@@ -154,14 +154,18 @@ export interface CertXpPublisher {
  * and taking svc-academy out of the fleet because a cert award could not be
  * published would trade a whole service for one downstream side effect. The
  * honest part is that it says so — `/ready` reports `usable: false` and
- * `grantCert` returns `publisher_unavailable` instead of implying an award
- * happened. Same shape as the stream provider (see stream/provider.ts).
+ * `grantCert` returns `publisher_unavailable` for priced certs instead of
+ * implying an award happened. Unpriced certs still return `no_policy` first
+ * (publish nothing) — a down bus must not look like a missing rate that will
+ * appear later. Same shape as the stream provider (see stream/provider.ts).
  */
 export class NullCertXpPublisher implements CertXpPublisher {
   readonly id = 'none';
   readonly usable = false;
 
-  async publishCertXp(_grant: CertGrantRecord): Promise<CertXpEmitResult> {
+  async publishCertXp(grant: CertGrantRecord): Promise<CertXpEmitResult> {
+    const decided = certXpIntentFor(grant);
+    if (!decided.ok) return { emitted: false, reason: decided.reason };
     return { emitted: false, reason: 'publisher_unavailable' };
   }
 }

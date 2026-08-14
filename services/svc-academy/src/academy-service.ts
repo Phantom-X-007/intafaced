@@ -1548,6 +1548,8 @@ export class AcademyService {
    * table and no sweep.
    *
    * Perks are read AFTER XP publish and never invented: svc-identity is SoT.
+   * Unpriced certs (`no_policy`) refuse the perk readout so the grant cannot
+   * look like a granted perk or perk money.
    */
   async grantCert(input: {
     userId: string;

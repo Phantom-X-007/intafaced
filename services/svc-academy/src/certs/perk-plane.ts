@@ -43,17 +43,21 @@ export type CertPerkReal = {
   readonly perks: RankPerks;
 };
 
+export type CertPerkRefuseReason = 'identity_unreadable' | 'unpriced';
+
 export type CertPerkOutcome =
   | CertPerkReal
   | {
       readonly status: 'refuse';
       readonly code: typeof CERT_PERK_REFUSE_CODE;
-      readonly reason: 'identity_unreadable';
+      readonly reason: CertPerkRefuseReason;
       readonly message: string;
       readonly academyHoldsPerkMoney: false;
       readonly academyMapsCertToPerk: false;
       readonly residual: typeof CERT_PERK_RESIDUAL;
     };
+
+const UNPRICED_MESSAGE = 'Unpriced cert publishes nothing — no XP, no identity perk grant, no invent perk money';
 
 const INVENT_MESSAGE =
   'Cert perk money / cert→perk map is refuse-closed — perks come only from svc-identity rank after XP (§4.1); no invent';
@@ -126,17 +130,53 @@ export function assertNoCertPerkMoneyAttachment(payload: unknown): void {
   }
 }
 
+export function refuseUnpricedCertPerk(): Extract<CertPerkOutcome, { status: 'refuse' }> {
+  return {
+    status: 'refuse',
+    code: CERT_PERK_REFUSE_CODE,
+    reason: 'unpriced',
+    message: UNPRICED_MESSAGE,
+    academyHoldsPerkMoney: false,
+    academyMapsCertToPerk: false,
+    residual: CERT_PERK_RESIDUAL,
+  };
+}
+
+/** True when grantCert XP skipped because the cert has no product XP policy. */
+export function isUnpricedCertXp(xp: CertXpEmitResult): boolean {
+  return xp.emitted === false && xp.reason === 'no_policy';
+}
+
 /**
- * After cert + XP: surface real identity perks, or refuse when the SoT is unreadable.
+ * Honesty detector — an unpriced cert must not look like a granted perk or perk money.
+ * Tests fail when this returns true.
+ */
+export function unpricedCertLooksLikeGrantedPerkOrMoney(result: {
+  readonly xp: CertXpEmitResult;
+  readonly perks: CertPerkOutcome;
+}): boolean {
+  if (!isUnpricedCertXp(result.xp)) return false;
+  if ('xpDelta' in result.xp && (result.xp as { xpDelta?: unknown }).xpDelta != null) return true;
+  if (result.perks.status === 'real') return true;
+  if ('perks' in result.perks && result.perks.perks != null) return true;
+  if (result.perks.academyHoldsPerkMoney !== false) return true;
+  return false;
+}
+
+/**
+ * After cert + XP: surface real identity perks, or refuse when the SoT is unreadable
+ * or the cert is unpriced (no XP policy — publish nothing, including perk grant shape).
  * Never invent a RankPerks table on failure.
  */
 export async function resolveCertPerkOutcome(input: {
   readonly userId: string;
   readonly hostRights: HostRightsSource;
-  /** XP result is informational — perks still come from identity, not from inventing on miss. */
+  /** Unpriced (`no_policy`) refuses before identity so the grant cannot look like a perk. */
   readonly xp: CertXpEmitResult;
 }): Promise<CertPerkOutcome> {
-  void input.xp;
+  if (isUnpricedCertXp(input.xp)) {
+    return refuseUnpricedCertPerk();
+  }
   try {
     const perks = await input.hostRights.perksOf(input.userId);
     return {

@@ -19,6 +19,9 @@ import {
   refuseInventPerkBalance,
   refuseInventPerkMoney,
   resolveCertPerkOutcome,
+  refuseUnpricedCertPerk,
+  isUnpricedCertXp,
+  unpricedCertLooksLikeGrantedPerkOrMoney,
 } from './perk-plane.js';
 
 const perks = (overrides: Partial<RankPerks> = {}): RankPerks => ({ ...BASE_PERKS, ...overrides });
@@ -99,6 +102,43 @@ describe('academy.certs D26-P1-C1 perk plane — real or refuse; no fake perk mo
     expect(outcome.academyHoldsPerkMoney).toBe(false);
     expect(outcome.academyMapsCertToPerk).toBe(false);
     expect(outcome).not.toHaveProperty('perks');
+  });
+
+  it('unpriced cert (no XP policy) publishes nothing — not a granted perk or perk money', async () => {
+    const hostRights: HostRightsSource = {
+      perksOf: vi.fn(async () => perks({ lobbyHostRights: true, feeDiscountBps: 150 })),
+    };
+    const xp = { emitted: false as const, reason: 'no_policy' as const };
+    const outcome = await resolveCertPerkOutcome({ userId: 'u-1', hostRights, xp });
+    expect(isUnpricedCertXp(xp)).toBe(true);
+    expect(outcome).toEqual(refuseUnpricedCertPerk());
+    expect(outcome.status).toBe('refuse');
+    if (outcome.status !== 'refuse') throw new Error('expected refuse');
+    expect(outcome.reason).toBe('unpriced');
+    expect(outcome).not.toHaveProperty('perks');
+    expect(outcome.academyHoldsPerkMoney).toBe(false);
+    expect(hostRights.perksOf).not.toHaveBeenCalled();
+    expect(unpricedCertLooksLikeGrantedPerkOrMoney({ xp, perks: outcome })).toBe(false);
+  });
+
+  it('fails closed when an unpriced cert still looks like a granted perk or perk money', () => {
+    const xp = { emitted: false as const, reason: 'no_policy' as const };
+    const lyingReal: Parameters<typeof unpricedCertLooksLikeGrantedPerkOrMoney>[0]['perks'] = {
+      status: 'real',
+      path: 'identity_rank',
+      sot: 'svc-identity',
+      academyHoldsPerkMoney: false,
+      academyMapsCertToPerk: false,
+      perks: perks({ feeDiscountBps: 150 }),
+    };
+    expect(unpricedCertLooksLikeGrantedPerkOrMoney({ xp, perks: lyingReal })).toBe(true);
+    expect(
+      unpricedCertLooksLikeGrantedPerkOrMoney({
+        xp: { emitted: false, reason: 'no_policy', xpDelta: 100 } as never,
+        perks: refuseUnpricedCertPerk(),
+      }),
+    ).toBe(true);
+    expect(unpricedCertLooksLikeGrantedPerkOrMoney({ xp, perks: refuseUnpricedCertPerk() })).toBe(false);
   });
 
   it('plane status is honest — identity SoT, no academy perk money', () => {
