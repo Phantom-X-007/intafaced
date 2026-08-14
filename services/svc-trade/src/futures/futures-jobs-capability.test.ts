@@ -22,11 +22,14 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(n.nextFundingTimestamp).toBe('unpublished');
     expect(n.indexPrice).toBe('unpublished');
     expect(n.ladderNumbers).toBe('d3_unset');
+    expect(n.profitSourceConfigured).toBe(false);
+    expect(n.profitSourceDefault).toBe(false);
   });
 
   it('live flags are only true when the caller says true', () => {
     expect(presentFuturesJobsCapabilityNote({ jobsEnabled: true }).jobsEnabled).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ orderableEnabled: true }).orderableEnabled).toBe(true);
+    expect(presentFuturesJobsCapabilityNote({ profitSourceConfigured: true }).profitSourceConfigured).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ jobsEnabled: false, orderableEnabled: false }).jobsEnabled).toBe(false);
   });
 });
