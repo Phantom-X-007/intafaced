@@ -1,7 +1,8 @@
 # Claim agents.risk-compliance-refuse-empty
 
-**status:** claimed
+**status:** pr-open
 **owner:** nitro-agent
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/1841
 **tracker:** agents.risk-compliance (stays ready — slice, not mountain-done)
 **branch:** feat/agents-risk-compliance-refuse-empty
 **updated:** 2026-08-14
