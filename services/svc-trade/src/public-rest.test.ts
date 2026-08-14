@@ -301,6 +301,7 @@ describe('public REST routes', () => {
       asOfMs: number;
       routes: Array<{ name: string; kind: string }>;
       refuseArms: Array<{ id: string; httpStatus: number }>;
+      notes: { rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number } };
     };
     expect(body.asOfMs).toBe(1_700_000_000_000);
     expect(body.routes.length).toBeGreaterThan(10);
@@ -309,6 +310,12 @@ describe('public REST routes', () => {
     expect(body.routes.some((r) => r.name === 'openPosition')).toBe(true);
     expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
+    expect(body.notes.rateLimit).toEqual({
+      enforcedBy: 'edge',
+      publicPerMinute: 300,
+      privatePerMinute: 300,
+      windowMs: 60_000,
+    });
     await app.close();
   });
 
