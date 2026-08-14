@@ -37,10 +37,10 @@ import { mmSeedOrderIdFor } from '../spot/ids.js';
 import { assertTradable } from '../spot/risk.js';
 import { TradeError, type Market } from '../spot/types.js';
 import { classifySeedSubmitResult, MM_SEED_ORDER_SEEDED, seedSubmitShape } from './seed-honesty.js';
+import { MM_MATCHING_ACCOUNT_ID } from './fill-account.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
 
-/** Matching STP account for house market-maker — distinct from user ids. */
-export const MM_MATCHING_ACCOUNT_ID = 'house:market-maker';
+export { MM_MATCHING_ACCOUNT_ID };
 
 export function isHouseMmAccount(accountId: string): boolean {
   return accountId === MM_MATCHING_ACCOUNT_ID;

@@ -124,6 +124,7 @@ open has no client idempotency key — see audit residual).
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`); MM seed records at rest via `recordSeededOrder` (D26-P1-T10) |
 | **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (wired to `TRADE_MM_SEED_ENABLED`, SD-4)                                 |
+| **Fill account**  | Seeded house-MM `orderFilled` recovers `house:market-maker` (never empty / HOUSE_MM_USER_UUID as a customer-looking id)              |
 | **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)                                                               |
 | **Cross ban**     | Seed submits are limit `PO`; synchronous engine fills → `manufactured_cross` + hold release (SD-5)                                   |
 | **F8**            | seed↔seed prints never inflate public tape                                                                                           |
