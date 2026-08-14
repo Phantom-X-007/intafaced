@@ -1,6 +1,7 @@
 # Claim pay.subscriptions (card mandate stays rail-absent)
 
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/1853
 **tracker:** `pay.subscriptions` (not re-opened — card acquiring / pre-charge delivery remain parked sockets)
 **branch:** `feat/pay-subscriptions-mandate-rail-absent`
 **class:** M
