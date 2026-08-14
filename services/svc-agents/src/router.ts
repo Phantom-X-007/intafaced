@@ -3208,13 +3208,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           z.discriminatedUnion('status', [
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum([
-                'warehouse_dark',
-                'autonomous_publish',
-                'returns_claim',
-                'budget_undecided',
-                'inputs_missing',
-              ]),
+              reason: z.enum(['warehouse_dark', 'autonomous_publish', 'returns_claim', 'budget_undecided', 'inputs_missing']),
               kind: z.literal('not_a_publication'),
               isPublication: z.literal(false),
               published: z.literal(false),
