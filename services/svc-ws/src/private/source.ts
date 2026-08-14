@@ -120,3 +120,47 @@ export async function subscribePrivatePositions(input: {
       return sub;
     });
 }
+
+export interface PrivateAttachments {
+  readonly orders: Subscription;
+  readonly fills: Subscription;
+  readonly positions: Subscription;
+}
+
+/**
+ * Attach all three private consumers, or none.
+ * A partial attach (orders up, fills fail) would lie: ready frames say
+ * `bus: true` while fills are silent. Tear whatever landed and return null
+ * so the lifecycle can retry the half without touching the public tape.
+ */
+export async function tryAttachPrivate(input: {
+  bus: EventBus;
+  hub: PrivateOrderHub;
+  durable: string;
+  log?: HubLogger;
+}): Promise<PrivateAttachments | null> {
+  let orders: Subscription | null = null;
+  let fills: Subscription | null = null;
+  let positions: Subscription | null = null;
+  try {
+    orders = await subscribePrivateOrders(input);
+    fills = await subscribePrivateFills({
+      ...input,
+      durable: `${input.durable}-fills`,
+    });
+    positions = await subscribePrivatePositions({
+      ...input,
+      durable: `${input.durable}-positions`,
+    });
+    return { orders, fills, positions };
+  } catch (err) {
+    await orders?.unsubscribe().catch(() => undefined);
+    await fills?.unsubscribe().catch(() => undefined);
+    await positions?.unsubscribe().catch(() => undefined);
+    input.log?.warn(
+      { err: String(err) },
+      'ws: private bus subscribe failed — trade tape still attached; private half will retry',
+    );
+    return null;
+  }
+}

@@ -260,4 +260,38 @@ describe('PrivateOrderHub', () => {
     expect(healthy.sent).toHaveLength(2);
     expect(JSON.parse(healthy.sent[0]!).channel).toBe('positions');
   });
+
+  it('re-announces ready+bus to every live seat when private half attaches late', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    const bob = sink();
+    hub.attach('user-a', alice);
+    hub.attach('user-b', bob);
+
+    hub.announceBus(true);
+
+    expect(alice.sent).toHaveLength(3);
+    expect(bob.sent).toHaveLength(3);
+    expect(alice.sent.map((s) => JSON.parse(s).channel)).toEqual(['orders', 'fills', 'positions']);
+    for (const raw of alice.sent) {
+      const frame = JSON.parse(raw);
+      expect(frame.type).toBe('ready');
+      expect(frame.bus).toBe(true);
+      expect(frame.userId).toBe('user-a');
+    }
+    for (const raw of bob.sent) {
+      expect(JSON.parse(raw).userId).toBe('user-b');
+    }
+    // Honesty only — no invented order/fill/position payload.
+    expect(alice.sent.some((s) => 'orderId' in JSON.parse(s))).toBe(false);
+  });
+
+  it('does not announce to a detached seat', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    const detach = hub.attach('user-a', alice);
+    detach!();
+    hub.announceBus(true);
+    expect(alice.sent).toHaveLength(0);
+  });
 });
