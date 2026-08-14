@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
-import { registerAdminRoutes, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
+import { registerAdminRoutes, registerGeoBlockGuard, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
 import { resolveRequestRegion } from './geo-region.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
@@ -229,6 +229,9 @@ app.get('/ready', async () => ({
 // through a test-only copy of the rule is not verified.
 
 registerKillSwitchGuard(app, killSwitches);
+// Geo-block on /api — unset/empty screening is unknown, not a geo-clearance.
+// Must not invent sanctions list content (Class X).
+registerGeoBlockGuard(app);
 // Network fail-closed on /api — product Done bar for VPN/signal residual.
 // Must not invent a partner; refuses only when env arms fail-closed / flagged.
 registerNetworkAccessGuard(app);
