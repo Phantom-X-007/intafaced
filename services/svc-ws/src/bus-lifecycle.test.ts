@@ -254,4 +254,73 @@ describe('bus lifecycle reconnect', () => {
     expect(lifecycle.tradesBus()).toBe(false);
     expect(lifecycle.privateBus()).toBe(false);
   });
+
+  it('re-attaches after sessionLost without a process restart', async () => {
+    let calls = 0;
+    const lost: { fire: (() => void) | null } = { fire: null };
+    const first = ok({
+      tradesUp: true,
+      privateUp: true,
+      sessionLost: new Promise<void>((resolve) => {
+        lost.fire = resolve;
+      }),
+    });
+    const second = ok({ tradesUp: true, privateUp: true });
+    const lifecycle = createBusLifecycle({
+      log,
+      initialBackoffMs: 5,
+      sleep: async () => undefined,
+      attempt: async () => {
+        calls += 1;
+        return calls === 1 ? first : second;
+      },
+    });
+
+    lifecycle.start();
+    await flushUntil(() => lifecycle.tradesBus());
+    expect(calls).toBe(1);
+    expect(lifecycle.tradesBus()).toBe(true);
+
+    lost.fire?.();
+    await flushUntil(() => calls >= 2);
+
+    expect(calls).toBe(2);
+    expect(first.close).toHaveBeenCalled();
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(lifecycle.privateBus()).toBe(true);
+
+    await lifecycle.stop();
+  });
+
+  it('stop while waiting on sessionLost does not re-attempt', async () => {
+    let calls = 0;
+    const lost: { fire: (() => void) | null } = { fire: null };
+    const first = ok({
+      tradesUp: true,
+      privateUp: true,
+      close: vi.fn(async () => {
+        lost.fire?.();
+      }),
+      sessionLost: new Promise<void>((resolve) => {
+        lost.fire = resolve;
+      }),
+    });
+    const lifecycle = createBusLifecycle({
+      log,
+      attempt: async () => {
+        calls += 1;
+        return first;
+      },
+    });
+
+    lifecycle.start();
+    await flushUntil(() => lifecycle.tradesBus());
+    expect(calls).toBe(1);
+
+    await lifecycle.stop();
+    await new Promise((r) => setImmediate(r));
+    expect(calls).toBe(1);
+    expect(first.close).toHaveBeenCalled();
+    expect(lifecycle.tradesBus()).toBe(false);
+  });
 });

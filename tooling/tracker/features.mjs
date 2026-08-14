@@ -558,7 +558,10 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Positions channel receives positionUpdated from trade.futures open/close (#281). Still not full product gateway done — residual streams/ops.',
+    note:
+      'Owner released 2026-08-08 (axis C1 / Nitro green light). Positions channel receives positionUpdated from trade.futures open/close (#281). ' +
+      '2026-08-14: boot bus retry + private-half retry without tearing the tape + mid-session `closed()` re-attach (flags drop, depth keeps serving). ' +
+      'Still `ready` not `done` — residual streams/ops.',
   }),
 
   f('web.mobile-apps', 'Native mobile apps — iOS and Android, own name, zero attribution (§25:727)', {

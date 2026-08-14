@@ -177,6 +177,7 @@ const busLifecycle = createBusLifecycle({
     return {
       tradesUp: tradeSub !== null,
       privateUp: privateHalf !== null,
+      sessionLost: connected.whenClosed(),
       retryPrivate: privateTokens
         ? async () => {
             privateHalf = await tryAttachPrivate({
