@@ -125,7 +125,8 @@ export class SqlTwapParentStore implements TwapParentStore {
         total_qty, duration_ms, slice_interval_ms, limit_price,
         status, created_at, started_at, next_due_at, projected_ends_at,
         schedule_stretch_reason, paused_at, halt_reason,
-        slices_planned, next_slice_index, plan_slices, children, misses, grant_claims, updated_at
+        slices_planned, next_slice_index, plan_slices, children, misses, grant_claims,
+        participation_bps, lot_size, updated_at
       ) VALUES (
         ${p.id},
         ${p.userId},
@@ -152,6 +153,8 @@ export class SqlTwapParentStore implements TwapParentStore {
         ${this.sql.json(childrenToJson(p.children))},
         ${this.sql.json(missesToJson(p.misses))},
         ${grantJson},
+        ${p.participationBps},
+        ${p.lotSize === null ? null : formatAmount(p.lotSize)},
         now()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -166,6 +169,8 @@ export class SqlTwapParentStore implements TwapParentStore {
         children = EXCLUDED.children,
         misses = EXCLUDED.misses,
         grant_claims = COALESCE(EXCLUDED.grant_claims, algo_parents.grant_claims),
+        participation_bps = EXCLUDED.participation_bps,
+        lot_size = COALESCE(EXCLUDED.lot_size, algo_parents.lot_size),
         updated_at = now()
     `;
   }
@@ -210,7 +215,7 @@ function rowToRecord(row: Record<string, unknown>): TwapParentRecord {
     marketId: String(row.market_id),
     symbol: String(row.symbol),
     side: row.side as OrderSide,
-    kind: 'twap',
+    kind: row.kind === 'vwap' || row.kind === 'pov' ? row.kind : 'twap',
     totalQty: parseAmount(String(row.total_qty)),
     durationMs,
     sliceIntervalMs,
@@ -223,6 +228,8 @@ function rowToRecord(row: Record<string, unknown>): TwapParentRecord {
     scheduleStretchReason: stretchFromRow(row.schedule_stretch_reason),
     pausedAt: row.paused_at ? new Date(String(row.paused_at)) : null,
     haltReason: row.halt_reason === null || row.halt_reason === undefined ? null : String(row.halt_reason),
+    lotSize: row.lot_size === null || row.lot_size === undefined ? null : parseAmount(String(row.lot_size)),
+    participationBps: row.participation_bps === null || row.participation_bps === undefined ? null : Number(row.participation_bps),
     slicesPlanned: Number(row.slices_planned),
     nextSliceIndex,
     children: childrenFromJson(row.children),

@@ -11,7 +11,7 @@
  */
 import type { Sql } from 'postgres';
 import { TIMEFRAME_MS, timeframeSchema, type Timeframe } from '@intafaced/exchange-contract';
-import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { Candle } from './types.js';
 
 export interface QueryCandlesOpts {
@@ -76,6 +76,27 @@ export async function queryCandlesFromFills(sql: Sql, opts: QueryCandlesOpts): P
       volume: parseAmount(row.volume),
     }))
     .reverse(); // CCXT fetchOHLCV: oldest → newest
+}
+
+/**
+ * Non-seeded taker volume in [from, to). Same SD-3 exclusion as candles.
+ * Empty tape → 0, never invented.
+ */
+export async function queryTakerVolumeFromFills(sql: Sql, opts: { marketId: string; from: Date; to: Date }): Promise<Amount> {
+  if (opts.to.getTime() <= opts.from.getTime()) return 0n;
+  const rows = await sql<Array<{ volume: string | null }>>`
+    SELECT coalesce(sum(f.qty), 0)::text AS volume
+      FROM trade.fills f
+      INNER JOIN trade.orders o ON o.id = f.order_id
+      INNER JOIN trade.orders c ON c.id = f.counter_order_id
+     WHERE f.market_id = ${opts.marketId}
+       AND f.liquidity = 'taker'
+       AND o.seeded = false
+       AND c.seeded = false
+       AND f.ts >= ${opts.from}
+       AND f.ts < ${opts.to}
+  `;
+  return parseAmount(rows[0]?.volume ?? '0');
 }
 
 /**

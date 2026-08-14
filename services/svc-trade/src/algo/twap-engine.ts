@@ -2,6 +2,7 @@ import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { TradeError, type OrderSide } from '../spot/types.js';
 import { acceptableForAlgo, algoMarkMissing, withinPriceBand, type AlgoMarkPolicy, DEFAULT_ALGO_MARK_POLICY } from './mark-gate.js';
 import { planTwapSlices } from './schedule.js';
+import { planPovSliceQty, planVwapSlices, sliceCount } from './volume-plan.js';
 import type {
   AlgoChildRef,
   AlgoMiss,
@@ -57,6 +58,11 @@ export interface TwapEnginePorts {
   bestOpposingPrice(marketId: string, side: OrderSide): Promise<Amount | null>;
   /** Mark feed. Null = halt (refuse invent). */
   markFor(marketId: string): Promise<AlgoQuotedMark | null>;
+  /**
+   * Non-seeded taker volume in [from, to). POV only.
+   * Omit or 0 → miss (never invent participation against an empty tape).
+   */
+  intervalTakerVolume?(marketId: string, from: Date, to: Date): Promise<Amount>;
   now(): Date;
   randomId(): string;
 }
@@ -131,12 +137,40 @@ export class TwapEngine {
       throw new TradeError(`TWAP sliceIntervalMs below min ${this.minSliceIntervalMs}ms`, 'trade.algo_invalid_schedule');
     }
 
-    const plan = planTwapSlices({
-      totalQty: input.totalQty,
-      durationMs: input.durationMs,
-      sliceIntervalMs: input.sliceIntervalMs,
-      lotSize,
-    });
+    const kind = input.kind ?? 'twap';
+    let slices: readonly Amount[];
+    let participationBps: number | null = null;
+
+    if (kind === 'twap') {
+      slices = planTwapSlices({
+        totalQty: input.totalQty,
+        durationMs: input.durationMs,
+        sliceIntervalMs: input.sliceIntervalMs,
+        lotSize,
+      }).slices;
+    } else if (kind === 'vwap') {
+      const profile = input.volumeProfile;
+      if (profile == null || profile.length === 0) {
+        throw new TradeError(
+          'VWAP requires an observed lookback volume profile — refuse rather than invent a curve',
+          'trade.algo_volume_immature',
+        );
+      }
+      slices = planVwapSlices({ totalQty: input.totalQty, volumes: profile, lotSize }).slices;
+    } else if (kind === 'pov') {
+      const bps = input.participationBps;
+      if (bps == null || !Number.isInteger(bps) || bps < 1 || bps > 10_000) {
+        throw new TradeError(
+          'POV participationBps must be an integer 1..10000 — refuse rather than invent a participation rate',
+          'trade.algo_invalid_schedule',
+        );
+      }
+      participationBps = bps;
+      const n = sliceCount(input.durationMs, input.sliceIntervalMs);
+      slices = Array.from({ length: n }, () => 0n);
+    } else {
+      throw new TradeError(`algo kind "${String(kind)}" is not available`, 'trade.algo_unsupported_kind');
+    }
 
     const now = this.ports.now();
     const id = input.clientAlgoId?.trim() ? `algo-${userId.slice(0, 8)}-${input.clientAlgoId.trim()}` : this.ports.randomId();
@@ -152,7 +186,7 @@ export class TwapEngine {
       marketId: input.marketId,
       symbol: input.symbol,
       side: input.side,
-      kind: 'twap',
+      kind,
       totalQty: input.totalQty,
       durationMs: input.durationMs,
       sliceIntervalMs: input.sliceIntervalMs,
@@ -161,18 +195,20 @@ export class TwapEngine {
       createdAt: now,
       startedAt: now,
       nextDueAt: now,
-      projectedEndsAt: projectTwapEndsAt(now.getTime(), plan.slices.length, input.sliceIntervalMs),
+      projectedEndsAt: projectTwapEndsAt(now.getTime(), slices.length, input.sliceIntervalMs),
       scheduleStretchReason: null,
       pausedAt: null,
       haltReason: null,
-      slicesPlanned: plan.slices.length,
+      lotSize,
+      participationBps,
+      slicesPlanned: slices.length,
       nextSliceIndex: 0,
       children: [],
       misses: [],
     };
 
     this.parents.set(id, parent);
-    this.plans.set(id, plan.slices);
+    this.plans.set(id, slices);
     this.emitChange(parent);
     return parent;
   }
@@ -355,7 +391,29 @@ export class TwapEngine {
       });
     }
 
-    const qty = plan[working.nextSliceIndex]!;
+    let qty = plan[working.nextSliceIndex]!;
+    if (working.kind === 'pov') {
+      const bps = working.participationBps;
+      const lot = working.lotSize;
+      if (bps == null || lot == null || lot <= 0n) {
+        return this.halt(working, 'POV parent missing participationBps or lotSize — refuse rather than invent', 'trade.algo_child_refused');
+      }
+      let remaining = working.totalQty;
+      for (const c of working.children) remaining -= c.qty;
+      const to = now;
+      const from = new Date(now.getTime() - working.sliceIntervalMs);
+      const vol = this.ports.intervalTakerVolume ? await this.ports.intervalTakerVolume(working.marketId, from, to) : 0n;
+      qty = planPovSliceQty({ intervalVolume: vol, participationBps: bps, remainingQty: remaining, lotSize: lot });
+    }
+
+    if (qty <= 0n) {
+      return this.recordMiss(working, {
+        sliceIndex: working.nextSliceIndex,
+        code: 'trade.algo_no_volume',
+        reason: `${working.symbol}: no non-seeded taker volume for slice ${working.nextSliceIndex} — recorded miss, no fill invented`,
+        at: now,
+      });
+    }
     const clientOrderId = `algo:${working.id}:${working.nextSliceIndex}`;
 
     try {
