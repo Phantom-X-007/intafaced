@@ -282,6 +282,16 @@ const schema = serviceEnvSchema
       TRADE_VENUE_MARK_SYMBOLS: z.string().default(''),
 
       /**
+       * When true, futures venue marks read the sequenced MaintainedBook
+       * (stream-first + snapshot join) instead of polling snapshotBook each tick.
+       * Default OFF. Empty symbol map still starts nothing. Desynced feed → null mark.
+       */
+      TRADE_VENUE_MARK_STREAM: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
        * Spot candle materialization job (A-TRADE-SPOT-1).
        * Default OFF — REST OHLCV always reads live fills; this job only
        * copies closed non-seeded buckets into trade.spot_candles.
