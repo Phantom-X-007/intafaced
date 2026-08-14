@@ -84,6 +84,8 @@ interface Subscription {
 
 const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 
+const READY_CHANNELS = ['orders', 'fills', 'positions'] as const;
+
 export class PrivateOrderHub {
   readonly #options: PrivateOrderHubOptions;
   readonly #log: HubLogger;
@@ -138,6 +140,26 @@ export class PrivateOrderHub {
       sub.closed = true;
       this.#subscriptions.delete(sub);
     };
+  }
+
+  /**
+   * Re-announce channel ready + bus honesty to every live seat.
+   * Used when the private half attaches after sockets already connected
+   * with `bus: false` (boot tape-up / private-down). Does not invent
+   * order/fill/position frames.
+   */
+  announceBus(bus: boolean): void {
+    for (const sub of this.#subscriptions) {
+      if (sub.closed) continue;
+      try {
+        for (const channel of READY_CHANNELS) {
+          sub.sink.send(JSON.stringify({ channel, type: 'ready', userId: sub.userId, bus }));
+        }
+      } catch {
+        sub.closed = true;
+        this.#subscriptions.delete(sub);
+      }
+    }
   }
 
   publish(update: PrivateOrderUpdate): void {
