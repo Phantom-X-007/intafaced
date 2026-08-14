@@ -7,10 +7,25 @@ import {
   type ComplianceQueueKind,
 } from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
+import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
 
 const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
+
+function geoBlockStatus(region: string) {
+  const decision = evaluateGeoBlock({ region });
+  return {
+    allowed: decision.allowed,
+    code: decision.code,
+    reason: decision.reason,
+    screeningDeclaration: decision.screeningDeclaration,
+    screeningConfigured: decision.screeningConfigured,
+    listHitCount: decision.listHitCount,
+    inventedBlockedList: false as const,
+    enforcedOnApiPath: true,
+  };
+}
 
 /**
  * Parse disposition body for the compliance queue. Unknown status refuses closed.
@@ -154,6 +169,41 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
 }
 
 /**
+ * Geo-block on the product door (`/api/*`).
+ *
+ * Unset / empty screening is unknown — not a geo-clearance and not an invented
+ * block list. Admin / health / ready stay open so operators can see why.
+ * Does not invent sanctions content (Class X).
+ */
+export function registerGeoBlockGuard(app: FastifyInstance): void {
+  app.addHook('onRequest', async (req, reply) => {
+    const pathname = resolvedPathname(req.url);
+    if (pathname === null) return;
+    if (!pathname.startsWith('/api/')) return;
+
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    const decision = evaluateGeoBlock({ region: region.region });
+    if (decision.allowed) return;
+
+    req.log.warn(
+      {
+        path: pathname,
+        code: decision.code,
+        declaration: decision.screeningDeclaration,
+        region: decision.region,
+      },
+      'edge: refused — geo-block / empty screening',
+    );
+    return reply.code(geoBlockHttpStatus(decision)).send(geoBlockPublicBody(decision));
+  });
+}
+
+/**
  * Network-signal fail-closed guard on the product door (`/api/*`).
  *
  * Status already surfaces unset≠clear (#1582). Product Done bar: when
@@ -276,6 +326,8 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         statusLine: regionResolutionStatusLine(region),
         note: region.note,
       },
+      // Geo-block honesty: unset/empty screening is unknown, never a clearance.
+      geoBlock: geoBlockStatus(region.region),
       networkSignal: {
         declaration: ops.network.signal.declaration,
         partnerConfigured: ops.network.signal.partnerConfigured,
@@ -311,6 +363,44 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         etlWatermarkAt: ops.analytics.etlWatermarkAt,
         etlNote: ops.analytics.etlNote,
       },
+    };
+  });
+
+  /**
+   * Geo-block probe — refuse with a typed code when screening is unset/empty.
+   * 409, not 200 green. Never invents a sanctions list.
+   */
+  app.get('/admin/compliance/geo-block', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    const decision = evaluateGeoBlock({ region: region.region });
+    const status = geoBlockOpsHttpStatus(decision);
+    if (status !== 200) {
+      return reply.code(status).send({
+        ok: false,
+        error: geoBlockErrorMessage(decision),
+        code: decision.code,
+        reason: decision.reason,
+        region: decision.region,
+        screeningDeclaration: decision.screeningDeclaration,
+        screeningConfigured: decision.screeningConfigured,
+        inventedBlockedList: false,
+      });
+    }
+    return {
+      ok: true,
+      code: decision.code,
+      reason: decision.reason,
+      region: decision.region,
+      screeningDeclaration: decision.screeningDeclaration,
+      screeningConfigured: decision.screeningConfigured,
+      listHitCount: decision.listHitCount,
+      inventedBlockedList: false,
     };
   });
 
