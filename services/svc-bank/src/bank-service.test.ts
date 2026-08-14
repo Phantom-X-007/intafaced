@@ -140,7 +140,7 @@ if (!available) {
                bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
                bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards,
-               bank.ramp_offramps, bank.ramp_onramps
+               bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();

@@ -209,6 +209,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.no_ramp_rail':
       case 'bank.fiat_ramp_no_pay_adapter':
       case 'bank.fiat_ramp_socket':
+      case 'bank.withdraw_destination_missing':
       case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
@@ -2057,8 +2058,20 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     /**
+     * Persist a user withdraw dest (IBAN/IFSC/EVM) so a later offramp has a
+     * real ref before withdrawHold. Does not move value and does not invent a PSP.
+     */
+    setWithdrawDestination: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ kind: z.enum(['crypto', 'bank']), ref: z.string().min(1).max(256) }))
+      .output(z.object({ kind: z.string(), ref: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => bank.ramps.setWithdrawDestination({ userId: ctx.principal.userId, kind: input.kind, ref: input.ref })),
+      ),
+
+    /**
      * User off-ramp. `offrampId` + `clientRef` are client-supplied so a retry
      * is the same withdrawal (§5). Fiat refuses before any hold is posted.
+     * Destination is persisted (or loaded) before withdrawHold.
      */
     offramp: scopedProcedure('bank:write', { module: 'bank' })
       .input(
@@ -2067,7 +2080,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           assetId: z.string().min(1).max(16),
           amount: amountString,
           kind: z.enum(['crypto', 'fiat']).default('crypto'),
-          destinationRef: z.string().min(1).max(256),
+          destinationRef: z.string().min(1).max(256).optional(),
           clientRef: z.string().min(1).max(128),
         }),
       )

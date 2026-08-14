@@ -48,7 +48,7 @@ export type BankErrorCode =
    */
   | 'bank.position_pending'
   | 'bank.not_owner'
-  // ── Loans (§8.1) ───────────────────────────────────────────────────────────
+  // ── Loans (§8.1) ───────────────────────────────────────────────────────
   | 'bank.loan_product_not_found'
   | 'bank.loan_product_closed'
   | 'bank.loan_not_found'
@@ -128,7 +128,7 @@ export type BankErrorCode =
    * could not cover it. The loudest code in this file.
    */
   | 'bank.bad_debt_uncovered'
-  // ── Cards (§8.1, ledger half) ──────────────────────────────────────────────
+  // ── Cards (§8.1, ledger half) ──────────────────────────────────────
   /**
    * NO ISSUER IS CONFIGURED, so this deployment has no card programme.
    *
@@ -173,7 +173,7 @@ export type BankErrorCode =
    * true. The capture it belongs to still stands; only the reward refuses.
    */
   | 'bank.cashback_pot_unfunded'
-  // ── Ramps (§8.1 / D-S-09, crypto ledger half) ──────────────────────────────
+  // ── Ramps (§8.1 / D-S-09, crypto ledger half) ──────────────────────────
   /**
    * NO RAMP PROGRAMME IS CONFIGURED.
    *
@@ -199,6 +199,8 @@ export type BankErrorCode =
    */
   | 'bank.ramp_invalid_asset'
   | 'bank.ramp_invalid_destination'
+  /** Persisted dest missing — later withdraw has no real ref before withdrawHold. */
+  | 'bank.withdraw_destination_missing'
   /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */
   | 'bank.ramp_conflict'
   /**
@@ -246,7 +248,7 @@ export type BankErrorCode =
   | 'bank.auto_invest_run_failed'
   | 'bank.auto_invest_below_threshold'
   | 'bank.auto_invest_disabled'
-  // ── Business maker/checker (§31:811 partial) ───────────────────────────────
+  // ── Business maker/checker (§31:811 partial) ───────────────────────────
   | 'bank.business_not_found'
   | 'bank.business_closed'
   | 'bank.business_not_member'

@@ -95,7 +95,7 @@ if (!available) {
     let ledger: MemoryLedger;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
     });
 
@@ -226,7 +226,7 @@ if (!available) {
         assetId: 'USDT',
         amount: '15',
         kind: 'fiat',
-        destinationRef: 'IBAN-PUBLIC-DOOR',
+        destinationRef: 'GB82WEST12345698765432',
         clientRef: `fiat-out-${offrampId}`,
       });
 
