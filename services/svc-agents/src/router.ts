@@ -37,6 +37,7 @@ import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/acti
 import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
 import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
 import { envCoachGrounding, runCoachSession } from './coach/grounded-session.js';
+import { envGrowthWarehouse, proposeGrowthCampaign } from './growth/campaign-proposal.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -3182,6 +3183,94 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             inventedLibrary: false as const,
             citedCount: result.citedCount,
             citations: result.citations.map((c) => ({ slug: c.slug, title: c.title })),
+            userMessageKey: 'agents.error.capability_unavailable' as const,
+          };
+        }),
+    }),
+
+    /**
+     * Growth — campaign proposals (§8.2). Never publishes. Dark warehouse is
+     * not a funnel. Returns-ranked copy and incentive budgets are refused.
+     * Not a fleet runSession.
+     */
+    growth: router({
+      propose: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            headline: z.string().max(200).optional(),
+            copy: z.string().max(2000).optional(),
+            publish: z.boolean().optional(),
+            incentiveBudget: z.string().max(32).optional(),
+            spendAmount: z.string().max(32).optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum([
+                'warehouse_dark',
+                'autonomous_publish',
+                'returns_claim',
+                'budget_undecided',
+                'inputs_missing',
+              ]),
+              kind: z.literal('not_a_publication'),
+              isPublication: z.literal(false),
+              published: z.literal(false),
+              warehouseConfigured: z.boolean(),
+              warehouseMayLabelLive: z.boolean(),
+              inventedReturns: z.literal(false),
+              inventedBudget: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+            z.object({
+              status: z.literal('proposal'),
+              kind: z.literal('proposal'),
+              isPublication: z.literal(false),
+              published: z.literal(false),
+              headline: z.string(),
+              warehouseConfigured: z.literal(true),
+              warehouseMayLabelLive: z.literal(true),
+              inventedReturns: z.literal(false),
+              inventedBudget: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = proposeGrowthCampaign({
+            warehouse: envGrowthWarehouse(),
+            ...(input.headline === undefined ? {} : { headline: input.headline }),
+            ...(input.copy === undefined ? {} : { copy: input.copy }),
+            ...(input.publish === undefined ? {} : { publish: input.publish }),
+            ...(input.incentiveBudget === undefined ? {} : { incentiveBudget: input.incentiveBudget }),
+            ...(input.spendAmount === undefined ? {} : { spendAmount: input.spendAmount }),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_a_publication' as const,
+              isPublication: false as const,
+              published: false as const,
+              warehouseConfigured: result.warehouseConfigured,
+              warehouseMayLabelLive: result.warehouseMayLabelLive,
+              inventedReturns: false as const,
+              inventedBudget: false as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+            };
+          }
+          return {
+            status: 'proposal' as const,
+            kind: 'proposal' as const,
+            isPublication: false as const,
+            published: false as const,
+            headline: result.headline,
+            warehouseConfigured: true as const,
+            warehouseMayLabelLive: true as const,
+            inventedReturns: false as const,
+            inventedBudget: false as const,
             userMessageKey: 'agents.error.capability_unavailable' as const,
           };
         }),
