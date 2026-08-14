@@ -1510,6 +1510,28 @@ describe('private REST — mount boundary + order write path', () => {
       await app.close();
     });
 
+    it('DELETE /positions unnamed pot on winning close is NotSupported, not a 5xx retry', async () => {
+      const app = await build(
+        deps({
+          closePosition: async () => {
+            throw new FuturesError('cannot pay', 'trade.profit_source_unconfigured', 503);
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/positions/${ORDER_ID}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({
+        error: 'trade.profit_source_unconfigured',
+        ccxtCode: 'NotSupported',
+        retry: false,
+      });
+      await app.close();
+    });
+
     it('POST with no price opens at the mark, and no price reaches the service', async () => {
       const seen: Record<string, unknown>[] = [];
       const app = await build(
@@ -1603,6 +1625,35 @@ describe('private REST — mount boundary + order write path', () => {
       expect(res.statusCode).toBe(400);
       expect(res.json().intafacedCode).toBe('trade.leverage_required');
       expect(called).toBe(false);
+      await app.close();
+    });
+
+    it('POST /positions unnamed profit pot is NotSupported, not a 5xx retry', async () => {
+      const app = await build(
+        deps({
+          openPosition: async () => {
+            throw new FuturesError('no pot', 'trade.futures_unconfigured', 503);
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: {
+          clientOpenId: 'rest-test-unconfigured',
+          symbol: 'BTC/USDT-PERP',
+          side: 'long',
+          size: '1',
+          leverage: '5',
+        },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(res.json()).toMatchObject({
+        error: 'trade.futures_unconfigured',
+        ccxtCode: 'NotSupported',
+        retry: false,
+      });
       await app.close();
     });
 
