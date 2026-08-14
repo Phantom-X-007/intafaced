@@ -603,6 +603,19 @@ describe('the HTTP half', () => {
     });
   });
 
+  it('publishes per-hub connection ceilings on /health without 503ing on occupancy', async () => {
+    const health = await app.inject({ method: 'GET', url: '/health' });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({
+      ok: true,
+      capacity: {
+        depth: { connections: 0, maxConnections: 4 },
+        trades: { connections: 0, maxConnections: 4 },
+        private: { connections: 0, maxConnections: 4, maxConnectionsPerUser: 16 },
+      },
+    });
+  });
+
   it('reports bus up when getters say the subscriptions are live', async () => {
     tradesBusUp = true;
     privateBusUp = true;
