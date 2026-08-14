@@ -11,13 +11,15 @@
  * the outbound payload and refuses any key that claims real custody, any
  * seal flip (`realMoney: true`, `withdrawable: true`, …), and any nested
  * object that tries the same. It is called on every paper success return
- * immediately after `assertSealedSimulated`.
+ * immediately after `assertSealedSimulated`, and on `paperOpsStatus`.
  *
  * It does NOT invent IFC, prizes, or balances. It only refuses shapes that
  * would let a paper flag be read as real money.
  */
 
 import { AcademyError } from '../errors.js';
+
+const PAPER_VENUE = 'paper' as const;
 
 /**
  * Keys that mean "this is funded / custodial / withdrawable money" on this
@@ -52,7 +54,8 @@ export const PAPER_REAL_MONEY_BANNED_KEYS = [
 
 const BANNED = new Set<string>(PAPER_REAL_MONEY_BANNED_KEYS);
 
-const SEAL_FALSE_KEYS = ['realMoney', 'realLedger', 'withdrawable'] as const;
+/** Booleans that must stay false on any paper door (inbound or outbound). */
+export const PAPER_SEAL_FALSE_KEYS = ['realMoney', 'realLedger', 'withdrawable', 'live', 'isLive'] as const;
 
 function refuse(why: string): never {
   throw new AcademyError(
@@ -79,12 +82,24 @@ export function assertPaperNeverReadableAsRealMoney(payload: unknown, path = 'pa
     if (BANNED.has(key)) {
       refuse(`${here} claims real custody ("${key}")`);
     }
-    if ((SEAL_FALSE_KEYS as readonly string[]).includes(key) && o[key] === true) {
+    if ((PAPER_SEAL_FALSE_KEYS as readonly string[]).includes(key) && o[key] === true) {
       refuse(`${here} is true — paper must keep ${key}=false`);
+    }
+    if (key === 'venue' && o[key] !== PAPER_VENUE) {
+      refuse(`${here} is ${JSON.stringify(o[key])} — paper doors are venue=${PAPER_VENUE}`);
     }
     // Nested objects / arrays (valuation, result, steps, …).
     assertPaperNeverReadableAsRealMoney(o[key], here);
   }
+}
+
+/**
+ * Inbound door. A paper procedure must not accept a body that already claims
+ * live / real money. Default Zod strip would let `realMoney: true` vanish and
+ * the drill proceed as paper — callers use `.strict()` plus this scan.
+ */
+export function assertPaperInputNeverClaimsLive(payload: unknown, path = 'input'): void {
+  assertPaperNeverReadableAsRealMoney(payload, path);
 }
 
 /** True when a key name is banned on paper payloads. */

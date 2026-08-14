@@ -104,6 +104,9 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
       flagId: 'academy.paper-trading' as const,
       envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
       liveTradeUnaffected: true as const,
+      simulated: true as const,
+      venue: 'paper' as const,
+      realMoney: false as const,
     })),
     // The real plane over the real null publisher — a hand-written literal here
     // would pass while the shape drifted underneath it.
@@ -518,13 +521,44 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('Stage-3 paperOpsStatus reports enable + liveTradeUnaffected', async () => {
+  it('Stage-3 paperOpsStatus reports enable + liveTradeUnaffected + realMoney false', async () => {
     const status = await caller().paperOpsStatus();
     expect(status).toEqual({
       enabled: true,
       flagId: 'academy.paper-trading',
       envKey: 'ACADEMY_PAPER_TRADING_ENABLED',
       liveTradeUnaffected: true,
+      simulated: true,
+      venue: 'paper',
+      realMoney: false,
+    });
+    expect(JSON.stringify(status)).not.toContain('"realMoney":true');
+    expect(JSON.stringify(status)).not.toContain('"live":true');
+  });
+
+  it('REFUSES paperDrill when the body claims realMoney or live', async () => {
+    await expect(
+      caller().paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket, realMoney: true } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      caller().paperDrill({ slug: 'foundations-paper-workbook', market: { ...paperMarket, live: true } } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('REFUSES paperOpsStatus when the service presents paper as live money', async () => {
+    const academy = stubAcademy({
+      paperOpsStatus: vi.fn(() => ({
+        enabled: true,
+        flagId: 'academy.paper-trading' as const,
+        envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
+        liveTradeUnaffected: true as const,
+        simulated: true as const,
+        venue: 'paper' as const,
+        realMoney: true,
+      })),
+    });
+    await expect(createAcademyRouter(academy).createCaller(signed()).paperOpsStatus()).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
     });
   });
 
@@ -609,6 +643,17 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
     expect(flat).not.toContain('idempotencyKey');
     expect(flat).not.toContain('availableBalance');
     expect(flat).not.toContain('holdAmount');
+  });
+
+  it('REFUSES a result body that claims live money on the wire', async () => {
+    await expect(
+      caller().paperDrillResult(drill({ realMoney: true }) as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      caller().paperDrillResult(
+        drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: '1', size: '1', live: true }] }) as never,
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 
   it('REFUSES a live market — a result is never produced off a real book', async () => {
