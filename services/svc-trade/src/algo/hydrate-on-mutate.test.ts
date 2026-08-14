@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import { TradeError } from '../spot/types.js';
 import { MemoryTwapParentStore } from './parent-store.js';
-import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from './hydrate-on-mutate.js';
+import {
+  hydrateAlgoFromStore,
+  hydrateAlgoIfMissing,
+  persistAlgoCancelAttempt,
+  persistAlgoMutation,
+} from './hydrate-on-mutate.js';
 import { TwapEngine, type TwapEnginePorts } from './twap-engine.js';
 import type { AlgoQuotedMark, CreateTwapInput } from './types.js';
 
@@ -95,6 +100,37 @@ describe('trade.algo — hydrate on mutate after restart', () => {
     const loaded = await store.load(parent.id);
     expect(loaded?.parent.misses).toHaveLength(1);
     expect(loaded?.parent.nextSliceIndex).toBe(1);
+  });
+
+  it('cancel-fail persists paused parent so the store is not still active', async () => {
+    const store = new MemoryTwapParentStore();
+    const p: TwapEnginePorts = {
+      ...ports(),
+      cancelChild: async () => {
+        throw new TradeError('matching down mid-cancel', 'trade.algo_child_cancel_failed');
+      },
+    };
+    const live = new TwapEngine(p);
+    const parent = live.create(USER, baseInput(), LOT);
+    await live.tick(parent.id);
+    await persistAlgoMutation(live, store, live.get(parent.id)!);
+    expect((await store.load(parent.id))?.parent.status).toBe('active');
+
+    await expect(persistAlgoCancelAttempt(live, store, USER, parent.id)).rejects.toMatchObject({
+      code: 'trade.algo_child_cancel_failed',
+    });
+
+    const parked = await store.load(parent.id);
+    expect(parked?.parent.status).not.toBe('active');
+    expect(parked?.parent.status).toBe('paused');
+    expect(parked?.parent.haltReason).toBe('cancel_incomplete');
+    expect(await store.listActive()).toHaveLength(0);
+
+    const cold = new TwapEngine(p);
+    await hydrateAlgoFromStore(cold, store, parent.id);
+    const tick = await cold.tick(parent.id);
+    expect(tick).toEqual({ kind: 'idle', reason: 'paused' });
+    expect(cold.get(parent.id)!.status).not.toBe('active');
   });
 
   it('hydrateAlgoFromStore 404s when the store has no row', async () => {

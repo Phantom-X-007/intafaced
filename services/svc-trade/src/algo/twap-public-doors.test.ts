@@ -22,7 +22,12 @@ import { createTradeRouter, type TradeRouter } from '../router.js';
 import { TradeError, type OrderSide } from '../spot/types.js';
 import type { TradeService } from '../spot/trade-service.js';
 import { MemoryTwapParentStore } from './parent-store.js';
-import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from './hydrate-on-mutate.js';
+import {
+  hydrateAlgoFromStore,
+  hydrateAlgoIfMissing,
+  persistAlgoCancelAttempt,
+  persistAlgoMutation,
+} from './hydrate-on-mutate.js';
 import { presentAlgoProgress, FORBIDDEN_PARENT_MONEY_KEYS } from './present.js';
 import { TwapEngine, type TwapEnginePorts } from './twap-engine.js';
 import type { AlgoQuotedMark, CreateTwapInput, TwapParent } from './types.js';
@@ -190,7 +195,7 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
     },
     async cancelAlgo(p: Principal, parentId: string) {
       await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
-      return persistAlgoMutation(engine, store, await engine.cancel(p.userId, parentId));
+      return persistAlgoCancelAttempt(engine, store, p.userId, parentId);
     },
     async tickAlgo(parentId: string) {
       await hydrateAlgoFromStore(engine, store, parentId);
