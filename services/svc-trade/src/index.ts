@@ -528,6 +528,10 @@ registerPublicRest(app, {
       indexPrice: null,
     };
   },
+  algo: {
+    createEnabled: env.TRADE_ALGO_ENABLED,
+    jobsEnabled: env.TRADE_ALGO_JOBS_ENABLED,
+  },
 });
 
 // S2S: oracle/ops publish funding rates (public GET only reflects published).
