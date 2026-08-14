@@ -759,10 +759,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         // (10×), not a silent substitute when the caller omitted the field.
         // A JSON number here is also refused — parseAmount is for a named string.
         return reply.code(400).send({
-          ...badRequest(
-            'leverage is required on open — isolated entry does not default to 1x',
-            'trade.leverage_required',
-          ).body,
+          ...badRequest('leverage is required on open — isolated entry does not default to 1x', 'trade.leverage_required').body,
         });
       }
       const leverage = leverageRaw;
