@@ -1565,6 +1565,7 @@ export const FEATURES = [
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
     note:
+      '**2026-08-14:** durable inbox for agentActionCompleted (completion/session_close only). ' +
       '**D26-P1-O5 deepen (2026-08-12):** `notify.operatorDeliveries` (`admin:read`) — newest-first ' +
       'cross-user delivery outcomes; `accepted`≠end-device delivered. Prior #1701: fan-out mountain vs §13 ' +
       'channels explicit (`mountain-vs-sockets.ts`). Mountain stays `ready` not `done` while OOA refuse; ' +

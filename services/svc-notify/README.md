@@ -239,6 +239,7 @@ _None._
 | `intafaced.token.stake.created`      | `notify-stake-created`         | Inbox row when a stake is locked                           |
 | `intafaced.bank.margin_call.created` | `notify-bank-margin-called`    | **Critical** inbox row + fan-out when a loan is called     |
 | `intafaced.agents.action.rejected`   | `notify-agent-action-rejected` | Inbox row when a guardrail refuses an agent action         |
+| `intafaced.agents.action.completed`  | `notify-agent-action-completed` | Inbox row on completion / session_close only              |
 
 ### Idempotency and backpressure
 

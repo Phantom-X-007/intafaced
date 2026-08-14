@@ -155,6 +155,8 @@ export const en = {
   'notify.token.stake.created.body': '{amount} staked on the {tier} tier.',
   'notify.agents.action.rejected.title': 'Agent action refused',
   'notify.agents.action.rejected.body': 'A guardrail blocked {tool} ({refusalCode}).',
+  'notify.agents.action.completed.title': 'Agent action finished',
+  'notify.agents.action.completed.body': 'Your agent finished ({kind}).',
   'notify.bank.margin_call.title': 'Margin call on your loan',
   'notify.bank.margin_call.body':
     'Add {cureCollateralAmount} {collateralAssetId} before {graceExpiresAt} or part of your collateral may be sold.',
