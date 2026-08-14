@@ -24,9 +24,7 @@ describe('assertPersistableDestination', () => {
   });
 
   it('does not invent a destination — empty / gibberish refuse before any hold', () => {
-    expect(() => assertPersistableDestination('crypto-native', { kind: 'crypto', ref: '0xdead' })).toThrow(
-      DestinationKindError,
-    );
+    expect(() => assertPersistableDestination('crypto-native', { kind: 'crypto', ref: '0xdead' })).toThrow(DestinationKindError);
     expect(() => assertPersistableDestination('card-sandbox', { kind: 'bank', ref: 'X' })).toThrow(DestinationKindError);
   });
 
@@ -47,9 +45,7 @@ describe('assertOnlyPayoutDestinations (no store)', () => {
   });
 
   it('require refuses closed — later payout has no ref to hold against', async () => {
-    await expect(dests.require({ merchantId: 'm', railId: 'crypto-native' })).rejects.toBeInstanceOf(
-      PayoutDestinationMissingError,
-    );
+    await expect(dests.require({ merchantId: 'm', railId: 'crypto-native' })).rejects.toBeInstanceOf(PayoutDestinationMissingError);
     await expect(dests.require({ merchantId: 'm', railId: 'crypto-native' })).rejects.toMatchObject({
       code: 'pay.payout_destination_missing',
     });
