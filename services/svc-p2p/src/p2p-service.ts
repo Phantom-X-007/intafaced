@@ -44,13 +44,7 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
-import {
-  InstrumentError,
-  methodIdKey,
-  methodsWithLiveDestination,
-  missingSellDestinations,
-  sellOfferBoardable,
-} from './instruments.js';
+import { InstrumentError, methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
