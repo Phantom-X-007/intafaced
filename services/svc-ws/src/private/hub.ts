@@ -103,6 +103,16 @@ export class PrivateOrderHub {
     return this.#subscriptions.size;
   }
 
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
+  get maxConnections(): number {
+    return this.#options.maxConnections;
+  }
+
+  /** Per-principal cap on the private hub. Default matches attach (16). */
+  get maxConnectionsPerUser(): number {
+    return this.#options.maxConnectionsPerUser ?? 16;
+  }
+
   get stats(): { connections: number; updates: number; droppedFrames: number; evictions: number } {
     return {
       connections: this.#subscriptions.size,

@@ -76,6 +76,11 @@ export class TradeHub {
     return this.#subscriptions.size;
   }
 
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
+  get maxConnections(): number {
+    return this.#options.maxConnections;
+  }
+
   get stats(): { connections: number; markets: number; prints: number; droppedFrames: number; evictions: number } {
     return {
       connections: this.#subscriptions.size,

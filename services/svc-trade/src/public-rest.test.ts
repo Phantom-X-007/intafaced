@@ -301,7 +301,10 @@ describe('public REST routes', () => {
       asOfMs: number;
       routes: Array<{ name: string; kind: string }>;
       refuseArms: Array<{ id: string; httpStatus: number }>;
-      notes: { rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number } };
+      notes: {
+        rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number };
+        algo: { createEnabled: boolean; jobsEnabled: boolean; jobsDefault: false; icebergs: 'out' };
+      };
     };
     expect(body.asOfMs).toBe(1_700_000_000_000);
     expect(body.routes.length).toBeGreaterThan(10);
@@ -316,6 +319,19 @@ describe('public REST routes', () => {
       privatePerMinute: 300,
       windowMs: 60_000,
     });
+    expect(body.notes.algo).toEqual({
+      createEnabled: true,
+      jobsEnabled: false,
+      jobsDefault: false,
+      icebergs: 'out',
+    });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports jobsEnabled when the host passes the live flag', async () => {
+    const app = await build(deps({ algo: { createEnabled: true, jobsEnabled: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.algo).toMatchObject({ jobsEnabled: true, jobsDefault: false, icebergs: 'out' });
     await app.close();
   });
 

@@ -57,14 +57,14 @@ smallest blast radius in the fleet. A second public origin on a process that hol
 HTTP + JSON, plus one websocket. Amounts in and out are **decimal strings**, never JSON numbers. The only JSON
 numbers anywhere in this service's output are integer sequences.
 
-| Route                                              | Input | Output                                                                                                                                                       |
-| -------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                                                                                                                    |
-| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                 |
-| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down                                                                                                       |
-| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                |
-| `GET /health`                                      | —     | `{ ok, service, enabled, connections, privateConnections, tradesBus, privateBus, … }`                                                                        |
-| `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works) |
+| Route                                              | Input | Output                                                                                                                                                            |
+| -------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                                                                                                                         |
+| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                      |
+| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down                                                                                                            |
+| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                     |
+| `GET /health`                                      | —     | `{ ok, service, enabled, connections, capacity.{depth,trades,private}, tradesBus, privateBus, … }` — occupancy never 503s; ceilings are per-hub, not process-wide |
+| `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works)      |
 
 ### The wire format is not ours
 
@@ -249,9 +249,9 @@ off before close). **Not** via the svc-edge admin console — edge never routes 
 origin, not behind the edge), so edge module halt cannot stop depth/tape here.
 
 **Effect when off:** upgrades are refused with `503`, every open socket is closed with a reason, and `/ready`
-returns `503` so the load balancer takes the instance out of rotation. `/health` keeps answering, so an operator can
-still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
-stale numbers.
+returns `503` so the load balancer takes the instance out of rotation. `/health` keeps answering (including per-hub
+`capacity` vs the same ceilings attach already enforces), so an operator can still see occupancy without paging.
+Occupancy never 503s `/health`.
 
 **Bus honesty:** if NATS subscribe fails **before the first successful attach** (boot), the process **retries with
 exponential backoff** (depth keeps serving). `/ready` stays `200` while the bus is down, but `tradesBus` /

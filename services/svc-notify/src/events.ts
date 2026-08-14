@@ -1,4 +1,5 @@
 import {
+  agentActionRejected,
   bankMarginCalled,
   fillSettled,
   kycApproved,
@@ -562,6 +563,30 @@ export async function subscribeNotificationEvents(
           severity: 'critical',
           sourceSubject: bankMarginCalled.subject,
           sourceIdempotencyKey: `${payload.loanId}:${payload.sequence}`,
+        }),
+      );
+    }),
+  );
+
+  attachments.push(
+    await attach(bus, 'agentActionRejected', agentActionRejected.subject, 'notify-agent-action-rejected', async (payload) => {
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'agents.action.rejected',
+          titleKey: 'notify.agents.action.rejected.title',
+          bodyKey: 'notify.agents.action.rejected.body',
+          params: {
+            refusalCode: payload.refusalCode,
+            tool: payload.tool ?? '—',
+            task: payload.task ?? '—',
+            sessionId: payload.sessionId,
+            agentId: payload.agentId,
+          },
+          href: `/agents/sessions/${payload.sessionId}`,
+          severity: 'action',
+          sourceSubject: agentActionRejected.subject,
+          sourceIdempotencyKey: `${payload.sessionId}:${payload.sequence}`,
         }),
       );
     }),

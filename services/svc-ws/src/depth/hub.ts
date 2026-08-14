@@ -184,6 +184,11 @@ export class DepthHub {
     return this.#subscriptions.size;
   }
 
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
+  get maxConnections(): number {
+    return this.#options.maxConnections;
+  }
+
   /** Markets with at least one subscriber — exactly what the poller should poll. */
   get activeMarkets(): string[] {
     const active = new Set<string>();

@@ -153,6 +153,8 @@ export const en = {
   'notify.identity.rank.updated.body': 'You moved from rank {previousRank} to rank {rank}.',
   'notify.token.stake.created.title': 'Stake locked',
   'notify.token.stake.created.body': '{amount} staked on the {tier} tier.',
+  'notify.agents.action.rejected.title': 'Agent action refused',
+  'notify.agents.action.rejected.body': 'A guardrail blocked {tool} ({refusalCode}).',
   'notify.bank.margin_call.title': 'Margin call on your loan',
   'notify.bank.margin_call.body':
     'Add {cureCollateralAmount} {collateralAssetId} before {graceExpiresAt} or part of your collateral may be sold.',
