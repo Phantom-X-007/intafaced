@@ -23,8 +23,6 @@ jobs:
           git rm -f .github/workflows/wire-crypto-payout-once.yml
           git rm -f services/svc-pay/scripts/wire-crypto-payout.py
           git add services/svc-pay/src/index.ts \
-                  services/svc-pay/src/merchant-payout-destination.ts \
-                  services/svc-pay/src/merchant-payout-destination.test.ts \
                   services/svc-pay/src/payment-service.ts \
                   services/svc-pay/src/payment-service.test.ts \
                   services/svc-pay/src/router.ts
@@ -36,3 +34,4 @@ withdrawHold. Refuse closed if none stored. No PSP. bank-payout stays absent.
 MSG
 )"
           git push origin HEAD:feat/pay-crypto-payout-stored-evm
+# retrigger-money-path-2
