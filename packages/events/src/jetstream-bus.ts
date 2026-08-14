@@ -139,6 +139,15 @@ export class JetStreamEventBus implements EventBus {
     await Promise.all(this.subs.map((s) => s.unsubscribe()));
     await this.nc.drain();
   }
+
+  /**
+   * Resolves when this NATS connection is gone for good (drain, close, or
+   * server drop). Used by svc-ws to drop `/ready` bus flags and re-attach
+   * without a process restart. Not a liveness probe while TCP reconnects.
+   */
+  whenClosed(): Promise<void> {
+    return this.nc.closed().then(() => undefined);
+  }
 }
 
 /**

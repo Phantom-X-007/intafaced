@@ -258,10 +258,7 @@ exponential backoff** (depth keeps serving). `/ready` stays `200` while the bus 
 `privateBus` are `false` so ops can see an empty tape is not "live and quiet" — it is unsubscribed until the next
 successful connect.
 
-After a consumer is attached, **nats.js owns TCP reconnect** for that connection. The flags stay `true` for the
-process session while the consumer is held; they are not a continuous probe of remote NATS liveness. A mid-session
-supervisor that drops the flags and re-attaches when the connection is gone for good is **not built** (ops residual
-if nats.js reconnect proves insufficient).
+After a consumer is attached, **nats.js owns TCP reconnect** for that connection. If the connection is gone for good (`closed()`), `/ready` flips `tradesBus` / `privateBus` false and the lifecycle **re-attaches** without a process restart. Depth keeps serving. Flags are not a continuous probe of remote NATS while TCP reconnect is in progress.
 
 ---
 
