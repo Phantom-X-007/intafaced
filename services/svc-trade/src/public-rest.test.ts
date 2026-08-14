@@ -304,6 +304,7 @@ describe('public REST routes', () => {
       notes: {
         rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number };
         algo: { createEnabled: boolean; jobsEnabled: boolean; jobsDefault: false; icebergs: 'out' };
+        futures: { jobsEnabled: boolean; jobsDefault: false };
       };
     };
     expect(body.asOfMs).toBe(1_700_000_000_000);
@@ -325,6 +326,10 @@ describe('public REST routes', () => {
       jobsDefault: false,
       icebergs: 'out',
     });
+    expect(body.notes.futures).toEqual({
+      jobsEnabled: false,
+      jobsDefault: false,
+    });
     await app.close();
   });
 
@@ -332,6 +337,13 @@ describe('public REST routes', () => {
     const app = await build(deps({ algo: { createEnabled: true, jobsEnabled: true } }));
     const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
     expect(res.json().notes.algo).toMatchObject({ jobsEnabled: true, jobsDefault: false, icebergs: 'out' });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports futures jobsEnabled only when the host passes the live flag', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toEqual({ jobsEnabled: true, jobsDefault: false });
     await app.close();
   });
 
