@@ -2,6 +2,7 @@ import {
   bankMarginCalled,
   fillSettled,
   kycApproved,
+  orderUpdated,
   p2pEscrowLocked,
   p2pEscrowRefunded,
   p2pEscrowReleased,
@@ -54,6 +55,7 @@ export { NOTIFY_EVENT_CONSUMERS, SKIPPED_NOTIFY_SUBJECTS, notifyEventConsumerCou
  * userId principal, and has clear user-facing meaning. No invented publishers.
  * Skipped (no user ids on payload): p2pDisputeResolved, p2pTradeExpired.
  * p2pTradeDisputed notifies openedBy only — the counterparty is not on the payload.
+ * orderUpdated notifies cancelled/rejected/expired only — fills already have fillSettled.
  */
 
 /**
@@ -164,9 +166,34 @@ export const DEFAULT_POSITION_NOTIFY_POLICY: PositionNotifyPolicy = {
   severity: 'critical',
 };
 
+/** The lifecycle states `intafaced.trade.order.updated` can carry. */
+type OrderStatus = PayloadOf<'orderUpdated'>['status'];
+
+/**
+ * WHICH ORDER TRANSITIONS ARE WORTH A NOTIFICATION.
+ *
+ * `trade.order.updated` is high-frequency: every pending/open/fill change.
+ * Fills already produce `trade.fill` via `fillSettled`. Pending and open are
+ * the trader's own click (and private WS already fans the live row).
+ *
+ * The inbox default is the three terminal states that can complete while the
+ * app is closed: cancelled, rejected, expired. Widening is a one-line change
+ * to `statuses` plus copy — not an env variable.
+ */
+export interface OrderTerminalNotifyPolicy {
+  readonly statuses: readonly OrderStatus[];
+  readonly severity: Severity;
+}
+
+export const DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY: OrderTerminalNotifyPolicy = {
+  statuses: ['cancelled', 'rejected', 'expired'],
+  severity: 'info',
+};
+
 export interface SubscribeOptions {
   /** Override the conservative default above. Production boots without one. */
   readonly positionNotify?: PositionNotifyPolicy;
+  readonly orderNotify?: OrderTerminalNotifyPolicy;
 }
 
 /**
@@ -232,6 +259,7 @@ export async function subscribeNotificationEvents(
 ): Promise<SubscriptionReport> {
   const attachments: Attachment[] = [];
   const positionPolicy = options.positionNotify ?? DEFAULT_POSITION_NOTIFY_POLICY;
+  const orderPolicy = options.orderNotify ?? DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY;
 
   attachments.push(
     await attach(bus, 'fillSettled', fillSettled.subject, 'notify-fill-settled', async (payload) => {
@@ -253,6 +281,37 @@ export async function subscribeNotificationEvents(
           severity: 'info',
           sourceSubject: fillSettled.subject,
           sourceIdempotencyKey: payload.fillId,
+        }),
+      );
+    }),
+  );
+
+  attachments.push(
+    await attach(bus, 'orderUpdated', orderUpdated.subject, 'notify-order-updated', async (payload) => {
+      if (!orderPolicy.statuses.includes(payload.status)) return;
+
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'trade.order.terminal',
+          titleKey: 'notify.trade.order.terminal.title',
+          bodyKey: 'notify.trade.order.terminal.body',
+          params: {
+            orderId: payload.orderId,
+            marketId: payload.marketId,
+            status: payload.status,
+            side: payload.side,
+            type: payload.type,
+            qty: payload.qty,
+            filledQty: payload.filledQty,
+            price: payload.price,
+            clientOrderId: payload.clientOrderId,
+            ts: payload.ts,
+          },
+          href: `/trade/orders/${payload.orderId}`,
+          severity: orderPolicy.severity,
+          sourceSubject: orderUpdated.subject,
+          sourceIdempotencyKey: `${payload.orderId}:${payload.status}`,
         }),
       );
     }),

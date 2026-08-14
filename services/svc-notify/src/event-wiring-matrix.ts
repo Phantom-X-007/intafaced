@@ -36,6 +36,12 @@ export const NOTIFY_EVENT_CONSUMERS: readonly NotifyConsumerRow[] = [
     effect: 'Inbox row for the fill owner',
   },
   {
+    event: 'orderUpdated',
+    durable: 'notify-order-updated',
+    subject: 'intafaced.trade.order.updated',
+    effect: 'Inbox row on cancelled / rejected / expired only',
+  },
+  {
     event: 'positionUpdated',
     durable: 'notify-position-updated',
     subject: 'intafaced.trade.position.updated',
