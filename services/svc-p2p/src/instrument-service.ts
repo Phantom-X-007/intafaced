@@ -471,18 +471,39 @@ export class InstrumentService {
   }
 
   /**
+   * Method ids an operator has actually registered and left enabled.
+   *
+   * The registry ships empty. An empty set is not "any rail" — it is no rail.
+   * Offer create and the public board consult this so a missing schema cannot
+   * look like a destination the seller merely forgot to fill in.
+   */
+  async enabledMethodKeys(): Promise<ReadonlySet<string>> {
+    const rows = await this.sql<Array<{ method_id: string }>>`
+      SELECT DISTINCT method_id FROM p2p.payment_method_schemas WHERE enabled = true
+    `;
+    return new Set(rows.map((r) => methodIdKey(r.method_id)));
+  }
+
+  /**
    * Active method ids for one owner in one fiat — the board's "can they be paid?"
    * answer without disclosing destinations.
    *
    * Method ids are already stored lowercased; returned keys match `methodIdKey`.
+   * A destination whose method has no enabled schema is not payable: the
+   * operator registry is the rail, not a leftover instrument row.
    */
   async liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>> {
     const fiat = fiatCurrency.trim().toUpperCase();
     const rows = await this.sql<Array<{ method_id: string }>>`
-      SELECT DISTINCT method_id FROM p2p.payment_instruments
-       WHERE owner_id = ${ownerId}
-         AND fiat_currency = ${fiat}
-         AND status = 'active'
+      SELECT DISTINCT i.method_id
+        FROM p2p.payment_instruments i
+        JOIN p2p.payment_method_schemas s
+          ON s.method_id = i.method_id
+         AND s.enabled = true
+         AND (s.country = i.country OR s.country = ${ANY_COUNTRY})
+       WHERE i.owner_id = ${ownerId}
+         AND i.fiat_currency = ${fiat}
+         AND i.status = 'active'
     `;
     return new Set(rows.map((r) => methodIdKey(r.method_id)));
   }

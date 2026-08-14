@@ -234,11 +234,59 @@ if (!available) {
     it('ships empty, so an unregistered market refuses rather than guesses', async () => {
       await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
       expect(await instruments.listMethodSchemas()).toEqual([]);
+      expect(await instruments.enabledMethodKeys()).toEqual(new Set());
+      expect(await callerFor(SELLER).instruments.methods.list({})).toEqual([]);
 
       // The honest failure. The alternative is a seeded guess at what this
       // market needs, which produces an instrument that looks complete and
       // cannot be paid — discovered by a buyer, after escrow is locked.
       await expect(sellerInstrument()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+    });
+
+    it('RED: an empty registry is not a live payable rail', async () => {
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      // `offer_method_no_destination` would mean "this rail exists; add a
+      // destination." That sentence is how an empty registry looks payable.
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+
+      // Buy offers used to skip every method check, so the board could advertise
+      // whatever string the maker typed as if it were a rail.
+      const buy = p2p.createOffer({
+        makerId: BUYER,
+        side: 'buy',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      await expect(buy).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+
+      expect(await p2p.listOffers({})).toEqual([]);
+    });
+
+    it('a leftover destination is not payable once the operator registry is empty', async () => {
+      const created = await sellerInstrument();
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      expect(await instruments.liveMethodKeys(SELLER, 'USD')).toEqual(new Set());
+      expect(await instruments.enabledMethodKeys()).toEqual(new Set());
+      expect(created.status).toBe('active');
     });
 
     it('rejects a field the operator never declared instead of dropping it', async () => {
@@ -1022,6 +1070,8 @@ if (!available) {
 
     it('does not force buy offers to hold destinations at create', async () => {
       // Maker is the buyer; seller is the eventual taker — unknown at post time.
+      // The method still has to be an operator-registered rail, or the board
+      // would advertise an invented string as payable.
       await expect(
         p2p.createOffer({
           makerId: BUYER,
@@ -1035,6 +1085,26 @@ if (!available) {
           methods: [METHOD],
         }),
       ).resolves.toMatchObject({ side: 'buy', methods: [METHOD] });
+    });
+
+    it('drops a buy offer from the board when the operator registry is emptied', async () => {
+      const offer = await p2p.createOffer({
+        makerId: BUYER,
+        side: 'buy',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
     it('filters a multi-method sell offer down to live rails only', async () => {
