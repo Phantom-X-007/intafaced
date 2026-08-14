@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "boardId": "D26-P0-18",
   "title": "Owner ruling packet — tip index of every open owner decision",
-  "updated": "2026-08-13",
+  "updated": "2026-08-14",
   "tipAtWrite": "a8e3effe",
   "purpose": "Single machine-readable index so open owner decisions are not scattered across packets, Class X checklists, and lane-stop parks. Completeness for D26-P0-18 is this file + the human packets it points at — not a tip-bump.",
   "humanPacket": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
@@ -56,15 +56,16 @@
     },
     {
       "id": "D26-P0-04",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Token emission / buyback authority live",
       "blocks": ["svc-token authority drift", "burn-before-guard"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-04--token-emission--buyback-authority-live",
       "satelliteDocs": ["docs/adr/2026-08-04-token-economics-outcomes.md"],
       "answerShape": "authority_store_live_plus_drift_guards",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-14 seal: token_params is live authority; seeds ≠ DB refuse; claim-before-burn already on tip. Magnitudes stay PKT-C9 / Nitro."
     },
     {
       "id": "D26-P0-05",
@@ -141,35 +142,37 @@
     },
     {
       "id": "D26-P0-11",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Scanner signal inputs law",
       "blocks": ["agents.scanner"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-12-scanner-signal-inputs-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-11--scanner-signal-inputs-law",
       "answerShape": "what_may_rank_plus_refuse_when_missing",
-      "priority": 4
+      "priority": 4,
+      "notes": "2026-08-12 seal: v1 abs_change_x_log_volume on last/volume24h/change24hBps. Index was stale open."
     },
     {
       "id": "D26-P0-12",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Attestation threat model (blueprint.attestations)",
       "blocks": ["blueprint.attestations"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-12--attestation-threat-model",
       "answerShape": "threat_model_plus_zero_pii_bar",
-      "priority": 4
+      "priority": 4,
+      "notes": "2026-08-14 seal: zero-PII bar + replay/issuer threats. On-chain implement stays Shehzad. No WebAuthn conflation."
     },
     {
       "id": "D26-P0-13",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Launchpad raise economics (law only)",
       "blocks": ["launch economics invent"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-13--launchpad-raise-economics-law-only",
-      "notes": "Law doc is owner/Denon; on-chain implement stays Shehzad.",
+      "notes": "2026-08-14 seal: raise math refuse-closed until Nitro publishes named params. On-chain implement stays Shehzad.",
       "answerShape": "law_doc_numbers_or_refuse",
       "priority": 4
     },
@@ -188,16 +191,16 @@
     },
     {
       "id": "D26-P0-15",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Copy jurisdiction list",
       "blocks": ["trade.copy geo"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#3--the-8-rate-fee-and-share-numbers--and-the-mechanism",
       "related": ["D26-P0-02", "CLASS-X-SANCTIONS"],
       "answerShape": "list_or_refuse_closed_jurisdictions",
       "priority": 2,
-      "notes": "Engineers do not draft jurisdiction lists; counsel/Nitro. Mechanism may refuse-closed until list exists."
+      "notes": "2026-08-12 mechanism refuse-closed. 2026-08-14 owner allowlist in .env.example (not worldwide). Blank host still refuse. Index was stale open."
     },
     {
       "id": "D26-P0-16",
@@ -260,39 +263,42 @@
     },
     {
       "id": "PKT-C7",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Dark-feed horizon + operator adjudicated settlement",
       "blocks": ["frozen futures positions"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#7--the-dark-feed-horizon-and-operator-settlement-of-a-frozen-position",
       "satelliteDocs": ["docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md"],
       "answerShape": "horizon_plus_human_adjudication_rules",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-14 seal: human adjudication only after liquidationMaxAgeSeconds of continuous dark; record price/author/reason. No job auto-settle."
     },
     {
       "id": "PKT-C8",
-      "status": "open",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "p2p:moderate scope split",
       "blocks": ["p2p moderation"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#8--the-p2pmoderate-scope-split",
       "answerShape": "owner_signoff_scope",
-      "priority": 4
+      "priority": 4,
+      "notes": "2026-08-14 seal: do not mint p2p:moderate. Allowlist + admin:compliance. Empty list = unreachable. Who is on the list is Class X."
     },
     {
       "id": "PKT-C9",
-      "status": "open",
+      "status": "mechanism_only",
       "kind": "product_ruling",
       "title": "Four token numbers (emission / buyback / burn / staking)",
       "blocks": ["svc-token magnitudes"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#9--four-token-numbers",
       "related": ["D26-P0-04"],
       "satelliteDocs": ["docs/adr/2026-08-04-token-economics-outcomes.md"],
       "answerShape": "owner_magnitudes_no_agent_invent",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-14: magnitudes stay unpublished (Nitro). Seeds are not live numbers. User-facing APY/supply refuses until token_params is owner-set."
     },
     {
       "id": "PKT-D10",

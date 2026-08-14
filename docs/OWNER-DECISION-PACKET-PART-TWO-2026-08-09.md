@@ -1,6 +1,6 @@
 # Owner decision packet, part two — P0-04…17 + completeness home
 
-**Status:** OPEN rulings — shapes only. Nothing in this file is decided by an agent.  
+**Status:** Remaining **Denon** P0 product rulings sealed 2026-08-14 (`adr/2026-08-14-remaining-p0-money-law.md`). Class X / F10 / GitHub admin / token **magnitudes** stay Nitro.  
 **Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-04…17** (P0-18 = this packet family).  
 **Companion (part one):** [`OWNER-DECISION-PACKET-2026-08-09.md`](OWNER-DECISION-PACKET-2026-08-09.md) — P0-01…03 plus money-path / dark-feed / token magnitudes / F10.  
 **Machine index (tip SoT for “what is still open”):** [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json).
@@ -155,5 +155,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## What to answer next (aligned with part one)
 
-1. **P0-02** — named §8 rates (or launch-closed). Commission **mechanism** is sealed (P0-10); the number is not.
-2. Class X wallet rotation / notify credentials when you want out-of-app margin calls.
+Denon P0 product law for custodial engines is sealed (2026-08-14). Remaining clicks are **not** agent-wait:
+
+1. **Nitro Class X** — gateway credentials, wallet rotation, licences, go-live, sanctions **content**.
+2. **PKT-C9 magnitudes** — emission/buyback/burn/staking into `token_params` when those surfaces should go live.
+3. **PKT-D10 F10** — human edit in unreviewed Java (`act/pom.xml`). Denon will not touch it.
+4. **Shehzad** — INTACHAIN / attestations against the P0-12 bar / launchpad chain.
+5. **GitHub admin** — GH-G1…G3, G5.
