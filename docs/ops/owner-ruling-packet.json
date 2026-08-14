@@ -9,12 +9,12 @@
   "humanPacketPartTwo": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
   "rule": "Where a number is missing, agents refuse-closed and name the residual. Never invent rates, venues, jurisdictions, or Class X content.",
   "statusLegend": {
-    "open": "Waiting on an owner product ruling or click",
+    "open": "Unsealed Denon product ruling — Denon takes the packet recommendation; not a Nitro click",
     "sealed": "Owner ruled; engineering may proceed under the seal",
     "deferred": "Explicitly deferred until a precondition ruling",
     "withdrawn": "Filed in error; nothing owed",
     "class_x": "Secrets / prod go-live / licence / counsel — Nitro human only",
-    "pending_click": "Defaults or shapes already shipped; owner still must click or override",
+    "pending_click": "Host/Class X override only (secrets, go-live, licence, sanctions list). Not a Nitro product-law gate",
     "mechanism_only": "Mechanism sealed by Denon; magnitudes still owner"
   },
   "rulings": [
