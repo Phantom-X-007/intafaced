@@ -420,7 +420,8 @@ export const FEATURES = [
       '2026-08-13 hydrate-on-mutate: pause/resume/cancel load durable store after restart and await save (onChange was fire-and-forget). ' +
       '2026-08-13 persist-on-tick: tickAlgo hydrates from store; tick/tickAll await save so a crash cannot leave Postgres active after a miss/halt. ' +
       '2026-08-14 durable place grant: createTwap persists presented scopes/session (no JWT); tick reinstalls after restart. Pre-migration rows still halt principal_unavailable. ' +
-      'VWAP/POV out — market maturity (owner). Not Done — ready with jobs OFF default. ' +
+      '2026-08-14 VWAP/POV: slices from non-seeded taker tape (candles lookback / interval volume); empty tape refuses trade.algo_volume_immature / algo_no_volume; POV participationBps is caller-published (no product default). Icebergs still out. ' +
+      'Not Done — ready with jobs OFF default. ' +
       'Owner released 2026-08-08. D-S-04 TWAP Stage #1002 + ADR #1145 + #1193 (re-space, cancel atomicity, scheduler mounted default OFF via TRADE_ALGO_JOBS_ENABLED). ' +
       'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON.',
     requires: ['services/svc-trade/src/algo'],

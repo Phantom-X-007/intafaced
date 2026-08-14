@@ -225,6 +225,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.algo_duplicate_id': { ccxt: 'InvalidOrder', status: 409 },
   'trade.algo_bad_state': { ccxt: 'InvalidOrder', status: 409 },
   'trade.algo_no_liquidity': { ccxt: 'OrderNotFillable', status: 400 },
+  'trade.algo_no_volume': { ccxt: 'OrderNotFillable', status: 400 },
+  'trade.algo_volume_immature': { ccxt: 'OrderNotFillable', status: 400 },
   'trade.algo_price_band': { ccxt: 'InvalidOrder', status: 400 },
   'trade.algo_mark_unusable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_mark_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },

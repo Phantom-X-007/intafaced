@@ -42,7 +42,7 @@ const algoParentOutputSchema = z.object({
   id: z.string(),
   symbol: z.string(),
   side: orderSideSchema,
-  kind: z.literal('twap'),
+  kind: z.enum(['twap', 'vwap', 'pov']),
   totalQty: decimal,
   durationMs: z.number().int(),
   sliceIntervalMs: z.number().int(),
@@ -53,6 +53,7 @@ const algoParentOutputSchema = z.object({
   childrenEmitted: z.number().int(),
   missesRecorded: z.number().int(),
   haltReason: z.string().nullable(),
+  participationBps: z.number().int().nullable(),
   createdAt: z.string(),
   startedAt: z.string(),
   nextDueAt: z.string(),
@@ -573,7 +574,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             limitPrice: decimal.optional(),
             clientAlgoId: z.string().min(1).max(48).optional(),
             subAccountId: z.string().uuid().optional(),
-            kind: z.enum(['twap']).optional(),
+            kind: z.enum(['twap', 'vwap', 'pov']).optional(),
+            participationBps: z.number().int().min(1).max(10_000).optional(),
           }),
         )
         .output(algoParentOutputSchema)
@@ -589,6 +591,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               clientAlgoId: input.clientAlgoId,
               subAccountId: input.subAccountId,
               kind: input.kind ?? 'twap',
+              participationBps: input.participationBps,
             });
             return presentAlgo(parent);
           }),
@@ -835,7 +838,7 @@ function presentAlgo(parent: import('./algo/index.js').TwapParent) {
     id: parent.id,
     symbol: parent.symbol,
     side: parent.side,
-    kind: 'twap' as const,
+    kind: parent.kind,
     totalQty: formatAmount(parent.totalQty),
     durationMs: parent.durationMs,
     sliceIntervalMs: parent.sliceIntervalMs,
@@ -846,6 +849,7 @@ function presentAlgo(parent: import('./algo/index.js').TwapParent) {
     childrenEmitted: parent.children.length,
     missesRecorded: parent.misses.length,
     haltReason: parent.haltReason,
+    participationBps: parent.participationBps,
     createdAt: parent.createdAt.toISOString(),
     startedAt: parent.startedAt.toISOString(),
     nextDueAt: parent.nextDueAt.toISOString(),

@@ -16,7 +16,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
-import { queryCandlesFromFills } from './candles.js';
+import { queryCandlesFromFills, queryTakerVolumeFromFills } from './candles.js';
 import { fillPayAmounts, fillReceivablesSurviveFees, ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
 import {
@@ -53,6 +53,7 @@ import {
   type TwapParentStore,
 } from '../algo/index.js';
 import { captureAlgoPlaceGrant, principalFromAlgoGrant } from '../algo/durable-principal.js';
+import { alignLookbackVolumes, sliceCount, timeframeForSliceInterval } from '../algo/volume-plan.js';
 import type { TwapParentRecord } from '../algo/parent-store.js';
 import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
@@ -408,6 +409,7 @@ export class TradeService {
             quality: 'mid',
           };
         },
+        intervalTakerVolume: async (marketId, from, to) => queryTakerVolumeFromFills(this.sql, { marketId, from, to }),
       },
       {
         onChange: (parent, plan) => this.algoStore.save({ parent, plan }),
@@ -2205,8 +2207,9 @@ export class TradeService {
       limitPrice?: Amount | null;
       subAccountId?: string;
       clientAlgoId?: string;
-      /** Only `twap` in v1 — VWAP/POV refused by name. */
+      /** `twap` (default), `vwap` (lookback candles), `pov` (live tape × participationBps). */
       kind?: string;
+      participationBps?: number;
     },
   ): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
@@ -2217,9 +2220,9 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
     const kind = (input.kind ?? 'twap').toLowerCase();
-    if (kind !== 'twap') {
+    if (kind !== 'twap' && kind !== 'vwap' && kind !== 'pov') {
       throw new TradeError(
-        `algo kind "${kind}" is not available — v1 is TWAP only (VWAP/POV blocked on market maturity, not missing candles)`,
+        `algo kind "${kind}" is not available — v1 is TWAP / VWAP / POV (icebergs still out)`,
         'trade.algo_unsupported_kind',
       );
     }
@@ -2227,7 +2230,7 @@ export class TradeService {
     const market = await this.requireMarket(input);
     // TWAP is spot-only by name (see `assertSpotSurface`), not because
     // `assertTradable` happens to refuse the kind.
-    assertSpotSurface(market, 'TWAP');
+    assertSpotSurface(market, kind === 'twap' ? 'TWAP' : kind === 'vwap' ? 'VWAP' : 'POV');
     assertTradable(market);
     assertSettlementRails(market);
     assertMarketOpen(market, this.now());
@@ -2247,7 +2250,7 @@ export class TradeService {
       );
     }
 
-    const createInput: CreateTwapInput = {
+    let createInput: CreateTwapInput = {
       marketId: market.id,
       symbol: market.symbol,
       side: input.side,
@@ -2257,7 +2260,35 @@ export class TradeService {
       limitPrice: input.limitPrice ?? null,
       subAccountId: input.subAccountId ?? null,
       clientAlgoId: input.clientAlgoId,
+      kind,
     };
+
+    if (kind === 'vwap') {
+      const tf = timeframeForSliceInterval(input.sliceIntervalMs);
+      if (tf == null) {
+        throw new TradeError(
+          'VWAP sliceIntervalMs must match a listed OHLCV timeframe (1m, 5m, 1h, …) — refuse rather than invent a finer volume bucket',
+          'trade.algo_invalid_schedule',
+        );
+      }
+      const n = sliceCount(input.durationMs, input.sliceIntervalMs);
+      const nowMs = this.now().getTime();
+      const windowEndMs = Math.floor(nowMs / input.sliceIntervalMs) * input.sliceIntervalMs;
+      const candles = await queryCandlesFromFills(this.sql, {
+        marketId: market.id,
+        timeframe: tf,
+        limit: n + 2,
+        sinceMs: windowEndMs - n * input.sliceIntervalMs,
+      });
+      createInput = {
+        ...createInput,
+        volumeProfile: alignLookbackVolumes(candles, n, input.sliceIntervalMs, windowEndMs),
+      };
+    }
+
+    if (kind === 'pov') {
+      createInput = { ...createInput, participationBps: input.participationBps };
+    }
 
     // Store principal on a side map so child place uses the real caller scopes.
     this.algoPrincipals.set(principal.userId, principal);
