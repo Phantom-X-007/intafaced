@@ -180,25 +180,25 @@ if (env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter) {
     });
   }
 }
+const venueBookPort =
+  venueMaintainedBooks.size > 0
+    ? (symbol: string) => {
+        const book = venueMaintainedBooks.get(symbol);
+        if (!book) return null;
+        return {
+          get servable() {
+            return book.servable;
+          },
+          top: () => book.top(),
+          observedAt: () => book.tracker.observedAt,
+        };
+      }
+    : undefined;
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
   symbols: venueMarkSymbols,
   adapter: venuePublicAdapter,
-  ...(venueMaintainedBooks.size > 0
-    ? {
-        bookForSymbol: (symbol: string) => {
-          const book = venueMaintainedBooks.get(symbol);
-          if (!book) return null;
-          return {
-            get servable() {
-              return book.servable;
-            },
-            top: () => book.top(),
-            observedAt: () => book.tracker.observedAt,
-          };
-        },
-      }
-    : {}),
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
   // Typo / unsupported venue — say so once; do not invent a mid adapter.
@@ -329,6 +329,7 @@ const mmMidSource = createMmMidSourceFromConfig({
   midFromVenue: env.TRADE_MM_SEED_MID_FROM_VENUE,
   venueAdapter: venuePublicAdapter,
   resolveVenueSymbol: (marketId) => venueMarkSymbols.get(marketId) ?? null,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
 const mmSeedJobs = startMmSeedJobs({
   ledger,
