@@ -1644,9 +1644,9 @@ if (!available) {
       const settlement = await settle(m.id, 'w-payout-no-dest');
       const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
 
-      await expect(
-        pay.payoutSettlement({ settlementId: settlement.id, railId: 'crypto-native' }),
-      ).rejects.toMatchObject({ code: 'pay.payout_destination_missing' });
+      await expect(pay.payoutSettlement({ settlementId: settlement.id, railId: 'crypto-native' })).rejects.toMatchObject({
+        code: 'pay.payout_destination_missing',
+      });
 
       expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
       expect(await availableOf(MERCHANT_USER)).toBe('9');
