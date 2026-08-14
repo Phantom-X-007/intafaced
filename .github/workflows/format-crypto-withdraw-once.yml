@@ -13,7 +13,7 @@ jobs:
         with:
           ref: feat/bank-crypto-withdraw-stored-evm
       - name: Apply prettier wrap
-        run: git apply services/svc-bank/scripts/fmt-withdraw.patch
+        run: git apply --verbose services/svc-bank/scripts/fmt-withdraw.patch
       - name: Commit and self-delete
         run: |
           git config user.name "Sovereign Builder"
