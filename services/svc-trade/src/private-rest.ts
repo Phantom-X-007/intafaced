@@ -753,7 +753,19 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = typeof body.symbol === 'string' ? body.symbol : '';
       const side = body.side === 'long' || body.side === 'short' ? body.side : null;
       const size = typeof body.size === 'string' ? body.size : typeof body.contracts === 'string' ? body.contracts : '';
-      const leverage = typeof body.leverage === 'string' ? body.leverage : '1';
+      const leverageRaw = typeof body.leverage === 'string' ? body.leverage.trim() : '';
+      if (!leverageRaw) {
+        // Isolated entry does not default to 1×. DIRECTION §1 states a ceiling
+        // (10×), not a silent substitute when the caller omitted the field.
+        // A JSON number here is also refused — parseAmount is for a named string.
+        return reply.code(400).send({
+          ...badRequest(
+            'leverage is required on open — isolated entry does not default to 1x',
+            'trade.leverage_required',
+          ).body,
+        });
+      }
+      const leverage = leverageRaw;
 
       const marginRefusal = crossMarginRefusal(body.marginMode);
       if (marginRefusal) {

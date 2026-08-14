@@ -1584,6 +1584,50 @@ describe('private REST — mount boundary + order write path', () => {
       await app.close();
     });
 
+    it('POST /positions without leverage → 400 and openPosition is never called (no silent 1x)', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          openPosition: async () => {
+            called = true;
+            return { id: 'pos-1' } as never;
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().intafacedCode).toBe('trade.leverage_required');
+      expect(called).toBe(false);
+      await app.close();
+    });
+
+    it('POST /positions with numeric leverage is refused, not coerced to 1x', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          openPosition: async () => {
+            called = true;
+            return { id: 'pos-1' } as never;
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: 10 },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().intafacedCode).toBe('trade.leverage_required');
+      expect(called).toBe(false);
+      await app.close();
+    });
+
     it('an unauthenticated caller is still refused first — the price check does not open a hole', async () => {
       const app = await build();
       const res = await app.inject({
@@ -1656,8 +1700,8 @@ describe('private REST — mount boundary + order write path', () => {
         }),
       );
       for (const payload of [
-        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'isolated', clientOpenId: 'iso-1' },
-        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', clientOpenId: 'iso-2' },
+        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', marginMode: 'isolated', clientOpenId: 'iso-1' },
+        { symbol: 'BTC/USDT-PERP', side: 'long', size: '1', leverage: '10', clientOpenId: 'iso-2' },
       ]) {
         const res = await app.inject({ method: 'POST', url: '/api/v1/positions', headers: signedHeaders(), payload });
         expect(res.statusCode).toBe(200);
@@ -1672,7 +1716,14 @@ describe('private REST — mount boundary + order write path', () => {
         method: 'POST',
         url: '/api/v1/positions',
         headers: signedHeaders(),
-        payload: { clientOpenId: 'rest-test-open', symbol: 'BTC/USDT-PERP', side: 'long', size: '1', marginMode: 'portfolio' },
+        payload: {
+          clientOpenId: 'rest-test-open',
+          symbol: 'BTC/USDT-PERP',
+          side: 'long',
+          size: '1',
+          leverage: '10',
+          marginMode: 'portfolio',
+        },
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('trade.bad_request');
