@@ -6,6 +6,7 @@ import { createAcademyRouter } from './router.js';
 import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
 import { certPerkPlaneStatus } from './certs/perk-plane.js';
 import type { AcademyService } from './academy-service.js';
+import type { PaperOpsStatus } from './paper/ops-gate.js';
 
 /**
  * THE MOUNT BOUNDARY for svc-academy (docs/decisions/mount-boundary.md).
@@ -99,14 +100,14 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
     createRoom: vi.fn(async () => room),
     invite: vi.fn(async () => undefined),
     assertPaperTradingEnabled: vi.fn(() => undefined),
-    paperOpsStatus: vi.fn(() => ({
+    paperOpsStatus: vi.fn((): PaperOpsStatus => ({
       enabled: true,
-      flagId: 'academy.paper-trading' as const,
-      envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
-      liveTradeUnaffected: true as const,
-      simulated: true as const,
-      venue: 'paper' as const,
-      realMoney: false as const,
+      flagId: 'academy.paper-trading',
+      envKey: 'ACADEMY_PAPER_TRADING_ENABLED',
+      liveTradeUnaffected: true,
+      simulated: true,
+      venue: 'paper',
+      realMoney: false,
     })),
     // The real plane over the real null publisher — a hand-written literal here
     // would pass while the shape drifted underneath it.
@@ -555,7 +556,7 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
         simulated: true as const,
         venue: 'paper' as const,
         realMoney: true,
-      })),
+      })) as unknown as AcademyService['paperOpsStatus'],
     });
     await expect(createAcademyRouter(academy).createCaller(signed()).paperOpsStatus()).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
