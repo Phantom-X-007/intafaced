@@ -163,6 +163,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
         'fundingRateUnavailable',
         'futuresUnconfiguredOnOpen',
         'leverageRequiredOnOpen',
+        'profitSourceUnconfiguredOnClose',
         'setLeverage',
         'setMarginMode',
       ].sort(),
@@ -200,6 +201,11 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(unconfigured.intafacedCode).toBe('trade.futures_unconfigured');
     expect(unconfigured.ccxtCode).toBe('NotSupported');
     expect(positionServiceSource).toContain("'trade.futures_unconfigured', 503");
+    const closeUnconfigured = refuseArmById('profitSourceUnconfiguredOnClose')!;
+    expect(closeUnconfigured.httpStatus).toBe(503);
+    expect(closeUnconfigured.intafacedCode).toBe('trade.profit_source_unconfigured');
+    expect(closeUnconfigured.ccxtCode).toBe('NotSupported');
+    expect(positionServiceSource).toContain("'trade.profit_source_unconfigured'");
   });
 
   it('extension inventory includes capabilities + ADL doors (not only REST_ROUTES)', () => {
@@ -456,6 +462,8 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     expect(body.refuseArms.some((a) => a.id === 'leverageRequiredOnOpen' && a.httpStatus === 400)).toBe(true);
     expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('futuresUnconfiguredOnOpen'))).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 503)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'closePosition' && r.refuseArmIds?.includes('profitSourceUnconfiguredOnClose'))).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'profitSourceUnconfiguredOnClose' && a.httpStatus === 503)).toBe(true);
     await app.close();
   });
 
