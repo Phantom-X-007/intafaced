@@ -1,0 +1,31 @@
+name: wire-withdraw-dest-once
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/wire-withdraw-dest-once.yml
+permissions:
+  contents: write
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/bank-user-withdraw-destination
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply withdraw-dest wire
+        run: python3 services/svc-bank/scripts/wire-withdraw-dest.py
+      - name: Commit wire and self-delete
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/wire-withdraw-dest-once.yml
+          rm -f services/svc-bank/scripts/wire-withdraw-dest.py
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "feat(svc-bank): wire withdraw dest persist into offramp"
+          git push
