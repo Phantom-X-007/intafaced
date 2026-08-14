@@ -18,7 +18,7 @@
  */
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
 import { depthRequirement, type DepthQuotePolicy } from '../futures/mark-from-depth.js';
-import { midFromVenueBook, readObservedAt } from '../futures/mark-from-venue.js';
+import { midFromVenueBook, readObservedAt, type MaintainedVenueBookPort } from '../futures/mark-from-venue.js';
 import { DEFAULT_FUTURES_MARK_POLICY, acceptableForMarking, type MarkPolicy } from '../futures/mark-policy.js';
 import { toQuotedMark } from '../futures/mark-source.js';
 import { parseMmSeedMids } from './seed-jobs.js';
@@ -134,6 +134,11 @@ export function createVenueMmMidSource(input: {
   adapter: Pick<MarketDataAdapter, 'snapshotBook'>;
   /** marketId → venue unified symbol. Missing → null mid. */
   resolveSymbol: (marketId: string) => string | null;
+  /**
+   * When set, mids come from the sequenced MaintainedBook (same port as futures
+   * marks). Unset keeps snapshotBook poll. Desynced / missing observedAt → null.
+   */
+  bookForSymbol?: (symbol: string) => MaintainedVenueBookPort | null;
   depthLimit?: number;
   /**
    * Minimum resting notional at a best level. Omitted → the default, because the
@@ -176,6 +181,27 @@ export function createVenueMmMidSource(input: {
     const symbol = input.resolveSymbol(marketId);
     if (symbol == null || symbol.trim() === '') return null;
     try {
+      if (input.bookForSymbol) {
+        const book = input.bookForSymbol(symbol);
+        if (book == null || !book.servable) return null;
+        const observedAt = book.observedAt();
+        if (observedAt == null) return null;
+        const top = book.top();
+        if (top == null) return null;
+        const mid = midFromVenueBook(
+          {
+            bids: top.bestBid != null && top.bestBidQty != null ? [[top.bestBid, top.bestBidQty]] : [],
+            asks: top.bestAsk != null && top.bestAskQty != null ? [[top.bestAsk, top.bestAskQty]] : [],
+          },
+          requirement,
+        );
+        if (mid == null) return null;
+        const quote = toQuotedMark({ marketId, symbol, price: mid, quality: 'mid', asOfMs: observedAt.getTime() });
+        if (quote == null) return null;
+        if (!acceptableForMarking(quote, readNow(), policy).ok) return null;
+        return mid;
+      }
+
       const snap = await input.adapter.snapshotBook(symbol, limit);
 
       // A snapshot that cannot say when it was read cannot be aged, and an
@@ -238,6 +264,7 @@ export function createMmMidSourceFromConfig(input: {
   venueAdapter: Pick<MarketDataAdapter, 'snapshotBook'> | null;
   /** marketId → venue symbol when midFromVenue */
   resolveVenueSymbol: (marketId: string) => string | null;
+  bookForSymbol?: (symbol: string) => MaintainedVenueBookPort | null;
   /**
    * Both optional and both defaulting inside `createVenueMmMidSource`. They exist
    * so the day the owner rules a different notional floor or a stricter seed-mid
@@ -254,6 +281,7 @@ export function createMmMidSourceFromConfig(input: {
   const venue = createVenueMmMidSource({
     adapter: input.venueAdapter,
     resolveSymbol: input.resolveVenueSymbol,
+    ...(input.bookForSymbol ? { bookForSymbol: input.bookForSymbol } : {}),
     ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
     ...(input.policy ? { policy: input.policy } : {}),
     ...(input.now ? { now: input.now } : {}),

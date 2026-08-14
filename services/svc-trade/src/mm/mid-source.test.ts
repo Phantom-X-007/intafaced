@@ -269,3 +269,45 @@ describe('createMmMidSourceFromConfig', () => {
     expect(await src('m1')).toBe('0.000000000000000001');
   });
 });
+
+describe('createVenueMmMidSource from MaintainedBook port', () => {
+  const twoSided = {
+    bestBid: parseAmount('100'),
+    bestAsk: parseAmount('102'),
+    bestBidQty: parseAmount('5'),
+    bestAskQty: parseAmount('5'),
+    spread: parseAmount('2'),
+    mid: parseAmount('101'),
+  };
+  const observedAt = new Date(NOW.getTime() - 1_000);
+
+  it('mids a servable sequenced top and does not poll snapshotBook', async () => {
+    const snapshotBook = vi.fn(async () => healthyBook());
+    const src = createVenueMmMidSource({
+      adapter: { snapshotBook },
+      resolveSymbol: () => 'BTC/USDT',
+      now: readNow,
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await src('m1')).not.toBeNull();
+    expect(snapshotBook).not.toHaveBeenCalled();
+  });
+
+  it('withholds while the feed is desynced — never invents a seed mid from a gap', async () => {
+    const src = createVenueMmMidSource({
+      adapter: { snapshotBook: vi.fn(async () => healthyBook()) },
+      resolveSymbol: () => 'BTC/USDT',
+      now: readNow,
+      bookForSymbol: () => ({
+        servable: false,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await src('m1')).toBeNull();
+  });
+});
