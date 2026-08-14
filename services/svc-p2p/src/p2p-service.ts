@@ -44,7 +44,7 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
-import { methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
+import { InstrumentError, methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
@@ -238,8 +238,15 @@ export interface TradeInstrumentAttacher {
    * Keys are lowercased (same rule as `methodIdKey` / instrument storage). Used
    * by sell-offer create and the board so a method with no live destination is
    * never advertised — closing the residual named on `TAKE_REFUSED_MESSAGE`.
+   * Empty operator registry ⇒ empty set: a leftover destination is not a rail.
    */
   liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>>;
+
+  /**
+   * Method ids an operator has registered and left enabled. Empty = no payable
+   * rail exists yet — not "any string the maker types is a method".
+   */
+  enabledMethodKeys(): Promise<ReadonlySet<string>>;
 }
 
 export interface P2pServiceOptions {
@@ -608,6 +615,25 @@ export class P2pService {
     }
 
     /**
+     * AN EMPTY REGISTRY IS NOT A PAYABLE RAIL.
+     *
+     * `offer_method_no_destination` says "this method exists; go register a
+     * destination." That is the wrong sentence when no operator has registered
+     * a schema: it makes an invented string look like a live rail the seller
+     * merely forgot to fill in. Buy offers used to skip every method check, so
+     * the public board could advertise whatever the maker typed. Both sides
+     * now require an enabled operator schema first. Destinations stay the
+     * second gate, and only for sell.
+     */
+    const registered = await this.instruments.enabledMethodKeys();
+    if (missingSellDestinations(input.methods, registered).length > 0) {
+      throw new InstrumentError(
+        'No payment method is registered — an operator must register its field requirements first',
+        'p2p.instrument_method_unknown',
+      );
+    }
+
+    /**
      * SELL OFFERS ONLY LIST METHODS THE MAKER CAN BE PAID ON.
      *
      * A sell maker is the seller. Advertising a method with no active destination
@@ -712,8 +738,8 @@ export class P2pService {
   async getOffer(offerId: string): Promise<OfferRecord> {
     const offer = await this.loadOfferRaw(offerId);
     const [projected] = await this.projectBoardMethods([offer]);
-    // Sell with zero live methods is not on the public board — same answer as
-    // missing, so get-by-id cannot confirm "listed rails, no destination".
+    // Zero payable methods is not on the public board — same answer as missing,
+    // so get-by-id cannot confirm "listed rails, no destination / no schema".
     if (!projected) throw new P2pError(`Offer ${offerId} not found`, 'p2p.offer_not_found');
     return projected;
   }
@@ -727,16 +753,20 @@ export class P2pService {
   }
 
   /**
-   * Board honesty: sell offers only expose methods with a live destination.
+   * Board honesty: only methods that are actually payable.
    *
-   * Buy offers pass through unchanged (seller is the taker). Sell offers with
-   * zero live methods drop off the board entirely — an empty methods list would
-   * re-open the "accept anything" take oracle that create already refuses.
+   * Sell offers expose methods with a live destination on an enabled schema.
+   * Buy offers cannot advertise a destination (the seller is the taker) but
+   * they still must not list a method the operator has never registered —
+   * that is how an empty registry looks like a rail. Offers with zero payable
+   * methods drop off the board: an empty methods list would re-open the
+   * "accept anything" take oracle that create already refuses.
    *
    * Live lookup is cached per (maker, fiat) inside one call so a 50-row board
    * does not issue 50 identical queries for one maker.
    */
   private async projectBoardMethods(offers: OfferRecord[]): Promise<OfferRecord[]> {
+    const registered = await this.instruments.enabledMethodKeys();
     const cache = new Map<string, ReadonlySet<string>>();
     const liveFor = async (ownerId: string, fiat: string): Promise<ReadonlySet<string>> => {
       const key = `${ownerId}\0${fiat}`;
@@ -751,7 +781,9 @@ export class P2pService {
     const out: OfferRecord[] = [];
     for (const offer of offers) {
       if (offer.side !== 'sell') {
-        out.push(offer);
+        const methods = methodsWithLiveDestination(offer.methods, registered);
+        if (methods.length === 0) continue;
+        out.push(methods === offer.methods ? offer : { ...offer, methods });
         continue;
       }
       const live = await liveFor(offer.makerId, offer.fiatCurrency);
