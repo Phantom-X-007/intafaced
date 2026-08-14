@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes } from '@intafaced/ledger-client';
 import { OtcDeskService } from './otc-service.js';
+import { MemoryOtcQuoteStore } from './quote-store.js';
 import { FixedOtcStake } from './stake-source.js';
 import { UNPUBLISHED_OTC_DESK_LAW, type OtcDeskLaw } from './desk-law.js';
 import { OtcError } from './errors.js';
@@ -186,5 +187,55 @@ describe('OtcDeskService', () => {
     expect(otcSettleIdsFor('other-quote').fillId).not.toBe(first.fillId);
 
     expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('accept and settle survive a new process sharing the durable store', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: parseAmount('10'), seedId: 'otc-btc-d' }));
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('10000'), rail: 'test', railRef: 'otc-ud' }));
+
+    const store = new MemoryOtcQuoteStore();
+    let now = new Date('2026-08-07T12:00:00.000Z');
+    const opts = {
+      law: published,
+      midSource: freshMids(() => now),
+      now: () => now,
+      store,
+    };
+    const first = new OtcDeskService(ledger, new FixedOtcStake(parseAmount('1000')), opts);
+    const quote = await first.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' });
+
+    const afterRestart = new OtcDeskService(ledger, new FixedOtcStake(parseAmount('1000')), opts);
+    const bound = await afterRestart.accept(principal, { quoteId: quote.quoteId });
+    expect(bound.fillPrice).toBe(quote.quotedPrice);
+
+    const afterAcceptRestart = new OtcDeskService(ledger, new FixedOtcStake(parseAmount('1000')), opts);
+    const settled = await afterAcceptRestart.settle(principal, { quoteId: quote.quoteId });
+    expect(settled.fillId).toBeTruthy();
+    expect(ledger.reconcile()).toEqual({ ok: true });
+
+    const replay = await afterAcceptRestart.settle(principal, { quoteId: quote.quoteId });
+    expect(replay.fillId).toBe(settled.fillId);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('accept after settle on the durable store refuses rather than requoting', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: parseAmount('10'), seedId: 'otc-btc-s' }));
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: parseAmount('10000'), rail: 'test', railRef: 'otc-us' }));
+    const store = new MemoryOtcQuoteStore();
+    let now = new Date('2026-08-07T12:00:00.000Z');
+    const svc = new OtcDeskService(ledger, new FixedOtcStake(parseAmount('1000')), {
+      law: published,
+      midSource: freshMids(() => now),
+      now: () => now,
+      store,
+    });
+    const quote = await svc.quote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' });
+    await svc.accept(principal, { quoteId: quote.quoteId });
+    await svc.settle(principal, { quoteId: quote.quoteId });
+    await expect(svc.accept(principal, { quoteId: quote.quoteId })).rejects.toMatchObject({
+      code: 'trade.otc_already_settled',
+    });
   });
 });
