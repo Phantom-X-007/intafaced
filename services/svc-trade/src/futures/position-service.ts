@@ -369,6 +369,7 @@ export class PositionService {
             AND p.status IN ('open', 'closing')
           ORDER BY p.opened_at DESC
         `;
+    // List is not a valuation: no mark source, no invented 0. Close attaches extras.
     return rows.map((row) => presentPosition(row));
   }
 
