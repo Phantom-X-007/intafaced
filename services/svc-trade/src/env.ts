@@ -355,8 +355,10 @@ const schema = serviceEnvSchema
 
       /**
        * When true, OTC quotes source mid from the same public venue adapter as
-       * TRADE_VENUE_MARK_VENUE. Default OFF. Never invents if venue down /
-       * unmapped / empty book. Boot TRADE_OTC_MIDS is not mixed in when this is on.
+       * TRADE_VENUE_MARK_VENUE. Default OFF. With TRADE_VENUE_MARK_STREAM also
+       * on, uses the same MaintainedBook port as futures marks / MM (desynced
+       * → null). Never invents if venue down / unmapped / empty book. Boot
+       * TRADE_OTC_MIDS is not mixed in when this is on.
        */
       TRADE_OTC_MID_FROM_VENUE: z
         .union([z.boolean(), z.string()])
