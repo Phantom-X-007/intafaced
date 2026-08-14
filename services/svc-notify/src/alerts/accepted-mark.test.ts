@@ -60,9 +60,7 @@ describe('acceptAlertMark — dark/absent never become a live price', () => {
 describe('outOfAppRequiredRefusal — named, never silent drop', () => {
   it('returns null when nothing is required (inbox-only is honest)', () => {
     expect(outOfAppRequiredRefusal([])).toBeNull();
-    expect(
-      outOfAppRequiredRefusal([{ channel: 'email', required: false, available: false, reason: 'channel.not_configured' }]),
-    ).toBeNull();
+    expect(outOfAppRequiredRefusal([{ channel: 'email', required: false, available: false, reason: 'channel.not_configured' }])).toBeNull();
   });
 
   it('names the required channel that cannot deliver', () => {
@@ -78,9 +76,7 @@ describe('outOfAppRequiredRefusal — named, never silent drop', () => {
   });
 
   it('keeps channel.disabled distinct from not_configured', () => {
-    expect(
-      outOfAppRequiredRefusal([{ channel: 'sms', required: true, available: false, reason: 'channel.disabled' }]),
-    ).toEqual({
+    expect(outOfAppRequiredRefusal([{ channel: 'sms', required: true, available: false, reason: 'channel.disabled' }])).toEqual({
       code: 'channel.disabled',
       detail: 'sms:channel.disabled',
     });

@@ -66,11 +66,7 @@ export type MarkSource = {
 };
 
 export type AlertRefuseCode =
-  | 'alert.price_unavailable'
-  | 'alert.not_active'
-  | 'alert.invalid_price'
-  | 'channel.not_configured'
-  | 'channel.disabled';
+  'alert.price_unavailable' | 'alert.not_active' | 'alert.invalid_price' | 'channel.not_configured' | 'channel.disabled';
 
 export type AlertEvalOutcome =
   | { readonly kind: 'hold'; readonly markPrice: string }

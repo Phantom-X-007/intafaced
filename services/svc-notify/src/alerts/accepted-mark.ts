@@ -57,9 +57,7 @@ export function acceptAlertMark(source: Pick<MarkSource, 'kind'>, quote: MarkQuo
  * returns null and in-app fire remains honest. Unconfigured / disabled required
  * channels never silently drop.
  */
-export function outOfAppRequiredRefusal(
-  statuses: readonly AlertChannelStatusSlice[],
-): OutOfAppRequiredRefusal | null {
+export function outOfAppRequiredRefusal(statuses: readonly AlertChannelStatusSlice[]): OutOfAppRequiredRefusal | null {
   for (const row of statuses) {
     if (row.channel === 'inapp') continue;
     if (!row.required) continue;
