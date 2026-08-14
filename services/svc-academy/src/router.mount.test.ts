@@ -646,9 +646,7 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
   });
 
   it('REFUSES a result body that claims live money on the wire', async () => {
-    await expect(
-      caller().paperDrillResult(drill({ realMoney: true }) as never),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller().paperDrillResult(drill({ realMoney: true }) as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(
       caller().paperDrillResult(
         drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: '1', size: '1', live: true }] }) as never,

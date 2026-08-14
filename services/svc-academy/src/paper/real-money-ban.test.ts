@@ -4,7 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { AcademyError } from '../errors.js';
 import { SIMULATED_SEAL, sealSimulated } from './simulated-result.js';
-import { PAPER_REAL_MONEY_BANNED_KEYS, assertPaperInputNeverClaimsLive, assertPaperNeverReadableAsRealMoney, isPaperRealMoneyBannedKey } from './real-money-ban.js';
+import {
+  PAPER_REAL_MONEY_BANNED_KEYS,
+  assertPaperInputNeverClaimsLive,
+  assertPaperNeverReadableAsRealMoney,
+  isPaperRealMoneyBannedKey,
+} from './real-money-ban.js';
 
 describe('D26-P1-C4 — paper flag never readable as real money', () => {
   it('lists the custody-looking keys a paper payload must never carry', () => {
