@@ -369,8 +369,8 @@ export const FEATURES = [
       'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
       'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
       '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
-      '2026-08-12 mid-feed seal: deskStatus.midFeed names socket.otc-mid-feed refuse-closed (boot TRADE_OTC_MIDS map ≠ live observation feed). ' +
-      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live observation feed close for socket.otc-mid-feed, maker-routing recipe close, durable quotes table. ' +
+      '2026-08-14: socket.otc-mid-feed closed — venue observation source (TRADE_OTC_MID_FROM_VENUE, default OFF) refreshes asOf; boot TRADE_OTC_MIDS is not a live feed and is not mixed in when venue is on. ' +
+      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, maker-routing recipe close, durable quotes table. ' +
       'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
@@ -2017,13 +2017,17 @@ export const FEATURES = [
   f('socket.otc-mid-feed', 'Live OTC mid observation feed (refreshes asOf)', {
     module: 'trade',
     phase: '2',
-    status: 'socket',
+    status: 'done',
     dependsOn: ['trade.otc'],
-    requires: ['services/svc-trade/src/otc/mid-feed.ts'],
+    requires: [
+      'services/svc-trade/src/otc/mid-feed.ts',
+      'services/svc-trade/src/otc/venue-mid-source.ts',
+      'services/svc-trade/src/otc/otc-mid-feed-donebar.test.ts',
+    ],
     note:
-      '§13 — named under trade.otc residual. createConfigOtcMidSource boot map stamps asOf at process start and age-gates dark — ' +
-      'that is not a live feed. otc.deskStatus.midFeed published=false until an observation source refreshes asOf. ' +
-      'Do NOT invent mids or keep boot memory past maxMidAgeSeconds. Pins: mid-feed.ts · mid-source.ts · otc-mid-feed-donebar.test.ts.',
+      'DONE 2026-08-14 — venue public book observation (same TRADE_VENUE_MARK_VENUE adapter) refreshes asOf when TRADE_OTC_MID_FROM_VENUE is on. ' +
+      'Default OFF. Empty TRADE_OTC_VENUE_SYMBOLS never invents pairs. Boot TRADE_OTC_MIDS is not mixed in while venue is on. ' +
+      'deskStatus.midFeed.liveObservationFeed tracks install. Unmapped/dark/missing observedAt → null. Pins: venue-mid-source.ts · mid-feed.ts · index.ts.',
   }),
   // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
   f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
