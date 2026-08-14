@@ -1,0 +1,31 @@
+name: kyc-compose-fmt-once
+on:
+  push:
+    branches: [feat/identity-kyc-compose-pass]
+    paths:
+      - '.github/workflows/kyc-compose-fmt-once.yml'
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/identity-kyc-compose-pass
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: prettier the two files and remove this workflow
+        run: |
+          pnpm exec prettier --write docker-compose.apps.yml services/svc-identity/src/kyc/index-boot-wire.test.ts
+          rm -f .github/workflows/kyc-compose-fmt-once.yml
+          git config user.name Nitro
+          git config user.email ZenYoda33@pm.me
+          git add docker-compose.apps.yml services/svc-identity/src/kyc/index-boot-wire.test.ts .github/workflows/kyc-compose-fmt-once.yml
+          git diff --cached --quiet && echo 'no format delta' && exit 0
+          git commit -m "style: prettier compose + identity boot-wire test"
+          git push
