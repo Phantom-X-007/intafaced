@@ -207,7 +207,10 @@ export class PrivateOrderHub {
       try {
         const orders = await this.#options.seedOrders(sub.userId);
         if (orders.length === 0) {
-          this.#log.warn({ userId: sub.userId }, 'ws-private: order seed empty — no blotter on the wire; live orders publish when they exist');
+          this.#log.warn(
+            { userId: sub.userId },
+            'ws-private: order seed empty — no blotter on the wire; live orders publish when they exist',
+          );
         } else {
           for (const order of orders) {
             if (sub.closed) return;
@@ -226,7 +229,10 @@ export class PrivateOrderHub {
       try {
         const positions = await this.#options.seedPositions(sub.userId);
         if (positions.length === 0) {
-          this.#log.warn({ userId: sub.userId }, 'ws-private: position seed empty — no blotter on the wire; live positions publish when they exist');
+          this.#log.warn(
+            { userId: sub.userId },
+            'ws-private: position seed empty — no blotter on the wire; live positions publish when they exist',
+          );
         } else {
           for (const position of positions) {
             if (sub.closed) return;

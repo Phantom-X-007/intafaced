@@ -116,9 +116,7 @@ function expectNoLiveZeroBlotter(frames: readonly string[]): void {
 function expectNoInventedFills(frames: readonly string[]): void {
   for (const frame of frames) {
     const parsed = JSON.parse(frame) as { channel?: string; fillId?: string; type?: string };
-    expect(parsed.channel === 'fills' && parsed.type !== 'ready', `invented fill on the wire: ${frame}`).toBe(
-      false,
-    );
+    expect(parsed.channel === 'fills' && parsed.type !== 'ready', `invented fill on the wire: ${frame}`).toBe(false);
     expect(parsed, `invented fillId on the wire: ${frame}`).not.toHaveProperty('fillId');
   }
 }
@@ -136,9 +134,7 @@ describe('isLiveZeroBlotterFrame', () => {
   it('does not flag a real order, position, or ready frame', () => {
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', ...order() }))).toBe(false);
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'positions', ...position() }))).toBe(false);
-    expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', type: 'ready', userId: 'user-a', bus: false }))).toBe(
-      false,
-    );
+    expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', type: 'ready', userId: 'user-a', bus: false }))).toBe(false);
   });
 });
 
