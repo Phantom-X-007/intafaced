@@ -228,6 +228,7 @@ _None._
 | Subject                              | Consumer (durable)           | Effect                                                     |
 | ------------------------------------ | ---------------------------- | ---------------------------------------------------------- |
 | `intafaced.trade.fill.settled`       | `notify-fill-settled`        | Inbox row for the fill owner                               |
+| `intafaced.trade.order.updated`      | `notify-order-updated`       | Inbox row on cancelled / rejected / expired only           |
 | `intafaced.trade.position.updated`   | `notify-position-updated`    | **Critical** inbox row + fan-out on liquidation only       |
 | `intafaced.p2p.escrow.locked`        | `notify-p2p-escrow-locked`   | Inbox rows for seller and buyer                            |
 | `intafaced.p2p.escrow.released`      | `notify-p2p-escrow-released` | Inbox rows when escrow releases to buyer                   |
@@ -307,6 +308,18 @@ The table is the tip wire vocabulary — a pin test fails if it drifts from
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is
 a different fact.
+
+### `trade.order.updated` — terminal statuses only
+
+That subject is published on every order row change (pending / open / filled /
+cancelled / rejected / expired). Fills already have `fill.settled`. Pending and
+open are things the trader just did, and the private WS already fans the live
+row. The inbox consumer writes only on **cancelled**, **rejected**, and
+**expired** — the cases that can complete while the app is closed.
+
+Which other statuses deserve a message is product law. It lives in
+`DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY` (`src/events.ts`). Severity is `info`
+(mute may apply). The key is `<orderId>:<status>`; `ts` is not part of it.
 
 ### `trade.position.updated` — one transition of four
 

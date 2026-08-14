@@ -130,6 +130,8 @@ export const en = {
   // ── notify · in-app inbox (title + body per kind; keys stored on the row) ──
   'notify.trade.fill.title': 'Order filled',
   'notify.trade.fill.body': '{side} {qty} on {marketId} at {price}.',
+  'notify.trade.order.terminal.title': 'Order {status}',
+  'notify.trade.order.terminal.body': '{side} {qty} on {marketId} is {status}.',
   // Liquidation copy names only fields the payload guarantees are present.
   // Realised loss, mark price and liquidation price are all nullable on
   // `trade.position.updated`, so none of them appears here: a notification that

@@ -10,7 +10,7 @@ import { InAppChannel, UnconfiguredChannel } from './channels/gateway.js';
 import { EmailChannel } from './channels/adapters.js';
 import { ChannelDeliveryError, type NotificationChannel, type OutboundMessage } from './channels/channel.js';
 import { normaliseLocale, renderNotification, renderVerification } from './channels/render.js';
-import { subscribeNotificationEvents } from './events.js';
+import { notifyEventConsumerCount, subscribeNotificationEvents } from './events.js';
 import { MemoryMuteStore } from './preferences/mute.js';
 import { TargetRateLimiter } from './target-rate-limit.js';
 
@@ -1130,6 +1130,6 @@ describe('consumers whose producer has not created a stream are reported, not hi
       reason: 'stream not found',
     });
     // Every other consumer still attached — the inbox is not held hostage.
-    expect(report.subscriptions).toHaveLength(9);
+    expect(report.subscriptions).toHaveLength(notifyEventConsumerCount() - 1);
   });
 });
