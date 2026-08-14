@@ -23,11 +23,5 @@ jobs:
           git rm -f .github/workflows/payout-dest-wire-once.yml
           git rm -f services/svc-pay/scripts/wire-payout-dest.py
           git add services/svc-pay/src/index.ts services/svc-pay/src/router.ts services/svc-pay/src/db/schema.ts
-          git commit -m "$(cat <<'MSG'
-feat(svc-pay): wire persisted payout dest into merchant payout
-
-setPayoutDestination + payout load the stored IBAN/IFSC/EVM ref
-before payoutSettlement/withdrawHold. bank-payout stays absent.
-MSG
-)"
+          git commit -m "feat(svc-pay): wire persisted payout dest into merchant payout"
           git push origin HEAD:feat/pay-merchant-payout-destination
