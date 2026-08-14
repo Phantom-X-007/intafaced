@@ -164,9 +164,7 @@ export function inventedBlockedTrueList(result: GeoBlockDecision | Record<string
   const blocked = result.blocked;
   if (blocked === true) return true;
   if (!Array.isArray(blocked)) return false;
-  return blocked.some(
-    (row) => row && typeof row === 'object' && 'blocked' in row && (row as { blocked: unknown }).blocked === true,
-  );
+  return blocked.some((row) => row && typeof row === 'object' && 'blocked' in row && (row as { blocked: unknown }).blocked === true);
 }
 
 export function geoBlockHttpStatus(decision: GeoBlockDecision): number {

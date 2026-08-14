@@ -7,13 +7,7 @@ import {
   type ComplianceQueueKind,
 } from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
-import {
-  evaluateGeoBlock,
-  geoBlockErrorMessage,
-  geoBlockHttpStatus,
-  geoBlockOpsHttpStatus,
-  geoBlockPublicBody,
-} from './geo-block.js';
+import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
 
