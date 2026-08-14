@@ -70,6 +70,19 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     privateConnections: privateHub.connections,
     tradesBus: tradesBus(),
     privateBus: privateBus(),
+    /**
+     * Per-hub ceilings. Summing them is NOT a process-wide cap — each hub
+     * refuses at its own max (1013). Occupancy never 503s this probe.
+     */
+    capacity: {
+      depth: { connections: hub.connections, maxConnections: hub.maxConnections },
+      trades: { connections: tradeHub.connections, maxConnections: tradeHub.maxConnections },
+      private: {
+        connections: privateHub.connections,
+        maxConnections: privateHub.maxConnections,
+        maxConnectionsPerUser: privateHub.maxConnectionsPerUser,
+      },
+    },
   }));
 
   /**
