@@ -92,12 +92,8 @@ describe('PayFiatRampPort — D26-P1-B4 fiat via pay adapters', () => {
 
   it('fails if a ramp looks live with empty rails', () => {
     expect(() => assertEmptyRailsCannotLookLive([], { simulated: false })).toThrow(BankError);
-    expect(() => assertEmptyRailsCannotLookLive([], { simulated: true, looksLive: true })).toThrow(
-      /cannot look live/,
-    );
-    expect(() => assertEmptyRailsCannotLookLive(IN_REPO_PAY_FIAT_RAILS, { simulated: false })).toThrow(
-      /cannot look live/,
-    );
+    expect(() => assertEmptyRailsCannotLookLive([], { simulated: true, looksLive: true })).toThrow(/cannot look live/);
+    expect(() => assertEmptyRailsCannotLookLive(IN_REPO_PAY_FIAT_RAILS, { simulated: false })).toThrow(/cannot look live/);
     try {
       assertEmptyRailsCannotLookLive([], { simulated: false });
       expect.fail('expected refuse');

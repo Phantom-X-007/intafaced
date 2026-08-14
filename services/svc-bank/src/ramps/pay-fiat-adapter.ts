@@ -72,8 +72,7 @@ export function assertEmptyRailsCannotLookLive(
   rails: readonly PayFiatRailSnapshot[],
   claim: { simulated: boolean; looksLive?: boolean },
 ): void {
-  const canSettle =
-    selectLivePayFiatRail(rails, 'onramp') !== null || selectLivePayFiatRail(rails, 'offramp') !== null;
+  const canSettle = selectLivePayFiatRail(rails, 'onramp') !== null || selectLivePayFiatRail(rails, 'offramp') !== null;
   const looksLive = claim.simulated === false || claim.looksLive === true;
   if (looksLive && !canSettle) {
     throw new BankError(
