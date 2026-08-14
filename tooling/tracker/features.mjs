@@ -427,14 +427,17 @@ export const FEATURES = [
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
       'services/svc-trade/src/public-rest.ts',
       'services/svc-trade/src/private-rest.ts',
       'services/svc-trade/src/ccxt-capability-matrix.ts',
     ],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms. Residual: paper-list exclude policy (N3 Nitro), rate-limit published vs edge 300/min (N4), mm seed ops.',
+    note:
+      '**DONE 2026-08-13 D26-P1-T5:** claim ≡ wire — `ccxt-capability-matrix.test.ts` fails if a REST_ROUTES row is missing or a refuse arm drifts. GET /api/v1/capabilities serves matrix. Residual not blocking: paper-list exclude (N3 Nitro — do not invent), published rate-limit vs edge 300/min (N4), mm seed ops. ' +
+      'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
