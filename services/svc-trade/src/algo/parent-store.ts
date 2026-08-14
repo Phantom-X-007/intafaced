@@ -108,7 +108,17 @@ export class SqlTwapParentStore implements TwapParentStore {
   async save(record: TwapParentRecord): Promise<void> {
     const p = record.parent;
     const existing = record.grant === undefined ? (await this.load(p.id))?.grant : record.grant;
-    const grantJson = existing ? this.sql.json(existing) : null;
+    const grantJson = existing
+      ? this.sql.json({
+          scopes: [...existing.scopes],
+          sid: existing.sid,
+          tier: existing.tier,
+          mfa: existing.mfa,
+          ...(existing.sub_account ? { sub_account: existing.sub_account } : {}),
+          ...(existing.kid ? { kid: existing.kid } : {}),
+          ...(existing.key_env ? { key_env: existing.key_env } : {}),
+        })
+      : null;
     await this.sql`
       INSERT INTO algo_parents (
         id, user_id, sub_account_id, market_id, symbol, side, kind,
