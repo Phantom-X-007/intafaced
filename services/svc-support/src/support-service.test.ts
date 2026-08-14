@@ -100,6 +100,8 @@ describe('SupportService Stage-2 operator queue', () => {
     expect(q.entries.map((e) => e.ticketId)).toEqual([dep.id, other.id]);
     expect(q.entries[0]!).not.toHaveProperty('balance');
     expect(q.entries[0]!).not.toHaveProperty('refundAmount');
+    expect(q.entries[0]!).toMatchObject({ timingKind: 'score_not_promise', sla: false });
+    expect(q.entries[0]!).not.toHaveProperty('slaMinutes');
   });
 
   it('peekNext and claimForOperator — exclusive claim, refuse steal', async () => {
