@@ -611,12 +611,10 @@ describe('a fill is idempotent per business event', () => {
   /**
    * THE REPLAY ITSELF.
    *
-   * The bound fill is dropped once settled, so `otc.settle` cannot be re-driven
-   * over HTTP — it answers NOT_FOUND, which is correct but proves nothing about
-   * the ledger. The business event is replayed the way an operator or a crashed
-   * retry would: recompute the plan from the quote id and post it again. The
-   * balances must not move, and each key must resolve to the transaction it
-   * resolved to the first time.
+   * Bound fills stay in the durable store after settle, so a second `otc.settle`
+   * over HTTP is a no-op present of the same fill ids — it must not move
+   * balances. The ledger business event is also re-posted by key: same
+   * transactions, same balances.
    */
   it('re-posting the same settle plan changes no balance and reuses every transaction', async () => {
     const desk = await buildDesk({ law: PUBLISHED });
@@ -631,7 +629,9 @@ describe('a fill is idempotent per business event', () => {
     );
 
     const before = desk.ledger.posted.length;
-    await callMutation(desk, 'otc.settle', { quoteId: quoted.quoteId });
+    const firstSettle = resultData<{ fillId: string; takerOrderId: string; makerOrderId: string }>(
+      await callMutation(desk, 'otc.settle', { quoteId: quoted.quoteId }),
+    );
     const firstKeys = desk.ledger.posted.slice(before).map((p) => p.idempotencyKey);
     const firstTxIds = await Promise.all(firstKeys.map(async (k) => (await desk.ledger.getTxByKey(k))?.id));
     expect(firstTxIds.every((id) => typeof id === 'string')).toBe(true);
@@ -641,8 +641,12 @@ describe('a fill is idempotent per business event', () => {
     expect(settledUsdt).toBe('9799');
     expect(settledBtc).toBe('1');
 
-    // A second settle over HTTP is not the replay — the bound fill is gone.
-    expect(errorCode(await callMutation(desk, 'otc.settle', { quoteId: quoted.quoteId }))).toBe('NOT_FOUND');
+    // Durable replay: second HTTP settle re-presents the same ids, no new posts.
+    const replayHttp = resultData<{ fillId: string; takerOrderId: string; makerOrderId: string }>(
+      await callMutation(desk, 'otc.settle', { quoteId: quoted.quoteId }),
+    );
+    expect(replayHttp).toEqual(firstSettle);
+    expect(desk.ledger.posted.length).toBe(before + firstKeys.length);
 
     // THE REPLAY: recompute the same business event and post it again.
     const ids = otcSettleIdsFor(quoted.quoteId);

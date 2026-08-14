@@ -337,10 +337,28 @@ const schema = serviceEnvSchema
        * Empty (default) = the desk can source no price and every quote refuses
        * `trade.otc_no_reference_price`. Boot-stamped asOf + desk-law
        * `maxMidAgeSeconds` makes a static map go dark after the owner window.
-       * This is the ONLY place an OTC mid comes from — deliberately not a
-       * caller input.
+       * Boot-stamped map is not a live feed. When TRADE_OTC_MID_FROM_VENUE is
+       * on, production uses the venue observation source instead (no boot fallback).
+       * Deliberately not a caller input.
        */
       TRADE_OTC_MIDS: z.string().default(''),
+
+      /**
+       * When true, OTC quotes source mid from the same public venue adapter as
+       * TRADE_VENUE_MARK_VENUE. Default OFF. Never invents if venue down /
+       * unmapped / empty book. Boot TRADE_OTC_MIDS is not mixed in when this is on.
+       */
+      TRADE_OTC_MID_FROM_VENUE: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
+       * OTC pairKey → venue unified symbol: `BTC/USDT:BTC/USDT,ETH/USDT:ETH/USDT`.
+       * Empty (default) = every pair unmapped → null mid (never invent symbols).
+       * Keys are OTC pair keys, not trade.markets UUIDs (those stay on TRADE_VENUE_MARK_SYMBOLS).
+       */
+      TRADE_OTC_VENUE_SYMBOLS: z.string().default(''),
 
       /**
        * Copy fee-share law (trade.copy / D-S-03 / D26-P0-02). JSON or empty.

@@ -148,6 +148,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.otc_quote_expired': { ccxt: 'InvalidOrder', status: 409 },
   'trade.otc_last_look_forbidden': { ccxt: 'InvalidOrder', status: 409 },
   'trade.otc_quote_missing': { ccxt: 'OrderNotFound', status: 404 },
+  'trade.otc_already_settled': { ccxt: 'InvalidOrder', status: 409 },
 
   // ── The order itself is malformed: fix it, then resubmit ──────────────────
   'trade.order_type_unsupported': { ccxt: 'InvalidOrder', status: 400 },
