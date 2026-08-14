@@ -18,6 +18,7 @@ import type { Position } from '@intafaced/exchange-contract';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
+import { presentFuturesErrorWire } from './futures/futures-error-wire.js';
 import type { MarginCallWire } from './futures/margin-call-transport.js';
 import type { AdlDisclosureWire } from './futures/adl-disclosure.js';
 import type { AdlActionDisclosureWire } from './futures/adl-last-resort.js';
@@ -799,7 +800,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         return reply.code(err.status).send({ error: err.code, message: err.message });
       }
       if (err instanceof FuturesError) {
-        return reply.code(err.status).send({ error: err.code, message: err.message });
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
       }
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
@@ -912,7 +913,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {
-        return reply.code(err.status).send({ error: err.code, message: err.message });
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
       }
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
