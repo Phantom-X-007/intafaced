@@ -168,20 +168,20 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 
 #### Ops enable path (default safe)
 
-| Env                            | Default | Meaning                                                                                                                                                       |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`** — both keyless. Unknown id → warn once, stay off (never invent). |
-| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                         |
-| `TRADE_VENUE_MARK_STREAM`      | `false` | When true, start one `MaintainedBook` per mapped symbol (stream-first + snapshot join). Default off so boot does not open WS. Desynced → null mark.           |
-| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                  |
-| `TRADE_OTC_MID_FROM_VENUE`     | `false` | Optional OTC observation feed from the same public adapter. Default off.                                                                                      |
-| `TRADE_OTC_VENUE_SYMBOLS`      | `""`    | `BTC/USDT:BTC/USDT` — OTC pairKey → venue unified symbol. Empty = every pair unmapped (never invent).                                                         |
+| Env                            | Default | Meaning                                                                                                                                                                      |
+| ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`**, **`okx-spot`** — all keyless. Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                                        |
+| `TRADE_VENUE_MARK_STREAM`      | `false` | When true, start one `MaintainedBook` per mapped symbol (stream-first + snapshot join). Default off so boot does not open WS. Desynced → null mark.                          |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                                 |
+| `TRADE_OTC_MID_FROM_VENUE`     | `false` | Optional OTC observation feed from the same public adapter. Default off.                                                                                                     |
+| `TRADE_OTC_VENUE_SYMBOLS`      | `""`    | `BTC/USDT:BTC/USDT` — OTC pairKey → venue unified symbol. Empty = every pair unmapped (never invent).                                                                        |
 
 **Enable checklist (ops):**
 
-1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget. Both governors reserve 20% headroom, and both refuse rather than silently waiting.
+1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget; `okx-spot` spends against a documented 10 requests / 2 seconds IP budget. Governors reserve 20% headroom, and refuse rather than silently waiting.
 2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols). The symbol format is the unified one (`BTC/USDT`) for either venue — the venue's own spelling is produced inside the adapter and nowhere else.
-3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median. Optional: `TRADE_VENUE_MARK_STREAM=true` to consume `MaintainedBook` instead of polling (still default off).
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot`, `bybit-spot`, **or** `okx-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median. Optional: `TRADE_VENUE_MARK_STREAM=true` to consume `MaintainedBook` instead of polling (still default off).
 4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
 5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
 6. Optional OTC: set `TRADE_OTC_VENUE_SYMBOLS` to real pair keys (never invent a catalogue) then `TRADE_OTC_MID_FROM_VENUE=true`. Dark/unmapped pairs still refuse. Boot `TRADE_OTC_MIDS` is not a fallback while this is on.
@@ -189,7 +189,7 @@ Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matc
 
 **Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
 
-**Second venue:** shipped 2026-08-08 as `bybit-spot` (public market data only; no trade or account half exists for it, and no credential is read anywhere in it). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A THIRD venue is not needed by any open residual on `venue.aggregation`.
+**Second venue:** shipped 2026-08-08 as `bybit-spot`. **Third venue:** shipped 2026-08-14 as `okx-spot` (public market data only; no trade or account half; no credential is read). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A fourth venue is not needed by any open residual on `venue.aggregation`.
 
 Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
