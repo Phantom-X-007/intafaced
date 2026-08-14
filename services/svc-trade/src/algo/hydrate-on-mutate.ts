@@ -31,8 +31,7 @@ export async function hydrateAlgoIfMissing(
 
 /**
  * Job-host hydrate: load by parent id with no caller principal. Tick after
- * restart must see the durable schedule; place still refuses without a live
- * grant (SOCKET §13 principal durability).
+ * restart reinstalls the durable createTwap place grant (not a minted userId).
  */
 export async function hydrateAlgoFromStore(engine: AlgoHydrateTarget, store: TwapParentStore, parentId: string): Promise<void> {
   if (engine.get(parentId)) return;
