@@ -425,6 +425,34 @@ describe('the shipped configuration does not turn futures on', () => {
   });
 });
 
+describe('the shipped configuration does not turn futures jobs on', () => {
+  it('hands the container jobs OFF on a clean clone', () => {
+    expect(shipped.has('TRADE_FUTURES_JOBS_ENABLED')).toBe(true);
+    expect(shipped.get('TRADE_FUTURES_JOBS_ENABLED')).toBe('false');
+  });
+
+  it('declares the env default as false, so a deployment that never mentions it gets nothing', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_FUTURES_JOBS_ENABLED:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_FUTURES_JOBS_ENABLED is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(false)');
+    expect(decl![1]).not.toContain('.default(true)');
+  });
+
+  it('leaves TRADE_FUTURES_JOBS_ENABLED commented out in .env.example, and documents it', () => {
+    expect(envExample.has('TRADE_FUTURES_JOBS_ENABLED')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_FUTURES_JOBS_ENABLED/);
+  });
+
+  it('compose defaults the flag to false rather than passing it through blank or on', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_JOBS_ENABLED:\s*\$\{TRADE_FUTURES_JOBS_ENABLED:-false\}/);
+  });
+
+  it('passes the env flag into startFuturesJobs rather than leaving jobs implied on', () => {
+    expect(read('services/svc-trade/src/index.ts')).toMatch(/enabled:\s*env\.TRADE_FUTURES_JOBS_ENABLED/);
+  });
+});
+
 describe('the shipped configuration does not invent a funding market list', () => {
   it('declares TRADE_FUTURES_FUNDING_MARKET_IDS default empty', () => {
     const src = joinChains(read('services/svc-trade/src/env.ts'));
