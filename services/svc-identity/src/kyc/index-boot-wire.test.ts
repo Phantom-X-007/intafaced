@@ -27,6 +27,7 @@ describe('production index boots KYC vault from IDENTITY_KYC_DOC_KEY only', () =
   });
 });
 
+// Host IDENTITY_KYC_DOC_KEY must reach the identity container or the #1806 vault stays dark.
 describe('compose passes IDENTITY_KYC_DOC_KEY through to svc-identity', () => {
   const composeSrc = readFileSync(join(here, '../../../../docker-compose.apps.yml'), 'utf8');
   const identityBlock = composeSrc.match(/^  svc-identity:[\s\S]*?(?=^  svc-)/m)?.[0] ?? '';
