@@ -42,13 +42,13 @@ Allowed: epoch, rank band, issuer key id, expiry, and a **nullifier / one-time s
 
 ### Threats this bar is for
 
-| Threat                         | Required answer                                                                 |
-| ------------------------------ | ------------------------------------------------------------------------------- |
-| Payload deanonymises a user    | Schema reject. No “optional PII”.                                               |
-| Replay of an old rank          | Epoch + expiry; verifier refuses stale epochs.                                  |
-| Rank inflation by the caller   | Issuer signs; caller cannot choose the band.                                    |
-| Issuer key compromise          | Rotation + expiry; old key id stops verifying.                                  |
-| Conflating WebAuthn attestation| Forbidden. Passkey `attestationObject` is a different product (`svc-identity`). |
+| Threat                          | Required answer                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| Payload deanonymises a user     | Schema reject. No “optional PII”.                                               |
+| Replay of an old rank           | Epoch + expiry; verifier refuses stale epochs.                                  |
+| Rank inflation by the caller    | Issuer signs; caller cannot choose the band.                                    |
+| Issuer key compromise           | Rotation + expiry; old key id stops verifying.                                  |
+| Conflating WebAuthn attestation | Forbidden. Passkey `attestationObject` is a different product (`svc-identity`). |
 
 Until Shehzad lands a verifier that meets this bar, the product surface stays a socket. Inventing a JSON badge in `svc-blueprint` is not closing the row.
 
@@ -58,7 +58,7 @@ Until Shehzad lands a verifier that meets this bar, the product surface stays a 
 
 > **Raise math is refuse-closed until Nitro publishes named params in an authority store. On-chain implement is Shehzad. Agents never invent caps, vest cliffs, or stake-tier allocations.**
 
-Named params (when published — not invented here): raise cap, per-tier allocation, vest start/cliff/duration, accepted settlement asset. Empty store → typed refuse, not a default curve. Staking *gates* may exist; they do not imply a live raise.
+Named params (when published — not invented here): raise cap, per-tier allocation, vest start/cliff/duration, accepted settlement asset. Empty store → typed refuse, not a default curve. Staking _gates_ may exist; they do not imply a live raise.
 
 ---
 
@@ -76,7 +76,7 @@ Horizon for the **operator alert** reuses `MarkPolicy.liquidationMaxAgeSeconds` 
 
 > **Do not mint `p2p:moderate` onto sessions.** Moderation is `admin:compliance` **or** a natural-person id on `P2P_MODERATOR_USER_IDS`. Empty allowlist → `p2p.moderation_unreachable`. Machine keys never moderate.
 
-The scope split is **not required** given the allowlist. Waiting on a new session scope was blocking nothing real. Class X still owns *who* is on the list.
+The scope split is **not required** given the allowlist. Waiting on a new session scope was blocking nothing real. Class X still owns _who_ is on the list.
 
 ---
 
@@ -90,12 +90,12 @@ Ties P0-04. No agent-chosen 40/60 split, cap, or APY.
 
 ## Still not Denon (leave them)
 
-| Id | Why |
-| --- | --- |
-| PKT-D10 F10 `act/pom.xml` | Unreviewed Java; Denon does not touch it. Nitro human. |
-| CLASS-X-\* | Secrets, licences, sanctions **content**, go-live. |
-| GH-G1…G3, G5 | GitHub admin. |
-| Shehzad chain / INTACHAIN / smart-accounts | Babysit only. |
+| Id                                         | Why                                                    |
+| ------------------------------------------ | ------------------------------------------------------ |
+| PKT-D10 F10 `act/pom.xml`                  | Unreviewed Java; Denon does not touch it. Nitro human. |
+| CLASS-X-\*                                 | Secrets, licences, sanctions **content**, go-live.     |
+| GH-G1…G3, G5                               | GitHub admin.                                          |
+| Shehzad chain / INTACHAIN / smart-accounts | Babysit only.                                          |
 
 ---
 
