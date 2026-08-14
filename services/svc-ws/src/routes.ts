@@ -156,6 +156,37 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     }
   });
 
+  /**
+   * Recent public prints for a listed market. Empty ≠ zero: a listed market
+   * with no tape is `404 NoTape`, never `200 { trades: [] }`.
+   */
+  app.get('/markets/:marketId/trades', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+
+    try {
+      if (!(await hub.ensureKnownMarket(marketId))) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+
+      const trades = tradeHub.recentFor(marketId);
+      if (trades.length === 0) {
+        return reply.code(404).send({ code: 'NoTape', message: `"${marketId}": matching holds no prints` });
+      }
+      return reply.code(200).send({ marketId, trades });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'trades unavailable';
+      req.log.error({ err, marketId }, 'ws: trades snapshot failed');
+      return reply.code(502).send({ code: 'UpstreamUnavailable', message });
+    }
+  });
+
   /** The market list, so a client can discover what it may subscribe to. */
   app.get('/markets', async (_req, reply) => {
     reply.header('access-control-allow-origin', '*');

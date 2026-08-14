@@ -554,6 +554,46 @@ describe('the HTTP half', () => {
     expect(response.json()).not.toMatchObject({ bids: [], asks: [] });
   });
 
+  it('404s NoTape when a listed market has no prints — never a 200 empty tape', async () => {
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/trades` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoTape' });
+    expect(response.json()).not.toMatchObject({ trades: [] });
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('404s an unknown market on the trades GET without a fabricated empty tape', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/trades' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
+    expect(response.json()).not.toMatchObject({ trades: [] });
+  });
+
+  it('serves recent public prints when the tape is live — not an empty wrapper', async () => {
+    const sink = { bufferedBytes: 0, send: () => undefined, close: () => undefined };
+    tradeHub.attach(MARKET, sink);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    tradeHub.ingest({
+      marketId: MARKET,
+      price: '30100.5',
+      qty: '0.1',
+      sequence: 50,
+      ts: '2026-07-29T12:00:00.000Z',
+    });
+
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/trades` });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { marketId: string; trades: TradePrint[] };
+    expect(body.marketId).toBe(MARKET);
+    expect(body.trades).toHaveLength(1);
+    expect(body.trades[0]).toMatchObject({ type: 'trade', sequence: 50, price: '30100.5', quantity: '0.1' });
+    expect(body.trades[0]).not.toHaveProperty('side');
+  });
+
   it('400s a market id that could never be one', async () => {
     const response = await app.inject({ method: 'GET', url: '/markets/..%2F..%2Fetc/depth' });
     expect(response.statusCode).toBe(400);
