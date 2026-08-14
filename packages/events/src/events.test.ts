@@ -440,6 +440,7 @@ describe('declared wiring sockets', () => {
   it('no longer records either of the two findings that started this — both ends are wired', () => {
     expect(wiringSocketReason('xpEarned', 'subscriber')).toBeNull();
     expect(wiringSocketReason('bankMarginCalled', 'publisher')).toBeNull();
+    expect(wiringSocketReason('agentActionRejected', 'subscriber')).toBeNull();
     // And says nothing about ends that were always wired.
     expect(wiringSocketReason('bankMarginCalled', 'subscriber')).toBeNull();
     expect(wiringSocketReason('orderFilled', 'publisher')).toBeNull();

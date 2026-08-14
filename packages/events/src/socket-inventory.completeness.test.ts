@@ -137,10 +137,14 @@ describe('D26-P2-05 bus completeness inventory (ADR D-S-13)', () => {
   it('no longer inventories the two closed findings as sockets or broken promises', () => {
     expect(wiringSocketReason('xpEarned', 'subscriber')).toBeNull();
     expect(wiringSocketReason('bankMarginCalled', 'publisher')).toBeNull();
+    expect(wiringSocketReason('agentActionRejected', 'subscriber')).toBeNull();
     expect(inventory.presumedFullyWired).toContain('xpEarned');
     expect(inventory.presumedFullyWired).toContain('bankMarginCalled');
+    expect(inventory.presumedFullyWired).toContain('agentActionRejected');
 
-    const closed = inventory.ends.filter((r) => r.event === 'xpEarned' || r.event === 'bankMarginCalled');
+    const closed = inventory.ends.filter(
+      (r) => r.event === 'xpEarned' || r.event === 'bankMarginCalled' || r.event === 'agentActionRejected',
+    );
     expect(closed.every((r) => r.disposition.kind === 'wired')).toBe(true);
   });
 

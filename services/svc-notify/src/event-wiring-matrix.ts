@@ -95,6 +95,12 @@ export const NOTIFY_EVENT_CONSUMERS: readonly NotifyConsumerRow[] = [
     subject: 'intafaced.bank.margin_call.created',
     effect: 'Critical inbox row + fan-out when a loan is called',
   },
+  {
+    event: 'agentActionRejected',
+    durable: 'notify-agent-action-rejected',
+    subject: 'intafaced.agents.action.rejected',
+    effect: 'Inbox row when a guardrail refuses an agent action',
+  },
 ] as const;
 
 /** Catalog subjects we deliberately do not fan out (and why). */

@@ -1034,18 +1034,6 @@ export const WIRING_SOCKETS = [
       "svc-agents publishes the public half of the Agentic Law (§8.2). The private half — the detail — is a query against agent_actions under the caller's own authorisation, which is where every surface in this repo reads it from today. The stream is the durable, replayable record for a compliance consumer that has not been built.",
   },
   {
-    event: 'agentActionRejected',
-    missing: 'subscriber',
-    /**
-     * CLASS A — classified here, not by the ADR. The guardrail refused the action
-     * before it ran and recorded the refusal in-process, so nothing downstream is
-     * waiting on the announcement to make the refusal true.
-     */
-    class: 'A',
-    reason:
-      'The guardrail refused the action before it ran, inside svc-agents, and recorded the refusal — so the event carries no obligation that would go unmet without a consumer. Named alongside agentActionCompleted for the same unbuilt compliance consumer.',
-  },
-  {
     event: 'agentUsageSettled',
     missing: 'subscriber',
     /**
