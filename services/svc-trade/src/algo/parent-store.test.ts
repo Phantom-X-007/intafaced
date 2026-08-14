@@ -69,4 +69,17 @@ describe('TwapParentStore (durable schedule residual)', () => {
     await store.save({ parent: sampleParent({ id: 'u2', userId: 'bob' }), plan: [parseAmount('1')] });
     expect((await store.listForUser('alice')).map((p) => p.id)).toEqual(['u1']);
   });
+
+  it('keeps the createTwap place grant across a later save that omits it', async () => {
+    const store = new MemoryTwapParentStore();
+    const parent = sampleParent();
+    await store.save({
+      parent,
+      plan: [parseAmount('1')],
+      grant: { scopes: ['trade:write'], sid: '33333333-3333-4333-8333-333333333333', tier: 'basic', mfa: false },
+    });
+    await store.save({ parent: sampleParent({ nextSliceIndex: 1 }), plan: [parseAmount('1')] });
+    const loaded = await store.load(parent.id);
+    expect(loaded!.grant?.scopes).toEqual(['trade:write']);
+  });
 });

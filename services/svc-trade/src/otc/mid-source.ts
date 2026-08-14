@@ -98,9 +98,9 @@ export function parseOtcMids(raw: string | null | undefined): Map<string, string
  * age gate refuses rather than keeping the desk open on a memory.
  *
  * A live OTC desk needs a feed that refreshes `asOf` on each observation
- * (`createObservedOtcMidSource` or a venue-chained source). The max-age number
- * itself is owner law on the desk (DIRECTION §8), never a default here.
- * Public posture: `otc.deskStatus.midFeed` — published=false until that feed.
+ * (`createObservedOtcMidSource` or `createVenueOtcMidSource` in venue-mid-source.ts).
+ * The max-age number itself is owner law on the desk (DIRECTION §8), never a default here.
+ * Public posture: `otc.deskStatus.midFeed` — published=false until that feed is installed.
  */
 export function createConfigOtcMidSource(raw: string | null | undefined, bootAsOf: Date = new Date()): OtcMidSource {
   const mids = parseOtcMids(raw);

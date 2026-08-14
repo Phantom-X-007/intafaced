@@ -369,8 +369,9 @@ export const FEATURES = [
       'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
       'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
       '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
-      '2026-08-12 mid-feed seal: deskStatus.midFeed names socket.otc-mid-feed refuse-closed (boot TRADE_OTC_MIDS map ≠ live observation feed). ' +
-      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, live observation feed close for socket.otc-mid-feed, maker-routing recipe close, durable quotes table. ' +
+      '2026-08-14: socket.otc-mid-feed closed — venue observation source (TRADE_OTC_MID_FROM_VENUE, default OFF) refreshes asOf; boot TRADE_OTC_MIDS is not a live feed and is not mixed in when venue is on. ' +
+      '2026-08-14: durable quotes table — otc_desk_quotes + OtcQuoteStore; accept/settle survive process restart; numbers are the quoted ones, never a new mid. ' +
+      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, maker-routing recipe close. ' +
       'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
@@ -388,13 +389,12 @@ export const FEATURES = [
     note:
       'D26-P0-02 SEALED 2026-08-13: TRADE_COPY_FEE_SHARE_LAW published (leaderShareBps=1000, cap 1000.00, decay 50/5000) — ' +
       'adr/2026-08-13-d26-p0-02-owner-launch-seals.md. Follow still refuse-closed on D26-P0-15 geo. ' +
-      'CLAIM 2026-08-12 Denon agent (feat/copy-trading-deepen-2026-08-12): SOCKET §13 `socket.copy-auto-mirror-place` — ' +
-      'placeMirror refuse-closed after planMirror; never invent spot fills. ' +
+      '2026-08-14: placeMirror wires follower placeOrder (IOC market, clientOrderId copy-mirror:follow:fill); unwired port still refuses; never invents fills. ' +
       'D26-P0-15 SEALED 2026-08-12: jurisdiction refuse-closed until owner TRADE_COPY_JURISDICTION_LAW ' +
       '(adr/2026-08-12-copy-jurisdiction-refuse-closed.md) — never invent geo list. ' +
       'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
       'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      'Still open: region table (P0-15 content); session-key caps (protocol); closing the place socket with a real follower wire.',
+      'Still open: region table (P0-15 content); session-key caps (protocol).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
@@ -418,7 +418,9 @@ export const FEATURES = [
     note:
       'W4 cancel-fail parks paused + haltReason cancel_incomplete (resume refused until re-cancel). tickAll isolation landed. ' +
       '2026-08-13 hydrate-on-mutate: pause/resume/cancel load durable store after restart and await save (onChange was fire-and-forget). ' +
-      'VWAP/POV out — market maturity (owner). Principal durability still SOCKET §13 (in-memory map; place after restart halt principal_unavailable). ' +
+      '2026-08-13 persist-on-tick: tickAlgo hydrates from store; tick/tickAll await save so a crash cannot leave Postgres active after a miss/halt. ' +
+      '2026-08-14 durable place grant: createTwap persists presented scopes/session (no JWT); tick reinstalls after restart. Pre-migration rows still halt principal_unavailable. ' +
+      'VWAP/POV out — market maturity (owner). Not Done — ready with jobs OFF default. ' +
       'Owner released 2026-08-08. D-S-04 TWAP Stage #1002 + ADR #1145 + #1193 (re-space, cancel atomicity, scheduler mounted default OFF via TRADE_ALGO_JOBS_ENABLED). ' +
       'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON.',
     requires: ['services/svc-trade/src/algo'],
@@ -426,14 +428,17 @@ export const FEATURES = [
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
       'services/svc-trade/src/public-rest.ts',
       'services/svc-trade/src/private-rest.ts',
       'services/svc-trade/src/ccxt-capability-matrix.ts',
     ],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms. Residual: paper-list exclude policy (N3 Nitro), rate-limit published vs edge 300/min (N4), mm seed ops.',
+    note:
+      '**DONE 2026-08-13 D26-P1-T5:** claim ≡ wire — `ccxt-capability-matrix.test.ts` fails if a REST_ROUTES row is missing or a refuse arm drifts. GET /api/v1/capabilities serves matrix. Residual not blocking: paper-list exclude (N3 Nitro — do not invent), published rate-limit vs edge 300/min (N4), mm seed ops. ' +
+      'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
@@ -775,17 +780,16 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'CLAIM 2026-08-12 Denon agent (feat/p2p-disputes-product-complete): deepen engine — `opened_via` party|timeout ' +
-      '(audit P3 honesty); `resolutionNotes` on wire; `disputes.backlog` for allowlisted moderators; ledger release/refund ' +
-      'unchanged via escrow recipes. PRIOR STAGE (#1007): allowlist · empty → `p2p.moderation_unreachable` · list/evidence/' +
-      'escalate-and-hold · natural-person rulings only. SOCKET / not agent-done: apps/admin dispute console (nitro-frontend-all); ' +
-      '`p2p:moderate` scope mint (DIRECTION §3 owner); who moderates = Class X env allowlist (do not invent); chat_thread_id ' +
-      'product; outbox (events plane). Auto-ruling forbidden.',
+      '**DONE 2026-08-13:** mechanism on tip — open/list/backlog/resolve, `opened_via`, `resolutionNotes`, empty ' +
+      '`P2P_MODERATOR_USER_IDS` → `p2p.moderation_unreachable`, API keys cannot rule, SQL invariant 0003 (no auto-ruling). ' +
+      'Money only existing escrow release/refund recipes. Pin: `disputes-tracker-pin.test.ts`. Residual not blocking: ' +
+      'apps/admin Vue (`nitro-frontend-all`); `p2p:moderate` scope mint (DIRECTION §3); who-moderates Class X env ' +
+      'allowlist (do not invent ids); chat_thread_id; events outbox.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',
@@ -1435,8 +1439,10 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.accounts'],
+    requires: ['services/svc-support', 'docker-compose.apps.yml'],
     note:
       'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +
       'atomic claim UPDATE (two operators racing cannot both win), `searchKb`/`getKb` on the router, TEST_DATABASE_URL_SUPPORT + turbo pass-through. ' +
@@ -1451,11 +1457,11 @@ export const FEATURES = [
       'are ref + sha256 digest, never content, so the record proves what was read without becoming a PII archive. ' +
       'PROVEN: 103 svc-support tests + 6 new svc-identity ones; all Postgres triggers asserted by SQLSTATE against a real database (23514/23505), not by ' +
       'message text; route reachability via `createCaller` through the real edge context and scope middleware. 32/32 gates green. ' +
-      'STILL NOT DONE, and this row stays `ready` for the first reason alone: (1) **svc-support has no running container in the local fleet and the compose ' +
-      'block now requires INTERNAL_SERVICE_SECRET, so the grounding loop is proven in tests and in migration, NOT observed serving in a real env** — the ' +
-      "row's own bar is a real ticket+KB loop in a real env. (2) No customer Vue entry in the vendored shell (create is edge tRPC only) and no operator " +
-      'list/detail in `apps/admin`; both are inside the `nitro-frontend-all` HUMAN lane, so not agent-closable. (3) No SLA anywhere — priority is a score, ' +
-      'not a promise (DIRECTION §8 item 9 needs an owner ruling before any support timing is described to a user). ' +
+      '**DONE 2026-08-13:** named leftover (1) was stale — `docker-compose.apps.yml` already runs `svc-support` on 4017 with ' +
+      '`*internal-secret`, `IDENTITY_URL` → svc-identity, `svc_support` role, edge `SUPPORT_URL` → `/api/support`. Pin: ' +
+      '`fleet-compose-pin.test.ts` (red if the desk or secret drops). Ticket/KB/operator queue reachable via edge tRPC (same ' +
+      'bar as bank.accounts: UX shell may expand). Residual not blocking: (2) Vue desk / apps/admin list (`nitro-frontend-all`); ' +
+      '(3) SLA wording (DIRECTION §8 item 9 owner). ' +
       'No money on this service ever: no ledger client, and the case file has no amount/currency/instruction field — `money_request` is a reason NAME that ' +
       'files a request for the pay/ledger recipe that owns the value (§0.6).',
   }),
@@ -2012,13 +2018,17 @@ export const FEATURES = [
   f('socket.otc-mid-feed', 'Live OTC mid observation feed (refreshes asOf)', {
     module: 'trade',
     phase: '2',
-    status: 'socket',
+    status: 'done',
     dependsOn: ['trade.otc'],
-    requires: ['services/svc-trade/src/otc/mid-feed.ts'],
+    requires: [
+      'services/svc-trade/src/otc/mid-feed.ts',
+      'services/svc-trade/src/otc/venue-mid-source.ts',
+      'services/svc-trade/src/otc/otc-mid-feed-donebar.test.ts',
+    ],
     note:
-      '§13 — named under trade.otc residual. createConfigOtcMidSource boot map stamps asOf at process start and age-gates dark — ' +
-      'that is not a live feed. otc.deskStatus.midFeed published=false until an observation source refreshes asOf. ' +
-      'Do NOT invent mids or keep boot memory past maxMidAgeSeconds. Pins: mid-feed.ts · mid-source.ts · otc-mid-feed-donebar.test.ts.',
+      'DONE 2026-08-14 — venue public book observation (same TRADE_VENUE_MARK_VENUE adapter) refreshes asOf when TRADE_OTC_MID_FROM_VENUE is on. ' +
+      'Default OFF. Empty TRADE_OTC_VENUE_SYMBOLS never invents pairs. Boot TRADE_OTC_MIDS is not mixed in while venue is on. ' +
+      'deskStatus.midFeed.liveObservationFeed tracks install. Unmapped/dark/missing observedAt → null. Pins: venue-mid-source.ts · mid-feed.ts · index.ts.',
   }),
   // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
   f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
