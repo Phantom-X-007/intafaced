@@ -388,6 +388,8 @@ describe('public REST routes', () => {
       nextFundingTimestamp: 'unpublished',
       indexPrice: 'unpublished',
       ladderNumbers: 'd3_unset',
+      insuranceEmptyBlocksLiveList: true,
+      insuranceTargetSize: 'owner_unset',
     });
     await app.close();
   });

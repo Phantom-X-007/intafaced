@@ -24,6 +24,8 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(n.ladderNumbers).toBe('d3_unset');
     expect(n.profitSourceConfigured).toBe(false);
     expect(n.profitSourceDefault).toBe(false);
+    expect(n.insuranceEmptyBlocksLiveList).toBe(true);
+    expect(n.insuranceTargetSize).toBe('owner_unset');
   });
 
   it('live flags are only true when the caller says true', () => {
