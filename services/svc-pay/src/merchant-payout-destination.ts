@@ -53,7 +53,7 @@ export function assertOnlyPayoutDestinations(): MerchantPayoutDestinations {
   };
 }
 
-/** In-memory store for tests — persist actually stores, require refuses if none. */
+/** In-memory store for tests. Persist stores; require refuses if none. */
 export function memoryPayoutDestinations(): MerchantPayoutDestinations {
   const rows = new Map<string, PayoutDestination>();
   const key = (merchantId: string, railId: string) => `${merchantId}:${railId}`;
