@@ -881,9 +881,7 @@ describe('DepthHub — seed vs poll races and window pins', () => {
     hub.ingest(snapshot(1, [['100', '1']], [['101', '1']]));
 
     expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 1 });
-    expect(sink.messages().some((m) => m.type === 'snapshot' && m.bids.length === 0 && m.asks.length === 0)).toBe(
-      false,
-    );
+    expect(sink.messages().some((m) => m.type === 'snapshot' && m.bids.length === 0 && m.asks.length === 0)).toBe(false);
     expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
   });
 
