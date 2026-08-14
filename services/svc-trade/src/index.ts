@@ -537,6 +537,7 @@ registerPublicRest(app, {
   futures: {
     jobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     orderableEnabled: env.TRADE_FUTURES_ENABLED,
+    profitSourceConfigured: profitSource != null,
   },
 });
 

@@ -383,6 +383,8 @@ describe('public REST routes', () => {
       orderableDefault: false,
       jobsEnabled: false,
       jobsDefault: false,
+      profitSourceConfigured: false,
+      profitSourceDefault: false,
       nextFundingTimestamp: 'unpublished',
       indexPrice: 'unpublished',
       ladderNumbers: 'd3_unset',
@@ -408,6 +410,13 @@ describe('public REST routes', () => {
     const app = await build(deps({ futures: { jobsEnabled: false, orderableEnabled: true } }));
     const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
     expect(res.json().notes.futures).toMatchObject({ orderableEnabled: true, orderableDefault: false });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports profitSourceConfigured only when the host names a pot', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, profitSourceConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({ profitSourceConfigured: true, profitSourceDefault: false });
     await app.close();
   });
 

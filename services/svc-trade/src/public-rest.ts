@@ -89,7 +89,11 @@ export interface PublicRestDeps {
    * Futures liq/funding job flag for the capabilities note.
    * Omitted → shipped default (jobs off). Does not start ticks.
    */
-  futures?: { readonly jobsEnabled: boolean; readonly orderableEnabled?: boolean };
+  futures?: {
+    readonly jobsEnabled: boolean;
+    readonly orderableEnabled?: boolean;
+    readonly profitSourceConfigured?: boolean;
+  };
 }
 
 /** Send an already-mapped CCXT error. */

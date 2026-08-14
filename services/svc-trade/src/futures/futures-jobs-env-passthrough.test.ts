@@ -20,7 +20,7 @@ const indexSource = readFileSync(join(here, '..', 'index.ts'), 'utf8');
 describe('futures env passthrough into registerPublicRest', () => {
   it('live host passes TRADE_FUTURES_JOBS_ENABLED and TRADE_FUTURES_ENABLED', () => {
     expect(indexSource).toMatch(/futures:\s*\{[\s\S]*jobsEnabled:\s*env\.TRADE_FUTURES_JOBS_ENABLED/);
-    expect(indexSource).toMatch(/futures:\s*\{[\s\S]*orderableEnabled:\s*env\.TRADE_FUTURES_ENABLED/);
+    expect(indexSource).toMatch(/futures:\s*\{[\s\S]*profitSourceConfigured:\s*profitSource != null/);
   });
 
   it('published funding quote never invents nextFundingTimestamp from the 8h interval', () => {
