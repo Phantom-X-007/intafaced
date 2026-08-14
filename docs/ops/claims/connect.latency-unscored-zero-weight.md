@@ -4,7 +4,8 @@
 **tracker:** `connect.latency-grading`  
 **branch:** `feat/connect-unscored-zero-weight`  
 **owner:** Phantom-X-007 (Denon)  
-**status:** claimed  
+**status:** pr-open  
+**pr:** https://github.com/Phantom-X-007/intafaced/pull/1843  
 **updated:** 2026-08-14
 
 ## Done bar
