@@ -32,6 +32,7 @@ import { fakeMarket, registerPublicRest, type PublicRestDeps } from './public-re
 const here = dirname(fileURLToPath(import.meta.url));
 const publicRestSource = readFileSync(join(here, 'public-rest.ts'), 'utf8');
 const privateRestSource = readFileSync(join(here, 'private-rest.ts'), 'utf8');
+const positionServiceSource = readFileSync(join(here, 'futures/position-service.ts'), 'utf8');
 
 const SECRET = 'a-ccxt-capability-matrix-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -160,6 +161,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
         'crossMarginOnOpen',
         'fundingRateSpot',
         'fundingRateUnavailable',
+        'futuresUnconfiguredOnOpen',
         'leverageRequiredOnOpen',
         'setLeverage',
         'setMarginMode',
@@ -192,6 +194,12 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(privateRestSource).toContain("'/api/v1/futures/adl-events'");
     expect(refuseArmById('adlDisclosureRequired')!.httpStatus).toBe(403);
     expect(refuseArmById('adlDisclosureRequired')!.intafacedCode).toBe(ADL_DISCLOSURE_REQUIRED);
+    expect(privateRestSource).toContain('FuturesError');
+    const unconfigured = refuseArmById('futuresUnconfiguredOnOpen')!;
+    expect(unconfigured.httpStatus).toBe(503);
+    expect(unconfigured.intafacedCode).toBe('trade.futures_unconfigured');
+    expect(unconfigured.ccxtCode).toBe('NotSupported');
+    expect(positionServiceSource).toContain("'trade.futures_unconfigured', 503");
   });
 
   it('extension inventory includes capabilities + ADL doors (not only REST_ROUTES)', () => {
@@ -446,6 +454,8 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'crossMarginOnOpen' && a.httpStatus === 400)).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'leverageRequiredOnOpen' && a.httpStatus === 400)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('futuresUnconfiguredOnOpen'))).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 503)).toBe(true);
     await app.close();
   });
 
