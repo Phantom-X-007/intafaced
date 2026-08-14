@@ -27,6 +27,7 @@ import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
+import { MaintainedBook } from '@intafaced/venue-adapter';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
@@ -168,10 +169,36 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 // Venue fabric public mid → mark path (A-TRADE-VENUE-1). Adapter created above (OTC/MM share).
+const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
+const venueMaintainedBooks = new Map<string, MaintainedBook>();
+if (env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter) {
+  for (const symbol of new Set(venueMarkSymbols.values())) {
+    const book = new MaintainedBook(venuePublicAdapter, symbol);
+    venueMaintainedBooks.set(symbol, book);
+    void book.run().then((status) => {
+      app.log.warn({ symbol, status }, 'venue maintained book ended');
+    });
+  }
+}
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
-  symbols: env.TRADE_VENUE_MARK_SYMBOLS,
+  symbols: venueMarkSymbols,
   adapter: venuePublicAdapter,
+  ...(venueMaintainedBooks.size > 0
+    ? {
+        bookForSymbol: (symbol: string) => {
+          const book = venueMaintainedBooks.get(symbol);
+          if (!book) return null;
+          return {
+            get servable() {
+              return book.servable;
+            },
+            top: () => book.top(),
+            observedAt: () => book.tracker.observedAt,
+          };
+        },
+      }
+    : {}),
 });
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
   // Typo / unsupported venue — say so once; do not invent a mid adapter.
@@ -297,7 +324,6 @@ const candleJobs = startCandleJobs({
 
 // MM seed job — default OFF. Empty markets or missing mids → no invent.
 // Mid port (A-TRADE-MM-3): env map first; optional venue public mid when enabled.
-const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
 const mmMidSource = createMmMidSourceFromConfig({
   midsEnv: env.TRADE_MM_SEED_MIDS,
   midFromVenue: env.TRADE_MM_SEED_MID_FROM_VENUE,
@@ -611,6 +637,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       mmSeedJobs.stop();
       algoJobs.stop();
       reconcileJobs.stop();
+      await Promise.all([...venueMaintainedBooks.values()].map((b) => b.close()));
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();

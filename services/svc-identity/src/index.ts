@@ -14,6 +14,7 @@ import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
 import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
+import { bootKycVault } from './kyc/boot-vault.js';
 import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -122,6 +123,13 @@ const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TI
  */
 const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET) : undefined;
 
+/**
+ * §10 KYC encrypted vault. Missing/invalid IDENTITY_KYC_DOC_KEY → null;
+ * store/list/bind procedures refuse closed. Never invent a key.
+ * Live vendor webhook remains Class X.
+ */
+const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
+
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
   webauthnEnabled: env.WEBAUTHN_ENABLED,
@@ -130,6 +138,8 @@ export const appRouter = createIdentityRouter(auth, rank, {
   accruals,
   accrualTierLaw,
   ledger,
+  kycDocs: vault?.kycDocs,
+  bindKycProviderRef: vault?.bindKycProviderRef,
 });
 export type AppRouter = typeof appRouter;
 

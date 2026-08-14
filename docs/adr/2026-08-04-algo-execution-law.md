@@ -1,10 +1,10 @@
 # ADR: algo execution — a schedule is not a position, and progress is not a fill
 
-**Status:** **Accepted — 2026-08-04.** Owner decision, stated and confirmed.
+**Status:** **Accepted — 2026-08-04.** Owner decision, stated and confirmed. **Amended 2026-08-14:** VWAP/POV may run from the existing non-seeded fill-tape volume series; they still refuse when that series is empty. Icebergs remain out. `trade.algo` is still not Done (jobs default OFF).
 **Decision owner:** repo owner. **Written by:** Denon.
 **Spec id:** D-S-04.
-**Builds on:** [`DIRECTION-2026-07-31.md`](../DIRECTION-2026-07-31.md) §1, which already decided the scope: **"Algo v1 = TWAP only. Icebergs are OUT."** That stands. This states the product law underneath it.
-**Ground truth at time of writing:** `trade.algo` has **zero lines of code**. `services/svc-trade/src/` holds `convert`, `futures`, `mm` and `spot` and nothing else. This is a greenfield law, not a description.
+**Builds on:** [`DIRECTION-2026-07-31.md`](../DIRECTION-2026-07-31.md) §1, which already decided the scope: **"Algo v1 = TWAP only. Icebergs are OUT."** That stands for icebergs. TWAP shipped; VWAP/POV now consume real tape rather than inventing a curve.
+**Ground truth at time of writing (2026-08-04):** `trade.algo` had **zero lines of code**. That sentence is historical. TWAP, durable grants, and tape-backed VWAP/POV now live under `services/svc-trade/src/algo`.
 
 ---
 
@@ -35,7 +35,7 @@ Every dishonest execution product in this category makes the same move: the pare
 **Out, and each for a reason:**
 
 - **Icebergs.** `DIRECTION` §1: "a hidden order that leaks through matching-engine timing is worse than no hidden order, and proving it doesn't leak is its own project." A hidden order that is inferable is a false promise of privacy, which is worse than the honest absence of the feature.
-- **VWAP and POV.** Both need a **volume** input the platform cannot currently produce honestly. `mm` seeded volume is excluded from every user-facing statistic by §1, so real volume on a young book is thin and often zero — and an algo that participates at 10% of a volume figure that is mostly our own bot is a machine for trading against ourselves. **These become buildable when a real volume series exists, not before.** The tracker row names them; the tracker row is aspirational and should say so.
+- **VWAP and POV (amended 2026-08-14).** Seeded MM volume is still excluded (SD-3 / §1). The honest series is `queryCandlesFromFills` / interval taker volume from real fills. When that series is all-zero or missing, create/tick **refuses** (`trade.algo_volume_immature` / `trade.algo_no_volume`) — it does not fall back to TWAP and it does not invent buckets. POV `participationBps` is caller-published (1..10000); there is no product default. Slice grain must be a listed OHLCV timeframe.
 - **Anything discretionary.** A schedule executes. It does not decide.
 
 ---
@@ -86,7 +86,7 @@ If a design needs the parent to hold value in order to work, the design is wrong
 ## Non-goals
 
 - **This is not a smart order router.** One market, one book. Routing across venues is `venue.aggregation` and is unspecced.
-- **This does not make `trade.algo` a Done candidate.** Doing TWAP honestly is the whole v1; VWAP and POV stay out with the reason above recorded on the row.
+- **This does not make `trade.algo` a Done candidate.** TWAP + tape-backed VWAP/POV still run with jobs default OFF. Icebergs stay out.
 - **This says nothing about algo on futures.** Futures risk law is D-S-01 and is still partial. Algo on a perp waits for it.
 
 ---
@@ -105,12 +105,13 @@ If a design needs the parent to hold value in order to work, the design is wrong
 ## What agents may implement without asking again
 
 - TWAP to the rules above, in `svc-trade`, against the real book.
+- VWAP/POV that size from non-seeded fill tape and refuse when that tape is empty.
 - The child-order provenance link and its user-visible surface.
 - Every refuse case and its test.
 
 ## What still needs the owner
 
-- VWAP, POV, or any volume-participating algo — blocked on a real volume series, not on code.
 - Icebergs, or any hidden-order product.
 - Algo on futures — waits on D-S-01.
 - Any fee or rebate specific to algo execution. `DIRECTION` §8 still holds every rate.
+- A product-default participation rate (there is none; callers publish bps).

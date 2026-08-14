@@ -272,6 +272,8 @@ export type TradeErrorCode =
   | 'trade.algo_child_cancel_failed'
   | 'trade.algo_principal_unavailable'
   | 'trade.algo_market_closed'
+  | 'trade.algo_volume_immature'
+  | 'trade.algo_no_volume'
   /**
    * Resume would stretch the schedule past 2× the order's own durationMs
    * (ADR 2026-08-08). Trader may cancel-and-recreate; parent stays paused.
