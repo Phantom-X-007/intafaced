@@ -137,7 +137,7 @@ export function proposeGrowthCampaign(input: GrowthProposeInput = {}): GrowthPro
   };
 }
 
-export function assertProposalOnly(result: GrowthProposeResult): void {
+export function assertProposalOnly(result: GrowthProposeResult | Record<string, unknown>): void {
   if (looksLikePublication(result)) {
     throw new Error('growth campaign presented as an autonomous publication');
   }
