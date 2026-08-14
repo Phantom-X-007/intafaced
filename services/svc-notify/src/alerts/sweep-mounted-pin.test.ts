@@ -74,4 +74,10 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(factory).toMatch(/kind:\s*'live'/);
     expect(factory).toMatch(/\/api\/v1\/ticker\//);
   });
+
+  it('evaluateMarket accepts the mark before firing — dark wiring cannot invent live', () => {
+    const service = src('alerts/service.ts');
+    expect(service).toMatch(/acceptAlertMark\(/);
+    expect(service).toMatch(/outOfAppRequiredRefusal\(/);
+  });
 });

@@ -160,7 +160,7 @@ const priceAlertOutput = z.object({
 const alertEvaluationOutput = z.object({
   markSource: z.enum(['dark', 'live']),
   canFire: z.boolean(),
-  code: z.enum(['alert.price_unavailable']).nullable(),
+  code: z.enum(['alert.price_unavailable', 'channel.not_configured', 'channel.disabled']).nullable(),
 });
 
 /** The answer when this deployment has no alert service at all. */
