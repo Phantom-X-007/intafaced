@@ -1021,19 +1021,6 @@ export const WIRING_SOCKETS = [
       'The revocation is effective on chain the moment it is mined; a consumer would only ever be catching up with a fact that is already binding. It stays unconsumed until there is an agent-routing surface that needs to stop sending — and that surface must re-read the chain anyway rather than trust this stream.',
   },
   {
-    event: 'agentActionCompleted',
-    missing: 'subscriber',
-    /**
-     * CLASS A — classified here, not by the ADR. There IS a user-facing agent
-     * action log (the Vue shell's Agents screen), and it is served by agents.log.mine
-     * → a direct read of agent_actions under the caller's own authorisation. The
-     * belief users hold is discharged by the table, not by this stream.
-     */
-    class: 'A',
-    reason:
-      "svc-agents publishes the public half of the Agentic Law (§8.2). The private half — the detail — is a query against agent_actions under the caller's own authorisation, which is where every surface in this repo reads it from today. The stream is the durable, replayable record for a compliance consumer that has not been built.",
-  },
-  {
     event: 'agentUsageSettled',
     missing: 'subscriber',
     /**

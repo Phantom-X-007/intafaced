@@ -1,4 +1,5 @@
 import {
+  agentActionCompleted,
   agentActionRejected,
   bankMarginCalled,
   fillSettled,
@@ -57,6 +58,7 @@ export { NOTIFY_EVENT_CONSUMERS, SKIPPED_NOTIFY_SUBJECTS, notifyEventConsumerCou
  * Skipped (no user ids on payload): p2pDisputeResolved, p2pTradeExpired.
  * p2pTradeDisputed notifies openedBy only — the counterparty is not on the payload.
  * orderUpdated notifies cancelled/rejected/expired only — fills already have fillSettled.
+ * agentActionCompleted notifies completion/session_close only — never tool_call/embedding noise.
  */
 
 /**
@@ -191,10 +193,34 @@ export const DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY: OrderTerminalNotifyPolicy = {
   severity: 'info',
 };
 
+/** The action kinds `intafaced.agents.action.completed` can carry. */
+type AgentActionKind = PayloadOf<'agentActionCompleted'>['kind'];
+
+/**
+ * WHICH AGENT COMPLETIONS ARE WORTH A NOTIFICATION.
+ *
+ * `agents.action.completed` is high-frequency: every tool_call, embedding, and
+ * usage_settlement publishes. The user-facing log is already `agent_actions`
+ * under the caller's authorisation. Inbox fan-out is only the two kinds a
+ * person would miss with the app closed: a finished reply, and a session close.
+ *
+ * Everything else is ACKED AND NOT WRITTEN — same posture as position/order.
+ */
+export interface AgentActionCompletedNotifyPolicy {
+  readonly kinds: readonly AgentActionKind[];
+  readonly severity: Severity;
+}
+
+export const DEFAULT_AGENT_ACTION_COMPLETED_NOTIFY_POLICY: AgentActionCompletedNotifyPolicy = {
+  kinds: ['completion', 'session_close'],
+  severity: 'info',
+};
+
 export interface SubscribeOptions {
   /** Override the conservative default above. Production boots without one. */
   readonly positionNotify?: PositionNotifyPolicy;
   readonly orderNotify?: OrderTerminalNotifyPolicy;
+  readonly agentActionCompletedNotify?: AgentActionCompletedNotifyPolicy;
 }
 
 /**
@@ -260,6 +286,7 @@ export async function subscribeNotificationEvents(
 ): Promise<SubscriptionReport> {
   const attachments: Attachment[] = [];
   const positionPolicy = options.positionNotify ?? DEFAULT_POSITION_NOTIFY_POLICY;
+  const agentCompletedPolicy = options.agentActionCompletedNotify ?? DEFAULT_AGENT_ACTION_COMPLETED_NOTIFY_POLICY;
   const orderPolicy = options.orderNotify ?? DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY;
 
   attachments.push(
@@ -586,6 +613,42 @@ export async function subscribeNotificationEvents(
           href: `/agents/sessions/${payload.sessionId}`,
           severity: 'action',
           sourceSubject: agentActionRejected.subject,
+          sourceIdempotencyKey: `${payload.sessionId}:${payload.sequence}`,
+        }),
+      );
+    }),
+  );
+
+  attachments.push(
+    await attach(bus, 'agentActionCompleted', agentActionCompleted.subject, 'notify-agent-action-completed', async (payload) => {
+      /**
+       * High-frequency stream. tool_call / embedding / session_open /
+       * usage_settlement are already on agent_actions; writing them here would
+       * turn the inbox into a telemetry dump. Return before notify.create so a
+       * suppressed kind never reaches the dispatcher.
+       *
+       * Business key is `<sessionId>:<sequence>` — the same grain the publisher
+       * uses. Kind is not in the key: a given sequence has one kind.
+       */
+      if (!agentCompletedPolicy.kinds.includes(payload.kind)) return;
+
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'agents.action.completed',
+          titleKey: 'notify.agents.action.completed.title',
+          bodyKey: 'notify.agents.action.completed.body',
+          params: {
+            kind: payload.kind,
+            task: payload.task ?? '—',
+            tool: payload.tool ?? '—',
+            sessionId: payload.sessionId,
+            agentId: payload.agentId,
+            sequence: payload.sequence,
+          },
+          href: `/agents/sessions/${payload.sessionId}`,
+          severity: agentCompletedPolicy.severity,
+          sourceSubject: agentActionCompleted.subject,
           sourceIdempotencyKey: `${payload.sessionId}:${payload.sequence}`,
         }),
       );

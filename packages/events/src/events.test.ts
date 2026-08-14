@@ -441,6 +441,7 @@ describe('declared wiring sockets', () => {
     expect(wiringSocketReason('xpEarned', 'subscriber')).toBeNull();
     expect(wiringSocketReason('bankMarginCalled', 'publisher')).toBeNull();
     expect(wiringSocketReason('agentActionRejected', 'subscriber')).toBeNull();
+    expect(wiringSocketReason('agentActionCompleted', 'subscriber')).toBeNull();
     // And says nothing about ends that were always wired.
     expect(wiringSocketReason('bankMarginCalled', 'subscriber')).toBeNull();
     expect(wiringSocketReason('orderFilled', 'publisher')).toBeNull();

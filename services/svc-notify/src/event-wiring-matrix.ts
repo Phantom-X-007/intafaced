@@ -101,6 +101,12 @@ export const NOTIFY_EVENT_CONSUMERS: readonly NotifyConsumerRow[] = [
     subject: 'intafaced.agents.action.rejected',
     effect: 'Inbox row when a guardrail refuses an agent action',
   },
+  {
+    event: 'agentActionCompleted',
+    durable: 'notify-agent-action-completed',
+    subject: 'intafaced.agents.action.completed',
+    effect: 'Inbox row on completion / session_close only (not tool_call noise)',
+  },
 ] as const;
 
 /** Catalog subjects we deliberately do not fan out (and why). */
