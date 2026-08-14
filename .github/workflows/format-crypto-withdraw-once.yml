@@ -13,14 +13,13 @@ jobs:
         with:
           ref: feat/bank-crypto-withdraw-stored-evm
       - name: Wrap long import
-        run: |
-          python3 -c "from pathlib import Path; p=Path('services/svc-bank/src/ramps/ramps.test.ts'); t=p.read_text(); old=\"import { assertOnlyWithdrawDestinations, memoryWithdrawDestinations } from '../withdraw-destination.js';\\n\"; new=\"import {\\n  assertOnlyWithdrawDestinations,\\n  memoryWithdrawDestinations,\\n} from '../withdraw-destination.js';\\n\";
-            assert old in t, 'needle missing'; p.write_text(t.replace(old,new,1))"
+        run: python3 services/svc-bank/scripts/wrap-import.py
       - name: Commit and self-delete
         run: |
           git config user.name "Sovereign Builder"
           git config user.email "intafaced@gmail.com"
           git rm -f .github/workflows/format-crypto-withdraw-once.yml
+          git rm -f services/svc-bank/scripts/wrap-import.py
           git rm -f services/svc-bank/scripts/fmt-withdraw.patch || true
           git add services/svc-bank/src/ramps/ramps.test.ts
           git commit -m "style(svc-bank): wrap crypto-withdraw test import for prettier"
