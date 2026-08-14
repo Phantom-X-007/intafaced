@@ -11,7 +11,7 @@
 
 ## The decision (one sentence)
 
-> **Copy leaders take 1000 bps of our protocol trading fee (not of notional, not of P&L), capped at `1000.00` per follower per period, decaying to 5000 bps of that share after 50 round-trips. Affiliates take 10/5/2 percent of the same fee at hops 0/1/2 (`MAX_PAYOUT_TIER_DEPTH` stays 5). Realised futures profit is paid from `house:fees:trade:available`. Marketplace commission and pay fee tables stay unpublished. Copy jurisdictions stay unpublished (D26-P0-15 / counsel). Funding stays off until a listed market is explicitly enabled.**
+> **Copy leaders take 1000 bps of our protocol trading fee (not of notional, not of P&L), capped at `1000.00` per follower per period, decaying to 5000 bps of that share after 50 round-trips. Affiliates take 10/5/2 percent of the same fee at hops 0/1/2 (`MAX_PAYOUT_TIER_DEPTH` stays 5). Realised futures profit is paid from `house:fees:trade:available`. Marketplace commission and pay fee tables stay unpublished. Copy jurisdictions owner-published 2026-08-14 in `.env.example` (D26-P0-15). Funding stays off until a listed market is explicitly enabled.**
 
 This is settled. Agents implement against it. They do not re-litigate the percentages in callers.
 
@@ -23,7 +23,7 @@ Units already exist in code. Copy `leaderShareBps` is bps **of the house trading
 
 `house:fees:trade:available` is the only account `recipes.futuresRealizeProfit` draws from. Naming any other pot fails boot. CX8 already used this spelling; this ADR is the owner choosing that pot for deploy, not a second book.
 
-Marketplace `MARKET_HOUSE_COMMISSION_BPS` stays **blank** (P0-10 authority). Silence is not `0`. Pay PSP tables stay unset (Class X). Copy geo stays unset.
+Marketplace `MARKET_HOUSE_COMMISSION_BPS` stays **blank** (P0-10 authority). Silence is not `0`. Pay PSP tables stay unset (Class X). Copy geo is owner-published in `.env.example` (2026-08-14); compose still has no default.
 
 ---
 
@@ -41,7 +41,7 @@ Marketplace `MARKET_HOUSE_COMMISSION_BPS` stays **blank** (P0-10 authority). Sil
 }
 ```
 
-Follow still refuses until D26-P0-15 publishes `TRADE_COPY_JURISDICTION_LAW`. Publishing fee-share does not invent a region list.
+Follow is live where `TRADE_COPY_JURISDICTION_LAW` is published (`.env.example` 2026-08-14). Blank host still refuse-closed.
 
 ### 2. Affiliate accrual — `IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON`
 
@@ -79,7 +79,7 @@ Published in `.env.example`. Compose still passes `${TRADE_FUTURES_PROFIT_SOURCE
 
 - `MARKET_HOUSE_COMMISSION_BPS` — **owner published `0`** (2026-08-13 explicit free-cut in `.env.example`). Compose still has no default. Unset on a host still refuses.
 - Pay fee / PSP bps — Class X.
-- `TRADE_COPY_JURISDICTION_LAW` — counsel / Nitro.
+- `TRADE_COPY_JURISDICTION_LAW` — owner-published 2026-08-14 in `.env.example` (not worldwide; blank host still refuse).
 - Token emission / buyback / burn / staking magnitudes.
 - DEX venues, insurance target size, D3 rungs, N3 paper-exclude.
 
