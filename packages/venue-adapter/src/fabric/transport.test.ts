@@ -60,9 +60,6 @@ describe('webSocketStreamPort', () => {
     await withFakeWebSocket(async () => {
       const handle = await webSocketStreamPort().open('wss://ws.test/v5/public/spot');
 
-      // `send` must exist on the REAL port, not only on the doubles. Without it a
-      // venue that subscribes by message opens a socket it never subscribes on —
-      // open, healthy and permanently silent.
       expect(typeof handle.send).toBe('function');
 
       await handle.send?.({ op: 'subscribe', args: ['orderbook.50.BTCUSDT'] });
@@ -73,6 +70,16 @@ describe('webSocketStreamPort', () => {
 
       await handle.close();
       expect(FakeSocket.last!.closed).toBe(true);
+    });
+  });
+
+  it('sends a string payload as-is — OKX ping is four characters, not JSON', async () => {
+    await withFakeWebSocket(async () => {
+      const handle = await webSocketStreamPort().open('wss://ws.okx.com:8443/ws/v5/public');
+      await handle.send?.('ping');
+      expect(FakeSocket.last!.sent).toEqual(['ping']);
+      expect(FakeSocket.last!.sent[0]).not.toBe('"ping"');
+      await handle.close();
     });
   });
 
@@ -90,13 +97,25 @@ describe('webSocketStreamPort', () => {
     });
   });
 
+  it('yields a non-JSON inbound frame as the raw string — OKX pong must not fail the stream', async () => {
+    await withFakeWebSocket(async () => {
+      const handle = await webSocketStreamPort().open('wss://ws.okx.com:8443/ws/v5/public');
+      const socket = FakeSocket.last!;
+
+      socket.onmessage?.({ data: 'pong' });
+      socket.onclose?.();
+
+      const frames = [];
+      for await (const frame of handle.messages) frames.push(frame);
+      expect(frames).toEqual(['pong']);
+    });
+  });
+
   it('REFUSES a runtime with no WebSocket rather than falling back to polling', async () => {
     const slot = globalThis as { WebSocket?: unknown };
     const original = slot.WebSocket;
     delete slot.WebSocket;
     try {
-      // A silent downgrade to polling would be invisible in every metric here,
-      // and a polled book is exactly what §27 exists to avoid.
       await expect(webSocketStreamPort().open('wss://ws.test')).rejects.toThrow(/NOT fall back to polling/);
     } finally {
       if (original !== undefined) slot.WebSocket = original;

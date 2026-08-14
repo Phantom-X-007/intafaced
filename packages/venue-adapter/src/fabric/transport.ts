@@ -1,10 +1,6 @@
 /**
  * TRANSPORT PORTS — the seam that makes a venue adapter testable.
  *
- * ═══════════════════════════════════════════════════════════════════════════
- * WHY THE PORTS EXIST
- * ═══════════════════════════════════════════════════════════════════════════
- *
  * An adapter that calls `fetch` and `new WebSocket` directly can only be tested
  * against the real venue. That sounds rigorous and is the opposite: the cases
  * worth testing are the ones a healthy venue never produces on demand — a
@@ -16,16 +12,18 @@
  * implementations are at the bottom of this file and are the only place in the
  * fabric that touches the network.
  *
- * ═══════════════════════════════════════════════════════════════════════════
- * NO WEBSOCKET DEPENDENCY
- * ═══════════════════════════════════════════════════════════════════════════
- *
  * `webSocketStreamPort` uses the platform's global `WebSocket` (Node 22+) rather
  * than pulling in a client library. Doctrine 5, and one fewer package in the
  * money path. On a runtime without it, the factory throws with the actual
  * requirement named — it does NOT fall back to polling, because a polled book is
  * exactly the thing §27 is built to avoid and a silent downgrade to it would be
  * invisible in every metric we have.
+ *
+ * STRING FRAMES — a heartbeat is not JSON. Some venues (OKX) heartbeat with the
+ * raw text `ping` and reply `pong`. `JSON.stringify('ping')` is the six-character
+ * `"ping"`, which the venue does not recognise, and `JSON.parse('pong')` throws.
+ * A `string` therefore goes out as-is, and a non-JSON inbound frame is yielded
+ * as the raw text.
  */
 
 export interface HttpResponse {
@@ -41,22 +39,19 @@ export interface HttpPort {
 }
 
 export interface StreamHandle {
-  /** Raw frames, already JSON-parsed, in arrival order. Ends when the socket closes. */
+  /** Raw frames, already JSON-parsed (or raw text when the venue did not send JSON), in arrival order. Ends when the socket closes. */
   readonly messages: AsyncIterable<unknown>;
   /**
-   * Send one frame to the venue, JSON-encoded.
+   * Send one frame to the venue.
    *
-   * A websocket is bidirectional and the first venue in this fabric hid that:
-   * Binance puts the subscription in the URL path and the client never speaks, so
-   * a receive-only handle looked like the whole shape. It is not — most venues
-   * subscribe by MESSAGE (`{"op":"subscribe","args":[…]}`), and a heartbeat is a
-   * message too.
+   * A `string` is sent as-is — OKX's heartbeat is the four characters `ping`.
+   * Anything else is JSON-encoded.
    *
    * OPTIONAL rather than required, so that a caller holding a receive-only double
    * keeps compiling. An adapter that needs it must check and REFUSE — see
-   * `bybit-spot.ts`. Silently skipping the subscribe would leave a socket that is
-   * open, healthy, and permanently silent, which is indistinguishable from a
-   * quiet market in every metric this fabric has.
+   * `bybit-spot.ts` and `okx-spot.ts`. Silently skipping the subscribe would leave
+   * a socket that is open, healthy, and permanently silent, which is
+   * indistinguishable from a quiet market in every metric this fabric has.
    */
   send?(payload: unknown): Promise<void>;
   close(): Promise<void>;
@@ -184,10 +179,14 @@ export function webSocketStreamPort(capacity = 4_096): StreamPort {
       const socket = new Ctor(url);
 
       socket.onmessage = (event: MessageEvent) => {
+        const text = String(event.data);
         try {
-          queue.push(JSON.parse(String(event.data)));
-        } catch (error) {
-          queue.fail(error instanceof Error ? error : new Error(String(error)));
+          queue.push(JSON.parse(text));
+        } catch {
+          // Venue heartbeat replies (`pong`) are not JSON. Yield the raw text
+          // so the adapter can see the socket is alive. Failing the stream on
+          // `pong` would turn a healthy OKX connection into an outage we caused.
+          queue.push(text);
         }
       };
       socket.onerror = () => queue.fail(new Error(`websocket error on ${url}`));
@@ -207,7 +206,9 @@ export function webSocketStreamPort(capacity = 4_096): StreamPort {
       return {
         messages: queue,
         async send(payload: unknown) {
-          socket.send(JSON.stringify(payload));
+          // Strings pass through — OKX's heartbeat is the four characters
+          // `ping`. JSON.stringify('ping') is the six-character `"ping"`.
+          socket.send(typeof payload === 'string' ? payload : JSON.stringify(payload));
         },
         async close() {
           queue.close();
