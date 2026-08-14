@@ -436,16 +436,21 @@ export function stateForError(err: unknown): CheckoutPageState {
       return { kind: 'exhausted' };
     case 'pay.checkout_busy':
       return { kind: 'busy' };
-    // The posture refusal, a rail that cannot move value, a suspended merchant,
-    // and live acquiring without approved KYB (D26-P1-P10 Layer B, already on
-    // the money door) all land on the same page: each means "this merchant
-    // cannot take payment right now". Telling a payer which one it is discloses
-    // our rail estate or KYB state to the internet. A 500 here was a lie —
-    // nothing broke; the merchant cannot take live payment.
+    // Live acquiring refuses that still reached this switch as a 500. Each
+    // means "this merchant cannot take payment right now". Same page as #1808:
+    // nothing charged, no try-again, no estate leak. Operator stubs
+    // (`pay.kyb_operator_required`) and per-payment rail declines stay unmapped
+    // — those are not "merchant cannot take live payment", and the unavailable
+    // copy says no payment was started.
     case 'pay.checkout_rail_not_live':
     case 'pay.rail_not_live':
+    case 'pay.sandbox_rail_refused':
     case 'pay.merchant_inactive':
+    case 'pay.merchant_not_found':
+    case 'pay.merchant_pricing_invalid':
     case 'pay.routing_no_rail':
+    case 'pay.rail_unknown':
+    case 'pay.rail_capability':
     case 'pay.kyb_required':
       return { kind: 'unavailable' };
     default:
