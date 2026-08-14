@@ -5,7 +5,7 @@
 **Companion (part one):** [`OWNER-DECISION-PACKET-2026-08-09.md`](OWNER-DECISION-PACKET-2026-08-09.md) — P0-01…03 plus money-path / dark-feed / token magnitudes / F10.  
 **Machine index (tip SoT for “what is still open”):** [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json).
 
-**Rule carried from part one:** a missing number is **refuse-closed**, never a placeholder. Agents implement mechanisms and refuse paths; you publish magnitudes or explicit launch-closed.
+**Rule carried from part one:** a missing number is **refuse-closed**, never a placeholder. Agents implement mechanisms and refuse paths. Denon takes recommendations in this packet; Nitro does **not** gate Denon mountains. Class X (secrets, go-live, licence, sanctions list content) stays Nitro.
 
 ---
 

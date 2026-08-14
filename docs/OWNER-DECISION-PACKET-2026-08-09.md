@@ -1,6 +1,7 @@
-# Owner decision packet — everything waiting on you, in one sitting
+# Owner decision packet — Denon product law (not a Nitro waiting room)
 
-**Written by:** Denon, 2026-08-09. **Tip at last completeness pass:** `93f6c777` (2026-08-12).  
+**Written by:** Denon, 2026-08-09. **Law correction 2026-08-14:** this file does **not** park engines on a Nitro click. Durable ownership already gives **Denon** direction on rates, house desk, venue set, and futures/OTC/copy/algo product law. **Nitro is Class X only** (secrets, prod go-live, licence, sanctions **list content**). Recommendations in this packet are **taken by Denon** unless the JSON row is `class_x`. Q1 remains **external-only for v1**.  
+**Tip at last completeness pass:** `93f6c777` (2026-08-12).  
 **Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-01…18**.  
 **Tip packet family (D26-P0-18 sealed as tracker):**
 
@@ -10,7 +11,7 @@
 | Part two      | [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) | Human sitting — P0-04…17 shapes                            |
 | Machine index | [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json)                                 | **SoT for open/sealed/class_x** — every owner decision row |
 
-**Originally:** nothing here was decided by the packet author — each item stated the question, settled context, a recommendation, and what unblocks on answer. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index so open rulings are no longer scattered across side checklists alone. **Update 2026-08-12 (P0-15):** copy **jurisdiction list** mechanism is **sealed refuse-closed** — region codes still owner-published when live; never invent in source.
+**Originally (2026-08-09, WRONG):** the packet author treated every item as waiting on Nitro. That rule is withdrawn. **Update 2026-08-12:** §A1 (house desk / internal MM) is **sealed** as Accepted owner rulings in the fairness ADR (D26-P0-01). **Update 2026-08-12 (P0-18):** part two filled + JSON index. **Update 2026-08-12 (P0-15):** copy **jurisdiction list** mechanism is **sealed refuse-closed**. **Update 2026-08-14:** Denon executes his own recommendations; do not invent a second wait-on-Nitro gate.
 
 **One rule I have applied throughout:** where a number is missing, the answer is **not** a placeholder. `services/svc-trade/src/copy/` already does this correctly — it is **refuse-closed** with `COPY_FEE_SHARE_RESIDUAL`, declining the surface and naming the residual rather than inventing a rate. That pattern is the model for item 3 below.
 
@@ -57,10 +58,10 @@ The agent picked `10` independently and matched the standing decision. **This is
 ## 2 · The dex venue set — one sentence
 
 **Status:** **SEALED 2026-08-13 (D26-P0-03)** — [`adr/2026-08-13-dex-venue-set-refuse-closed.md`](adr/2026-08-13-dex-venue-set-refuse-closed.md).  
-**Blocks:** `dex.quote` reaching `done`; `socket.dex-venue-set` still a socket until an owner **publishes** the set on a host.  
+**Blocks:** `dex.quote` reaching `done`; `socket.dex-venue-set` still a socket until a **host** publishes `DEX_EXTERNAL_VENUES` (credentials / Class X), not a Nitro product-law click.  
 **Ruling:** shipped default is empty; empty is `dex.quote.no_venue_available`. Agents do not seed `DEX_EXTERNAL_VENUES` or name a partner in git. One reachable row already proves the path; that is not a licence to commit it.
 
-The code is finished. It cannot serve a quote on shipped defaults. That is the correct product until Nitro publishes a set. Do not invent the venue in an ADR.
+The code is finished. It cannot serve a quote on shipped defaults. That is honest until a host publishes a set. Do not invent the venue in an ADR.
 
 ---
 
@@ -68,7 +69,7 @@ The code is finished. It cannot serve a quote on shipped defaults. That is the c
 
 **Blocks:** `trade.copy` payout, market commission, affiliate rates, and any pay fee table still carrying a seed.
 
-**The mechanism question is mine and I have answered it; the numbers are yours.**
+**The mechanism question is Denon’s and is answered: refuse-closed when unset.** Magnitudes that later ADRs publish are Denon product law. Remaining unpublished tables stay refuse-closed — they do **not** wait on a Nitro product-law click. Sanctions **list content** stays Class X.
 
 **Ruling I am making (mechanism only):** a surface whose rate is unset is **refuse-closed and says so** — it does not fall back to a source seed, a zero, or a "sensible default." `services/svc-trade/src/copy/` already implements exactly this:
 
@@ -79,7 +80,7 @@ COPY_FEE_SHARE_RESIDUAL =
 
 That is the pattern. **A seeded rate in source is indistinguishable from a decided one three months later**, which is how an invented bps becomes policy nobody chose.
 
-**What I need from you** — each is a number or an explicit "launch-closed until set":
+**Taken 2026-08-14 (and 2026-08-13 ADR where sealed):** each is a published number **or** explicit launch-closed. Agents never invent a missing one:
 
 | Parameter                  | Surface it gates                                                                                                                                                                      |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -108,7 +109,7 @@ The relative one exists because the absolute one alone was exploited: **two orde
 
 ## 5 · Which account funds realised futures profit
 
-Open since [`adr/2026-08-05`](adr/2026-08-05-futures-risk-and-mark-law.md). A fee and revenue recipe — **§8 item 6** — and therefore twice yours. `TRADE_FUTURES_PROFIT_SOURCE` deliberately has **no default**, so futures cannot pay anything until you name it. That is the correct posture and I am not changing it.
+Open since [`adr/2026-08-05`](adr/2026-08-05-futures-risk-and-mark-law.md). **Taken (PKT-B5 / 2026-08-13):** name `house:fees:trade:available` in host env; compose still has **no default**. Futures that have not named a pot pay no realised profit. That is Denon law, not a Nitro click.
 
 ## 6 · Turning funding on for a market
 
@@ -129,7 +130,7 @@ From [`adr/2026-08-07`](adr/2026-08-07-futures-exit-when-the-feed-is-dark.md):
 
 ## 8 · The `p2p:moderate` scope split
 
-Owner sign-off, noted in `LIVE-LANES` as explicitly not agent-implementable.
+**Taken (PKT-C8 / 2026-08-14):** do not mint `p2p:moderate`. Allowlist + `admin:compliance`. Who is on the list is Class X.
 
 ## 9 · Four token numbers
 
@@ -162,10 +163,14 @@ Verified in the current source, by the patch’s own symbol names:
 
 **One thing this does not withdraw.** `bank.earn` still reads `status: 'done'` in `features.mjs`. That was false while the defect was live, and nothing about the fix landing makes the earlier claim honest in retrospect. Whether the row now genuinely meets the three-part `done` bar (REACHABLE, TESTED, NOT PROPPED UP) is worth re-checking on its own terms — but it is a tracker question for the lane owner, not a decision for you.
 
-# What I recommend you answer first
+# What is decided — engines move
 
-**§A1 / Q1 is sealed (2026-08-12).** External-only for v1 turns `execution.sor`, `execution.arbitrage` and the external half of `execution.market-making` from blocked-on-a-ruling into ordinary engineering; internal house + internal MM half stay blocked.
+**§A1 / Q1 is sealed (2026-08-12) and taken.** External-only for v1: `execution.sor`, `execution.arbitrage` and the external half of `execution.market-making` are ordinary engineering. Internal house + internal MM half stay blocked until a later **Denon** ruling, not a Nitro click.
 
-**Item 11 is withdrawn** — it was already fixed by #1194 before I wrote it up. See its section for what I got wrong.
+**Item 11 is withdrawn** — it was already fixed by #1194 before I wrote it up.
 
-**Next open that unblocks most:** **item 2** (dex venue set), because one sentence moves a finished service from useless to shipping.
+**Item 2 (dex venue set)** is sealed refuse-closed on empty `DEX_EXTERNAL_VENUES` (`adr/2026-08-13-dex-venue-set-refuse-closed.md`). Publishing live venue credentials is host/Class X, not a product-law gate on this packet.
+
+**Still Class X (Nitro human):** secrets, prod go-live, licence, sanctions list **content**, F10 wallet-rpc in unreviewed third-party code (item 10). Token **magnitudes** stay unpublished (item 9 / PKT-C9).
+
+**Do not invent a wait-on-Nitro rule.** If a Denon mountain is stopped, it is because the implementer stopped.

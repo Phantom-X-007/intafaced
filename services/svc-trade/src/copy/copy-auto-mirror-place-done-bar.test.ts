@@ -142,4 +142,46 @@ describe('D26-P1-T3 auto-mirror place Done-bar', () => {
     expect(placed[0]!.qty).toBe(parseAmount('0.01'));
     expect(placed[0]!.clientOrderId).toBe(copyMirrorClientOrderId(follow.followId, 'leader-fill-2'));
   });
+
+  it('clientOrderId stays ≤64 when follow+fill would overflow the placeOrder retry key', async () => {
+    const longFill = 'f'.repeat(120);
+    const followId = FOLLOWER;
+    const id = copyMirrorClientOrderId(followId, longFill);
+    expect(id.length).toBe(64);
+    expect(copyMirrorClientOrderId(followId, longFill)).toBe(id);
+
+    const placed: string[] = [];
+    const copy = new CopyService(new MemoryLedger(), {
+      ...laws(),
+      placeFollowerOrder: async (_p, input) => {
+        placed.push(input.clientOrderId);
+        expect(input.clientOrderId.length).toBeLessThanOrEqual(64);
+        return { orderId: 'ord-long-fill' };
+      },
+    });
+    const caller = createTradeRouter({} as TradeService, undefined, copy).createCaller(signed());
+    const follow = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: longFill,
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    const result = await caller.copy.placeMirror({
+      followId: follow.followId,
+      fillId: longFill,
+    });
+    expect(result.orderId).toBe('ord-long-fill');
+    expect(placed[0]!.length).toBeLessThanOrEqual(64);
+    expect(placed[0]).toBe(copyMirrorClientOrderId(follow.followId, longFill));
+  });
 });
