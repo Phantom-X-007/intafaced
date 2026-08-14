@@ -115,6 +115,30 @@ export function assertOnlyWithdrawDestinations(): UserWithdrawDestinations {
   };
 }
 
+/** In-memory store for tests. Persist stores; require refuses if none. */
+export function memoryWithdrawDestinations(): UserWithdrawDestinations {
+  const rows = new Map<string, WithdrawDestination>();
+  const key = (userId: string, kind: string) => `${userId}:${kind}`;
+  return {
+    async persist(input) {
+      const dest = assertPersistableWithdrawDestination(input);
+      rows.set(key(input.userId, dest.kind), dest);
+      return dest;
+    },
+    async require(input) {
+      const kind = asKind(input.kind);
+      const dest = rows.get(key(input.userId, kind));
+      if (!dest) {
+        throw new BankError(
+          `User ${input.userId} has no persisted withdraw destination for kind ${kind}`,
+          'bank.withdraw_destination_missing',
+        );
+      }
+      return dest;
+    },
+  };
+}
+
 export class UserWithdrawDestinationStore implements UserWithdrawDestinations {
   constructor(private readonly sql: Sql) {}
 
