@@ -79,6 +79,31 @@ describe('presenters', () => {
     expect(marketSchema.safeParse(sim).success).toBe(true);
     // Not disguised as inactive — it IS tradable, just not for real money.
     expect(sim.active).toBe(true);
+    expect(sim.orderable).toBe(true);
+  });
+
+  it('listed futures stay active and are not orderable until the host enables futures', () => {
+    const perp = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }));
+    expect(perp.active).toBe(true);
+    expect(perp.swap).toBe(true);
+    expect(perp.orderable).toBe(false);
+    expect(marketSchema.safeParse(perp).success).toBe(true);
+
+    const live = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }), Date.now(), {
+      futuresOrderable: true,
+    });
+    expect(live.orderable).toBe(true);
+
+    const halted = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures', status: 'halted' }), Date.now(), {
+      futuresOrderable: true,
+    });
+    expect(halted.active).toBe(false);
+    expect(halted.orderable).toBe(false);
+
+    const opt = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-OPT', kind: 'options' }), Date.now(), {
+      futuresOrderable: true,
+    });
+    expect(opt.orderable).toBe(false);
   });
 
   /**
@@ -290,7 +315,34 @@ describe('public REST routes', () => {
     expect(body).toHaveLength(1);
     expect(marketSchema.safeParse(body[0]).success).toBe(true);
     expect((body[0] as { symbol: string }).symbol).toBe('BTC/USDT');
+    expect((body[0] as { orderable: boolean }).orderable).toBe(true);
     await app.close();
+  });
+
+  it('GET /api/v1/markets lists futures as active but not orderable unless the host enables them', async () => {
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const app = await build(
+      deps({
+        markets: async () => [perp],
+        futures: { jobsEnabled: false },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    const row = res.json()[0] as { symbol: string; active: boolean; orderable: boolean };
+    expect(row.symbol).toBe('BTC/USDT-PERP');
+    expect(row.active).toBe(true);
+    expect(row.orderable).toBe(false);
+    await app.close();
+
+    const live = await build(
+      deps({
+        markets: async () => [perp],
+        futures: { jobsEnabled: false, orderableEnabled: true },
+      }),
+    );
+    const liveRow = (await live.inject({ method: 'GET', url: '/api/v1/markets' })).json()[0] as { orderable: boolean };
+    expect(liveRow.orderable).toBe(true);
+    await live.close();
   });
 
   it('GET /api/v1/capabilities exposes matrix + refuse arms without auth', async () => {
@@ -304,7 +356,7 @@ describe('public REST routes', () => {
       notes: {
         rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number };
         algo: { createEnabled: boolean; jobsEnabled: boolean; jobsDefault: false; icebergs: 'out' };
-        futures: { jobsEnabled: boolean; jobsDefault: false };
+        futures: { jobsEnabled: boolean; jobsDefault: false; orderableEnabled: boolean; orderableDefault: false };
       };
     };
     expect(body.asOfMs).toBe(1_700_000_000_000);
@@ -327,8 +379,13 @@ describe('public REST routes', () => {
       icebergs: 'out',
     });
     expect(body.notes.futures).toEqual({
+      orderableEnabled: false,
+      orderableDefault: false,
       jobsEnabled: false,
       jobsDefault: false,
+      nextFundingTimestamp: 'unpublished',
+      indexPrice: 'unpublished',
+      ladderNumbers: 'd3_unset',
     });
     await app.close();
   });
@@ -343,7 +400,14 @@ describe('public REST routes', () => {
   it('GET /api/v1/capabilities reports futures jobsEnabled only when the host passes the live flag', async () => {
     const app = await build(deps({ futures: { jobsEnabled: true } }));
     const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
-    expect(res.json().notes.futures).toEqual({ jobsEnabled: true, jobsDefault: false });
+    expect(res.json().notes.futures).toMatchObject({ jobsEnabled: true, jobsDefault: false, orderableEnabled: false });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports futures orderableEnabled only when the host passes the live flag', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, orderableEnabled: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({ orderableEnabled: true, orderableDefault: false });
     await app.close();
   });
 
