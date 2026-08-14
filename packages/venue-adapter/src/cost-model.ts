@@ -1,7 +1,7 @@
 import { type Amount, add, mulBps, sub } from '@intafaced/ledger-client';
 import { isGraded, type MarketDataAdapter, type VenueLatencyGrade } from '@intafaced/venue-contracts';
 import { routingWeightFromCapture, type CaptureRoutingRecord } from './fabric/capture-routing.js';
-import { routingWeightFromGrade } from './fabric/latency.js';
+import { measuredLatencyMs, routingWeightFromGrade } from './fabric/latency.js';
 
 /**
  * §28 SMART ORDER ROUTER COST MODEL (D26-P1-X3).
@@ -19,11 +19,13 @@ import { routingWeightFromGrade } from './fabric/latency.js';
  *     (routing weight 0). We do not default impact or transfer to zero: a silent
  *     zero is a claim that the cost is free.
  *   · **Latency grade** — consumed via `routingWeightFromGrade` (D26-P1-X2).
- *     Unscored (`grade: null` / `!isGraded`) → weight **zero**. Letter→bps
- *     scaling is NOT invented here (D-S-14 owner magnitudes); a graded venue
- *     is eligible (weight 1) and its measured `latencyMs` remains the equal-
- *     price tie-break in the router. Inventing a second latency-shaped thumb
- *     on the price scale is forbidden by the house-desk ADR.
+ *     Unscored (`grade: null` / `!isGraded`) **or** no live `p95Ms` → weight
+ *     **zero**. Missing measurement is `null` from `liveLatencyScoreMs`, never
+ *     a sentinel number and never an estimate. Letter→bps scaling is NOT
+ *     invented here (D-S-14 owner magnitudes); a graded venue with a measured
+ *     p95 is eligible (weight 1) and that p95 remains the equal-price
+ *     tie-break in the router. Inventing a second latency-shaped thumb on the
+ *     price scale is forbidden by the house-desk ADR.
  *   · **Capture fact** (optional, D26-P1-X2 deepen · coords #1739) — when
  *     supplied, a capture `hole` → weight **zero**. Absence in the lake must
  *     not be routed as if an empty book were observed. Omit the field when
@@ -71,6 +73,17 @@ export function sorCostTermsFromAdapter(adapter: MarketDataAdapter, costs: SorSt
     ...costs,
     latencyGrade: adapter.latencyGrade?.(now) ?? null,
   };
+}
+
+/**
+ * Cost-model door for the live latency score.
+ *
+ * `null` means there is no measurement. Never `0`, never a sentinel, never an
+ * estimated round-trip. `scoreSorCost` turns that absence into routing weight 0.
+ */
+export function liveLatencyScoreMs(grade: VenueLatencyGrade | null): number | null {
+  if (grade === null) return null;
+  return measuredLatencyMs(grade);
 }
 
 export type CostModelRefuseReason =
@@ -121,7 +134,12 @@ export function scoreSorCost(terms: SorCostTerms): CostModelScore {
     };
   }
 
-  if (terms.latencyGrade === null || !isGraded(terms.latencyGrade) || routingWeightFromGrade(terms.latencyGrade) === 0) {
+  if (
+    terms.latencyGrade === null ||
+    !isGraded(terms.latencyGrade) ||
+    routingWeightFromGrade(terms.latencyGrade) === 0 ||
+    liveLatencyScoreMs(terms.latencyGrade) === null
+  ) {
     return {
       ok: false,
       routingWeight: 0,
