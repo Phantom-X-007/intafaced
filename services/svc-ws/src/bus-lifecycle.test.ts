@@ -12,6 +12,13 @@ function ok(partial: Partial<BusLifecycleConnectResult> = {}): BusLifecycleConne
   };
 }
 
+async function flushUntil(pred: () => boolean, turns = 40): Promise<void> {
+  for (let i = 0; i < turns && !pred(); i += 1) {
+    await Promise.resolve();
+    await new Promise((r) => setImmediate(r));
+  }
+}
+
 describe('bus lifecycle reconnect', () => {
   it('retries after boot failure and flips tradesBus true without a restart', async () => {
     let calls = 0;
@@ -33,10 +40,7 @@ describe('bus lifecycle reconnect', () => {
 
     lifecycle.start();
     // Drain the async loop: fail, sleep, fail, sleep, success.
-    for (let i = 0; i < 20 && !lifecycle.tradesBus(); i += 1) {
-      await Promise.resolve();
-      await new Promise((r) => setImmediate(r));
-    }
+    await flushUntil(() => lifecycle.tradesBus());
 
     expect(calls).toBe(3);
     expect(lifecycle.tradesBus()).toBe(true);
@@ -117,10 +121,7 @@ describe('bus lifecycle reconnect', () => {
     });
 
     lifecycle.start();
-    for (let i = 0; i < 20 && !lifecycle.tradesBus(); i += 1) {
-      await Promise.resolve();
-      await new Promise((r) => setImmediate(r));
-    }
+    await flushUntil(() => lifecycle.tradesBus());
     expect(lifecycle.tradesBus()).toBe(true);
     expect(calls).toBe(1);
 
@@ -150,15 +151,107 @@ describe('bus lifecycle reconnect', () => {
     });
 
     lifecycle.start();
-    for (let i = 0; i < 20 && !lifecycle.tradesBus(); i += 1) {
-      await Promise.resolve();
-      await new Promise((r) => setImmediate(r));
-    }
+    await flushUntil(() => lifecycle.tradesBus());
 
     expect(calls).toBe(2);
     expect(empty.close).toHaveBeenCalled();
     expect(lifecycle.tradesBus()).toBe(true);
     expect(lifecycle.privateBus()).toBe(true);
     await lifecycle.stop();
+  });
+
+  it('retries private half without tearing the tape or re-attempting connect', async () => {
+    let attempts = 0;
+    let privateTries = 0;
+    const first = ok({
+      tradesUp: true,
+      privateUp: false,
+      retryPrivate: async () => {
+        privateTries += 1;
+        return privateTries >= 3;
+      },
+    });
+    const lifecycle = createBusLifecycle({
+      log,
+      initialBackoffMs: 5,
+      sleep: async () => undefined,
+      attempt: async () => {
+        attempts += 1;
+        return first;
+      },
+    });
+
+    lifecycle.start();
+    await flushUntil(() => lifecycle.privateBus());
+
+    expect(attempts).toBe(1);
+    expect(privateTries).toBe(3);
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(lifecycle.privateBus()).toBe(true);
+    expect(first.close).not.toHaveBeenCalled();
+
+    await lifecycle.stop();
+    expect(first.close).toHaveBeenCalled();
+  });
+
+  it('treats a throwing retryPrivate as still-down and keeps the tape', async () => {
+    let privateTries = 0;
+    const first = ok({
+      tradesUp: true,
+      privateUp: false,
+      retryPrivate: async () => {
+        privateTries += 1;
+        if (privateTries < 2) throw new Error('durable race');
+        return true;
+      },
+    });
+    const lifecycle = createBusLifecycle({
+      log,
+      initialBackoffMs: 5,
+      sleep: async () => undefined,
+      attempt: async () => first,
+    });
+
+    lifecycle.start();
+    await flushUntil(() => lifecycle.privateBus());
+
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(lifecycle.privateBus()).toBe(true);
+    expect(privateTries).toBe(2);
+    expect(first.close).not.toHaveBeenCalled();
+    await lifecycle.stop();
+  });
+
+  it('stop during private-half retry closes the tape and does not flip privateBus', async () => {
+    const sleepGate: { release: (() => void) | null } = { release: null };
+    const first = ok({
+      tradesUp: true,
+      privateUp: false,
+      retryPrivate: async () => {
+        throw new Error('should not run after stop if we stop during first backoff');
+      },
+    });
+    const lifecycle = createBusLifecycle({
+      log,
+      initialBackoffMs: 1_000,
+      sleep: () =>
+        new Promise<void>((resolve) => {
+          sleepGate.release = resolve;
+        }),
+      attempt: async () => first,
+    });
+
+    lifecycle.start();
+    await flushUntil(() => lifecycle.tradesBus());
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(lifecycle.privateBus()).toBe(false);
+
+    const stopPromise = lifecycle.stop();
+    sleepGate.release?.();
+    await stopPromise;
+
+    expect(first.close).toHaveBeenCalled();
+    expect(lifecycle.tradesBus()).toBe(false);
+    expect(lifecycle.privateBus()).toBe(false);
   });
 });
