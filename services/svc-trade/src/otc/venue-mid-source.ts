@@ -16,12 +16,7 @@
 
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
 import { depthRequirement } from '../futures/mark-from-depth.js';
-import {
-  midFromVenueBook,
-  parseVenueMarkSymbols,
-  readObservedAt,
-  type MaintainedVenueBookPort,
-} from '../futures/mark-from-venue.js';
+import { midFromVenueBook, parseVenueMarkSymbols, readObservedAt, type MaintainedVenueBookPort } from '../futures/mark-from-venue.js';
 import { createConfigOtcMidSource, type OtcMidSource, type OtcQuotedMid } from './mid-source.js';
 
 export function createVenueOtcMidSource(input: {
