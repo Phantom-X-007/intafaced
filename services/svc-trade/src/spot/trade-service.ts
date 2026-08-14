@@ -55,12 +55,7 @@ import {
 import { captureAlgoPlaceGrant, principalFromAlgoGrant } from '../algo/durable-principal.js';
 import { alignLookbackVolumes, sliceCount, timeframeForSliceInterval } from '../algo/volume-plan.js';
 import type { TwapParentRecord } from '../algo/parent-store.js';
-import {
-  hydrateAlgoFromStore,
-  hydrateAlgoIfMissing,
-  persistAlgoCancelAttempt,
-  persistAlgoMutation,
-} from '../algo/hydrate-on-mutate.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
   TradeError,
   type Candle,
