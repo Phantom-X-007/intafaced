@@ -3039,16 +3039,48 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           ]),
         )
-        .query(({ input }) =>
-          draftScreeningSupport({
+        .query(({ input }) => {
+          const result = draftScreeningSupport({
             screening: envScreeningList(),
             businessBlocks: SHIPPED_BUSINESS_BLOCKS,
             ...(input.subjectId === undefined ? {} : { subjectId: input.subjectId }),
             ...(input.region === undefined ? {} : { region: input.region }),
             ...(input.asDecision === undefined ? {} : { asDecision: input.asDecision }),
             ...(input.writeReviewedBy === undefined ? {} : { writeReviewedBy: input.writeReviewedBy }),
-          }),
-        ),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_a_decision' as const,
+              isDecision: false as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+              screeningDeclaration: result.screeningDeclaration,
+              screeningConfigured: result.screeningConfigured,
+              screeningSource: result.screeningSource,
+              inventedBlockedList: false as const,
+            };
+          }
+          return {
+            status: 'draft' as const,
+            kind: 'proposal' as const,
+            isDecision: false as const,
+            subjectId: result.subjectId,
+            region: result.region,
+            screeningDeclaration: result.screeningDeclaration,
+            screeningConfigured: result.screeningConfigured,
+            screeningSource: result.screeningSource,
+            listHitCount: result.listHitCount,
+            businessHitCount: result.businessHitCount,
+            listHits: result.listHits.map((hit) => ({
+              region: hit.region,
+              reason: hit.reason,
+              source: hit.source,
+              authority: 'screening' as const,
+            })),
+            inventedBlockedList: false as const,
+          };
+        }),
 
       refuseKycReview: scopedProcedure('agents:read', { module: 'agents' })
         .input(
