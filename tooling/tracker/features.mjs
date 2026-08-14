@@ -336,7 +336,7 @@ export const FEATURES = [
       'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
       '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), ' +
       '#1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c, #1684 T1d, #1685 T1g. ' +
-      'Still not umbrella-done: leveraged entry product, funding jobs OFF default + owner §8 rates/ceilings, ' +
+      'Still not umbrella-done: leveraged entry requires named leverage on POST /positions (no silent 1x; live re-leverage still 501); funding jobs OFF default + owner §8 rates/ceilings, ' +
       'Denon ladder numbers (D3), N1 profit-source capitalisation. ' +
       'D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list ' +
       '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. ' +
