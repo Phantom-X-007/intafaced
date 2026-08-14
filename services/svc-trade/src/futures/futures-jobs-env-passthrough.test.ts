@@ -21,6 +21,10 @@ describe('futures env passthrough into registerPublicRest', () => {
   it('live host passes TRADE_FUTURES_JOBS_ENABLED and TRADE_FUTURES_ENABLED', () => {
     expect(indexSource).toMatch(/futures:\s*\{[\s\S]*jobsEnabled:\s*env\.TRADE_FUTURES_JOBS_ENABLED/);
     expect(indexSource).toMatch(/futures:\s*\{[\s\S]*profitSourceConfigured:\s*profitSource != null/);
+    expect(indexSource).toMatch(
+      /futures:\s*\{[\s\S]*fundingMaxAbsRateConfigured:\s*env\.TRADE_FUTURES_FUNDING_MAX_ABS_RATE\.trim\(\) !== ''/,
+    );
+    expect(indexSource).not.toMatch(/fundingMaxAbsRate:\s*env\.TRADE_FUTURES_FUNDING_MAX_ABS_RATE/);
   });
 
   it('published funding quote never invents nextFundingTimestamp from the 8h interval', () => {

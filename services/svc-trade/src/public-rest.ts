@@ -93,6 +93,7 @@ export interface PublicRestDeps {
     readonly jobsEnabled: boolean;
     readonly orderableEnabled?: boolean;
     readonly profitSourceConfigured?: boolean;
+    readonly fundingMaxAbsRateConfigured?: boolean;
   };
 }
 

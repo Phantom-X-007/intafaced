@@ -390,6 +390,8 @@ describe('public REST routes', () => {
       ladderNumbers: 'd3_unset',
       insuranceEmptyBlocksLiveList: true,
       insuranceTargetSize: 'owner_unset',
+      fundingMaxAbsRateConfigured: false,
+      fundingMaxAbsRateDefault: false,
     });
     await app.close();
   });
@@ -419,6 +421,17 @@ describe('public REST routes', () => {
     const app = await build(deps({ futures: { jobsEnabled: false, profitSourceConfigured: true } }));
     const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
     expect(res.json().notes.futures).toMatchObject({ profitSourceConfigured: true, profitSourceDefault: false });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports fundingMaxAbsRateConfigured only when the host set D2', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, fundingMaxAbsRateConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({
+      fundingMaxAbsRateConfigured: true,
+      fundingMaxAbsRateDefault: false,
+    });
+    expect(JSON.stringify(res.json().notes.futures)).not.toMatch(/0\.01/);
     await app.close();
   });
 

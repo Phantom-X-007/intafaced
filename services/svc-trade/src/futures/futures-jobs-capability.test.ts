@@ -26,12 +26,15 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(n.profitSourceDefault).toBe(false);
     expect(n.insuranceEmptyBlocksLiveList).toBe(true);
     expect(n.insuranceTargetSize).toBe('owner_unset');
+    expect(n.fundingMaxAbsRateConfigured).toBe(false);
+    expect(n.fundingMaxAbsRateDefault).toBe(false);
   });
 
   it('live flags are only true when the caller says true', () => {
     expect(presentFuturesJobsCapabilityNote({ jobsEnabled: true }).jobsEnabled).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ orderableEnabled: true }).orderableEnabled).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ profitSourceConfigured: true }).profitSourceConfigured).toBe(true);
+    expect(presentFuturesJobsCapabilityNote({ fundingMaxAbsRateConfigured: true }).fundingMaxAbsRateConfigured).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ jobsEnabled: false, orderableEnabled: false }).jobsEnabled).toBe(false);
   });
 });
