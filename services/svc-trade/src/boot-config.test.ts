@@ -424,3 +424,19 @@ describe('the shipped configuration does not turn futures on', () => {
     expect(read('services/svc-trade/src/index.ts')).toMatch(/futuresEnabled:\s*env\.TRADE_FUTURES_ENABLED/);
   });
 });
+
+describe('the shipped configuration does not invent a funding market list', () => {
+  it('declares TRADE_FUTURES_FUNDING_MARKET_IDS default empty', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    expect(src).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS:\s*z\.string\(\)\.default\(''\)/);
+  });
+
+  it('leaves TRADE_FUTURES_FUNDING_MARKET_IDS commented in .env.example', () => {
+    expect(envExample.has('TRADE_FUTURES_FUNDING_MARKET_IDS')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS/);
+  });
+
+  it('compose does not inject a funding market UUID list', () => {
+    expect(read('docker-compose.apps.yml')).not.toMatch(/^\s*TRADE_FUTURES_FUNDING_MARKET_IDS:/m);
+  });
+});
