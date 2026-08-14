@@ -730,7 +730,6 @@ export const subscriptionExecutions = pay.table(
   ],
 );
 
-
 /**
  * Where a merchant is paid out — kind+ref asserted through
  * `assertPayoutDestinationKind` before insert. One row per (merchant, rail).

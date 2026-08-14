@@ -137,7 +137,13 @@ type WithdrawalViewOut = z.infer<typeof withdrawalView>;
  * `assertSelf`. NOT_FOUND leaks less because it never confirms the id exists,
  * but every id here is a v4 uuid the caller already holds.
  */
-export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null, destinations: MerchantPayoutDestinations = assertOnlyPayoutDestinations()) {
+export function createPayRouter(
+  pay: PayService,
+  rails: RailRegistry,
+  userMoney: UserMoneyService,
+  trees: MerchantAreaFence | null = null,
+  destinations: MerchantPayoutDestinations = assertOnlyPayoutDestinations(),
+) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
