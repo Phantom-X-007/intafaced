@@ -113,6 +113,57 @@ describe('CopyService', () => {
     ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
+  it('listMyFollows and already-following never scan every follow in the store', async () => {
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    class SpyStore extends MemoryCopyFollowStore {
+      listFollowsCalls = 0;
+      override async listFollows() {
+        this.listFollowsCalls += 1;
+        return super.listFollows();
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    store.listFollowsCalls = 0;
+    expect(await svc.listMyFollows(principal)).toEqual([]);
+    const mine = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const listed = await svc.listMyFollows(principal);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.followId).toBe(mine.followId);
+    expect(listed[0]?.leaderId).toBe(LEADER);
+    expect(store.listFollowsCalls).toBe(0);
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.listFollowsCalls).toBe(0);
+  });
+
   it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {

@@ -178,12 +178,12 @@ export class CopyService {
   }
 
   /**
-   * List the caller's own follows (product desk). Never invents other users'
-   * envelopes — store is filtered by followerId after the full list read.
+   * List the caller's own follows (product desk). Store filters by followerId —
+   * never loads another user's envelope into this process.
    */
   async listMyFollows(principal: Principal) {
-    const all = await this.store.listFollows();
-    return all.filter((f) => f.followerId === principal.userId).map(presentCopyFollow);
+    const mine = await this.store.listFollowsByFollower(principal.userId);
+    return mine.map(presentCopyFollow);
   }
 
   /**
@@ -210,8 +210,8 @@ export class CopyService {
       throw new CopyError('Cannot follow yourself', 'trade.copy_self_follow');
     }
 
-    for (const f of await this.store.listFollows()) {
-      if (f.followerId === principal.userId && f.leaderId === leaderId) {
+    for (const f of await this.store.listFollowsByFollower(principal.userId)) {
+      if (f.leaderId === leaderId) {
         throw new CopyError('Already following this leader', 'trade.copy_already_following');
       }
     }

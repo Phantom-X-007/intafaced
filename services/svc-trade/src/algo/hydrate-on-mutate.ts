@@ -3,7 +3,7 @@ import { TradeError } from '../spot/types.js';
 import type { TwapParent } from './types.js';
 import type { TwapParentStore } from './parent-store.js';
 
-/** In-memory TWAP engine surface used by hydrate-on-mutate. */
+/** In-memory algo engine surface used by hydrate-on-mutate. */
 export interface AlgoHydrateTarget {
   get(parentId: string): TwapParent | undefined;
   hydrate(parent: TwapParent, plan: readonly Amount[]): void;
@@ -11,7 +11,7 @@ export interface AlgoHydrateTarget {
 }
 
 /**
- * Load a durable TWAP parent into the engine if this process does not already
+ * Load a durable algo parent into the engine if this process does not already
  * hold it. Pause/resume/cancel after restart must not 404 a schedule that
  * Postgres still has.
  */
