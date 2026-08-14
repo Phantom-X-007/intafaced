@@ -193,7 +193,7 @@ describe('checkout page rendering', () => {
   it('escapes a rail reference before rendering it', () => {
     const { html } = renderCheckoutPage({
       kind: 'session',
-      session: { ...stubSession, instruction: { reference: `"> <script>x</script>`, amount: '1', currency: 'USDT' } },
+      session: { ...stubSession, instruction: { reference: `"><script>x</script>`, amount: '1', currency: 'USDT' } },
     });
     expect(html).not.toContain('<script>x</script>');
     expect(html).toContain('&lt;script&gt;');
