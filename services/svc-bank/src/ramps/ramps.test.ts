@@ -11,10 +11,7 @@ import { BankError } from '../errors.js';
 import type { PayFiatRampPort } from './pay-fiat-adapter.js';
 import { BANK_CRYPTO_LEDGER_RAIL, CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './rails.js';
 import { RampService } from './ramp-service.js';
-import {
-  assertOnlyWithdrawDestinations,
-  memoryWithdrawDestinations,
-} from '../withdraw-destination.js';
+import { assertOnlyWithdrawDestinations, memoryWithdrawDestinations } from '../withdraw-destination.js';
 
 /**
  * bank.ramps — CRYPTO LEDGER half (D-S-09) + FIAT VIA PAY ADAPTERS (D26-P1-B4).

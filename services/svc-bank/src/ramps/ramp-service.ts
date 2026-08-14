@@ -375,11 +375,7 @@ export class RampService {
    * then require the store — refuse closed if none stored, before withdrawHold.
    * Fiat still persist-or-require (IBAN/IFSC). No PSP.
    */
-  private async resolveWithdrawDestination(
-    userId: string,
-    kind: RampKind,
-    offeredRef?: string,
-  ): Promise<WithdrawDestination> {
+  private async resolveWithdrawDestination(userId: string, kind: RampKind, offeredRef?: string): Promise<WithdrawDestination> {
     const destKind = destKindForRamp(kind);
     const offered = offeredRef?.trim();
     if (kind === 'crypto') {
