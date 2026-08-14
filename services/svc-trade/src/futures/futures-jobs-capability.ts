@@ -15,6 +15,9 @@ export type FuturesJobsCapabilityNote = {
   readonly nextFundingTimestamp: 'unpublished';
   readonly indexPrice: 'unpublished';
   readonly ladderNumbers: 'd3_unset';
+  /** DIRECTION:33 — empty insurance pot blocks live list. Size stays owner law. */
+  readonly insuranceEmptyBlocksLiveList: true;
+  readonly insuranceTargetSize: 'owner_unset';
 };
 
 export function presentFuturesJobsCapabilityNote(input: {
@@ -32,5 +35,7 @@ export function presentFuturesJobsCapabilityNote(input: {
     nextFundingTimestamp: 'unpublished',
     indexPrice: 'unpublished',
     ladderNumbers: 'd3_unset',
+    insuranceEmptyBlocksLiveList: true,
+    insuranceTargetSize: 'owner_unset',
   };
 }

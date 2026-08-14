@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, insuranceFund, parseAmount as amt, recipes } from '@intafaced/ledger-client';
-import { checkInsuranceFundedForListing, INSURANCE_FUND_EMPTY } from './insurance-listing-gate.js';
+import { checkInsuranceFundedForListing, INSURANCE_FUND_EMPTY, presentInsuranceListingPolicy } from './insurance-listing-gate.js';
 import { formatAccountRef } from './profit-source.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -102,5 +102,11 @@ describe('checkInsuranceFundedForListing', () => {
   it('exports a stable refuse code distinct from shortfall underfunded', () => {
     expect(INSURANCE_FUND_EMPTY).toBe('trade.insurance_fund_empty');
     expect(INSURANCE_FUND_EMPTY).not.toBe('trade.insurance_underfunded');
+  });
+
+  it('policy note never invents a target size and always blocks empty live list', () => {
+    const p = presentInsuranceListingPolicy();
+    expect(p.emptyPotBlocksLiveList).toBe(true);
+    expect(p.targetSize).toBe('owner_unset');
   });
 });
