@@ -1,0 +1,21 @@
+name: format-withdraw-dest-once
+on:
+  push:
+    branches: [feat/bank-user-withdraw-destination]
+  workflow_dispatch:
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: collapse double blanks and self-delete
+        run: |
+          python3 -c "from pathlib import Path\nfor rel in ['services/svc-bank/src/db/schema.ts','services/svc-bank/src/ramps/ramps.test.ts']:\n p=Path(rel); t=p.read_text()\n while '\\n\\n\\n' in t: t=t.replace('\\n\\n\\n','\\n\\n')\n p.write_text(t)\nPath('.github/workflows/format-withdraw-dest-once.yml').unlink(missing_ok=True)"
+          git config user.name "ZenYoda3"
+          git config user.email "intafaced@gmail.com"
+          git add services/svc-bank/src/db/schema.ts services/svc-bank/src/ramps/ramps.test.ts .github/workflows/format-withdraw-dest-once.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "style(svc-bank): prettier withdraw dest blanks"
+          git push
