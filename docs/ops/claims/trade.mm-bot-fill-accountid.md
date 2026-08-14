@@ -1,6 +1,7 @@
 # Claim — trade.mm-bot orderFilled accountId recovery
 
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/1852
 **owner:** denon-agent
 **class:** M
 **mountain:** trade.mm-bot
