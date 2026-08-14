@@ -354,6 +354,11 @@ services:
       # in .env.example; compose still has no default). This flag governs
       # orderability only.
       TRADE_FUTURES_ENABLED: ${TRADE_FUTURES_ENABLED:-false}
+      # Residual jobs (liquidation scan + funding ticks). Default OFF — same
+      # shape as TRADE_FUTURES_ENABLED. `${VAR:-true}` here would start funding
+      # ticks on a clean clone while env.ts still read as off. Does not invent
+      # a market list or a |rate| ceiling; those stay empty until named.
+      TRADE_FUTURES_JOBS_ENABLED: ${TRADE_FUTURES_JOBS_ENABLED:-false}
       # Absolute max |period funding rate| — empty refuses publish/settle.
       # Required when funding market ids are non-empty. No invented ceiling.
       TRADE_FUTURES_FUNDING_MAX_ABS_RATE: ${TRADE_FUTURES_FUNDING_MAX_ABS_RATE:-}
