@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { isScheduleKey, isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
 import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -77,6 +78,12 @@ export interface PublicRestDeps {
         indexPrice: string | null;
       }
     | null;
+  /**
+   * Algo create vs slice-scheduler flags for the capabilities note.
+   * Omitted → shipped defaults (create on, jobs off). Callers that have env
+   * should pass it so a live enable is not hidden.
+   */
+  algo?: { readonly createEnabled: boolean; readonly jobsEnabled: boolean };
 }
 
 /** Send an already-mapped CCXT error. */
@@ -460,6 +467,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
         },
         neverInvent: 'mids, funding rates, candles, leverage live re-set',
         openPositionGates: 'caller price 400 · cross margin 400 · ADL disclosure ack required 403 (DIRECTION:34)',
+        algo: presentAlgoCapabilityNote(deps.algo ?? {}),
       },
     });
   });
