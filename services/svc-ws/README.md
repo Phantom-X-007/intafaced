@@ -63,6 +63,8 @@ numbers anywhere in this service's output are integer sequences.
 | `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                      |
 | `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` `MarketNotFound` (unlisted) · `404` `NoBook` (listed, no resting depth) · `502` upstream down                                             |
 | `GET /markets/:marketId/trades`                    | —     | recent `TradePrint[]` · `404` `MarketNotFound` (unlisted) · `404` `NoTape` (listed, no prints — never `200 { trades: [] }`) · `502` listing down                  |
+| `GET /markets/:marketId/orders`                    | —     | no public blotter · `404` `MarketNotFound` (unlisted) · `404` `NoBlotter` (listed — never `200 { orders: [] }`)                                                   |
+| `GET /markets/:marketId/positions`                 | —     | no public blotter · `404` `MarketNotFound` (unlisted) · `404` `NoPositions` (listed — never `200 { positions: [] }`)                                              |
 | `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                     |
 | `GET /health`                                      | —     | `{ ok, service, enabled, connections, capacity.{depth,trades,private}, tradesBus, privateBus, … }` — occupancy never 503s; ceilings are per-hub, not process-wide |
 | `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works)      |
@@ -130,6 +132,12 @@ The public **trades** tape follows the same rule. An unseeded ring, a matching 4
 absence — the socket stays open with **no frames**, and `GET /markets/:id/trades` is `404 NoTape`. Fabricating
 `{ trades: [] }` would let a client treat that as a live zero-print market. The first real fill is a `TradePrint`;
 prints and mids are never invented.
+
+Private **orders** and **positions** follow the same rule. An unseeded seat, a matching 404, or a seed failure is
+absence — no `{ orders: [] }` / `{ positions: [] }` on the wire, and the public GETs are `404 NoBlotter` /
+`404 NoPositions`. Fabricating an empty snapshot would let a client treat that as a priced live book of nothing.
+The first real lifecycle event is a private update; fills are never invented. Ready frames (`type: "ready"`) name
+the bus, they are not a blotter.
 
 The union survives a failure of either source: the listing being down leaves every traded market streaming, the
 engine being down leaves every listed market subscribed without a fabricated book, and only a failure of both

@@ -426,6 +426,7 @@ describe('the websocket gateway, over a real socket', () => {
 
   it('refuses an unknown channel on the upgrade', async () => {
     expect(await upgradeStatus(`ws://${base}/stream?market=${MARKET}&channel=orders`)).toBe(400);
+    expect(await upgradeStatus(`ws://${base}/stream?market=${MARKET}&channel=positions`)).toBe(400);
   });
 
   it('terminates a public socket that stops answering pings and frees the hub seat', async () => {
@@ -570,6 +571,39 @@ describe('the HTTP half', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
     expect(response.json()).not.toMatchObject({ trades: [] });
+  });
+
+  it('404s NoBlotter for a listed market — never a 200 empty orders book', async () => {
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/orders` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoBlotter' });
+    expect(response.json()).not.toMatchObject({ orders: [] });
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('404s an unknown market on the orders GET without a fabricated empty blotter', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/orders' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
+    expect(response.json()).not.toMatchObject({ orders: [] });
+  });
+
+  it('404s NoPositions for a listed market — never a 200 empty positions book', async () => {
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/positions` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoPositions' });
+    expect(response.json()).not.toMatchObject({ positions: [] });
+  });
+
+  it('404s an unknown market on the positions GET without a fabricated empty blotter', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/positions' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
+    expect(response.json()).not.toMatchObject({ positions: [] });
   });
 
   it('serves recent public prints when the tape is live — not an empty wrapper', async () => {
