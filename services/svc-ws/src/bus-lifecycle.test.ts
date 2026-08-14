@@ -257,12 +257,12 @@ describe('bus lifecycle reconnect', () => {
 
   it('re-attaches after sessionLost without a process restart', async () => {
     let calls = 0;
-    let lose: (() => void) | null = null;
+    const lost: { fire: (() => void) | null } = { fire: null };
     const first = ok({
       tradesUp: true,
       privateUp: true,
       sessionLost: new Promise<void>((resolve) => {
-        lose = resolve;
+        lost.fire = resolve;
       }),
     });
     const second = ok({ tradesUp: true, privateUp: true });
@@ -281,7 +281,7 @@ describe('bus lifecycle reconnect', () => {
     expect(calls).toBe(1);
     expect(lifecycle.tradesBus()).toBe(true);
 
-    lose?.();
+    lost.fire?.();
     await flushUntil(() => calls >= 2);
 
     expect(calls).toBe(2);
@@ -294,15 +294,15 @@ describe('bus lifecycle reconnect', () => {
 
   it('stop while waiting on sessionLost does not re-attempt', async () => {
     let calls = 0;
-    let lose: (() => void) | null = null;
+    const lost: { fire: (() => void) | null } = { fire: null };
     const first = ok({
       tradesUp: true,
       privateUp: true,
       close: vi.fn(async () => {
-        lose?.();
+        lost.fire?.();
       }),
       sessionLost: new Promise<void>((resolve) => {
-        lose = resolve;
+        lost.fire = resolve;
       }),
     });
     const lifecycle = createBusLifecycle({
