@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`██████████░░░░░░░░░░` **49%** — 73 of 148 features shipped
+`██████████░░░░░░░░░░` **50%** — 74 of 148 features shipped
 
-Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 13/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 14/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
 
-**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Moderated dispute resolution (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007)
+**In progress:** PII isolation — KYC documents in a separate encrypted store (§10) (ZenYoda3) · Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007)
 
 **🟢 26 ready to claim** — nothing blocks these:
 
