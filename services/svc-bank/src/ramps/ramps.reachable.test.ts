@@ -100,7 +100,7 @@ if (!available) {
     let ledger: MemoryLedger;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
     });
 
@@ -145,7 +145,7 @@ if (!available) {
         assetId: 'USDT',
         amount: '15',
         kind: 'crypto',
-        destinationRef: '0xdest',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: `c-${offrampId}`,
       });
       expect(out.simulated).toBe(true);

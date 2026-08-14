@@ -67,7 +67,7 @@ if (!available) {
   let ramps: RampService;
 
   beforeEach(async () => {
-    await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.spaces RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations, bank.spaces RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
       ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
@@ -204,7 +204,7 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('15'),
         kind: 'fiat',
-        destinationRef: 'IBAN-TEST',
+        destinationRef: 'GB82WEST12345698765432',
         clientRef: 'fiat-out-1',
       });
       expect(out.kind).toBe('fiat');
@@ -331,7 +331,7 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('30'),
         kind: 'crypto',
-        destinationRef: '0xout',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: 'off-1',
       });
 
@@ -352,7 +352,7 @@ if (!available) {
           assetId: 'USDT',
           amount: amt('5'),
           kind: 'crypto',
-          destinationRef: '0xout',
+          destinationRef: '0x000000000000000000000000000000000000dEaD',
           clientRef: 'broke',
         }),
       ).rejects.toThrow(/insufficient/i);
@@ -379,7 +379,7 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('10'),
         kind: 'crypto',
-        destinationRef: '0xout',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: 'retry-me',
       });
       const b = await ramps.offramp({
@@ -388,7 +388,7 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('10'),
         kind: 'crypto',
-        destinationRef: '0xout',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: 'retry-me',
       });
       expect(b.id).toBe(a.id);
@@ -411,7 +411,7 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('10'),
         kind: 'crypto',
-        destinationRef: '0xout',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: 'first-ref',
       });
 
@@ -422,13 +422,87 @@ if (!available) {
           assetId: 'USDT',
           amount: amt('10'),
           kind: 'crypto',
-          destinationRef: '0xout',
+          destinationRef: '0x000000000000000000000000000000000000dEaD',
           clientRef: 'other-ref',
         }),
       ).rejects.toMatchObject({ code: 'bank.ramp_conflict' });
 
       // Balance unchanged after the conflict (only the first offramp settled).
       expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('30');
+    });
+  });
+
+
+  describe('user withdraw destination persist before withdrawHold', () => {
+    it('refuses a gibberish dest before any hold is posted', async () => {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('20'),
+        kind: 'crypto',
+        railRef: 'dest-garbage',
+        creditedBy: OPERATOR,
+      });
+      await expect(
+        ramps.offramp({
+          offrampId: randomUUID(),
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('5'),
+          kind: 'crypto',
+          destinationRef: '0xdead',
+          clientRef: 'garbage-dest',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.ramp_invalid_destination' });
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('20');
+      const holds = await sql`SELECT count(*)::int AS n FROM bank.ramp_offramps`;
+      expect(holds[0]!.n).toBe(0);
+    });
+
+    it('refuses a later withdraw when no dest was persisted', async () => {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('20'),
+        kind: 'crypto',
+        railRef: 'dest-missing',
+        creditedBy: OPERATOR,
+      });
+      await expect(
+        ramps.offramp({
+          offrampId: randomUUID(),
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('5'),
+          kind: 'crypto',
+          clientRef: 'missing-dest',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.withdraw_destination_missing' });
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('20');
+    });
+
+    it('loads a persisted dest so a later withdraw has a real ref', async () => {
+      await ramps.setWithdrawDestination({ userId: USER, kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' });
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('20'),
+        kind: 'crypto',
+        railRef: 'dest-persist',
+        creditedBy: OPERATOR,
+      });
+      const id = randomUUID();
+      const row = await ramps.offramp({
+        offrampId: id,
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('8'),
+        kind: 'crypto',
+        clientRef: 'from-store',
+      });
+      expect(row.destinationRef).toBe('0x000000000000000000000000000000000000dEaD');
+      expect(row.status).toBe('settled');
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('12');
     });
   });
 
@@ -448,7 +522,7 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('25'),
         kind: 'crypto',
-        destinationRef: '0xout',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: 'cons-off',
       });
       expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('0');

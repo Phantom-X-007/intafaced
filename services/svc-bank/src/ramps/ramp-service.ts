@@ -15,6 +15,11 @@ import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
+import {
+  destKindForRamp,
+  UserWithdrawDestinationStore,
+  type UserWithdrawDestinations,
+} from '../withdraw-destination.js';
 
 /**
  * RAMPS (§8.1 / D-S-09) — the CRYPTO LEDGER half: on-ramp credit, off-ramp settle.
@@ -152,11 +157,17 @@ export interface RampServiceOptions {
    * fiat RailAdapter.
    */
   payFiat?: PayFiatRampPort;
+  /**
+   * Persisted user withdraw dest. Default is the SQL store. Tests may inject
+   * `assertOnlyWithdrawDestinations` so persist asserts and require refuses.
+   */
+  destinations?: UserWithdrawDestinations;
 }
 
 export class RampService {
   private readonly programme: RampProgramme;
   private readonly payFiat: PayFiatRampPort;
+  private readonly destinations: UserWithdrawDestinations;
 
   constructor(
     private readonly sql: Sql,
@@ -165,11 +176,17 @@ export class RampService {
   ) {
     this.programme = options.programme ?? NO_RAMP_PROGRAMME;
     this.payFiat = options.payFiat ?? emptyPayFiatRampPort;
+    this.destinations = options.destinations ?? new UserWithdrawDestinationStore(sql);
   }
 
   /** What this deployment's ramp programme is — including that it is not one. */
   programmeInfo(): RampProgramme {
     return this.programme;
+  }
+
+  /** Persist a user withdraw dest (IBAN/IFSC/EVM) so a later offramp has a real ref. */
+  setWithdrawDestination(input: { userId: string; kind: string; ref: string }) {
+    return this.destinations.persist(input);
   }
 
   /**
@@ -265,23 +282,24 @@ export class RampService {
     assetId: string;
     amount: Amount;
     kind: RampKind;
-    destinationRef: string;
+    destinationRef?: string;
     clientRef: string;
   }): Promise<OfframpRecord> {
     if (input.amount <= 0n) {
       throw new BankError('Off-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
     assertRampAssetId(input.assetId);
-    if (!input.destinationRef.trim()) {
-      throw new BankError('Off-ramp destination is required', 'bank.ramp_invalid_destination');
-    }
     const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
+    const destKind = destKindForRamp(input.kind);
+    const dest = input.destinationRef?.trim()
+      ? await this.destinations.persist({ userId: input.userId, kind: destKind, ref: input.destinationRef })
+      : await this.destinations.require({ userId: input.userId, kind: destKind });
 
     return withMoneySpan(
       'bank.ramp.offramp',
       { operation: 'offramp', amount: formatAmount(input.amount), userId: input.userId, assetId: input.assetId },
       async () => {
-        const claimed = await this.claimOfframp({ ...input, rail });
+        const claimed = await this.claimOfframp({ ...input, rail, destinationRef: dest.ref });
 
         if (claimed.status === 'settled') return claimed;
         if (claimed.status === 'rejected') {

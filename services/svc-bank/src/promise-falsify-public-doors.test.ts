@@ -250,7 +250,7 @@ if (!available) {
     let ledger: MemoryLedger;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.ramp_onramps, bank.ramp_offramps RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.ramp_onramps, bank.ramp_offramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
     });
 
