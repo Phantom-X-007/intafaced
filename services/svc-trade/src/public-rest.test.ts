@@ -12,6 +12,7 @@ import {
   presentPublicTrade,
   presentTicker,
   registerPublicRest,
+  OPEN_POSITION_GATES_NOTE,
   type PublicRestDeps,
 } from './public-rest.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -357,6 +358,7 @@ describe('public REST routes', () => {
         rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number };
         algo: { createEnabled: boolean; jobsEnabled: boolean; jobsDefault: false; icebergs: 'out' };
         futures: { jobsEnabled: boolean; jobsDefault: false; orderableEnabled: boolean; orderableDefault: false };
+        openPositionGates: string;
       };
     };
     expect(body.asOfMs).toBe(1_700_000_000_000);
@@ -393,6 +395,10 @@ describe('public REST routes', () => {
       fundingMaxAbsRateConfigured: false,
       fundingMaxAbsRateDefault: false,
     });
+    expect(body.notes.openPositionGates).toBe(OPEN_POSITION_GATES_NOTE);
+    expect(body.notes.openPositionGates).toContain('leverage required 400');
+    expect(body.notes.openPositionGates).toContain('unnamed profit pot 503 NotSupported');
+    expect(body.notes.openPositionGates).toContain('no silent 1x');
     await app.close();
   });
 
