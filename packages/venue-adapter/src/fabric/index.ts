@@ -45,5 +45,11 @@ export * from './capture-lake.js';
 export * from './transport.js';
 export * from './venues/binance-spot.js';
 export * from './venues/bybit-spot.js';
-export * from './venues/okx-spot.js';
+export {
+  OkxSpotMarketData,
+  okxSymbolOf,
+  capDepth,
+  OKX_SPOT_RATE_LIMIT,
+  type OkxSpotOptions,
+} from './venues/okx-spot.js';
 export * from './venues/factory.js';

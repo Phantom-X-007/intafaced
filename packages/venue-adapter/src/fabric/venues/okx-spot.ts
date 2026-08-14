@@ -390,7 +390,7 @@ export function okxSymbolOf(unified: string): string {
 
 export function capDepth(limit: number): number {
   const n = Math.min(Math.max(1, Math.trunc(limit)), MAX_DEPTH_LIMIT);
-  let chosen = ALLOWED_DEPTH[0];
+  let chosen: (typeof ALLOWED_DEPTH)[number] = ALLOWED_DEPTH[0];
   for (const allowed of ALLOWED_DEPTH) {
     if (allowed <= n) chosen = allowed;
   }
