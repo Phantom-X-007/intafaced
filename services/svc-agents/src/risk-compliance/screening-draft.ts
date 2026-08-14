@@ -21,11 +21,7 @@ import type { CopyKey } from '../copy.js';
 
 export const RISK_COMPLIANCE_REFUSE_COPY: CopyKey = 'agents.error.capability_unavailable';
 
-export type ScreeningDraftRefuseReason =
-  | 'screening_unset'
-  | 'screening_empty'
-  | 'inputs_missing'
-  | 'decision_forbidden';
+export type ScreeningDraftRefuseReason = 'screening_unset' | 'screening_empty' | 'inputs_missing' | 'decision_forbidden';
 
 export type ScreeningListHit = {
   readonly region: string;

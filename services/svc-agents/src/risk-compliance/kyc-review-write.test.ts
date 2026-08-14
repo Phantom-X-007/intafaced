@@ -33,6 +33,6 @@ describe('risk-compliance cannot write identity.kyc-review reviewed_by', () => {
     expect(writeSrc).not.toMatch(/reviewedBy\s*:/);
     expect(draftSrc).not.toMatch(/reviewed_by\s*=/);
     expect(writeSrc).not.toMatch(/UPDATE\s+kyc/i);
-    expect(writeSrc).toContain("writable: false");
+    expect(writeSrc).toContain('writable: false');
   });
 });

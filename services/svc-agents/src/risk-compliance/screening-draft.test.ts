@@ -59,12 +59,14 @@ describe('risk-compliance screening drafts', () => {
   });
 
   it('refuses when asked to decide or write reviewed_by', () => {
-    expect(
-      draftScreeningSupport({ subjectId: 'user-1', region: 'ZZ', screening: listed, asDecision: true }),
-    ).toMatchObject({ status: 'refuse', reason: 'decision_forbidden' });
-    expect(
-      draftScreeningSupport({ subjectId: 'user-1', region: 'ZZ', screening: listed, writeReviewedBy: true }),
-    ).toMatchObject({ status: 'refuse', reason: 'decision_forbidden' });
+    expect(draftScreeningSupport({ subjectId: 'user-1', region: 'ZZ', screening: listed, asDecision: true })).toMatchObject({
+      status: 'refuse',
+      reason: 'decision_forbidden',
+    });
+    expect(draftScreeningSupport({ subjectId: 'user-1', region: 'ZZ', screening: listed, writeReviewedBy: true })).toMatchObject({
+      status: 'refuse',
+      reason: 'decision_forbidden',
+    });
   });
 
   it('a listed hit is a proposal, never a decision or invented blocked:true list', () => {
