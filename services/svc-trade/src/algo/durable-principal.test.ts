@@ -19,7 +19,7 @@ function principal(overrides: Partial<Principal> = {}): Principal {
   };
 }
 
-describe('durable TWAP place grant', () => {
+describe('durable algo place grant', () => {
   it('reconstructs the presented scopes after a process restart (no JWT)', () => {
     const grant = captureAlgoPlaceGrant(principal());
     const restored = principalFromAlgoGrant({
@@ -44,7 +44,7 @@ describe('durable TWAP place grant', () => {
     ).toThrow(TradeError);
   });
 
-  it('refuses after the schedule end (grant must not outlive the TWAP)', () => {
+  it('refuses after the schedule end (grant must not outlive the algo)', () => {
     const grant = captureAlgoPlaceGrant(principal());
     const ends = new Date('2020-01-01T00:00:00.000Z');
     expect(() =>
@@ -64,6 +64,8 @@ describe('durable TWAP place grant', () => {
   });
 
   it('capture refuses a caller without trade:write', () => {
-    expect(() => captureAlgoPlaceGrant(principal({ scopes: ['trade:read'] }))).toThrow(TradeError);
+    expect(() => captureAlgoPlaceGrant(principal({ scopes: ['trade:read'] }))).toThrow(
+      /algo create cannot persist a place grant without trade:write/,
+    );
   });
 });
