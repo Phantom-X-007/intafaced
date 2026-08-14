@@ -116,7 +116,7 @@ if (!available) {
           railRef: 'ach-1',
           creditedBy: OPERATOR,
         }),
-      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_no_pay_adapter' });
 
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);
@@ -131,7 +131,7 @@ if (!available) {
           destinationRef: 'IBAN',
           clientRef: 'fiat-1',
         }),
-      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_no_pay_adapter' });
     });
 
     it('sandbox pay rails still refuse fiat — no PSP laundering into bank', async () => {
@@ -151,7 +151,7 @@ if (!available) {
           railRef: 'sandbox-ach',
           creditedBy: OPERATOR,
         }),
-      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_no_pay_adapter' });
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);
     });

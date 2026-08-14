@@ -69,8 +69,8 @@ export interface BankServiceOptions {
    * Ramp wiring: crypto ledger half, if any.
    *
    * Not defaulted to crypto-ledger. Silence is no programme; every ramp money
-   * path refuses `bank.no_ramp_rail`. Fiat is never selectable — see
-   * `ramps/rails.ts` and `bank.fiat_ramp_socket`.
+   * path refuses `bank.no_ramp_rail`. Fiat reuses svc-pay adapters only —
+   * empty/sandbox/absent refuse `bank.fiat_ramp_no_pay_adapter`.
    */
   ramps?: RampServiceOptions;
   /**

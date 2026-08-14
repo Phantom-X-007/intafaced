@@ -126,7 +126,7 @@ const bank = createBankServices(sql, ledger, history, {
    *
    * Silence is `none` (`BANK_RAMP_MODE` default). `crypto-ledger` turns on the
    * crypto ledger half. Fiat resolves through PayFiatRampPort (svc-pay
-   * RailAdapter plane); boot default is empty → `bank.fiat_ramp_socket` until
+   * RailAdapter plane); boot default is empty → `bank.fiat_ramp_no_pay_adapter` until
    * a live pay rail is injected at the edge. `simulated` is always true.
    */
   ramps: { programme: rampProgrammeFor(env.BANK_RAMP_MODE) },

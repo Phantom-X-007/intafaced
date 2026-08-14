@@ -189,6 +189,7 @@ export type BankErrorCode =
    * A bank/PSP partner and money-transmission permission are a commercial
    * relationship. Refusing by this code is the whole fiat half of the ADR split.
    */
+  | 'bank.fiat_ramp_no_pay_adapter'
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'
   /**
