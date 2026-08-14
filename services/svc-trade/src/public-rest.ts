@@ -263,10 +263,11 @@ export function sessionStateForMarket(
 
 /**
  * GET /capabilities note — must name every open-door refuse a bot cannot
- * discover from a happy-path 200. Unnamed pot is 503 today (NotSupported class).
+ * discover from a happy-path 200. Unnamed pot is 403 NotSupported (same class
+ * as `trade.futures_disabled`) — not a retryable 503.
  */
 export const OPEN_POSITION_GATES_NOTE =
-  'caller price 400 · cross margin 400 · leverage required 400 (no silent 1x) · ADL disclosure ack 403 (DIRECTION:34) · unnamed profit pot 503 NotSupported';
+  'caller price 400 · cross margin 400 · leverage required 400 (no silent 1x) · ADL disclosure ack 403 (DIRECTION:34) · unnamed profit pot 403 NotSupported';
 
 /** Listing status vs kill-switch. Options have no engine. */
 export function orderableForListedMarket(market: Market, futuresOrderable: boolean): boolean {
