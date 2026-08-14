@@ -10,7 +10,7 @@ import { registerRoutes } from './routes.js';
 import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
-import { subscribePrivateFills, subscribePrivateOrders, subscribePrivatePositions } from './private/source.js';
+import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -133,7 +133,9 @@ const isEnabled = () => enabled;
 /**
  * Bus lifecycle — declared before routes so /ready getters can read status.
  * Connect/subscribe may fail at boot; the lifecycle retries with backoff so
- * an empty tape is temporary, not "until process restart".
+ * an empty tape is temporary, not "until process restart". If the tape lands
+ * and private does not, retryPrivate attaches the private half on the same
+ * connection — do not tear the public print to recover orders.
  */
 const busLifecycle = createBusLifecycle({
   log: app.log,
@@ -145,9 +147,7 @@ const busLifecycle = createBusLifecycle({
       ownedStreams: [],
     });
     let tradeSub: Subscription | null = null;
-    let privateSub: Subscription | null = null;
-    let privateFillSub: Subscription | null = null;
-    let privatePositionSub: Subscription | null = null;
+    let privateHalf: PrivateAttachments | null = null;
     try {
       // Public tape first and independently. A private-half failure must not
       // tear the trade consumer — empty private is privateBus:false, not a dead tape.
@@ -163,45 +163,40 @@ const busLifecycle = createBusLifecycle({
     }
 
     if (privateTokens) {
-      try {
-        privateSub = await subscribePrivateOrders({
-          bus: connected,
-          hub: privateOrderHub,
-          durable: env.WS_PRIVATE_ORDERS_DURABLE,
-          log: app.log,
-        });
-        privateFillSub = await subscribePrivateFills({
-          bus: connected,
-          hub: privateOrderHub,
-          durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-fills`,
-          log: app.log,
-        });
-        privatePositionSub = await subscribePrivatePositions({
-          bus: connected,
-          hub: privateOrderHub,
-          durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-positions`,
-          log: app.log,
-        });
-      } catch (err) {
-        // Tear only the private half. Trade tape stays up.
-        await privateSub?.unsubscribe().catch(() => undefined);
-        await privateFillSub?.unsubscribe().catch(() => undefined);
-        await privatePositionSub?.unsubscribe().catch(() => undefined);
-        privateSub = null;
-        privateFillSub = null;
-        privatePositionSub = null;
-        app.log.warn({ err: String(err) }, 'svc-ws: private bus subscribe failed — trade tape still attached; privateBus stays false');
+      privateHalf = await tryAttachPrivate({
+        bus: connected,
+        hub: privateOrderHub,
+        durable: env.WS_PRIVATE_ORDERS_DURABLE,
+        log: app.log,
+      });
+      if (privateHalf) {
+        privateOrderHub.announceBus(true);
       }
     }
 
     return {
       tradesUp: tradeSub !== null,
-      privateUp: privateSub !== null && privateFillSub !== null && privatePositionSub !== null,
+      privateUp: privateHalf !== null,
+      retryPrivate: privateTokens
+        ? async () => {
+            privateHalf = await tryAttachPrivate({
+              bus: connected,
+              hub: privateOrderHub,
+              durable: env.WS_PRIVATE_ORDERS_DURABLE,
+              log: app.log,
+            });
+            if (privateHalf) {
+              privateOrderHub.announceBus(true);
+              return true;
+            }
+            return false;
+          }
+        : undefined,
       close: async () => {
         await tradeSub?.unsubscribe().catch(() => undefined);
-        await privateSub?.unsubscribe().catch(() => undefined);
-        await privateFillSub?.unsubscribe().catch(() => undefined);
-        await privatePositionSub?.unsubscribe().catch(() => undefined);
+        await privateHalf?.orders.unsubscribe().catch(() => undefined);
+        await privateHalf?.fills.unsubscribe().catch(() => undefined);
+        await privateHalf?.positions.unsubscribe().catch(() => undefined);
         await connected.close().catch(() => undefined);
       },
     };

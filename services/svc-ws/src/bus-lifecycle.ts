@@ -10,7 +10,9 @@ import type { HubLogger } from './depth/hub.js';
  *
  * Ownership split (do not blur these):
  * - **Before first attach:** this loop owns retry + `/ready` flags.
- * - **After first attach:** nats.js owns TCP reconnect for that connection.
+ * - **Tape up, private down:** this loop keeps the tape handle and retries
+ *   only `retryPrivate` (do not reconnect, do not tear the public print).
+ * - **After first full attach:** nats.js owns TCP reconnect for that connection.
  *   `tradesBus` / `privateBus` stay true while the consumer is attached for
  *   this process session. They are not a continuous liveness probe of the
  *   remote NATS server. A full mid-session supervisor (drop flags + re-attach
@@ -24,6 +26,12 @@ export interface BusLifecycleConnectResult {
   readonly tradesUp: boolean;
   /** Private order (and fill/position) consumers attached. */
   readonly privateUp: boolean;
+  /**
+   * When the tape is up but private is not, lifecycle calls this on backoff
+   * instead of tearing the tape and reconnecting. Return true when all three
+   * private consumers are attached. Omit when private is disabled (no JWT).
+   */
+  readonly retryPrivate?: () => Promise<boolean>;
 }
 
 export interface BusLifecycleOptions {
@@ -71,6 +79,35 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
     privateUp = result?.privateUp === true;
   }
 
+  async function retryPrivateHalf(result: BusLifecycleConnectResult, startBackoff: number): Promise<void> {
+    let backoff = startBackoff;
+    while (!stopped) {
+      await sleep(backoff);
+      if (stopped) return;
+      try {
+        const up = await result.retryPrivate!();
+        if (stopped) return;
+        if (up) {
+          apply({
+            close: result.close,
+            tradesUp: true,
+            privateUp: true,
+            retryPrivate: result.retryPrivate,
+          });
+          log.info({ tradesBus: true, privateBus: true }, 'svc-ws: private bus consumers attached after retry');
+          return;
+        }
+      } catch (err) {
+        if (stopped) return;
+        log.warn(
+          { err: String(err), backoffMs: backoff },
+          'svc-ws: private bus still unavailable — trade tape still attached; retrying private half',
+        );
+      }
+      backoff = Math.min(backoff * 2, maxBackoffMs);
+    }
+  }
+
   async function run(): Promise<void> {
     let backoff = initialBackoffMs;
     while (!stopped) {
@@ -82,9 +119,20 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
           return;
         }
         apply(result);
+        if (result.tradesUp && result.privateUp) {
+          log.info({ tradesBus: true, privateBus: true }, 'svc-ws: bus consumers attached');
+          // Stay parked on full success. nats.js owns mid-session reconnect.
+          return;
+        }
+        if (result.tradesUp && result.retryPrivate) {
+          // Tape is live. Keep retrying private only — do not close the tape.
+          log.info({ tradesBus: true, privateBus: false }, 'svc-ws: bus consumers attached (private half still retrying)');
+          await retryPrivateHalf(result, backoff);
+          return;
+        }
         if (result.tradesUp || result.privateUp) {
+          // Partial without a retry hook (JWT unset) — park like before.
           log.info({ tradesBus: result.tradesUp, privateBus: result.privateUp }, 'svc-ws: bus consumers attached');
-          // Stay parked on success. nats.js owns mid-session reconnect.
           return;
         }
         // Connected but nothing subscribed — treat as fail and retry.
