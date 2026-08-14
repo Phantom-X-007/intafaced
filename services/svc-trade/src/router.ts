@@ -10,7 +10,7 @@ import { OtcError } from './otc/errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
 import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
 import type { OtcDeskService } from './otc/otc-service.js';
-import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL, COPY_AUTO_MIRROR_PLACE_SOCKET } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
 
@@ -690,7 +690,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               jurisdiction: COPY_JURISDICTION_RESIDUAL,
               autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
             },
-            autoMirrorPlace: autoMirrorPlaceStatus(),
+            autoMirrorPlace: autoMirrorPlaceStatus(false),
           };
         }
         return copy.deskStatus();
@@ -776,8 +776,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         ),
 
       /**
-       * Place a planned mirror into spot — SOCKET §13 refuse-closed until the
-       * follower place wire lands. planMirror is real; inventing a fill is not.
+       * Place a planned mirror into spot via follower placeOrder.
+       * planMirror is real; inventing a fill is not. Unwired port still refuses.
        */
       placeMirror: scopedProcedure('trade:write', { module: 'trade' })
         .input(
@@ -790,7 +790,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           guard(async () => {
             if (!copy) {
               throw new CopyError(
-                `Auto-mirror place into spot is refuse-closed (${autoMirrorPlaceStatus().socket})`,
+                `Auto-mirror place into spot is refuse-closed (${COPY_AUTO_MIRROR_PLACE_SOCKET})`,
                 'trade.copy_auto_mirror_place_socket',
                 COPY_AUTO_MIRROR_PLACE_RESIDUAL,
               );
