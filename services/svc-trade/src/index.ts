@@ -27,6 +27,7 @@ import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
+import { presentVenueLatencyHealth } from './futures/venue-latency-health.js';
 import { MaintainedBook } from '@intafaced/venue-adapter';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
@@ -446,7 +447,11 @@ const reconcileJobs = startEngineLedgerReconcileJobs({
   },
 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
+app.get('/health', async () => ({
+  ok: true,
+  service: env.SERVICE_NAME,
+  venueLatency: presentVenueLatencyHealth(venuePublicAdapter),
+}));
 
 app.get('/ready', async (_req, reply) => {
   if (!env.TRADE_SPOT_ENABLED) return reply.code(503).send({ ready: false, reason: 'trade.spot flag is off' });
