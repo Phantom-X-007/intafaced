@@ -61,14 +61,21 @@ describe('ambassador IFC / revenue-share rate authority — refuse invent (D26-P
     expect(ambassadorRevenueShareLawStatusLine(law)).toBe('published=1 basis=lobby_host_fees bps=500');
   });
 
-  it('request law wins over unpublished env', () => {
+  it('per-call published law is invent_refused — never a payable override', () => {
     const request = {
       published: true as const,
       sessionCredit: '3.00000000',
       asset: 'IFC',
       period: 'season',
     };
-    expect(resolveAmbassadorIfcPayLaw({ requestLaw: request, law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW })).toEqual(request);
+    expect(() => resolveAmbassadorIfcPayLaw({ requestLaw: request, law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW })).toThrow(
+      AmbassadorRateAuthorityRefuseError,
+    );
+    try {
+      resolveAmbassadorIfcPayLaw({ requestLaw: request, law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW });
+    } catch (err) {
+      expect((err as AmbassadorRateAuthorityRefuseError).code).toBe('academy.ambassador_pay.invent_refused');
+    }
   });
 
   it('no request + unpublished → rates_unset residual', () => {

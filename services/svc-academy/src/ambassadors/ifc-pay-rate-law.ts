@@ -48,7 +48,16 @@ export const AMBASSADOR_IFC_RATE_AUTHORITY_RESIDUAL =
 export const AMBASSADOR_REVENUE_SHARE_RATE_AUTHORITY_RESIDUAL =
   'DIRECTION §8 ambassador revenue-share rates are owner-only — refuse-closed (never invent fee %)';
 
-export type AmbassadorRateAuthorityRefuseCode = 'academy.ambassador_pay.rates_unset' | 'academy.ambassador_revenue_share.rates_unset';
+export type AmbassadorRateAuthorityRefuseCode =
+  | 'academy.ambassador_pay.rates_unset'
+  | 'academy.ambassador_pay.invent_refused'
+  | 'academy.ambassador_revenue_share.rates_unset'
+  | 'academy.ambassador_revenue_share.invent_refused';
+
+/** True when IFC / share law is unpublished (blank owner authority). */
+export function isAmbassadorRateAuthorityUnset(law: AmbassadorIfcPayLaw | AmbassadorRevenueShareLaw): boolean {
+  return law.published !== true;
+}
 
 export class AmbassadorRateAuthorityRefuseError extends Error {
   constructor(
@@ -203,14 +212,18 @@ export function parseAmbassadorRevenueShareLawJson(raw: string | null | undefine
 
 /**
  * Resolve IFC pay law for one attempt.
- * Order: request override (explicit operator schedule) → owner-published env → refuse.
+ * Owner-published env only. Per-call published law is invent — refuse closed.
  */
 export function resolveAmbassadorIfcPayLaw(input: {
   readonly requestLaw?: AmbassadorIfcPayLaw | null | undefined;
   readonly law: AmbassadorIfcPayLaw;
 }): Extract<AmbassadorIfcPayLaw, { published: true }> {
   if (input.requestLaw?.published === true) {
-    return input.requestLaw;
+    throw new AmbassadorRateAuthorityRefuseError(
+      'Ambassador IFC pay refuses per-call rate invent — owner-published authority only',
+      'academy.ambassador_pay.invent_refused',
+      AMBASSADOR_IFC_RATE_AUTHORITY_RESIDUAL,
+    );
   }
   if (input.law.published) {
     return input.law;
@@ -227,7 +240,11 @@ export function resolveAmbassadorRevenueShareLaw(input: {
   readonly law: AmbassadorRevenueShareLaw;
 }): Extract<AmbassadorRevenueShareLaw, { published: true }> {
   if (input.requestLaw?.published === true) {
-    return input.requestLaw;
+    throw new AmbassadorRateAuthorityRefuseError(
+      'Ambassador revenue share refuses per-call rate invent — owner-published authority only',
+      'academy.ambassador_revenue_share.invent_refused',
+      AMBASSADOR_REVENUE_SHARE_RATE_AUTHORITY_RESIDUAL,
+    );
   }
   if (input.law.published) {
     return input.law;
