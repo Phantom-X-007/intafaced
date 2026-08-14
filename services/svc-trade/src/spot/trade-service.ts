@@ -41,6 +41,7 @@ import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } 
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
 import { isHouseMmAccount } from '../mm/seed-market.js';
+import { recoverMatchingAccountId } from '../mm/fill-account.js';
 import { HOUSE_MM_USER_UUID } from './ids.js';
 import {
   presentAlgoProgress,
@@ -1802,10 +1803,11 @@ export class TradeService {
    * each other.
    *
    * `makerAccountId` / `takerAccountId` come from the matching event when the
-   * catalog carries them. House MM seed makers have no `trade.orders` row and
-   * are identified only by matching STP id `house:market-maker` — empty string
-   * must not invent that path. User makers may fall back to the order row's
-   * userId (matching uses user id as accountId for users).
+   * catalog carries them. House MM seed makers are matching STP
+   * `house:market-maker`. A recorded seed row uses HOUSE_MM_USER_UUID for
+   * bookkeeping — recovery rewrites that to the house STP id so the fill
+   * cannot look like an anonymous customer. Empty event + no house row must
+   * not invent house MM. User makers fall back to the order row's userId.
    */
   async settleFillEvent(input: {
     marketId: string;
@@ -1825,10 +1827,17 @@ export class TradeService {
     const taker = await this.findOrder(input.takerOrderId);
     if (!taker) throw new TradeError(`order ${input.takerOrderId} not found`, 'trade.order_not_found');
 
-    // Prefer event payload; then orders table for user legs. Never invent house MM.
+    // Prefer event payload; then orders table. House bookkeeping UUID → house STP id.
+    // Never invent house MM from an unknown maker (empty + no house row).
     const makerRow = await this.findOrder(input.makerOrderId);
-    const makerAccountId = (input.makerAccountId && input.makerAccountId.trim()) || (makerRow ? makerRow.userId : '') || '';
-    const takerAccountId = (input.takerAccountId && input.takerAccountId.trim()) || taker.userId;
+    const makerAccountId = recoverMatchingAccountId({
+      eventAccountId: input.makerAccountId,
+      orderUserId: makerRow?.userId,
+    });
+    const takerAccountId = recoverMatchingAccountId({
+      eventAccountId: input.takerAccountId,
+      orderUserId: taker.userId,
+    });
 
     await withMoneySpan(
       'trade.settleFillEvent',

@@ -19,8 +19,9 @@ import {
 } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
-import { mmSeedOrderIdFor, orderIdFor } from './ids.js';
+import { HOUSE_MM_USER_UUID, mmSeedOrderIdFor, orderIdFor } from './ids.js';
 import { MM_MATCHING_ACCOUNT_ID } from '../mm/seed-market.js';
+import { looksLikeAnonymousCustomerFill, recoverMatchingAccountId } from '../mm/fill-account.js';
 import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor, restsInFull } from './testing.js';
 
 /**
@@ -717,6 +718,52 @@ if (!available) {
       expect(await avail(ALICE, 'USDT')).toBe(usdtBefore);
       expect(await avail(ALICE, 'BTC')).toBe(btcBefore);
       expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe(mmHoldBefore);
+    });
+
+    it('recovery from recorded seed row without event accountId is house STP, not an anonymous customer', async () => {
+      // recordSeededOrder writes HOUSE_MM_USER_UUID. Older orderFilled payloads
+      // omit makerAccountId — recovery must yield house:market-maker, not the
+      // bookkeeping UUID (that looks like a live customer fill).
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-rec-row' }));
+      const mmOrderId = mmSeedOrderIdFor('recorded-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '1000');
+
+      matching.script1((request, next) => restsInFull(request, next()));
+      const taker = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-mm-recorded');
+
+      await sql`
+        INSERT INTO trade.orders (
+          id, user_id, market_id, side, type, price, qty, status, tif,
+          hold_asset, hold_amount, fee_discount_bps, seeded
+        ) VALUES (
+          ${mmOrderId}, ${HOUSE_MM_USER_UUID}, ${btcusdt.id}, ${'sell'}, ${'limit'},
+          ${'100'}::numeric, ${'1'}::numeric, ${'open'}, ${'PO'},
+          ${'BTC'}, ${'1'}::numeric, ${0}, ${true}
+        )
+      `;
+
+      const recovered = recoverMatchingAccountId({
+        eventAccountId: '',
+        orderUserId: HOUSE_MM_USER_UUID,
+      });
+      expect(looksLikeAnonymousCustomerFill(recovered)).toBe(false);
+      expect(recovered).toBe(MM_MATCHING_ACCOUNT_ID);
+
+      await trade.settleFillEvent({
+        marketId: btcusdt.id,
+        makerOrderId: mmOrderId,
+        takerOrderId: taker.id,
+        price: '100',
+        qty: '1',
+        sequence: 77,
+        takerAccountId: ALICE,
+      });
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(1);
+      expect(postsWithReason('trade.fill')).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe('0');
+      expect(await avail(ALICE, 'BTC')).toBe('0.998');
     });
   });
 
