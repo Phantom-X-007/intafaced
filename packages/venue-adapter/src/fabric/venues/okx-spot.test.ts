@@ -94,7 +94,11 @@ class ScriptedStream implements StreamPort {
     };
     return {
       messages,
-      send: this.sendEnabled ? async (payload) => this.sent.push(payload) : undefined,
+      send: this.sendEnabled
+        ? async (payload) => {
+            this.sent.push(payload);
+          }
+        : undefined,
       close: async () => {
         this.closed.push(1);
         this.end();
@@ -143,7 +147,7 @@ describe('okx-spot — public market data (third venue)', () => {
     expect(http.requests[0]).toContain('/api/v5/public/instruments?instType=SPOT');
 
     const numbers = new FakeHttp(() => json(200, { code: '0', msg: '', data: [instrument('BTC-USDT', { tickSz: 0.1 })] }));
-    await expect(adapter(numbers).markets()).rejects.toThrow(/refuses JSON numbers/);
+    await expect(adapter(numbers).markets()).rejects.toThrow(/JSON number/);
   });
 
   it('snapshotBook reads string levels + seqId and grades the round-trip', async () => {
@@ -206,7 +210,7 @@ describe('okx-spot — public market data (third venue)', () => {
     const http = new FakeHttp(() =>
       json(200, { code: '0', msg: '', data: [{ asks: [[30002.1, 1.5]], bids: [[30000, 2]], ts: '1', seqId: 1 }] }),
     );
-    await expect(adapter(http).snapshotBook('BTC/USDT')).rejects.toThrow(/refuses JSON numbers/);
+    await expect(adapter(http).snapshotBook('BTC/USDT')).rejects.toThrow(/JSON number/);
   });
 
   it('rate-governs BEFORE the request and honors HTTP 429 / body code 50011', async () => {
