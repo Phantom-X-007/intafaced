@@ -603,10 +603,10 @@ export const FEATURES = [
       '`docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (Accepted) rules is a sponsor bank and an acquiring BIN — a commercial ' +
       'relationship no code closes. The tracker permits a rail that is *sandbox* under `done`; it does not cover one that is absent, ' +
       'and #800 widened `RailMode` with `absent` precisely so the two stop reporting the same thing. ' +
-      '(2) KYB FLAG NOW CONSUMES ON MONEY DOORS (2026-08-14 IN slice). `merchantKybMoneyGateRefusal` refuses `rejected` in every ' +
-      'posture and refuses any non-approved KYB under `live-only` (`pay.kyb_required`) via `assertMerchantActive` ' +
-      '(payment.create / checkout.open / links / authorize / capture / settle / payout) plus the settlement lock and mandate create. ' +
-      'Digital KYB product remains `pay.psp`. This row stays `ready` not `done` because residual (1) — card acquiring — is still the socket. ' +
+      '(2) `kybStatus` HAS NO CONSUMER. `submitKyb`/`decideKybStub` move it and the read surfaces echo it, but nothing else reads it — ' +
+      '`payment.create`, `checkout.open`, `settlement.run` and the withdrawal path all gate on `merchants.status`, never on KYB. ' +
+      'A merchant sitting at `kybStatus: rejected` transacts exactly like an approved one, so merchant onboarding is not KYB-gated at all ' +
+      'yet. Digital KYB is `pay.psp`; wiring the existing flag into the money gates is this row. ' +
       'Neither residual is a defect in #346 — its code is reachable, tested and unpropped on its own terms. They are what stands between ' +
       'this row and `done`, and naming them is cheaper than a `done` the board would have to walk back. ' +
       '**Reclaimed 2026-08-04** from Shehzad M1 — Nitro agents after the #346 handoff. Class M. Not go-live.',
