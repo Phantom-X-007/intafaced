@@ -165,6 +165,17 @@ export const CCXT_REFUSE_ARMS: readonly CcxtRefuseArm[] = [
     when: 'body.marginMode is "cross" — isolated only; never coerce to isolated',
   },
   {
+    id: 'leverageRequiredOnOpen',
+    routeName: 'openPosition',
+    method: 'POST',
+    path: '/api/v1/positions',
+    httpStatus: 400,
+    ccxtCode: 'BadRequest',
+    intafacedCode: 'trade.leverage_required',
+    wireShape: 'domain',
+    when: 'body.leverage omitted, blank, or not a decimal string — never default 1x',
+  },
+  {
     id: 'adlDisclosureRequired',
     routeName: 'openPosition',
     method: 'POST',
@@ -246,8 +257,8 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     auth: 'private',
     scope: 'trade:write',
     kind: 'supported',
-    refuseArmIds: refuseIds('callerPriceOnOpen', 'crossMarginOnOpen', 'adlDisclosureRequired'),
-    notes: 'Open funded futures; mark entry only; cross margin + missing ADL ack refuse',
+    refuseArmIds: refuseIds('callerPriceOnOpen', 'crossMarginOnOpen', 'leverageRequiredOnOpen', 'adlDisclosureRequired'),
+    notes: 'Open funded futures; mark entry only; leverage required (no 1x default); cross margin + missing ADL ack refuse',
   },
   {
     name: 'closePosition',

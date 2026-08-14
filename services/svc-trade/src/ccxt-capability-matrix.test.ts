@@ -160,6 +160,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
         'crossMarginOnOpen',
         'fundingRateSpot',
         'fundingRateUnavailable',
+        'leverageRequiredOnOpen',
         'setLeverage',
         'setMarginMode',
       ].sort(),
@@ -184,6 +185,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
 
   it('openPosition refuse arms pin private-rest domain codes', () => {
     expect(privateRestSource).toContain("'trade.cross_margin_unsupported'");
+    expect(privateRestSource).toContain("'trade.leverage_required'");
     expect(privateRestSource).toContain('AdlDisclosureError');
     expect(privateRestSource).toContain("'/api/v1/futures/adl-disclosure'");
     expect(privateRestSource).toContain("'/api/v1/futures/adl-disclosure/ack'");
@@ -443,6 +445,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('adlDisclosureRequired'))).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'crossMarginOnOpen' && a.httpStatus === 400)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'leverageRequiredOnOpen' && a.httpStatus === 400)).toBe(true);
     await app.close();
   });
 
