@@ -177,8 +177,6 @@ patch(
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
-
-  // ── Doctrine and invariants ───────────────────────────────
 """,
             """      expect(chain.outboundTransfers()).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
@@ -224,8 +222,6 @@ patch(
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
-
-  // ── Doctrine and invariants ───────────────────────────────
 """,
         ),
     ],
