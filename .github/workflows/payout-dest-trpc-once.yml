@@ -1,0 +1,27 @@
+name: payout-dest-trpc-once
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/payout-dest-trpc-once.yml
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/pay-merchant-payout-destination
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Map dest errors in toTrpcError
+        run: |
+          python3 -c "from pathlib import Path; p=Path('services/svc-pay/src/router.ts'); t=p.read_text(); old='  if (!(err instanceof PayError)) return err;'; new='  if (err instanceof DestinationKindError) {\n    return new TRPCError({ code: \'BAD_REQUEST\', message: \`${err.code}: ${err.message}\`, cause: err });\n  }\n  if (err instanceof PayoutDestinationMissingError) {\n    return new TRPCError({ code: \'PRECONDITION_FAILED\', message: \`${err.code}: ${err.message}\`, cause: err });\n  }\n  if (!(err instanceof PayError)) return err;';\nassert old in t, 'guard missing';\nassert 'err instanceof DestinationKindError' not in t.split('function toTrpcError')[-1] if 'function toTrpcError' in t else True;\np.write_text(t.replace(old, new, 1)); print('patched')"
+      - name: Commit and self-delete
+        run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm -f .github/workflows/payout-dest-trpc-once.yml
+          git add services/svc-pay/src/router.ts
+          git commit -m "fix(svc-pay): map payout dest errors in toTrpcError"
+          git push origin HEAD:feat/pay-merchant-payout-destination
