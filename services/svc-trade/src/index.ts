@@ -32,6 +32,7 @@ import { MaintainedBook } from '@intafaced/venue-adapter';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { presentMmSeedHealth } from './mm/seed-health.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { HOUSE_MM_USER_UUID } from './spot/ids.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
@@ -338,6 +339,7 @@ const mmMidSource = createMmMidSourceFromConfig({
   resolveVenueSymbol: (marketId) => venueMarkSymbols.get(marketId) ?? null,
   ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
+const mmSeedTargets = parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS);
 const mmSeedJobs = startMmSeedJobs({
   ledger,
   matching,
@@ -356,7 +358,7 @@ const mmSeedJobs = startMmSeedJobs({
     stepBps: env.TRADE_MM_SEED_STEP_BPS,
     levels: env.TRADE_MM_SEED_LEVELS,
     qtyPerLevel: env.TRADE_MM_SEED_QTY,
-    targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
+    targets: mmSeedTargets,
   },
   statePath: env.TRADE_MM_SEED_STATE_PATH,
   // SD-2: flag resting MM seed orders so public tape excludes them before fill.
@@ -451,6 +453,10 @@ app.get('/health', async () => ({
   ok: true,
   service: env.SERVICE_NAME,
   venueLatency: presentVenueLatencyHealth(venuePublicAdapter),
+  mmSeed: presentMmSeedHealth({
+    enabled: env.TRADE_MM_SEED_ENABLED,
+    targetCount: mmSeedTargets.length,
+  }),
 }));
 
 app.get('/ready', async (_req, reply) => {
