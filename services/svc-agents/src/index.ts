@@ -37,8 +37,8 @@ registerProcessHooks(
  *
  * Stage-1 product factories (navigator / support / scanner / merchant /
  * copy-intel) are registered into `agent_definitions` at boot so metered
- * `runSession` paths can open without a separate deploy-side seed. `coach` is a
- * refuse/citation door (not a factory). Portfolio / launch / growth remain
+ * `runSession` paths can open without a separate deploy-side seed. `coach` and
+ * `growth` are refuse/proposal doors (not factories). Portfolio / launch remain
  * doctrine names only until product law.
  */
 
