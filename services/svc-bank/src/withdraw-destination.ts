@@ -115,7 +115,7 @@ export function assertOnlyWithdrawDestinations(): UserWithdrawDestinations {
   };
 }
 
-/** In-memory store for tests. Persist stores; require refuses if none. */
+/** In-memory store for tests. Persist stores; require refuses if none stored. */
 export function memoryWithdrawDestinations(): UserWithdrawDestinations {
   const rows = new Map<string, WithdrawDestination>();
   const key = (userId: string, kind: string) => `${userId}:${kind}`;
