@@ -89,7 +89,7 @@ export interface PublicRestDeps {
    * Futures liq/funding job flag for the capabilities note.
    * Omitted → shipped default (jobs off). Does not start ticks.
    */
-  futures?: { readonly jobsEnabled: boolean };
+  futures?: { readonly jobsEnabled: boolean; readonly orderableEnabled?: boolean };
 }
 
 /** Send an already-mapped CCXT error. */
@@ -255,13 +255,27 @@ export function sessionStateForMarket(
  * engine actually enforces (`snapToTick`, and the lot check in risk.ts), so it
  * is the only report a client can build a fillable order from.
  *
+/** Listing status vs kill-switch. Options have no engine. */
+export function orderableForListedMarket(market: Market, futuresOrderable: boolean): boolean {
+  if (market.status !== 'active') return false;
+  if (market.kind === 'options') return false;
+  if (market.kind === 'futures') return futuresOrderable === true;
+  return true;
+}
+
+/**
  * HOURS / SESSION — published so a bot can tell "venue shut" from "exchange
  * down" or "empty book". `active` stays listing status; `sessionOpen` is the
  * schedule gate the order path already enforces via `assertMarketOpen`.
  *
+ * `orderable` is the kill-switch the order path already enforces. A listed
+ * active perp with TRADE_FUTURES_ENABLED off is still `active: true` (it is
+ * on the board) and `orderable: false` (place/open refuse). Options stay
+ * unorderable — engine still `trade.market_kind_unsupported`.
+ *
  * @param nowMs response clock — injectable so sessionOpen is testable at a boundary.
  */
-export function presentCcxtMarket(market: Market, nowMs: number = Date.now()) {
+export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), flags: { readonly futuresOrderable?: boolean } = {}) {
   const tick = formatAmount(market.tickSize);
   const lot = formatAmount(market.lotSize);
   const isSpot = market.kind === 'spot';
@@ -285,6 +299,12 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now()) {
     linear: isSpot ? null : true,
     inverse: isSpot ? null : false,
     active: market.status === 'active',
+    /**
+     * TRUE = the order path will accept a new order/open here (subject to
+     * session, paper, risk). FALSE = listed but refused — futures kill-switch
+     * or options until an engine exists. Distinct from `active` (listing).
+     */
+    orderable: orderableForListedMarket(market, flags.futuresOrderable === true),
     /**
      * TRUE = orders here are SIMULATED. No hold is taken, nothing posts to the
      * ledger, and the position a fill implies does not exist.
@@ -482,7 +502,8 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
   app.get('/api/v1/markets', async (_req, reply) => {
     const markets = await deps.markets();
     const ts = now();
-    return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts)));
+    const futuresOrderable = deps.futures?.orderableEnabled === true;
+    return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));
   });
 
   app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>('/api/v1/orderbook/:symbol', async (req, reply) => {
