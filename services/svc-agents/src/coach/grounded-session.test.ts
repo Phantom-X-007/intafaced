@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  assertNotAdvice,
-  inventedLibraryTitles,
-  looksLikeAdvice,
-  runCoachSession,
-  type CoachGrounding,
-} from './grounded-session.js';
+import { assertNotAdvice, inventedLibraryTitles, looksLikeAdvice, runCoachSession, type CoachGrounding } from './grounded-session.js';
 
 const spine: CoachGrounding = {
   licensedLibraryImported: false,

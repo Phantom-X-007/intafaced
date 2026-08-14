@@ -27,11 +27,7 @@ export type CoachGrounding = {
 };
 
 export type CoachRefuseReason =
-  | 'curriculum_empty'
-  | 'library_import_pending'
-  | 'invented_library'
-  | 'positions_not_decided'
-  | 'advice_forbidden';
+  'curriculum_empty' | 'library_import_pending' | 'invented_library' | 'positions_not_decided' | 'advice_forbidden';
 
 export type CoachSessionRefuse = {
   readonly status: 'refuse';
