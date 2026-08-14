@@ -1,0 +1,49 @@
+name: totp-compose-once
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/totp-compose-once.yml
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pass IDENTITY_TOTP_SECRET_KEY through identity compose
+        run: |
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('docker-compose.apps.yml')
+          t = p.read_text()
+          needle = '      IDENTITY_KYC_DOC_KEY: ${IDENTITY_KYC_DOC_KEY:-}\n'
+          insert = (
+              needle
+              + '      # TOTP enrol at rest. Pass-through only — no compose default, no invented key.\n'
+              + '      # Host sets IDENTITY_TOTP_SECRET_KEY → enrol can run. Blank stays refuse-closed.\n'
+              + '      IDENTITY_TOTP_SECRET_KEY: ${IDENTITY_TOTP_SECRET_KEY:-}\n'
+          )
+          if 'IDENTITY_TOTP_SECRET_KEY:' in t:
+              print('compose already has TOTP key')
+          elif needle not in t:
+              raise SystemExit('KYC compose line not found')
+          else:
+              p.write_text(t.replace(needle, insert, 1))
+              print('compose patched')
+          PY
+      - name: Commit patch and self-delete
+        run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm .github/workflows/totp-compose-once.yml
+          git add docker-compose.apps.yml
+          git commit -m "$(cat <<'MSG'
+          feat(svc-identity): pass IDENTITY_TOTP_SECRET_KEY through compose
+
+          Host IDENTITY_TOTP_SECRET_KEY now reaches svc-identity so TOTP
+          enrol can run. Blank stays refuse-closed (${IDENTITY_TOTP_SECRET_KEY:-}).
+          No invented key. No Class X.
+          MSG
+          )"
+          git push
