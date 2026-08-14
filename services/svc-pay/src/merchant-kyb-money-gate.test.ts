@@ -7,14 +7,29 @@ describe('merchant KYB money gate (D26-P1-P10 Layer B)', () => {
     status: 'active',
   } as const;
 
-  it('does not refuse under allow-sandbox (fixture path; no invent grantor)', () => {
-    expect(
-      merchantKybMoneyGateRefusal({
-        ...base,
-        kybStatus: 'none',
-        valueMovement: 'allow-sandbox',
-      }),
-    ).toBeNull();
+  it('does not refuse none/pending under allow-sandbox (fixture path; no invent grantor)', () => {
+    for (const kybStatus of ['none', 'pending'] as const) {
+      expect(
+        merchantKybMoneyGateRefusal({
+          ...base,
+          kybStatus,
+          valueMovement: 'allow-sandbox',
+        }),
+        kybStatus,
+      ).toBeNull();
+    }
+  });
+
+  it('refuses rejected KYB under allow-sandbox — rejected cannot transact like approved', () => {
+    const refuse = merchantKybMoneyGateRefusal({
+      ...base,
+      kybStatus: 'rejected',
+      valueMovement: 'allow-sandbox',
+    });
+    expect(refuse).toMatchObject({
+      code: PAY_KYB_REQUIRED_CODE,
+      detail: { kybStatus: 'rejected' },
+    });
   });
 
   it('refuses live-only when KYB is not approved — pay.kyb_required', () => {

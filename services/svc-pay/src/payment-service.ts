@@ -2259,11 +2259,11 @@ export class PayService {
         // the same unsettled payments and freeze them into two settlements.
         // Re-read status under the lock so a suspend that races the getMerchant
         // above cannot slip a freeze through.
-        const locked = await tx<Array<{ status: MerchantRecord['status'] }>>`
-          SELECT status FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE
+        const locked = await tx<Array<{ status: MerchantRecord['status']; kyb_status: MerchantRecord['kybStatus'] }>>`
+          SELECT status, kyb_status FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE
         `;
-        const lockedStatus = locked[0]?.status;
-        if (!lockedStatus) {
+        const lockedRow = locked[0];
+        if (!lockedRow) {
           throw new PayError(`Merchant ${input.merchantId} not found`, 'pay.merchant_not_found');
         }
 
@@ -2274,8 +2274,17 @@ export class PayService {
         `;
         if (existing[0]) return toSettlement(existing[0]);
 
-        if (lockedStatus !== 'active') {
-          throw new PayError(`Merchant ${input.merchantId} is ${lockedStatus}`, 'pay.merchant_inactive');
+        if (lockedRow.status !== 'active') {
+          throw new PayError(`Merchant ${input.merchantId} is ${lockedRow.status}`, 'pay.merchant_inactive');
+        }
+        const kybRefuse = merchantKybMoneyGateRefusal({
+          merchantId: input.merchantId,
+          status: lockedRow.status,
+          kybStatus: lockedRow.kyb_status,
+          valueMovement: this.valueMovement,
+        });
+        if (kybRefuse) {
+          throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
         }
 
         // Candidate ids only first — lock each payment FOR UPDATE before reading
@@ -2687,8 +2696,8 @@ export class PayService {
    * payoutSettlement. Refund is intentionally not on this list (payer return).
    *
    * `status` is the operational cut-off (`suspended` / `closed` / `pending`).
-   * Under `live-only`, Layer B also requires approved KYB (`pay.kyb_required`)
-   * — D26-P1-P10. Does not invent `pay:*` scopes (Layer A stays refuse-closed).
+   * Layer B also reads `kybStatus`: `rejected` never pays; `live-only` requires
+   * approved KYB (`pay.kyb_required`). Does not invent `pay:*` scopes.
    */
   private assertMerchantActive(merchant: MerchantRecord): void {
     if (merchant.status !== 'active') {

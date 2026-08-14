@@ -2187,6 +2187,26 @@ if (!available) {
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
     });
 
+    it('refuses a public checkout when merchant KYB is rejected', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
+      await sql`UPDATE pay.merchants SET kyb_status = 'rejected' WHERE id = ${m.id}`;
+
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('live-only createPaymentLink refuses when KYB is not approved', async () => {
+      const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      await expect(
+        livePay.createPaymentLink({ merchantId: m.id, label: 'Invoice', amount: amt('10'), currency: 'USDT' }),
+      ).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`).toHaveLength(0);
+    });
+
     it('reports an unknown session token as not found rather than an empty session', async () => {
       await expect(pay.getCheckoutSession('cs_nothing_here_at_all')).rejects.toMatchObject({
         code: 'pay.checkout_session_not_found',
@@ -2257,6 +2277,21 @@ if (!available) {
         railAdapter: 'crypto-native',
       });
       expect(payment.status).toBe('created');
+    });
+
+    it('rejected KYB cannot createPayment even under allow-sandbox', async () => {
+      const m = await merchant();
+      await sql`UPDATE pay.merchants SET kyb_status = 'rejected' WHERE id = ${m.id}`;
+      await expect(
+        pay.createPayment({
+          merchantId: m.id,
+          amount: amt('10'),
+          assetId: 'USDT',
+          method: 'crypto',
+          railAdapter: 'crypto-native',
+        }),
+      ).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
     });
 
     it('lists payments by durable status projection after card lifecycle', async () => {

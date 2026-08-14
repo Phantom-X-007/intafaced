@@ -2,6 +2,8 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { PayError } from '../payment-service.js';
+import { merchantKybMoneyGateRefusal, type MerchantKybStatus } from '../merchant-kyb-money-gate.js';
+import type { ValueMovementPolicy } from '../rails/posture.js';
 import { CADENCES, occurrenceStart, type Cadence } from './schedule.js';
 import {
   MAX_ATTEMPTS_PER_CYCLE,
@@ -273,6 +275,8 @@ export interface SubscriptionServiceOptions {
    */
   readonly defaultFeeBps?: number;
   readonly resolveMerchantFeeBps?: MerchantFeeBpsResolver;
+  /** Same posture as PayService — rejected KYB cannot open a mandate. */
+  readonly valueMovement?: ValueMovementPolicy;
 }
 
 export type FiringOutcome = 'invoiced' | 'rejected' | 'already-fired' | 'skipped';
@@ -305,6 +309,7 @@ export interface RunReport {
 export class SubscriptionService {
   private readonly defaultFeeBps: number | undefined;
   private readonly resolveMerchantFeeBps: MerchantFeeBpsResolver | undefined;
+  private readonly valueMovement: ValueMovementPolicy;
 
   constructor(
     private readonly sql: Sql,
@@ -318,6 +323,7 @@ export class SubscriptionService {
   ) {
     this.defaultFeeBps = options.defaultFeeBps;
     this.resolveMerchantFeeBps = options.resolveMerchantFeeBps;
+    this.valueMovement = options.valueMovement ?? 'allow-sandbox';
   }
 
   async createMandate(input: {
@@ -347,9 +353,7 @@ export class SubscriptionService {
     }
 
     const m = await this.requireMerchant(input.merchantId);
-    if (m.status !== 'active') {
-      throw new PayError(`Merchant ${m.id} is ${m.status}`, 'pay.merchant_inactive');
-    }
+    this.assertMerchantMayOpenMoney(m);
 
     const rows = await this.sql<MandateRow[]>`
       INSERT INTO pay.subscription_mandates (
@@ -393,7 +397,7 @@ export class SubscriptionService {
     if (mandate.status !== 'active') {
       throw new PayError(`Mandate ${mandate.id} is ${mandate.status}`, 'pay.mandate_inactive');
     }
-    await this.requireMerchant(mandate.merchantId);
+    this.assertMerchantMayOpenMoney(await this.requireMerchant(mandate.merchantId));
 
     const nextRunAt = occurrenceStart(mandate.startsAt, mandate.cadence, 0);
     const path = normaliseSubscriptionPath(input.path);
@@ -1320,12 +1324,30 @@ export class SubscriptionService {
     return occurrenceDueAt(frame, occurrence + 1);
   }
 
-  private async requireMerchant(merchantId: string): Promise<{ id: string; status: string }> {
-    const rows = await this.sql<Array<{ id: string; status: string }>>`
-      SELECT id, status FROM pay.merchants WHERE id = ${merchantId}
+  private async requireMerchant(
+    merchantId: string,
+  ): Promise<{ id: string; status: string; kybStatus: MerchantKybStatus }> {
+    const rows = await this.sql<Array<{ id: string; status: string; kyb_status: MerchantKybStatus }>>`
+      SELECT id, status, kyb_status FROM pay.merchants WHERE id = ${merchantId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Merchant ${merchantId} not found`, 'pay.merchant_not_found');
-    return row;
+    return { id: row.id, status: row.status, kybStatus: row.kyb_status };
+  }
+
+  /** Mandate / subscription writes — same status + KYB cut-off as PayService money doors. */
+  private assertMerchantMayOpenMoney(merchant: { id: string; status: string; kybStatus: MerchantKybStatus }): void {
+    if (merchant.status !== 'active') {
+      throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+    }
+    const kybRefuse = merchantKybMoneyGateRefusal({
+      merchantId: merchant.id,
+      status: merchant.status,
+      kybStatus: merchant.kybStatus,
+      valueMovement: this.valueMovement,
+    });
+    if (kybRefuse) {
+      throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
+    }
   }
 }

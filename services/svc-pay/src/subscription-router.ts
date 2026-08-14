@@ -189,6 +189,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.merchant_forbidden':
       case 'pay.submerchant_permission_denied':
       case 'pay.merchant_inactive':
+      case 'pay.kyb_required':
         return 'FORBIDDEN' as const;
       case 'pay.mandate_inactive':
       case 'pay.subscription_inactive':
