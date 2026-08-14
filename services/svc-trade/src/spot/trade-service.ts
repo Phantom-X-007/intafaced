@@ -52,7 +52,7 @@ import {
   type TwapParent,
   type TwapParentStore,
 } from '../algo/index.js';
-import { hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
   TradeError,
   type Candle,
@@ -2334,7 +2334,11 @@ export class TradeService {
 
   /** Drive one parent's next due slice (job host / tests). */
   async tickAlgo(parentId: string) {
-    return this.algo.tick(parentId);
+    await hydrateAlgoFromStore(this.algo, this.algoStore, parentId);
+    const result = await this.algo.tick(parentId);
+    const live = this.algo.get(parentId);
+    if (live) await persistAlgoMutation(this.algo, this.algoStore, live);
+    return result;
   }
 
   /** Drive all active algos once. Hydrates durable active parents first. */
@@ -2345,7 +2349,11 @@ export class TradeService {
         this.algo.hydrate(rec.parent, rec.plan);
       }
     }
-    return this.algo.tickAll();
+    await this.algo.tickAll();
+    for (const rec of active) {
+      const live = this.algo.get(rec.parent.id);
+      if (live) await persistAlgoMutation(this.algo, this.algoStore, live);
+    }
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
