@@ -3,6 +3,7 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
+import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { emptyScene, parseScene } from './spatial/scene.js';
 import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
@@ -562,7 +563,9 @@ export class AcademyService {
 
   /** Stage-3 — ops status snapshot (live trade always unaffected). */
   paperOpsStatus(): PaperOpsStatus {
-    return paperOpsStatus(this.options.paperTradingEnabled);
+    const status = paperOpsStatus(this.options.paperTradingEnabled);
+    assertPaperNeverReadableAsRealMoney(status);
+    return status;
   }
 
   private mapTournamentErr(err: unknown): never {

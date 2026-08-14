@@ -45,7 +45,7 @@ import {
   valueSimulatedDrill,
   type PublishedFill,
 } from './paper/simulated-result.js';
-import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
+import { assertPaperInputNeverClaimsLive, assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 import {
   CERT_PERK_REFUSE_CODE,
@@ -261,14 +261,25 @@ const paperDrillOut = z.discriminatedUnion('ok', [
  * book — doctrine §0.6's "never a number" does not have a practice exemption,
  * because a wrong practice figure is still a figure this platform published.
  */
-const publishedFillIn = z.object({
-  fillId: z.string().min(1).max(128),
-  marketId: z.string().min(1),
-  side: z.enum(['buy', 'sell']),
-  price: z.string().min(1),
-  size: z.string().min(1),
-  recordedAt: z.date().optional(),
-});
+const publishedFillIn = z
+  .object({
+    fillId: z.string().min(1).max(128),
+    marketId: z.string().min(1),
+    side: z.enum(['buy', 'sell']),
+    price: z.string().min(1),
+    size: z.string().min(1),
+    recordedAt: z.date().optional(),
+  })
+  .strict();
+
+/** Trade's paper flag only. Extra live/realMoney keys must refuse, not strip. */
+const paperMarketFlagIn = z
+  .object({
+    marketId: z.string().min(1),
+    paper: z.boolean(),
+    symbol: z.string().min(1),
+  })
+  .strict();
 
 const simulatedValuationOut = z.object({
   // Nested seal — valuation alone cannot be read as live money if parent seal stripped
@@ -748,17 +759,17 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
      */
     paperDrill: scopedProcedure('academy:read', { module: 'academy' })
       .input(
-        z.object({
-          slug: z.string().min(1),
-          market: z
-            .object({ marketId: z.string().min(1), paper: z.boolean(), symbol: z.string().min(1) })
-            .nullable()
-            .default(null),
-        }),
+        z
+          .object({
+            slug: z.string().min(1),
+            market: paperMarketFlagIn.nullable().default(null),
+          })
+          .strict(),
       )
       .output(paperDrillOut)
       .query(({ input }) =>
         guard(async () => {
+          assertPaperInputNeverClaimsLive(input);
           academy.assertPaperTradingEnabled();
           const item = getCurriculumItem(input.slug);
           if (!item) {
@@ -820,21 +831,21 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
      */
     paperDrillResult: scopedProcedure('academy:read', { module: 'academy' })
       .input(
-        z.object({
-          slug: z.string().min(1),
-          market: z
-            .object({ marketId: z.string().min(1), paper: z.boolean(), symbol: z.string().min(1) })
-            .nullable()
-            .default(null),
-          completedStepIds: z.array(z.string().min(1)).max(64).default([]),
-          fills: z.array(publishedFillIn).max(256).default([]),
-          /** Trade's published mark for open size. Absent → reported unmarked. */
-          markPrice: z.string().min(1).nullable().default(null),
-        }),
+        z
+          .object({
+            slug: z.string().min(1),
+            market: paperMarketFlagIn.nullable().default(null),
+            completedStepIds: z.array(z.string().min(1)).max(64).default([]),
+            fills: z.array(publishedFillIn).max(256).default([]),
+            /** Trade's published mark for open size. Absent → reported unmarked. */
+            markPrice: z.string().min(1).nullable().default(null),
+          })
+          .strict(),
       )
       .output(paperDrillResultOut)
       .query(({ input }) =>
         guard(async () => {
+          assertPaperInputNeverClaimsLive(input);
           academy.assertPaperTradingEnabled();
           const item = getCurriculumItem(input.slug);
           if (!item) {
@@ -918,9 +929,29 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
           flagId: z.literal(PAPER_OPS_FLAG_ID),
           envKey: z.literal(PAPER_OPS_ENV_KEY),
           liveTradeUnaffected: z.literal(true),
+          simulated: z.literal(true),
+          venue: z.literal(SIMULATED_VENUE),
+          realMoney: z.literal(false),
         }),
       )
-      .query(() => academy.paperOpsStatus()),
+      .query(() =>
+        guard(async () => {
+          const status = academy.paperOpsStatus();
+          // Refuse a live/realMoney claim from the service — do not rewrite it quiet.
+          assertPaperNeverReadableAsRealMoney(status);
+          const wire = {
+            enabled: status.enabled,
+            flagId: PAPER_OPS_FLAG_ID,
+            envKey: PAPER_OPS_ENV_KEY,
+            liveTradeUnaffected: true as const,
+            simulated: true as const,
+            venue: SIMULATED_VENUE,
+            realMoney: false as const,
+          };
+          assertPaperNeverReadableAsRealMoney(wire);
+          return wire;
+        }),
+      ),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 

@@ -14,6 +14,9 @@ describe('paper Stage-3 ops gate', () => {
     expect(status.liveTradeUnaffected).toBe(true);
     expect(status.flagId).toBe(PAPER_OPS_FLAG_ID);
     expect(status.envKey).toBe(PAPER_OPS_ENV_KEY);
+    expect(status.realMoney).toBe(false);
+    expect(status.simulated).toBe(true);
+    expect(status.venue).toBe('paper');
   });
 
   it('keeps paper on when enabled is true', () => {
