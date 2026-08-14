@@ -3,6 +3,7 @@ import { isScheduleKey, isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULE
 import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
+import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capability.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -84,6 +85,11 @@ export interface PublicRestDeps {
    * should pass it so a live enable is not hidden.
    */
   algo?: { readonly createEnabled: boolean; readonly jobsEnabled: boolean };
+  /**
+   * Futures liq/funding job flag for the capabilities note.
+   * Omitted → shipped default (jobs off). Does not start ticks.
+   */
+  futures?: { readonly jobsEnabled: boolean };
 }
 
 /** Send an already-mapped CCXT error. */
@@ -468,6 +474,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
         neverInvent: 'mids, funding rates, candles, leverage live re-set',
         openPositionGates: 'caller price 400 · cross margin 400 · ADL disclosure ack required 403 (DIRECTION:34)',
         algo: presentAlgoCapabilityNote(deps.algo ?? {}),
+        futures: presentFuturesJobsCapabilityNote(deps.futures ?? {}),
       },
     });
   });
