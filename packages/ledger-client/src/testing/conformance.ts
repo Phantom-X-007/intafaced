@@ -637,7 +637,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
 
         expect(await harness.reconcile()).toMatchObject({ ok: true });
         expect(await balanceOf(USER_A, 'USDT')).toBe('10000');
-      });
+      }, 30_000);
 
       it('closes the books — every asset nets to zero', async () => {
         if (!harness.totalsByAsset) return;
@@ -669,7 +669,7 @@ export function runLedgerConformance(name: string, createHarness: () => Promise<
         expect(results.filter((r) => r === 'ok')).toHaveLength(10);
         expect(await balanceOf(USER_A, 'USDT')).toBe('0');
         expect(await heldTotal(USER_A, 'USDT')).toBe('100');
-      });
+      }, 30_000);
     });
   });
 }

@@ -10,8 +10,9 @@
  * Quality is `mid` (two-sided book mid), not `index`. Liquidation consumers
  * already accept mid under the default MarkPolicy.
  *
- * Does not open WS streams here. Streaming/gap-detection stays inside the fabric
- * for adapters that need it.
+ * Snapshot poll remains the default. When `TRADE_VENUE_MARK_STREAM` is on,
+ * `index.ts` owns `MaintainedBook` lifecycle and this file mids the servable
+ * top — it still does not invent a feed.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * OPEN, UNFIXED: THIS FILE POLLS A CONTRACT THAT REFUSES TO OFFER POLLING
@@ -86,7 +87,7 @@
  * `MarkRequest` and is threaded to the level check without being re-decided.
  */
 import { formatAmount } from '@intafaced/ledger-client/money';
-import type { MarketDataAdapter } from '@intafaced/venue-contracts';
+import type { MarketDataAdapter, BookTop } from '@intafaced/venue-contracts';
 import { BinanceSpotMarketData, BybitSpotMarketData } from '@intafaced/venue-adapter';
 import type { MarkRequest, MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook, midFromBook } from './mark-source.js';
@@ -221,6 +222,48 @@ export function markSourceFromVenuePublicBook(input: {
         // Venue down / rate limited / malformed — null, never invent a mid.
         return null;
       }
+    },
+  });
+}
+
+/**
+ * Mark from a *maintained* sequenced book (`MaintainedBook` / `book-feed.ts`).
+ *
+ * Polling `snapshotBook` on every liquidation tick is the contract violation
+ * this file's header records. The fabric already joins stream-first + snapshot.
+ * A desynced or unservable feed returns null — matching depth remains the
+ * fallback. Never invents a mid from a withheld book.
+ */
+export interface MaintainedVenueBookPort {
+  readonly servable: boolean;
+  top(): BookTop | null;
+  observedAt(): Date | null;
+}
+
+export function markSourceFromMaintainedVenueBook(input: {
+  resolveSymbol: VenueSymbolResolver;
+  bookForSymbol: (symbol: string) => MaintainedVenueBookPort | null;
+  policy?: MarkPolicy;
+  depthPolicy?: DepthQuotePolicy;
+}): QuotedMarkSource {
+  const depthPolicy = input.depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY;
+  return markSourceFromBook({
+    policy: input.policy,
+    async readBook(marketId, authorisesSize) {
+      const symbol = input.resolveSymbol(marketId);
+      if (symbol == null || symbol.trim() === '') return null;
+      const book = input.bookForSymbol(symbol);
+      if (book == null || !book.servable) return null;
+      const observedAt = book.observedAt();
+      if (observedAt == null) return null;
+      const top = book.top();
+      if (top == null) return null;
+      const snap: VenueTopOfBook = {
+        bids: top.bestBid != null && top.bestBidQty != null ? [[top.bestBid, top.bestBidQty]] : [],
+        asks: top.bestAsk != null && top.bestAskQty != null ? [[top.bestAsk, top.bestAskQty]] : [],
+      };
+      const { bestBid, bestAsk } = bestFromVenueBook(snap, depthRequirement(authorisesSize, depthPolicy));
+      return { bestBid, bestAsk, last: null, observedAt };
     },
   });
 }
@@ -367,6 +410,11 @@ export function createConfiguredVenueMarkSource(input: {
    * `DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL`.
    */
   depthPolicy?: DepthQuotePolicy;
+  /**
+   * When set, marks come from the sequenced MaintainedBook (stream-first).
+   * Default unset keeps the snapshot poll (legacy, gated by staleness).
+   */
+  bookForSymbol?: (symbol: string) => MaintainedVenueBookPort | null;
 }): { source: QuotedMarkSource; venueId: string; symbolCount: number } | null {
   const venueId = input.venueId.trim().toLowerCase();
   // Feature off — empty / off / none never invents a mark port.
@@ -376,14 +424,24 @@ export function createConfiguredVenueMarkSource(input: {
   const adapter = input.adapter === undefined ? createVenueMarketDataAdapter(venueId) : input.adapter;
   if (!adapter) return null;
 
+  const resolveSymbol = (marketId: string) => map.get(marketId) ?? null;
+  const source = input.bookForSymbol
+    ? markSourceFromMaintainedVenueBook({
+        resolveSymbol,
+        bookForSymbol: input.bookForSymbol,
+        policy: input.policy,
+        ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
+      })
+    : markSourceFromVenuePublicBook({
+        adapter,
+        resolveSymbol,
+        policy: input.policy,
+        ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
+      });
+
   return {
     venueId,
     symbolCount: map.size,
-    source: markSourceFromVenuePublicBook({
-      adapter,
-      resolveSymbol: (marketId) => map.get(marketId) ?? null,
-      policy: input.policy,
-      ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
-    }),
+    source,
   };
 }

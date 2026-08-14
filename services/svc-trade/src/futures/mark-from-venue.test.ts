@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseAmount } from '@intafaced/ledger-client/money';
+import { parseAmount, formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter, VenueBookSnapshot } from '@intafaced/venue-contracts';
 import type { HttpPort } from '@intafaced/venue-adapter';
 import {
@@ -7,6 +7,7 @@ import {
   createConfiguredVenueMarkSource,
   createVenueMarketDataAdapter,
   markSourceFromVenuePublicBook,
+  markSourceFromMaintainedVenueBook,
   markSourcePrefer,
   midFromVenueBook,
   parseVenueMarkSymbols,
@@ -534,5 +535,71 @@ describe('honesty: fabric snapshot is the only data path', () => {
     await src.markPrice({ marketId: 'm-eth', at: new Date() });
     expect(snapshotBook).toHaveBeenCalledTimes(1);
     expect(snapshotBook).toHaveBeenCalledWith('ETH/USDT', 5);
+  });
+});
+
+describe('markSourceFromMaintainedVenueBook', () => {
+  const observedAt = new Date('2026-08-14T05:00:00.000Z');
+  const twoSided = {
+    bestBid: parseAmount('100'),
+    bestAsk: parseAmount('102'),
+    bestBidQty: parseAmount('10'),
+    bestAskQty: parseAmount('10'),
+    spread: parseAmount('2'),
+    mid: parseAmount('101'),
+  };
+
+  it('mids a servable sequenced top and keeps tracker observedAt', async () => {
+    const src = markSourceFromMaintainedVenueBook({
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    const q = await src.quote!({ marketId: 'm1', at: new Date('2026-08-14T05:00:01.000Z') });
+    expect(q && formatAmount(q.price)).toBe('101');
+    expect(q?.asOf).toEqual(observedAt);
+  });
+
+  it('withholds the mark while the feed is desynced — never invents from a gap', async () => {
+    const src = markSourceFromMaintainedVenueBook({
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: false,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('withholds when the tracker has no observedAt — a book without an age is not a mark', async () => {
+    const src = markSourceFromMaintainedVenueBook({
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => null,
+      }),
+    });
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('does not poll snapshotBook when createConfigured is given a maintained port', async () => {
+    const snapshotBook = vi.fn(async () => snap({ bids: [['50', '10']], asks: [['50', '10']] }));
+    const cfg = createConfiguredVenueMarkSource({
+      venueId: 'binance-spot',
+      symbols: 'm1:BTC/USDT',
+      adapter: fakeAdapter(snapshotBook),
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await cfg!.source.markPrice({ marketId: 'm1', at: observedAt })).toBe('101');
+    expect(snapshotBook).not.toHaveBeenCalled();
   });
 });

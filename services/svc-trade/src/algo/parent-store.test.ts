@@ -26,6 +26,8 @@ function sampleParent(over: Partial<TwapParent> = {}): TwapParent {
     scheduleStretchReason: null,
     pausedAt: null,
     haltReason: null,
+    lotSize: null,
+    participationBps: null,
     slicesPlanned: 2,
     nextSliceIndex: 0,
     children: [],
