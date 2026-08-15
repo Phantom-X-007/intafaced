@@ -230,6 +230,7 @@ describe('U4 — analytics warehouse door', () => {
     expect(body.mayLabelLive).toBe(false);
     expect(body.surfaceStatus).not.toBe('ok');
     expect(body.etlWatermark).toBe('absent');
+    expect((body as { lagSource?: string }).lagSource).toBe('unknown');
   });
 });
 

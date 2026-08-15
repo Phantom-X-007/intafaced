@@ -584,6 +584,63 @@ export function lagFromProbeReading(
   return { lagSeconds: lag, measuredAt: nowMs, lagSource: 'probed' };
 }
 
+/**
+ * Parse a `ANALYTICS_REPLICA_LAG_SQL` result (postgres.js row, array, or object).
+ * NULL / missing / negative / non-finite → null (not a standby, or unreadable).
+ */
+export function parseWarehouseLagSqlResult(result: unknown): number | null {
+  const row = Array.isArray(result) ? result[0] : result;
+  if (row == null || typeof row !== 'object') return null;
+  const rec = row as { readonly lag_seconds?: unknown; readonly lagSeconds?: unknown };
+  const raw = rec.lag_seconds ?? rec.lagSeconds;
+  if (raw == null) return null;
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : typeof raw === 'bigint' ? Number(raw) : NaN;
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/** Injected one-shot query. Contracts still do not open a pool. */
+export type WarehouseLagSqlQuery = (args: {
+  readonly url: string;
+  readonly sql: string;
+  readonly source: AnalyticsSourceDb;
+}) => Promise<unknown> | unknown;
+
+/**
+ * Production SQL probe: run ANALYTICS_REPLICA_LAG_SQL on every configured replica.
+ *
+ * · Any source that fails / returns NULL → overall unknown (never live from a subset).
+ * · All connections fail → null (not a measurement).
+ * · All succeed → worst lag (max seconds).
+ * · Writer-looking URL → null (role law; resolveWarehouseReplicaConfig already refuses).
+ */
+export function createSqlWarehouseLagProbe(query: WarehouseLagSqlQuery): WarehouseLagProbe {
+  return async ({ endpoints, nowMs }) => {
+    if (endpoints.length === 0) return null;
+    const lags: number[] = [];
+    let sawQuery = false;
+    let sawUnknown = false;
+    for (const ep of endpoints) {
+      const role = assertAnalyticsReplicaRole(ep.url, 'readonly');
+      if (!role.ok) return null;
+      try {
+        const raw = await query({ url: ep.url, sql: ANALYTICS_REPLICA_LAG_SQL, source: ep.source });
+        sawQuery = true;
+        const lag = parseWarehouseLagSqlResult(raw);
+        if (lag === null) sawUnknown = true;
+        else lags.push(lag);
+      } catch {
+        sawUnknown = true;
+      }
+    }
+    if (!sawQuery) return null;
+    if (sawUnknown || lags.length === 0) {
+      return { lagSeconds: null, measuredAt: nowMs };
+    }
+    return { lagSeconds: Math.max(...lags), measuredAt: nowMs };
+  };
+}
+
 export function parseConfiguredLagSeconds(raw: string | undefined): number | null {
   if (raw === undefined || raw === '') return null;
   const n = Number(raw);

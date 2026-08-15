@@ -6,10 +6,12 @@ import {
   LAG_MEASUREMENT_MAX_AGE_SECONDS,
   WAREHOUSE_REPLICA_PLAN_V0,
   assertAnalyticsReplicaRole,
+  createSqlWarehouseLagProbe,
   lagFromProbeReading,
   listConfiguredAnalyticsReplicaUrls,
   listWarehouseReplicaSources,
   parseConfiguredLagSeconds,
+  parseWarehouseLagSqlResult,
   queryWarehouseSurface,
   resolveEffectiveWarehouseLag,
   resolveEtlWatermark,
@@ -315,6 +317,102 @@ describe('resolveWarehouseReplicaConfig — URLs + role + probe', () => {
     expect(parseConfiguredLagSeconds('12')).toBe(12);
     expect(parseConfiguredLagSeconds('')).toBeNull();
     expect(parseConfiguredLagSeconds('nope')).toBeNull();
+  });
+});
+
+describe('createSqlWarehouseLagProbe — production SQL adapter', () => {
+  const ledger = {
+    source: 'ledger' as const,
+    url: 'postgres://analytics_ro:x@replica:5432/ledger',
+    username: 'analytics_ro',
+  };
+  const trade = {
+    source: 'trade' as const,
+    url: 'postgres://analytics_ro:x@replica:5432/trade',
+    username: 'analytics_ro',
+  };
+
+  it('parses postgres.js rows, numeric strings, and NULL', () => {
+    expect(parseWarehouseLagSqlResult([{ lag_seconds: 4.25 }])).toBe(4.25);
+    expect(parseWarehouseLagSqlResult([{ lag_seconds: '8.5' }])).toBe(8.5);
+    expect(parseWarehouseLagSqlResult({ lagSeconds: 0 })).toBe(0);
+    expect(parseWarehouseLagSqlResult([{ lag_seconds: null }])).toBeNull();
+    expect(parseWarehouseLagSqlResult([])).toBeNull();
+    expect(parseWarehouseLagSqlResult([{ lag_seconds: -1 }])).toBeNull();
+    expect(parseWarehouseLagSqlResult('nope')).toBeNull();
+  });
+
+  it('sends ANALYTICS_REPLICA_LAG_SQL and stamps worst lag', async () => {
+    const seen: string[] = [];
+    const probe = createSqlWarehouseLagProbe(async ({ sql, source }) => {
+      seen.push(source);
+      expect(sql).toBe(ANALYTICS_REPLICA_LAG_SQL);
+      return [{ lag_seconds: source === 'ledger' ? 3 : 11 }];
+    });
+    const reading = await probe({ endpoints: [ledger, trade], nowMs: 1_700 });
+    expect(seen).toEqual(['ledger', 'trade']);
+    expect(reading).toEqual({ lagSeconds: 11, measuredAt: 1_700 });
+  });
+
+  it('not-a-standby (NULL) is a measurement with unknown lag — not invented 0', async () => {
+    const probe = createSqlWarehouseLagProbe(async () => [{ lag_seconds: null }]);
+    const reading = await probe({ endpoints: [ledger], nowMs: 9 });
+    expect(reading).toEqual({ lagSeconds: null, measuredAt: 9 });
+  });
+
+  it('one source failing fail-closes the rollup (never live from a subset)', async () => {
+    const probe = createSqlWarehouseLagProbe(async ({ source }) => {
+      if (source === 'trade') throw new Error('connect timeout');
+      return [{ lag_seconds: 2 }];
+    });
+    const reading = await probe({ endpoints: [ledger, trade], nowMs: 5 });
+    expect(reading).toEqual({ lagSeconds: null, measuredAt: 5 });
+  });
+
+  it('all connections fail → null (not a measurement)', async () => {
+    const probe = createSqlWarehouseLagProbe(async () => {
+      throw new Error('ECONNREFUSED');
+    });
+    expect(await probe({ endpoints: [ledger], nowMs: 1 })).toBeNull();
+  });
+
+  it('writer-looking URL never queries', async () => {
+    let queried = 0;
+    const probe = createSqlWarehouseLagProbe(async () => {
+      queried += 1;
+      return [{ lag_seconds: 1 }];
+    });
+    const reading = await probe({
+      endpoints: [{ source: 'ledger', url: 'postgres://svc_ledger:x@primary:5432/ledger', username: 'svc_ledger' }],
+      nowMs: 1,
+    });
+    expect(queried).toBe(0);
+    expect(reading).toBeNull();
+  });
+
+  it('resolveWarehouseReplicaConfig + SQL probe → lagSource probed', async () => {
+    const now = 2_100_000_000_000;
+    const r = await resolveWarehouseReplicaConfig({
+      env: { ANALYTICS_REPLICA_LEDGER_URL: ledger.url },
+      nowMs: now,
+      probe: createSqlWarehouseLagProbe(async () => [{ lag_seconds: '6' }]),
+    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.lagSource).toBe('probed');
+    expect(r.lagSeconds).toBe(6);
+    expect(r.lagMeasuredAt).toBe(now);
+    const surface = queryWarehouseSurface({
+      replicaConfigured: r.replicaConfigured,
+      lagSeconds: r.lagSeconds,
+      lagMeasuredAt: r.lagMeasuredAt,
+      lagSource: r.lagSource,
+      nowMs: now,
+      facts: [{ metricId: 'trade.fills.count', value: '1' }],
+    });
+    expect(surface.status).toBe('ok');
+    if (surface.status !== 'ok') return;
+    expect(surface.mayLabelLive).toBe(true);
   });
 });
 

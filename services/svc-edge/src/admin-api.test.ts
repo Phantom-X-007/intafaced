@@ -258,6 +258,38 @@ describe('ops honesty residual on the admin door', () => {
     if (!r.ok) expect(r.code).toBe('refuse.partner_absent');
     expect(admin.complianceQueueSnapshot().items.map((i) => i.id)).toEqual(['hit-1']);
   });
+
+  it('probeWarehouse with injected SQL reading stamps lagSource=probed', async () => {
+    const prev = process.env.ANALYTICS_REPLICA_LEDGER_URL;
+    process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://analytics_ro:x@replica:5432/ledger';
+    try {
+      const state = new KillSwitchState();
+      const admin = createAdminApi(state, {
+        tokens,
+        ledger: null,
+        warehouseLagProbe: ({ nowMs }) => ({ lagSeconds: 4, measuredAt: nowMs }),
+      });
+      const door = await admin.probeWarehouse();
+      expect(door.lagSource).toBe('probed');
+      expect(door.lagSeconds).toBe(4);
+      expect(typeof door.lagMeasuredAt).toBe('number');
+      expect(door.replicaConfigured).toBe(true);
+      // No fixture facts on the door — empty, never invented volume.
+      expect(door.surfaceStatus).toBe('empty');
+      expect(door.mayLabelLive).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.ANALYTICS_REPLICA_LEDGER_URL;
+      else process.env.ANALYTICS_REPLICA_LEDGER_URL = prev;
+    }
+  });
+
+  it('probeWarehouse with no replica URL stays unconfigured — no sockets', async () => {
+    const door = await api().admin.probeWarehouse();
+    expect(door.replicaConfigured).toBe(false);
+    expect(door.lagSource).toBe('unknown');
+    expect(door.mayLabelLive).toBe(false);
+    expect(door.surfaceStatus).not.toBe('ok');
+  });
 });
 
 describe('reaching the ledger freeze', () => {

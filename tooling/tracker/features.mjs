@@ -1546,7 +1546,10 @@ export const FEATURES = [
     note:
       '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — `ANALYTICS_ETL_WATERMARK_AT` + ' +
       '`resolveEtlWatermark` absent/present honesty; stamp never paints live cubes alone; writer URLs refuse. ' +
-      'Residual (not invent): production pg lag pool wiring + cube job callers. Never second balances.',
+      '**2026-08-15:** production SQL lag probe — `createSqlWarehouseLagProbe` runs ANALYTICS_REPLICA_LAG_SQL; ' +
+      'svc-edge `/admin/analytics/warehouse` is the caller (one-shot postgres.js, ANALYTICS_REPLICA_PROBE=off kill). ' +
+      'URL absent / connect fail / not-a-standby → unknown, never invented live. ' +
+      'Residual (not invent): cube job callers (Phase B late — no warehouse process). Never second balances.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
