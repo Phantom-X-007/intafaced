@@ -268,7 +268,7 @@ if (!available) {
       expectNamedRefuse(second.body, 'bank.pool_underfunded');
       await app.close();
 
-      expect((await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${pool.id}`)).toHaveLength(0);
+      expect(await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${pool.id}`).toHaveLength(0);
       expect(ledger.journal().some((tx) => tx.reason === 'bank.earn.interest')).toBe(false);
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(0n);
     });
@@ -362,8 +362,8 @@ if (!available) {
       expectNamedRefuse(auth.body, 'bank.mark_missing');
       await app.close();
 
-      expect((await sql`SELECT id FROM bank.card_authorizations WHERE card_id = ${cardId}`)).toHaveLength(0);
-      expect((await sql`SELECT id FROM bank.card_conversions`)).toHaveLength(0);
+      expect(await sql`SELECT id FROM bank.card_authorizations WHERE card_id = ${cardId}`).toHaveLength(0);
+      expect(await sql`SELECT id FROM bank.card_conversions`).toHaveLength(0);
       expect(ledger.journal().some((tx) => tx.reason === 'withdraw.held')).toBe(false);
       expect((await ledger.balance(userAvailable(HOLDER, 'BTC'))).amount).toBe(amt('1'));
     });
