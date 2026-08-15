@@ -1,5 +1,9 @@
 export {
+  assertFraudScoreSourceNotBlank,
+  assertNoInventedFraudScores,
   evaluateFraud,
+  FORBIDDEN_FRAUD_SCORE_FIELDS,
+  FraudScoreError,
   isAutoDecline,
   type FraudBlocklists,
   type FraudDecision,
@@ -8,6 +12,7 @@ export {
   type FraudReason,
   type FraudRuleId,
   type FraudRuleSwitches,
+  type FraudScoreErrorCode,
   type FraudThresholds,
 } from './evaluate.js';
 

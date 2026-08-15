@@ -85,6 +85,58 @@ export interface FraudEvaluationInput {
    * Explicit `false` = kill-switched off.
    */
   readonly enabled?: FraudRuleSwitches;
+  /**
+   * Named origin of an external score (PSP / adapter). Omitted = rule-only path.
+   * Present-but-blank (null / whitespace) fail-closes — never invent a score.
+   */
+  readonly scoreSource?: string | null;
+}
+
+export type FraudScoreErrorCode = 'pay.fraud_score_source_blank' | 'pay.fraud_score_invented';
+
+/** Thrown when a score source is blank or an inventable rate/magnitude is supplied. */
+export class FraudScoreError extends Error {
+  constructor(
+    message: string,
+    readonly code: FraudScoreErrorCode,
+    readonly field?: string,
+  ) {
+    super(message);
+    this.name = 'FraudScoreError';
+  }
+}
+
+/**
+ * Inventable score fields — never defaulted, never synthesised.
+ * Approval/decline rates and chargeback magnitudes are caller/PSP facts or absent.
+ */
+export const FORBIDDEN_FRAUD_SCORE_FIELDS = ['approvalRate', 'declineRate', 'chargebackMagnitude', 'chargebackRate'] as const;
+
+export function assertNoInventedFraudScores(bag: object): void {
+  const rec = bag as Record<string, unknown>;
+  for (const key of FORBIDDEN_FRAUD_SCORE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(rec, key) && rec[key] !== undefined) {
+      throw new FraudScoreError(`pay.fraud forbids invented field ${key}`, 'pay.fraud_score_invented', key);
+    }
+  }
+}
+
+function scoreSourcePresent(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Fail-closed when a score source key is present but blank.
+ * Omitted key = rule-only evaluation (no model invented).
+ */
+export function assertFraudScoreSourceNotBlank(input: FraudEvaluationInput): void {
+  if (!Object.prototype.hasOwnProperty.call(input, 'scoreSource')) return;
+  if (scoreSourcePresent(input.scoreSource)) return;
+  throw new FraudScoreError(
+    'pay.fraud score source is blank — refuse rather than invent a score',
+    'pay.fraud_score_source_blank',
+    'scoreSource',
+  );
 }
 
 function isRuleEnabled(enabled: FraudRuleSwitches | undefined, ruleId: FraudRuleId): boolean {
@@ -119,6 +171,9 @@ function worse(a: FraudOutcome, b: FraudOutcome): FraudOutcome {
  * Never invents blocklist content, baselines, or velocity meters.
  */
 export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
+  assertNoInventedFraudScores(input);
+  assertFraudScoreSourceNotBlank(input);
+
   const reasons: FraudReason[] = [];
   const skippedDisabled: FraudRuleId[] = [];
   let outcome: FraudOutcome = 'allow';
