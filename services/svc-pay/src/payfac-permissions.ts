@@ -32,6 +32,24 @@ export const MONEY_PERMISSION_AREAS = [
 export type MoneyPermissionArea = (typeof MONEY_PERMISSION_AREAS)[number];
 
 /**
+ * Tracker title still says "14 permission areas". The shipped vocabulary is
+ * `PERMISSION_AREAS` in `submerchants.ts` — eleven surfaces this service has
+ * today. This number is that list's length, not a second taxonomy and not a
+ * product target. Padding to fourteen (or inventing `underwriting`) is refused
+ * at typecheck; adding a real twelfth is a one-line change on `PERMISSION_AREAS`.
+ */
+export const SHIPPED_PAYFAC_AREA_COUNT = 11;
+
+type _ShippedAreaCount = (typeof PERMISSION_AREAS)['length'];
+const _pinShippedCount: _ShippedAreaCount extends typeof SHIPPED_PAYFAC_AREA_COUNT ? typeof SHIPPED_PAYFAC_AREA_COUNT : never =
+  SHIPPED_PAYFAC_AREA_COUNT;
+const _pinNotInventedFourteenth: _ShippedAreaCount extends 14 ? never : true = true;
+const _pinNoUnderwritingArea: 'underwriting' extends PermissionArea ? never : true = true;
+void _pinShippedCount;
+void _pinNotInventedFourteenth;
+void _pinNoUnderwritingArea;
+
+/**
  * Gateway / public REST surface → required area.
  *
  * Kept here so REST and future routers cannot drift to a second vocabulary.
@@ -104,12 +122,14 @@ export function areaForSurface(surface: PayfacSurface): PermissionArea {
 /** Every vocabulary area is either money-gated, visibility/default, or named elsewhere. */
 export function permissionAreaCoverage(): {
   areas: readonly PermissionArea[];
+  shippedCount: typeof SHIPPED_PAYFAC_AREA_COUNT;
   money: readonly MoneyPermissionArea[];
   defaults: readonly PermissionArea[];
   sockets: typeof PAYFAC_PERMISSION_SOCKETS;
 } {
   return {
     areas: PERMISSION_AREAS,
+    shippedCount: PERMISSION_AREAS.length,
     money: MONEY_PERMISSION_AREAS,
     defaults: DEFAULT_GRANTED_AREAS,
     sockets: PAYFAC_PERMISSION_SOCKETS,

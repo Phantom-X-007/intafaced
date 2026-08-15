@@ -3,17 +3,49 @@ import {
   MONEY_PERMISSION_AREAS,
   PAYFAC_PERMISSION_SOCKETS,
   PAYFAC_SURFACE_AREAS,
+  SHIPPED_PAYFAC_AREA_COUNT,
   areaForSurface,
   isPayfacPermissionPort,
   permissionAreaCoverage,
   resolveActorMerchantId,
 } from './payfac-permissions.js';
-import { DEFAULT_GRANTED_AREAS, PERMISSION_AREAS, SubMerchantError } from './submerchants.js';
+import { DEFAULT_GRANTED_AREAS, PERMISSION_AREAS, SubMerchantError, isPermissionArea } from './submerchants.js';
 
 describe('D26-P1-P2 payfac permissions map', () => {
   it('names every vocabulary area exactly once in PERMISSION_AREAS', () => {
     expect(new Set(PERMISSION_AREAS).size).toBe(PERMISSION_AREAS.length);
     expect(PERMISSION_AREAS.length).toBe(11);
+  });
+
+  it('ships the actual surface list (eleven) — tracker title 14 is not a target', () => {
+    const c = permissionAreaCoverage();
+    expect(c.areas).toBe(PERMISSION_AREAS);
+    expect(c.shippedCount).toBe(SHIPPED_PAYFAC_AREA_COUNT);
+    expect(c.shippedCount).toBe(11);
+    expect(c.shippedCount).not.toBe(14);
+    expect(PERMISSION_AREAS).toEqual([
+      'merchant.profile',
+      'checkout.profile',
+      'payment.link',
+      'payment',
+      'payment.refund',
+      'settlement',
+      'settlement.payout',
+      'webhook',
+      'kyb',
+      'submerchant',
+      'permission',
+    ]);
+  });
+
+  it('refuses an invented fourteenth area and does not invent underwriting', () => {
+    expect(isPermissionArea('underwriting')).toBe(false);
+    expect(isPermissionArea('payfac.underwriting')).toBe(false);
+    expect(PERMISSION_AREAS).not.toContain('underwriting');
+    const inventedFourteenth = 'area.14';
+    expect(isPermissionArea(inventedFourteenth)).toBe(false);
+    expect(PERMISSION_AREAS.length + 1).not.toBe(14);
+    expect([...PERMISSION_AREAS, inventedFourteenth]).toHaveLength(12);
   });
 
   it('never default-grants a money area — onboarding stays visibility-only', () => {
@@ -51,6 +83,7 @@ describe('D26-P1-P2 payfac permissions map', () => {
   it('coverage helper exposes areas + money + defaults + sockets together', () => {
     const c = permissionAreaCoverage();
     expect(c.areas).toBe(PERMISSION_AREAS);
+    expect(c.shippedCount).toBe(PERMISSION_AREAS.length);
     expect(c.money).toEqual([...MONEY_PERMISSION_AREAS]);
     expect(c.defaults).toBe(DEFAULT_GRANTED_AREAS);
     expect(c.sockets).toBe(PAYFAC_PERMISSION_SOCKETS);
