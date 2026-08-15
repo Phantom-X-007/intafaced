@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { fixedFundingRateSource, isRateFresh, memoryFundingRateBook, periodIdFor } from './funding-rate-source.js';
 
@@ -51,12 +52,23 @@ describe('memoryFundingRateBook', () => {
       periodId: periodIdFor('m1', '2026-07-31T00:00:00.000Z'),
       asOfMs: 1_000_000,
     });
-    const q = await book.source().quote({ marketId: 'm1', at: new Date(1_000_000) });
+    const q = await book.source({ maxAgeMs: 0 }).quote({ marketId: 'm1', at: new Date(1_000_000) });
     expect(q).toEqual({
       marketId: 'm1',
       rate: '0.0001',
       periodId: 'm1:2026-07-31T00:00:00.000Z',
     });
+  });
+
+  it('omitted maxAgeMs is missing — not an invented 8h window', async () => {
+    const book = memoryFundingRateBook({ now: () => 1_000_000 });
+    book.set({
+      marketId: 'm1',
+      rate: '0.0001',
+      periodId: periodIdFor('m1', '2026-07-31T00:00:00.000Z'),
+      asOfMs: 1_000_000,
+    });
+    expect(await book.source().quote({ marketId: 'm1', at: new Date(1_000_000) })).toBeNull();
   });
 
   it('stale rate → null', async () => {
@@ -87,7 +99,7 @@ describe('memoryFundingRateBook', () => {
       periodId: 'm1:neg',
       asOfMs: 5_000,
     });
-    const q = await book.source().quote({ marketId: 'm1', at: new Date(5_000) });
+    const q = await book.source({ maxAgeMs: 0 }).quote({ marketId: 'm1', at: new Date(5_000) });
     expect(q?.rate).toBe('-0.0001');
   });
 });
@@ -100,6 +112,15 @@ describe('fixedFundingRateSource', () => {
   it('refuses market mismatch', async () => {
     const src = fixedFundingRateSource({ marketId: 'm1', rate: '0.01', periodId: 'p' });
     expect(await src.quote({ marketId: 'm2', at: new Date() })).toBeNull();
+  });
+});
+
+describe('no invented 8h freshness default', () => {
+  it('source does not pin a typical funding interval', () => {
+    const src = readFileSync(new URL('./funding-rate-source.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/8 \* 60 \* 60/);
+    expect(src).not.toMatch(/28_?800_?000/);
+    expect(src).not.toMatch(/typical funding interval/);
   });
 });
 
@@ -157,7 +178,7 @@ describe('integration: rate book → funding tick', () => {
     const posts: PostRequest[] = [];
     const result = await runFundingTick(
       {
-        rates: book.source(),
+        rates: book.source({ maxAgeMs: 0 }),
         positions: {
           async listOpenForMarket() {
             return longShort();
