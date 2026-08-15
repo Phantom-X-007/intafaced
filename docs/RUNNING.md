@@ -16,7 +16,7 @@ pnpm install
 pnpm platform:up          # docker compose -f docker-compose.apps.yml up -d --build
 ```
 
-Tip-image law (D26-P2-04): [`FLEET-TIP-IMAGES.md`](ops/FLEET-TIP-IMAGES.md) — local `--build`, staging digest + `--no-build`, never Hub-pull `intafaced/app:dev`.
+Tip-image law (D26-P2-04): [`FLEET-TIP-IMAGES.md`](ops/FLEET-TIP-IMAGES.md) — local `--build` (and `--no-cache` when layers lie), staging digest + `--no-build`, never Hub-pull `intafaced/app:dev`. Vendor jars are a **separate** artifact: gitignored `target/*.jar` older than D-S-17 neutering are the known lie — rebuild, do not commit.
 
 First run builds the image (~3–6 min, mostly `pnpm install` and `next build`).
 After that, a full teardown-to-healthy cycle is about **100 seconds**.

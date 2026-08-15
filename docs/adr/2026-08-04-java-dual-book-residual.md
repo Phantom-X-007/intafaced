@@ -43,6 +43,8 @@ So `✓ vendor-java-money-scan clean` is a true statement about source that noth
 
 **Rule: no claim about Java runtime safety may cite a source scan as its evidence.** The gates prove what the source says. They prove nothing about the jar.
 
+Operator rebuild / retarget (TS fleet images **and** these jars, including hosts with no Docker/JDK): [`docs/ops/FLEET-TIP-IMAGES.md`](../ops/FLEET-TIP-IMAGES.md) (D26-P2-04). Do not `git add` gitignored jars.
+
 ### 2. Ten sites are held by nothing, and four are beyond the door by construction
 
 Grade D has no throw, no `WHERE 1=0`, no door — only a `= null` line and a static allowlist. Restore one assignment and the mint is live.

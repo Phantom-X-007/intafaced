@@ -211,6 +211,11 @@ services:
   # compose network is also what lets the configs address `coinex-mysql` by name
   # instead of a hardcoded IP.
   #
+  # D26-P2-04 / D-S-17: `-jar …/target/*.jar` are gitignored. Jars older than
+  # the 2026-07-31→08-02 neutering commits are the known lie (source scan ≠
+  # running binary). Rebuild path: docs/ops/FLEET-TIP-IMAGES.md — never git add
+  # those jars to “fix” compose.
+  #
   # THE SCHEMA IS CREATED BY THESE CONTAINERS, not by a SQL file. The README is
   # explicit: "the successfully compiled Jar will automatically map the Entity to
   # a database structure after the first run" via `ddl-auto=update`. So MySQL
