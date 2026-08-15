@@ -3,11 +3,17 @@ import { startAlgoJobs } from './algo-jobs.js';
 
 describe('startAlgoJobs', () => {
   it('disabled: host exists, no job scheduled, nothing ticks', async () => {
-    const trade = { tickAllAlgos: vi.fn(async () => undefined) };
-    const handle = startAlgoJobs({ trade, config: { enabled: false, intervalMs: 1_000 } });
-    expect(handle.host.list()).toEqual([]);
-    expect(trade.tickAllAlgos).not.toHaveBeenCalled();
-    handle.stop();
+    vi.useFakeTimers();
+    try {
+      const trade = { tickAllAlgos: vi.fn(async () => undefined) };
+      const handle = startAlgoJobs({ trade, config: { enabled: false, intervalMs: 1_000 } });
+      expect(handle.host.list()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(trade.tickAllAlgos).not.toHaveBeenCalled();
+      handle.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('enabled: registers one job and drives the engine on the interval', async () => {
