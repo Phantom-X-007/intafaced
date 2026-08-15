@@ -1,10 +1,17 @@
 /**
- * @intafaced/execution-mm — §28 external-only market-making engine half (D26-P1-X5).
- *
- * Thin product path on top of `@intafaced/venue-adapter` SOR cost model.
- * Quoting + cross-venue hedge + kill-switches for EXTERNAL venues only.
- * Internal half refuses with an honest reason (D26-P0-01).
+ * @intafaced/execution-mm — §28 external-only MM half (D26-P1-X5) + house-tenant
+ * Q1 pin (D26-P0-01). Thin path on `@intafaced/venue-adapter` SOR cost model.
+ * Internal matching-book targets refuse with an honest reason. No invented preference.
  */
+export {
+  pinHouseTenantTarget,
+  refuseHouseTenantInternalBook,
+  type HouseTenantExternalOk,
+  type HouseTenantPinResult,
+  type HouseTenantRefuseReason,
+  type HouseTenantRefusal,
+  type HouseTenantTarget,
+} from './house-tenant.js';
 export {
   evaluateMmKillSwitches,
   isExternalVenueKind,
