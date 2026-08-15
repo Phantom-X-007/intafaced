@@ -91,18 +91,8 @@ function selfTest() {
     ['ack=0', { LOAD_TEST_ACK: '0' }, false, 'LOAD_TEST_ACK'],
     ['production APP_ENV', { LOAD_TEST_ACK: '1', APP_ENV: 'production' }, false, 'production'],
     ['production NODE_ENV', { LOAD_TEST_ACK: '1', NODE_ENV: 'production' }, false, 'production'],
-    [
-      'remote matching URL',
-      { LOAD_TEST_ACK: '1', MATCHING_HTTP_URL: 'https://matching.example.com' },
-      false,
-      'matching target',
-    ],
-    [
-      'remote ledger URL',
-      { LOAD_TEST_ACK: '1', LEDGER_HTTP_URL: 'http://10.0.0.8:4001' },
-      false,
-      'ledger target',
-    ],
+    ['remote matching URL', { LOAD_TEST_ACK: '1', MATCHING_HTTP_URL: 'https://matching.example.com' }, false, 'matching target'],
+    ['remote ledger URL', { LOAD_TEST_ACK: '1', LEDGER_HTTP_URL: 'http://10.0.0.8:4001' }, false, 'ledger target'],
     ['soak flag', { LOAD_TEST_ACK: '1', LOAD_TEST_SOAK: '1' }, false, 'LOAD_TEST_SOAK'],
     ['ack + defaults', { LOAD_TEST_ACK: '1' }, true, 'plan only'],
     [
@@ -123,14 +113,10 @@ function selfTest() {
     const got = evaluateLoadTestIntent(env);
     const ok = got.allow === wantAllow && got.reason.includes(needle);
     if (!ok) failed += 1;
-    console.log(
-      `  ${ok ? '✓' : '✖'} ${name.padEnd(28)} wantAllow=${wantAllow} got=${got.allow} (${got.reason})`,
-    );
+    console.log(`  ${ok ? '✓' : '✖'} ${name.padEnd(28)} wantAllow=${wantAllow} got=${got.allow} (${got.reason})`);
   }
   console.log(
-    failed
-      ? `\n✖ ${failed}/${cases.length} self-test cases failed`
-      : `\n✓ ${cases.length}/${cases.length} self-test cases passed`,
+    failed ? `\n✖ ${failed}/${cases.length} self-test cases failed` : `\n✓ ${cases.length}/${cases.length} self-test cases passed`,
   );
   process.exit(failed ? 1 : 0);
 }

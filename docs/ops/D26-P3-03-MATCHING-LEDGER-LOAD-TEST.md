@@ -28,13 +28,13 @@ LOAD_TEST_ACK=1 node tooling/scripts/matching-ledger-load-test.mjs
 node tooling/scripts/matching-ledger-load-test.mjs --self-test
 ```
 
-| Condition | Result |
-| --------- | ------ |
-| `LOAD_TEST_ACK` unset or not `1` | **exit 2** — default |
-| `APP_ENV` / `NODE_ENV` is production | **exit 2** |
-| `MATCHING_HTTP_URL` / `LEDGER_HTTP_URL` not `http://` loopback (`127.0.0.1`, `localhost`, `::1`) | **exit 2** |
-| `LOAD_TEST_SOAK=1` | **exit 2** — soak is not implemented |
-| `LOAD_TEST_ACK=1` + loopback + no soak | **exit 0** — plan printed, **zero requests** |
+| Condition                                                                                        | Result                                       |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| `LOAD_TEST_ACK` unset or not `1`                                                                 | **exit 2** — default                         |
+| `APP_ENV` / `NODE_ENV` is production                                                             | **exit 2**                                   |
+| `MATCHING_HTTP_URL` / `LEDGER_HTTP_URL` not `http://` loopback (`127.0.0.1`, `localhost`, `::1`) | **exit 2**                                   |
+| `LOAD_TEST_SOAK=1`                                                                               | **exit 2** — soak is not implemented         |
+| `LOAD_TEST_ACK=1` + loopback + no soak                                                           | **exit 0** — plan printed, **zero requests** |
 
 Defaults (compose / README, not prod): matching `http://127.0.0.1:4005`, ledger `http://127.0.0.1:4001`.
 
@@ -48,12 +48,12 @@ From the service READMEs on tip. Agents must not edit `services/svc-matching` (P
 
 HTTP + JSON. Amounts are **decimal strings**. The engine holds **no balances**.
 
-| Door | Why it would be on a future local soak (not this stub) |
-| ---- | ------------------------------------------------------- |
-| `POST /markets/:marketId/orders` | Admission + match loop (the §20 internal-match surface) |
-| `DELETE /markets/:marketId/orders/:orderId` | Cancel path |
-| `GET /markets/:marketId/depth` | Read path (not a money move) |
-| `GET /health` · `GET /ready` | Liveness / disabled engine |
+| Door                                        | Why it would be on a future local soak (not this stub)  |
+| ------------------------------------------- | ------------------------------------------------------- |
+| `POST /markets/:marketId/orders`            | Admission + match loop (the §20 internal-match surface) |
+| `DELETE /markets/:marketId/orders/:orderId` | Cancel path                                             |
+| `GET /markets/:marketId/depth`              | Read path (not a money move)                            |
+| `GET /health` · `GET /ready`                | Liveness / disabled engine                              |
 
 A rejection is `200` + `accepted: false`, not a 4xx. Counting 4xx as “errors” on this door would lie.
 
@@ -63,11 +63,11 @@ Matching **posts no ledger transactions**. A matching-only flood is not a ledger
 
 There is **no user-facing write path**. Value moves when another module calls `post` with a `ledger-client` recipe. Operator HTTP (`/operator/freeze`, `/operator/reconcile`) is **not** a load-test target.
 
-| Door | Why it would be on a future local soak (not this stub) |
-| ---- | ------------------------------------------------------- |
-| Internal `post` (service credentials) | The only write; decimal strings; balanced + funded + idempotent |
-| `GET /health` · `GET /ready` | Liveness; `/ready` is **503 when frozen** |
-| `balance` / `balances` (`ledger:read`) | Read path — not a substitute for `post` |
+| Door                                   | Why it would be on a future local soak (not this stub)          |
+| -------------------------------------- | --------------------------------------------------------------- |
+| Internal `post` (service credentials)  | The only write; decimal strings; balanced + funded + idempotent |
+| `GET /health` · `GET /ready`           | Liveness; `/ready` is **503 when frozen**                       |
+| `balance` / `balances` (`ledger:read`) | Read path — not a substitute for `post`                         |
 
 A soak that hammers `/health` and calls it “ledger load” is out of scope.
 
@@ -77,18 +77,18 @@ A soak that hammers `/health` and calls it “ledger load” is out of scope.
 
 **Recorded measurements:** none. No host, no soak, stub generates no traffic.
 
-| Surface | Door | Doctrine (existing law — not invented here) | Measured here |
-| ------- | ---- | ------------------------------------------- | ------------- |
+| Surface                        | Door                             | Doctrine (existing law — not invented here)                           | Measured here    |
+| ------------------------------ | -------------------------------- | --------------------------------------------------------------------- | ---------------- |
 | Fiat matching (internal match) | `POST /markets/:marketId/orders` | §20: `< 5ms p99` internal match; Rust-port trigger `>10k/s` sustained | **not measured** |
-| Ledger `post` | internal `post` | §20 does **not** name a ledger-post p99; do not invent one | **not measured** |
-| Matching cancel | `DELETE …/orders/:orderId` | none in §20 | **not measured** |
-| Health | `GET /health` | not an SLO | **not measured** |
+| Ledger `post`                  | internal `post`                  | §20 does **not** name a ledger-post p99; do not invent one            | **not measured** |
+| Matching cancel                | `DELETE …/orders/:orderId`       | none in §20                                                           | **not measured** |
+| Health                         | `GET /health`                    | not an SLO                                                            | **not measured** |
 
 When a **local** fleet exists and someone runs a real generator **outside** this repo’s money-path dependencies, paste rows below. Until then the table stays empty on purpose.
 
-| When (UTC) | Target (loopback only) | Tool (out of tree) | n | Notes | p50 | p99 | Claim as product law? |
-| ---------- | ---------------------- | ------------------ | - | ----- | --- | --- | --------------------- |
-| — | — | — | — | no host | — | — | **no** |
+| When (UTC) | Target (loopback only) | Tool (out of tree) | n   | Notes   | p50 | p99 | Claim as product law? |
+| ---------- | ---------------------- | ------------------ | --- | ------- | --- | --- | --------------------- |
+| —          | —                      | —                  | —   | no host | —   | —   | **no**                |
 
 A filled p99 in that table is an **observation**, not a doctrine amendment. Changing §20 is a Denon law edit, not an ops paste.
 
@@ -96,12 +96,12 @@ A filled p99 in that table is an **observation**, not a doctrine amendment. Chan
 
 ## 4 · Residual (no host)
 
-| Residual | Why it stays open |
-| -------- | ----------------- |
-| Staging / prod soak | No host; Class X to buy and wire one |
-| In-repo HTTP generator | Intentionally omitted so k6/artillery do not enter the money path |
-| Grafana SLO panel | Doctrine §14 sign-off still unchecked; needs a running Tempo/Grafana (P3-08) |
-| Matching dual-target / Rust port | Shehzad / LAW (`socket.rust-matching`); not this mountain |
-| Promise-falsify matching (P2-01d) | Separate lane; do not dual-edit `services/svc-matching` |
+| Residual                          | Why it stays open                                                            |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| Staging / prod soak               | No host; Class X to buy and wire one                                         |
+| In-repo HTTP generator            | Intentionally omitted so k6/artillery do not enter the money path            |
+| Grafana SLO panel                 | Doctrine §14 sign-off still unchecked; needs a running Tempo/Grafana (P3-08) |
+| Matching dual-target / Rust port  | Shehzad / LAW (`socket.rust-matching`); not this mountain                    |
+| Promise-falsify matching (P2-01d) | Separate lane; do not dual-edit `services/svc-matching`                      |
 
 **This mountain’s agent-closable bar:** harness refuses without `LOAD_TEST_ACK=1`; numbers table exists and is empty for cause.
