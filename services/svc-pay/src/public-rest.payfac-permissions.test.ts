@@ -122,6 +122,29 @@ describe('REST PayFac permissions (D26-P1-P2)', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/submerchant-permissions/areas', headers: signed() });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([...PERMISSION_AREAS]);
+    expect(res.json()).toHaveLength(11);
+    expect(res.json()).not.toHaveLength(14);
+    expect(res.json()).not.toContain('underwriting');
+  });
+
+  it('grant schema refuses an invented fourteenth area and underwriting', async () => {
+    const trees = stubPermissions();
+    app = await build(trees);
+    for (const area of ['underwriting', 'area.14', 'everything'] as const) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/submerchant-permissions/grant',
+        headers: signed(),
+        payload: {
+          granteeMerchantId: MID,
+          subjectMerchantId: LEAF,
+          area,
+          reason: 'must not invent a fourteenth permission area',
+        },
+      });
+      expect(res.statusCode, area).not.toBe(200);
+      expect(trees.grantPermission).not.toHaveBeenCalled();
+    }
   });
 
   it('does not mount permission routes when trees is only an assertHolds fence', async () => {
