@@ -31,16 +31,16 @@
     },
     {
       "id": "D26-P0-02",
-      "status": "sealed",
+      "status": "mechanism_only",
       "kind": "product_ruling",
       "title": "DIRECTION §8 rates / fee-shares",
-      "blocks": ["trade.copy geo (P0-15)", "pay fee tables Class X", "MARKET_HOUSE_COMMISSION_BPS blank"],
-      "primaryDoc": "docs/adr/2026-08-13-d26-p0-02-owner-launch-seals.md",
+      "blocks": ["trade.copy", "market.commerce", "ops.affiliates", "pay fee tables"],
+      "primaryDoc": "docs/adr/2026-08-15-d26-p0-02-section8-rates-refuse-closed.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#3--the-8-rate-fee-and-share-numbers--and-the-mechanism",
       "answerShape": "named_params_in_authority_or_launch_closed",
       "priority": 2,
       "related": ["D26-P0-10", "D26-P0-15", "PAYOUT-01", "PKT-B5"],
-      "notes": "2026-08-13 Denon: copy leaderShareBps=1000 cap 1000.00 decay 50/5000; affiliate hops 0-2 rates 0.10/0.05/0.02; marketplace bps stay blank; pay tables Class X; copy geo still P0-15."
+      "notes": "2026-08-15 Denon: explicit launch-closed. copy leader_share, market commission, affiliate tiers, pay fee table refuse-closed until owner publishes into config authority (not source seeds). Pattern: COPY_FEE_SHARE_RESIDUAL. Magnitudes still owner. 2026-08-13 ADR JSON is not authority. Copy geo remains D26-P0-15."
     },
     {
       "id": "D26-P0-03",
