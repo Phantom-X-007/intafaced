@@ -1,0 +1,24 @@
+/**
+ * User-visible WebSocket close / error copy.
+ *
+ * Reasons on the wire are catalog keys resolved through `@intafaced/i18n`.
+ * Mode is `prod` so a missing key cannot throw on the socket path. A key that
+ * is not in the catalog yet refuses as the key name — greppable, never blank,
+ * never invented English. Catalog rows land in a separate PR; this service
+ * must not wait on them.
+ */
+import { createTranslator, type ParamValue } from '@intafaced/i18n';
+
+const translator = createTranslator('en', undefined, { mode: 'prod', onMissing: () => undefined });
+
+export const WS_COPY = {
+  unknownMarket: 'ws.close.unknown_market',
+  atCapacity: 'ws.close.at_capacity',
+  privateAtCapacity: 'ws.close.private_at_capacity',
+  privateUserLimit: 'ws.close.private_user_limit',
+  shuttingDown: 'ws.close.shutting_down',
+} as const;
+
+export function resolveWsCopy(key: string, params: Readonly<Record<string, ParamValue>> = {}): string {
+  return translator.tUnsafe(key, params);
+}

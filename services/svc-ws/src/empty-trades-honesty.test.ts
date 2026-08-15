@@ -153,7 +153,7 @@ describe('empty trades tape is absent, not a zero print', () => {
     trades.attach('NOPE', sink);
     await settle();
 
-    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'unknown market "NOPE"' });
+    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'ws.close.unknown_market' });
     expect(sink.frames).toEqual([]);
     expectNoLiveZeroTape(sink.frames);
   });

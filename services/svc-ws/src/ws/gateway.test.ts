@@ -249,7 +249,7 @@ describe('the websocket gateway, over a real socket', () => {
     // Policy violation (1008), not an internal error path stacked on top of
     // capacity / try-later codes. Unknown market is a single, stable close.
     expect(closed.code).toBe(1008);
-    expect(closed.reason).toMatch(/unknown market/);
+    expect(closed.reason).toBe('ws.close.unknown_market');
     // And critically: no depth call was made, so nothing was allocated upstream.
     expect(source.snapshotCalls).toEqual([]);
   });
@@ -311,7 +311,7 @@ describe('the websocket gateway, over a real socket', () => {
 
     for (const closed of closures) {
       expect(closed.code).toBe(1008);
-      expect(closed.reason).toMatch(/unknown market/);
+      expect(closed.reason).toBe('ws.close.unknown_market');
     }
     expect(hub.connections).toBe(0);
     expect(source.snapshotCalls).toEqual([]);
@@ -348,11 +348,11 @@ describe('the websocket gateway, over a real socket', () => {
     const client = connect(`market=${MARKET}`);
     await client.frameCount(1);
 
-    await gateway.close('gateway shutting down');
+    await gateway.close('ws.close.shutting_down');
     const closed = await client.closure();
 
     expect(closed.code).toBe(1001);
-    expect(closed.reason).toBe('gateway shutting down');
+    expect(closed.reason).toBe('ws.close.shutting_down');
   });
 
   it('streams public trade prints on channel=trades — no order/account ids, no invented side', async () => {

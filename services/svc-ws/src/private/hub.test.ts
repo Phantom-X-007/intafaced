@@ -104,7 +104,7 @@ describe('PrivateOrderHub', () => {
     expect(hub.attach('user-a', a2)).not.toBeNull();
     expect(hub.attach('user-a', a3)).toBeNull();
     expect(a3.closed?.code).toBe(1013);
-    expect(a3.closed?.reason).toMatch(/too many private connections/i);
+    expect(a3.closed?.reason).toBe('ws.close.private_user_limit');
     expect(hub.connections).toBe(2);
 
     expect(hub.attach('user-b', b1)).not.toBeNull();

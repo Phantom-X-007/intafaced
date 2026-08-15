@@ -1571,6 +1571,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client

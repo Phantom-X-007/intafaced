@@ -17,6 +17,7 @@
     "@intafaced/auth": "workspace:*",
     "@intafaced/config": "workspace:*",
     "@intafaced/events": "workspace:*",
+    "@intafaced/i18n": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
     "@intafaced/market-data": "workspace:*",
     "@intafaced/telemetry": "workspace:*",

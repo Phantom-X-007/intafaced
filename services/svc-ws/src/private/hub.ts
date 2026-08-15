@@ -1,3 +1,4 @@
+import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 
 /**
@@ -181,7 +182,7 @@ export class PrivateOrderHub {
    */
   attach(userId: string, sink: PrivateSink, channel: PrivateStreamChannel | null = null): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
-      sink.close(CLOSE_TRY_LATER, 'private gateway at capacity');
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.privateAtCapacity));
       return null;
     }
 
@@ -191,7 +192,7 @@ export class PrivateOrderHub {
       if (!existing.closed && existing.userId === userId) forUser++;
     }
     if (forUser >= maxPerUser) {
-      sink.close(CLOSE_TRY_LATER, 'too many private connections for this user');
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.privateUserLimit));
       return null;
     }
 

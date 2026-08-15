@@ -1,6 +1,7 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import type { TradeHub } from '../trade/hub.js';
@@ -75,9 +76,10 @@ export interface WebSocketGateway {
   close(reason: string): Promise<void>;
 }
 
-/** RFC 6455 caps a close reason at 123 bytes; a longer one throws. */
+/** RFC 6455 caps a close reason at 123 bytes; a longer one throws. Catalog keys resolve first. */
 function closeReason(reason: string): string {
-  return reason.length <= 120 ? reason : `${reason.slice(0, 117)}...`;
+  const copy = resolveWsCopy(reason);
+  return copy.length <= 120 ? copy : `${copy.slice(0, 117)}...`;
 }
 
 function sinkFor(socket: WebSocket): DepthSink {
@@ -203,11 +205,12 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
       server.off('upgrade', onUpgrade);
       // Say why, rather than dropping the TCP connection: a client that is told
       // reconnects with backoff, and one that is not reconnects immediately.
-      hub.closeAll(CLOSE_GOING_AWAY, reason);
-      tradeHub.closeAll(CLOSE_GOING_AWAY, reason);
-      for (const ws of wss.clients) ws.close(CLOSE_GOING_AWAY, closeReason(reason));
+      const copy = resolveWsCopy(reason);
+      hub.closeAll(CLOSE_GOING_AWAY, copy);
+      tradeHub.closeAll(CLOSE_GOING_AWAY, copy);
+      for (const ws of wss.clients) ws.close(CLOSE_GOING_AWAY, closeReason(copy));
       await new Promise<void>((resolve) => wss.close(() => resolve()));
-      log.info({ reason }, 'ws: gateway closed');
+      log.info({ reason: copy }, 'ws: gateway closed');
     },
   };
 }

@@ -1,4 +1,5 @@
 import { tradePrintFromFill, type FillLike, type TradePrint } from '@intafaced/market-data';
+import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 
 /**
@@ -142,7 +143,7 @@ export class TradeHub {
    */
   attach(marketId: string, sink: TradeSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
-      sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
       return null;
     }
 
@@ -174,7 +175,7 @@ export class TradeHub {
   async #open(sub: Subscription): Promise<void> {
     try {
       if (!(await this.#options.ensureKnownMarket(sub.marketId))) {
-        this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
+        this.#evict(sub, CLOSE_POLICY, resolveWsCopy(WS_COPY.unknownMarket));
         return;
       }
       if (sub.closed) return;
