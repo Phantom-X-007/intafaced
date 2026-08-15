@@ -8,6 +8,7 @@ import { SupportService } from './support-service.js';
 import { PostgresSupportStore } from './store.js';
 import { createSupportRouter, type SupportRouter } from './router.js';
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
+import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE } from './ticket-kb-loop-observation.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -73,6 +74,9 @@ app.get('/ready', async () => {
     deskMountain: split.deskMountain,
     agentAssist: split.agentAssist,
     deskStandalone: split.deskStandalone,
+    // Proven in unit tests + migrations only. Compose `/health` is liveness,
+    // not a ticket create + KB search observation. Do not invent SLA times.
+    ticketKbLoopObservedInLiveCompose: TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE,
   };
 });
 
