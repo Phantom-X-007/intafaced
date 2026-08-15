@@ -116,8 +116,8 @@ export function createConfigMmMidSource(mids: ReadonlyMap<string, string>): MmMi
  * bar is `acceptableForMarking` under `DEFAULT_FUTURES_MARK_POLICY`.
  *
  * There is NO new constant, no new policy shape and no new name here on purpose:
- * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` is awaiting an owner ruling, and a second
- * number would be a second unruled thing to rule.
+ * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` is the D26-P0-14 sealed floor, and a second
+ * number would be a third % the ADR forbids.
  *
  * `acceptableForMarking` is the WEAKER of the two gates, for the reason
  * `markSourcePrefer` gives: this port does not know its caller's bar, so it must
@@ -141,10 +141,9 @@ export function createVenueMmMidSource(input: {
   bookForSymbol?: (symbol: string) => MaintainedVenueBookPort | null;
   depthLimit?: number;
   /**
-   * Minimum resting notional at a best level. Omitted → the default, because the
-   * unsafe reading must not be the one you get by leaving an argument off. See
-   * `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` in `mark-from-depth.ts` for the number and
-   * for whose ruling it awaits.
+   * Minimum resting notional at a best level. Omitted → D26-P0-14 sealed pair
+   * in `mark-from-depth.ts`. Unsafe reading must not be the one you get by
+   * leaving an argument off.
    */
   depthPolicy?: DepthQuotePolicy;
   /** Staleness bar for the snapshot. Omitted → `DEFAULT_FUTURES_MARK_POLICY`. */
