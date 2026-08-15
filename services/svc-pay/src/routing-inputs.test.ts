@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assertNoInventedRoutingScores,
   assertRoutingInputsPresent,
+  assertRoutingScoresRefuseBlank,
   FORBIDDEN_ROUTING_SCORE_FIELDS,
   missingRoutingDimensions,
   RoutingInputError,
@@ -87,6 +88,47 @@ describe('pay.routing — refuse when geo/method/risk data missing', () => {
 
     expect(() => assertNoInventedRoutingScores({ ...honest, approvalRate: 0.92 })).toThrow(/approvalRate/);
     expect(() => assertNoInventedRoutingScores({ ...honest, costBps: 25 })).toThrow(/costBps/);
+    expect(() => assertNoInventedRoutingScores({ ...honest, geoScore: 1 })).toThrow(/geoScore/);
+    expect(() => assertNoInventedRoutingScores({ ...honest, methodRank: 3 })).toThrow(/methodRank/);
+  });
+
+  it('refuses blank approval-rate and geo scores rather than inventing defaults', () => {
+    try {
+      assertRoutingScoresRefuseBlank({ approvalRate: '' });
+      expect.unreachable('blank approvalRate must refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(RoutingInputError);
+      const err = e as RoutingInputError;
+      expect(err.code).toBe('pay.routing_input_missing');
+      expect(err.missing).toEqual(['approvalRate']);
+    }
+
+    try {
+      assertRoutingInputsPresent({ required: [] }, { geoScore: '  ' });
+      expect.unreachable('blank geoScore must refuse');
+    } catch (e) {
+      const err = e as RoutingInputError;
+      expect(err.code).toBe('pay.routing_input_missing');
+      expect(err.missing).toEqual(['geoScore']);
+    }
+
+    try {
+      assertRoutingInputsPresent({ required: [] }, { approvalRate: null, geoScore: Number.NaN });
+      expect.unreachable('null/NaN scores must refuse');
+    } catch (e) {
+      const err = e as RoutingInputError;
+      expect(err.missing).toEqual(['approvalRate', 'geoScore']);
+    }
+
+    expect(() => assertRoutingInputsPresent({ required: [] }, {})).not.toThrow();
+    expect(() => assertRoutingInputsPresent({ required: [] }, { approvalRate: '0.81', geoScore: 12 })).not.toThrow();
+  });
+
+  it('omitted score keys stay omitted — no default approval-rate sneaks in', () => {
+    const inputs = { geoCountry: 'DE', method: 'card', riskBand: 'low' };
+    expect(() => assertRoutingInputsPresent({ required: ['geo', 'method', 'risk'] }, inputs)).not.toThrow();
+    expect(inputs).not.toHaveProperty('approvalRate');
+    expect(inputs).not.toHaveProperty('geoScore');
   });
 
   it('source tree still bans inventable score field assignments in routing modules', () => {
@@ -100,9 +142,13 @@ describe('pay.routing — refuse when geo/method/risk data missing', () => {
       expect(src, f).not.toMatch(/\bcost_bps\s*:/);
       expect(src, f).not.toMatch(/\bapprovalRate\s*=/);
       expect(src, f).not.toMatch(/\bcostBps\s*=/);
+      expect(src, f).not.toMatch(/\bapprovalRate\s*\?\?/);
+      expect(src, f).not.toMatch(/\bgeoScore\s*\?\?/);
     }
     // List stays the ban-list source of truth for assertNoInventedRoutingScores.
     expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('approvalRate');
     expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('costBps');
+    expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('geoScore');
+    expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('methodRank');
   });
 });

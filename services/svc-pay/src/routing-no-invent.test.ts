@@ -22,6 +22,9 @@ describe('routing — no invent costs or approval rates', () => {
       expect(src, f).not.toMatch(/\bapprovalRate\s*[:=]/);
       expect(src, f).not.toMatch(/\bcostBps\s*[:=]/);
       expect(src, f).not.toMatch(/\bapproval_rate\s*[:=]/);
+      expect(src, f).not.toMatch(/\bapprovalRate\s*\?\?/);
+      expect(src, f).not.toMatch(/\bgeoScore\s*\?\?/);
+      expect(src, f).not.toMatch(/\bmethodRank\s*[:=]/);
     }
   });
 
