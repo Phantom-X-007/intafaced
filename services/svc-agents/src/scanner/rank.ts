@@ -126,8 +126,8 @@ export function rankFixtures(
     /** Stage-2: only rank these market ids when provided and non-empty. */
     marketAllowlist?: ReadonlySet<string> | readonly string[];
     /**
-     * D26-P0-11 signal-inputs law. Omitted → production sealed v1 recipe.
-     * Explicit null / unpublished → refuse-closed.
+     * D26-P0-11 signal-inputs law. Omitted / null / unpublished → refuse-closed
+     * (`signal_inputs_law_blank`). Never sneak a default ranked board.
      */
     signalInputsLaw?: ScannerSignalInputsLaw | null;
   } = {},

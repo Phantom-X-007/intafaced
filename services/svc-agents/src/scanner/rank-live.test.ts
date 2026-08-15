@@ -42,7 +42,7 @@ describe('rankLiveFromTickers (Stage-2)', () => {
     });
   });
 
-  it('D26-P1-A3: omitted law uses production sealed recipe', () => {
+  it('D26-P1-A3: omitted law → refuse (no sneak default ranked board)', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: law,
@@ -50,9 +50,12 @@ describe('rankLiveFromTickers (Stage-2)', () => {
       now: NOW,
       tickers: [ticker({ marketId: 'BTC-USD' })],
     });
-    expect(r.status).toBe('ok');
-    if (r.status !== 'ok') return;
-    expect(r.signals[0]?.marketId).toBe('BTC-USD');
+    expect(r).toEqual({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.tier_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
   });
 
   it('ranks accepted tickers and caps by tier maxSignals', () => {
