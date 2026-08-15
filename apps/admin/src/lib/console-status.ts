@@ -77,6 +77,11 @@ export interface ConsoleStatus {
   readonly missing: readonly string[];
   /** True when the console can halt at least one thing. */
   readonly canHaltAnything: boolean;
+  /**
+   * Both halt authorities wired (edge + operator token + treasury token).
+   * This is the only "all green" signal — the banner hides iff this is true.
+   */
+  readonly fullyConfigured: boolean;
   /** True when the BFF routes are behind the shared-secret gate (§13 until SSO). */
   readonly bffGated: boolean;
 }
@@ -107,8 +112,18 @@ export function readConsoleStatus(env: NodeJS.ProcessEnv = process.env): Console
     treasury: treasuryStatus,
     missing: [...new Set([...moduleStatus.missing, ...treasuryStatus.missing])],
     canHaltAnything: moduleStatus.configured || treasuryStatus.configured,
+    fullyConfigured: moduleStatus.configured && treasuryStatus.configured,
     bffGated: present(env, 'ADMIN_BFF_SHARED_SECRET'),
   };
+}
+
+/**
+ * The banner's "all green" predicate. False whenever EDGE_URL or either
+ * operator/treasury token is missing — a half-wired console must never read as
+ * a healthy control plane.
+ */
+export function consoleLooksFullyGreen(status: ConsoleStatus): boolean {
+  return status.fullyConfigured;
 }
 
 /**

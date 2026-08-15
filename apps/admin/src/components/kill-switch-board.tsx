@@ -177,7 +177,7 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
 
       <RuntimeUnknownPanel states={unknown} />
 
-      <Panel title="Platform state" live>
+      <Panel title="Platform state" live={liveModules}>
         <div className="adm-statrow">
           {/* "Flags live" is a registry count and says so. It was previously the
               first number on the page and read as a count of live CAPABILITIES,
