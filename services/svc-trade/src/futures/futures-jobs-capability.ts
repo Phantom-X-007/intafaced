@@ -26,6 +26,9 @@ export type FuturesJobsCapabilityNote = {
   /** True only when a known venue adapter + non-empty symbol map is wired. Never echoes venue id or symbols. */
   readonly venueMarkConfigured: boolean;
   readonly venueMarkDefault: false;
+  /** True only when TRADE_FUTURES_FUNDING_INTERVAL_MS is a named integer. Never echoes the ms. */
+  readonly fundingIntervalConfigured: boolean;
+  readonly fundingIntervalDefault: false;
 };
 
 export function presentFuturesJobsCapabilityNote(input: {
@@ -35,6 +38,7 @@ export function presentFuturesJobsCapabilityNote(input: {
   readonly fundingMaxAbsRateConfigured?: boolean;
   readonly fundingMarketCount?: number;
   readonly venueMarkConfigured?: boolean;
+  readonly fundingIntervalConfigured?: boolean;
 }): FuturesJobsCapabilityNote {
   const raw = input.fundingMarketCount;
   const fundingMarketCount = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
@@ -55,5 +59,7 @@ export function presentFuturesJobsCapabilityNote(input: {
     fundingMarketCount,
     venueMarkConfigured: input.venueMarkConfigured === true,
     venueMarkDefault: false,
+    fundingIntervalConfigured: input.fundingIntervalConfigured === true,
+    fundingIntervalDefault: false,
   };
 }

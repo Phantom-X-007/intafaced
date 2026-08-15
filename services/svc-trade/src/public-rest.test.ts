@@ -398,6 +398,8 @@ describe('public REST routes', () => {
       fundingMarketCount: 0,
       venueMarkConfigured: false,
       venueMarkDefault: false,
+      fundingIntervalConfigured: false,
+      fundingIntervalDefault: false,
     });
     expect(body.notes.openPositionGates).toBe(OPEN_POSITION_GATES_NOTE);
     expect(body.notes.openPositionGates).toContain('leverage required 400');
@@ -453,6 +455,16 @@ describe('public REST routes', () => {
     expect(futures).not.toHaveProperty('venueId');
     expect(futures).not.toHaveProperty('symbols');
     expect(JSON.stringify(futures)).not.toMatch(/binance|bybit|okx|BTC\/USDT/i);
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports fundingIntervalConfigured without echoing ms', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, fundingIntervalConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    const futures = res.json().notes.futures as Record<string, unknown>;
+    expect(futures).toMatchObject({ fundingIntervalConfigured: true, fundingIntervalDefault: false });
+    expect(futures).not.toHaveProperty('fundingIntervalMs');
+    expect(JSON.stringify(futures)).not.toMatch(/28_?800_?000|28800000/);
     await app.close();
   });
 
