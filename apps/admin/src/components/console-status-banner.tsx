@@ -16,13 +16,12 @@ import { AUTHORITY_REACH, type ConsoleStatus } from '@/lib/console-status';
  * A safety control's inability to act is a property of the whole console, so it
  * is stated in the frame around every screen.
  *
- * ── It renders nothing when everything is configured ────────────────────────
+ * ── It renders nothing when fullyConfigured ─────────────────────────────────
  *
  * Deliberately. A banner that is always present is furniture, and furniture is
- * not read. The absence of this strip is the signal that both authorities are
- * wired; the presence of it is a fact about what is missing, in the operator's
- * own vocabulary ("cannot freeze the ledger") followed by the exact variable
- * name to set.
+ * not read. The absence of this strip is the only "all green" signal, and it
+ * fires only when EDGE_URL plus both operator and treasury tokens are set.
+ * Missing either token or the edge address keeps the strip up.
  *
  * Never renders a credential — `ConsoleStatus` carries booleans and variable
  * NAMES only, which is the property `console-status.ts` maintains.
@@ -33,7 +32,7 @@ export interface ConsoleStatusBannerProps {
 }
 
 export function ConsoleStatusBanner({ status }: ConsoleStatusBannerProps) {
-  if (status.module.configured && status.treasury.configured) return null;
+  if (status.fullyConfigured) return null;
 
   const blocked = [status.module, status.treasury].filter((a) => !a.configured);
 

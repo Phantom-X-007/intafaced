@@ -229,3 +229,20 @@ describe('a module killed at the edge is the one state the board may assert', ()
     expect(withKill).toBeLessThan(Number(before?.[1]));
   });
 });
+
+describe('an unconfigured control plane never paints Platform state as live', () => {
+  it('clears the live bloom when EDGE_URL / operator token are absent', () => {
+    const html = render({
+      initialControlPlane: {
+        status: 'unconfigured',
+        snapshot: { disabledModules: [], reasons: {}, audit: [] },
+        detail: 'This console cannot halt a module — EDGE_URL and ADMIN_OPERATOR_TOKEN are not set on this app.',
+      },
+    });
+    const titleAt = html.indexOf('Platform state');
+    expect(titleAt).toBeGreaterThan(-1);
+    const panelHead = html.slice(Math.max(0, titleAt - 240), titleAt);
+    expect(panelHead).toContain('data-live="false"');
+    expect(html).toContain('Control plane: not configured');
+  });
+});
