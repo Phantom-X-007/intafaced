@@ -23,6 +23,8 @@
 
 **Kill switch:** remove `swarm:*` from `package.json` and delete `tooling/scripts/swarm.mjs` if these tools thrash; residual + `claim:check` remain.
 
+**Money-path incident (who / detect / contain):** [`INCIDENT-MONEY-PATH-RUNBOOK.md`](./INCIDENT-MONEY-PATH-RUNBOOK.md) (D26-P3-10). Switch mechanics stay in [`../OPS-KILL-SWITCH-RUNBOOK.md`](../OPS-KILL-SWITCH-RUNBOOK.md).
+
 ## Denon hard board
 
 **Live** invent-risk / product-complete mountains (agents babysit only): [`../DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](../DENON-HARD-PARALLEL-BOARD-2026-08-09.md) · LIVE-LANES `denon-hard-parallel`.  
