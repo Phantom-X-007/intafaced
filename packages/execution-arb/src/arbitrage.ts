@@ -18,6 +18,15 @@ import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCos
  * package is a thin scanner path — not a second money book or SOR.
  */
 
+/**
+ * Pin: there is no default cross-exchange spread.
+ *
+ * Typed `null` so a later `quoted + DEFAULT_SPREAD_BPS` cannot compile without
+ * changing this export. Equal quotes refuse as `no_edge` — they are never
+ * filled with a house bps (including the SOR 5 bps internal tie-break).
+ */
+export const CROSS_EXCHANGE_DEFAULT_SPREAD_BPS: null = null;
+
 const INTERNAL_KINDS: ReadonlySet<VenueKind> = new Set(['internal']);
 
 /** Venue kinds that are not house-internal (P0-01 external-only door). */
@@ -230,6 +239,24 @@ export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanE
           sellVenueId: sellQ.venueId,
           reason: 'insufficient_size',
           detail: 'quoted size below contemplated amount — depth not invented',
+        });
+        continue;
+      }
+
+      // Pin: never substitute CROSS_EXCHANGE_DEFAULT_SPREAD_BPS (null) for a
+      // missing raw quote spread. Equal or inverted quotes refuse as no_edge.
+      const inventedSpreadBps: number | null = CROSS_EXCHANGE_DEFAULT_SPREAD_BPS;
+      if (inventedSpreadBps !== null) {
+        throw new Error('cross-exchange default spread is forbidden — do not invent');
+      }
+      const rawSpread = sub(sellQ.price, buyQ.price);
+      if (rawSpread <= 0n) {
+        refused.push({
+          ok: false,
+          buyVenueId: buyQ.venueId,
+          sellVenueId: sellQ.venueId,
+          reason: 'no_edge',
+          detail: 'quoted sell ≤ quoted buy — default spread not invented',
         });
         continue;
       }
