@@ -87,6 +87,9 @@ export interface RouterOptions {
    * It is a tiebreak, not a cover for bad pricing: at the default 5 bps an
    * internal book that is genuinely worse loses, and the user is shown the real
    * effective price either way.
+   *
+   * D26-P2-06 / D-S-06: a request above the accepted 5 bps is **capped**, never
+   * applied. Raising the thumb is an owner product change, not a caller option.
    */
   readonly internalPreferenceBps?: number;
   /** Legs worse than the best effective price by more than this are dropped. */
@@ -104,12 +107,30 @@ export interface RouterOptions {
   readonly costTermsByVenue?: Readonly<Record<string, SorCostTerms>>;
 }
 
+/** Accepted D-S-06 / TERMINAL §4 house thumb. Default and hard ceiling. */
+export const ACCEPTED_INTERNAL_PREFERENCE_BPS = 5 as const;
+
 const DEFAULTS = {
-  internalPreferenceBps: 5,
+  internalPreferenceBps: ACCEPTED_INTERNAL_PREFERENCE_BPS,
   maxSlippageBps: 50,
   maxVenues: 4,
   maxStalenessMs: 5_000,
 } as const;
+
+/**
+ * Resolve the ranking-time internal preference.
+ *
+ * Callers may lower it (including to 0). They cannot raise it: anything above
+ * the accepted 5 bps is clamped. Non-finite values fall back to the default
+ * rather than opening an unbounded thumb.
+ */
+export function capInternalPreferenceBps(requested?: number): number {
+  if (requested === undefined || !Number.isFinite(requested)) {
+    return ACCEPTED_INTERNAL_PREFERENCE_BPS;
+  }
+  if (requested <= 0) return 0;
+  return Math.min(ACCEPTED_INTERNAL_PREFERENCE_BPS, requested);
+}
 
 /**
  * What the user really pays (buy) or receives (sell) per unit.
@@ -157,7 +178,12 @@ export async function planRoute(
   sources: readonly LiquiditySource[],
   options: RouterOptions = {},
 ): Promise<RoutePlan> {
-  const opts = { ...DEFAULTS, ...options };
+  const opts = {
+    ...DEFAULTS,
+    ...options,
+    // Cap after spread so a caller cannot silently raise the house thumb.
+    internalPreferenceBps: capInternalPreferenceBps(options.internalPreferenceBps),
+  };
   const now = opts.now ?? new Date();
   const rejected: RejectedVenue[] = [];
   const candidates: Candidate[] = [];
