@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { parseAmount as amt, type AccountRef, type Amount, type Balance, type PostRequest } from '@intafaced/ledger-client';
 import {
   memoryLiquidationAttemptStore,
@@ -642,5 +643,47 @@ describe('runLiquidationTick — C15 margin-call transport + grace non-start', (
     expect(result.liquidated).toBe(0);
     expect(posts).toEqual([]);
     expect(closed).toEqual([]);
+  });
+
+  it('ladder without owner D3 policy skips — never seizes on DEFAULT placeholders', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+    const depth = vi.fn(async () => amt('1000000'));
+    const result = await runLiquidationTick({
+      marks: fixedMark('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      ladder: {
+        depth: { depthNotional: depth },
+        reducer: {
+          async reduce() {
+            throw new Error('must not reduce on unset D3');
+          },
+        },
+      },
+    });
+    expect(result.items[0]!.outcome).toBe('skipped_d3_unset');
+    expect(result.items[0]!.reason).toBe('trade.ladder_d3_unset');
+    expect(result.liquidated).toBe(0);
+    expect(result.partial).toBe(0);
+    expect(posts).toHaveLength(0);
+    expect(closed).toHaveLength(0);
+    expect(depth).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back to DEFAULT placeholder rungs when policy is omitted', () => {
+    const src = readFileSync(new URL('./liquidation-tick.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\?\?\s*DEFAULT_FUTURES_LADDER_POLICY/);
   });
 });
