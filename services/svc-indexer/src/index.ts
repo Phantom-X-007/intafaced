@@ -163,18 +163,22 @@ app.get('/health', async () => ({
  * failure this service exists to prevent. Being unreachable costs a user
  * nothing they cannot get from any node; a wrong price costs them a trade.
  *
+ * A lastError on the serving-refuse list (chain door, startHeight) is the
+ * same signal: data procedures already 503, so `/ready` 200 would keep a
+ * load balancer sending traffic at a brick. `/health` stays liveness.
+ *
  * A database that will not answer is the other way out of the rotation, for the
  * ordinary reason.
  */
 app.get('/ready', async (_req, reply) => {
-  // Halt wins over DB: a projection that knows it is wrong must leave the
-  // rotation even if Postgres still answers.
+  // Halt wins over lastError and DB: a projection that knows it is wrong must
+  // leave the rotation even if Postgres still answers.
   try {
     await db.sql`SELECT 1`;
-    const answer = readinessOf(indexer.halted, true);
+    const answer = readinessOf(indexer.halted, true, undefined, indexer.lastError);
     return reply.code(answer.httpStatus).send(answer.body);
   } catch (err) {
-    const answer = readinessOf(indexer.halted, false, (err as Error).message);
+    const answer = readinessOf(indexer.halted, false, (err as Error).message, indexer.lastError);
     return reply.code(answer.httpStatus).send(answer.body);
   }
 });
@@ -208,15 +212,10 @@ if (sovereignty.code !== 'allowed.permissionless') {
 /**
  * A boot-time chain check that LOGS rather than throws.
  *
- * Deliberate. A read model whose chain is not up yet still has a job — it serves
- * everything already projected, and `status` now states exactly how stale that
- * is. Refusing to start would take the read path down over a dependency the read
- * path does not need, and in a compose stack it would mean svc-indexer racing
- * `evm` and losing.
- *
- * What must never happen is starting quietly. So the refusal is logged at
- * `error` with its code, `status.chain` carries the same refusal on every
- * request, and `Indexer.lastError` records each pass that cannot advance.
+ * Deliberate. Refusing to start would crash-loop a compose stack racing `evm`.
+ * The process stays up, `/health` stays green, `status` names the refusal.
+ * After a failed pass, data paths and `/ready` refuse so a last projection
+ * is not served as live (D26-P1-I3 + serving-refuse lastError).
  */
 if (evmSource) {
   const probe = await chainProbe();
