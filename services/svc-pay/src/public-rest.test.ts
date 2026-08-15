@@ -26,6 +26,7 @@ const OWNER = '11111111-1111-4111-8111-111111111111';
 const STRANGER = '22222222-2222-4222-8222-222222222222';
 const MERCHANT = '33333333-3333-4333-8333-333333333333';
 const PAYMENT = '44444444-4444-4444-8444-444444444444';
+const LINK = '66666666-6666-4666-8666-666666666666';
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
@@ -108,6 +109,29 @@ function stubPay(over: Partial<Record<string, unknown>> = {}): PayService & { ca
       status: 'refunded' as const,
       refundedAmount: parseAmount('1.10'),
     })),
+    createPaymentLink: record('createPaymentLink', async (input: { label: string; maxUses?: number }) => ({
+      id: LINK,
+      token: 'pl_testtokenvalue',
+      prefix: 'pl_testtoke',
+      label: input.label,
+      expiresAt: new Date('2026-09-07T10:00:00.000Z'),
+      maxUses: input.maxUses ?? null,
+    })),
+    listPaymentLinks: record('listPaymentLinks', async () => [
+      {
+        id: LINK,
+        prefix: 'pl_testtoke',
+        label: 'Invoice',
+        amount: '10',
+        currency: 'USDT',
+        active: true,
+        expiresAt: '2026-09-07T10:00:00.000Z',
+        maxUses: 1,
+        uses: 0,
+        createdAt: '2026-08-07T10:00:00.000Z',
+      },
+    ]),
+    deactivatePaymentLink: record('deactivatePaymentLink', async () => ({ deactivated: true })),
     ...over,
   } as unknown as PayService & { calls: Call[] };
 }
@@ -308,6 +332,8 @@ describe('the spec is served, and describes what the routes actually do', () => 
         '/payments/{id}/authorize',
         '/payments/{id}/capture',
         '/payments/{id}/refund',
+        '/payment-links',
+        '/payment-links/{id}',
       ]),
     );
     expect(Object.keys(spec.paths).some((p) => p.startsWith('/v1/'))).toBe(false);
@@ -360,13 +386,14 @@ describe('the spec is served, and describes what the routes actually do', () => 
 
     // Non-vacuity: two empty sets are equal, and would make this test a comment.
     //
-    // TEN PATHS — OpenAPI keys by path; GET+POST share `/payments` and
-    // `/webhook-endpoints`.
+    // TWELVE PATHS — OpenAPI keys by path; GET+POST share `/payments`,
+    // `/webhook-endpoints`, and `/payment-links`.
     //   payments: /payments, /payments/{id}, …/authorize, …/capture, …/refund
+    //   payment-links: /payment-links, /payment-links/{id}
     //   balances: /balances
     //   webhooks: /webhook-endpoints, /webhook-endpoints/{id},
     //             /webhook-endpoints/{id}/enable, /webhook-deliveries
-    expect(mounted.size).toBe(10);
+    expect(mounted.size).toBe(12);
     expect([...described].sort()).toEqual([...mounted].sort());
   });
 
@@ -797,5 +824,223 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
     expect(res.statusCode).toBe(200);
     const args = pay.calls.find((c) => c.method === 'createPayment')!.args[0] as { railAdapter: string };
     expect(args.railAdapter).toBe('crypto-native');
+  });
+});
+
+describe('payment-links — REST translation of createLink / listLinks / deactivateLink', () => {
+  const linkBody = {
+    merchantId: MERCHANT,
+    label: 'Invoice 42',
+    amount: '10.50',
+    currency: 'USDT',
+    maxUses: 1,
+  };
+
+  it('REFUSES create with no Idempotency-Key — NOTHING WAS ATTEMPTED', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { ...signed(), 'content-type': 'application/json' },
+      payload: linkBody,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.idempotency_required');
+    expect(pay.calls.filter((c) => c.method === 'createPaymentLink')).toHaveLength(0);
+  });
+
+  it('creates through createPaymentLink and returns the token once', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'link:invoice:42' },
+      payload: linkBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      id: LINK,
+      token: 'pl_testtokenvalue',
+      prefix: 'pl_testtoke',
+      label: 'Invoice 42',
+      expiresAt: '2026-09-07T10:00:00.000Z',
+      maxUses: 1,
+    });
+    const args = pay.calls.find((c) => c.method === 'createPaymentLink')!.args[0] as {
+      merchantId: string;
+      label: string;
+      amount: unknown;
+      currency: string;
+      expiresAt: unknown;
+      maxUses: number;
+    };
+    expect(args.merchantId).toBe(MERCHANT);
+    expect(args.label).toBe('Invoice 42');
+    expect(args.currency).toBe('USDT');
+    expect(args.maxUses).toBe(1);
+    expect(args.expiresAt).toBeUndefined();
+    expect(args.amount).toEqual(parseAmount('10.50'));
+  });
+
+  it('omitted expiresAt is undefined — never null (null means forever and is refused)', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'link:default-ttl' },
+      payload: { merchantId: MERCHANT, label: 'Tip jar' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const args = pay.calls.find((c) => c.method === 'createPaymentLink')!.args[0] as { expiresAt: unknown };
+    expect(args.expiresAt).toBeUndefined();
+  });
+
+  it('explicit null expiresAt is pay.link_expiry_invalid — NOTHING WAS ATTEMPTED', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'link:forever' },
+      payload: { merchantId: MERCHANT, label: 'Forever', expiresAt: null },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.link_expiry_invalid');
+    expect(pay.calls.filter((c) => c.method === 'createPaymentLink')).toHaveLength(0);
+  });
+
+  it('rejects a JSON-number amount — decimal strings only', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'link:number' },
+      payload: { merchantId: MERCHANT, label: 'Invoice', amount: 10.5, currency: 'USDT' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.invalid_amount');
+    expect(pay.calls.filter((c) => c.method === 'createPaymentLink')).toHaveLength(0);
+  });
+
+  it('REPLAYS an identical retry and does not mint a second token', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+    const headers = { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'link:retry' };
+
+    const first = await app.inject({ method: 'POST', url: '/v1/payment-links', headers, payload: linkBody });
+    const second = await app.inject({ method: 'POST', url: '/v1/payment-links', headers, payload: linkBody });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual(first.json());
+    expect(pay.calls.filter((c) => c.method === 'createPaymentLink')).toHaveLength(1);
+  });
+
+  it('CONFLICTS when the same key is reused with a DIFFERENT body', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+    const headers = { ...signed(), 'content-type': 'application/json', 'idempotency-key': 'link:reuse' };
+
+    await app.inject({ method: 'POST', url: '/v1/payment-links', headers, payload: linkBody });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers,
+      payload: { ...linkBody, label: 'Different invoice' },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('pay.idempotency_conflict');
+    expect(pay.calls.filter((c) => c.method === 'createPaymentLink')).toHaveLength(1);
+  });
+
+  it('REFUSES create/list/deactivate on another merchant BEFORE the service runs', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+    const stranger = signed(principal({ sub: STRANGER, userId: STRANGER }));
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { ...stranger, 'content-type': 'application/json', 'idempotency-key': 'stranger:link' },
+      payload: linkBody,
+    });
+    expect(create.statusCode).toBe(403);
+    expect(create.json().error.code).toBe('pay.merchant_forbidden');
+    expect(pay.calls.filter((c) => c.method === 'createPaymentLink')).toHaveLength(0);
+
+    const list = await app.inject({
+      method: 'GET',
+      url: `/v1/payment-links?merchantId=${MERCHANT}`,
+      headers: stranger,
+    });
+    expect(list.statusCode).toBe(403);
+    expect(pay.calls.filter((c) => c.method === 'listPaymentLinks')).toHaveLength(0);
+
+    const deactivate = await app.inject({
+      method: 'DELETE',
+      url: `/v1/payment-links/${LINK}?merchantId=${MERCHANT}`,
+      headers: stranger,
+    });
+    expect(deactivate.statusCode).toBe(403);
+    expect(pay.calls.filter((c) => c.method === 'deactivatePaymentLink')).toHaveLength(0);
+  });
+
+  it('lists through listPaymentLinks — token is not in the list shape', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/payment-links?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([
+      {
+        id: LINK,
+        prefix: 'pl_testtoke',
+        label: 'Invoice',
+        amount: '10',
+        currency: 'USDT',
+        active: true,
+        expiresAt: '2026-09-07T10:00:00.000Z',
+        maxUses: 1,
+        uses: 0,
+        createdAt: '2026-08-07T10:00:00.000Z',
+      },
+    ]);
+    expect(res.json()[0]).not.toHaveProperty('token');
+    expect(pay.calls.filter((c) => c.method === 'listPaymentLinks')).toHaveLength(1);
+  });
+
+  it('deactivates through deactivatePaymentLink', async () => {
+    const pay = stubPay();
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/v1/payment-links/${LINK}?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ deactivated: true });
+    expect(pay.calls.find((c) => c.method === 'deactivatePaymentLink')!.args).toEqual([MERCHANT, LINK]);
   });
 });
