@@ -307,4 +307,26 @@ describe('merchant.watch metered session run', () => {
     expect(new Set(fake.toolCalls)).toEqual(new Set([MERCHANT_METRICS_TOOL]));
     expect(fake.toolCalls.some((t) => t === 'pay.route.change' || t.startsWith('ledger.') || t === 'pay.capture')).toBe(false);
   });
+
+  it('fat fixture rates on a dark plane still refuse — no default live board', async () => {
+    const fake = new FakeRuntime();
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      plane: 'dark',
+      points: [
+        point('card-visa', { approvalRate: '0.99', attempts: 10_000 }),
+        point('card-mc', { approvalRate: '0.98', attempts: 10_000 }),
+      ],
+      threshold: '0.85',
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'pay_plane_dark',
+      userMessageKey: 'agents.merchant.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result).not.toMatchObject({ status: 'ok' });
+    expect(result.metering.billedAmount).toBe('0');
+  });
 });

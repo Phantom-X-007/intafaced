@@ -68,6 +68,14 @@ export type WatchResult = WatchOk | WatchEmpty | WatchUnavailable;
  */
 export type PayPlaneState = 'live' | 'dark';
 
+/**
+ * Live pay metrics are Class X. Omitted / unknown plane is dark — a default
+ * approval-rate board is invented completeness, not a watch.
+ */
+export function resolveMerchantPayPlane(plane: PayPlaneState | undefined): PayPlaneState {
+  return plane === 'live' ? 'live' : 'dark';
+}
+
 function parseRate(s: string): number | null {
   if (!/^(0(\.\d+)?|1(\.0+)?)$/.test(s)) return null;
   const n = Number(s);
@@ -133,7 +141,7 @@ export function watchApprovalFixtures(
 ): WatchResult {
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
-  if (options.payPlane === 'dark') {
+  if (resolveMerchantPayPlane(options.payPlane) === 'dark') {
     return { status: 'unavailable', userMessageKey: 'agents.merchant.unavailable', reason: 'pay_plane_dark' };
   }
   const thresholdStr = options.threshold ?? '0.85';

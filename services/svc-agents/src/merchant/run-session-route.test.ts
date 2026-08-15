@@ -85,6 +85,27 @@ describe('merchant.runSession route', () => {
     expect(result.metering.billedAmount).toBe('0');
   });
 
+  it('fat fixture rates on dark plane refuse — no invented live approval board', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .merchant.runSession({
+        plane: 'dark',
+        points: [
+          { ...point, approvalRate: '0.99', attempts: 10_000 },
+          { ...point, railId: 'card-mc', approvalRate: '0.98', attempts: 10_000 },
+        ],
+        threshold: '0.85',
+      });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'pay_plane_dark',
+      userMessageKey: 'agents.merchant.unavailable',
+    });
+    expect(result).not.toMatchObject({ status: 'ok' });
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
   it('requires agents:execute — a read-only principal cannot run a metered watch', async () => {
     const readOnly = signed(principal({ scopes: ['agents:read'] }));
     await expect(
