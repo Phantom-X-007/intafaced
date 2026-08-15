@@ -45,44 +45,29 @@
  * `DIRECTION` §8 item 8 reserves "leverage, margin and liquidation parameters
  * beyond §1's stated defaults" to the owner, and §1 states no leverage default,
  * so the maximum is unruled. What is implemented here is the MECHANISM and its
- * refusal. The number is a conservative placeholder in exactly one named
- * constant, it is injectable per deployment through
- * `PositionServiceDeps.maxLeverage` so the ruling has one place to land, and it
- * is reported for a ruling rather than presented as decided.
+ * refusal. Unset is refuse-closed (`trade.leverage_cap_unset`), not a shipped
+ * 10x. The ruling lands on `TRADE_FUTURES_MAX_LEVERAGE` / `PositionServiceDeps.maxLeverage`.
  */
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 
-/**
- * MAXIMUM LEVERAGE ON A FUTURES OPEN. Decimal string, same units as the request.
- *
- * `10` — a tenth of the notional posted as margin. Chosen conservatively and
- * deliberately at the low end, for three reasons that are all about being wrong
- * in the cheap direction:
- *
- *   · **It is the highest number this repository has ever actually exercised.**
- *     Every existing futures test opens at 1x, 2x, 5x or 10x, and
- *     `maintenance-ladder.test.ts` generates its property cases over `2..10`. A
- *     cap at the top of the tested range refuses nothing anybody has run and
- *     nothing the maintenance ladder has been shown to survive.
- *   · **Nothing above it has a maintenance ladder that is known to hold.** The
- *     ladder's own header calls its parameters placeholders awaiting the same
- *     ruling; a 100x position is liquidated by a 1% move, which on a book this
- *     thin is a rounding error, and the ladder has not been sized for that.
- *   · **Raising a cap is a decision; lowering one is a migration.** Positions
- *     opened above a limit that is later imposed have to be handled, and the
- *     cheap direction of error is the one where nobody is holding a position
- *     the platform has since decided it should not have written.
- *
- * IT IS A PLACEHOLDER AWAITING AN OWNER RULING, NOT A CONSIDERED PRODUCT LIMIT.
- * A real exchange offering perps at 10x is offering a conservative product; that
- * may be the wrong product, and choosing is not an agent's call.
- */
-export const DEFAULT_MAX_LEVERAGE = '10';
+/** Owner cap omitted — opens refuse rather than inventing 10x. */
+export const LEVERAGE_CAP_UNSET = 'trade.leverage_cap_unset';
 
-/** The cap as an Amount. One place, so no call site re-parses the string. */
-export function maxLeverage(configured?: Amount | null): Amount {
+/** Positive configured cap, or null when the owner has not named one. */
+export function resolveMaxLeverage(configured?: Amount | null): Amount | null {
   if (configured != null && configured > 0n) return configured;
-  return parseAmount(DEFAULT_MAX_LEVERAGE);
+  return null;
+}
+
+/** Parse `TRADE_FUTURES_MAX_LEVERAGE`. Empty → null (no invented 10). Invalid → throw at boot. */
+export function parseConfiguredMaxLeverage(raw: string): Amount | null {
+  const s = raw.trim();
+  if (s === '') return null;
+  const n = parseAmount(s);
+  if (n <= 0n) {
+    throw new Error('TRADE_FUTURES_MAX_LEVERAGE must be a positive decimal, or empty (no invented 10x)');
+  }
+  return n;
 }
 
 /** Leverage was zero, negative, or not a number this path can use. */
@@ -108,7 +93,7 @@ export interface LeverageCheck {
  * is what turns the `numeric(8, 2)` overflow from a 500 with a compensating
  * release into a 400 that never moved anything.
  */
-export function checkLeverage(leverage: Amount, maximum: Amount = maxLeverage()): LeverageCheck {
+export function checkLeverage(leverage: Amount, maximum: Amount): LeverageCheck {
   if (leverage <= 0n) {
     return { ok: false, code: LEVERAGE_INVALID, reason: `leverage must be greater than zero, got ${formatAmount(leverage)}` };
   }

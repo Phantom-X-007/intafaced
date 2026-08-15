@@ -24,6 +24,7 @@ import {
 } from './futures/adl-disclosure.js';
 import { presentAdlActionDisclosureWire, sqlAdlDisclosureEventStore } from './futures/adl-last-resort.js';
 import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
+import { parseConfiguredMaxLeverage } from './futures/initial-margin.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
@@ -276,6 +277,7 @@ const futuresJobs = startFuturesJobs({
  * exchange stays up while the owner decides.
  */
 const profitSource = optionalProfitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
+const maxLeverage = parseConfiguredMaxLeverage(env.TRADE_FUTURES_MAX_LEVERAGE);
 if (profitSource) {
   app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
 } else {
@@ -300,6 +302,7 @@ const positions = new PositionService(sql, ledger, {
   marks: futuresJobs.marks,
   profitSource,
   bus,
+  ...(maxLeverage != null ? { maxLeverage } : {}),
   assertAdlDisclosureAcked: async (userId) => {
     try {
       await assertAdlDisclosureAcked(adlDisclosureAcks, userId);
