@@ -26,8 +26,10 @@ describe('futures env passthrough into registerPublicRest', () => {
     );
     expect(indexSource).toMatch(/futures:\s*\{[\s\S]*fundingMarketCount:\s*fundingMarketIds\.length/);
     expect(indexSource).toMatch(/futures:\s*\{[\s\S]*venueMarkConfigured:\s*venueMarkConfigured != null/);
+    expect(indexSource).toMatch(/futures:\s*\{[\s\S]*fundingIntervalConfigured:\s*env\.TRADE_FUTURES_FUNDING_INTERVAL_MS != null/);
     expect(indexSource).not.toMatch(/fundingMarketIds:\s*fundingMarketIds/);
     expect(indexSource).not.toMatch(/fundingMaxAbsRate:\s*env\.TRADE_FUTURES_FUNDING_MAX_ABS_RATE/);
+    expect(indexSource).not.toMatch(/futures:\s*\{[\s\S]*fundingIntervalMs:/);
   });
 
   it('published funding quote never invents nextFundingTimestamp from the 8h interval', () => {
