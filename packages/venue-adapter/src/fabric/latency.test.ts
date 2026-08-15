@@ -240,6 +240,21 @@ describe('routingWeightFromGrade — D26-P1-X2 score feed', () => {
     expect(measuredLatencyMs(grade)).toBeNull();
   });
 
+  it('ungraded latency cannot invent routing bps — weight is 0|1 eligibility, never a letter map', () => {
+    const ungraded = new VenueLatencyGrader('never-called').grade(T0);
+    expect(routingWeightFromGrade(ungraded)).toBe(0);
+    expect(measuredLatencyMs(ungraded)).toBeNull();
+
+    const grader = new VenueLatencyGrader('v');
+    feed(grader, 20, 40);
+    const live = grader.grade(at(100));
+    const weight = routingWeightFromGrade(live);
+    expect(weight).toBe(1);
+    // A letter→bps invent would return 5 / 10 / 25 / … here. Eligibility only.
+    expect(weight).not.toBe(5);
+    expect(weight).not.toBe(live.p95Ms);
+  });
+
   it('a letter with no p95 is still weight zero — missing score is not a number', () => {
     const grader = new VenueLatencyGrader('errors-only');
     feed(grader, 2, 5, 'error');

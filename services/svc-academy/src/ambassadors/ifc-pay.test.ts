@@ -14,6 +14,7 @@ import {
   attemptAmbassadorPay,
   attemptResidencyIfcPay,
   ambassadorPayLooksPayable,
+  ambassadorIfcDefaultsCarryNoRates,
   decidePublicAmbassadorPayQuote,
   decidePublicResidencyPayQuote,
   refuseAmbassadorIfcPay,
@@ -264,5 +265,47 @@ describe('public IFC / residency doors — unset rates never look payable', () =
   it('fails closed if an unset quote were marked payable', () => {
     const fake = { status: 'ok', ok: true, payable: true, sessionCredit: '1.00' };
     expect(ambassadorPayLooksPayable(fake)).toBe(true);
+  });
+});
+
+describe('pin: default IFC share cannot sneak in while rates unset', () => {
+  it('unpublished defaults carry no session credit or share bps', () => {
+    expect(ambassadorIfcDefaultsCarryNoRates()).toBe(true);
+    expect(UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW).toEqual({ published: false });
+    expect(UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW).toEqual({ published: false });
+    expect('shareOfFeeBps' in UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW).toBe(false);
+    expect('sessionCredit' in UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW).toBe(false);
+  });
+
+  it('unset IFC pay and revenue share refuse without inventing rates', () => {
+    expect(() => refuseAmbassadorIfcPay()).toThrow(AmbassadorPayRefuseError);
+    expect(() => refuseAmbassadorRevenueShare()).toThrow(AmbassadorPayRefuseError);
+
+    const ifc = tryRefuseAmbassadorPay('ifc_pay');
+    const share = tryRefuseAmbassadorPay('revenue_share');
+    expect(ifc.ok).toBe(false);
+    expect(share.ok).toBe(false);
+    expect(ifc.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(share.code).toBe('academy.ambassador_revenue_share.rates_unset');
+    expect(ambassadorPayLooksPayable(ifc)).toBe(false);
+    expect(ambassadorPayLooksPayable(share)).toBe(false);
+    expect(JSON.stringify(ifc)).not.toMatch(/shareOfFeeBps|sessionCredit/);
+    expect(JSON.stringify(share)).not.toMatch(/shareOfFeeBps|sessionCredit/);
+  });
+
+  it('a sneaky published default fails the no-rates pin', () => {
+    expect(ambassadorIfcDefaultsCarryNoRates(publishedIfc, UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW)).toBe(false);
+    expect(ambassadorIfcDefaultsCarryNoRates(UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW, publishedShare)).toBe(false);
+  });
+
+  it('ambassador pay modules do not ship a DEFAULT IFC share/rate', async () => {
+    const { readFile } = await import('node:fs/promises');
+    const pay = await readFile(new URL('./ifc-pay.ts', import.meta.url), 'utf8');
+    const law = await readFile(new URL('./ifc-pay-rate-law.ts', import.meta.url), 'utf8');
+    for (const src of [pay, law]) {
+      expect(src).not.toMatch(/(?:export\s+)?const\s+DEFAULT_(?:IFC|SHARE|RATE|BPS|FEE)/);
+      expect(src).not.toMatch(/shareOfFeeBps\s*[:=]\s*\d+/);
+      expect(src).not.toMatch(/sessionCredit\s*[:=]\s*['"]\d/);
+    }
   });
 });
