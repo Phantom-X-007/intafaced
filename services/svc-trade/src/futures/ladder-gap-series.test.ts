@@ -278,7 +278,7 @@ describe('gap-series liquidation proof (DIRECTION §1 MVP items 4 and 5)', () =>
     // planner invented 50% maintenance and full-closed. Unset D3 skips.
     expect(result.liquidated).toBe(0);
     expect(result.items[0]).toMatchObject({
-      outcome: 'skipped_healthy',
+      outcome: 'skipped_d3_unset',
       reason: 'maintenance_bps_unset',
     });
     expect(live.closed).toBeNull();
