@@ -308,4 +308,21 @@ describe('the alert surface tells the truth over the wire', () => {
     // Still active. A refused evaluation must never read as a fired watch.
     expect(listed.items[0]!.status).toBe('active');
   });
+
+  it('createAlert with kind=portfolio refuses unpublished and never fires', async () => {
+    const { base, notifyStore } = await mount();
+    const res = await call(base, 'notify.createAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { kind: 'portfolio' },
+    });
+    expect(res.status).not.toBe(200);
+    const text = JSON.stringify(res.body);
+    expect(text).toContain('alert.portfolio_view_unpublished');
+    expect(text).not.toMatch(/"balance"\s*:/);
+    expect(await notifyStore.unreadCount(USER)).toBe(0);
+
+    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    expect(data(listed.body)).toMatchObject({ items: [] });
+  });
 });

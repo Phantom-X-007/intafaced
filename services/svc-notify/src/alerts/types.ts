@@ -5,8 +5,37 @@
  * the platform can source, plus watchlists. Intelligence tiers, funding, whale
  * flow, and mobile sync are out of scope for this residual.
  *
+ * Portfolio is in the tracker TITLE, not in the price core. Until ledger-client
+ * publishes a portfolio view, the honest slice is refuse-closed
+ * (`alert.portfolio_view_unpublished`) — notify never invents a second book
+ * (Doctrine §0.6) and never fires on silence.
+ *
  * Money discipline: every price is a decimal *string*. Nothing is a `number`.
+ * The portfolio refuse arm carries zero money fields.
  */
+
+/** Price watches are live. Portfolio is named so the door can refuse it. */
+export type AlertKind = 'price' | 'portfolio';
+
+/** Stable refuse until a ledger portfolio view exists. Never invent a balance. */
+export const ALERT_PORTFOLIO_VIEW_UNPUBLISHED = 'alert.portfolio_view_unpublished' as const;
+
+export class AlertPortfolioUnpublishedError extends Error {
+  readonly code: typeof ALERT_PORTFOLIO_VIEW_UNPUBLISHED = ALERT_PORTFOLIO_VIEW_UNPUBLISHED;
+  constructor(detail = 'ledger portfolio view unpublished — notify holds no balance') {
+    super(`${ALERT_PORTFOLIO_VIEW_UNPUBLISHED}: ${detail}`);
+    this.name = 'AlertPortfolioUnpublishedError';
+  }
+}
+
+/**
+ * Create a portfolio watch — zero money fields on purpose.
+ * Create always throws `AlertPortfolioUnpublishedError`; nothing is stored.
+ */
+export type CreatePortfolioAlertInput = {
+  readonly kind: 'portfolio';
+  readonly userId: string;
+};
 
 /** Above / below a target. Crossing fires once (status becomes `fired`). */
 export type AlertDirection = 'above' | 'below';
@@ -66,7 +95,12 @@ export type MarkSource = {
 };
 
 export type AlertRefuseCode =
-  'alert.price_unavailable' | 'alert.not_active' | 'alert.invalid_price' | 'channel.not_configured' | 'channel.disabled';
+  | 'alert.price_unavailable'
+  | 'alert.not_active'
+  | 'alert.invalid_price'
+  | 'alert.portfolio_view_unpublished'
+  | 'channel.not_configured'
+  | 'channel.disabled';
 
 export type AlertEvalOutcome =
   | { readonly kind: 'hold'; readonly markPrice: string }

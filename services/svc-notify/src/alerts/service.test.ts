@@ -7,7 +7,7 @@ import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
 import { AlertService } from './service.js';
 import { MemoryAlertStore } from './store.js';
-import type { MarkQuote, MarkSource } from './types.js';
+import { ALERT_PORTFOLIO_VIEW_UNPUBLISHED, AlertPortfolioUnpublishedError, type MarkQuote, type MarkSource } from './types.js';
 
 function harness(mark: MarkQuote) {
   const notifyStore = new MemoryNotifyStore();
@@ -104,6 +104,40 @@ describe('AlertService — rides notify fan-out, refuses dark marks', () => {
     expect(report.results[0]!.outcome).toEqual({ kind: 'hold', markPrice: '99' });
     expect(await notifyStore.unreadCount('u1')).toBe(0);
     expect((await alerts.list('u1'))[0]!.status).toBe('active');
+  });
+});
+
+describe('AlertService — portfolio watch is refuse-closed', () => {
+  it('createPortfolio throws the unpublished code and stores nothing', async () => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    expect(() => alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' })).toThrow(AlertPortfolioUnpublishedError);
+    try {
+      alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' });
+    } catch (err) {
+      expect(err).toBeInstanceOf(AlertPortfolioUnpublishedError);
+      expect((err as AlertPortfolioUnpublishedError).code).toBe(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
+      expect(String(err)).toContain(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
+    }
+    expect(await alerts.list('u1')).toHaveLength(0);
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it('evaluatePortfolio refuses, writes no inbox, and carries no number balance', async () => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    const out = alerts.evaluatePortfolio();
+    expect(out.kind).toBe('refuse');
+    if (out.kind === 'refuse') {
+      expect(out.code).toBe(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
+    }
+    expect(out.kind).not.toBe('fire');
+    for (const value of Object.values(out)) {
+      expect(typeof value).not.toBe('number');
+    }
+    expect(out).not.toHaveProperty('balance');
+    expect(out).not.toHaveProperty('equity');
+    expect(out).not.toHaveProperty('pnl');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+    expect(await alerts.list('u1')).toHaveLength(0);
   });
 });
 
