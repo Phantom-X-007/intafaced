@@ -62,6 +62,7 @@ import type { LedgerClient, PostRequest } from '@intafaced/ledger-client';
 import { PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import type { QuotedMarkSource } from './liquidation-tick.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -140,6 +141,7 @@ if (!available) {
     return new PositionService(sql, recording, {
       marks: source,
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus: null,
       now: () => NOW,
     });

@@ -29,6 +29,7 @@ import { sqlFundingMarginApplier, sqlFundingPeriodStore, sqlPositionCloser } fro
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 
 /**
  * A PER-RUN DATABASE, created and dropped by this suite.
@@ -98,6 +99,7 @@ if (!available) {
     return new PositionService(sql, ledger, {
       marks: marks.source(),
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus,
       now: () => NOW,
     });
@@ -746,6 +748,33 @@ if (!available) {
     expect(await positions.listOpen(ALICE)).toEqual([]);
   });
 
+  function withoutMaxLeverage() {
+    return new PositionService(sql, ledger, {
+      marks: marks.source(),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      bus,
+      now: () => NOW,
+    });
+  }
+
+  it('refuses to OPEN when no leverage cap is named, and locks nothing', async () => {
+    feed('50000');
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+    await expect(
+      withoutMaxLeverage().open({
+        clientOpenId: 't-open-position-service.test-cap-unset',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.leverage_cap_unset', status: 403 });
+
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
   /**
    * A position opened while a pot WAS configured. Profit cannot be paid from an
    * account nobody chose — the ADR's rule, unchanged — so the close refuses and
@@ -953,6 +982,7 @@ if (!available) {
     return new PositionService(sql, ledger, {
       marks: markSourceFromDepth(readDepth),
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus,
       now: () => NOW,
     });

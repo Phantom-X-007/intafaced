@@ -94,8 +94,8 @@ import {
   markSourceFromDepth,
   requiredBestLevelSize,
 } from './mark-from-depth.js';
-import { DEFAULT_MAX_LEVERAGE } from './initial-margin.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE, TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -257,6 +257,7 @@ if (!available) {
     return new PositionService(sql, ledger, {
       marks: markSourceFromDepth(async (id) => (id === marketId ? bookFromOrders(marketId) : null)),
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus,
       now: () => NOW,
     });
@@ -1039,7 +1040,7 @@ if (!available) {
     /** The cap is a number, it is at the top of the range this repo trades, and it opens. */
     it('opens at exactly the cap and refuses one step past it', async () => {
       const positions = await bookedPositions();
-      expect(DEFAULT_MAX_LEVERAGE).toBe('10');
+      expect(TEST_MAX_LEVERAGE).toBe('10');
 
       const atCap = await positions.open({
         clientOpenId: 't-open-orderable-path.test-8',

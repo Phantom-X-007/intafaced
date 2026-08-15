@@ -34,7 +34,7 @@ import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
-import { checkLeverage, initialMargin, maxLeverage } from './initial-margin.js';
+import { checkLeverage, initialMargin, LEVERAGE_CAP_UNSET, resolveMaxLeverage } from './initial-margin.js';
 import { planClose } from './close-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
@@ -150,13 +150,9 @@ export interface PositionServiceDeps {
   /**
    * THE LEVERAGE CEILING FOR THIS DEPLOYMENT.
    *
-   * Omitted → `DEFAULT_MAX_LEVERAGE`. There is deliberately no way to express
-   * "no ceiling": the unbounded reading is what the repository had, and it was
-   * worth 190,000 USDT. An operator who wants more says how much more.
-   *
-   * Present so `DIRECTION` §8 item 8's ruling has one place to land — see
-   * `initial-margin.ts` for the number and for the argument that it is not an
-   * agent's to pick.
+   * Omitted → refuse opens (`trade.leverage_cap_unset`). Unbounded was the
+   * defect; inventing 10x is the same class of silent product law. Owner names
+   * the number via `TRADE_FUTURES_MAX_LEVERAGE`.
    */
   maxLeverage?: Amount;
   now?: () => Date;
@@ -209,7 +205,7 @@ export interface PositionRow {
 export class PositionService {
   private readonly bus: EventBus | null;
   private readonly markPolicy: MarkPolicy;
-  private readonly maxLeverage: Amount;
+  private readonly maxLeverage: Amount | null;
   private readonly now: () => Date;
 
   constructor(
@@ -219,7 +215,7 @@ export class PositionService {
   ) {
     this.bus = deps.bus ?? null;
     this.markPolicy = deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY;
-    this.maxLeverage = maxLeverage(deps.maxLeverage ?? null);
+    this.maxLeverage = resolveMaxLeverage(deps.maxLeverage ?? null);
     this.now = deps.now ?? (() => new Date());
   }
 
@@ -445,8 +441,15 @@ export class PositionService {
      * something it does not offer. Validating here makes it a named 400 that
      * never locked anything, so there is nothing to compensate.
      *
-     * The cap itself, and why 10x, is argued in `initial-margin.ts`.
+     * The cap itself is owner §8 — unset refuses rather than inventing 10x.
      */
+    if (this.maxLeverage == null) {
+      throw new FuturesError(
+        'Futures is not open on this deployment — TRADE_FUTURES_MAX_LEVERAGE is unset (no invented 10x cap)',
+        LEVERAGE_CAP_UNSET,
+        403,
+      );
+    }
     const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
     if (!leverageCheck.ok) {
       throw new FuturesError(leverageCheck.reason ?? 'leverage refused', leverageCheck.code ?? 'trade.leverage_invalid', 400);
