@@ -499,24 +499,13 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   });
 
   /**
-   * Analytics warehouse door — dark/unavailable honesty, never live cubes
-   * without lag probe. ETL watermark is operator-stamped or honestly absent.
+   * Analytics warehouse door — real replica lag probe when URLs are set.
+   * Absent URL / connect fail / not-a-standby → unknown, never invented live.
+   * ETL watermark is operator-stamped or honestly absent (does not paint live).
    */
   app.get('/admin/analytics/warehouse', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
-    const a = admin.opsHonesty().analytics;
-    return {
-      replicaConfigured: a.replicaConfigured,
-      replicaCount: a.replicaCount,
-      refuse: a.refuse,
-      surfaceStatus: a.surface.status,
-      mayLabelLive: a.surface.mayLabelLive,
-      statusLine: a.statusLine,
-      etlWatermark: a.etlWatermark,
-      etlWatermarkAt: a.etlWatermarkAt,
-      etlNote: a.etlNote,
-      surface: a.surface,
-    };
+    return admin.probeWarehouse();
   });
 
   app.get('/admin/kill-switches', async (req, reply) => {

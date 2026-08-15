@@ -204,9 +204,8 @@ function analyticsHonesty(env: Record<string, string | undefined>): EdgeAnalytic
     }
   }
 
-  // Replica URLs present and role-clean, but this edge does not run lag probes
-  // here. Surface is honest dark/unavailable — never invent live cubes.
-  // ETL watermark (if stamped) is disclosed separately and does not paint live.
+  // Sync status snapshot stays I/O-free. The warehouse door probes via
+  // createSqlWarehouseLagProbe (admin.probeWarehouse). Unknown here is honest.
   const surface = queryWarehouseSurface({
     replicaConfigured: true,
     lagSeconds: null,
