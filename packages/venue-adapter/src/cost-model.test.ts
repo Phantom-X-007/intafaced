@@ -129,6 +129,26 @@ describe('scoreSorCost — §28 complete model honesty (D26-P1-X3)', () => {
     expect(scored.reason).toBe('unscored_latency');
   });
 
+  it('ungraded latency cannot invent routing bps — letter is not a cost term', () => {
+    const refused = scoreSorCost(completeTerms({ latencyGrade: ungraded() }));
+    expect(refused).toMatchObject({ ok: false, routingWeight: 0, reason: 'unscored_latency' });
+    expect(refused).not.toHaveProperty('totalCostBps');
+
+    const letters = ['A', 'B', 'C', 'D', 'F'] as const;
+    const totals = letters.map((letter) => {
+      const scored = scoreSorCost(completeTerms({ latencyGrade: graded(letter) }));
+      expect(scored.ok).toBe(true);
+      if (!scored.ok) return Number.NaN;
+      expect(scored.routingWeight).toBe(1);
+      expect(scored).not.toHaveProperty('latencyBps');
+      return scored.totalCostBps;
+    });
+
+    // Same fee + impact + transfer for every letter. A mapping A→cheap / F→dear
+    // would split this set. D-S-14: do not invent letter→bps on this surface.
+    expect(new Set(totals)).toEqual(new Set([17]));
+  });
+
   it('missing fee refuses rather than assuming 0', () => {
     const scored = scoreSorCost(completeTerms({ feeBps: null }));
     expect(scored).toMatchObject({ ok: false, routingWeight: 0, reason: 'missing_fee' });
