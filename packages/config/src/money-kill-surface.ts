@@ -524,13 +524,8 @@ function pathUnderPrefix(path: string, prefix: string): boolean {
   return path === prefix || path.startsWith(`${prefix}/`);
 }
 
-function longestMatchingPrefix(
-  path: string,
-  upstreams: readonly MoneyEdgeUpstream[],
-): MoneyEdgeUpstream | undefined {
-  return [...upstreams]
-    .filter((u) => pathUnderPrefix(path, u.prefix))
-    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+function longestMatchingPrefix(path: string, upstreams: readonly MoneyEdgeUpstream[]): MoneyEdgeUpstream | undefined {
+  return [...upstreams].filter((u) => pathUnderPrefix(path, u.prefix)).sort((a, b) => b.prefix.length - a.prefix.length)[0];
 }
 
 /**
@@ -542,9 +537,7 @@ function longestMatchingPrefix(
  * Callers pass the live `UPSTREAMS` table (CI gate parses `routes.ts`; unit
  * tests pass fixtures including a deliberate unmapped prefix).
  */
-export function assertMoneyRoutesHaveKillMapping(
-  upstreams: readonly MoneyEdgeUpstream[],
-): readonly string[] {
+export function assertMoneyRoutesHaveKillMapping(upstreams: readonly MoneyEdgeUpstream[]): readonly string[] {
   const failures: string[] = [];
   if (upstreams.length === 0) {
     failures.push('no edge upstreams provided — money-route kill mapping would pass vacuously');
@@ -555,13 +548,9 @@ export function assertMoneyRoutesHaveKillMapping(
 
   for (const upstream of upstreams) {
     if (!moneyModules.has(upstream.module)) continue;
-    const control = isModuleId(upstream.module)
-      ? moneyKillControlFor(upstream.module)
-      : undefined;
+    const control = isModuleId(upstream.module) ? moneyKillControlFor(upstream.module) : undefined;
     if (!control) {
-      failures.push(
-        `money route prefix "${upstream.prefix}" names unknown module "${upstream.module}" — no kill mapping`,
-      );
+      failures.push(`money route prefix "${upstream.prefix}" names unknown module "${upstream.module}" — no kill mapping`);
       continue;
     }
     if (control.kind === 'ledger-freeze') {
@@ -582,9 +571,7 @@ export function assertMoneyRoutesHaveKillMapping(
       );
       continue;
     }
-    const covering = MONEY_PUBLIC_DOORS.filter(
-      (d) => d.module === upstream.module && pathUnderPrefix(d.path, upstream.prefix),
-    );
+    const covering = MONEY_PUBLIC_DOORS.filter((d) => d.module === upstream.module && pathUnderPrefix(d.path, upstream.prefix));
     if (covering.length === 0) {
       failures.push(
         `money route prefix "${upstream.prefix}" (module ${upstream.module}) has no kill mapping in MONEY_PUBLIC_DOORS — a new money door that is not in the catalogue cannot be proved killable from /admin/kill-switches`,
@@ -602,9 +589,7 @@ export function assertMoneyRoutesHaveKillMapping(
     }
     const match = longestMatchingPrefix(door.path, upstreams);
     if (!match) {
-      failures.push(
-        `money door "${door.id}" path ${door.path} matches no edge prefix — unmapped (will never hit the kill guard)`,
-      );
+      failures.push(`money door "${door.id}" path ${door.path} matches no edge prefix — unmapped (will never hit the kill guard)`);
     } else if (match.module !== door.module) {
       failures.push(
         `money door "${door.id}" path ${door.path} resolves to prefix ${match.prefix} module ${match.module}, catalogue says ${door.module}`,

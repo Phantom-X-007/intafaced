@@ -378,15 +378,9 @@ if (!e2e) {
     // agents bills via ledger recipes — same kill surface even though custodial:false.
     const moneyModules = new Set([...custodial, 'agents']);
 
-    const doorRows = [
-      ...moneySurface.matchAll(
-        /\{\s*id:\s*'([^']+)',\s*module:\s*'([^']+)',\s*method:\s*'[^']+',\s*path:\s*'([^']+)'/g,
-      ),
-    ];
+    const doorRows = [...moneySurface.matchAll(/\{\s*id:\s*'([^']+)',\s*module:\s*'([^']+)',\s*method:\s*'[^']+',\s*path:\s*'([^']+)'/g)];
     if (doorRows.length === 0) {
-      failures.push(
-        'MONEY_PUBLIC_DOORS could not be parsed — a mapping check that sees zero doors would pass vacuously',
-      );
+      failures.push('MONEY_PUBLIC_DOORS could not be parsed — a mapping check that sees zero doors would pass vacuously');
     }
 
     const pathUnder = (path, prefix) => path === prefix || path.startsWith(`${prefix}/`);
@@ -402,9 +396,7 @@ if (!e2e) {
       for (const u of upstreams) {
         if (!moneyModules.has(u.module)) continue;
         if (u.module === 'ledger') {
-          failures.push(
-            `money route prefix "${u.prefix}" maps to ledger — halt the book at /admin/ledger/freeze, not an /api prefix`,
-          );
+          failures.push(`money route prefix "${u.prefix}" maps to ledger — halt the book at /admin/ledger/freeze, not an /api prefix`);
           continue;
         }
         const covering = doorRows.filter(([, , module, path]) => module === u.module && pathUnder(path, u.prefix));
@@ -416,15 +408,11 @@ if (!e2e) {
         }
       }
       for (const [, id, module, path] of doorRows) {
-        const match = [...upstreams]
-          .filter((u) => pathUnder(path, u.prefix))
-          .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+        const match = [...upstreams].filter((u) => pathUnder(path, u.prefix)).sort((a, b) => b.prefix.length - a.prefix.length)[0];
         if (!match) {
           failures.push(`money door "${id}" path ${path} matches no edge prefix — unmapped`);
         } else if (match.module !== module) {
-          failures.push(
-            `money door "${id}" path ${path} resolves to ${match.prefix} (${match.module}), catalogue says ${module}`,
-          );
+          failures.push(`money door "${id}" path ${path} resolves to ${match.prefix} (${match.module}), catalogue says ${module}`);
         }
       }
     }
