@@ -127,6 +127,15 @@ if (!available) {
       });
     });
 
+    it('earn.pools({ assetId }) refuses by name rather than inventing a default APY', async () => {
+      const user = signedCaller(bank, principal(USER, ['bank:read', 'bank:write']));
+
+      await expect(user.earn.pools({ assetId: 'USDT' })).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.earn_rate_unset' },
+      });
+    });
+
     it('ops.accrueInterest refuses by name when no yield rate is configured', async () => {
       const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
 
