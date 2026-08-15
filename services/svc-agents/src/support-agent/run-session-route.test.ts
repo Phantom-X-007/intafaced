@@ -114,12 +114,16 @@ describe('support.runSession route', () => {
     expect(result.caseFile.reason).toBe('money_request');
   });
 
-  it('is empty when nothing was asked', async () => {
+  it('refuses when nothing was asked — not a live KB plane', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
       .support.runSession({ plane: 'live', userTier: 'free', law, asks: [] });
 
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.support.empty' });
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
     expect(result.metering.billedAmount).toBe('0');
   });
 

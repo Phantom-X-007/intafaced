@@ -165,7 +165,9 @@ export type SupportRunRefuseReason =
   | 'tier_not_granted'
   | 'no_grounded_read'
   /** Account read was asked and missing/incomplete/invent — do not answer as if it existed. */
-  | 'account_state_missing';
+  | 'account_state_missing'
+  /** Live plane claimed, but no published KB catalog — do not invent ops.support answers. */
+  | 'kb_plane_ungrounded';
 
 export type SupportRunEscalateReason = 'kb_no_hit' | 'money_request' | 'desk_refused';
 
@@ -363,7 +365,7 @@ export type SupportRunInput = {
   readonly signal?: AbortSignal;
   /**
    * Published ops.support KB catalog. Used when an ask carries `kbQuery`.
-   * Absent catalog + kbQuery → empty hits (escalate), never invented articles.
+   * Absent/empty catalog + kbQuery → refuse (`kb_plane_ungrounded`), never invented articles.
    */
   readonly kbCatalog?: readonly SupportKbArticle[] | null;
 };
@@ -400,6 +402,19 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     return {
       status: 'refuse',
       reason: 'desk_plane_dark',
+      userMessageKey: 'agents.support.unavailable',
+      unanswered: [],
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
+  // A "live" desk with kbQuery but no published catalog is not a live ops.support
+  // KB plane. Refuse before a session opens — do not invent articles to answer with.
+  const asksLiveKbQuery = input.asks.some((ask) => ask.tool.trim() === SUPPORT_KB_TOOL && ask.kbQuery != null);
+  if (asksLiveKbQuery && (input.kbCatalog == null || input.kbCatalog.length === 0)) {
+    return {
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
       userMessageKey: 'agents.support.unavailable',
       unanswered: [],
       metering: unmetered(input.feeAssetId),
