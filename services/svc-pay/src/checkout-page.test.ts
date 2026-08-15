@@ -75,7 +75,8 @@ describe('checkout page rendering', () => {
     expect(html).toContain('19.99');
     expect(html).toContain('USD');
     expect(html).toContain('Acme Widgets');
-    expect(html).toContain('Continue to payment');
+    expect(html).toContain('Continue');
+    expect(html).toContain('lang="en"');
     expect(html).toMatch(/name="geoCountry"/);
     // Still no card capture. There is no live acquiring rail, and a form that
     // took a PAN against a mock acquirer would be the most dishonest thing here.
@@ -172,7 +173,7 @@ describe('checkout page rendering', () => {
 
   it('renders honest empty and error states', () => {
     expect(renderCheckoutPage({ kind: 'missing_token' }).status).toBe(400);
-    expect(renderCheckoutPage({ kind: 'not_found' }).html).toContain('Link not found');
+    expect(renderCheckoutPage({ kind: 'not_found' }).html).toContain('We could not find that.');
     expect(renderCheckoutPage({ kind: 'expired' }).status).toBe(410);
     expect(renderCheckoutPage({ kind: 'expired' }).html).toContain('expired');
     expect(renderCheckoutPage({ kind: 'exhausted' }).status).toBe(410);
@@ -335,7 +336,7 @@ describe('checkout routes', () => {
     });
     const r1 = await notFound.inject({ method: 'GET', url: '/checkout?token=pl_missing_token_xx' });
     expect(r1.statusCode).toBe(404);
-    expect(r1.body).toContain('Link not found');
+    expect(r1.body).toContain('We could not find that.');
     await notFound.close();
 
     const expired = await build({
@@ -425,7 +426,7 @@ describe('checkout routes', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toContain('plain number');
+    expect(res.body).toContain('Enter a valid amount.');
     expect(called).toBe(false);
     await app.close();
   });

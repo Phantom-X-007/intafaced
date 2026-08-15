@@ -33,6 +33,7 @@
 
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
+import { PAYER_COPY_KEYS, payerTranslator, resolvePayerCopy } from './payer-copy.js';
 
 export type CheckoutLinkView = {
   id: string;
@@ -154,12 +155,18 @@ export function renderCheckoutPage(state: CheckoutPageState, paths: CheckoutPath
     case 'missing_token':
       return {
         status: 400,
-        html: pageShell(errorBody('Missing link', 'This checkout URL needs a payment link token.'), 'Missing link'),
+        html: pageShell(
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.required), resolvePayerCopy(PAYER_COPY_KEYS.notFound)),
+          resolvePayerCopy(PAYER_COPY_KEYS.required),
+        ),
       };
     case 'not_found':
       return {
         status: 404,
-        html: pageShell(errorBody('Link not found', 'This payment link does not exist or is no longer active.'), 'Link not found'),
+        html: pageShell(
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.notFound), resolvePayerCopy(PAYER_COPY_KEYS.notFound)),
+          resolvePayerCopy(PAYER_COPY_KEYS.notFound),
+        ),
       };
     case 'expired':
       return {
@@ -194,8 +201,8 @@ export function renderCheckoutPage(state: CheckoutPageState, paths: CheckoutPath
       return {
         status: 429,
         html: pageShell(
-          errorBody('Too many checkouts open', 'Too many people are paying this link at once. Try again in a few minutes.'),
-          'Too many checkouts open',
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.rateLimited), resolvePayerCopy(PAYER_COPY_KEYS.rateLimited)),
+          resolvePayerCopy(PAYER_COPY_KEYS.rateLimited),
         ),
       };
     case 'amount_required':
@@ -204,8 +211,8 @@ export function renderCheckoutPage(state: CheckoutPageState, paths: CheckoutPath
       return {
         status: 500,
         html: pageShell(
-          errorBody('Something went wrong', state.message ?? 'The checkout page could not load this link.'),
-          'Checkout error',
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.generic), state.message ?? resolvePayerCopy(PAYER_COPY_KEYS.generic)),
+          resolvePayerCopy(PAYER_COPY_KEYS.generic),
         ),
       };
   }
@@ -239,7 +246,7 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
     ? ''
     : `
       <label class="field">
-        <span>Amount${link.currency ? ` (${escapeHtml(link.currency)})` : ''}</span>
+        <span>${escapeHtml(resolvePayerCopy(PAYER_COPY_KEYS.amount))}${link.currency ? ` (${escapeHtml(link.currency)})` : ''}</span>
         <input name="amount" inputmode="decimal" autocomplete="off" required pattern="[0-9]+(\\.[0-9]{1,18})?" placeholder="0.00" />
       </label>${
         link.currency
@@ -270,7 +277,7 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
       ${problemLine}
       <form method="POST" action="${escapeHtml(paths.basePath)}/checkout/session" class="pay">
         ${tokenField}${amountField}${geoField}
-        <button type="submit">Continue to payment</button>
+        <button type="submit">${escapeHtml(resolvePayerCopy(PAYER_COPY_KEYS.continue))}</button>
       </form>
       <p class="hint">Nothing is charged until you send the payment yourself. This page never asks for card details.</p>
     </section>
@@ -368,7 +375,7 @@ function readSafeString(config: Record<string, unknown>, key: string): string | 
 function pageShell(body: string, title: string, refreshSeconds?: number): string {
   const refresh = refreshSeconds ? `\n  <meta http-equiv="refresh" content="${refreshSeconds}" />` : '';
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(payerTranslator().renderedLocale)}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -572,7 +579,7 @@ async function registerRoutes(app: FastifyInstance, pay: CheckoutPay, paths: Che
     if (!token) return send(reply, renderCheckoutPage({ kind: 'missing_token' }, paths));
 
     const amount = parsePayerAmount(body.amount);
-    if (amount === null) return showLink(token, reply, 'Enter an amount as a plain number, for example 19.99.');
+    if (amount === null) return showLink(token, reply, resolvePayerCopy(PAYER_COPY_KEYS.invalidAmount));
     const assetId = typeof body.assetId === 'string' && body.assetId.trim() ? body.assetId.trim().slice(0, 16) : undefined;
     const geoCountry = typeof body.geoCountry === 'string' && body.geoCountry.trim() ? body.geoCountry.trim().slice(0, 8) : undefined;
 
@@ -588,10 +595,10 @@ async function registerRoutes(app: FastifyInstance, pay: CheckoutPay, paths: Che
         .send();
     } catch (err) {
       if (errorCode(err) === 'pay.checkout_amount_required') {
-        return showLink(token, reply, 'This payment link needs you to enter an amount.');
+        return showLink(token, reply, resolvePayerCopy(PAYER_COPY_KEYS.invalidAmount));
       }
       if (errorCode(err) === 'pay.routing_input_missing') {
-        return showLink(token, reply, 'This checkout needs your country. We do not invent one.');
+        return showLink(token, reply, resolvePayerCopy(PAYER_COPY_KEYS.required));
       }
       return send(reply, renderCheckoutPage(stateForError(err), paths));
     }
