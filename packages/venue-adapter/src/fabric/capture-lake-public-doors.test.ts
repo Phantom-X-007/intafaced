@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { VenueUnavailableError, type MarketDataAdapter, type VenueBookSnapshot, type VenueDescriptor } from '@intafaced/venue-contracts';
-import { CaptureLake, bookFromCapture, isCaptureHole, isQuietMarketBook } from './capture-lake.js';
+import { CaptureLake, bookFromCapture, isCaptureHole, isQuietMarketBook, midFromCapture } from './capture-lake.js';
 
 const VENUE: VenueDescriptor = {
   id: 'binance-spot',
@@ -50,6 +50,7 @@ describe('Connect CaptureLake public door — package export honesty', () => {
     expect(typeof bookFromCapture).toBe('function');
     expect(typeof isCaptureHole).toBe('function');
     expect(typeof isQuietMarketBook).toBe('function');
+    expect(typeof midFromCapture).toBe('function');
   });
 
   it('null adapter → hole on the package surface; bookFromCapture is null (not quiet)', async () => {
@@ -59,6 +60,7 @@ describe('Connect CaptureLake public door — package export honesty', () => {
     expect(isCaptureHole(record)).toBe(true);
     expect(bookFromCapture(record)).toBeNull();
     expect(isQuietMarketBook(record)).toBe(false);
+    expect(midFromCapture(record)).toBeNull();
     expect(lake.holes()).toHaveLength(1);
   });
 
@@ -74,6 +76,7 @@ describe('Connect CaptureLake public door — package export honesty', () => {
     expect(record.kind).toBe('book');
     expect(isQuietMarketBook(record)).toBe(true);
     expect(bookFromCapture(record)).toEqual(empty);
+    expect(midFromCapture(record)).toBeNull();
     expect(lake.holes()).toHaveLength(0);
   });
 

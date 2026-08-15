@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { createVenueMarketDataAdapter, PUBLIC_MARKET_DATA_VENUE_IDS } from './factory.js';
+import { createVenueMarketDataAdapter, PUBLIC_MARKET_DATA_VENUE_IDS, publicVenueBookMid } from './factory.js';
 import { OkxSpotMarketData } from './okx-spot.js';
 import { crossCheckMids } from '../cross-check.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
@@ -50,6 +50,17 @@ describe('createVenueMarketDataAdapter — a third id is what makes a median a c
     expect(createVenueMarketDataAdapter('false')).toBeNull();
     expect(createVenueMarketDataAdapter('not-a-venue')).toBeNull();
     expect(createVenueMarketDataAdapter('ccxt')).toBeNull();
+    expect(
+      publicVenueBookMid('off', 'BTC/USDT', {
+        venueId: 'binance-spot',
+        symbol: 'BTC/USDT',
+        bids: [],
+        asks: [],
+        sequence: 1,
+        sequenced: true,
+        observedAt: new Date(0),
+      }),
+    ).toBeNull();
   });
 
   it('reaches snapshotBook through the factory id, not only the concrete class', async () => {

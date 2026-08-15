@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { VenueUnavailableError, type MarketDataAdapter, type VenueBookSnapshot, type VenueDescriptor } from '@intafaced/venue-contracts';
-import { CaptureLake, bookFromCapture, isCaptureHole, isQuietMarketBook } from './capture-lake.js';
+import { CaptureLake, bookFromCapture, isCaptureHole, isQuietMarketBook, midFromCapture } from './capture-lake.js';
 
 const VENUE: VenueDescriptor = {
   id: 'binance-spot',
@@ -44,6 +44,7 @@ describe('CaptureLake — hole vs quiet market (D-S-18 / connect.data-lake)', ()
     expect(record.detail).toMatch(/absent in capture/);
     expect(bookFromCapture(record)).toBeNull();
     expect(isQuietMarketBook(record)).toBe(false);
+    expect(midFromCapture(record)).toBeNull();
     expect(lake.holes()).toHaveLength(1);
   });
 
@@ -59,6 +60,7 @@ describe('CaptureLake — hole vs quiet market (D-S-18 / connect.data-lake)', ()
     expect(record.kind).toBe('book');
     expect(isQuietMarketBook(record)).toBe(true);
     expect(bookFromCapture(record)).toEqual(empty);
+    expect(midFromCapture(record)).toBeNull();
     expect(lake.holes()).toHaveLength(0);
   });
 

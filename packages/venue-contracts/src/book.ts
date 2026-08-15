@@ -161,6 +161,19 @@ export function topOfBook(bids: readonly PriceLevel[], asks: readonly PriceLevel
 }
 
 /**
+ * Mid of a snapshot, or `null`.
+ *
+ * Empty, one-sided, and missing books have no mid. This is the only derived
+ * price this package will mint from a book: never a last-trade, never zero,
+ * never a previously-seen number. Callers that need a price when this is
+ * `null` must refuse, not invent.
+ */
+export function midFromSnapshot(snapshot: VenueBookSnapshot | null | undefined): Amount | null {
+  if (!snapshot) return null;
+  return topOfBook(snapshot.bids, snapshot.asks).mid;
+}
+
+/**
  * A book is crossed when the best bid is at or above the best ask.
  *
  * On one venue that is impossible and means our copy is wrong — usually a
