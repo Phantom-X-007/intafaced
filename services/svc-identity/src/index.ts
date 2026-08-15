@@ -15,6 +15,8 @@ import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
 import { bootKycVault } from './kyc/boot-vault.js';
+import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
+import { WaitlistService } from './waitlist/waitlist-service.js';
 import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -130,6 +132,14 @@ const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_
  */
 const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
 
+const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
+  drop: env.LAUNCH_DROP,
+  env: {
+    INTAFACED_FLAG_WAITLIST_ENABLED: env.INTAFACED_FLAG_WAITLIST_ENABLED,
+    INTAFACED_FLAG_REFERRAL_QUEUE: env.INTAFACED_FLAG_REFERRAL_QUEUE,
+  },
+});
+
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
   webauthnEnabled: env.WEBAUTHN_ENABLED,
@@ -140,6 +150,7 @@ export const appRouter = createIdentityRouter(auth, rank, {
   ledger,
   kycDocs: vault?.kycDocs,
   bindKycProviderRef: vault?.bindKycProviderRef,
+  waitlist,
 });
 export type AppRouter = typeof appRouter;
 
