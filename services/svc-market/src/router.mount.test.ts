@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
+import { userCopy } from './user-copy.js';
 import { MarketError, type VendorService } from './vendor-service.js';
 
 /**
@@ -515,7 +516,7 @@ describe('svc-market mount — commerce scopes', () => {
         .createListing({ title: 'Sub', description: 'monthly', offerType: 'subscription', assetId: 'USDT', price: '10' }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
-      message: 'Subscription listings are not built yet — creating one would take a listing slot for inventory that cannot be sold',
+      message: 'market.subscription_not_built',
     });
   });
 
@@ -528,7 +529,7 @@ describe('svc-market mount — commerce scopes', () => {
       createMarketRouter(stubVendors(), commerce as never)
         .createCaller(signed())
         .createListing({ title: 'Bot', description: 'A bot', offerType: 'one_time', assetId: 'USDT', price: '10' }),
-    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'House commission rate is not configured' });
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'market.commission_not_configured' });
   });
 
   it('maps blank-commission purchase refuse to PRECONDITION_FAILED', async () => {
@@ -575,7 +576,7 @@ describe('svc-market mount — commerce scopes', () => {
         createMarketRouter(stubVendors(), commerce as never)
           .createCaller(signed())
           .purchase({ listingId, purchaseId }),
-      ).rejects.toMatchObject({ code: c.trpc, message: 'refuse' });
+      ).rejects.toMatchObject({ code: c.trpc, message: userCopy(c.code) });
     }
   });
 

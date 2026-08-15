@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-service.js';
 import type { CommerceService } from './commerce/commerce-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
@@ -111,41 +112,42 @@ const statusEventOut = z.object({
  */
 function mapError(err: unknown): never {
   if (err instanceof MarketError) {
-    if (err.code === 'market.vendor_not_found') throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
-    if (err.code === 'market.vendor_already_applied') throw new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
-    if (err.code === 'market.vet_operator_required') throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    const message = userCopy(err.code);
+    if (err.code === 'market.vendor_not_found') throw new TRPCError({ code: 'NOT_FOUND', message, cause: err });
+    if (err.code === 'market.vendor_already_applied') throw new TRPCError({ code: 'CONFLICT', message, cause: err });
+    if (err.code === 'market.vet_operator_required') throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     if (err.code === 'market.stake_required' || err.code === 'market.vendor_not_approved') {
-      throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     }
     // CONFLICT rather than FORBIDDEN: the vendor IS entitled, the capacity is
     // simply taken. Retrying after a release is correct client behaviour and a
     // 403 would tell them not to.
-    if (err.code === 'market.slots_exhausted') throw new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+    if (err.code === 'market.slots_exhausted') throw new TRPCError({ code: 'CONFLICT', message, cause: err });
     if (err.code === 'market.stake_unavailable') {
       // OUR infrastructure, not the caller's request, and the distinction
       // matters to a client: a 403 sends somebody off to go and stake, and
       // telling them that because svc-token was unreachable sends them to do
       // something they have already done. A 500 says "try again". Same mapping,
       // and the same reasoning, as `academy.stake_unavailable`.
-      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
     }
     if (err.code === 'market.commission_not_configured' || err.code === 'market.subscription_not_built') {
-      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
     }
     // Orphan listing / missing slot / over-quota after unstake — preconditions, not bad payloads.
     if (err.code === 'market.listing_slot_missing' || err.code === 'market.slot_required' || err.code === 'market.listing_over_capacity') {
-      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
     }
     if (err.code === 'market.listing_not_found') {
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      throw new TRPCError({ code: 'NOT_FOUND', message, cause: err });
     }
     if (err.code === 'market.purchase_conflict' || err.code === 'market.purchase_self' || err.code === 'market.listing_not_owned') {
-      throw new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      throw new TRPCError({ code: 'CONFLICT', message, cause: err });
     }
     if (err.code === 'market.insufficient_funds') {
-      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
     }
-    throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    throw new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
   }
   throw err;
 }
