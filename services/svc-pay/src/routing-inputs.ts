@@ -11,13 +11,21 @@
  * profile opts into required dimensions. This file does not invent defaults.
  */
 
-export type RoutingDimension = 'geo' | 'method' | 'risk';
+export type RoutingDimension = 'geo' | 'method' | 'risk' | 'approvalRate' | 'geoScore';
+
+/** Score keys that must never be defaulted. Mapped type avoids inventable field literals. */
+export type RoutingScoreKey = 'approvalRate' | 'geoScore';
+
+export type RoutingScoreBag = {
+  readonly [K in RoutingScoreKey]?: string | number | null;
+};
 
 /**
  * Optional signals a caller may supply for rail selection.
  * All absent-or-blank → treated as missing for any required dimension.
+ * Score keys, if present, must be honest — blank → refuse, never a default %.
  */
-export interface RoutingInputs {
+export interface RoutingInputs extends RoutingScoreBag {
   /** ISO-3166-1 alpha-2 (or longer merchant region tag). Not invented. */
   readonly geoCountry?: string | null;
   /** Payment method the merchant/payer actually selected. */
@@ -61,6 +69,30 @@ function present(value: string | null | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function presentScore(value: string | number | null | undefined): boolean {
+  if (typeof value === 'number') return Number.isFinite(value);
+  return present(value);
+}
+
+const SCORE_KEYS: readonly RoutingScoreKey[] = ['approvalRate', 'geoScore'];
+
+/**
+ * If a caller supplied an approval-rate or geo score key, the value must be
+ * honest. Blank / null / non-finite → refuse. Omitted keys stay omitted —
+ * we never invent 1.0 / 0.5 / ranking weights.
+ */
+export function assertRoutingScoresRefuseBlank(inputs: RoutingInputs): void {
+  const missing: RoutingDimension[] = [];
+  for (const key of SCORE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(inputs, key)) continue;
+    if (!presentScore(inputs[key])) missing.push(key);
+  }
+  if (missing.length === 0) return;
+  throw new RoutingInputError(`Smart routing needs ${missing.join(', ')} but that data is missing — refuse rather than invent`, missing, {
+    missing,
+  });
+}
+
 /** Which required dimensions lack data for this decision. */
 export function missingRoutingDimensions(policy: RoutingInputPolicy, inputs: RoutingInputs): RoutingDimension[] {
   const missing: RoutingDimension[] = [];
@@ -80,6 +112,7 @@ export function missingRoutingDimensions(policy: RoutingInputPolicy, inputs: Rou
  * - Never returns fabricated geo/method/risk/approval values.
  */
 export function assertRoutingInputsPresent(policy: RoutingInputPolicy, inputs: RoutingInputs): void {
+  assertRoutingScoresRefuseBlank(inputs);
   const missing = missingRoutingDimensions(policy, inputs);
   if (missing.length === 0) return;
   throw new RoutingInputError(`Smart routing needs ${missing.join(', ')} but that data is missing — refuse rather than invent`, missing, {
@@ -92,7 +125,16 @@ export function assertRoutingInputsPresent(policy: RoutingInputPolicy, inputs: R
  * Structural pin: a routing decision object must never carry inventable score
  * fields. Used by tests and by callers assembling payment_events payloads.
  */
-export const FORBIDDEN_ROUTING_SCORE_FIELDS = ['approvalRate', 'approval_rate', 'costBps', 'cost_bps'] as const;
+export const FORBIDDEN_ROUTING_SCORE_FIELDS = [
+  'approvalRate',
+  'approval_rate',
+  'costBps',
+  'cost_bps',
+  'geoScore',
+  'geo_score',
+  'methodRank',
+  'method_rank',
+] as const;
 
 export function assertNoInventedRoutingScores(decision: Record<string, unknown>): void {
   for (const key of FORBIDDEN_ROUTING_SCORE_FIELDS) {
