@@ -23,6 +23,7 @@ describe('futures jobs occupancy on /health', () => {
     expect(indexSource).toMatch(/enabled:\s*env\.TRADE_FUTURES_JOBS_ENABLED/);
     expect(indexSource).toMatch(/fundingMarketCount:\s*fundingMarketIds\.length/);
     expect(indexSource).toMatch(/fundingMaxAbsRateConfigured:\s*fundingMaxAbsRate\s*!==\s*null/);
+    expect(indexSource).toMatch(/venueMarkConfigured:\s*venueMarkConfigured\s*!=\s*null/);
   });
 
   it('does not put the |rate| decimal or market UUID list on /health', () => {
@@ -30,5 +31,11 @@ describe('futures jobs occupancy on /health', () => {
     expect(health).toContain('presentFuturesJobsHealth');
     expect(health).not.toMatch(/fundingMaxAbsRate:\s*fundingMaxAbsRate/);
     expect(health).not.toMatch(/fundingMarketIds:/);
+    expect(health).not.toMatch(/venueId:/);
+  });
+
+  it('boot log does not echo TRADE_VENUE_MARK_VENUE', () => {
+    expect(indexSource).toMatch(/venueMark:\s*venueMarkConfigured \? \{ configured: true, symbolCount:/);
+    expect(indexSource).not.toMatch(/venueId:\s*venueMarkConfigured\.venueId/);
   });
 });

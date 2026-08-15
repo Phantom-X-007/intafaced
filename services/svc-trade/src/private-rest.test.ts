@@ -1836,6 +1836,7 @@ describe('private REST — mount boundary + order write path', () => {
       expect(res.statusCode).toBe(501);
       expect(res.json().code).toBe('NotSupported');
       expect(res.json().intafacedCode).toBe(intafacedCode);
+      expect(res.json().retryAfter).toBeUndefined();
       await app.close();
     });
 
