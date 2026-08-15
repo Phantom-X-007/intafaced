@@ -465,6 +465,7 @@ app.get('/health', async () => ({
     enabled: env.TRADE_FUTURES_JOBS_ENABLED,
     fundingMarketCount: fundingMarketIds.length,
     fundingMaxAbsRateConfigured: fundingMaxAbsRate !== null,
+    fundingIntervalConfigured: env.TRADE_FUTURES_FUNDING_INTERVAL_MS != null,
     venueMarkConfigured: venueMarkConfigured != null,
   }),
   insuranceListing: presentInsuranceListingPolicy(),

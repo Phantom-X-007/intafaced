@@ -23,6 +23,7 @@ describe('futures jobs occupancy on /health', () => {
     expect(indexSource).toMatch(/enabled:\s*env\.TRADE_FUTURES_JOBS_ENABLED/);
     expect(indexSource).toMatch(/fundingMarketCount:\s*fundingMarketIds\.length/);
     expect(indexSource).toMatch(/fundingMaxAbsRateConfigured:\s*fundingMaxAbsRate\s*!==\s*null/);
+    expect(indexSource).toMatch(/fundingIntervalConfigured:\s*env\.TRADE_FUTURES_FUNDING_INTERVAL_MS\s*!=\s*null/);
     expect(indexSource).toMatch(/venueMarkConfigured:\s*venueMarkConfigured\s*!=\s*null/);
   });
 
@@ -32,6 +33,8 @@ describe('futures jobs occupancy on /health', () => {
     expect(health).not.toMatch(/fundingMaxAbsRate:\s*fundingMaxAbsRate/);
     expect(health).not.toMatch(/fundingMarketIds:/);
     expect(health).not.toMatch(/venueId:/);
+    expect(health).not.toMatch(/TRADE_FUTURES_FUNDING_INTERVAL_MS:/);
+    expect(health).not.toMatch(/28_?800_?000/);
   });
 
   it('boot log does not echo TRADE_VENUE_MARK_VENUE', () => {
