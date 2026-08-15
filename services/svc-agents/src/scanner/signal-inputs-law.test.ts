@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   P0_11_BOARD_ID,
+  PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW,
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
   SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
   UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW,
@@ -93,10 +94,15 @@ describe('scannerSignalInputsGate (D26-P0-11 / D26-P1-A3)', () => {
     expect(scannerSignalInputsGateStatusLine(r)).toBe('ok=1 board=D26-P0-11 recipe=abs_change_x_log_volume inputs=3');
   });
 
-  it('resolve: omitted law is production sealed v1; null stays unpublished refuse', () => {
-    expect(resolveScannerSignalInputsLaw(undefined)).toEqual(SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW);
+  it('pin: omitted / production default stays blank — no sneak ranked board', () => {
+    expect(PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW).toEqual(UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW);
+    expect(PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW).not.toEqual(SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW);
+    expect(resolveScannerSignalInputsLaw(undefined)).toEqual(UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW);
     expect(resolveScannerSignalInputsLaw(null)).toBeNull();
     expect(resolveScannerSignalInputsLaw(UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW)).toEqual(UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW);
+    const omitted = scannerSignalInputsGate(resolveScannerSignalInputsLaw(undefined));
+    expect(omitted).toMatchObject({ status: 'refuse', reason: 'signal_inputs_law_blank', boardId: P0_11_BOARD_ID });
+    expect(scannerSignalInputsGateBoardCard(omitted).ok).toBe(false);
   });
 
   it('residual string names D26-P0-11 and invent ban (high-signal ops grep)', () => {

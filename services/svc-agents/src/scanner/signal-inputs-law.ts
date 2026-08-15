@@ -2,9 +2,10 @@
  * D26-P0-11 — Scanner signal inputs law.
  * D26-P1-A3 — Ranked signals only after P0-11; else refuse (no invent alpha).
  *
- * P0-11 is sealed on tip (`docs/adr/2026-08-12-scanner-signal-inputs-law.md`).
- * Production default is the sealed v1 recipe. Explicit unpublished / null still refuses.
- * Agents must not invent score formulas, "hot" lists, or market alpha.
+ * Until the owner seals which market inputs may contribute to a ranking (and
+ * which ranking recipe is allowed), every ranked-signal path is refuse-closed.
+ * Omitted law must not sneak a default ranked board. Agents must not invent
+ * score formulas, "hot" lists, live tickers, or market alpha.
  */
 
 /** Board id this gate exists to honour. */
@@ -37,12 +38,13 @@ export type ScannerSignalInputsLaw =
       readonly rankingRecipeId: ScannerRankingRecipeId;
     };
 
-/** Explicit unpublished — still refuse. Not the production default. */
+/** Explicit unpublished / blank P0-11 — refuse-closed. Production default is this. */
 export const UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW: ScannerSignalInputsLaw = { published: false };
 
 /**
- * Sealed v1 production law (D26-P0-11 ADR). Allowlist + recipe named there.
- * Omitted law on public doors resolves to this. Do not invent a second recipe.
+ * Test / sealed-path fixture: the only recipe the Stage-1 ranker implements.
+ * Not a production default — callers must pass it explicitly after P0-11 seals.
+ * Do not wire this as the omitted-law ranked board.
  */
 export const SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW: Extract<ScannerSignalInputsLaw, { published: true }> = {
   published: true,
@@ -51,12 +53,16 @@ export const SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW: Extract<ScannerSignalInputsLaw,
   rankingRecipeId: 'abs_change_x_log_volume',
 };
 
-/** Tip / production default after P0-11 sealed — same object as the fixture. */
-export const PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW: ScannerSignalInputsLaw = SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW;
+/**
+ * Tip / production default — P0-11 inputs stay blank (Class X live-data residual).
+ * Omitted law resolves here so a default ranked board cannot sneak in.
+ */
+export const PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW: ScannerSignalInputsLaw = UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW;
 
 /**
- * `undefined` (caller omitted) → production sealed law.
- * `null` or `{ published: false }` → still refuse (explicit unpublished).
+ * `undefined` (caller omitted) → unpublished / blank → refuse-closed.
+ * `null` or `{ published: false }` → same refuse (`signal_inputs_law_blank`).
+ * Explicit sealed fixture only after owner seal — never invent inputs.
  */
 export function resolveScannerSignalInputsLaw(law: ScannerSignalInputsLaw | null | undefined): ScannerSignalInputsLaw | null {
   if (law === undefined) return PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW;
