@@ -787,9 +787,7 @@ if (!available) {
       );
       expect(refused.statusCode).toBe(400);
       expect(refused.body.error?.data?.code).toBe('BAD_REQUEST');
-      expect(refused.body.error?.data?.cause?.code ?? refused.body.error?.message).toMatch(
-        /yield_source_underfunded|underfund/i,
-      );
+      expect(refused.body.error?.data?.cause?.code ?? refused.body.error?.message).toMatch(/yield_source_underfunded|underfund/i);
       expect(await sql`SELECT window_id FROM token.yield_windows`).toHaveLength(0);
       expect(await sql`SELECT window_id FROM token.yield_payouts`).toHaveLength(0);
       expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
