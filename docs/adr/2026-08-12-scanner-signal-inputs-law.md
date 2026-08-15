@@ -28,11 +28,11 @@ This is settled. Agents and engineers implement it; they do not re-litigate it o
 
 ## Production allow-list (sealed)
 
-| Field | Production value |
-| ----- | ---------------- |
-| Published allow-list of input kinds | **empty** |
-| Published ranking recipe | **none** |
-| Effect | **Refuse all ranks** (`inputs_empty` when the sealed object is published with an empty list; `signal_inputs_law_blank` while the law object is still unpublished) |
+| Field                               | Production value                                                                                                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Published allow-list of input kinds | **empty**                                                                                                                                                         |
+| Published ranking recipe            | **none**                                                                                                                                                          |
+| Effect                              | **Refuse all ranks** (`inputs_empty` when the sealed object is published with an empty list; `signal_inputs_law_blank` while the law object is still unpublished) |
 
 Kinds not on the published allow-list **must not** enter a rank. There are **no** kinds on the published list.
 
@@ -42,15 +42,15 @@ Agents **must not** add kinds (`last`, `volume24h`, `change24hBps`, `spread`, `f
 
 ## Refuse matrix (fail closed)
 
-| Situation | Named refuse / answer |
-| --------- | --------------------- |
-| Law unpublished / blank / not `p0_11: sealed` | **`signal_inputs_law_blank`** — no invent rankings |
-| Sealed allow-list empty (this production seal) | **`inputs_empty`** — refuse all ranks |
-| Unknown `rankingRecipeId` | **`ranking_recipe_unknown`** — do not guess a formula |
-| Sealed recipe missing a required input on the allow-list | **`required_inputs_missing`** |
-| Input present but **untrusted** (stale, synthetic, caller-supplied, partner-named, dark plane, unproven feed) | **`inputs_untrusted`** — named refuse; never rank on it |
-| Per-row required field null / unparseable | **Omit that row**; if none remain → typed empty / unavailable — never invent |
-| Request for a returns-ranked / PnL-ranked / “hot alpha” board | **Refuse** — D-S-18 / §8; scanner is not a returns leaderboard |
+| Situation                                                                                                     | Named refuse / answer                                                        |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Law unpublished / blank / not `p0_11: sealed`                                                                 | **`signal_inputs_law_blank`** — no invent rankings                           |
+| Sealed allow-list empty (this production seal)                                                                | **`inputs_empty`** — refuse all ranks                                        |
+| Unknown `rankingRecipeId`                                                                                     | **`ranking_recipe_unknown`** — do not guess a formula                        |
+| Sealed recipe missing a required input on the allow-list                                                      | **`required_inputs_missing`**                                                |
+| Input present but **untrusted** (stale, synthetic, caller-supplied, partner-named, dark plane, unproven feed) | **`inputs_untrusted`** — named refuse; never rank on it                      |
+| Per-row required field null / unparseable                                                                     | **Omit that row**; if none remain → typed empty / unavailable — never invent |
+| Request for a returns-ranked / PnL-ranked / “hot alpha” board                                                 | **Refuse** — D-S-18 / §8; scanner is not a returns leaderboard               |
 
 Wire copy key for law-level refuse: `agents.scanner.signal_inputs_closed` (brand-safe; no vendor names). Residual string stays greppable as `D26-P0-11_refuse_closed`.
 
