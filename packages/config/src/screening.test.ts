@@ -15,7 +15,17 @@ import {
   screeningStatus,
   type JurisdictionEntry,
 } from './jurisdiction.js';
-import { SCREENING_REVIEWED_EMPTY, ScreeningListError, UNSET_SCREENING_LIST, parseScreeningList } from './screening.js';
+import {
+  OWNER_LIST_REQUIRED_ENVS,
+  SCREENING_REVIEWED_EMPTY,
+  SHIPPED_SCREENING_REGIONS,
+  ScreeningListError,
+  UNSET_SCREENING_LIST,
+  consultScreeningList,
+  envScreeningList,
+  ownerListSatisfiesBoot,
+  parseScreeningList,
+} from './screening.js';
 
 /**
  * THE GAP THIS CLOSES.
@@ -772,6 +782,32 @@ describe('what ships', () => {
     expect(shipped.configured).toBe(false);
     expect(shipped.declaration).toBe('unset');
     expect(shipped.regions).toEqual([]);
+    expect(SHIPPED_SCREENING_REGIONS).toEqual([]);
+    expect(envScreeningList({})).toBe(UNSET_SCREENING_LIST);
+    expect(ownerListSatisfiesBoot(UNSET_SCREENING_LIST)).toBe(false);
+  });
+
+  /**
+   * Empty/unset cannot silently pass a hit. Consulting QQ (unassigned ISO-3166)
+   * against the shipped list is `unconsulted`, never `clear`.
+   */
+  it('an empty list cannot silently pass a hit — consult is unconsulted, not clear', () => {
+    const consult = consultScreeningList(UNSET_SCREENING_LIST, 'QQ');
+    expect(consult.outcome).toBe('unconsulted');
+    expect(consult.outcome).not.toBe('clear');
+    expect(consult.declaration).toBe('unset');
+
+    const listed = parseScreeningList('AA:placeholder programme', 'test-fixture-not-a-real-list');
+    expect(consultScreeningList(listed, 'AA').outcome).toBe('hit');
+    expect(consultScreeningList(listed, 'QQ').outcome).toBe('clear');
+  });
+
+  it('prod and staging still refuse to boot without an owner list', () => {
+    expect([...SCREENING_ENFORCED_ENVS]).toEqual([...OWNER_LIST_REQUIRED_ENVS]);
+    for (const appEnv of OWNER_LIST_REQUIRED_ENVS) {
+      expect(ownerListSatisfiesBoot(envScreeningList({ APP_ENV: appEnv }))).toBe(false);
+      expect(() => assertScreeningConfigured({ APP_ENV: appEnv })).toThrow(UnscreenedJurisdictionError);
+    }
   });
 
   /**

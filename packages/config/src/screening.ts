@@ -174,17 +174,79 @@ export interface ScreeningList {
 }
 
 /**
+ * Counsel content that ships in this repo. Empty until an owner supplies a list.
+ * Filling this array is Class X. Tests pin `length === 0`.
+ */
+export const SHIPPED_SCREENING_REGIONS: readonly ScreenedRegion[] = [];
+
+/**
  * The state before anyone supplies anything. Screens nothing, and says so.
  *
  * Named `UNSET`, not `EMPTY`: "deliberately empty" is a different, legitimate
  * state, and the two must not share a word — let alone a value.
  */
 export const UNSET_SCREENING_LIST: ScreeningList = {
-  regions: [],
+  regions: SHIPPED_SCREENING_REGIONS,
   declaration: 'unset',
   configured: false,
   source: 'unconfigured',
 };
+
+/**
+ * APP_ENVs that must not boot on an unset owner list.
+ *
+ * `assertScreeningConfigured` (jurisdiction.ts) enforces this. The names live
+ * here so a screening-only pin can fail if prod/staging drop off the guard
+ * without this file noticing. Dev and test stay frictionless.
+ */
+export const OWNER_LIST_REQUIRED_ENVS = ['staging', 'prod'] as const;
+
+/** `unset` does not satisfy the boot guard. `listed` and `reviewed-empty` do. */
+export function ownerListSatisfiesBoot(list: ScreeningList): boolean {
+  return list.declaration !== 'unset';
+}
+
+/**
+ * What consulting the list for one region actually said.
+ *
+ * `unconsulted` is NOT a miss. An empty/unset list has no owner content, so a
+ * lookup cannot come back as "clear" — that is how a hit used to pass silently.
+ */
+export type ScreeningConsult =
+  | { readonly outcome: 'unconsulted'; readonly region: string; readonly declaration: 'unset' }
+  | {
+      readonly outcome: 'hit';
+      readonly region: string;
+      readonly reason: string;
+      readonly source: string;
+      readonly declaration: 'listed';
+    }
+  | {
+      readonly outcome: 'clear';
+      readonly region: string;
+      readonly declaration: 'listed' | 'reviewed-empty';
+      readonly source: string;
+    };
+
+/**
+ * Look up one region against a list. Unset never returns `clear`.
+ *
+ * Placeholder codes only at call sites. This function does not invent jurisdictions.
+ */
+export function consultScreeningList(list: ScreeningList, region: string): ScreeningConsult {
+  const code = region.trim().toUpperCase();
+  if (list.declaration === 'unset') {
+    return { outcome: 'unconsulted', region: code, declaration: 'unset' };
+  }
+  if (list.declaration === 'reviewed-empty') {
+    return { outcome: 'clear', region: code, declaration: 'reviewed-empty', source: list.source };
+  }
+  const hit = list.regions.find((entry) => entry.region === code);
+  if (hit) {
+    return { outcome: 'hit', region: code, reason: hit.reason, source: hit.source, declaration: 'listed' };
+  }
+  return { outcome: 'clear', region: code, declaration: 'listed', source: list.source };
+}
 
 export class ScreeningListError extends Error {
   constructor(
