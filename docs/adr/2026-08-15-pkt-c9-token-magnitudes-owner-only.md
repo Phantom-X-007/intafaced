@@ -22,12 +22,12 @@ D-S-14 already decided **whose** they are (the owner, via `token_params`) and **
 
 These are families, not a licence to invent the sub-fields D-S-14 enumerated. No value is published here.
 
-| Named param | Status | What refuse-closed means until the owner writes `token_params` |
-| ----------- | ------ | -------------------------------------------------------------- |
-| **emission** | **unset** | No published epoch reward, supply cap, halving interval, or mining/governance split. |
-| **buyback** | **unset** | No published buyback rate, window length/cadence, or fee→buyback percentage. |
-| **burn** | **unset** | No published burn split or user-facing burn total as an economic outcome. |
-| **staking** | **unset** | No published APY, access-tier magnitudes, lock multipliers, or fee-discount steps as live policy. |
+| Named param  | Status    | What refuse-closed means until the owner writes `token_params`                                    |
+| ------------ | --------- | ------------------------------------------------------------------------------------------------- |
+| **emission** | **unset** | No published epoch reward, supply cap, halving interval, or mining/governance split.              |
+| **buyback**  | **unset** | No published buyback rate, window length/cadence, or fee→buyback percentage.                      |
+| **burn**     | **unset** | No published burn split or user-facing burn total as an economic outcome.                         |
+| **staking**  | **unset** | No published APY, access-tier magnitudes, lock multipliers, or fee-discount steps as live policy. |
 
 Seeds in source (if any exist) are **not** these numbers. Copying a seed into a user-facing figure, a new constant “so tests pass,” or a comment that treats a seed as committed policy is inventing.
 
@@ -35,12 +35,12 @@ Seeds in source (if any exist) are **not** these numbers. Copying a seed into a 
 
 ## Refuse-closed (done bar)
 
-| Situation | Correct answer |
-| --------- | -------------- |
-| All four magnitudes unset (today) | **Refuse-closed.** Name the residual. Never a plausible figure. |
-| A surface asks for supply, burn total, APY, or fee-% | **Say it is not set.** Never a zero, never a dash. (D-S-14 refuse table.) |
-| An agent needs a number to ship | **Stop.** Do not seed. Do not copy economics constants into live copy. |
-| Owner later writes `token_params` | Engineering may then publish **that** store. Still no second book in source. |
+| Situation                                            | Correct answer                                                               |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| All four magnitudes unset (today)                    | **Refuse-closed.** Name the residual. Never a plausible figure.              |
+| A surface asks for supply, burn total, APY, or fee-% | **Say it is not set.** Never a zero, never a dash. (D-S-14 refuse table.)    |
+| An agent needs a number to ship                      | **Stop.** Do not seed. Do not copy economics constants into live copy.       |
+| Owner later writes `token_params`                    | Engineering may then publish **that** store. Still no second book in source. |
 
 This seal does **not** require a red CI gate that blocks unrelated merges until four figures exist. D-S-14 already rejected that failure mode. The product rule is refuse-closed on the door, not an unconditional red on `main`.
 
