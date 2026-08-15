@@ -7,10 +7,10 @@
 
 Two independent allowlists answer “is this browser origin ours?”
 
-| List | Used for |
-| ---- | -------- |
-| `EDGE_ALLOWED_ORIGINS` | Browser tRPC/REST preflight and ACAO echo |
-| `WEBAUTHN_ORIGIN` | `clientDataJSON.origin` on register/assert/step-up |
+| List                   | Used for                                           |
+| ---------------------- | -------------------------------------------------- |
+| `EDGE_ALLOWED_ORIGINS` | Browser tRPC/REST preflight and ACAO echo          |
+| `WEBAUTHN_ORIGIN`      | `clientDataJSON.origin` on register/assert/step-up |
 
 They can diverge.
 

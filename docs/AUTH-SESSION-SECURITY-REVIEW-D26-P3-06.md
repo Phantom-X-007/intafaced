@@ -5,7 +5,7 @@
 **Lane:** `denon-d26-p3-06-auth-review`  
 **Leverage:** Phase A IN — existing `@intafaced/auth` + `svc-identity` credential plane. No second auth stack. No Vue. No Class X implementation.
 
-**Done-bar this document satisfies:** written review of JWT/session, step-up, API keys, WebAuthn, key kill, and cookie/CORS *interaction*. Residual tickets are named files with failure modes, not “harden later.”
+**Done-bar this document satisfies:** written review of JWT/session, step-up, API keys, WebAuthn, key kill, and cookie/CORS _interaction_. Residual tickets are named files with failure modes, not “harden later.”
 
 **Not this mountain:**
 
@@ -32,16 +32,16 @@ That is a policy call (accept / shorten TTL / denylist), not a one-line patch. I
 
 ## 1 · JWT / session
 
-| Promise | Tip fact | Status |
-| ------- | -------- | ------ |
-| Short-lived HS256 access JWT; opaque rotating refresh | `packages/auth/src/tokens.ts` + `AuthService.refresh` | **Holds** |
-| `exp` required (jose `requiredClaims`) | #1078; `exp <= now` fail-closed | **Holds** |
-| Refresh hash only stored (48-byte CSPRNG, sha256) | `generateRefreshToken` / `generateToken(48)` | **Holds** |
-| Reuse of a rotated refresh burns **every** session for that user | Revocation committed **outside** the txn so a throw cannot roll it back | **Holds** (correct, non-obvious) |
-| Frozen/closed user cannot mint from a still-valid refresh | `auth.account_frozen`; presented session revoked | **Holds** |
-| Access JWT checked against session row / denylist | `verifyAccessToken` has no DB | **Broken for kill** — **R-AUTH-01** |
-| `sid` / `jti` protect replay or revoke | Claims present; unused at authorise | **Promise-shaped** — same ticket |
-| Signing-secret rotation with overlap | One `JWT_ACCESS_SECRET`, no `kid` for signing keys (`kid` = API-key id) | **Class X residual** — **R-AUTH-07** |
+| Promise                                                          | Tip fact                                                                | Status                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------ |
+| Short-lived HS256 access JWT; opaque rotating refresh            | `packages/auth/src/tokens.ts` + `AuthService.refresh`                   | **Holds**                            |
+| `exp` required (jose `requiredClaims`)                           | #1078; `exp <= now` fail-closed                                         | **Holds**                            |
+| Refresh hash only stored (48-byte CSPRNG, sha256)                | `generateRefreshToken` / `generateToken(48)`                            | **Holds**                            |
+| Reuse of a rotated refresh burns **every** session for that user | Revocation committed **outside** the txn so a throw cannot roll it back | **Holds** (correct, non-obvious)     |
+| Frozen/closed user cannot mint from a still-valid refresh        | `auth.account_frozen`; presented session revoked                        | **Holds**                            |
+| Access JWT checked against session row / denylist                | `verifyAccessToken` has no DB                                           | **Broken for kill** — **R-AUTH-01**  |
+| `sid` / `jti` protect replay or revoke                           | Claims present; unused at authorise                                     | **Promise-shaped** — same ticket     |
+| Signing-secret rotation with overlap                             | One `JWT_ACCESS_SECRET`, no `kid` for signing keys (`kid` = API-key id) | **Class X residual** — **R-AUTH-07** |
 
 Refresh TTL default is 30 days (`JWT_REFRESH_TTL_SECONDS`, max 90 days). That is the long-lived half. Theft of a **refresh** is the serious event; reuse detection is the control. Theft of an **access** JWT is a 15-minute (or up to 60-minute) fully privileged window, including `mfa: true` and whatever scopes were minted — including a step-up `trade:withdraw` token.
 
@@ -55,16 +55,16 @@ Refresh after step-up **drops** `trade:withdraw` (`issueSession` / `refresh` bot
 
 Tracker `identity.step-up` is `done`. The router is mounted. The note that a TOTP code is “replayable inside its validity window” is **stale on this tip**.
 
-| Control | Tip fact |
-| ------- | -------- |
-| `trade:withdraw` withheld from `SESSION_SCOPE_LIST` | `WITHHELD_FROM_SESSION` — XSS-stolen ordinary access token cannot drain |
-| Mint path | `AuthService.stepUp` — live session + exactly one of TOTP/recovery **or** WebAuthn |
-| Session must still be unrevoked and unexpired **at mint** | Logout then step-up with a leftover access JWT is refused (`auth.session_invalid`) |
-| Elevated TTL | `min(accessTtl, 300)` seconds |
-| Elevated `mfa` | Forced `true` on the new token |
-| TOTP replay | `consumeTotpCode` burns `totp_last_step` under `FOR UPDATE`; same code cannot buy login **and** step-up |
-| WebAuthn step-up | Challenge kind `step-up`; login assertion cannot be reused (`challenges.take(..., 'step-up')`) |
-| Recovery codes | Same `totpCode` field; TOTP tried first so a live authenticator never burns recovery; recovery **is** burned |
+| Control                                                   | Tip fact                                                                                                     |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `trade:withdraw` withheld from `SESSION_SCOPE_LIST`       | `WITHHELD_FROM_SESSION` — XSS-stolen ordinary access token cannot drain                                      |
+| Mint path                                                 | `AuthService.stepUp` — live session + exactly one of TOTP/recovery **or** WebAuthn                           |
+| Session must still be unrevoked and unexpired **at mint** | Logout then step-up with a leftover access JWT is refused (`auth.session_invalid`)                           |
+| Elevated TTL                                              | `min(accessTtl, 300)` seconds                                                                                |
+| Elevated `mfa`                                            | Forced `true` on the new token                                                                               |
+| TOTP replay                                               | `consumeTotpCode` burns `totp_last_step` under `FOR UPDATE`; same code cannot buy login **and** step-up      |
+| WebAuthn step-up                                          | Challenge kind `step-up`; login assertion cannot be reused (`challenges.take(..., 'step-up')`)               |
+| Recovery codes                                            | Same `totpCode` field; TOTP tried first so a live authenticator never burns recovery; recovery **is** burned |
 
 **Failure mode that remains:** mint checks the session; **use does not.** If the attacker already holds the five-minute withdraw JWT, `logout` / freeze does not stop withdraw until `exp`. Same as R-AUTH-01, sharper because the token carries `trade:withdraw`.
 
@@ -80,17 +80,17 @@ Tracker `identity.step-up` is `done`. The router is mounted. The note that a TOT
 
 Tracker `identity.apikeys` is `done` (D26-P1-I1 / D-S-11). Create / list / revoke / exchange are mounted.
 
-| Control | Tip fact | Status |
-| ------- | -------- | ------ |
-| Shown once; only hash stored | `generateApiKey` — `ifc_` / `ifc_test_` + 24-byte secret | **Holds** |
-| Cannot exceed grantor | `assertDelegatableScopes(requested, grantorScopes)` — grantor from **session**, not client body | **Holds** (the old self-KYC via `admin:compliance` on a key is closed) |
-| Interactive-only refused in code **and** DB | `assertKeyScopesAllowed` + `api_keys_no_withdraw_ck` (`trade:withdraw`, `admin:treasury`, `bank:card`, `pay:payout`) | **Holds** |
-| Exchange mints JWT, `mfa: false`, **no refresh** | Bot re-exchanges; withdraw scopes stay unreachable even if smuggled | **Holds** |
-| `key_env` live/sandbox on JWT | Pay public-api routing; absence = live, never silent sandbox upgrade | **Holds** |
-| Frozen user cannot exchange | Status check after verify | **Holds** |
-| Domain whitelist | Empty = unrestricted (bots). Non-empty + missing Origin = fail-closed | **Mostly holds**; suffix over-grant **R-AUTH-05** |
-| `revokeApiKey` / freeze bulk-revoke | Row `revoked = true`; exchange stops | **Holds for new exchange** |
-| Already-exchanged access JWT dies on revoke | Stateless verify; `sid` is key id and unused | **Fails** — **R-AUTH-01** |
+| Control                                          | Tip fact                                                                                                             | Status                                                                 |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Shown once; only hash stored                     | `generateApiKey` — `ifc_` / `ifc_test_` + 24-byte secret                                                             | **Holds**                                                              |
+| Cannot exceed grantor                            | `assertDelegatableScopes(requested, grantorScopes)` — grantor from **session**, not client body                      | **Holds** (the old self-KYC via `admin:compliance` on a key is closed) |
+| Interactive-only refused in code **and** DB      | `assertKeyScopesAllowed` + `api_keys_no_withdraw_ck` (`trade:withdraw`, `admin:treasury`, `bank:card`, `pay:payout`) | **Holds**                                                              |
+| Exchange mints JWT, `mfa: false`, **no refresh** | Bot re-exchanges; withdraw scopes stay unreachable even if smuggled                                                  | **Holds**                                                              |
+| `key_env` live/sandbox on JWT                    | Pay public-api routing; absence = live, never silent sandbox upgrade                                                 | **Holds**                                                              |
+| Frozen user cannot exchange                      | Status check after verify                                                                                            | **Holds**                                                              |
+| Domain whitelist                                 | Empty = unrestricted (bots). Non-empty + missing Origin = fail-closed                                                | **Mostly holds**; suffix over-grant **R-AUTH-05**                      |
+| `revokeApiKey` / freeze bulk-revoke              | Row `revoked = true`; exchange stops                                                                                 | **Holds for new exchange**                                             |
+| Already-exchanged access JWT dies on revoke      | Stateless verify; `sid` is key id and unused                                                                         | **Fails** — **R-AUTH-01**                                              |
 
 Freeze bulk-revokes keys **and** sessions. Exchange after freeze fails. Outstanding JWTs do not. The comment on `freezeIdentity` (“Revoke every open session so freeze is not delayed until token expiry”) is **true for refresh** and **false for access**.
 
@@ -100,15 +100,15 @@ Freeze bulk-revokes keys **and** sessions. Exchange after freeze fails. Outstand
 
 Tracker `identity.webauthn` is `done` (PR #93). Implementation is in-tree (ES256 only), not a blind `@simplewebauthn` import — same sovereignty reason as TOTP.
 
-| Control | Tip fact | Status |
-| ------- | -------- | ------ |
-| UV required; attestation `none`; ES256 only | Other algs refused | **Holds** |
-| Register requires live session; auth (passwordless) is public | Router split | **Holds** |
-| Challenge single-use + kind (`register` / `auth` / `step-up`) | `WebAuthnChallengeStore.take` | **Holds** |
-| Counter updated; clone that resets counter fails | `verifyAuthenticationResponse` | **Holds** |
-| Kill switch `WEBAUTHN_ENABLED=false` | Router FORBIDDEN | **Holds** |
-| Origin on `clientDataJSON` | `WEBAUTHN_ORIGIN` (comma-separated), default `http://localhost:3000` | **Holds locally** |
-| Same origin list as browser CORS | **Independent env** from `EDGE_ALLOWED_ORIGINS` | **Drift** — **R-AUTH-03** (P3-07 owns the CORS half) |
+| Control                                                       | Tip fact                                                             | Status                                               |
+| ------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| UV required; attestation `none`; ES256 only                   | Other algs refused                                                   | **Holds**                                            |
+| Register requires live session; auth (passwordless) is public | Router split                                                         | **Holds**                                            |
+| Challenge single-use + kind (`register` / `auth` / `step-up`) | `WebAuthnChallengeStore.take`                                        | **Holds**                                            |
+| Counter updated; clone that resets counter fails              | `verifyAuthenticationResponse`                                       | **Holds**                                            |
+| Kill switch `WEBAUTHN_ENABLED=false`                          | Router FORBIDDEN                                                     | **Holds**                                            |
+| Origin on `clientDataJSON`                                    | `WEBAUTHN_ORIGIN` (comma-separated), default `http://localhost:3000` | **Holds locally**                                    |
+| Same origin list as browser CORS                              | **Independent env** from `EDGE_ALLOWED_ORIGINS`                      | **Drift** — **R-AUTH-03** (P3-07 owns the CORS half) |
 
 `WEBAUTHN_RP_ID` defaults to `localhost`. Staging/prod must set RP ID + origin to the real registrable domain. That is a **deploy** fact, not a code bug. Wrong RP ID in prod is a Class X / ops misconfig: passkeys enrol against the wrong origin and never work — or worse, enrol against a default that an attacker page on localhost cannot actually hit in prod. P3-07’s origin contract should name WebAuthn as a **consumer** of the same production origin set. This review does not write that contract.
 
@@ -118,12 +118,12 @@ Tracker `identity.webauthn` is `done` (PR #93). Implementation is in-tree (ES256
 
 Surfaces that claim to kill credentials:
 
-| Surface | What it actually kills | What still lives |
-| ------- | ---------------------- | ---------------- |
-| `auth.logout` | That refresh row | Access JWT until `exp` |
-| `auth.logoutAll` | All refresh rows | All outstanding access JWTs |
-| Refresh reuse | All sessions + `reuse_detected_at` | Outstanding access JWTs (including step-up) |
-| `apiKeys.revoke` | That key row; future `exchange` | JWTs already exchanged from that key |
+| Surface          | What it actually kills                        | What still lives                                                         |
+| ---------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
+| `auth.logout`    | That refresh row                              | Access JWT until `exp`                                                   |
+| `auth.logoutAll` | All refresh rows                              | All outstanding access JWTs                                              |
+| Refresh reuse    | All sessions + `reuse_detected_at`            | Outstanding access JWTs (including step-up)                              |
+| `apiKeys.revoke` | That key row; future `exchange`               | JWTs already exchanged from that key                                     |
 | `freezeIdentity` | User status, sessions, sub-accounts, API keys | Outstanding access JWTs (operator HTTP on ledger/edge is in this window) |
 
 **Honest operator sentence:** “We killed the key” means “the bot cannot mint a **new** JWT.” It does not mean “the JWT in the wild is dead.”
@@ -168,22 +168,22 @@ Auth facts that P3-07 must not contradict:
 
 ## 9 · Class X — named, not done
 
-| Item | Why X | Ticket |
-| ---- | ----- | ------ |
-| Rotate `JWT_ACCESS_SECRET` in any hosted env | Secret value + blast radius (every access JWT dies at once; no overlap) | R-AUTH-07 · see [`SECRET-ROTATION-READINESS-2026-08-03.md`](SECRET-ROTATION-READINESS-2026-08-03.md) |
-| Production `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` / `EDGE_ALLOWED_ORIGINS` values | Deploy origins are P3-07 + owner | Cite P3-07; do not invent hostnames here |
-| Strix / live pentest against auth | [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) — later, non-prod, explicit go | Not a residual ticket for agents |
+| Item                                                                            | Why X                                                                             | Ticket                                                                                               |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Rotate `JWT_ACCESS_SECRET` in any hosted env                                    | Secret value + blast radius (every access JWT dies at once; no overlap)           | R-AUTH-07 · see [`SECRET-ROTATION-READINESS-2026-08-03.md`](SECRET-ROTATION-READINESS-2026-08-03.md) |
+| Production `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` / `EDGE_ALLOWED_ORIGINS` values | Deploy origins are P3-07 + owner                                                  | Cite P3-07; do not invent hostnames here                                                             |
+| Strix / live pentest against auth                                               | [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md) — later, non-prod, explicit go | Not a residual ticket for agents                                                                     |
 
 ---
 
 ## 10 · Residual index
 
-| ID | File | Failure mode (one line) |
-| -- | ---- | ----------------------- |
-| R-AUTH-01 | [`auth-session-residuals/R-AUTH-01-stateless-jwt-survives-kill.md`](auth-session-residuals/R-AUTH-01-stateless-jwt-survives-kill.md) | Logout / freeze / key-revoke leave access JWTs live until `exp` (up to 3600s; step-up 300s with `trade:withdraw`) |
-| R-AUTH-02 | [`auth-session-residuals/R-AUTH-02-httponly-cookie-cors-ws-retake.md`](auth-session-residuals/R-AUTH-02-httponly-cookie-cors-ws-retake.md) | httpOnly refresh cookie without CORS credentials + WS Origin re-take → CSRF + cross-site private-stream hijack |
-| R-AUTH-03 | [`auth-session-residuals/R-AUTH-03-webauthn-origin-cors-drift.md`](auth-session-residuals/R-AUTH-03-webauthn-origin-cors-drift.md) | Passkeys enrol on `WEBAUTHN_ORIGIN` while browsers are gated by `EDGE_ALLOWED_ORIGINS` — two lists, two answers |
-| R-AUTH-04 | [`auth-session-residuals/R-AUTH-04-bank-card-unminted-step-up.md`](auth-session-residuals/R-AUTH-04-bank-card-unminted-step-up.md) | `bank:card` promised as step-up; nothing mints it — outage or a future grant that skips 2FA |
-| R-AUTH-05 | [`auth-session-residuals/R-AUTH-05-api-key-whitelist-suffix-overgrant.md`](auth-session-residuals/R-AUTH-05-api-key-whitelist-suffix-overgrant.md) | Short/parent hostname suffixes (`com`, `co.uk`) allow any matching host on `exchange` |
-| R-AUTH-06 | [`auth-session-residuals/R-AUTH-06-private-ws-access-token-query.md`](auth-session-residuals/R-AUTH-06-private-ws-access-token-query.md) | Private WS `?access_token=` leaks JWTs into logs; cookie “fix” is R-AUTH-02 |
-| R-AUTH-07 | [`auth-session-residuals/R-AUTH-07-jwt-secret-rotation-overlap.md`](auth-session-residuals/R-AUTH-07-jwt-secret-rotation-overlap.md) | Single signing secret; rotation is instant mass-logout — Class X, no overlap window |
+| ID        | File                                                                                                                                               | Failure mode (one line)                                                                                           |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| R-AUTH-01 | [`auth-session-residuals/R-AUTH-01-stateless-jwt-survives-kill.md`](auth-session-residuals/R-AUTH-01-stateless-jwt-survives-kill.md)               | Logout / freeze / key-revoke leave access JWTs live until `exp` (up to 3600s; step-up 300s with `trade:withdraw`) |
+| R-AUTH-02 | [`auth-session-residuals/R-AUTH-02-httponly-cookie-cors-ws-retake.md`](auth-session-residuals/R-AUTH-02-httponly-cookie-cors-ws-retake.md)         | httpOnly refresh cookie without CORS credentials + WS Origin re-take → CSRF + cross-site private-stream hijack    |
+| R-AUTH-03 | [`auth-session-residuals/R-AUTH-03-webauthn-origin-cors-drift.md`](auth-session-residuals/R-AUTH-03-webauthn-origin-cors-drift.md)                 | Passkeys enrol on `WEBAUTHN_ORIGIN` while browsers are gated by `EDGE_ALLOWED_ORIGINS` — two lists, two answers   |
+| R-AUTH-04 | [`auth-session-residuals/R-AUTH-04-bank-card-unminted-step-up.md`](auth-session-residuals/R-AUTH-04-bank-card-unminted-step-up.md)                 | `bank:card` promised as step-up; nothing mints it — outage or a future grant that skips 2FA                       |
+| R-AUTH-05 | [`auth-session-residuals/R-AUTH-05-api-key-whitelist-suffix-overgrant.md`](auth-session-residuals/R-AUTH-05-api-key-whitelist-suffix-overgrant.md) | Short/parent hostname suffixes (`com`, `co.uk`) allow any matching host on `exchange`                             |
+| R-AUTH-06 | [`auth-session-residuals/R-AUTH-06-private-ws-access-token-query.md`](auth-session-residuals/R-AUTH-06-private-ws-access-token-query.md)           | Private WS `?access_token=` leaks JWTs into logs; cookie “fix” is R-AUTH-02                                       |
+| R-AUTH-07 | [`auth-session-residuals/R-AUTH-07-jwt-secret-rotation-overlap.md`](auth-session-residuals/R-AUTH-07-jwt-secret-rotation-overlap.md)               | Single signing secret; rotation is instant mass-logout — Class X, no overlap window                               |
