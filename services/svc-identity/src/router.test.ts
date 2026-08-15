@@ -13,6 +13,8 @@ import type { CommissionRow } from './affiliates/commission.js';
 import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
 import { MemoryKycDocumentStore } from './kyc/document-store.js';
 import type { BindProviderRefInput, BindProviderRefResult } from './kyc/provider-ref-bind.js';
+import { MemoryWaitlistStore } from './waitlist/waitlist-store.js';
+import { WaitlistService } from './waitlist/waitlist-service.js';
 
 /**
  * The tRPC boundary for KYC and step-up.
@@ -1369,5 +1371,86 @@ describe('kyc surface never mounts a document-bytes read procedure', () => {
     expect(src).toContain('storeDocument');
     expect(src).toContain('listDocuments');
     expect(src).toContain('bindDocument');
+  });
+});
+
+// ── Drop 0 waitlist + referral queue ─────────────────────────────────────────
+
+function waitlistRouter(overrides: Record<string, boolean> = {}) {
+  const store = new MemoryWaitlistStore();
+  const waitlist = new WaitlistService(store, { drop: '0', overrides });
+  return {
+    store,
+    api: createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, waitlist }),
+  };
+}
+
+describe('waitlist door — unbuilt / flag / operator', () => {
+  it('refuses enroll with waitlist.unbuilt when the store is not wired', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
+    const err = await api.waitlist.enroll({ email: 'ada@example.com' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('waitlist.unbuilt');
+  });
+
+  it('enrolls publicly when the flag is on', async () => {
+    const { api } = waitlistRouter();
+    const out = await api.createCaller(await ctx([])).waitlist.enroll({ email: 'ada@example.com' });
+    expect(out.created).toBe(true);
+    expect(out.position).toBe(1);
+    expect(out.referralCode).toMatch(/^[a-f0-9]{12}$/);
+  });
+
+  it('refuses enroll when waitlist.enabled is off — no silent capture', async () => {
+    const { api, store } = waitlistRouter({ 'waitlist.enabled': false });
+    const err = await api
+      .createCaller(await ctx([]))
+      .waitlist.enroll({ email: 'ada@example.com' })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('flag.waitlist.enabled.disabled');
+    expect(await store.count()).toBe(0);
+  });
+
+  it('refuses a referral code when referral.queue is off — does not discard it', async () => {
+    const store = new MemoryWaitlistStore();
+    const open = new WaitlistService(store, { drop: '0' });
+    const ref = await open.enroll({ email: 'ref@example.com' });
+    const closed = new WaitlistService(store, { drop: '0', overrides: { 'referral.queue': false } });
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, waitlist: closed });
+    const err = await api
+      .createCaller(await ctx([]))
+      .waitlist.enroll({ email: 'ada@example.com', referralCode: ref.entry.referralCode })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('flag.referral.queue.disabled');
+    expect(await store.getByEmail('ada@example.com')).toBeNull();
+  });
+
+  it('list requires admin:read', async () => {
+    const { api } = waitlistRouter();
+    const err = await api
+      .createCaller(await ctx([]))
+      .waitlist.list({ limit: 10, offset: 0 })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    const userErr = await api
+      .createCaller(await ctx(['identity:read']))
+      .waitlist.list({ limit: 10, offset: 0 })
+      .catch((e: unknown) => e);
+    expect(codeOf(userErr)).toBe('FORBIDDEN');
+  });
+
+  it('lists FIFO for admin:read including email', async () => {
+    const { api } = waitlistRouter();
+    const publicApi = api.createCaller(await ctx([]));
+    await publicApi.waitlist.enroll({ email: 'a@example.com' });
+    await publicApi.waitlist.enroll({ email: 'b@example.com' });
+    const list = await api.createCaller(await ctx(['admin:read'], { userId: OPERATOR })).waitlist.list({
+      limit: 10,
+      offset: 0,
+    });
+    expect(list.total).toBe(2);
+    expect(list.entries.map((e) => e.email)).toEqual(['a@example.com', 'b@example.com']);
   });
 });
