@@ -640,6 +640,47 @@ describe('support.reply metered session run', () => {
 
   // ── Free refusals, before a session exists ────────────────────────────────
 
+  it('refuses an ungrounded live KB plane — no invented ops.support answers', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      plane: 'live',
+      kbCatalog: null,
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'withdrawal-hold' }, accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    // Not a live KB plane: no session, no articles composed, no silent fee.
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result).not.toHaveProperty('citedArticleKeys');
+    expect(result).not.toHaveProperty('findings');
+  });
+
+  it('refuses an empty catalog the same way — empty is not a published KB', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      plane: 'live',
+      kbCatalog: [],
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'account' }],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
   it('refuses a dark desk plane before opening a metered session', async () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({ ...baseInput(fake), plane: 'dark', asks: [kbAsk()] });

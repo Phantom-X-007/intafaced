@@ -2267,11 +2267,6 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               metering: runMeteringOutput,
             }),
             z.object({
-              status: z.literal('empty'),
-              userMessageKey: z.literal('agents.support.empty'),
-              metering: runMeteringOutput,
-            }),
-            z.object({
               status: z.literal('stopped'),
               reason: z.literal('aborted'),
               // No new i18n key — FE fence. Caller keys off status+reason.
@@ -2282,7 +2277,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read', 'account_state_missing']),
+              reason: z.enum([
+                'desk_plane_dark',
+                'tier_law_blank',
+                'tier_not_granted',
+                'no_grounded_read',
+                'account_state_missing',
+                'kb_plane_ungrounded',
+              ]),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
@@ -2325,7 +2327,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
 
             if (result.status === 'empty') {
-              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+              // Empty asks are not a live KB plane — reuse refuse, do not advertise `empty`.
+              return {
+                status: 'refuse' as const,
+                reason: 'kb_plane_ungrounded' as const,
+                userMessageKey: 'agents.support.unavailable' as const,
+                unanswered: [],
+                metering,
+              };
             }
 
             const unanswered = result.unanswered.map((u) => ({
