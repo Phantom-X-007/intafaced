@@ -551,6 +551,7 @@ registerPublicRest(app, {
     fundingMaxAbsRateConfigured: env.TRADE_FUTURES_FUNDING_MAX_ABS_RATE.trim() !== '',
     fundingMarketCount: fundingMarketIds.length,
     venueMarkConfigured: venueMarkConfigured != null,
+    fundingIntervalConfigured: env.TRADE_FUTURES_FUNDING_INTERVAL_MS != null,
   },
 });
 
