@@ -59,6 +59,7 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
         points: [point, { ...point, railId: 'card-b', approvalRate: '0.99' }],
         threshold: '0.85',
         now: '2026-08-07T12:00:00.000Z',
+        payPlane: 'live',
       });
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
@@ -75,8 +76,18 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
   });
 
   it('empty points → empty (never invent rails)', async () => {
-    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).merchant.watch({ points: [] });
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .merchant.watch({ points: [], payPlane: 'live' });
     expect(result).toEqual({ status: 'empty', userMessageKey: 'agents.merchant.empty' });
+  });
+
+  it('omitted pay plane refuses invented live rates — no default board', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .merchant.watch({ points: [point] });
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'pay_plane_dark' });
+    expect(result).not.toMatchObject({ status: 'ok' });
   });
 
   it('D26-P1-A4: missing rate on wire refuses — no partial alerts', async () => {
@@ -86,6 +97,7 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
         points: [point, { ...point, railId: 'card-b', approvalRate: null, attempts: null }],
         threshold: '0.85',
         now: '2026-08-07T12:00:00.000Z',
+        payPlane: 'live',
       });
     expect(result).toEqual({
       status: 'unavailable',
@@ -110,6 +122,7 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
         ],
         threshold: '0.85',
         now: '2026-08-07T12:00:00.000Z',
+        payPlane: 'live',
       });
     expect(result).toEqual({
       status: 'unavailable',
