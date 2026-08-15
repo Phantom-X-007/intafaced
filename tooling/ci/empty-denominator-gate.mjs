@@ -285,6 +285,13 @@ export const ENFORCED = {
     must: /ENOENT[\s\S]*env\.ts/,
     note: 'reads packages/config/src/env.ts to learn which secrets exist. Refuses, by throw.',
   },
+  'secret-rotation-readiness': {
+    kind: 'guard',
+    must: /SECRET ROTATION READINESS FAILED/,
+    note:
+      'D26-P3-05: denominator is the tip runbook. With the tree gone the file is missing and the scan refuses by name ' +
+      'rather than printing clean over an absent inventory.',
+  },
   'money-property-mutation': {
     kind: 'uncaught',
     must: /ENOENT[\s\S]*money\.ts/,

@@ -400,6 +400,16 @@ export const GATES = [
       'gate reproduces that bug and emits the exact fix that was applied.',
   },
   {
+    id: 'secret-rotation-readiness',
+    script: 'tooling/ci/secret-rotation-readiness-scan.mjs',
+    doctrine: '§16 / D26-P3-05',
+    why:
+      'rotation readiness is a runbook plus the gates that prove a disclosed or unwired secret is refused. ' +
+      'A missing inventory prints as nothing-to-rotate. This gate holds docs/SECRET-ROTATION-READINESS.md, ' +
+      'the OWNER-ACTIONS-WALLET-RPC-SECRETS.md citation (that file is not edited here), EctWithdrawSecretConfig, ' +
+      'and compose-secret-parity / wallet-rpc-auth / secrets remaining in GATES. It never reads secret values.',
+  },
+  {
     id: 'secret-scan-mutation',
     script: 'tooling/ci/secret-scan.mutation.mjs',
     doctrine: '§14',
