@@ -293,12 +293,17 @@ export class TwapEngine {
       // stays sealed from #1193.) haltReason marks cancel-incomplete so resume
       // cannot re-arm placement while children may still be live.
       if (parent.status === 'active' || parent.status === 'paused') {
-        this.replace(parentId, {
+        const parked: TwapParent = {
           ...parent,
           status: 'paused',
           pausedAt: this.ports.now(),
           haltReason: CANCEL_INCOMPLETE_HALT,
-        });
+        };
+        this.parents.set(parentId, parked);
+        // Await durable park. Fire-and-forget onChange would let cancel reject
+        // while listActive still shows the parent tradable — or a later save
+        // of `cancelled` must never land if children are still live.
+        await this.emitChange(parked);
       }
       throw new TradeError(
         `algo cancel refused: ${failures.length} of ${parent.children.length} child cancel(s) failed — parent left paused (re-cancel required; resume refused): ${message}`,
@@ -549,15 +554,16 @@ export class TwapEngine {
 
   private replace(id: string, parent: TwapParent): TwapParent {
     this.parents.set(id, parent);
-    this.emitChange(parent);
+    void this.emitChange(parent);
     return parent;
   }
 
-  private emitChange(parent: TwapParent): void {
-    if (!this.onChange) return;
+  private emitChange(parent: TwapParent): Promise<void> {
+    if (!this.onChange) return Promise.resolve();
     const plan = this.plans.get(parent.id) ?? [];
-    void Promise.resolve(this.onChange(parent, plan)).catch(() => {
+    const write = Promise.resolve(this.onChange(parent, plan)).catch(() => {
       // Persistence failures must not invent progress; next tick retries save.
     });
+    return write;
   }
 }

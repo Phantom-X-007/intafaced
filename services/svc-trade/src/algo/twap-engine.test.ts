@@ -529,6 +529,38 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
     }
   });
 
+  it('cancel-fail does not look like the parent died: still gettable, children live, not cancelled', async () => {
+    let durable: { status: string; haltReason: string | null } | undefined;
+    const ports = makePorts({
+      cancelChild: async () => {
+        throw new TradeError('matching down mid-cancel', 'trade.algo_child_cancel_failed');
+      },
+    });
+    const engine = new TwapEngine(ports, {
+      onChange: async (parent) => {
+        await new Promise((r) => setTimeout(r, 15));
+        durable = { status: parent.status, haltReason: parent.haltReason };
+      },
+    });
+    const parent = engine.create(USER, baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), LOT);
+    await engine.tick(parent.id);
+    expect(engine.get(parent.id)!.children).toHaveLength(1);
+
+    await expect(engine.cancel(USER, parent.id)).rejects.toMatchObject({
+      code: 'trade.algo_child_cancel_failed',
+    });
+
+    const live = engine.get(parent.id);
+    expect(live).toBeDefined();
+    expect(live!.status).not.toBe('cancelled');
+    expect(live!.status).not.toBe('completed');
+    expect(live!.status).not.toBe('active');
+    expect(live!.children).toHaveLength(1);
+    // Awaited onChange: durable park landed before the refuse, so a job host
+    // cannot still list this parent as active after cancel failed.
+    expect(durable).toEqual({ status: 'paused', haltReason: 'cancel_incomplete' });
+  });
+
   it('A: parent flips cancelled only after every child cancel succeeds', async () => {
     const order: string[] = [];
     const ports = makePorts({
