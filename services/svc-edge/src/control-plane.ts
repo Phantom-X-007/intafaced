@@ -10,6 +10,7 @@ import { statusForAuthError, type AdminApi } from './admin-api.js';
 import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
+import { isS2sPath, resolve } from './routes.js';
 
 const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
 
@@ -23,6 +24,7 @@ function geoBlockStatus(region: string) {
     screeningConfigured: decision.screeningConfigured,
     listHitCount: decision.listHitCount,
     inventedBlockedList: false as const,
+    regionResolved: decision.regionResolved,
     enforcedOnApiPath: true,
   };
 }
@@ -112,6 +114,19 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     }
 
     if (!pathname.startsWith('/api/')) return;
+
+    /**
+     * S2S `/internal/*` is not a public route. Pay jobs, token stake, identity
+     * rank, bank cron — all sit at that path behind a service secret the edge
+     * does not hold and will not forward. Refuse here, before the kill-switch
+     * and before the proxy, so a live module cannot 200 an S2S job from the
+     * internet. 404 + `edge.s2s_not_proxied`, never a green pass-through.
+     */
+    const routed = resolve(pathname);
+    if (routed && isS2sPath(routed.path)) {
+      req.log.warn({ path: pathname, module: routed.upstream.module }, 'edge: refused — S2S path is not a public door');
+      return reply.code(404).send({ error: 'no route', code: 'edge.s2s_not_proxied' });
+    }
 
     /**
      * FAIL CLOSED, TWICE.
@@ -390,6 +405,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         screeningDeclaration: decision.screeningDeclaration,
         screeningConfigured: decision.screeningConfigured,
         inventedBlockedList: false,
+        regionResolved: decision.regionResolved,
       });
     }
     return {
@@ -401,6 +417,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       screeningConfigured: decision.screeningConfigured,
       listHitCount: decision.listHitCount,
       inventedBlockedList: false,
+      regionResolved: decision.regionResolved,
     };
   });
 
@@ -499,24 +516,13 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   });
 
   /**
-   * Analytics warehouse door — dark/unavailable honesty, never live cubes
-   * without lag probe. ETL watermark is operator-stamped or honestly absent.
+   * Analytics warehouse door — real replica lag probe when URLs are set.
+   * Absent URL / connect fail / not-a-standby → unknown, never invented live.
+   * ETL watermark is operator-stamped or honestly absent (does not paint live).
    */
   app.get('/admin/analytics/warehouse', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
-    const a = admin.opsHonesty().analytics;
-    return {
-      replicaConfigured: a.replicaConfigured,
-      replicaCount: a.replicaCount,
-      refuse: a.refuse,
-      surfaceStatus: a.surface.status,
-      mayLabelLive: a.surface.mayLabelLive,
-      statusLine: a.statusLine,
-      etlWatermark: a.etlWatermark,
-      etlWatermarkAt: a.etlWatermarkAt,
-      etlNote: a.etlNote,
-      surface: a.surface,
-    };
+    return admin.probeWarehouse();
   });
 
   app.get('/admin/kill-switches', async (req, reply) => {

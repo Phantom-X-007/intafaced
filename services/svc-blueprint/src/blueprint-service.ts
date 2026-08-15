@@ -19,6 +19,7 @@ import {
   type Visibility,
 } from '@intafaced/contracts';
 import { composeCard } from './card/compose.js';
+import { mayViewCard } from './visibility.js';
 import type { CardRenderer } from './card/card-renderer.js';
 import { EngineProtocolError, EngineUnavailableError, type BlueprintRequest, type NeuralEngineClient } from './engine/neural-engine.js';
 import { chooseCrew, crewName, newCrewId, rankCrews, type CrewCandidate, type MatchableProfile } from './matching/crew-matching.js';
@@ -539,6 +540,51 @@ export class BlueprintService implements BlueprintContract {
   }
 
   /**
+   * Visibility-gated card read (`packages/auth` scopes: reading someone else's
+   * is governed by `blueprints.visibility` on top of `blueprint:read`).
+   *
+   * Self is the owner path (`card`) — it may persist a real portrait PNG URL.
+   * Any other viewer is a read: compose + raster, never a write, so a stranger
+   * hitting `cardOf` cannot stamp `card_asset_url`. Denied and missing throw
+   * the same `blueprint.not_found` — a private row is not enumerable.
+   *
+   * This is still authenticated. It is not a public unfurl URL (those need a
+   * revocable token + object storage — ops.social-promotion / Class X).
+   */
+  async cardFor(input: { viewerId: string; subjectUserId: string; size: CardSize }): Promise<CardRender> {
+    return withBlueprintSpan('blueprint.cardFor', { stage: 'card', userId: input.viewerId }, async (span) => {
+      if (input.viewerId === input.subjectUserId) {
+        return this.card({ userId: input.viewerId, size: input.size });
+      }
+
+      const blueprint = await this.visibleBlueprint(input.viewerId, input.subjectUserId);
+      const render = await this.renderCard(blueprint, input.size);
+      setBlueprintSpanAttribute(span, 'cardRaster', render.raster.status);
+      return render;
+    });
+  }
+
+  /**
+   * Change the caller's own visibility. Write-once-at-onboard would make the
+   * column decorative for anyone who accepted the default (`private`).
+   */
+  async setVisibility(input: { userId: string; visibility: Visibility }): Promise<BlueprintRecord> {
+    return withBlueprintSpan('blueprint.setVisibility', { stage: 'visibility', userId: input.userId }, async () => {
+      const rows = await this.sql<BlueprintRow[]>`
+        UPDATE blueprint.blueprints
+           SET visibility = ${input.visibility}, updated_at = now()
+         WHERE user_id = ${input.userId}
+        RETURNING id, user_id, engine_version, profile, card_asset_url, visibility, mentor_available, created_at
+      `;
+      const row = rows[0];
+      if (!row) {
+        throw new BlueprintError('No Blueprint to update — run the Blueprint session first', 'blueprint.not_found');
+      }
+      return toBlueprintRecord(row);
+    });
+  }
+
+  /**
    * Compose the card and ask the renderer for a raster. **Writes nothing.**
    *
    * Split out of `card()` so `export()` can carry the same artifact without
@@ -810,6 +856,37 @@ export class BlueprintService implements BlueprintContract {
 
       return { userId: input.userId, erasedAt, removed: outcome.removed };
     });
+  }
+
+  /**
+   * Subject Blueprint the viewer may see, or `not_found`.
+   *
+   * `private` and "no row" are the same answer. `public` is any authenticated
+   * viewer. `crew` is same-crew only — an unplaced subject has no crew, so
+   * crew-visibility is never visible to anyone else.
+   */
+  private async visibleBlueprint(viewerId: string, subjectUserId: string): Promise<BlueprintRecord> {
+    const blueprint = await this.get({ userId: subjectUserId });
+    if (!blueprint) {
+      throw new BlueprintError('No Blueprint to render a card for — run the Blueprint session first', 'blueprint.not_found');
+    }
+
+    let sameCrew = false;
+    if (blueprint.visibility === 'crew') {
+      const same = await this.sql<Array<{ ok: number }>>`
+        SELECT 1 AS ok
+          FROM blueprint.crew_members a
+          JOIN blueprint.crew_members b ON a.crew_id = b.crew_id
+         WHERE a.user_id = ${viewerId} AND b.user_id = ${subjectUserId}
+         LIMIT 1
+      `;
+      sameCrew = Boolean(same[0]);
+    }
+
+    if (!mayViewCard({ viewerId, subjectUserId, visibility: blueprint.visibility, sameCrew })) {
+      throw new BlueprintError('No Blueprint to render a card for — run the Blueprint session first', 'blueprint.not_found');
+    }
+    return blueprint;
   }
 
   // ── Events ─────────────────────────────────────────────────────────────────

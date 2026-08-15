@@ -43,6 +43,10 @@ await sql`SELECT 1 FROM support.ticket_events LIMIT 1`.catch(() => {
   throw new Error('support.ticket_events is missing — apply migration 0001 before starting svc-support');
 });
 
+await sql`SELECT 1 FROM support.kb_articles LIMIT 1`.catch(() => {
+  throw new Error('support.kb_articles is missing — apply migration 0003 before starting svc-support');
+});
+
 const store = new PostgresSupportStore(sql);
 // Account state is READ from svc-identity per request, never cached here.
 const accounts = createAccountStateClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);

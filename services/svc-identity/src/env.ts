@@ -64,6 +64,12 @@ const schema = serviceEnvSchema
        * (SPEC-SUBACCOUNTS §4 / §8). Default 25 — abuse bound, not a tier ladder.
        */
       IDENTITY_MAX_SUB_ACCOUNTS: z.coerce.number().int().min(1).max(10_000).default(25),
+      /**
+       * Optional pin for `waitlist.enabled` / `referral.queue` (packages/config
+       * `envVarNameFor`). Unset → drop clock. `off` refuse-closes capture.
+       */
+      INTAFACED_FLAG_WAITLIST_ENABLED: z.string().optional(),
+      INTAFACED_FLAG_REFERRAL_QUEUE: z.string().optional(),
     }),
   );
 

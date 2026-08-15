@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { resolve, UPSTREAMS } from './routes.js';
+import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
 
 describe('route resolution', () => {
   it('maps a prefix to its upstream and strips the prefix from the path', () => {
@@ -93,6 +93,64 @@ describe('route resolution', () => {
       expect(u.envVar, u.prefix).toMatch(/^[A-Z0-9_]+_URL$/);
       expect(u.devUrl).toMatch(/^http:\/\/localhost:\d+$/);
     }
+  });
+});
+
+describe('S2S /internal/ is not a public path', () => {
+  it('names the stripped path the door must refuse', () => {
+    expect(isS2sPath('/internal/jobs/run-due-subscriptions')).toBe(true);
+    expect(isS2sPath('/internal/stake/u')).toBe(true);
+    expect(isS2sPath('/internal/rank/u/perks')).toBe(true);
+    expect(isS2sPath('/internal')).toBe(true);
+    expect(isS2sPath('/trpc/payment.create')).toBe(false);
+    expect(isS2sPath('/v1/payments')).toBe(false);
+    expect(isS2sPath('/webhooks/crypto')).toBe(false);
+    expect(isS2sPath('/checkout')).toBe(false);
+    expect(isS2sPath('/internalist')).toBe(false);
+  });
+
+  it('resolves pay/identity/token/academy/support internals to an S2S remainder', () => {
+    for (const path of [
+      '/api/pay/internal/jobs/run-due-subscriptions',
+      '/api/identity/internal/rank/u/perks',
+      '/api/token/internal/emissions/mint-next',
+      '/api/academy/internal/anything',
+      '/api/support/internal/anything',
+    ]) {
+      const r = resolve(path);
+      expect(r, path).not.toBeNull();
+      expect(isS2sPath(r!.path), path).toBe(true);
+    }
+  });
+});
+
+describe('unwired upstreams refuse in staging/prod, fall back in dev', () => {
+  const pay = UPSTREAMS.find((u) => u.prefix === '/api/pay')!;
+
+  it('uses the env URL when set, in every APP_ENV', () => {
+    const env = (name: string) => (name === 'PAY_URL' ? 'http://pay.internal:4006/' : undefined);
+    expect(resolveUpstreamBase(pay, env, 'prod')).toEqual({ base: 'http://pay.internal:4006' });
+    expect(resolveUpstreamBase(pay, env, 'dev')).toEqual({ base: 'http://pay.internal:4006' });
+  });
+
+  it('does not silently hit localhost when PAY_URL is unset in prod', () => {
+    expect(resolveUpstreamBase(pay, () => undefined, 'prod')).toEqual({ unwired: true });
+    expect(resolveUpstreamBase(pay, () => undefined, 'staging')).toEqual({ unwired: true });
+  });
+
+  it('keeps the local default in dev/test so a laptop still boots', () => {
+    expect(resolveUpstreamBase(pay, () => undefined, 'dev')).toEqual({ base: 'http://localhost:4006' });
+    expect(resolveUpstreamBase(pay, () => undefined, 'test')).toEqual({ base: 'http://localhost:4006' });
+  });
+
+  it('lists wired vs unwired on /ready without leaking URLs', () => {
+    const table = readyRoutes((name) => (name === 'PAY_URL' || name === 'IDENTITY_URL' ? 'http://secret.internal' : undefined));
+    const byPrefix = Object.fromEntries(table.map((r) => [r.prefix, r]));
+    expect(byPrefix['/api/pay']?.wired).toBe(true);
+    expect(byPrefix['/api/identity']?.wired).toBe(true);
+    expect(byPrefix['/api/academy']?.wired).toBe(false);
+    expect(byPrefix['/api/support']?.wired).toBe(false);
+    expect(JSON.stringify(table)).not.toContain('secret.internal');
   });
 });
 

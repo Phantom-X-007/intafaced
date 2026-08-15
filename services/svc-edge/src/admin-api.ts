@@ -9,9 +9,34 @@ import {
   type ComplianceQueueItem,
   type ModuleId,
 } from '@intafaced/config';
+import {
+  queryWarehouseSurface,
+  resolveWarehouseReplicaConfig,
+  warehouseSurfaceStatusLine,
+  type LagSource,
+  type WarehouseLagProbe,
+  type WarehouseSurfaceResult,
+} from '@intafaced/contracts';
+import { createEdgeWarehouseLagProbe, warehouseLagProbeEnabled } from './analytics-lag-probe.js';
 import { EdgeComplianceQueue, edgeComplianceHonesty, type EdgeComplianceHonesty } from './compliance-honesty.js';
 import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
+
+export type WarehouseDoorSnapshot = {
+  readonly replicaConfigured: boolean;
+  readonly replicaCount: number;
+  readonly refuse: string | null;
+  readonly surfaceStatus: WarehouseSurfaceResult['status'];
+  readonly mayLabelLive: boolean;
+  readonly statusLine: string;
+  readonly etlWatermark: EdgeComplianceHonesty['analytics']['etlWatermark'];
+  readonly etlWatermarkAt: string | null;
+  readonly etlNote: string;
+  readonly surface: WarehouseSurfaceResult;
+  readonly lagSource: LagSource;
+  readonly lagSeconds: number | null;
+  readonly lagMeasuredAt: number | null;
+};
 
 /**
  * THE OPERATOR CONTROL SURFACE (§14.6) — what `apps/admin` reaches.
@@ -230,6 +255,11 @@ export interface AdminApi {
   openComplianceCase(item: ComplianceQueueItem): ReturnType<EdgeComplianceQueue['snapshot']>;
   /** Dispose a case — partner_cleared refuses without screening partner. */
   disposeComplianceCase(itemId: string, request: ComplianceQueueDispositionRequest): ComplianceQueueDispositionResult;
+  /**
+   * Analytics warehouse door with a real replica lag probe when URLs are set.
+   * Absent URL / probe off / connect fail → unknown, never invented live.
+   */
+  probeWarehouse(): Promise<WarehouseDoorSnapshot>;
 }
 
 export interface AdminApiDeps {
@@ -242,6 +272,11 @@ export interface AdminApiDeps {
    * operator who believes the platform is halted when it is not.
    */
   readonly ledger: LedgerOperatorCall | null;
+  /**
+   * Injected replica lag probe (tests). Production uses createEdgeWarehouseLagProbe
+   * unless ANALYTICS_REPLICA_PROBE=off or VITEST (no sockets in unit tests).
+   */
+  readonly warehouseLagProbe?: WarehouseLagProbe | null;
 }
 
 export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): AdminApi {
@@ -356,7 +391,70 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
     openComplianceCase: (item) => complianceQueue.open(item),
 
     disposeComplianceCase: (itemId, request) => complianceQueue.dispose(itemId, request),
+
+    async probeWarehouse() {
+      const honesty = edgeComplianceHonesty(process.env, {
+        queueItems: complianceQueue.snapshot().items,
+      });
+      const etl = {
+        etlWatermark: honesty.analytics.etlWatermark,
+        etlWatermarkAt: honesty.analytics.etlWatermarkAt,
+        etlNote: honesty.analytics.etlNote,
+      };
+
+      const probe = resolveDoorLagProbe(deps);
+      const resolved = await resolveWarehouseReplicaConfig({
+        env: process.env,
+        probe,
+      });
+
+      if (resolved.status === 'refuse') {
+        const surface = queryWarehouseSurface({ replicaConfigured: false, lagSeconds: null, facts: [] });
+        return {
+          replicaConfigured: false,
+          replicaCount: 0,
+          refuse: resolved.reason,
+          surfaceStatus: surface.status,
+          mayLabelLive: false,
+          statusLine: `status=refuse reason=writer_or_bad_role live=0`,
+          ...etl,
+          surface,
+          lagSource: 'unknown',
+          lagSeconds: null,
+          lagMeasuredAt: null,
+        };
+      }
+
+      const surface = queryWarehouseSurface({
+        replicaConfigured: resolved.replicaConfigured,
+        lagSeconds: resolved.lagSeconds,
+        lagMeasuredAt: resolved.lagMeasuredAt,
+        lagSource: resolved.lagSource,
+        facts: [],
+      });
+      return {
+        replicaConfigured: resolved.replicaConfigured,
+        replicaCount: resolved.endpoints.length,
+        refuse: null,
+        surfaceStatus: surface.status,
+        mayLabelLive: surface.mayLabelLive,
+        statusLine: warehouseSurfaceStatusLine(surface),
+        ...etl,
+        surface,
+        lagSource: resolved.lagSource,
+        lagSeconds: resolved.lagSeconds,
+        lagMeasuredAt: resolved.lagMeasuredAt,
+      };
+    },
   };
+}
+
+function resolveDoorLagProbe(deps: AdminApiDeps): WarehouseLagProbe | null {
+  if (deps.warehouseLagProbe !== undefined) return deps.warehouseLagProbe;
+  if (!warehouseLagProbeEnabled(process.env)) return null;
+  // Vitest must not open sockets when a leftover ANALYTICS_REPLICA_*_URL is set.
+  if (process.env.VITEST === 'true') return null;
+  return createEdgeWarehouseLagProbe();
 }
 
 /** Map an `AuthError` to the status an operator console can branch on. */

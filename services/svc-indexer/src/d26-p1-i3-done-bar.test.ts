@@ -10,8 +10,9 @@ import { readinessOf } from './ready.js';
 /**
  * D26-P1-I3 Done bar — Chain→Postgres honest halt/refuse; no fake books.
  *
- * Pins public-door behaviour: status/ready diagnose; book/fills refuse when
- * the projection is known wrong (deep halt) or the chain door is known broken.
+ * Pins public-door behaviour: status/health diagnose; /ready leaves rotation
+ * and book/fills refuse when the projection is known wrong (deep halt) or the
+ * chain door is known broken.
  */
 
 const CHAIN_ID = 31_337;
@@ -68,5 +69,11 @@ describe('D26-P1-I3 indexer readmodels Done bar', () => {
     await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
     await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
     await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+
+    // /ready must leave rotation too — 200 here would keep a balancer sending
+    // traffic at procedures that all 503.
+    const ready = readinessOf(indexer.halted, true, undefined, indexer.lastError);
+    expect(ready.httpStatus).toBe(503);
+    expect(ready.body.ready).toBe(false);
   });
 });

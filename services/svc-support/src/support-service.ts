@@ -14,7 +14,7 @@ import type {
 } from '@intafaced/contracts';
 import { DarkAccountState, type AccountStateSource } from './account-state.js';
 import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingFor } from './case-file.js';
-import { getKbById, listPlatformKb, searchKb } from './kb-catalog.js';
+import { assertKbArticle, KbCatalogError, searchKb } from './kb-catalog.js';
 import { isTerminal } from './lifecycle.js';
 import { assignNext, buildOperatorQueue, type QueueEntry, type QueueResult } from './operator-queue.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
@@ -94,6 +94,18 @@ export class SupportService implements SupportContract {
     });
   }
 
+  /**
+   * Add a comment. Visibility is the same as `getTicket`.
+   *
+   * A USER reply on `resolved` reopens the same ticket (`resolved → open`) and
+   * clears the assignee so the row returns to the shared queue — that is the
+   * lifecycle edge already named "a user saying not fixed". An operator note
+   * on `resolved` does not reopen (they are not the user).
+   *
+   * A user comment on `closed` is refused (`support.comment.terminal`). Closed
+   * is finished; storing a reply nobody will queue is a ghost. Operators may
+   * still annotate a closed ticket.
+   */
   async comment(input: { userId: string; ticketId: string; body: string; asOperator?: boolean }): Promise<SupportComment> {
     return withSupportSpan('support.comment', { op: 'comment', ticketId: input.ticketId }, async () => {
       await this.getTicket({
@@ -101,12 +113,17 @@ export class SupportService implements SupportContract {
         ticketId: input.ticketId,
         asOperator: input.asOperator,
       });
-      return this.store.addComment({
+      const result = await this.store.addComment({
         ticketId: input.ticketId,
         authorId: input.userId,
         authorRole: input.asOperator ? 'operator' : 'user',
         body: input.body,
       });
+      if (result.status === 'refuse') {
+        if (result.reason === 'not_found') throw ticketNotFound();
+        throw new SupportError('comment refused: ticket is terminal', 'support.comment.terminal');
+      }
+      return result.comment;
     });
   }
 
@@ -241,9 +258,9 @@ export class SupportService implements SupportContract {
       if (grounding.status === 'read') citations.push(citeAccountState(grounding.state, readAt));
 
       for (const id of input.citedArticleIds ?? []) {
-        const article = getKbById(id);
+        const article = await this.store.getPublishedKb(id);
         // Silently skipped, deliberately: refusing the whole escalation over a
-        // stale article id would strand the user, and counting a missing
+        // stale / unpublished id would strand the user, and counting a missing
         // article as a citation would be the fabrication this guards against.
         if (article) citations.push(citeKbArticle(article, readAt));
       }
@@ -293,16 +310,59 @@ export class SupportService implements SupportContract {
   }
 
   async listKb(): Promise<SupportKbArticle[]> {
-    return [...listPlatformKb()];
+    return this.store.listPublishedKb();
   }
 
-  /** Search platform KB by id/key fragment. Empty query → full spine. */
+  /** Search published KB by id/key fragment. Empty query → published list. */
   async searchKb(query: string): Promise<SupportKbArticle[]> {
-    return [...searchKb(query)];
+    return [...searchKb(query, await this.store.listPublishedKb())];
   }
 
   async getKbArticle(id: string): Promise<SupportKbArticle | null> {
-    return getKbById(id);
+    return this.store.getPublishedKb(id);
+  }
+
+  /**
+   * Operator publish. Bumps revision. Stale baseRevision refuses.
+   * `baseRevision` 0 creates a new published row at revision 1.
+   */
+  async publishKb(input: { id: string; titleKey: string; bodyKey: string; baseRevision: number }): Promise<SupportKbArticle> {
+    try {
+      assertKbArticle({ id: input.id, titleKey: input.titleKey, bodyKey: input.bodyKey });
+    } catch (err) {
+      if (err instanceof KbCatalogError) throw new SupportError(err.message, err.code);
+      throw err;
+    }
+    const result = await this.store.putKbRevision({
+      id: input.id,
+      titleKey: input.titleKey,
+      bodyKey: input.bodyKey,
+      baseRevision: input.baseRevision,
+      published: true,
+    });
+    if (result.status === 'refuse') {
+      if (result.reason === 'revision_stale') {
+        throw new SupportError('KB revision is stale', 'support.kb.revision_stale');
+      }
+      throw new SupportError('KB article refused', result.reason === 'vendor' ? 'support.kb_vendor_name' : 'support.kb_invalid');
+    }
+    return result.article;
+  }
+
+  /** Operator unpublish. Unpublished never appears on public list/search/get. */
+  async unpublishKb(input: { id: string; baseRevision: number }): Promise<SupportKbArticle> {
+    const result = await this.store.putKbRevision({
+      id: input.id,
+      baseRevision: input.baseRevision,
+      published: false,
+    });
+    if (result.status === 'refuse') {
+      if (result.reason === 'revision_stale') {
+        throw new SupportError('KB revision is stale', 'support.kb.revision_stale');
+      }
+      throw new SupportError('KB article refused', 'support.kb_invalid');
+    }
+    return result.article;
   }
 
   /** Stage-2 — prioritised open/pending queue for operators. No money. */

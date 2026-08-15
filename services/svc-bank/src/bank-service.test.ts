@@ -2066,7 +2066,7 @@ if (!available) {
         // ── Auto-invest (§31:805 F-plane) ────────────────────────────────────
         // Rules are instructions; runs are write-once records. No running balance.
         'auto_invest_rules.threshold': 'a POLICY keep-amount for a threshold sweep; instruction, not a holding',
-        'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule; instruction, not a holding',
+        'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule, or round-up granularity; instruction, not a holding',
         'auto_invest_runs.amount': 'a RECORD of one run (settled or rejected); written once',
         'business_accounts.spend_threshold': 'a POLICY dual-control floor; instruction, not a holding',
         'business_approvals.amount': 'a RECORD of one proposed/approved transfer; written once',

@@ -397,7 +397,7 @@ describe('public REST routes', () => {
     });
     expect(body.notes.openPositionGates).toBe(OPEN_POSITION_GATES_NOTE);
     expect(body.notes.openPositionGates).toContain('leverage required 400');
-    expect(body.notes.openPositionGates).toContain('unnamed profit pot 503 NotSupported');
+    expect(body.notes.openPositionGates).toContain('unnamed profit pot 403 NotSupported');
     expect(body.notes.openPositionGates).toContain('no silent 1x');
     await app.close();
   });

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { BankError } from './errors.js';
-import { assertOnlyWithdrawDestinations, assertPersistableWithdrawDestination, destKindForRamp } from './withdraw-destination.js';
+import {
+  assertOnlyWithdrawDestinations,
+  assertPersistableWithdrawDestination,
+  destKindForRamp,
+  memoryWithdrawDestinations,
+} from './withdraw-destination.js';
 
 const EVM = '0x000000000000000000000000000000000000dEaD';
 const IBAN = 'GB82WEST12345698765432';
@@ -46,5 +51,20 @@ describe('assertOnlyWithdrawDestinations (no store)', () => {
     await expect(dests.require({ userId: 'u', kind: 'crypto' })).rejects.toMatchObject({
       code: 'bank.withdraw_destination_missing',
     });
+  });
+});
+
+describe('memoryWithdrawDestinations', () => {
+  it('require refuses when nothing was stored', async () => {
+    const dests = memoryWithdrawDestinations();
+    await expect(dests.require({ userId: 'u', kind: 'crypto' })).rejects.toMatchObject({
+      code: 'bank.withdraw_destination_missing',
+    });
+  });
+
+  it('persist then require returns the stored EVM dest', async () => {
+    const dests = memoryWithdrawDestinations();
+    await dests.persist({ userId: 'u', kind: 'crypto', ref: EVM });
+    await expect(dests.require({ userId: 'u', kind: 'crypto' })).resolves.toEqual({ kind: 'crypto', ref: EVM });
   });
 });

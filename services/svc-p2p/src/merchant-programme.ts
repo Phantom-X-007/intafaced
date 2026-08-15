@@ -214,10 +214,29 @@ export function reputationOnPublicDoor(snapshot: ReputationSnapshot, merchant: b
   };
 }
 
-/** Audit line: freeze/restore is checkable against the counters badges use. */
+/** Audit line: freeze/restore/approve is checkable against the counters badges use. */
 export function describeReputationSnapshot(snapshot: ReputationSnapshot): string {
   const badges = snapshot.badges.length === 0 ? 'none' : snapshot.badges.join(',');
   return `${snapshot.tradesTotal} escrowed trades at ${(snapshot.completionRate * 100).toFixed(2)}% completion, derived badges: ${badges}`;
+}
+
+/**
+ * Stamping `approved` is not a permanent grant — first approval or unfreeze.
+ *
+ * Apply already checks live reputation. Restore already re-checked. First
+ * approval (`applied → approved`) used to skip that snapshot, so an applicant
+ * who was clean at apply, then lost a dispute (or dropped below the rate)
+ * while waiting, could still be stamped merchant. That is the same "fresh
+ * account borrowing merchant trust" hole, one state later.
+ *
+ * Badges stay derived from counters. This only answers: may a human grant
+ * the programme voucher against the snapshot the public door shows right now?
+ */
+export function mayGrantProgrammePrivileges(
+  snapshot: ReputationSnapshot,
+  policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
+): EligibilityVerdict {
+  return checkEligibility(snapshot, policy);
 }
 
 /**
@@ -228,7 +247,7 @@ export function mayRestoreProgrammePrivileges(
   snapshot: ReputationSnapshot,
   policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
 ): EligibilityVerdict {
-  return checkEligibility(snapshot, policy);
+  return mayGrantProgrammePrivileges(snapshot, policy);
 }
 
 /**
@@ -238,8 +257,9 @@ export function mayRestoreProgrammePrivileges(
  * Leaving an approved row untouched after the same loss would let the badge
  * keep vouching for someone a human moderator has already ruled against —
  * the dispute-law half of D26-P1-I2. Non-approved rows are untouched here;
- * operator unfreeze still re-checks live eligibility (`mayRestoreProgrammePrivileges`)
- * so a human cannot stamp approved over a snapshot that would fail apply.
+ * operator grant (first approve or unfreeze) still re-checks live eligibility
+ * (`mayGrantProgrammePrivileges`) so a human cannot stamp approved over a
+ * snapshot that would fail apply.
  */
 export function standingBrokenByDisputeLaw(
   status: MerchantStatus,

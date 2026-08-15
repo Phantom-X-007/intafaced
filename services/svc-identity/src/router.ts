@@ -33,6 +33,8 @@ import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
+import { FlagDisabledError } from '@intafaced/config';
+import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -129,6 +131,26 @@ function toTrpcError(err: unknown): TRPCError {
       message: `${err.message} [${err.residual}]`,
       cause: err,
     });
+  }
+
+  if (err instanceof FlagDisabledError) {
+    // Drop clock / override / env pin — named code on the message so the
+    // client can tell disabled from drop_pending without a second field.
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof WaitlistError) {
+    switch (err.code) {
+      case 'waitlist.unbuilt':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
+      case 'waitlist.not_found':
+      case 'waitlist.unknown_referrer':
+        return new TRPCError({ code: 'NOT_FOUND', message: `${err.message} [${err.code}]`, cause: err });
+      case 'waitlist.self_referral':
+        return new TRPCError({ code: 'CONFLICT', message: `${err.message} [${err.code}]`, cause: err });
+      case 'waitlist.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+    }
   }
 
   if (!(err instanceof AuthError)) {
@@ -276,6 +298,11 @@ export function createIdentityRouter(
      * Injected so this router never holds a free SQL handle for records.
      */
     bindKycProviderRef?: (input: BindProviderRefInput) => Promise<BindProviderRefResult>;
+    /**
+     * Drop 0 waitlist + referral queue. Absent → named `waitlist.unbuilt`
+     * (no silent enroll). Wired in index.ts against SqlWaitlistStore.
+     */
+    waitlist?: WaitlistService;
   },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
@@ -286,6 +313,7 @@ export function createIdentityRouter(
   const ledger = options.ledger;
   const kycDocs = options.kycDocs;
   const bindKycProviderRef = options.bindKycProviderRef;
+  const waitlist = options.waitlist;
 
   function requireReferral(): ReferralService {
     if (!referral) {
@@ -326,6 +354,16 @@ export function createIdentityRouter(
       });
     }
     return bindKycProviderRef;
+  }
+
+  function requireWaitlist(): WaitlistService {
+    if (!waitlist) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Waitlist capture is not wired [waitlist.unbuilt]',
+      });
+    }
+    return waitlist;
   }
 
   return router({
@@ -1718,6 +1756,109 @@ export function createIdentityRouter(
                 asset: r.asset,
                 accruedAt: r.accruedAt.toISOString(),
                 sourceModule: r.sourceModule,
+              })),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+    }),
+
+    /**
+     * Drop 0 tease — email waitlist + referral queue.
+     * Not the affiliate tree (`affiliates.*`). No rewards, no ledger.
+     */
+    waitlist: router({
+      enroll: publicProcedure
+        .input(
+          z.object({
+            email: z.string().email().max(320),
+            referralCode: z
+              .string()
+              .regex(/^[a-fA-F0-9]{12}$/)
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            email: z.string(),
+            position: z.number().int().positive(),
+            referralCode: z.string(),
+            referredCount: z.number().int().min(0),
+            created: z.boolean(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            const out = await requireWaitlist().enroll(input);
+            return {
+              id: out.entry.id,
+              email: out.entry.email,
+              position: out.entry.position,
+              referralCode: out.entry.referralCode,
+              referredCount: out.entry.referredCount,
+              created: out.created,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      position: publicProcedure
+        .input(z.object({ referralCode: z.string().regex(/^[a-fA-F0-9]{12}$/) }))
+        .output(
+          z.object({
+            position: z.number().int().positive(),
+            referralCode: z.string(),
+            referredCount: z.number().int().min(0),
+            queueLength: z.number().int().min(0),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            return await requireWaitlist().position(input.referralCode);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      list: scopedProcedure('admin:read')
+        .input(
+          z.object({
+            limit: z.number().int().min(1).max(200).default(50),
+            offset: z.number().int().min(0).default(0),
+          }),
+        )
+        .output(
+          z.object({
+            total: z.number().int().min(0),
+            entries: z.array(
+              z.object({
+                id: z.string().uuid(),
+                email: z.string(),
+                position: z.number().int().positive(),
+                referralCode: z.string(),
+                referredBy: z.string().nullable(),
+                referredCount: z.number().int().min(0),
+                createdAt: z.string(),
+              }),
+            ),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const out = await requireWaitlist().list(input);
+            return {
+              total: out.total,
+              entries: out.entries.map((e) => ({
+                id: e.id,
+                email: e.email,
+                position: e.position,
+                referralCode: e.referralCode,
+                referredBy: e.referredBy,
+                referredCount: e.referredCount,
+                createdAt: e.createdAt.toISOString(),
               })),
             };
           } catch (err) {

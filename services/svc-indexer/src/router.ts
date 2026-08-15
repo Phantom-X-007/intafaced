@@ -4,6 +4,7 @@ import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from 
 import { ChainDataError } from './chain/source.js';
 import type { FillRecord, PositionRecord, ProjectionStore } from './projection/store.js';
 import type { Indexer } from './indexer.js';
+import { haltServingReason, lastErrorRefusesServing, lastErrorServingReason } from './serving.js';
 import { withReadSpan } from './tracing.js';
 
 /**
@@ -147,37 +148,26 @@ export interface IndexerRouterDeps {
 }
 
 /**
- * Chain-door failures that make a served book a lie about "live" state
- * (D26-P1-I3). Status still surfaces `lastError`; data paths refuse.
- */
-const CHAIN_DOOR_REFUSE_CODES = new Set([
-  'indexer.chain_not_configured',
-  'indexer.chain_unreachable',
-  'indexer.chain_id_mismatch',
-  'indexer.venue_not_deployed',
-  'indexer.malformed_block',
-]);
-
-/**
  * A halted projection knows its book is wrong and cannot repair it.
- * A projection whose last sync hit a typed chain-door failure likewise must
- * not serve prices as current. `status` and `health` still answer so an
- * operator can see why; every data procedure refuses so a client that never
- * checks `status.halted` / `status.lastError` cannot render a fake book.
+ * A projection whose last sync hit a typed serving-refuse lastError (chain
+ * door or startHeight — see `SERVING_REFUSE_CODES`) likewise must not serve
+ * prices as current. `status` and `health` still answer so an operator can
+ * see why; every data procedure refuses so a client that never checks
+ * `status.halted` / `status.lastError` cannot render a fake book.
  */
 function assertServing(indexer: Indexer): void {
   const halt = indexer.halted;
   if (halt) {
     throw new TRPCError({
       code: 'SERVICE_UNAVAILABLE',
-      message: `Indexer halted — projection is known wrong and will not serve data until re-indexed. ${halt.reason}`,
+      message: haltServingReason(halt),
     });
   }
   const failure = indexer.lastError;
-  if (failure?.code && CHAIN_DOOR_REFUSE_CODES.has(failure.code)) {
+  if (lastErrorRefusesServing(failure)) {
     throw new TRPCError({
       code: 'SERVICE_UNAVAILABLE',
-      message: `Indexer chain door refused (${failure.code}) — will not serve projected books as live. ${failure.message}`,
+      message: lastErrorServingReason(failure),
     });
   }
 }

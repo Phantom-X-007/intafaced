@@ -9,7 +9,8 @@ import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecuri
 import { KillSwitchState } from './kill-switch.js';
 import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { exchangePrincipal } from './principal-exchange.js';
-import { resolve, UPSTREAMS } from './routes.js';
+import { upstreamBody } from './proxy-body.js';
+import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -137,7 +138,7 @@ await registerRateLimit(app, rateLimit);
 const rateLimitState = rateLimitSummary(rateLimit);
 app.log[rateLimitState.level]({ appEnv: env.APP_ENV, ...rateLimit }, rateLimitState.summary);
 
-const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
+const envLookup = (name: string): string | undefined => process.env[name];
 
 const tokenConfig = {
   secret: env.JWT_ACCESS_SECRET,
@@ -181,7 +182,18 @@ app.get('/ready', async () => ({
   ready: true,
   // The route table, so an operator can see what the edge will forward without
   // reading the source. Deliberately no secrets, no upstream URLs.
+  //
+  // `wired` is whether the env var is SET — not whether the process behind it
+  // is healthy. A prefix listed here with `wired: false` would have been
+  // forwarded to localhost in staging/prod (a 200/502 on an unwired door).
   routes: UPSTREAMS.map((u) => u.prefix),
+  upstreamWiring: (() => {
+    const table = readyRoutes(envLookup);
+    return {
+      wired: table.filter((r) => r.wired).map((r) => r.prefix),
+      unwired: table.filter((r) => !r.wired).map((r) => r.prefix),
+    };
+  })(),
   // Whether screening is armed, and how many regions it refuses — a count, not
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.
@@ -242,87 +254,117 @@ registerAdminRoutes(app, admin);
  *
  * A catch-all rather than a route per upstream, because the failure mode of a
  * missing route must be 404 — not "fell through to a default upstream".
+ *
+ * Encapsulated so the JSON parser here can keep RAW BYTES (pay webhook HMAC)
+ * without turning `/admin/*` bodies into Buffers. Fastify parsers are
+ * per-context; the parent keeps the object parser the control plane needs.
  */
-app.all('/api/*', async (req, reply) => {
-  const url = new URL(req.url, `http://${env.HTTP_HOST}`);
-  const target = resolve(url.pathname);
-
-  if (!target) {
-    // An unlisted prefix is not forwarded anywhere. An edge that proxies what
-    // it does not recognise is a proxy for the entire internal network.
-    return reply.code(404).send({ error: 'no route', code: 'edge.no_route' });
-  }
-
-  // The kill-switch already ran, in the `onRequest` hook registered above —
-  // before body parsing and before this handler exists. See `control-plane.ts`
-  // for why it is a hook and not a check here: a guard inside one handler
-  // protects that handler, a hook protects the door.
-
-  // Region: DEFAULT_REGION, or trusted geo header when EDGE_GEO_COUNTRY_HEADER
-  // + EDGE_TRUST_PROXY are both set. Never caller-supplied free-form region.
-  const regionRes = resolveRequestRegion({
-    defaultRegion: env.DEFAULT_REGION,
-    trustProxy: env.EDGE_TRUST_PROXY !== undefined,
-    geoHeaderName: env.EDGE_GEO_COUNTRY_HEADER,
-    headers: req.headers as Record<string, string | string[] | undefined>,
+await app.register(async (api) => {
+  api.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) => {
+    done(null, body);
+  });
+  api.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'buffer' }, (_req, body, done) => {
+    done(null, body);
   });
 
-  const exchanged = await exchangePrincipal(req.headers, {
-    tokens: tokenConfig,
-    edgeSecret: env.EDGE_PRINCIPAL_SECRET,
-    region: regionRes.region,
-    // Direct to identity for `ifc_…` API keys — never via this edge (loop).
-    identityUrl: env.IDENTITY_URL,
+  api.all('/api/*', async (req, reply) => {
+    const url = new URL(req.url, `http://${env.HTTP_HOST}`);
+    const target = resolve(url.pathname);
+
+    if (!target) {
+      // An unlisted prefix is not forwarded anywhere. An edge that proxies what
+      // it does not recognise is a proxy for the entire internal network.
+      return reply.code(404).send({ error: 'no route', code: 'edge.no_route' });
+    }
+
+    if (isS2sPath(target.path)) {
+      // Belt: the onRequest hook already refuses this. Kept so a future route
+      // that skips the hook cannot open the S2S plane.
+      return reply.code(404).send({ error: 'no route', code: 'edge.s2s_not_proxied' });
+    }
+
+    const resolved = resolveUpstreamBase(target.upstream, envLookup, env.APP_ENV);
+    if ('unwired' in resolved) {
+      // Staging/prod with no PAY_URL (etc.) used to silently hit localhost.
+      // 503 + named code, not a 200/502 that looks like the service is down.
+      req.log.error({ prefix: target.upstream.prefix, envVar: target.upstream.envVar }, 'edge: upstream env unset');
+      return reply.code(503).send({
+        error: 'upstream not configured',
+        code: 'edge.upstream_unwired',
+        module: target.upstream.module,
+      });
+    }
+
+    // The kill-switch already ran, in the `onRequest` hook registered above —
+    // before body parsing and before this handler exists. See `control-plane.ts`
+    // for why it is a hook and not a check here: a guard inside one handler
+    // protects that handler, a hook protects the door.
+
+    // Region: DEFAULT_REGION, or trusted geo header when EDGE_GEO_COUNTRY_HEADER
+    // + EDGE_TRUST_PROXY are both set. Never caller-supplied free-form region.
+    const regionRes = resolveRequestRegion({
+      defaultRegion: env.DEFAULT_REGION,
+      trustProxy: env.EDGE_TRUST_PROXY !== undefined,
+      geoHeaderName: env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+
+    const exchanged = await exchangePrincipal(req.headers, {
+      tokens: tokenConfig,
+      edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+      region: regionRes.region,
+      // Direct to identity for `ifc_…` API keys — never via this edge (loop).
+      identityUrl: env.IDENTITY_URL,
+    });
+
+    // A refused token is logged and the request continues as ANONYMOUS. The
+    // service decides — `protectedProcedure` answers UNAUTHORIZED with the right
+    // status, and a `publicProcedure` still works, which is what lets a caller
+    // with an expired token reach `auth.refresh` and recover.
+    if (exchanged.rejected) {
+      req.log.info({ reason: exchanged.rejected, path: url.pathname }, 'edge: token refused, forwarding anonymous');
+    }
+
+    // Recorded for the metric, not for the response. Kept as three values rather
+    // than a boolean because "presented nothing" and "presented something we
+    // refused" are different incidents: a spike in `refused` after a deploy is a
+    // signing-key mismatch, and a spike in `anonymous` is a front-end that stopped
+    // attaching the header. An availability panel that merges them shows neither.
+    markAuthOutcome(req, exchanged.rejected ? 'refused' : exchanged.principal ? 'authenticated' : 'anonymous');
+
+    const body = upstreamBody(req.method, req.body);
+
+    return withEdgeSpan(
+      'edge.proxy',
+      {
+        upstream: target.upstream.prefix,
+        method: req.method,
+        auth: exchanged.rejected ?? (exchanged.principal ? 'authenticated' : 'anonymous'),
+      },
+      async () => {
+        let response: Response;
+        try {
+          response = await fetch(`${resolved.base}${target.path}${url.search}`, {
+            method: req.method,
+            headers: exchanged.headers,
+            ...(body === undefined ? {} : { body }),
+            signal: AbortSignal.timeout(env.UPSTREAM_TIMEOUT_MS),
+          });
+        } catch (err) {
+          // 502, not 500: the edge is fine, the upstream is not, and a caller
+          // needs to tell those apart before deciding whether to retry.
+          req.log.error({ err, upstream: target.upstream.prefix }, 'edge: upstream unreachable');
+          return reply.code(502).send({ error: 'upstream unavailable', code: 'edge.upstream_unavailable' });
+        }
+
+        const text = await response.text();
+        return reply
+          .code(response.status)
+          .header('content-type', response.headers.get('content-type') ?? 'application/json')
+          .send(text);
+      },
+    );
   });
-
-  // A refused token is logged and the request continues as ANONYMOUS. The
-  // service decides — `protectedProcedure` answers UNAUTHORIZED with the right
-  // status, and a `publicProcedure` still works, which is what lets a caller
-  // with an expired token reach `auth.refresh` and recover.
-  if (exchanged.rejected) {
-    req.log.info({ reason: exchanged.rejected, path: url.pathname }, 'edge: token refused, forwarding anonymous');
-  }
-
-  // Recorded for the metric, not for the response. Kept as three values rather
-  // than a boolean because "presented nothing" and "presented something we
-  // refused" are different incidents: a spike in `refused` after a deploy is a
-  // signing-key mismatch, and a spike in `anonymous` is a front-end that stopped
-  // attaching the header. An availability panel that merges them shows neither.
-  markAuthOutcome(req, exchanged.rejected ? 'refused' : exchanged.principal ? 'authenticated' : 'anonymous');
-
-  const base = upstreamUrl(target.upstream.envVar, target.upstream.devUrl);
-  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : (req.body as unknown);
-
-  return withEdgeSpan(
-    'edge.proxy',
-    {
-      upstream: target.upstream.prefix,
-      method: req.method,
-      auth: exchanged.rejected ?? (exchanged.principal ? 'authenticated' : 'anonymous'),
-    },
-    async () => {
-      let response: Response;
-      try {
-        response = await fetch(`${base}${target.path}${url.search}`, {
-          method: req.method,
-          headers: exchanged.headers,
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          signal: AbortSignal.timeout(env.UPSTREAM_TIMEOUT_MS),
-        });
-      } catch (err) {
-        // 502, not 500: the edge is fine, the upstream is not, and a caller
-        // needs to tell those apart before deciding whether to retry.
-        req.log.error({ err, upstream: target.upstream.prefix }, 'edge: upstream unreachable');
-        return reply.code(502).send({ error: 'upstream unavailable', code: 'edge.upstream_unavailable' });
-      }
-
-      const text = await response.text();
-      return reply
-        .code(response.status)
-        .header('content-type', response.headers.get('content-type') ?? 'application/json')
-        .send(text);
-    },
-  );
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });

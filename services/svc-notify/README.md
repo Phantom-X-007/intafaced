@@ -389,9 +389,11 @@ every `ALERT_SWEEP_INTERVAL_MS`, clearing it on shutdown. The last pass is on
 **Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
 injected mark port. `acceptAlertMark` is the accepted-mark gate: a `kind: 'dark'`
 source cannot fire even if `quote()` invents `{ kind: 'ok' }`, and an absent
-quote is refused rather than treated as zero. When the accepted mark is
-unavailable (dark / stale / refused), the outcome is `alert.price_unavailable`
-and **nothing is written to the inbox**.
+quote is refused rather than treated as zero. A live `{ kind: 'ok' }` whose
+`at` is older than 300s (same ticker window bank uses for loan marks) or dated
+more than 30s in the future is `stale` / `refused` — a one-shot must not fire
+on a memory. When the accepted mark is unavailable (dark / stale / refused),
+the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
 
 **Out-of-app required.** If this deployment listed a channel in
 `NOTIFY_REQUIRED_CHANNELS` and that channel cannot deliver, a crossing watch

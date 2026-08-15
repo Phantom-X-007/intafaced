@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,22 +7,38 @@ import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intaf
 import { MemoryLedger, formatAmount, parseAmount, recipes, userAvailable, type Amount } from '@intafaced/ledger-client';
 import { createBankServices, type BankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
+import { cardSim } from '../cards/issuer.js';
 import { createBankRouter } from '../router.js';
-import type { ConvertPort } from './auto-invest-service.js';
+import { spareChange, type ConvertPort } from './auto-invest-service.js';
 
 /**
- * Unit card — bank.auto-invest F-plane (wave 10 L08)
+ * Unit card — bank.auto-invest F-plane (round-up residual)
  *
- * 1. Promise: §31:805 / tracker bank.auto-invest — DCA, threshold sweeps;
- *    schedules refuse rates unset; no invent §8.
- * 2. Break: no auto-invest surface on tip; DCA would invent rates if shipped open.
- * 3. Done bar: threshold sweep moves excess → earn via ledger; DCA create refuses
- *    bank.auto_invest_rate_unset without ConvertPort; rules hold no balance.
+ * 1. Promise: §31:805 card round-ups sweep spare change into a same-asset
+ *    earn pool; cross-asset refuses rates unset; no invent §8 / yield.
+ * 2. Break: capture had no hook; AUTO_INVEST_ENABLED did not stop a hook.
+ * 3. Done bar: capture of 4.30 @ granularity 1.00 stakes 0.70; exact
+ *    multiple skips; buyAsset refuses rate_unset; kill skips; capture stands
+ *    when the sweep cannot fund; runner never fires card_roundup.
  * 4. Class M
  * 5. Paths: services/svc-bank/**
  * 6. RED first: this suite
- * 7. Collision: claim-check clear; no open bank PRs
+ * 7. Collision: no open bank PRs; mountain already wip
  */
+
+const amt = (v: string): Amount => parseAmount(v);
+
+describe('spareChange — integer remainder, never a rate', () => {
+  it('rounds 4.30 to the next 1.00 as 0.70', () => {
+    expect(formatAmount(spareChange(amt('4.30'), amt('1')))).toBe('0.7');
+  });
+  it('an exact multiple produces zero — nothing to sweep', () => {
+    expect(spareChange(amt('5'), amt('1'))).toBe(0n);
+  });
+  it('non-positive granularity produces zero rather than inventing a unit', () => {
+    expect(spareChange(amt('4.30'), 0n)).toBe(0n);
+  });
+});
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +49,6 @@ const migrations = readdirSync(drizzle)
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
-const amt = (v: string): Amount => parseAmount(v);
 
 const available = await postgresAvailable(URL);
 
@@ -82,11 +98,16 @@ if (!available) {
     await sql`
       TRUNCATE bank.auto_invest_runs, bank.auto_invest_rules,
                bank.interest_accruals, bank.earn_positions, bank.earn_pools,
+               bank.card_cashback, bank.card_settlements, bank.card_conversions,
+               bank.card_authorizations, bank.cards,
                bank.spaces
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
-    bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
+    bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      nativeAssetId: 'IFC',
+      cards: { issuer: cardSim() },
+    });
   });
 
   afterAll(async () => {
@@ -327,6 +348,219 @@ if (!available) {
         code: 'SERVICE_UNAVAILABLE',
         cause: { code: 'bank.auto_invest_disabled' },
       });
+    });
+  });
+
+  describe('card round-up — spare change on capture (no yield invent)', () => {
+    async function openFlexPool() {
+      return bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Roundup vault',
+        aprBps: 100,
+        minDeposit: amt('0.01'),
+      });
+    }
+
+    it('sweeps 0.70 after a 4.30 capture into the same-asset earn pool', async () => {
+      const pool = await openFlexPool();
+      await fund(USER_A, 'USDT', '1000');
+      const rule = await bank.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+      expect(rule.kind).toBe('card_roundup');
+
+      const card = await bank.cards.issue({
+        cardId: randomUUID(),
+        userId: USER_A,
+        assetId: 'USDT',
+        perAuthorizationLimit: amt('1000'),
+      });
+      await bank.cards.authorize({ cardId: card.id, authorizationRef: 'auth-ru-1', amount: amt('4.30') });
+      const captured = await bank.cards.capture({
+        cardId: card.id,
+        authorizationRef: 'auth-ru-1',
+        amount: amt('4.30'),
+      });
+
+      expect(captured.roundUp.status).toBe('settled');
+      if (captured.roundUp.status === 'settled') {
+        expect(formatAmount(captured.roundUp.amount)).toBe('0.7');
+      }
+      // 1000 - 4.30 spend - 0.70 sweep
+      expect(await availableOf(USER_A, 'USDT')).toBe('995');
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('0.7');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('skips when the capture is already a multiple of granularity — moves nothing extra', async () => {
+      const pool = await openFlexPool();
+      await fund(USER_A, 'USDT', '100');
+      await bank.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+      const card = await bank.cards.issue({
+        cardId: randomUUID(),
+        userId: USER_A,
+        assetId: 'USDT',
+        perAuthorizationLimit: amt('100'),
+      });
+      await bank.cards.authorize({ cardId: card.id, authorizationRef: 'auth-ru-2', amount: amt('5') });
+      const captured = await bank.cards.capture({
+        cardId: card.id,
+        authorizationRef: 'auth-ru-2',
+        amount: amt('5'),
+      });
+      expect(captured.roundUp.status).toBe('skipped');
+      expect(await availableOf(USER_A, 'USDT')).toBe('95');
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('0');
+    });
+
+    it('refuses a cross-asset destination rather than inventing a convert rate', async () => {
+      const pool = await openFlexPool();
+      await expect(
+        bank.autoInvest.createCardRoundUp({
+          userId: USER_A,
+          assetId: 'USDT',
+          granularity: amt('1'),
+          targetPoolId: pool.id,
+          buyAssetId: 'BTC',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.auto_invest_rate_unset' });
+    });
+
+    it('refuses a second live round-up on the same asset', async () => {
+      const pool = await openFlexPool();
+      await bank.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+      await expect(
+        bank.autoInvest.createCardRoundUp({
+          userId: USER_A,
+          assetId: 'USDT',
+          granularity: amt('5'),
+          targetPoolId: pool.id,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.auto_invest_roundup_exists' });
+    });
+
+    it('AUTO_INVEST kill skips the hook — capture still stands, nothing swept', async () => {
+      const pool = await openFlexPool();
+      bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        nativeAssetId: 'IFC',
+        cards: { issuer: cardSim() },
+        autoInvest: { enabled: false },
+      });
+      await fund(USER_A, 'USDT', '1000');
+      // Create is allowed while the runner/hook is stopped (same as threshold).
+      // Re-enable just long enough to insert, then rebuild disabled.
+      const writer = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        nativeAssetId: 'IFC',
+        cards: { issuer: cardSim() },
+      });
+      await writer.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+
+      const card = await bank.cards.issue({
+        cardId: randomUUID(),
+        userId: USER_A,
+        assetId: 'USDT',
+        perAuthorizationLimit: amt('1000'),
+      });
+      await bank.cards.authorize({ cardId: card.id, authorizationRef: 'auth-ru-kill', amount: amt('4.30') });
+      const captured = await bank.cards.capture({
+        cardId: card.id,
+        authorizationRef: 'auth-ru-kill',
+        amount: amt('4.30'),
+      });
+      expect(captured.roundUp.status).toBe('skipped');
+      if (captured.roundUp.status === 'skipped') {
+        expect(captured.roundUp.reason).toBe('bank.auto_invest_disabled');
+      }
+      expect(await availableOf(USER_A, 'USDT')).toBe('995.7');
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('0');
+    });
+
+    it('pause stops the hook; capture still stands', async () => {
+      const pool = await openFlexPool();
+      await fund(USER_A, 'USDT', '1000');
+      const rule = await bank.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+      await bank.autoInvest.pauseRule(rule.id);
+      const card = await bank.cards.issue({
+        cardId: randomUUID(),
+        userId: USER_A,
+        assetId: 'USDT',
+        perAuthorizationLimit: amt('1000'),
+      });
+      await bank.cards.authorize({ cardId: card.id, authorizationRef: 'auth-ru-pause', amount: amt('4.30') });
+      const captured = await bank.cards.capture({
+        cardId: card.id,
+        authorizationRef: 'auth-ru-pause',
+        amount: amt('4.30'),
+      });
+      expect(captured.roundUp.status).toBe('none');
+      expect(await availableOf(USER_A, 'USDT')).toBe('995.7');
+    });
+
+    it('runDue does not fire card_roundup rules', async () => {
+      const pool = await openFlexPool();
+      await fund(USER_A, 'USDT', '1000');
+      await bank.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-15T12:00:00Z') });
+      expect(report.considered).toBe(0);
+      expect(await availableOf(USER_A, 'USDT')).toBe('1000');
+    });
+
+    it('refuses the sweep when available cannot fund it — capture still stands', async () => {
+      const pool = await openFlexPool();
+      await fund(USER_A, 'USDT', '4.30');
+      await bank.autoInvest.createCardRoundUp({
+        userId: USER_A,
+        assetId: 'USDT',
+        granularity: amt('1'),
+        targetPoolId: pool.id,
+      });
+      const card = await bank.cards.issue({
+        cardId: randomUUID(),
+        userId: USER_A,
+        assetId: 'USDT',
+        perAuthorizationLimit: amt('10'),
+      });
+      await bank.cards.authorize({ cardId: card.id, authorizationRef: 'auth-ru-short', amount: amt('4.30') });
+      const captured = await bank.cards.capture({
+        cardId: card.id,
+        authorizationRef: 'auth-ru-short',
+        amount: amt('4.30'),
+      });
+      expect(captured.captured).toBe(amt('4.30'));
+      expect(captured.roundUp.status).toBe('refused');
+      if (captured.roundUp.status === 'refused') {
+        expect(captured.roundUp.reason).toBe('ledger.insufficient_funds');
+      }
+      expect(await availableOf(USER_A, 'USDT')).toBe('0');
     });
   });
 

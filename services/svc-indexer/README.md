@@ -48,9 +48,9 @@ HTTP: `GET /health` (liveness) · `GET /ready`.
 
 `chain` is deliberately live rather than a copy of what the last sync saw: the question is "how stale is this _right now_", and a cached answer to that is a contradiction. `book` still carries `asOfHeight`/`asOfHash`, so a client holding both knows exactly which chain state the ladder in front of it describes.
 
-**`/ready` returns 503 when the indexer is halted**, not only when the database is down. A halted indexer has hit a reorg deeper than its retained history: it knows its book is wrong and cannot repair it. Leaving the rotation is the correct response — being unreachable costs a user nothing they cannot get from any node, and a wrong price costs them a trade.
+**`/ready` returns 503 when the book cannot be trusted as live** — a deep-reorg halt, a serving-refuse `lastError` (chain door or startHeight), or a down database. `/health` stays liveness. A load balancer that probes `/ready` must not keep sending traffic at procedures that all 503. Compose healthchecks currently probe `/health`; do not read that as "ready is optional."
 
-**Data procedures refuse when halted too.** `/ready` only protects callers that go through a load balancer that actually probes readiness (compose healthchecks currently probe `/health`, which is liveness). So `book` / `fills` / `accountFills` / `position` / `positions` / `markets` return `SERVICE_UNAVAILABLE` while `status` and `health` keep answering — `status.halted` is how a caller learns why. A client that only hits `book` cannot silently render a dead-branch price.
+**Data procedures refuse on the same signals.** `/ready` only protects callers that go through a load balancer that actually probes readiness. So `book` / `fills` / `accountFills` / `position` / `positions` / `markets` return `SERVICE_UNAVAILABLE` while `status` and `health` keep answering — `status.halted` / `status.lastError` is how a caller learns why. A client that only hits `book` cannot silently render a dead-branch price or an empty book that is really "we never indexed." Transient `indexer.parent_unlink` does **not** refuse: the last canonical projection is still that block.
 
 **Money is a decimal string on the wire and a scaled bigint in memory**, everywhere. `formatAmount` is the only thing in the router that renders a price. Nothing constructs a `number` from an amount: an order book is nothing but sums, and a float sums `0.1 + 0.2` to something that is not `0.3`. There is a test that round-trips 18 decimal places through Postgres and back.
 
@@ -215,6 +215,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 | `chain/evm/reorg.live.test.ts`      | **A real chain, really forked**, on both stores: orphaned rows gone, tip-replacement caught, idempotent restart, deep-fork halt, `behindBy` staleness   |
 | `router.mount.test.ts`              | The mount boundary over real `createEdgeContext` headers: anonymous reads succeed, a forged principal confers nothing, `status` surfaces a halt         |
 | `indexer.parent-unlink.test.ts`     | Mid-read parent unlink throws once (`indexer.parent_unlink`) — never burns a green batch with a frozen cursor                                           |
+| `ready.test.ts`                     | `/ready` leaves rotation on halt **and** serving-refuse lastError; parent-unlink stays ready                                                            |
 | `sovereignty.test.ts`               | §22 for every region × tier with a custodial control, and the §16.10 custody assertions listed under **Ledger**                                         |
 
 **Two implementations is the point.** A single implementation tested against itself proves the tests match the code, not that the code matches the design. The memory store is short enough to check by eye; `unwindTo` is a `DELETE` and `prune` is a `DELETE` with a correlated subquery — the kind of SQL that looks right and is off by one row.
