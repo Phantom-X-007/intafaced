@@ -43,7 +43,8 @@ const AT = new Date('2026-08-12T14:00:00.000Z');
 
 /**
  * Widened band so an uncapped partial is reachable — see maintenance-ladder.test.ts.
- * Production still uses DEFAULT_FUTURES_LADDER_POLICY (placeholders pending D3).
+ * Test harness only. Live jobs omit ladderPolicy (skipped_d3_unset). These bps
+ * are not product law and must not be copied into index.ts / startFuturesJobs.
  */
 const WIDE_POLICY: FuturesLadderPolicy = {
   tiers: [
