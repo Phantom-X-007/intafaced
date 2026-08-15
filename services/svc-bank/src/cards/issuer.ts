@@ -143,13 +143,28 @@ export interface CardIssuerAdapter {
  * Anything a surface renders from a card issued here must carry `simulated`
  * through, and the router does.
  */
+/**
+ * THE PUBLIC PROGRAMME SURFACE.
+ *
+ * `simulated` is a required boolean, not an inferred id and not an omitted
+ * default. A mapper that dropped the field would let a screen treat a
+ * simulator (or an unconfigured programme) as live. This copies the three
+ * fields explicitly so a later spread cannot lose the flag.
+ */
+export function cardProgrammeOutput(programme: CardProgramme): CardProgramme {
+  if (typeof programme.simulated !== 'boolean') {
+    throw new TypeError('Card programme must declare whether it is simulated');
+  }
+  return { id: programme.id, simulated: programme.simulated, displayName: programme.displayName };
+}
+
 export function cardSim(options: { displayName?: string } = {}): CardIssuerAdapter {
-  const programme: CardProgramme = {
+  const programme = cardProgrammeOutput({
     id: 'card-sim',
     simulated: true,
     // Says what it is in the name, because this string reaches a screen.
     displayName: options.displayName ?? 'Simulated card (no card programme)',
-  };
+  });
 
   return {
     programme,
@@ -183,7 +198,7 @@ export function cardSim(options: { displayName?: string } = {}): CardIssuerAdapt
  * possible. Choosing `cardSim()` has to be an act somebody performed.
  */
 export const noCardIssuer: CardIssuerAdapter = {
-  programme: { id: 'none', simulated: true, displayName: 'No card programme' },
+  programme: cardProgrammeOutput({ id: 'none', simulated: true, displayName: 'No card programme' }),
   issue: async () => {
     throw new BankError('No card issuer is configured — this deployment has no card programme', 'bank.no_card_issuer');
   },

@@ -23,7 +23,7 @@ import {
   type CardConversionPolicy,
   type ConversionQuote,
 } from './conversion.js';
-import { cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
+import { cardProgrammeOutput, cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
 
 /**
  * CARDS (§8.1) — the LEDGER half: authorise, hold, capture, reverse, cash back.
@@ -333,7 +333,7 @@ export class CardService {
 
   /** What this deployment's card programme is, and whether it is real. */
   programme(): CardIssuerAdapter['programme'] {
-    return this.issuer.programme;
+    return cardProgrammeOutput(this.issuer.programme);
   }
 
   // ── Cards ──────────────────────────────────────────────────────────────────
@@ -1256,6 +1256,9 @@ interface AuthorizationRow {
 }
 
 function toCard(row: CardRow): CardRecord {
+  if (typeof row.simulated !== 'boolean') {
+    throw new TypeError('Card row must declare whether it is simulated');
+  }
   return {
     id: row.id,
     userId: row.user_id,
