@@ -17,12 +17,11 @@ export interface FundingRateEntry extends FundingRateQuote {
 export interface FundingRatePolicy {
   /**
    * Max age in ms before a quote is treated as missing.
-   * Default 8h (typical funding interval). Set 0 to disable.
+   * Omitted → quote is missing (D2: do not invent an 8h "typical" interval).
+   * Set 0 to disable the age check after an explicit caller choice.
    */
   maxAgeMs?: number;
 }
-
-const DEFAULT_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 function isFiniteDecimal(s: string): boolean {
   // Allow optional leading minus; require at least one digit.
@@ -54,7 +53,8 @@ export function memoryFundingRateBook(opts?: { now?: () => number; policy?: Fund
     const e = byMarket.get(marketId);
     if (!e) return null;
     if (e.marketId !== marketId) return null;
-    const maxAge = policy?.maxAgeMs ?? defaultPolicy.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+    const maxAge = policy?.maxAgeMs ?? defaultPolicy.maxAgeMs;
+    if (maxAge === undefined) return null;
     if (!isRateFresh(e, atMs, maxAge)) return null;
     if (!isFiniteDecimal(e.rate)) return null;
     if (!e.periodId || e.periodId.trim() === '') return null;
