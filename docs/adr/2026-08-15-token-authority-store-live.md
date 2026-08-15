@@ -21,11 +21,11 @@ Parent ADR already decided **whose** the numbers are and **that** claim-before-b
 
 ## When the store is the only live source
 
-| Store state                                                         | Live source                         | Burn / mint that sizes from params                                      |
-| ------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
-| Singleton `token_params` row present and readable                   | **That row only**                   | Allowed only after claim-before-burn (and other refuse cases below)     |
-| Row missing, unreadable, or invalid (`token.params_missing` / `token.params_invalid`) | **None**                            | **Fail-closed.** Never fall back to `economics/*.ts`                    |
-| Tests with `loadParamsFromDb: false`                                | Explicit test overrides, not seeds  | Test fixture only — not a production path                               |
+| Store state                                                                           | Live source                        | Burn / mint that sizes from params                                  |
+| ------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------- |
+| Singleton `token_params` row present and readable                                     | **That row only**                  | Allowed only after claim-before-burn (and other refuse cases below) |
+| Row missing, unreadable, or invalid (`token.params_missing` / `token.params_invalid`) | **None**                           | **Fail-closed.** Never fall back to `economics/*.ts`                |
+| Tests with `loadParamsFromDb: false`                                                  | Explicit test overrides, not seeds | Test fixture only — not a production path                           |
 
 **Populated** means the singleton row exists. The migration INSERT that first fills it is how the store gets a row; it is **not** licence to treat source constants as live. Boot stays `loadParamsFromDb: true`.
 
@@ -37,14 +37,14 @@ Parent ADR already decided **whose** the numbers are and **that** claim-before-b
 
 These are the named guards. They decide **no** magnitude. Inventing a fifth “nice default” to make two copies agree is the silent-resolution hole the parent ADR forbids.
 
-| Guard                                      | What it watches                                                                                          | Fail closed                                                                                          |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Runtime store read**                     | `token_params` singleton on boot/read (`token.params_missing`, `token.params_invalid`)                   | Missing/invalid row — never seed fallback                                                            |
-| **Fee-ladder agreement**                   | `economics/staking.ts` ↔ migration fee-discount schedule                                                 | Any new disagreement fails the test                                                                  |
-| **Pinned emission/buyback inventory**      | Hand-pinned set: `initialEpochReward`, `maxSupply`, `buybackBps`, `burnSplitBps`                         | Changing either copy, adding a fifth drifted param, or “fixing” a pinned row by copying values fails |
-| **New-drift / silent-resolution**          | Parent ADR correction 2026-08-04                                                                         | New disagreement or a change to an existing one fails the build; the four known rows stay pinned     |
-| **Claim-before-burn + overlap**            | Revenue window `[from, to)` claimed **before** `recipes.burn`                                            | Overlap / spent window → `token.buyback_window_overlap` (or run conflict) **with no burn posted**    |
-| **Mint-funded “buyback”**                  | Parent ADR: a burn funded by mint is not a buyback                                                       | Refuse to describe or surface it as buyback until funding is provably fee revenue                    |
+| Guard                                 | What it watches                                                                        | Fail closed                                                                                          |
+| ------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Runtime store read**                | `token_params` singleton on boot/read (`token.params_missing`, `token.params_invalid`) | Missing/invalid row — never seed fallback                                                            |
+| **Fee-ladder agreement**              | `economics/staking.ts` ↔ migration fee-discount schedule                               | Any new disagreement fails the test                                                                  |
+| **Pinned emission/buyback inventory** | Hand-pinned set: `initialEpochReward`, `maxSupply`, `buybackBps`, `burnSplitBps`       | Changing either copy, adding a fifth drifted param, or “fixing” a pinned row by copying values fails |
+| **New-drift / silent-resolution**     | Parent ADR correction 2026-08-04                                                       | New disagreement or a change to an existing one fails the build; the four known rows stay pinned     |
+| **Claim-before-burn + overlap**       | Revenue window `[from, to)` claimed **before** `recipes.burn`                          | Overlap / spent window → `token.buyback_window_overlap` (or run conflict) **with no burn posted**    |
+| **Mint-funded “buyback”**             | Parent ADR: a burn funded by mint is not a buyback                                     | Refuse to describe or surface it as buyback until funding is provably fee revenue                    |
 
 User-facing supply, burn total, APY, or fee-% stays **unset** until Nitro writes magnitudes into the store (PKT-C9). Never a zero, never a dash, never a plausible figure from a seed file.
 
