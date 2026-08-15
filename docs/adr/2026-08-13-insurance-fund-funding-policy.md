@@ -58,11 +58,11 @@ A later owner table may raise the list floor above zero. Until then, **do not** 
 
 ## Refuse matrix (names on tip — do not rename)
 
-| Situation                                           | Code                                                  |
-| --------------------------------------------------- | ----------------------------------------------------- |
-| Real-money futures list / enable-to-active, pot ≤ 0 | `trade.insurance_fund_empty`                          |
+| Situation                                           | Code                                                                                         |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Real-money futures list / enable-to-active, pot ≤ 0 | `trade.insurance_fund_empty`                                                                 |
 | Real-money futures list, insurance path unset       | `trade.insurance_fund_empty` (same code — do not invent a second refuse or a house-fee read) |
-| Shortfall larger than live pot                      | existing shortfall bound refuse (not a new list code) |
+| Shortfall larger than live pot                      | existing shortfall bound refuse (not a new list code)                                        |
 
 ---
 
@@ -97,15 +97,15 @@ The live-path inventory records `futuresInsuranceTopup` as a **§13 socket for a
 
 ### Empty vs unset vs owner-unset size
 
-| State | List / enable-to-active (real-money futures) |
-| ----- | -------------------------------------------- |
-| Pot never posted, or `available ≤ 0` | **Refuse** `trade.insurance_fund_empty` |
-| Quote/pot identity missing so the insurance account cannot be named | **Refuse** the same code — do not invent an account, and do not read `houseFees('trade')` as cover |
-| `presentInsuranceListingPolicy().targetSize === 'owner_unset'` | **Not** a list refuse. Target size/schedule stay owner (D4 / DIRECTION §8). The list gate stays “any positive balance” until an owner table raises the floor |
+| State                                                               | List / enable-to-active (real-money futures)                                                                                                                 |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Pot never posted, or `available ≤ 0`                                | **Refuse** `trade.insurance_fund_empty`                                                                                                                      |
+| Quote/pot identity missing so the insurance account cannot be named | **Refuse** the same code — do not invent an account, and do not read `houseFees('trade')` as cover                                                           |
+| `presentInsuranceListingPolicy().targetSize === 'owner_unset'`      | **Not** a list refuse. Target size/schedule stay owner (D4 / DIRECTION §8). The list gate stays “any positive balance” until an owner table raises the floor |
 
 ### No house-fee substitute
 
-The futures risk ADR already: a house account is not an insurance fund and a fee balance is not a risk budget. `futuresInsuranceTopup` may *move* value from `houseFees('trade')` into `insuranceFund` — that is the existing recipe. Listing against the fee pot itself, or treating fee-pot depth as “funded insurance,” is the substitute this row forbids.
+The futures risk ADR already: a house account is not an insurance fund and a fee balance is not a risk budget. `futuresInsuranceTopup` may _move_ value from `houseFees('trade')` into `insuranceFund` — that is the existing recipe. Listing against the fee pot itself, or treating fee-pot depth as “funded insurance,” is the substitute this row forbids.
 
 This addendum does not edit `svc-trade` (including #1946 / futures lanes). Proof remains the files already on tip.
 
