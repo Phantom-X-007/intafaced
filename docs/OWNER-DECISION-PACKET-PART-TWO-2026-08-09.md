@@ -93,9 +93,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-12 · Attestation threat model (`blueprint.attestations`)
 
-**Blocks:** on-chain rank / attestation surfaces.  
+**Status:** **Sealed 2026-08-15.** Dedicated threat model: [`THREAT-MODEL-BLUEPRINT-ATTESTATIONS.md`](THREAT-MODEL-BLUEPRINT-ATTESTATIONS.md).  
+**Blocks:** on-chain rank / attestation surfaces until the zero-PII bar is met. On-chain implement stays Shehzad (`protocol.smart-accounts`).  
 **Question:** threat model + zero-PII bar before any product path claims Done.  
-**Recommendation:** threat model doc first; implementers refuse if the bar is unmet. No PII in attestation payloads.
+**Ruling:** an attestation may prove discrete rank/standing for a named epoch. It must never contain identity, KYC, or addresses that link Fiat and Protocol planes. Implementers refuse if the bar is unmet. No PII in attestation payloads. Product `done` for `blueprint.attestations` stays refused until a verifier meets the bar.
 
 ---
 
