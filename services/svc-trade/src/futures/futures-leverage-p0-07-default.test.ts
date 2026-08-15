@@ -44,9 +44,7 @@ describe('production ships DIRECTION §1 10× (D26-P0-07)', () => {
   });
 
   it('live host resolves empty env to the DIRECTION cap', () => {
-    expect(indexSrc).toMatch(
-      /resolveMaxLeverage\(parseConfiguredMaxLeverage\(env\.TRADE_FUTURES_MAX_LEVERAGE\)\)/,
-    );
+    expect(indexSrc).toMatch(/resolveMaxLeverage\(parseConfiguredMaxLeverage\(env\.TRADE_FUTURES_MAX_LEVERAGE\)\)/);
     expect(production).toMatch(/above 10. is a raise/);
   });
 });
