@@ -56,25 +56,25 @@ This does not need fixing today, and a machine account has its own costs. But it
 
 A separate GitHub user (human-created, admin-invited) holds the swarm `GH_TOKEN`. `ZenYoda3` stays Nitro-the-operator.
 
-| Cost | Why it bites |
-| ---- | ------------ |
-| Admin act | Someone must create the user, invite `write`, rotate tokens, and keep the split. Agents are forbidden to do that. |
-| Secret sprawl | Two PATs, two agent-auth files, two failure modes. A leaked swarm token is still `write` on a public money repo. |
-| False confidence | CODEOWNERS / required reviewers still cannot tell “Nitro typed this” vs “Nitro’s laptop ran the agent”. Authorship becomes *token* evidence, not *person* evidence. |
-| Process rewrite | Every Nitro agent prompt, `gh` helper, and merge path must refuse `ZenYoda3`. One missed export and the split is theatre. |
-| Blame noise | History before the cut stays mixed. Reviews that treat author as owner will still misread the old majority of commits. |
+| Cost             | Why it bites                                                                                                                                                        |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Admin act        | Someone must create the user, invite `write`, rotate tokens, and keep the split. Agents are forbidden to do that.                                                   |
+| Secret sprawl    | Two PATs, two agent-auth files, two failure modes. A leaked swarm token is still `write` on a public money repo.                                                    |
+| False confidence | CODEOWNERS / required reviewers still cannot tell “Nitro typed this” vs “Nitro’s laptop ran the agent”. Authorship becomes _token_ evidence, not _person_ evidence. |
+| Process rewrite  | Every Nitro agent prompt, `gh` helper, and merge path must refuse `ZenYoda3`. One missed export and the split is theatre.                                           |
+| Blame noise      | History before the cut stays mixed. Reviews that treat author as owner will still misread the old majority of commits.                                              |
 
-Pick A only if Denon wants GitHub rails (after G1) to *treat swarm pushes as a distinct login* — for example required-reviewer rules that exclude the swarm identity. That is an admin follow-on, not this docs PR.
+Pick A only if Denon wants GitHub rails (after G1) to _treat swarm pushes as a distinct login_ — for example required-reviewer rules that exclude the swarm identity. That is an admin follow-on, not this docs PR.
 
 ### Option B — accept the authorship ceiling
 
 Keep `ZenYoda3` as the shared Nitro write identity. Treat `git` author / GitHub user as **not evidence** of a person. Enforce who-coded-what in LIVE-LANES + tracker owner + PR body, the same way the repo already does.
 
-| Cost | Why it bites |
-| ---- | ------------ |
-| Mechanical ceiling | No ownership rule that needs “this commit was a human” can ever be proven from git. That is the ceiling, stated. |
-| Audit stories | External readers will keep counting “Nitro authored N commits” and be wrong. Correct them in prose; do not invent a git fix. |
-| G1 still matters more | Branch protection and required checks constrain *what* can land, not *which person* landed it. G5 does not unblock G1. |
+| Cost                  | Why it bites                                                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Mechanical ceiling    | No ownership rule that needs “this commit was a human” can ever be proven from git. That is the ceiling, stated.             |
+| Audit stories         | External readers will keep counting “Nitro authored N commits” and be wrong. Correct them in prose; do not invent a git fix. |
+| G1 still matters more | Branch protection and required checks constrain _what_ can land, not _which person_ landed it. G5 does not unblock G1.       |
 
 This matches the table’s existing Action: structural; do not “fix” in agents.
 
