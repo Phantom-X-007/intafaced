@@ -195,10 +195,8 @@ export function markSourceFromVenuePublicBook(input: {
   depthLimit?: number;
   /**
    * Both depth thresholds — the absolute floor at a best level, and the fraction
-   * of the priced position that must rest behind it. Optional, and omitting it
-   * applies the defaults; see `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` and
-   * `DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL` in `mark-from-depth.ts` for the
-   * numbers and for whose ruling they are awaiting.
+   * of the priced position that must rest behind it. Omitted → D26-P0-14 sealed
+   * pair in `mark-from-depth.ts` (`'100'` quote + 100 bps). Not an open ruling.
    */
   depthPolicy?: DepthQuotePolicy;
 }): QuotedMarkSource {
