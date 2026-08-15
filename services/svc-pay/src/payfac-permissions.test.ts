@@ -35,6 +35,12 @@ describe('D26-P1-P2 payfac permissions map', () => {
     expect(PAYFAC_SURFACE_AREAS['rest.payments.refund']).toBe('payment.refund');
   });
 
+  it('payment-links REST maps to payment.link — same area as tRPC createLink', () => {
+    expect(PAYFAC_SURFACE_AREAS['rest.payment-links.create']).toBe('payment.link');
+    expect(PAYFAC_SURFACE_AREAS['rest.payment-links.list']).toBe('payment.link');
+    expect(PAYFAC_SURFACE_AREAS['rest.payment-links.deactivate']).toBe('payment.link');
+  });
+
   it('honest §13 sockets are named (settling partner + fee splits) — not inventable here', () => {
     expect(PAYFAC_PERMISSION_SOCKETS.map((s) => s.id)).toEqual(['socket.payfac-settling-party-partner', 'socket.payfac-split-fee-recipes']);
     for (const s of PAYFAC_PERMISSION_SOCKETS) {

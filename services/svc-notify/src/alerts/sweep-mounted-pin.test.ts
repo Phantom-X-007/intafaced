@@ -80,4 +80,15 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(service).toMatch(/acceptAlertMark\(/);
     expect(service).toMatch(/outOfAppRequiredRefusal\(/);
   });
+
+  it('accepted-mark refuses a live ok quote whose timestamp is older than the bank marking window', () => {
+    // Inverse of "dark cannot invent live": a live source with a 2023 ticker
+    // timestamp must not fire. Age law lives in accepted-mark (gate) and the
+    // HTTP producer calls the same helper — deleting either is a hole.
+    const accepted = src('alerts/accepted-mark.ts');
+    expect(accepted).toMatch(/ALERT_MARK_MAX_AGE_MS\s*=\s*300_000/);
+    expect(accepted).toMatch(/refuseIfMarkAged\(/);
+    expect(src('alerts/service.ts')).toMatch(/acceptAlertMark\(this\.marks, raw, at\)/);
+    expect(src('alerts/trade-http-mark.ts')).toMatch(/refuseIfMarkAged\(/);
+  });
 });

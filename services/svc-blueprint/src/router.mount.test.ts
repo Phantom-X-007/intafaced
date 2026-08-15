@@ -11,12 +11,13 @@ import type { BlueprintService } from './blueprint-service.js';
  * `index.ts` builds it — never a hand-written `Context` literal, which would go
  * on passing if the service started believing an unsigned header.
  *
- * This service has the sharpest version of the problem. Every procedure reads
- * `ctx.principal.userId` and there is deliberately no path that takes a userId
- * as input, because a Blueprint is the most personal object in the OS. That
- * design is only worth anything if the caller cannot choose whose userId ends
- * up on the context — so `export` and `erase` are exactly as safe as the
- * signature check, and no safer.
+ * This service has the sharpest version of the problem. Owner procedures
+ * (`export`, `erase`, `me`, `card`, `setVisibility`) read `ctx.principal.userId`
+ * and never take a userId as input. `cardOf` is the one exception: its input
+ * names the SUBJECT (whose share card), and the viewer is still the signed
+ * principal. That design is only worth anything if the caller cannot choose
+ * whose userId ends up on the context — so `export` and `erase` are exactly as
+ * safe as the signature check, and no safer.
  *
  * `blueprint` is `minTier: 'none'` in the jurisdiction matrix: the guard's job
  * here is scope and region, not verification.
@@ -109,6 +110,27 @@ describe('svc-blueprint mount — authorisation', () => {
       code: 'UNAUTHORIZED',
     });
     expect(readFor).toBeNull();
+  });
+
+  it('refuses an anonymous caller on cardOf, and reads nothing', async () => {
+    let called = false;
+    const blueprint = stubBlueprint({
+      cardFor: async () => {
+        called = true;
+        return {
+          size: 'portrait' as const,
+          width: 1080,
+          height: 1350,
+          svg: '<svg/>',
+          raster: { status: 'unavailable' as const, code: 'blueprint.card_renderer_unconfigured' as const, reason: 'x' },
+          shareMode: 'svg' as const,
+        };
+      },
+    });
+    await expect(
+      createBlueprintRouter(blueprint).createCaller(anonymous()).cardOf({ userId: VICTIM, size: 'portrait' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(called).toBe(false);
   });
 
   it('accepts a principal the edge signed, and reads that principal own Blueprint', async () => {
@@ -204,6 +226,37 @@ describe('svc-blueprint mount — a real session, on the real router', () => {
           raster: { status: 'unavailable', code: 'blueprint.card_renderer_unconfigured', reason: 'no renderer' },
           shareMode: 'svg' as const,
         }),
+        cardFor: async () => ({
+          size: 'portrait',
+          width: 1080,
+          height: 1350,
+          svg: '<svg/>',
+          raster: { status: 'unavailable', code: 'blueprint.card_renderer_unconfigured', reason: 'no renderer' },
+          shareMode: 'svg' as const,
+        }),
+        setVisibility: async () => ({
+          id: '33333333-3333-4333-8333-333333333333',
+          userId: USER,
+          engineVersion: 'test',
+          profile: {
+            decisionStyle: 'analytical',
+            riskTemperament: 'measured',
+            energyRhythm: 'steady',
+            learningMode: 'systematic',
+            crewRole: 'anchor',
+            curriculumPath: 'foundations',
+            toneRegister: 'direct',
+            guardrails: {
+              maxLeverage: 1,
+              dailyLossPromptPct: 5,
+              confirmBeforeMarketOrder: true,
+              copyTradingVisible: false,
+            },
+          },
+          cardAssetUrl: null,
+          visibility: 'public' as const,
+          createdAt: new Date().toISOString(),
+        }),
         mentors: async () => [],
         export: async () => {
           exports += 1;
@@ -221,6 +274,8 @@ describe('svc-blueprint mount — a real session, on the real router', () => {
     // list, or adds a procedure here gated on one that is not issued.
     await expect(caller.me()).resolves.toBeNull();
     await expect(caller.card({ size: 'portrait' })).resolves.toMatchObject({ width: 1080 });
+    await expect(caller.cardOf({ userId: VICTIM, size: 'portrait' })).resolves.toMatchObject({ width: 1080 });
+    await expect(caller.setVisibility({ visibility: 'public' })).resolves.toMatchObject({ visibility: 'public' });
     await expect(caller.mentors()).resolves.toEqual([]);
     await expect(caller.export()).resolves.toBeDefined();
     await expect(caller.erase()).resolves.toMatchObject({ userId: USER });
@@ -245,6 +300,28 @@ describe('svc-blueprint mount — a real session, on the real router', () => {
 
     await caller.me();
     expect(readFor).toBe(USER);
+  });
+
+  it('cardOf uses the signed principal as viewer, and the input only as subject', async () => {
+    let seen: { viewerId: string; subjectUserId: string } | null = null;
+    const caller = createBlueprintRouter(
+      stubBlueprint({
+        cardFor: async (input: { viewerId: string; subjectUserId: string }) => {
+          seen = { viewerId: input.viewerId, subjectUserId: input.subjectUserId };
+          return {
+            size: 'portrait' as const,
+            width: 1080,
+            height: 1350,
+            svg: '<svg/>',
+            raster: { status: 'unavailable' as const, code: 'blueprint.card_renderer_unconfigured' as const, reason: 'no renderer' },
+            shareMode: 'svg' as const,
+          };
+        },
+      }),
+    ).createCaller(await loggedIn());
+
+    await caller.cardOf({ userId: VICTIM, size: 'portrait' });
+    expect(seen).toEqual({ viewerId: USER, subjectUserId: VICTIM });
   });
 
   it('still refuses that same real token once the edge signature is stripped', async () => {

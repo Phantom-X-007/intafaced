@@ -19,6 +19,13 @@ import { MarketError, type VendorService } from '../vendor-service.js';
  * decision, not silence. Ledger recipe refuses blank/invalid bps so a
  * miswired caller cannot invent free commission at post time (#1761 owns
  * listing/premium fee recipe deepen — do not dual-edit market.ts here).
+ *
+ * Subscription create is refuse-closed the same way. Stage C3 is not built, so
+ * a subscription listing cannot be sold. Creating one would burn a stake slot
+ * for inventory that purchase already refuses — and, oldest-slot-first, it
+ * can steal the entitled quota from a later one-time listing. The schema still
+ * stores `offer_type=subscription` so leftover rows and a future C3 stay
+ * representable; the API does not invent a working subscription shopfront.
  */
 
 export type OfferType = 'one_time' | 'subscription';
@@ -165,6 +172,18 @@ export class CommerceService {
     /** Decimal string. */
     price: string;
   }): Promise<ListingRecord> {
+    // Unbuilt offer type before any other gate — including commission. A
+    // subscription cannot be sold today, so creating one must not consume a
+    // listing slot or become shopfront inventory. Same refuse code purchase
+    // already uses; C3 product law (period / past-due / cancel) is not invented
+    // here. Venue / pair catalogues stay owner-only (D26-P0-06).
+    if (input.offerType === 'subscription') {
+      throw new MarketError(
+        'Subscription listings are not built yet — creating one would take a listing slot for inventory that cannot be sold',
+        'market.subscription_not_built',
+      );
+    }
+
     // Commission law before stake burn: a blank rate must not consume a slot
     // for inventory that can never settle (D26-P1-M2).
     this.requireCommissionConfigured();

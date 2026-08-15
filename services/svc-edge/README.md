@@ -21,7 +21,7 @@ This service is the join between those two halves. It is the only place in the s
 
 ### The route table
 
-Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live prefix list. This table must stay in lockstep.
+Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live prefix list plus `upstreamWiring` (which env vars are set — no URLs). This table must stay in lockstep.
 
 | Prefix           | Upstream      | Env var         | Notes                                            |
 | ---------------- | ------------- | --------------- | ------------------------------------------------ |
@@ -47,6 +47,12 @@ Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live pref
 **`svc-ws` is also not here.** The browser reaches it on its own port (`4014`); nginx `/ws` proxies straight to it. That is SOCKET §13 `socket.ws-behind-the-edge` — the edge kill-switch cannot halt market-data sockets. `/admin/status` names this under `outsideTheDoor.ws` so the console cannot show a green halt while the socket is still live.
 
 An unlisted prefix returns **404, never a pass-through**. An edge that forwards what it does not recognise is a proxy for the entire internal network.
+
+**`/internal/*` after a listed prefix is also 404** (`edge.s2s_not_proxied`). Pay jobs, token stake, identity rank, bank cron — those are S2S, authenticated by a secret the edge does not hold and will not forward. A 200 on that path would be a door that opened nothing useful, or worse.
+
+**`/ready.upstreamWiring`** lists which prefixes have their env var actually set. In `staging`/`prod` an unset `PAY_URL` (etc.) refuses with **503 `edge.upstream_unwired`** — it does not silently proxy to `localhost`. `dev`/`test` keep the table's local default.
+
+**API-key `Origin`.** `ifc_…` exchange at the door sends the real `Origin` to identity so `domain_whitelist` can fail closed. Client `x-forwarded-origin` is stripped and rewritten from `Origin` only — a stolen browser key cannot pick its own allowed origin.
 
 ## The security properties, and why each is shaped that way
 

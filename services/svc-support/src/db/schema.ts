@@ -1,8 +1,8 @@
-import { index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, pk } from '@intafaced/db';
 
 /**
- * svc-support schema — tickets, comments, audit trail, case files.
+ * svc-support schema — tickets, comments, audit trail, case files, published KB.
  *
  * Doctrine §2: this schema is the only one this service may touch.
  * No balances, no money columns, no cross-service table reads.
@@ -92,7 +92,23 @@ export const caseFiles = schema.table('case_files', {
   createdAt: createdAt(),
 });
 
+/**
+ * Versioned published help articles. Keys only — never body text, never money.
+ *
+ * `revision` is the citation-stable content version (title/body *keys*).
+ * Locale copy lives in `@intafaced/i18n` and must not bump this number.
+ */
+export const kbArticles = schema.table('kb_articles', {
+  id: text('id').primaryKey(),
+  titleKey: text('title_key').notNull(),
+  bodyKey: text('body_key').notNull(),
+  revision: integer('revision').notNull(),
+  published: boolean('published').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+});
+
 export type TicketRow = typeof tickets.$inferSelect;
 export type CommentRow = typeof comments.$inferSelect;
 export type TicketEventRow = typeof ticketEvents.$inferSelect;
 export type CaseFileRow = typeof caseFiles.$inferSelect;
+export type KbArticleRow = typeof kbArticles.$inferSelect;

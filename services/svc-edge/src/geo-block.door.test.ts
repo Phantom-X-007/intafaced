@@ -1,13 +1,15 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
-import { SANCTIONS_REGIONS_ENV, SANCTIONS_SOURCE_ENV, SCREENING_REVIEWED_EMPTY } from '@intafaced/config';
+import { REGION_FAIL_CLOSED_ENV, SANCTIONS_REGIONS_ENV, SANCTIONS_SOURCE_ENV, SCREENING_REVIEWED_EMPTY } from '@intafaced/config';
 import { createAdminApi } from './admin-api.js';
 import { registerAdminRoutes, registerGeoBlockGuard } from './control-plane.js';
 import {
   GEO_BLOCK_EMPTY_CODE,
   GEO_BLOCK_HIT_CODE,
+  GEO_BLOCK_REGION_UNKNOWN_CODE,
   GEO_BLOCK_SCREENED_CODE,
+  GEO_BLOCK_UNRESOLVED_CODE,
   GEO_BLOCK_UNSET_CODE,
   looksLikeGeoClearance,
 } from './geo-block.js';
@@ -43,6 +45,7 @@ function clearScreeningEnv(): void {
   delete process.env[SANCTIONS_REGIONS_ENV];
   delete process.env[SANCTIONS_SOURCE_ENV];
   delete process.env.DEFAULT_REGION;
+  delete process.env[REGION_FAIL_CLOSED_ENV];
 }
 
 beforeEach(() => {
@@ -112,6 +115,19 @@ describe('public geo-block door — empty screening is unknown', () => {
     expect(res.statusCode).toBe(403);
     expect(res.json()).toMatchObject({ code: GEO_BLOCK_HIT_CODE, reason: 'region_listed', inventedBlockedList: false });
   });
+
+  it('refuses /api as region-unknown when XX is stamped and fail-closed is armed', async () => {
+    process.env[SANCTIONS_REGIONS_ENV] = 'AA:test-fixture-not-a-real-list';
+    process.env[REGION_FAIL_CLOSED_ENV] = 'true';
+    const { app } = await buildEdge();
+    const res = await app.inject({ method: 'GET', url: '/api/trade/health' });
+    expect(res.statusCode).toBe(503);
+    const body = res.json() as Record<string, unknown>;
+    expect(body.code).toBe(GEO_BLOCK_REGION_UNKNOWN_CODE);
+    expect(body.reason).toBe('region_unknown');
+    expect(body.regionResolved).toBe(false);
+    expect(looksLikeGeoClearance(body)).toBe(false);
+  });
 });
 
 describe('ops geo-block door — refuse, never 200-cleared on empty', () => {
@@ -159,7 +175,29 @@ describe('ops geo-block door — refuse, never 200-cleared on empty', () => {
       ok: true,
       code: GEO_BLOCK_SCREENED_CODE,
       inventedBlockedList: false,
+      regionResolved: true,
     });
     expect(body).not.toHaveProperty('blocked');
+  });
+
+  it('ops geo-block does not 200-screen unresolved XX against a listed miss', async () => {
+    process.env[SANCTIONS_REGIONS_ENV] = 'AA:test-fixture-not-a-real-list';
+    const { app } = await buildEdge();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/compliance/geo-block',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      ok: true,
+      code: GEO_BLOCK_UNRESOLVED_CODE,
+      reason: 'region_unresolved',
+      regionResolved: false,
+      inventedBlockedList: false,
+    });
+    expect(body.code).not.toBe(GEO_BLOCK_SCREENED_CODE);
+    expect(looksLikeGeoClearance(body)).toBe(false);
   });
 });

@@ -5,11 +5,13 @@ import type {
   SupportCaseFile,
   SupportCitation,
   SupportComment,
+  SupportKbArticle,
   SupportTicket,
   SupportTicketEvent,
   SupportTicketEventKind,
   SupportTicketStatus,
 } from '@intafaced/contracts';
+import { assertKbArticle, KbCatalogError, PLATFORM_KB_SPINE } from './kb-catalog.js';
 import { checkTransition } from './lifecycle.js';
 import { claimTicket, type ClaimResult } from './operator-queue.js';
 
@@ -51,6 +53,26 @@ export type AddCommentInput = {
   body: string;
 };
 
+/**
+ * Comment write + the lifecycle it may carry.
+ *
+ * A user reply on `resolved` must reopen the SAME ticket (`resolved → open`)
+ * in this same transaction: the lifecycle table already names that edge as
+ * the "not fixed" path, and a comment that lands while the ticket stays
+ * `resolved` is a reply nobody will see in the shared queue.
+ *
+ * `closed` is terminal. A user comment there is refused rather than stored
+ * as a ghost reply. Operator notes after close are allowed (no reopen).
+ */
+export type AddCommentResult =
+  | {
+      readonly status: 'ok';
+      readonly comment: SupportComment;
+      readonly ticket: SupportTicket;
+      readonly reopened: boolean;
+    }
+  | { readonly status: 'refuse'; readonly reason: 'not_found' | 'terminal' };
+
 export type AppendEventInput = {
   ticketId: string;
   /** Pure read only. Escalation uses `putCaseFileWithEscalated`. */
@@ -82,7 +104,7 @@ export interface SupportStore {
   listByUser(userId: string): Promise<SupportTicket[]>;
   listAll(): Promise<SupportTicket[]>;
   findById(ticketId: string): Promise<SupportTicket | null>;
-  addComment(input: AddCommentInput): Promise<SupportComment>;
+  addComment(input: AddCommentInput): Promise<AddCommentResult>;
   listComments(ticketId: string): Promise<SupportComment[]>;
   /** Lifecycle move + its audit row, atomically. Refuses illegal transitions. */
   setStatus(input: SetStatusInput): Promise<SetStatusResult>;
@@ -109,7 +131,34 @@ export interface SupportStore {
   putCaseFileWithEscalated(input: { caseFile: SupportCaseFile; actorId: string; note: string }): Promise<SupportCaseFile>;
   /** The most recent case file for a ticket, or null if never escalated. */
   latestCaseFile(ticketId: string): Promise<SupportCaseFile | null>;
+  /** Published articles only, never drafts. */
+  listPublishedKb(): Promise<SupportKbArticle[]>;
+  /** One published article, or null when missing / unpublished. */
+  getPublishedKb(id: string): Promise<SupportKbArticle | null>;
+  /**
+   * Insert (baseRevision 0) or update a row. Publish bumps revision.
+   * Unpublish hides the same revision. Stale baseRevision refuses.
+   */
+  putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult>;
 }
+
+export type PutKbRevisionInput =
+  | {
+      id: string;
+      baseRevision: number;
+      published: true;
+      titleKey: string;
+      bodyKey: string;
+    }
+  | {
+      id: string;
+      baseRevision: number;
+      published: false;
+    };
+
+export type PutKbRevisionResult =
+  | { readonly status: 'ok'; readonly article: SupportKbArticle }
+  | { readonly status: 'refuse'; readonly reason: 'revision_stale' | 'invalid' | 'vendor' };
 
 function toIso(d: Date | string): string {
   if (typeof d === 'string') return d;
@@ -212,6 +261,37 @@ function caseFileFromPg(row: PgCaseFile): SupportCaseFile {
   };
 }
 
+type PgKb = {
+  id: string;
+  title_key: string;
+  body_key: string;
+  revision: number;
+  published: boolean;
+  updated_at: Date;
+};
+
+function kbFromPg(row: PgKb): SupportKbArticle {
+  return {
+    id: row.id,
+    titleKey: row.title_key,
+    bodyKey: row.body_key,
+    revision: Number(row.revision),
+    published: row.published,
+  };
+}
+
+function assertPersistable(article: Pick<SupportKbArticle, 'id' | 'titleKey' | 'bodyKey'>): PutKbRevisionResult | null {
+  try {
+    assertKbArticle({ id: article.id, titleKey: article.titleKey, bodyKey: article.bodyKey });
+    return null;
+  } catch (err) {
+    if (err instanceof KbCatalogError) {
+      return { status: 'refuse', reason: err.code === 'support.kb_vendor_name' ? 'vendor' : 'invalid' };
+    }
+    throw err;
+  }
+}
+
 /**
  * Append one trail row, taking the next dense sequence for this ticket.
  *
@@ -265,6 +345,17 @@ export class MemorySupportStore implements SupportStore {
   private readonly comments = new Map<string, SupportComment[]>();
   private readonly events = new Map<string, SupportTicketEvent[]>();
   private readonly cases = new Map<string, SupportCaseFile[]>();
+  private readonly kb = new Map<string, SupportKbArticle>();
+
+  constructor() {
+    for (const article of PLATFORM_KB_SPINE) {
+      this.kb.set(article.id, {
+        ...article,
+        revision: article.revision ?? 1,
+        published: article.published ?? true,
+      });
+    }
+  }
 
   /** Dense per ticket — the array length IS the sequence, single process. */
   private record(input: {
@@ -327,22 +418,47 @@ export class MemorySupportStore implements SupportStore {
     return this.tickets.get(ticketId) ?? null;
   }
 
-  async addComment(input: AddCommentInput): Promise<SupportComment> {
+  async addComment(input: AddCommentInput): Promise<AddCommentResult> {
     const ticket = this.tickets.get(input.ticketId);
-    if (!ticket) throw new Error('ticket not found for comment');
+    if (!ticket) return { status: 'refuse', reason: 'not_found' };
+    // Closed is terminal for the owner. An operator note after close is a
+    // desk annotation, not a reopen, so it is allowed.
+    if (ticket.status === 'closed' && input.authorRole === 'user') {
+      return { status: 'refuse', reason: 'terminal' };
+    }
+
+    const now = new Date().toISOString();
     const comment: SupportComment = {
       id: randomUUID(),
       ticketId: input.ticketId,
       authorId: input.authorId,
       authorRole: input.authorRole,
       body: input.body,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     };
     const list = this.comments.get(input.ticketId) ?? [];
     list.push(comment);
     this.comments.set(input.ticketId, list);
-    this.tickets.set(ticket.id, { ...ticket, updatedAt: comment.createdAt });
-    return comment;
+
+    const reopened = ticket.status === 'resolved' && input.authorRole === 'user';
+    const updated: SupportTicket = reopened
+      ? { ...ticket, status: 'open', assigneeId: null, updatedAt: now }
+      : { ...ticket, updatedAt: now };
+    this.tickets.set(ticket.id, updated);
+
+    if (reopened) {
+      this.record({
+        ticketId: ticket.id,
+        kind: 'status_changed',
+        actorId: input.authorId,
+        actorRole: 'user',
+        fromStatus: 'resolved',
+        toStatus: 'open',
+        note: 'user_reply_reopen',
+        at: now,
+      });
+    }
+    return { status: 'ok', comment, ticket: updated, reopened };
   }
 
   async listComments(ticketId: string): Promise<SupportComment[]> {
@@ -460,6 +576,51 @@ export class MemorySupportStore implements SupportStore {
     const list = this.cases.get(ticketId) ?? [];
     return list.length === 0 ? null : list[list.length - 1]!;
   }
+
+  async listPublishedKb(): Promise<SupportKbArticle[]> {
+    return [...this.kb.values()].filter((a) => a.published === true).map((a) => ({ ...a }));
+  }
+
+  async getPublishedKb(id: string): Promise<SupportKbArticle | null> {
+    const article = this.kb.get(id);
+    return article && article.published === true ? { ...article } : null;
+  }
+
+  async putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult> {
+    const current = this.kb.get(input.id);
+    if (input.published) {
+      const bad = assertPersistable({ id: input.id, titleKey: input.titleKey, bodyKey: input.bodyKey });
+      if (bad) return bad;
+      if (!current) {
+        if (input.baseRevision !== 0) return { status: 'refuse', reason: 'revision_stale' };
+        const created: SupportKbArticle = {
+          id: input.id,
+          titleKey: input.titleKey,
+          bodyKey: input.bodyKey,
+          revision: 1,
+          published: true,
+        };
+        this.kb.set(input.id, created);
+        return { status: 'ok', article: { ...created } };
+      }
+      if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+      const next: SupportKbArticle = {
+        id: input.id,
+        titleKey: input.titleKey,
+        bodyKey: input.bodyKey,
+        revision: current.revision! + 1,
+        published: true,
+      };
+      this.kb.set(input.id, next);
+      return { status: 'ok', article: { ...next } };
+    }
+
+    if (!current) return { status: 'refuse', reason: 'invalid' };
+    if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+    const hidden: SupportKbArticle = { ...current, published: false };
+    this.kb.set(input.id, hidden);
+    return { status: 'ok', article: { ...hidden } };
+  }
 }
 
 /**
@@ -512,21 +673,61 @@ export class PostgresSupportStore implements SupportStore {
     return rows[0] ? ticketFromPg(rows[0]) : null;
   }
 
-  async addComment(input: AddCommentInput): Promise<SupportComment> {
-    const rows = await this.sql.begin(async (tx) => {
+  async addComment(input: AddCommentInput): Promise<AddCommentResult> {
+    return this.sql.begin(async (tx): Promise<AddCommentResult> => {
+      const locked = await tx<PgTicket[]>`
+        SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+        FROM support.tickets
+        WHERE id = ${input.ticketId}
+        FOR UPDATE
+      `;
+      if (!locked[0]) return { status: 'refuse', reason: 'not_found' };
+      const existing = ticketFromPg(locked[0]);
+      if (existing.status === 'closed' && input.authorRole === 'user') {
+        return { status: 'refuse', reason: 'terminal' };
+      }
+
       const comments = await tx<PgComment[]>`
         INSERT INTO support.comments (ticket_id, author_id, author_role, body)
         VALUES (${input.ticketId}, ${input.authorId}, ${input.authorRole}, ${input.body})
         RETURNING id, ticket_id, author_id, author_role, body, created_at
       `;
-      await tx`
-        UPDATE support.tickets
-        SET updated_at = now()
-        WHERE id = ${input.ticketId}
-      `;
-      return comments;
+
+      const reopened = existing.status === 'resolved' && input.authorRole === 'user';
+      const rows = reopened
+        ? await tx<PgTicket[]>`
+            UPDATE support.tickets
+            SET status = 'open', assignee_id = NULL, updated_at = now()
+            WHERE id = ${input.ticketId}
+            RETURNING id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+          `
+        : await tx<PgTicket[]>`
+            UPDATE support.tickets
+            SET updated_at = now()
+            WHERE id = ${input.ticketId}
+            RETURNING id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+          `;
+      if (!rows[0]) return { status: 'refuse', reason: 'not_found' };
+
+      if (reopened) {
+        await insertEvent(tx, {
+          ticketId: input.ticketId,
+          kind: 'status_changed',
+          actorId: input.authorId,
+          actorRole: 'user',
+          fromStatus: 'resolved',
+          toStatus: 'open',
+          note: 'user_reply_reopen',
+        });
+      }
+
+      return {
+        status: 'ok',
+        comment: commentFromPg(comments[0]!),
+        ticket: ticketFromPg(rows[0]),
+        reopened,
+      };
     });
-    return commentFromPg(rows[0]!);
   }
 
   async listComments(ticketId: string): Promise<SupportComment[]> {
@@ -728,5 +929,75 @@ export class PostgresSupportStore implements SupportStore {
       LIMIT 1
     `;
     return rows[0] ? caseFileFromPg(rows[0]) : null;
+  }
+
+  async listPublishedKb(): Promise<SupportKbArticle[]> {
+    const rows = await this.sql<PgKb[]>`
+      SELECT id, title_key, body_key, revision, published, updated_at
+      FROM support.kb_articles
+      WHERE published = true
+      ORDER BY id
+    `;
+    return rows.map(kbFromPg);
+  }
+
+  async getPublishedKb(id: string): Promise<SupportKbArticle | null> {
+    const rows = await this.sql<PgKb[]>`
+      SELECT id, title_key, body_key, revision, published, updated_at
+      FROM support.kb_articles
+      WHERE id = ${id} AND published = true
+      LIMIT 1
+    `;
+    return rows[0] ? kbFromPg(rows[0]) : null;
+  }
+
+  async putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult> {
+    return this.sql.begin(async (tx): Promise<PutKbRevisionResult> => {
+      const locked = await tx<PgKb[]>`
+        SELECT id, title_key, body_key, revision, published, updated_at
+        FROM support.kb_articles
+        WHERE id = ${input.id}
+        FOR UPDATE
+      `;
+      const current = locked[0] ? kbFromPg(locked[0]) : null;
+
+      if (input.published) {
+        const bad = assertPersistable({ id: input.id, titleKey: input.titleKey, bodyKey: input.bodyKey });
+        if (bad) return bad;
+        if (!current) {
+          if (input.baseRevision !== 0) return { status: 'refuse', reason: 'revision_stale' };
+          const rows = await tx<PgKb[]>`
+            INSERT INTO support.kb_articles (id, title_key, body_key, revision, published)
+            VALUES (${input.id}, ${input.titleKey}, ${input.bodyKey}, 1, true)
+            RETURNING id, title_key, body_key, revision, published, updated_at
+          `;
+          return { status: 'ok', article: kbFromPg(rows[0]!) };
+        }
+        if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+        const rows = await tx<PgKb[]>`
+          UPDATE support.kb_articles
+          SET title_key = ${input.titleKey},
+              body_key = ${input.bodyKey},
+              revision = revision + 1,
+              published = true,
+              updated_at = now()
+          WHERE id = ${input.id} AND revision = ${input.baseRevision}
+          RETURNING id, title_key, body_key, revision, published, updated_at
+        `;
+        if (!rows[0]) return { status: 'refuse', reason: 'revision_stale' };
+        return { status: 'ok', article: kbFromPg(rows[0]) };
+      }
+
+      if (!current) return { status: 'refuse', reason: 'invalid' };
+      if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+      const rows = await tx<PgKb[]>`
+        UPDATE support.kb_articles
+        SET published = false, updated_at = now()
+        WHERE id = ${input.id} AND revision = ${input.baseRevision}
+        RETURNING id, title_key, body_key, revision, published, updated_at
+      `;
+      if (!rows[0]) return { status: 'refuse', reason: 'revision_stale' };
+      return { status: 'ok', article: kbFromPg(rows[0]) };
+    });
   }
 }

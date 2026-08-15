@@ -5,6 +5,7 @@ import {
   DEFAULT_ELIGIBILITY,
   describeReputationSnapshot,
   isActiveMerchant,
+  mayGrantProgrammePrivileges,
   mayRestoreProgrammePrivileges,
   programmeVouch,
   reputationOnPublicDoor,
@@ -131,6 +132,17 @@ describe('operator freeze / restore — same snapshot badges use', () => {
 
   it('allows unfreeze only when the current snapshot still meets programme rules', () => {
     expect(mayRestoreProgrammePrivileges(snapshotOf(counters())).eligible).toBe(true);
+  });
+
+  it('refuses first approval on the same live snapshot unfreeze uses', () => {
+    // applied → approved used to skip this check. An applicant who was clean
+    // at apply, then lost a dispute while waiting, could still be stamped.
+    const lost = snapshotOf(counters({ disputed: 1, disputesLost: 1 }));
+    const verdict = mayGrantProgrammePrivileges(lost);
+    expect(verdict.eligible).toBe(false);
+    expect(verdict.eligible === false && verdict.reason).toContain('dispute');
+    expect(mayGrantProgrammePrivileges(lost)).toEqual(mayRestoreProgrammePrivileges(lost));
+    expect(mayGrantProgrammePrivileges(snapshotOf(counters())).eligible).toBe(true);
   });
 
   it('puts freeze on the public reputation door without minting a badge', () => {

@@ -122,6 +122,14 @@ const bank = createBankServices(sql, ledger, history, {
     moduleEnabled: env.BANK_CARDS_ENABLED,
   },
   /**
+   * AUTO-INVEST — threshold / round-up / refuse-closed DCA.
+   *
+   * `enabled` is the same flag as the HTTP/tRPC runner kill. The capture hook
+   * has no other door; without this a flipped AUTO_INVEST_ENABLED would still
+   * sweep spare change on every card capture.
+   */
+  autoInvest: { enabled: env.AUTO_INVEST_ENABLED },
+  /**
    * RAMPS — same missing-wiring shape as cards.
    *
    * Silence is `none` (`BANK_RAMP_MODE` default). `crypto-ledger` turns on the
