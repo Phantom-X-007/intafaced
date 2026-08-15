@@ -26,13 +26,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import {
-  createEdgeContext,
-  encodePrincipal,
-  serviceAuthHeaders,
-  signPrincipalHeader,
-  verifyServiceHeaders,
-} from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader, verifyServiceHeaders } from '@intafaced/contracts';
 import { AuthError, type AuthService } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import { createIdentityRouter } from './router.js';
@@ -76,9 +70,7 @@ class MemorySubAccountAuth {
   }
 
   async listSubAccounts(userId: string): Promise<Book[]> {
-    return [...this.books.values()]
-      .filter((b) => b.parentUserId === userId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return [...this.books.values()].filter((b) => b.parentUserId === userId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async revokeSubAccount(userId: string, subAccountId: string): Promise<boolean> {
