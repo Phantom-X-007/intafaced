@@ -87,11 +87,12 @@ export class NotificationDispatcher {
     private readonly options: DispatchOptions,
   ) {}
 
-  async dispatch(notification: Notification): Promise<DispatchReport> {
+  async dispatch(notification: Notification, opts: { outOfApp?: boolean } = {}): Promise<DispatchReport> {
     return withNotifySpan(
       'notify.dispatch',
       { op: 'dispatch', kind: notification.kind, sourceSubject: notification.sourceSubject },
       async (span) => {
+        const outOfApp = opts.outOfApp !== false;
         const verified = await this.targets.verified(notification.userId);
         const byChannel = new Map<ChannelId, ChannelTarget>(verified.map((t) => [t.channel, t]));
         const outcomes: ChannelOutcome[] = [];
@@ -106,6 +107,15 @@ export class NotificationDispatcher {
         // Recording it as a delivery keeps one shape for "what happened to this
         // message across every channel", which is what the API answers.
         outcomes.push(await this.attempt(notification, 'inapp', notification.id, normaliseLocale(null)));
+
+        if (!outOfApp) {
+          const retry = outcomes.some((o) => o.retryable);
+          span.setAttribute('intafaced.notify.channels_attempted', outcomes.length);
+          span.setAttribute('intafaced.notify.channels_accepted', outcomes.filter((o) => o.status === 'accepted').length);
+          span.setAttribute('intafaced.notify.dispatch_retry', retry);
+          span.setAttribute('intafaced.notify.out_of_app', false);
+          return { notificationId: notification.id, outcomes, retry };
+        }
 
         for (const channel of OUT_OF_APP_CHANNELS) {
           const target = byChannel.get(channel);
