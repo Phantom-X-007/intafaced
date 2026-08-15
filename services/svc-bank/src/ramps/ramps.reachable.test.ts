@@ -137,7 +137,10 @@ if (!available) {
           kind: 'fiat',
           railRef: `fiat-${randomUUID()}`,
         }),
-      ).rejects.toMatchObject({ message: expect.stringMatching(/socket\.psp-partners/) });
+      ).rejects.toMatchObject({
+        message: 'bank.fiat_ramp_no_pay_adapter',
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+      });
 
       const offrampId = randomUUID();
       const out = await user.ramps.offramp({
@@ -169,7 +172,7 @@ if (!available) {
           destinationRef: '0x',
           clientRef: 'nope',
         }),
-      ).rejects.toMatchObject({ message: expect.stringMatching(/No bank ramp programme/) });
+      ).rejects.toMatchObject({ message: 'bank.no_ramp_rail', cause: { code: 'bank.no_ramp_rail' } });
     });
 
     /**
