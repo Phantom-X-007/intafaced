@@ -25,6 +25,7 @@ describe('futures env passthrough into registerPublicRest', () => {
       /futures:\s*\{[\s\S]*fundingMaxAbsRateConfigured:\s*env\.TRADE_FUTURES_FUNDING_MAX_ABS_RATE\.trim\(\) !== ''/,
     );
     expect(indexSource).toMatch(/futures:\s*\{[\s\S]*fundingMarketCount:\s*fundingMarketIds\.length/);
+    expect(indexSource).toMatch(/futures:\s*\{[\s\S]*venueMarkConfigured:\s*venueMarkConfigured != null/);
     expect(indexSource).not.toMatch(/fundingMarketIds:\s*fundingMarketIds/);
     expect(indexSource).not.toMatch(/fundingMaxAbsRate:\s*env\.TRADE_FUTURES_FUNDING_MAX_ABS_RATE/);
   });
