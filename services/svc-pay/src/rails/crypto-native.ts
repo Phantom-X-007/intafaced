@@ -152,7 +152,7 @@ export class CryptoNativeAdapter implements RailAdapter {
     this.lastContact = this.now();
   }
 
-  // ── The interface ──────────────────────────────────────────────────────────
+  // ── The interface ──────────────────────────────────────────────────────
 
   async authorize(p: PaymentIntent): Promise<RailResult> {
     this.lastContact = this.now();
@@ -346,6 +346,7 @@ export class CryptoNativeAdapter implements RailAdapter {
     }
 
     const payer = transfer.from?.trim() ?? '';
+    // Payer dest only — never invent an address.
     if (!payer) {
       return railFailure({
         railRef: ref,
@@ -555,7 +556,7 @@ export class CryptoNativeAdapter implements RailAdapter {
     };
   }
 
-  // ── internals ──────────────────────────────────────────────────────────────
+  // ── internals ──────────────────────────────────────────────────────────
 
   /**
    * WHICH KIND OF "the chain did not answer" THIS WAS.
