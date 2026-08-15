@@ -89,10 +89,11 @@ export function listPlatformKb(): readonly SupportKbArticle[] {
 }
 
 /**
- * Search by id substring or key fragment. Empty query → full spine.
- * Never invents articles for unknown queries.
+ * Search by id substring or key fragment. Empty query → that catalog (or []).
+ * Empty catalog and unknown queries stay empty — never a default / fallback article.
  */
 export function searchKb(query: string, catalog: readonly SupportKbArticle[] = PLATFORM_KB_SPINE): readonly SupportKbArticle[] {
+  if (catalog.length === 0) return [];
   const q = query.trim().toLowerCase();
   if (!q) return catalog.map((a) => ({ ...a }));
   return catalog.filter(
@@ -101,6 +102,7 @@ export function searchKb(query: string, catalog: readonly SupportKbArticle[] = P
 }
 
 export function getKbById(id: string, catalog: readonly SupportKbArticle[] = PLATFORM_KB_SPINE): SupportKbArticle | null {
+  if (!id.trim() || catalog.length === 0) return null;
   const hit = catalog.find((a) => a.id === id);
   return hit ? { ...hit } : null;
 }

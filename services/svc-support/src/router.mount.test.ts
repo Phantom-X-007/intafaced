@@ -184,6 +184,18 @@ describe('svc-support mount', () => {
     expect(missing).toBeNull();
   });
 
+  it('searchKb/getKb stay empty when the desk has no published articles', async () => {
+    const support = stubSupport({
+      searchKb: vi.fn(async () => []),
+      getKbArticle: vi.fn(async () => null),
+    });
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    expect(await caller.searchKb({ q: '' })).toEqual([]);
+    expect(await caller.searchKb({ q: 'account' })).toEqual([]);
+    expect(await caller.getKb({ id: 'kb-account-access' })).toBeNull();
+    expect(await caller.getKb({ id: 'kb-default' })).toBeNull();
+  });
+
   it('refuses listAll without support:ops', async () => {
     const support = stubSupport();
     await expect(createSupportRouter(support).createCaller(signed()).listAll()).rejects.toMatchObject({

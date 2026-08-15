@@ -22,9 +22,23 @@ describe('support Stage-2 KB catalog', () => {
     expect(searchKb('').length).toBe(PLATFORM_KB_SPINE.length);
   });
 
+  it('empty catalog searchKb stays empty — no default article', () => {
+    expect(searchKb('', [])).toEqual([]);
+    expect(searchKb('account', [])).toEqual([]);
+    expect(searchKb('help', [])).toEqual([]);
+    expect(searchKb('kb-account-access', [])).toEqual([]);
+  });
+
   it('getKbById null when missing', () => {
     expect(getKbById('kb-account-access')?.titleKey).toContain('account_access');
     expect(getKbById('nope')).toBeNull();
+  });
+
+  it('empty catalog getKbById is null — no default / first-spine fallback', () => {
+    expect(getKbById('kb-account-access', [])).toBeNull();
+    expect(getKbById('kb-default', [])).toBeNull();
+    expect(getKbById('', [])).toBeNull();
+    expect(getKbById('   ', PLATFORM_KB_SPINE)).toBeNull();
   });
 
   it('refuses vendor-named keys', () => {
@@ -69,6 +83,18 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     await svc.unpublishKb({ id: 'kb-orders-status', baseRevision: 1 });
     expect(await svc.getKbArticle('kb-orders-status')).toBeNull();
     expect(await svc.getKbArticle('kb-invented-never-existed')).toBeNull();
+  });
+
+  it('searchKb/getKb refuse invent when every article is unpublished', async () => {
+    const svc = new SupportService();
+    for (const article of await svc.listKb()) {
+      await svc.unpublishKb({ id: article.id, baseRevision: article.revision ?? 1 });
+    }
+    expect(await svc.listKb()).toEqual([]);
+    expect(await svc.searchKb('')).toEqual([]);
+    expect(await svc.searchKb('account')).toEqual([]);
+    expect(await svc.getKbArticle('kb-account-access')).toBeNull();
+    expect(await svc.getKbArticle('kb-default')).toBeNull();
   });
 
   it('searchKb empty query returns published only', async () => {
