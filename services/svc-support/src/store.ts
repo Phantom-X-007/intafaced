@@ -5,11 +5,13 @@ import type {
   SupportCaseFile,
   SupportCitation,
   SupportComment,
+  SupportKbArticle,
   SupportTicket,
   SupportTicketEvent,
   SupportTicketEventKind,
   SupportTicketStatus,
 } from '@intafaced/contracts';
+import { assertKbArticle, KbCatalogError, PLATFORM_KB_SPINE } from './kb-catalog.js';
 import { checkTransition } from './lifecycle.js';
 import { claimTicket, type ClaimResult } from './operator-queue.js';
 
@@ -129,7 +131,34 @@ export interface SupportStore {
   putCaseFileWithEscalated(input: { caseFile: SupportCaseFile; actorId: string; note: string }): Promise<SupportCaseFile>;
   /** The most recent case file for a ticket, or null if never escalated. */
   latestCaseFile(ticketId: string): Promise<SupportCaseFile | null>;
+  /** Published articles only, never drafts. */
+  listPublishedKb(): Promise<SupportKbArticle[]>;
+  /** One published article, or null when missing / unpublished. */
+  getPublishedKb(id: string): Promise<SupportKbArticle | null>;
+  /**
+   * Insert (baseRevision 0) or update a row. Publish bumps revision.
+   * Unpublish hides the same revision. Stale baseRevision refuses.
+   */
+  putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult>;
 }
+
+export type PutKbRevisionInput =
+  | {
+      id: string;
+      baseRevision: number;
+      published: true;
+      titleKey: string;
+      bodyKey: string;
+    }
+  | {
+      id: string;
+      baseRevision: number;
+      published: false;
+    };
+
+export type PutKbRevisionResult =
+  | { readonly status: 'ok'; readonly article: SupportKbArticle }
+  | { readonly status: 'refuse'; readonly reason: 'revision_stale' | 'invalid' | 'vendor' };
 
 function toIso(d: Date | string): string {
   if (typeof d === 'string') return d;
@@ -232,6 +261,37 @@ function caseFileFromPg(row: PgCaseFile): SupportCaseFile {
   };
 }
 
+type PgKb = {
+  id: string;
+  title_key: string;
+  body_key: string;
+  revision: number;
+  published: boolean;
+  updated_at: Date;
+};
+
+function kbFromPg(row: PgKb): SupportKbArticle {
+  return {
+    id: row.id,
+    titleKey: row.title_key,
+    bodyKey: row.body_key,
+    revision: Number(row.revision),
+    published: row.published,
+  };
+}
+
+function assertPersistable(article: Pick<SupportKbArticle, 'id' | 'titleKey' | 'bodyKey'>): PutKbRevisionResult | null {
+  try {
+    assertKbArticle({ id: article.id, titleKey: article.titleKey, bodyKey: article.bodyKey });
+    return null;
+  } catch (err) {
+    if (err instanceof KbCatalogError) {
+      return { status: 'refuse', reason: err.code === 'support.kb_vendor_name' ? 'vendor' : 'invalid' };
+    }
+    throw err;
+  }
+}
+
 /**
  * Append one trail row, taking the next dense sequence for this ticket.
  *
@@ -285,6 +345,17 @@ export class MemorySupportStore implements SupportStore {
   private readonly comments = new Map<string, SupportComment[]>();
   private readonly events = new Map<string, SupportTicketEvent[]>();
   private readonly cases = new Map<string, SupportCaseFile[]>();
+  private readonly kb = new Map<string, SupportKbArticle>();
+
+  constructor() {
+    for (const article of PLATFORM_KB_SPINE) {
+      this.kb.set(article.id, {
+        ...article,
+        revision: article.revision ?? 1,
+        published: article.published ?? true,
+      });
+    }
+  }
 
   /** Dense per ticket — the array length IS the sequence, single process. */
   private record(input: {
@@ -504,6 +575,51 @@ export class MemorySupportStore implements SupportStore {
   async latestCaseFile(ticketId: string): Promise<SupportCaseFile | null> {
     const list = this.cases.get(ticketId) ?? [];
     return list.length === 0 ? null : list[list.length - 1]!;
+  }
+
+  async listPublishedKb(): Promise<SupportKbArticle[]> {
+    return [...this.kb.values()].filter((a) => a.published === true).map((a) => ({ ...a }));
+  }
+
+  async getPublishedKb(id: string): Promise<SupportKbArticle | null> {
+    const article = this.kb.get(id);
+    return article && article.published === true ? { ...article } : null;
+  }
+
+  async putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult> {
+    const current = this.kb.get(input.id);
+    if (input.published) {
+      const bad = assertPersistable({ id: input.id, titleKey: input.titleKey, bodyKey: input.bodyKey });
+      if (bad) return bad;
+      if (!current) {
+        if (input.baseRevision !== 0) return { status: 'refuse', reason: 'revision_stale' };
+        const created: SupportKbArticle = {
+          id: input.id,
+          titleKey: input.titleKey,
+          bodyKey: input.bodyKey,
+          revision: 1,
+          published: true,
+        };
+        this.kb.set(input.id, created);
+        return { status: 'ok', article: { ...created } };
+      }
+      if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+      const next: SupportKbArticle = {
+        id: input.id,
+        titleKey: input.titleKey,
+        bodyKey: input.bodyKey,
+        revision: current.revision! + 1,
+        published: true,
+      };
+      this.kb.set(input.id, next);
+      return { status: 'ok', article: { ...next } };
+    }
+
+    if (!current) return { status: 'refuse', reason: 'invalid' };
+    if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+    const hidden: SupportKbArticle = { ...current, published: false };
+    this.kb.set(input.id, hidden);
+    return { status: 'ok', article: { ...hidden } };
   }
 }
 
@@ -813,5 +929,75 @@ export class PostgresSupportStore implements SupportStore {
       LIMIT 1
     `;
     return rows[0] ? caseFileFromPg(rows[0]) : null;
+  }
+
+  async listPublishedKb(): Promise<SupportKbArticle[]> {
+    const rows = await this.sql<PgKb[]>`
+      SELECT id, title_key, body_key, revision, published, updated_at
+      FROM support.kb_articles
+      WHERE published = true
+      ORDER BY id
+    `;
+    return rows.map(kbFromPg);
+  }
+
+  async getPublishedKb(id: string): Promise<SupportKbArticle | null> {
+    const rows = await this.sql<PgKb[]>`
+      SELECT id, title_key, body_key, revision, published, updated_at
+      FROM support.kb_articles
+      WHERE id = ${id} AND published = true
+      LIMIT 1
+    `;
+    return rows[0] ? kbFromPg(rows[0]) : null;
+  }
+
+  async putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult> {
+    return this.sql.begin(async (tx): Promise<PutKbRevisionResult> => {
+      const locked = await tx<PgKb[]>`
+        SELECT id, title_key, body_key, revision, published, updated_at
+        FROM support.kb_articles
+        WHERE id = ${input.id}
+        FOR UPDATE
+      `;
+      const current = locked[0] ? kbFromPg(locked[0]) : null;
+
+      if (input.published) {
+        const bad = assertPersistable({ id: input.id, titleKey: input.titleKey, bodyKey: input.bodyKey });
+        if (bad) return bad;
+        if (!current) {
+          if (input.baseRevision !== 0) return { status: 'refuse', reason: 'revision_stale' };
+          const rows = await tx<PgKb[]>`
+            INSERT INTO support.kb_articles (id, title_key, body_key, revision, published)
+            VALUES (${input.id}, ${input.titleKey}, ${input.bodyKey}, 1, true)
+            RETURNING id, title_key, body_key, revision, published, updated_at
+          `;
+          return { status: 'ok', article: kbFromPg(rows[0]!) };
+        }
+        if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+        const rows = await tx<PgKb[]>`
+          UPDATE support.kb_articles
+          SET title_key = ${input.titleKey},
+              body_key = ${input.bodyKey},
+              revision = revision + 1,
+              published = true,
+              updated_at = now()
+          WHERE id = ${input.id} AND revision = ${input.baseRevision}
+          RETURNING id, title_key, body_key, revision, published, updated_at
+        `;
+        if (!rows[0]) return { status: 'refuse', reason: 'revision_stale' };
+        return { status: 'ok', article: kbFromPg(rows[0]) };
+      }
+
+      if (!current) return { status: 'refuse', reason: 'invalid' };
+      if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+      const rows = await tx<PgKb[]>`
+        UPDATE support.kb_articles
+        SET published = false, updated_at = now()
+        WHERE id = ${input.id} AND revision = ${input.baseRevision}
+        RETURNING id, title_key, body_key, revision, published, updated_at
+      `;
+      if (!rows[0]) return { status: 'refuse', reason: 'revision_stale' };
+      return { status: 'ok', article: kbFromPg(rows[0]) };
+    });
   }
 }

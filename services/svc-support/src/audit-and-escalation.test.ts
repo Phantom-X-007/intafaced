@@ -260,6 +260,9 @@ describe('escalation carries its case file', () => {
         throw new Error('simulated crash mid-escalation');
       },
       latestCaseFile: (id) => base.latestCaseFile(id),
+      listPublishedKb: () => base.listPublishedKb(),
+      getPublishedKb: (id) => base.getPublishedKb(id),
+      putKbRevision: (i) => base.putKbRevision(i),
     };
     const support = new SupportService(store, new FixedAccountState({ userId: USER, status: 'active', kycTier: 'basic' }));
     const t = await support.createTicket({

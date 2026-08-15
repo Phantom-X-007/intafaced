@@ -16,6 +16,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const MIGRATION = readFileSync(join(here, '..', 'drizzle', '0000_support_init.sql'), 'utf8');
 const MIGRATION_0001 = readFileSync(join(here, '..', 'drizzle', '0001_support_audit_and_case_file.sql'), 'utf8');
 const MIGRATION_0002 = readFileSync(join(here, '..', 'drizzle', '0002_support_lifecycle_full.sql'), 'utf8');
+const MIGRATION_0003 = readFileSync(join(here, '..', 'drizzle', '0003_kb_articles.sql'), 'utf8');
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OP_A = '33333333-3333-4333-8333-333333333333';
@@ -35,6 +36,7 @@ if (available && sql) {
   // table that is not there — a green run proving nothing.
   await sql.unsafe(MIGRATION_0001);
   await sql.unsafe(MIGRATION_0002);
+  await sql.unsafe(MIGRATION_0003);
 }
 
 afterAll(async () => {
@@ -372,6 +374,68 @@ describe.skipIf(!available)('audit trail and case file — enforced in Postgres'
       SELECT table_name, column_name
       FROM information_schema.columns
       WHERE table_schema = 'support' AND table_name IN ('ticket_events', 'case_files')
+    `;
+    const names = columns.map((c) => c.column_name);
+    expect(names.length).toBeGreaterThan(0);
+    for (const banned of ['amount', 'currency', 'asset', 'balance', 'value', 'credit', 'debit', 'payout']) {
+      expect(names).not.toContain(banned);
+    }
+  });
+});
+
+describe.skipIf(!available)('PostgresSupportStore — published KB', () => {
+  const store = () => new PostgresSupportStore(sql!);
+
+  async function restoreSeed() {
+    await sql!`DELETE FROM support.kb_articles`;
+    await sql!.unsafe(MIGRATION_0003);
+  }
+
+  beforeEach(async () => {
+    await restoreSeed();
+  });
+
+  it('seeds five published spine rows and lists only those', async () => {
+    const list = await store().listPublishedKb();
+    expect(list).toHaveLength(5);
+    expect(list.every((a) => a.published === true && a.revision === 1)).toBe(true);
+    expect(list.every((a) => a.titleKey.startsWith('support.kb.'))).toBe(true);
+  });
+
+  it('unpublish hides the row from getPublishedKb', async () => {
+    const s = store();
+    const hidden = await s.putKbRevision({ id: 'kb-paper-vs-live', baseRevision: 1, published: false });
+    expect(hidden.status).toBe('ok');
+    expect(await s.getPublishedKb('kb-paper-vs-live')).toBeNull();
+    expect((await s.listPublishedKb()).some((a) => a.id === 'kb-paper-vs-live')).toBe(false);
+  });
+
+  it('stale publish refuses and leaves the current revision', async () => {
+    const s = store();
+    const first = await s.putKbRevision({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      baseRevision: 1,
+      published: true,
+    });
+    expect(first).toMatchObject({ status: 'ok', article: { revision: 2 } });
+    const stale = await s.putKbRevision({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      baseRevision: 1,
+      published: true,
+    });
+    expect(stale).toEqual({ status: 'refuse', reason: 'revision_stale' });
+    expect(await s.getPublishedKb('kb-account-access')).toMatchObject({ revision: 2 });
+  });
+
+  it('kb_articles table has no amount/balance/currency column', async () => {
+    const columns = await sql!<Array<{ column_name: string }>>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'support' AND table_name = 'kb_articles'
     `;
     const names = columns.map((c) => c.column_name);
     expect(names.length).toBeGreaterThan(0);

@@ -39,7 +39,7 @@ function mapError(err: unknown): never {
     if (err.code === 'support.not_found' || err.code === 'support.claim.not_found') {
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
     }
-    if (err.code === 'support.claim.already_claimed') {
+    if (err.code === 'support.claim.already_claimed' || err.code === 'support.kb.revision_stale') {
       throw new TRPCError({ code: 'CONFLICT', message: err.message });
     }
     if (
@@ -54,7 +54,8 @@ function mapError(err: unknown): never {
       err.code === 'support.case_file.empty_summary' ||
       // Closed is terminal — same family as illegal lifecycle moves.
       err.code === 'support.escalation.terminal' ||
-      err.code === 'support.comment.terminal'
+      err.code === 'support.comment.terminal' ||
+      err.code === 'support.kb.not_published'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
     }
@@ -255,12 +256,51 @@ export function createSupportRouter(support: SupportService) {
         return support.searchKb(input?.q ?? '');
       }),
 
-    /** Single KB article by id — null when missing (never invent). */
+    /** Single KB article by id — null when missing / unpublished (never invent). */
     getKb: publicProcedure
       .input(z.object({ id: z.string().min(1).max(200) }))
       .output(supportKbArticleSchema.nullable())
       .query(async ({ input }) => {
         return support.getKbArticle(input.id);
+      }),
+
+    /** Operator publish. Bumps revision. Stale baseRevision → CONFLICT. */
+    publishKb: scopedProcedure('support:ops')
+      .input(
+        z.object({
+          id: z.string().min(1).max(200),
+          titleKey: z.string().min(1).max(200),
+          bodyKey: z.string().min(1).max(200),
+          /** 0 creates a new published row at revision 1. */
+          baseRevision: z.number().int().nonnegative(),
+        }),
+      )
+      .output(supportKbArticleSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          requireSupportOps(ctx.principal!);
+          return await support.publishKb(input);
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    /** Operator unpublish. Hidden from public list/search/get. */
+    unpublishKb: scopedProcedure('support:ops')
+      .input(
+        z.object({
+          id: z.string().min(1).max(200),
+          baseRevision: z.number().int().positive(),
+        }),
+      )
+      .output(supportKbArticleSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          requireSupportOps(ctx.principal!);
+          return await support.unpublishKb(input);
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /** Stage-2 — prioritised operator queue (open/pending only). */

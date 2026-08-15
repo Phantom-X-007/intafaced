@@ -74,6 +74,20 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     readAccountState: vi.fn(async () => ({ status: 'unread' as const, reason: 'plane_dark' as const })),
     escalate: vi.fn(),
     getCaseFile: vi.fn(async () => null),
+    publishKb: vi.fn(async () => ({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      revision: 2,
+      published: true,
+    })),
+    unpublishKb: vi.fn(async () => ({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      revision: 1,
+      published: false,
+    })),
     ...overrides,
   } as unknown as SupportService;
 }
@@ -120,6 +134,42 @@ describe('svc-support mount', () => {
     const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
     expect(kb).toHaveLength(1);
     expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
+  });
+
+  it('refuses publishKb / unpublishKb without support:ops', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(
+      caller.publishKb({
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        baseRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.unpublishKb({ id: 'kb-account-access', baseRevision: 1 })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(support.publishKb).not.toHaveBeenCalled();
+    expect(support.unpublishKb).not.toHaveBeenCalled();
+  });
+
+  it('publishKb requires support:ops and reaches the service', async () => {
+    const support = stubSupport();
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const published = await createSupportRouter(support).createCaller(signed(op)).publishKb({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      baseRevision: 1,
+    });
+    expect(published.revision).toBe(2);
+    expect(support.publishKb).toHaveBeenCalledWith({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      baseRevision: 1,
+    });
   });
 
   it('searchKb and getKb are public', async () => {

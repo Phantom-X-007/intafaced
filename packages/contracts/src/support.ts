@@ -51,6 +51,10 @@ export const supportKbArticleSchema = z.object({
   /** i18n catalog key — never raw third-party product names */
   titleKey: z.string().min(1),
   bodyKey: z.string().min(1),
+  /** Monotonic content revision. Locale copy is not a revision. */
+  revision: z.number().int().positive().optional(),
+  /** Public doors return published rows only. Optional so older callers still parse. */
+  published: z.boolean().optional(),
 });
 export type SupportKbArticle = z.infer<typeof supportKbArticleSchema>;
 
@@ -223,6 +227,10 @@ export interface SupportContract {
   listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]>;
   setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus; note?: string }): Promise<SupportTicket>;
   listKb(): Promise<SupportKbArticle[]>;
+  /** Search published articles by id/key fragment. Empty query → published list. */
+  searchKb(query: string): Promise<SupportKbArticle[]>;
+  /** One published article, or null when missing / unpublished. Never invents. */
+  getKbArticle(id: string): Promise<SupportKbArticle | null>;
   /** Audit trail, oldest first. Owner sees their own; operators see any. */
   listTicketEvents(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicketEvent[]>;
   /** Read the ticket owner's account state from svc-identity. Records a `grounding_read`. */
