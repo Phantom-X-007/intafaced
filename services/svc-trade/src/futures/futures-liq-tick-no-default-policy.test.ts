@@ -19,8 +19,7 @@ const src = readFileSync(join(here, 'liquidation-tick.ts'), 'utf8');
 
 describe('liquidation tick does not import placeholder D3 rungs', () => {
   it('maintenance-ladder import does not include DEFAULT_FUTURES_LADDER_POLICY', () => {
-    const importBlock =
-      src.match(/import \{[\s\S]*?\} from '\.\/maintenance-ladder\.js';/)?.[0] ?? '';
+    const importBlock = src.match(/import \{[\s\S]*?\} from '\.\/maintenance-ladder\.js';/)?.[0] ?? '';
     expect(importBlock).toMatch(/from '\.\/maintenance-ladder\.js'/);
     expect(importBlock).not.toMatch(/DEFAULT_FUTURES_LADDER_POLICY/);
   });
