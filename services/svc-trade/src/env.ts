@@ -192,8 +192,7 @@ const schema = serviceEnvSchema
           if (!Number.isInteger(n) || n < 60_000 || n > 86_400_000) {
             ctx.addIssue({
               code: z.ZodIssueCode.custom,
-              message:
-                'TRADE_FUTURES_FUNDING_INTERVAL_MS must be an integer 60000–86400000, or empty (no invented 8h schedule)',
+              message: 'TRADE_FUTURES_FUNDING_INTERVAL_MS must be an integer 60000–86400000, or empty (no invented 8h schedule)',
             });
             return z.NEVER;
           }
