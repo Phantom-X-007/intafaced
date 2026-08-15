@@ -2723,6 +2723,13 @@ if (emptyWalks.length > 0) {
 // assertion held this run — so deleting every MainNetParams / signMessage /
 // width fixture cannot leave a green summary that still says the class is
 // refused. The dedicated regression suite is `wallet-rpc-perimeter-refuse.mjs`.
+//
+// Classes are the board names (mainnet / sign / width). Axes are the four
+// fail-closed slices inside those classes that D26-P2-09's done-bar names:
+// chain-id, RPC, key-width, disclosed-secret-width. A green `width` class
+// over only address/topic fixtures must not count as proving key-width or
+// the disclosed-secret digest guard. Axes are counted from probe identity
+// (rule id + source shape), never from PERIMETER_AXES.length.
 const PERIMETER_CLASSES = [
   {
     id: 'mainnet',
@@ -2741,6 +2748,33 @@ const PERIMETER_CLASSES = [
     rules: ['M11', 'M11-known'],
   },
 ];
+
+const PERIMETER_AXES = [
+  { id: 'chain-id', label: 'chain-id-less EVM signing' },
+  { id: 'rpc', label: 'hardcoded or defaulted RPC endpoint' },
+  { id: 'key-width', label: 'secp256k1 key hex width' },
+  { id: 'disclosed-secret-width', label: 'disclosed-secret digest width' },
+];
+
+/**
+ * Which fail-closed axis a probe feeds. Untagged address/topic/M1 fixtures
+ * still feed their class; they must not launder an axis that lost its own
+ * fixtures.
+ *
+ * @param {{ rule: string, source: string }} probe
+ * @returns {string[]}
+ */
+function axesForProbe(probe) {
+  /** @type {string[]} */
+  const ids = [];
+  if (probe.rule === 'M3') ids.push('chain-id');
+  if (probe.rule === 'M2' || probe.rule === 'M4-endpoint') ids.push('rpc');
+  if (probe.rule === 'M11' || probe.rule === 'M11-known') {
+    if (/DISCLOSED_DIGEST/i.test(probe.source)) ids.push('disclosed-secret-width');
+    if (/privateKey|publicKey|priv(?:ate)?_?key|pub(?:lic)?_?key/i.test(probe.source)) ids.push('key-width');
+  }
+  return ids;
+}
 
 const RULE_PROBES = [
   // ── M1: mainnet network-parameter selectors (D26-P2-09) ─────────────────
@@ -2947,6 +2981,20 @@ const RULE_PROBES = [
     note: 'a defaulted endpoint is the same bypass one rule sideways — M4-endpoint reads the value through the identical resolution, so it cannot be fixed in one place only',
   },
   {
+    rule: 'M4-endpoint',
+    kind: 'properties',
+    fires: false,
+    source: 'coin.rpc=${ETH_NODE_RPC_URL}',
+    note: 'an unresolved RPC placeholder is the environment’s decision — D26-P2-09 RPC axis must stay silent here or the gate blocks the remediation',
+  },
+  {
+    rule: 'M4-endpoint',
+    kind: 'properties',
+    fires: false,
+    source: 'coin.rpc=http://127.0.0.1:8545',
+    note: 'loopback RPC is not a mainnet reach — same silent half M2 already has in Java, now on the properties rule the RPC axis also counts',
+  },
+  {
     rule: 'M4-address',
     kind: 'properties',
     fires: false,
@@ -3151,6 +3199,13 @@ const RULE_PROBES = [
   {
     rule: 'M11',
     kind: 'hex-java',
+    fires: false,
+    source: 'class P { private static final String DISCLOSED_DIGEST_SHA256 = "${ECT_GUARD_DIGEST}"; }',
+    note: 'D26-P2-09 disclosed-secret-width silent half — a digest identifier with no hex literal has no width to check; firing here would punish the form that does not pin a digest',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
     fires: true,
     verdict: 'TRANSCRIPTION',
     // Split across concatenation ON PURPOSE, and do not rejoin it — the same
@@ -3196,6 +3251,13 @@ const RULE_PROBES = [
     source: 'class P { String publicKey = "' + 'ab'.repeat(64) + '"; }',
     note: '128 digits is well-formed for the public-key role — proves the width arithmetic, not a permanent "malformed" answer',
   },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: false,
+    source: 'class P { String privateKey = "${WITHDRAW_KEY}"; }',
+    note: 'D26-P2-09 key-width silent half — an unresolved private-key placeholder has no hex width; the environment decides it',
+  },
 ];
 
 /**
@@ -3223,6 +3285,8 @@ function runRuleProbes() {
   const failures = [];
   /** @type {Map<string, { fired: number, silent: number }>} */
   const classHits = new Map(PERIMETER_CLASSES.map((c) => [c.id, { fired: 0, silent: 0 }]));
+  /** @type {Map<string, { fired: number, silent: number }>} */
+  const axisHits = new Map(PERIMETER_AXES.map((a) => [a.id, { fired: 0, silent: 0 }]));
 
   for (const probe of RULE_PROBES) {
     const findings =
@@ -3269,6 +3333,15 @@ function runRuleProbes() {
     for (const cls of PERIMETER_CLASSES) {
       if (!cls.rules.includes(probe.rule)) continue;
       const hit = classHits.get(cls.id);
+      if (found) hit.fired++;
+      else hit.silent++;
+    }
+    for (const axisId of axesForProbe(probe)) {
+      const hit = axisHits.get(axisId);
+      if (!hit) {
+        failures.push(`[${probe.rule}] probe names unknown perimeter axis ${axisId}`);
+        continue;
+      }
       if (found) hit.fired++;
       else hit.silent++;
     }
@@ -3354,7 +3427,38 @@ function runRuleProbes() {
     classParts.push(`${cls.id} ${hit.fired}f/${hit.silent}s`);
   }
 
-  establish('perimeter', `continuous refuse held for mainnet/sign/width (${classParts.join(', ')})`);
+  const requiredAxes = ['chain-id', 'rpc', 'key-width', 'disclosed-secret-width'];
+  const haveAxes = PERIMETER_AXES.map((a) => a.id);
+  if (haveAxes.length !== requiredAxes.length || requiredAxes.some((id, i) => haveAxes[i] !== id)) {
+    die('the continuous perimeter axes no longer name chain-id/rpc/key-width/disclosed-secret-width', [
+      `required: ${requiredAxes.join(', ')}`,
+      `present:  ${haveAxes.join(', ') || '(empty)'}`,
+      '',
+      'D26-P2-09 freezes these four fail-closed axes by name. A green width class over only',
+      'address fixtures must not count as proving key-width or disclosed-secret-width.',
+    ]);
+  }
+
+  const axisParts = [];
+  for (const axis of PERIMETER_AXES) {
+    const hit = axisHits.get(axis.id);
+    if (hit.fired < 1 || hit.silent < 1) {
+      die(`the ${axis.id} perimeter axis is no longer fail-closed`, [
+        `axis: ${axis.id} (${axis.label})`,
+        `held firing probes: ${hit.fired}`,
+        `held silent probes: ${hit.silent}`,
+        '',
+        'D26-P2-09: chain-id / RPC / key-width / disclosed-secret-width must each keep both halves',
+        'of a refuse proof. Losing either half means the axis is decoration inside a still-green class.',
+      ]);
+    }
+    axisParts.push(`${axis.id} ${hit.fired}f/${hit.silent}s`);
+  }
+
+  establish(
+    'perimeter',
+    `continuous refuse held for mainnet/sign/width (${classParts.join(', ')}; axes ${axisParts.join(', ')})`,
+  );
 
   return (
     `${executed} rule probe(s) executed across ${rules.size} rule id(s) — ${fired} fired as required and ` +
