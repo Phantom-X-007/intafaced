@@ -1145,6 +1145,7 @@ if (!available) {
         acceptedMarks,
         ledger,
         now: () => NOW,
+        maintenanceBps: 5000, // fixture — not product law (D3)
       });
       expect(result.items[0]!.outcome).toBe('skipped_healthy');
     }
