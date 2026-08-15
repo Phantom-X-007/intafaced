@@ -399,7 +399,9 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
       const outcome =
         decision.reason === 'invalid_mark' || decision.reason === 'invalid_maintenance_bps' || decision.reason === 'empty_position'
           ? 'invalid'
-          : 'skipped_healthy';
+          : decision.reason === 'maintenance_bps_unset'
+            ? 'skipped_d3_unset'
+            : 'skipped_healthy';
       items.push({
         positionId: row.positionId,
         outcome,
