@@ -31,6 +31,8 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(n.fundingMarketCount).toBe(0);
     expect(n.venueMarkConfigured).toBe(false);
     expect(n.venueMarkDefault).toBe(false);
+    expect(n.fundingIntervalConfigured).toBe(false);
+    expect(n.fundingIntervalDefault).toBe(false);
   });
 
   it('live flags are only true when the caller says true', () => {
@@ -45,5 +47,8 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(presentFuturesJobsCapabilityNote({ venueMarkConfigured: true }).venueMarkConfigured).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ venueMarkConfigured: true })).not.toHaveProperty('venueId');
     expect(presentFuturesJobsCapabilityNote({ venueMarkConfigured: true })).not.toHaveProperty('symbols');
+    expect(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true }).fundingIntervalConfigured).toBe(true);
+    expect(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true })).not.toHaveProperty('fundingIntervalMs');
+    expect(JSON.stringify(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true }))).not.toMatch(/28_?800_?000|28800000/);
   });
 });
