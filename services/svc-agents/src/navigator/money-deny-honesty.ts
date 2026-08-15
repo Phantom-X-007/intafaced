@@ -81,3 +81,52 @@ export function navigatorMoneyDenyExportText(tools: readonly string[] = NAVIGATO
 export function isNavigatorMoneyDenied(tool: string, tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): boolean {
   return tools.includes(tool);
 }
+
+/**
+ * Dark-refuse billed amount for a money-shaped tool. Decimal string on the wire
+ * (never a `number`). Zero is reported as zero — not a synthetic default fee.
+ */
+export const NAVIGATOR_MONEY_DENY_BILLED_AMOUNT = '0' as const;
+
+/** Last path segment that makes a tool money-shaped (bill/fee/charge or denylist writes). */
+const NAVIGATOR_MONEY_SHAPED_SEGMENT = /(?:^|[.])(post|hold|refund|capture|transfer|loan|order|cancel|release|fee|charge|bill)(?:$|[.])/i;
+
+/** Denylist write tools, plus names that look like billing even if not yet listed. */
+export function isNavigatorMoneyShapedTool(tool: string, tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS): boolean {
+  return isNavigatorMoneyDenied(tool, tools) || NAVIGATOR_MONEY_SHAPED_SEGMENT.test(tool);
+}
+
+export type NavigatorMoneyShapedToolBillPin = {
+  readonly denied: true;
+  readonly billedAmount: typeof NAVIGATOR_MONEY_DENY_BILLED_AMOUNT;
+  readonly inventedCharge: false;
+  readonly defaultFeeApplied: false;
+};
+
+/**
+ * A money-shaped tool cannot bill. Proposed fee/charge/defaultFee arguments are
+ * ignored so a default cannot sneak in.
+ */
+export function navigatorMoneyShapedToolBillPin(
+  tool: string,
+  proposed: { readonly fee?: string; readonly charge?: string; readonly defaultFee?: string } = {},
+  tools: readonly string[] = NAVIGATOR_MONEY_WRITE_TOOLS,
+): NavigatorMoneyShapedToolBillPin | { readonly denied: false } {
+  if (!isNavigatorMoneyShapedTool(tool, tools)) {
+    return { denied: false };
+  }
+  void proposed.fee;
+  void proposed.charge;
+  void proposed.defaultFee;
+  return {
+    denied: true,
+    billedAmount: NAVIGATOR_MONEY_DENY_BILLED_AMOUNT,
+    inventedCharge: false,
+    defaultFeeApplied: false,
+  };
+}
+
+/** True when billed amount is the pinned decimal-string zero (not a number, not a default fee). */
+export function navigatorMoneyDenyBilledAmountIsPinnedZero(billedAmount: string): boolean {
+  return billedAmount === NAVIGATOR_MONEY_DENY_BILLED_AMOUNT && typeof billedAmount === 'string';
+}
