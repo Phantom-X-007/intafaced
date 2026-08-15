@@ -6,9 +6,23 @@ import {
   MONEY_PUBLIC_DOORS,
   assertCustodialMoneyKillsComplete,
   assertMoneyKillResidualsPresent,
+  assertMoneyRoutesHaveKillMapping,
   edgeKillableMoneyModules,
   moneyKillControlFor,
+  moneyRouteKillModules,
 } from './index.js';
+
+/** Live money prefixes as of this catalogue — fixtures, not a second route table. */
+const LIVE_MONEY_UPSTREAMS = [
+  { prefix: '/api/trade', module: 'trade' },
+  { prefix: '/api/v1', module: 'trade' },
+  { prefix: '/api/token', module: 'token' },
+  { prefix: '/api/agents', module: 'agents' },
+  { prefix: '/api/bank', module: 'bank' },
+  { prefix: '/api/p2p', module: 'p2p' },
+  { prefix: '/api/pay', module: 'pay' },
+  { prefix: '/api/market', module: 'market' },
+] as const;
 
 describe('money kill surface (D26-P2-10)', () => {
   it('lists at least one public door per live edge money module', () => {
@@ -63,5 +77,43 @@ describe('money kill surface (D26-P2-10)', () => {
     for (const module of ['trade', 'pay', 'bank', 'p2p', 'token', 'market', 'agents'] as const) {
       expect(moneyKillControlFor(module)).toEqual({ kind: 'edge-module', module });
     }
+  });
+
+  it('every live money edge prefix has a catalogue kill mapping', () => {
+    expect(assertMoneyRoutesHaveKillMapping(LIVE_MONEY_UPSTREAMS)).toEqual([]);
+    expect(moneyRouteKillModules()).toContain('pay');
+    expect(moneyRouteKillModules()).toContain('agents');
+  });
+
+  it('refuses a new money prefix that has no catalogue kill mapping', () => {
+    const failures = assertMoneyRoutesHaveKillMapping([
+      ...LIVE_MONEY_UPSTREAMS,
+      { prefix: '/api/pay/v2', module: 'pay' },
+    ]);
+    expect(failures.some((f) => f.includes('/api/pay/v2') && f.includes('no kill mapping'))).toBe(true);
+  });
+
+  it('refuses an undeployed custodial module that suddenly has an edge prefix', () => {
+    const failures = assertMoneyRoutesHaveKillMapping([
+      ...LIVE_MONEY_UPSTREAMS,
+      { prefix: '/api/launch', module: 'launch' },
+    ]);
+    expect(failures.some((f) => f.includes('/api/launch') && f.includes('not-deployed'))).toBe(true);
+  });
+
+  it('refuses an empty upstream table (vacuous green is a hole)', () => {
+    expect(assertMoneyRoutesHaveKillMapping([])).toEqual([
+      'no edge upstreams provided — money-route kill mapping would pass vacuously',
+    ]);
+  });
+
+  it('identity / academy prefixes are not money routes — no mapping required', () => {
+    expect(
+      assertMoneyRoutesHaveKillMapping([
+        ...LIVE_MONEY_UPSTREAMS,
+        { prefix: '/api/identity', module: 'identity' },
+        { prefix: '/api/academy', module: 'academy' },
+      ]),
+    ).toEqual([]);
   });
 });
