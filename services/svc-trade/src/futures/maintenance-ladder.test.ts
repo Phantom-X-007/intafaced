@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { formatAmount, mul, mulBps, parseAmount as amt, type Amount } from '@intafaced/ledger-client';
 import {
-  DEFAULT_FUTURES_LADDER_POLICY,
   DEPTH_UNKNOWN,
   FuturesLadderError,
   LADDER_POLICY_INCOHERENT,
@@ -18,6 +17,7 @@ import {
   type FuturesLadderPolicy,
   type LadderRung,
 } from './maintenance-ladder.js';
+import { DEFAULT_FUTURES_LADDER_POLICY } from './ladder-policy.test-harness.js';
 import type { LiquidationPosition } from './liquidation-planner.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
