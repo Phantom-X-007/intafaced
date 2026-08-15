@@ -148,14 +148,14 @@ Pinned toolchain: OpenJDK 8 + Maven 3.8 — image `maven:3.8.8-eclipse-temurin-8
 
 This runbook is the law even when **this host cannot execute it**. Missing Docker or JDK is **INCOMPLETE**, not a silent skip and not a green “fleet matches tip.”
 
-| Probe                                                                 | If missing / red                                                                                          | Honest line to write                                                                                          |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `docker compose version`                                              | No Docker                                                                                                 | TS running-fleet match **UNVERIFIED**. Commands above still apply on a Docker host. Do not invent a second kit. |
-| `pnpm fleet:tip-images`                                               | Fails only if git drifted from `--build` / digest law                                                     | Proves the **files**, not that this laptop rebuilt.                                                           |
-| `pnpm vendor-java:rebuild --check`                                    | Exit 2 — no `mvn` / JDK                                                                                   | Java runtime **UNVERIFIED**. Do not cite `vendor-java-money-scan` as jar truth (D-S-17).                      |
-| `pnpm vendor-java:rebuild --dry-run`                                  | Always runnable (no toolchain)                                                                            | Confirms compose jar inventory + the mvn line.                                                                |
-| `pnpm scan:vendor-java-jar-truth`                                     | All compose jars **absent**                                                                               | Honest **UNVERIFIED** (preferred over a stale jar).                                                           |
-| same, jars **present** and older than module `src`                    | Gate fails                                                                                                | **The lie is live on disk.** Rebuild. Never `git add` the jar.                                                |
+| Probe                                              | If missing / red                                      | Honest line to write                                                                                            |
+| -------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `docker compose version`                           | No Docker                                             | TS running-fleet match **UNVERIFIED**. Commands above still apply on a Docker host. Do not invent a second kit. |
+| `pnpm fleet:tip-images`                            | Fails only if git drifted from `--build` / digest law | Proves the **files**, not that this laptop rebuilt.                                                             |
+| `pnpm vendor-java:rebuild --check`                 | Exit 2 — no `mvn` / JDK                               | Java runtime **UNVERIFIED**. Do not cite `vendor-java-money-scan` as jar truth (D-S-17).                        |
+| `pnpm vendor-java:rebuild --dry-run`               | Always runnable (no toolchain)                        | Confirms compose jar inventory + the mvn line.                                                                  |
+| `pnpm scan:vendor-java-jar-truth`                  | All compose jars **absent**                           | Honest **UNVERIFIED** (preferred over a stale jar).                                                             |
+| same, jars **present** and older than module `src` | Gate fails                                            | **The lie is live on disk.** Rebuild. Never `git add` the jar.                                                  |
 
 Windows (PowerShell) probes:
 
