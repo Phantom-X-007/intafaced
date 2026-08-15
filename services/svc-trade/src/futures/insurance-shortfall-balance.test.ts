@@ -195,6 +195,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
       liquidationId: 'liq-margin-only',
       position: row,
       markPrice: '80',
+      maintenanceBps: 5000, // fixture — not product law (D3)
     });
     expect(plan.liquidate).toBe(true);
     if (!plan.liquidate) throw new Error('expected liquidate');
@@ -221,6 +222,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
       attempts: memoryLiquidationAttemptStore(),
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
+      maintenanceBps: 5000, // fixture — not product law (D3)
       liquidationIdFor: () => 'liq-margin-only',
     });
 
