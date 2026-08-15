@@ -22,9 +22,7 @@ export const ALERT_PORTFOLIO_VIEW_UNPUBLISHED = 'alert.portfolio_view_unpublishe
 
 export class AlertPortfolioUnpublishedError extends Error {
   readonly code: typeof ALERT_PORTFOLIO_VIEW_UNPUBLISHED = ALERT_PORTFOLIO_VIEW_UNPUBLISHED;
-  constructor(
-    detail = 'ledger portfolio view unpublished — notify holds no balance',
-  ) {
+  constructor(detail = 'ledger portfolio view unpublished — notify holds no balance') {
     super(`${ALERT_PORTFOLIO_VIEW_UNPUBLISHED}: ${detail}`);
     this.name = 'AlertPortfolioUnpublishedError';
   }

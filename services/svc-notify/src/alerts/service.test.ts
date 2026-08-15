@@ -110,9 +110,7 @@ describe('AlertService — rides notify fan-out, refuses dark marks', () => {
 describe('AlertService — portfolio watch is refuse-closed', () => {
   it('createPortfolio throws the unpublished code and stores nothing', async () => {
     const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
-    expect(() =>
-      alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' }),
-    ).toThrow(AlertPortfolioUnpublishedError);
+    expect(() => alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' })).toThrow(AlertPortfolioUnpublishedError);
     try {
       alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' });
     } catch (err) {

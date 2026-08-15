@@ -13,12 +13,7 @@
  */
 
 import { compareDecimalStrings, isValidPositivePrice, parseDecimalString } from './decimal.js';
-import {
-  ALERT_PORTFOLIO_VIEW_UNPUBLISHED,
-  type AlertEvalOutcome,
-  type MarkQuote,
-  type PriceAlert,
-} from './types.js';
+import { ALERT_PORTFOLIO_VIEW_UNPUBLISHED, type AlertEvalOutcome, type MarkQuote, type PriceAlert } from './types.js';
 
 /**
  * Portfolio watches are unpublished until ledger owns a view.
