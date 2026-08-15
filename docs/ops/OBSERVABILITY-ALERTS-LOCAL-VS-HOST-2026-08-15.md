@@ -10,21 +10,21 @@ File: `tooling/infra/prometheus/alerts/edge-fail-closed.yaml`
 Loaded by: `rule_files` in `tooling/infra/prometheus.yaml`  
 Mounted by: `docker-compose.yml` → `/etc/prometheus/alerts`
 
-| Alert name                         | Route label                 | Fires when                                      | Invents traffic? |
-| ---------------------------------- | --------------------------- | ----------------------------------------------- | ---------------- |
-| `IntafacedEdgeScrapeFailClosed`    | `intafaced-edge-scrape`     | `up{job="svc-edge"}` is 0 **or absent**         | No               |
-| `IntafacedEdgeHttpSeriesAbsent`    | `intafaced-edge-metrics`    | `intafaced_http_requests_total` is absent       | No               |
+| Alert name                      | Route label              | Fires when                                | Invents traffic? |
+| ------------------------------- | ------------------------ | ----------------------------------------- | ---------------- |
+| `IntafacedEdgeScrapeFailClosed` | `intafaced-edge-scrape`  | `up{job="svc-edge"}` is 0 **or absent**   | No               |
+| `IntafacedEdgeHttpSeriesAbsent` | `intafaced-edge-metrics` | `intafaced_http_requests_total` is absent | No               |
 
 There is **no Alertmanager** in compose. Firing means the Prometheus UI (`http://localhost:9090/alerts` on a laptop) can show the route. It does not page anyone.
 
 ## What is local-only
 
-| Piece                                         | Where it lives                         | What it proves                                      |
-| --------------------------------------------- | -------------------------------------- | --------------------------------------------------- |
-| Prometheus process                            | `docker-compose.yml` service `prometheus` | Laptop scrape of compose DNS `svc-edge:4000`     |
-| Grafana + `edge-slo.json`                     | same compose + `tooling/infra/grafana/` | Panels query names the edge emits; empty ≠ green    |
-| Alert **evaluation**                          | same Prometheus, `rule_files`           | Rules load; fail-closed on missing scrape / series |
-| `prom/prometheus:v3.0.1` image pin            | compose                                 | Local binary, not a hosted service                  |
+| Piece                              | Where it lives                            | What it proves                                     |
+| ---------------------------------- | ----------------------------------------- | -------------------------------------------------- |
+| Prometheus process                 | `docker-compose.yml` service `prometheus` | Laptop scrape of compose DNS `svc-edge:4000`       |
+| Grafana + `edge-slo.json`          | same compose + `tooling/infra/grafana/`   | Panels query names the edge emits; empty ≠ green   |
+| Alert **evaluation**               | same Prometheus, `rule_files`             | Rules load; fail-closed on missing scrape / series |
+| `prom/prometheus:v3.0.1` image pin | compose                                   | Local binary, not a hosted service                 |
 
 Local compose **cannot** see a production edge, cannot retain months of series, and cannot deliver pages. A green local dashboard is not a proven prod SLO. Do not paste invented p99 numbers as if they were.
 

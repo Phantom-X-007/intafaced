@@ -23,10 +23,7 @@ const rules = read('tooling/infra/prometheus/alerts/edge-fail-closed.yaml');
 const dashboard = JSON.parse(read('tooling/infra/grafana/dashboards/edge-slo.json'));
 
 check(/rule_files:/.test(prom), 'prometheus.yaml must declare rule_files');
-check(
-  prom.includes('/etc/prometheus/alerts/*.yaml'),
-  'prometheus.yaml rule_files must glob /etc/prometheus/alerts/*.yaml',
-);
+check(prom.includes('/etc/prometheus/alerts/*.yaml'), 'prometheus.yaml rule_files must glob /etc/prometheus/alerts/*.yaml');
 
 const promBlock = (() => {
   const lines = compose.split(/\r?\n/);
@@ -53,18 +50,12 @@ for (const name of ALERTS) {
 }
 check(rules.includes('route: intafaced-edge-scrape'), 'scrape alert must set route label');
 check(rules.includes('route: intafaced-edge-metrics'), 'series alert must set route label');
-check(
-  /up\{job="svc-edge"\}/.test(rules),
-  'fail-closed scrape rule must match the existing svc-edge job',
-);
+check(/up\{job="svc-edge"\}/.test(rules), 'fail-closed scrape rule must match the existing svc-edge job');
 check(
   rules.includes('absent(intafaced_http_requests_total)'),
   'series-absent rule must use the /metrics name the edge emits — not an invented series',
 );
-check(
-  !/proven prod|production SLO met/i.test(rules),
-  'rules must not claim proven prod SLOs',
-);
+check(!/proven prod|production SLO met/i.test(rules), 'rules must not claim proven prod SLOs');
 
 const slo = (dashboard.panels ?? []).find((p) => p.id === 1);
 check(slo, 'edge-slo.json must keep panel id 1 (availability SLO)');
@@ -91,6 +82,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  `observability-alerts: ok — ${ALERTS.join(', ')}; dashboard empty scrape is not green`,
-);
+console.log(`observability-alerts: ok — ${ALERTS.join(', ')}; dashboard empty scrape is not green`);
