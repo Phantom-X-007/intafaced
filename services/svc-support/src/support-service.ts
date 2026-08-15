@@ -14,7 +14,7 @@ import type {
 } from '@intafaced/contracts';
 import { DarkAccountState, type AccountStateSource } from './account-state.js';
 import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingFor } from './case-file.js';
-import { assertKbArticle, KbCatalogError, searchKb } from './kb-catalog.js';
+import { assertKbArticle, KbCatalogError, searchKb, toPublicKb } from './kb-catalog.js';
 import { isTerminal } from './lifecycle.js';
 import { assignNext, buildOperatorQueue, type QueueEntry, type QueueResult } from './operator-queue.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
@@ -310,16 +310,17 @@ export class SupportService implements SupportContract {
   }
 
   async listKb(): Promise<SupportKbArticle[]> {
-    return this.store.listPublishedKb();
+    return (await this.store.listPublishedKb()).map(toPublicKb);
   }
 
   /** Search published KB by id/key fragment. Empty query → published list. */
   async searchKb(query: string): Promise<SupportKbArticle[]> {
-    return [...searchKb(query, await this.store.listPublishedKb())];
+    return [...searchKb(query, await this.store.listPublishedKb())].map(toPublicKb);
   }
 
   async getKbArticle(id: string): Promise<SupportKbArticle | null> {
-    return this.store.getPublishedKb(id);
+    const article = await this.store.getPublishedKb(id);
+    return article ? toPublicKb(article) : null;
   }
 
   /**
@@ -346,7 +347,7 @@ export class SupportService implements SupportContract {
       }
       throw new SupportError('KB article refused', result.reason === 'vendor' ? 'support.kb_vendor_name' : 'support.kb_invalid');
     }
-    return result.article;
+    return toPublicKb(result.article);
   }
 
   /** Operator unpublish. Unpublished never appears on public list/search/get. */
@@ -362,7 +363,7 @@ export class SupportService implements SupportContract {
       }
       throw new SupportError('KB article refused', 'support.kb_invalid');
     }
-    return result.article;
+    return toPublicKb(result.article);
   }
 
   /** Stage-2 — prioritised open/pending queue for operators. No money. */

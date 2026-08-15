@@ -51,7 +51,15 @@ export const PLATFORM_KB_SPINE: readonly SupportKbArticle[] = [
 
 /** Public doors: published === true only. Missing flag is not a public article. */
 export function publishedOnly(catalog: readonly SupportKbArticle[]): SupportKbArticle[] {
-  return catalog.filter((a) => a.published === true).map((a) => ({ ...a }));
+  return catalog.filter((a) => a.published === true).map(toPublicKb);
+}
+
+/**
+ * Wire shape until SupportContract carries revision/published (T-001).
+ * Store columns stay server-side; public doors must not leak them.
+ */
+export function toPublicKb(article: SupportKbArticle): SupportKbArticle {
+  return { id: article.id, titleKey: article.titleKey, bodyKey: article.bodyKey };
 }
 
 const VENDOR_SMELL = /\b(binance|coinbase|kraken|okx|bybit|deriv|metatrader|tradingview)\b/i;
