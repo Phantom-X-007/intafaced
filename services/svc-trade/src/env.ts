@@ -177,8 +177,28 @@ const schema = serviceEnvSchema
       /** Liquidation scan interval when jobs enabled. Default 15s. */
       TRADE_FUTURES_LIQ_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
 
-      /** Funding tick interval per market when jobs enabled. Default 8h. */
-      TRADE_FUTURES_FUNDING_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(28_800_000),
+      /**
+       * Funding tick interval per market when jobs enabled.
+       * EMPTY = do not schedule funding ticks. D2: there is no product 8h default.
+       * A set value must be an integer 60000–86400000.
+       */
+      TRADE_FUTURES_FUNDING_INTERVAL_MS: z
+        .string()
+        .default('')
+        .transform((raw, ctx) => {
+          const s = raw.trim();
+          if (s === '') return null;
+          const n = Number(s);
+          if (!Number.isInteger(n) || n < 60_000 || n > 86_400_000) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message:
+                'TRADE_FUTURES_FUNDING_INTERVAL_MS must be an integer 60000–86400000, or empty (no invented 8h schedule)',
+            });
+            return z.NEVER;
+          }
+          return n;
+        }),
 
       /**
        * Comma-separated market UUIDs for funding ticks.

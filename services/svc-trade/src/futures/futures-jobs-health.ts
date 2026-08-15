@@ -15,6 +15,9 @@ export type FuturesJobsHealth = {
   readonly fundingScheduled: boolean;
   readonly fundingMaxAbsRateConfigured: boolean;
   readonly fundingMaxAbsRateDefault: false;
+  /** True only when TRADE_FUTURES_FUNDING_INTERVAL_MS is a named integer. Never echoes the ms. */
+  readonly fundingIntervalConfigured: boolean;
+  readonly fundingIntervalDefault: false;
   /** True only when a known venue adapter + non-empty symbol map is wired. Never echoes venue id or symbols. */
   readonly venueMarkConfigured: boolean;
   readonly venueMarkDefault: false;
@@ -25,12 +28,14 @@ export function presentFuturesJobsHealth(input: {
   readonly enabled: boolean;
   readonly fundingMarketCount: number;
   readonly fundingMaxAbsRateConfigured: boolean;
+  readonly fundingIntervalConfigured?: boolean;
   readonly venueMarkConfigured?: boolean;
 }): FuturesJobsHealth {
   const enabled = input.enabled === true;
   const fundingMarketCount =
     Number.isFinite(input.fundingMarketCount) && input.fundingMarketCount > 0 ? Math.floor(input.fundingMarketCount) : 0;
-  const fundingScheduled = enabled && fundingMarketCount > 0;
+  const fundingIntervalConfigured = input.fundingIntervalConfigured === true;
+  const fundingScheduled = enabled && fundingMarketCount > 0 && fundingIntervalConfigured;
   const fundingMaxAbsRateConfigured = input.fundingMaxAbsRateConfigured === true;
   let reason: FuturesJobsHealthReason = 'jobs_off';
   if (enabled) reason = fundingScheduled ? 'funding_scheduled' : 'liq_only';
@@ -42,6 +47,8 @@ export function presentFuturesJobsHealth(input: {
     fundingScheduled,
     fundingMaxAbsRateConfigured,
     fundingMaxAbsRateDefault: false,
+    fundingIntervalConfigured,
+    fundingIntervalDefault: false,
     venueMarkConfigured: input.venueMarkConfigured === true,
     venueMarkDefault: false,
     reason,

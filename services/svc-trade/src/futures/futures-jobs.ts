@@ -35,8 +35,11 @@ export interface FuturesJobsConfig {
   enabled: boolean;
   /** Liquidation scan interval. Default 15s when enabled. */
   liqIntervalMs: number;
-  /** Funding tick interval per market. Default 8h when enabled. */
-  fundingIntervalMs: number;
+  /**
+   * Funding tick interval per market. Null = do not schedule funding
+   * (D2: never invent an 8h period).
+   */
+  fundingIntervalMs: number | null;
   /**
    * Market ids to run funding for. Empty = funding job not scheduled
    * (never invent a market list).
@@ -195,22 +198,25 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     });
   });
 
-  for (const marketId of deps.config.fundingMarketIds) {
-    if (!marketId.trim()) continue;
-    host.every(`futures.funding.${marketId}`, deps.config.fundingIntervalMs, async () => {
-      await runFundingTick(
-        {
-          rates: rates.source(),
-          positions: fundLoader,
-          periods,
-          ledger: deps.ledger,
-          margins,
-          maxAbsRate: deps.config.fundingMaxAbsRate,
-          now: deps.now,
-        },
-        marketId,
-      );
-    });
+  const fundingIntervalMs = deps.config.fundingIntervalMs;
+  if (fundingIntervalMs != null) {
+    for (const marketId of deps.config.fundingMarketIds) {
+      if (!marketId.trim()) continue;
+      host.every(`futures.funding.${marketId}`, fundingIntervalMs, async () => {
+        await runFundingTick(
+          {
+            rates: rates.source(),
+            positions: fundLoader,
+            periods,
+            ledger: deps.ledger,
+            margins,
+            maxAbsRate: deps.config.fundingMaxAbsRate,
+            now: deps.now,
+          },
+          marketId,
+        );
+      });
+    }
   }
 
   return {
