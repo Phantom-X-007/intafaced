@@ -21,17 +21,17 @@ Read (not edited): `packages/auth/src/{tokens,scopes,guards,auth.test}.ts`, `ser
 
 ### Proven on tip
 
-| Claim | Where |
-| ----- | ----- |
-| Access JWTs are HS256, require `exp`, carry `sub` / `sid` / `scopes` / `tier` / `mfa` | `packages/auth/src/tokens.ts` (`issueAccessToken`, `verifyAccessToken` + `requiredClaims: ['exp']`) |
-| Signing secret shorter than 32 characters is refused | `tokens.ts` `key()`; `packages/config/src/env.ts` `JWT_ACCESS_SECRET` `min(32)` |
-| Default access TTL is 900s (bounded 60–3600); refresh default 30d (bounded 1h–90d) | `authEnvSchema` |
-| Refresh is opaque, stored hashed, rotated; reuse of a revoked refresh burns **all** live sessions for that user | `AuthService.refresh` in `services/svc-identity/src/auth/auth-service.ts` |
-| Login compares password even when the account is missing (dummy hash) | `AuthService.login` |
-| Frozen/closed accounts cannot mint from a still-valid refresh | `refresh` outcome `frozen` (ID-P1-2) |
-| Logout / logoutAll / freeze set `sessions.revoked = true` | `logout`, `logoutAll`, `freezeIdentity` |
-| Interactive session scopes come from one table; `trade:withdraw` is withheld | `packages/auth/src/scopes.ts` `SESSION_SCOPES` / `WITHHELD_FROM_SESSION` |
-| Wire step-up binds `userId` + `sid` from the **edge principal**, not from the body | `services/svc-identity/src/router.ts` `auth.stepUp` |
+| Claim                                                                                                           | Where                                                                                               |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Access JWTs are HS256, require `exp`, carry `sub` / `sid` / `scopes` / `tier` / `mfa`                           | `packages/auth/src/tokens.ts` (`issueAccessToken`, `verifyAccessToken` + `requiredClaims: ['exp']`) |
+| Signing secret shorter than 32 characters is refused                                                            | `tokens.ts` `key()`; `packages/config/src/env.ts` `JWT_ACCESS_SECRET` `min(32)`                     |
+| Default access TTL is 900s (bounded 60–3600); refresh default 30d (bounded 1h–90d)                              | `authEnvSchema`                                                                                     |
+| Refresh is opaque, stored hashed, rotated; reuse of a revoked refresh burns **all** live sessions for that user | `AuthService.refresh` in `services/svc-identity/src/auth/auth-service.ts`                           |
+| Login compares password even when the account is missing (dummy hash)                                           | `AuthService.login`                                                                                 |
+| Frozen/closed accounts cannot mint from a still-valid refresh                                                   | `refresh` outcome `frozen` (ID-P1-2)                                                                |
+| Logout / logoutAll / freeze set `sessions.revoked = true`                                                       | `logout`, `logoutAll`, `freezeIdentity`                                                             |
+| Interactive session scopes come from one table; `trade:withdraw` is withheld                                    | `packages/auth/src/scopes.ts` `SESSION_SCOPES` / `WITHHELD_FROM_SESSION`                            |
+| Wire step-up binds `userId` + `sid` from the **edge principal**, not from the body                              | `services/svc-identity/src/router.ts` `auth.stepUp`                                                 |
 
 ### Residual (named)
 
@@ -46,15 +46,15 @@ This is a judgment residual, not a CVE number. Closing it means a live-session (
 
 ### Proven on tip
 
-| Claim | Where |
-| ----- | ----- |
-| RFC 6238 TOTP, ±1 step window, constant-time compare, returns the matched **counter** | `services/svc-identity/src/auth/totp.ts` `matchTotpStep` |
-| Successful use burns the step under `FOR UPDATE`; same or earlier step → `auth.mfa_invalid` | `AuthService.consumeTotpCode`; column `users.totp_last_step` (`drizzle/0008_totp_last_step.sql`) |
-| Enrol confirm seeds `totp_last_step` so the QR-confirm code cannot immediately login/step-up | `confirmTotpEnrolment` comment + write in `auth-service.ts` |
-| Login / step-up prefer TOTP burn, then single-use recovery hash | `login`, `stepUp` |
-| Pending enrol is hashed secret + recovery hashes, SQL single-use take | `pending-totp-store.ts` |
-| Prod boot refuses missing `IDENTITY_TOTP_SECRET_KEY` | `services/svc-identity/src/index.ts` (`APP_ENV === 'prod'`) |
-| Anti-replay is tested | `identity.test.ts` “refuses a TOTP code that was already consumed in this window” |
+| Claim                                                                                        | Where                                                                                            |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| RFC 6238 TOTP, ±1 step window, constant-time compare, returns the matched **counter**        | `services/svc-identity/src/auth/totp.ts` `matchTotpStep`                                         |
+| Successful use burns the step under `FOR UPDATE`; same or earlier step → `auth.mfa_invalid`  | `AuthService.consumeTotpCode`; column `users.totp_last_step` (`drizzle/0008_totp_last_step.sql`) |
+| Enrol confirm seeds `totp_last_step` so the QR-confirm code cannot immediately login/step-up | `confirmTotpEnrolment` comment + write in `auth-service.ts`                                      |
+| Login / step-up prefer TOTP burn, then single-use recovery hash                              | `login`, `stepUp`                                                                                |
+| Pending enrol is hashed secret + recovery hashes, SQL single-use take                        | `pending-totp-store.ts`                                                                          |
+| Prod boot refuses missing `IDENTITY_TOTP_SECRET_KEY`                                         | `services/svc-identity/src/index.ts` (`APP_ENV === 'prod'`)                                      |
+| Anti-replay is tested                                                                        | `identity.test.ts` “refuses a TOTP code that was already consumed in this window”                |
 
 Tracker `identity.step-up` still carries the **stale** note that a TOTP code is “replayable inside its validity window.” That note is leftover honesty, **not** current mint behaviour. This review does **not** edit `features.mjs`.
 
@@ -68,13 +68,13 @@ Window ±1 is still three valid codes per clock. Adjacent **unused** steps remai
 
 ### Proven on tip
 
-| Claim | Where |
-| ----- | ----- |
-| ES256 only; `userVerification: 'required'`; attestation fmt `none` only | `services/svc-identity/src/auth/webauthn.ts` |
+| Claim                                                                                                | Where                                                                                   |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| ES256 only; `userVerification: 'required'`; attestation fmt `none` only                              | `services/svc-identity/src/auth/webauthn.ts`                                            |
 | Challenges are single-use with TTL; kinds `registration` / `authentication` / `step-up` are distinct | `ChallengeKind`; `startWebauthnStepUp` comment — login assertion cannot satisfy step-up |
-| Assertion counter is stored and updated | `verifyAuthenticationResponse` + `auth-service.ts` updates `webauthn_creds` |
-| Passwordless login issues a session; step-up uses a separate ceremony | `router.ts` `stepUpOptions` / `stepUp` |
-| Kill-switch `WEBAUTHN_ENABLED` | `env.ts` / router |
+| Assertion counter is stored and updated                                                              | `verifyAuthenticationResponse` + `auth-service.ts` updates `webauthn_creds`             |
+| Passwordless login issues a session; step-up uses a separate ceremony                                | `router.ts` `stepUpOptions` / `stepUp`                                                  |
+| Kill-switch `WEBAUTHN_ENABLED`                                                                       | `env.ts` / router                                                                       |
 
 ### Residual (named)
 
@@ -87,16 +87,16 @@ Window ±1 is still three valid codes per clock. Adjacent **unused** steps remai
 
 ### Proven on tip
 
-| Claim | Where |
-| ----- | ----- |
-| Default session never carries `trade:withdraw` | `WITHHELD_FROM_SESSION` |
-| Elevation adds **only** `STEP_UP_SCOPES = ['trade:withdraw']` — not caller-supplied scopes | `auth-service.ts` |
-| TTL capped at 300s (`STEP_UP_TTL_SECONDS`) even if access TTL is longer | `stepUp` `Math.min(..., 300)` |
-| Session must still be unrevoked and unexpired | `stepUp` session SELECT |
-| Exactly one of TOTP/recovery or WebAuthn | router refine + service `hasTotp === hasWebauthn` refuse |
-| Elevated token sets `mfa: true`; `requireScope` on `INTERACTIVE_ONLY_SCOPES` demands `principal.mfa` | `packages/auth/src/guards.ts` |
-| API keys cannot be granted `trade:withdraw` / `pay:payout` / `admin:treasury` / `bank:card` | `assertKeyScopesAllowed` / `assertDelegatableScopes` |
-| Key exchange always `mfa: false` | `exchangeApiKey` |
+| Claim                                                                                                | Where                                                    |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Default session never carries `trade:withdraw`                                                       | `WITHHELD_FROM_SESSION`                                  |
+| Elevation adds **only** `STEP_UP_SCOPES = ['trade:withdraw']` — not caller-supplied scopes           | `auth-service.ts`                                        |
+| TTL capped at 300s (`STEP_UP_TTL_SECONDS`) even if access TTL is longer                              | `stepUp` `Math.min(..., 300)`                            |
+| Session must still be unrevoked and unexpired                                                        | `stepUp` session SELECT                                  |
+| Exactly one of TOTP/recovery or WebAuthn                                                             | router refine + service `hasTotp === hasWebauthn` refuse |
+| Elevated token sets `mfa: true`; `requireScope` on `INTERACTIVE_ONLY_SCOPES` demands `principal.mfa` | `packages/auth/src/guards.ts`                            |
+| API keys cannot be granted `trade:withdraw` / `pay:payout` / `admin:treasury` / `bank:card`          | `assertKeyScopesAllowed` / `assertDelegatableScopes`     |
+| Key exchange always `mfa: false`                                                                     | `exchangeApiKey`                                         |
 
 ### Residual (named)
 
@@ -109,14 +109,14 @@ Window ±1 is still three valid codes per clock. Adjacent **unused** steps remai
 
 ### Proven on tip
 
-| Claim | Where |
-| ----- | ----- |
-| Create runs `assertDelegatableScopes` (unknown scopes refused; cannot exceed grantor; interactive-only refused) | `createApiKey` |
-| Key returned once; stored hashed; prefix listed | `createApiKey` / `listApiKeys` |
-| Exchange is the public door to a short JWT; no refresh | `exchangeApiKey`; `router.ts` `apiKeys.exchange` |
-| Frozen user cannot exchange | status check in `exchangeApiKey` |
-| Non-empty `domain_whitelist` + missing Origin fails closed | `api-key-origin.ts`; tests in `api-key-origin.test.ts` |
-| Freeze bulk-revokes keys | `freezeIdentity` |
+| Claim                                                                                                           | Where                                                  |
+| --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Create runs `assertDelegatableScopes` (unknown scopes refused; cannot exceed grantor; interactive-only refused) | `createApiKey`                                         |
+| Key returned once; stored hashed; prefix listed                                                                 | `createApiKey` / `listApiKeys`                         |
+| Exchange is the public door to a short JWT; no refresh                                                          | `exchangeApiKey`; `router.ts` `apiKeys.exchange`       |
+| Frozen user cannot exchange                                                                                     | status check in `exchangeApiKey`                       |
+| Non-empty `domain_whitelist` + missing Origin fails closed                                                      | `api-key-origin.ts`; tests in `api-key-origin.test.ts` |
+| Freeze bulk-revokes keys                                                                                        | `freezeIdentity`                                       |
 
 ### Residual (not a third primary ticket; leftover)
 
@@ -126,11 +126,11 @@ Empty whitelist = any origin (`apiKeyOriginAllowed` first line). Documented for 
 
 ## 6 · Named residuals (must exist as files on this tip)
 
-| ID | Failure mode | File(s) that exist |
-| -- | ------------ | ------------------ |
+| ID            | Failure mode                                                                | File(s) that exist                                                                                                                                                   |
+| ------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **R-AUTH-01** | Logout/freeze/key-revoke do not kill already-minted access JWTs until `exp` | `packages/auth/src/tokens.ts` (`verifyAccessToken`); `services/svc-identity/src/auth/auth-service.ts` (`logout`, `freezeIdentity`, `exchangeApiKey`, `revokeApiKey`) |
-| **R-AUTH-02** | `APP_ENV=prod` can boot WebAuthn with localhost rpId/origin | `services/svc-identity/src/env.ts` (`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` defaults); `services/svc-identity/src/index.ts` (prod boot block) |
-| **R-AUTH-03** | `bank:card` labelled step-up; only `trade:withdraw` is minted | `packages/auth/src/scopes.ts` (`WITHHELD_FROM_SESSION`, `INTERACTIVE_ONLY_SCOPES`); `services/svc-identity/src/auth/auth-service.ts` (`STEP_UP_SCOPES`) |
+| **R-AUTH-02** | `APP_ENV=prod` can boot WebAuthn with localhost rpId/origin                 | `services/svc-identity/src/env.ts` (`WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGIN` defaults); `services/svc-identity/src/index.ts` (prod boot block)                           |
+| **R-AUTH-03** | `bank:card` labelled step-up; only `trade:withdraw` is minted               | `packages/auth/src/scopes.ts` (`WITHHELD_FROM_SESSION`, `INTERACTIVE_ONLY_SCOPES`); `services/svc-identity/src/auth/auth-service.ts` (`STEP_UP_SCOPES`)              |
 
 No invented CVE IDs. No production secrets. No claim that the plane is ready for go-live.
 
@@ -148,9 +148,9 @@ No invented CVE IDs. No production secrets. No claim that the plane is ready for
 
 ## 8 · Leftover (after this review ships)
 
-1. Owner judgment on R-AUTH-01 (session/key liveness on every request vs shorter TTL).  
-2. Prod env contract for R-AUTH-02 (fail boot if rpId is `localhost` when `APP_ENV=prod`) — still no invented hostname.  
-3. Align R-AUTH-03: either a real `bank:card` step-up when §18 is live, or rewrite the withheld reason to “not issued; no elevation path”.  
-4. Stale `identity.step-up` tracker note (TOTP replay) — honesty PR, mountain event, not this file.  
-5. Duplicate write-up `#2015` — close or supersede when this lands.  
+1. Owner judgment on R-AUTH-01 (session/key liveness on every request vs shorter TTL).
+2. Prod env contract for R-AUTH-02 (fail boot if rpId is `localhost` when `APP_ENV=prod`) — still no invented hostname.
+3. Align R-AUTH-03: either a real `bank:card` step-up when §18 is live, or rewrite the withheld reason to “not issued; no elevation path”.
+4. Stale `identity.step-up` tracker note (TOTP replay) — honesty PR, mountain event, not this file.
+5. Duplicate write-up `#2015` — close or supersede when this lands.
 6. CORS/production origin list remains **D26-P3-07**.
