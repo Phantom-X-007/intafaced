@@ -10,7 +10,7 @@ import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intaf
 import { createBankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankRouter } from '../router.js';
-import { CARD_ISSUER_SETTINGS, cardIssuerFor, noCardIssuer } from './issuer.js';
+import { CARD_ISSUER_SETTINGS, cardIssuerFor, cardProgrammeOutput, noCardIssuer } from './issuer.js';
 
 /**
  * CAN ANYBODY ACTUALLY CALL THIS? (§8.1 `bank.cards`, D-S-15)
@@ -81,6 +81,7 @@ describe('choosing an issuer is a closed decision with a refusing default', () =
   it('maps the absent choice to the adapter that refuses everything', () => {
     expect(cardIssuerFor('none')).toBe(noCardIssuer);
     expect(cardIssuerFor('none').programme).toEqual({ id: 'none', simulated: true, displayName: 'No card programme' });
+    expect(cardIssuerFor('none')).not.toBe(cardIssuerFor('card-sim'));
   });
 
   it('maps the only other choice to something that says it is a simulator', () => {
@@ -88,6 +89,15 @@ describe('choosing an issuer is a closed decision with a refusing default', () =
     expect(programme.id).toBe('card-sim');
     expect(programme.simulated).toBe(true);
     expect(programme.displayName.toLowerCase()).toContain('simulated');
+  });
+
+  it('never omits simulated:true on either closed setting — neither is a live rail', () => {
+    for (const setting of CARD_ISSUER_SETTINGS) {
+      const programme = cardProgrammeOutput(cardIssuerFor(setting).programme);
+      expect(Object.hasOwn(programme, 'simulated')).toBe(true);
+      expect(programme.simulated).toBe(true);
+      expect(JSON.stringify(programme)).toContain('"simulated":true');
+    }
   });
 });
 

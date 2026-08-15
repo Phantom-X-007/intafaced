@@ -18,7 +18,7 @@ import { BankError } from '../errors.js';
 import type { MarkQuality, PriceSource, QuotedMark } from '../loans/prices.js';
 import { CardService } from './card-service.js';
 import { DEFAULT_CARD_CONVERSION_POLICY, fundingFor, noConversionRates, quoteConversion } from './conversion.js';
-import { cardSim, cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
+import { cardProgrammeOutput, cardSim, cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
 
 /**
  * CARDS (§8.1) — the LEDGER half.
@@ -97,6 +97,14 @@ describe('the simulator says what it is on every surface it has', () => {
     expect(programme.simulated).toBe(true);
     expect(programme.id).toBe('card-sim');
     expect(programme.displayName.toLowerCase()).toContain('simulated');
+    expect(Object.hasOwn(programme, 'simulated')).toBe(true);
+    expect(JSON.parse(JSON.stringify(programme)).simulated).toBe(true);
+  });
+
+  it('cannot omit simulated:true — a missing flag would look like a live card', () => {
+    const wire = JSON.stringify(cardProgrammeOutput(cardSim().programme));
+    expect(wire).toContain('"simulated":true');
+    expect(() => cardProgrammeOutput({ id: 'card-sim', displayName: 'Simulated card (no card programme)' } as never)).toThrow(TypeError);
   });
 
   it('derives a stable four-digit tail from the card id, and it is not a card number', async () => {
@@ -122,6 +130,14 @@ describe('no issuer configured means no card programme, and it refuses by name',
    * against a counterparty that does not exist. Choosing `cardSim()` has to be an
    * act somebody performed.
    */
+  it('is the CardService default, not the simulator', () => {
+    const unconfigured = new CardService(null as never, null as never);
+    expect(unconfigured.programme()).toEqual(noCardIssuer.programme);
+    expect(unconfigured.programme().id).toBe('none');
+    expect(unconfigured.programme().id).not.toBe('card-sim');
+    expect(JSON.stringify(unconfigured.programme())).toContain('"simulated":true');
+  });
+
   it('refuses to issue, respond or set status', async () => {
     await expect(noCardIssuer.issue({ cardId: randomUUID(), userId: HOLDER, assetId: 'USDT' })).rejects.toMatchObject({
       code: 'bank.no_card_issuer',
@@ -349,6 +365,8 @@ if (!available) {
       const card = await issueCard();
 
       expect(card.simulated).toBe(true);
+      expect(Object.hasOwn(card, 'simulated')).toBe(true);
+      expect(JSON.parse(JSON.stringify({ simulated: card.simulated })).simulated).toBe(true);
       expect(card.issuer).toBe('card-sim');
       expect(card.panTail).toMatch(/^\d{4}$/);
 

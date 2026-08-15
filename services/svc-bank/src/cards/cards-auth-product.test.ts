@@ -45,6 +45,8 @@ describe('D26-P1-B2 issuer surface stays closed — no invented BIN/programme', 
     expect([...CARD_ISSUER_SETTINGS]).toEqual(['none', 'card-sim']);
     expect(cardIssuerFor('none')).toBe(noCardIssuer);
     expect(cardIssuerFor('none').programme.simulated).toBe(true);
+    expect(JSON.stringify(cardIssuerFor('none').programme)).toContain('"simulated":true');
+    expect(JSON.stringify(cardIssuerFor('card-sim').programme)).toContain('"simulated":true');
     expect(cardIssuerFor('card-sim').programme).toMatchObject({
       id: 'card-sim',
       simulated: true,
