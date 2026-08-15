@@ -4,7 +4,9 @@ import {
   evaluateGeoBlock,
   GEO_BLOCK_EMPTY_CODE,
   GEO_BLOCK_HIT_CODE,
+  GEO_BLOCK_REGION_UNKNOWN_CODE,
   GEO_BLOCK_SCREENED_CODE,
+  GEO_BLOCK_UNRESOLVED_CODE,
   GEO_BLOCK_UNSET_CODE,
   inventedBlockedTrueList,
   looksLikeGeoClearance,
@@ -78,6 +80,43 @@ describe('evaluateGeoBlock — empty is unknown, not a geo-clearance', () => {
       screeningDeclaration: 'listed',
       screeningConfigured: true,
       listHitCount: 0,
+      regionResolved: true,
+    });
+    expect(looksLikeGeoClearance(result)).toBe(false);
+  });
+
+  it('does not paint unresolved XX as geo-screened when a list exists (fail-open)', () => {
+    const result = evaluateGeoBlock({ region: 'XX', screening: LISTED });
+    expect(result).toMatchObject({
+      allowed: true,
+      code: GEO_BLOCK_UNRESOLVED_CODE,
+      reason: 'region_unresolved',
+      regionResolved: false,
+      screeningDeclaration: 'listed',
+      inventedBlockedList: false,
+    });
+    expect(result.code).not.toBe(GEO_BLOCK_SCREENED_CODE);
+    expect(looksLikeGeoClearance(result)).toBe(false);
+    expect(
+      looksLikeGeoClearance({
+        allowed: true,
+        code: GEO_BLOCK_SCREENED_CODE,
+        reason: 'region_not_listed',
+        regionResolved: false,
+        screeningDeclaration: 'listed',
+        screeningConfigured: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('refuses unresolved XX when region fail-closed is armed — still not a screen', () => {
+    const result = evaluateGeoBlock({ region: 'XX', screening: LISTED, regionFailClosed: true });
+    expect(result).toMatchObject({
+      allowed: false,
+      code: GEO_BLOCK_REGION_UNKNOWN_CODE,
+      reason: 'region_unknown',
+      regionResolved: false,
+      inventedBlockedList: false,
     });
     expect(looksLikeGeoClearance(result)).toBe(false);
   });

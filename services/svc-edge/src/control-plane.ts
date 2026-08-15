@@ -24,6 +24,7 @@ function geoBlockStatus(region: string) {
     screeningConfigured: decision.screeningConfigured,
     listHitCount: decision.listHitCount,
     inventedBlockedList: false as const,
+    regionResolved: decision.regionResolved,
     enforcedOnApiPath: true,
   };
 }
@@ -404,6 +405,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         screeningDeclaration: decision.screeningDeclaration,
         screeningConfigured: decision.screeningConfigured,
         inventedBlockedList: false,
+        regionResolved: decision.regionResolved,
       });
     }
     return {
@@ -415,6 +417,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       screeningConfigured: decision.screeningConfigured,
       listHitCount: decision.listHitCount,
       inventedBlockedList: false,
+      regionResolved: decision.regionResolved,
     };
   });
 
