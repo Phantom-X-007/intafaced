@@ -281,3 +281,27 @@ One service per task. Cross-service: contracts/events PR **first**, then impleme
 ## When the spec is ambiguous
 
 Doctrine (§0) decides. If it does not: **stop and ask.** Never guess on money, custody, or jurisdiction.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+
+Rules:
+
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Graphify corpus (INTAFACED)
+
+`graphify-out/` is **gitignored local cache** (per-worktree). Do not commit it.
+
+- **First build in a worktree:** `graphify extract .` (AST only, no API key). `.graphifyignore` allowlists `services/` + `packages/` and excludes markdown / paste walls / vendor.
+- **After that:** `graphify query` / `path` / `explain`. Then open the one source file you will edit.
+- The official git hook skips linked worktrees (`git-dir != common-dir`). This repo works in worktrees — **you** run `graphify update .` after code changes. Do not wait for Nitro.
+- Graph is a map, not law. `AGENTS.md` / doctrine / live `gh` win on ownership, money, and tip state.
+- Never ingest `docs/paste-w*` or old boards into the graph.
