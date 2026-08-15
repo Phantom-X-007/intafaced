@@ -372,3 +372,41 @@ export function orphanRefuseArmIds(): readonly string[] {
   const used = new Set(CCXT_CAPABILITY_MATRIX.flatMap((r) => [...r.refuseArmIds]));
   return CCXT_REFUSE_ARMS.filter((a) => !used.has(a.id)).map((a) => a.id);
 }
+
+/**
+ * Live re-leverage / live margin-mode change — always refuse.
+ * A 200 on these paths would let a bot size against invented margin.
+ */
+export const CCXT_LEVERAGE_REFUSE_IDS = ['setLeverage', 'setMarginMode'] as const;
+
+export type CcxtLeverageRefuseId = (typeof CCXT_LEVERAGE_REFUSE_IDS)[number];
+
+/**
+ * Drift strings if setLeverage / setMarginMode are claimed as a happy path
+ * (supported/conditional) or anything other than 501 NotSupported.
+ * Empty = pin holds.
+ */
+export function leverageRefuseDrift(): readonly string[] {
+  const drift: string[] = [];
+  for (const id of CCXT_LEVERAGE_REFUSE_IDS) {
+    const arm = refuseArmById(id);
+    if (!arm) {
+      drift.push(`${id}: missing refuse arm`);
+      continue;
+    }
+    if (arm.httpStatus !== 501) drift.push(`${id}: httpStatus ${arm.httpStatus} (want 501)`);
+    if (arm.ccxtCode !== 'NotSupported') drift.push(`${id}: ccxtCode ${arm.ccxtCode} (want NotSupported)`);
+    const row = CCXT_CAPABILITY_MATRIX.find((r) => r.name === id);
+    if (!row) {
+      drift.push(`${id}: missing matrix row`);
+      continue;
+    }
+    if (row.kind !== 'refuse') {
+      drift.push(`${id}: kind ${row.kind} (must be refuse — never a 200 happy path)`);
+    }
+    if (!row.refuseArmIds.includes(id)) {
+      drift.push(`${id}: matrix row does not reference its refuse arm`);
+    }
+  }
+  return drift;
+}

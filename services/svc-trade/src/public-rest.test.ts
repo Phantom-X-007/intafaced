@@ -368,7 +368,13 @@ describe('public REST routes', () => {
     expect(body.asOfMs).toBe(1_700_000_000_000);
     expect(body.routes.length).toBeGreaterThan(10);
     expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'refuse')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'supported')).toBe(false);
+    expect(body.routes.some((r) => r.name === 'setMarginMode' && r.kind === 'refuse')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setMarginMode' && r.kind === 'supported')).toBe(false);
     expect(body.refuseArms.some((a) => a.id === 'setLeverage' && a.httpStatus === 501)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'setLeverage' && a.httpStatus === 200)).toBe(false);
+    expect(body.refuseArms.some((a) => a.id === 'setMarginMode' && a.httpStatus === 501)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'setMarginMode' && a.httpStatus === 200)).toBe(false);
     expect(body.routes.some((r) => r.name === 'openPosition')).toBe(true);
     expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);

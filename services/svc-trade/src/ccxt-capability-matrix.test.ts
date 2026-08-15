@@ -18,8 +18,10 @@ import { REST_ROUTES } from '@intafaced/exchange-contract';
 import {
   CALLER_REFUSED_PRICE_FIELDS,
   CCXT_CAPABILITY_MATRIX,
+  CCXT_LEVERAGE_REFUSE_IDS,
   CCXT_REFUSE_ARMS,
   danglingRefuseArmIds,
+  leverageRefuseDrift,
   matrixRestRouteNames,
   orphanRefuseArmIds,
   refuseArmById,
@@ -175,6 +177,21 @@ describe('ccxt capability matrix — inventory integrity', () => {
     ).toEqual(['setLeverage', 'setMarginMode'].sort());
   });
 
+  it('setLeverage/setMarginMode stay refuse 501 NotSupported — never a 200 path', () => {
+    expect([...leverageRefuseDrift()]).toEqual([]);
+    expect(CCXT_LEVERAGE_REFUSE_IDS).toEqual(['setLeverage', 'setMarginMode']);
+    for (const id of CCXT_LEVERAGE_REFUSE_IDS) {
+      const row = CCXT_CAPABILITY_MATRIX.find((r) => r.name === id)!;
+      expect(row.kind, id).toBe('refuse');
+      expect(row.kind, id).not.toBe('supported');
+      expect(row.kind, id).not.toBe('conditional');
+      const arm = refuseArmById(id)!;
+      expect(arm.httpStatus, id).toBe(501);
+      expect(arm.httpStatus, id).not.toBe(200);
+      expect(arm.ccxtCode, id).toBe('NotSupported');
+    }
+  });
+
   it('caller-refused price fields pin private-rest PRICE_FIELDS', () => {
     // private-rest: const PRICE_FIELDS = ['entryPrice', 'exitPrice', 'price', 'markPrice']
     for (const field of CALLER_REFUSED_PRICE_FIELDS) {
@@ -233,12 +250,22 @@ describe('ccxt capability matrix — claim ≡ mount source', () => {
     }
   });
 
-  it('refuse-only routes use notSupported + matrix intafacedCode in private-rest', () => {
-    for (const row of refuseOnlyRoutes()) {
-      const arm = refuseArmById(row.refuseArmIds[0]!)!;
-      expect(privateRestSource).toContain(`'${arm.intafacedCode}'`);
-      expect(privateRestSource).toContain(`'${row.path}'`);
-    }
+  it('refuse-only leverage mounts pin 501 NotSupported and never reply.code(200)', () => {
+    expect(privateRestSource).toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/);
+    expect(privateRestSource).toMatch(/app\.post\('\/api\/v1\/positions\/margin-mode',\s*derivativesNotSupported\('setMarginMode'/);
+    expect(privateRestSource).toContain('never invent leverage');
+    expect(privateRestSource).toContain('httpStatus !== 501');
+    expect(privateRestSource).toContain("ccxtCode !== 'NotSupported'");
+    expect(privateRestSource).toContain('notSupported(');
+    const leverageBlockStart = privateRestSource.indexOf('const derivativesNotSupported');
+    const leverageBlockEnd = privateRestSource.indexOf('// ── Create (money path)');
+    expect(leverageBlockStart).toBeGreaterThanOrEqual(0);
+    expect(leverageBlockEnd).toBeGreaterThan(leverageBlockStart);
+    const block = privateRestSource.slice(leverageBlockStart, leverageBlockEnd);
+    expect(block).not.toMatch(/reply\.code\(200\)/);
+    expect(block).not.toMatch(/rateLimited\(/);
+    expect(publicRestSource).not.toContain("app.post('/api/v1/positions/leverage'");
+    expect(publicRestSource).not.toContain("app.post('/api/v1/positions/margin-mode'");
   });
 
   it('funding-rate refuse codes appear in public-rest', () => {
@@ -260,9 +287,12 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
       payload: { symbol: 'BTC/USDT', leverage: '10' },
     });
+    expect(res.statusCode).not.toBe(200);
     expect(res.statusCode).toBe(arm.httpStatus);
+    expect(arm.httpStatus).toBe(501);
     expect(res.json().code).toBe(arm.ccxtCode);
     expect(res.json().intafacedCode).toBe(arm.intafacedCode);
+    expect(JSON.stringify(res.json())).not.toMatch(/"leverage"\s*:/);
     await app.close();
   });
 
@@ -277,9 +307,12 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
       payload: { symbol: 'BTC/USDT', marginMode: 'cross' },
     });
+    expect(res.statusCode).not.toBe(200);
     expect(res.statusCode).toBe(arm.httpStatus);
+    expect(arm.httpStatus).toBe(501);
     expect(res.json().code).toBe(arm.ccxtCode);
     expect(res.json().intafacedCode).toBe(arm.intafacedCode);
+    expect(JSON.stringify(res.json())).not.toMatch(/"marginMode"\s*:/);
     await app.close();
   });
 
@@ -452,7 +485,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as {
-      routes: Array<{ name: string; refuseArmIds?: string[] }>;
+      routes: Array<{ name: string; kind?: string; refuseArmIds?: string[] }>;
       refuseArms: Array<{ id: string; httpStatus: number }>;
     };
     expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
@@ -464,6 +497,14 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 403)).toBe(true);
     expect(body.routes.some((r) => r.name === 'closePosition' && r.refuseArmIds?.includes('profitSourceUnconfiguredOnClose'))).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'profitSourceUnconfiguredOnClose' && a.httpStatus === 403)).toBe(true);
+    for (const id of CCXT_LEVERAGE_REFUSE_IDS) {
+      const route = body.routes.find((r) => r.name === id);
+      expect(route?.kind, id).toBe('refuse');
+      expect(route?.kind, id).not.toBe('supported');
+      const arm = body.refuseArms.find((a) => a.id === id);
+      expect(arm?.httpStatus, id).toBe(501);
+      expect(arm?.httpStatus, id).not.toBe(200);
+    }
     await app.close();
   });
 
