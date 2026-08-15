@@ -5,6 +5,7 @@
  * No second ranking rule, no invented spreads/fees, no internal house legs.
  */
 export {
+  CROSS_EXCHANGE_DEFAULT_SPREAD_BPS,
   isCrossRailPair,
   isExternalVenueKind,
   scanExternalCrossExchangeArb,

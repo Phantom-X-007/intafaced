@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { type Amount, formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import type { SorCostTerms, VenueKind } from '@intafaced/venue-adapter';
 import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
-import { isExternalVenueKind, scanExternalCrossExchangeArb, type ArbVenueQuote } from './arbitrage.js';
+import { CROSS_EXCHANGE_DEFAULT_SPREAD_BPS, isExternalVenueKind, scanExternalCrossExchangeArb, type ArbVenueQuote } from './arbitrage.js';
 
 function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
   return {
@@ -209,6 +209,56 @@ describe('scanExternalCrossExchangeArb — D26-P1-X4', () => {
 
     expect(result.opportunities).toHaveLength(0);
     expect(result.refused.some((r) => r.reason === 'no_edge')).toBe(true);
+  });
+
+  it('pins CROSS_EXCHANGE_DEFAULT_SPREAD_BPS as null (no sneak-in default)', () => {
+    expect(CROSS_EXCHANGE_DEFAULT_SPREAD_BPS).toBeNull();
+  });
+
+  it('equal quotes refuse no_edge — default spread is not invented', () => {
+    const result = scanExternalCrossExchangeArb({
+      symbol: 'BTC/USDT',
+      amount: amt('1'),
+      quotes: [q({ venueId: 'a', kind: 'external-cex', price: '100' }), q({ venueId: 'b', kind: 'external-cex', price: '100' })],
+      costTermsByVenue: {
+        a: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+        b: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+      },
+      inventory: { prePositionedByVenue: { a: true, b: true } },
+    });
+
+    expect(result.opportunities).toHaveLength(0);
+    expect(result.refused.every((r) => r.reason === 'no_edge')).toBe(true);
+    expect(result.refused.some((r) => r.detail.includes('default spread not invented'))).toBe(true);
+  });
+
+  it('single quote does not invent a second venue or spread', () => {
+    const result = scanExternalCrossExchangeArb({
+      symbol: 'BTC/USDT',
+      amount: amt('1'),
+      quotes: [q({ venueId: 'a', kind: 'external-cex', price: '100' })],
+      costTermsByVenue: { a: completeTerms() },
+      inventory: { prePositionedByVenue: { a: true } },
+    });
+
+    expect(result.opportunities).toHaveLength(0);
+    expect(result.refused).toHaveLength(0);
+  });
+
+  it('missing impact refuses incomplete_cost rather than assume 0', () => {
+    const result = scanExternalCrossExchangeArb({
+      symbol: 'BTC/USDT',
+      amount: amt('1'),
+      quotes: [q({ venueId: 'a', kind: 'external-cex', price: '100' }), q({ venueId: 'b', kind: 'external-cex', price: '102' })],
+      costTermsByVenue: {
+        a: completeTerms({ expectedImpactBps: null }),
+        b: completeTerms(),
+      },
+      inventory: { prePositionedByVenue: { a: true, b: true } },
+    });
+
+    expect(result.opportunities).toHaveLength(0);
+    expect(result.refused.some((r) => r.reason === 'incomplete_cost' && r.detail.includes('missing_impact'))).toBe(true);
   });
 
   it('insufficient quoted size refuses rather than inventing depth', () => {
