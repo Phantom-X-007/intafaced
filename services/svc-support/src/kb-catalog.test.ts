@@ -73,7 +73,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     await svc.unpublishKb({ id: 'kb-paper-vs-live', baseRevision: 1 });
     const after = await svc.listKb();
     expect(after.some((a) => a.id === 'kb-paper-vs-live')).toBe(false);
-    expect(after.every((a) => a.published === true)).toBe(true);
+    expect(after.every((a) => !('published' in a) && !('revision' in a))).toBe(true);
     expect(after.length).toBe(before.length - 1);
   });
 
@@ -88,7 +88,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
   it('searchKb/getKb refuse invent when every article is unpublished', async () => {
     const svc = new SupportService();
     for (const article of await svc.listKb()) {
-      await svc.unpublishKb({ id: article.id, baseRevision: article.revision ?? 1 });
+      await svc.unpublishKb({ id: article.id, baseRevision: 1 });
     }
     expect(await svc.listKb()).toEqual([]);
     expect(await svc.searchKb('')).toEqual([]);
@@ -101,7 +101,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     const svc = new SupportService();
     await svc.unpublishKb({ id: 'kb-security-basics', baseRevision: 1 });
     const empty = await svc.searchKb('');
-    expect(empty.every((a) => a.published === true)).toBe(true);
+    expect(empty.every((a) => !('published' in a) && !('revision' in a))).toBe(true);
     expect(empty.some((a) => a.id === 'kb-security-basics')).toBe(false);
     expect(empty.length).toBe((await svc.listKb()).length);
   });
@@ -134,8 +134,11 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
       bodyKey: 'support.kb.account_access.body',
       baseRevision: 1,
     });
-    expect(bumped.revision).toBe(2);
-    expect(bumped.published).toBe(true);
+    expect(bumped).toEqual({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+    });
     await expect(
       svc.publishKb({
         id: 'kb-account-access',
@@ -145,7 +148,9 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
       }),
     ).rejects.toMatchObject({ code: 'support.kb.revision_stale' });
     const still = await svc.getKbArticle('kb-account-access');
-    expect(still?.revision).toBe(2);
+    expect(still).toEqual(bumped);
+    expect(still).not.toHaveProperty('revision');
+    expect(still).not.toHaveProperty('published');
   });
 
   it('unpublishKb hides the article on public listKb', async () => {

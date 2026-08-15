@@ -107,17 +107,17 @@ Horizon: `docs/INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md` names `ops.
 
 One service: **`svc-support`**. Contracts first if the schema grows.
 
-| File                                                                                     | Change                                                                                                                                |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/contracts/src/support.ts`                                                      | Add optional `revision: z.number().int().positive()` + `published: z.boolean()`; add `searchKb` + `getKbArticle` to `SupportContract` |
-| `services/svc-support/src/kb-catalog.ts`                                                 | Keep `assertKbArticle` + `VENDOR_SMELL`; published-only list/search/get                                                               |
-| `services/svc-support/src/db/schema.ts` + `drizzle/0003_kb_articles.sql` (+ `.down.sql`) | `support.kb_articles` (`id`, `title_key`, `body_key`, `revision`, `published`, `updated_at`) — **no body text, no money columns**     |
-| `services/svc-support/src/store.ts`                                                      | `listPublishedKb` / `getPublishedKb` / `putKbRevision`                                                                                |
-| `services/svc-support/src/support-service.ts`                                            | Wire store; `escalate` still `getKbById` **published only**                                                                           |
-| `services/svc-support/src/router.ts`                                                     | Keep public list/search/get; add `support:ops` `publishKb` / `unpublishKb`                                                            |
-| `packages/i18n/src/catalog.ts`                                                           | New keys only if new article ids land — same `support.kb.*` prefix                                                                    |
-| `services/svc-support/src/kb-catalog.test.ts` (+ new store/router tests)                 | Names in §7                                                                                                                           |
-| `services/svc-agents/src/support-agent/*`                                                | **Do not edit** unless the article shape breaks compile — then a **second** PR                                                        |
+| File                                                                                     | Change                                                                                                                             |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/contracts/src/support.ts`                                                      | **Do not edit** (T-001). Public wire stays `{id,titleKey,bodyKey}`; `revision`/`published` stay in `kb_articles` until that merge. |
+| `services/svc-support/src/kb-catalog.ts`                                                 | Keep `assertKbArticle` + `VENDOR_SMELL`; published-only list/search/get; `toPublicKb` strips store columns                         |
+| `services/svc-support/src/db/schema.ts` + `drizzle/0003_kb_articles.sql` (+ `.down.sql`) | `support.kb_articles` (`id`, `title_key`, `body_key`, `revision`, `published`, `updated_at`) — **no body text, no money columns**  |
+| `services/svc-support/src/store.ts`                                                      | `listPublishedKb` / `getPublishedKb` / `putKbRevision`                                                                             |
+| `services/svc-support/src/support-service.ts`                                            | Wire store; `escalate` still `getKbById` **published only**                                                                        |
+| `services/svc-support/src/router.ts`                                                     | Keep public list/search/get; add `support:ops` `publishKb` / `unpublishKb`                                                         |
+| `packages/i18n/src/catalog.ts`                                                           | New keys only if new article ids land — same `support.kb.*` prefix                                                                 |
+| `services/svc-support/src/kb-catalog.test.ts` (+ new store/router tests)                 | Names in §7                                                                                                                        |
+| `services/svc-agents/src/support-agent/*`                                                | **Do not edit** unless the article shape breaks compile — then a **second** PR                                                     |
 
 Seed: migrate the five `PLATFORM_KB_SPINE` rows as `revision: 1`, `published: true` so public doors stay non-empty.
 
@@ -180,15 +180,15 @@ Router: extend `router.mount.test.ts` (`listKb is public and returns Stage-2 spi
 
 ### Stage 1 — versioned published catalog (first PR · Class N · **this cook**)
 
-- [ ] `support.kb_articles` (+ down migration) · seed five spine rows published r1
-- [ ] `SupportKbArticle` carries `revision` + `published`
-- [ ] `SupportContract.searchKb` + `getKbArticle` exist
-- [ ] Public doors = published only; unknown → empty/`null`
-- [ ] Operator `publishKb` / `unpublishKb` (`support:ops`) + stale-revision refuse
+- [x] `support.kb_articles` (+ down migration) · seed five spine rows published r1
+- [ ] `SupportKbArticle` carries `revision` + `published` on the **wire** — T-001; this cook keeps them server-side only
+- [ ] `SupportContract.searchKb` + `getKbArticle` exist — T-001
+- [x] Public doors = published only; unknown → empty/`null`; response keys `{id,titleKey,bodyKey}` only
+- [x] Operator `publishKb` / `unpublishKb` (`support:ops`) + stale-revision refuse
 - [ ] `assertKbArticle` + brand-scan still green
 - [ ] Tests in §7 except the workflow stub
-- [ ] No `apps/admin` / shell change
-- [ ] No `features.mjs` `done` flip (reachability of a **versioned** public KB in a real env is the flip; seed+API alone is Stage 1)
+- [x] No `apps/admin` / shell change
+- [x] No `features.mjs` `done` flip (reachability of a **versioned** public KB in a real env is the flip; seed+API alone is Stage 1)
 
 ### Stage 2 — consumers stay honest
 
