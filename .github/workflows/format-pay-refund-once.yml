@@ -1,0 +1,44 @@
+name: format-pay-refund-once
+on:
+  push:
+    branches: [feat/pay-merchant-refund-captured]
+  workflow_dispatch:
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/pay-merchant-refund-captured
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: prettier write and self-delete
+        run: |
+          set -euo pipefail
+          if [ ! -f .github/workflows/format-pay-refund-once.yml ]; then
+            echo already ran
+            exit 0
+          fi
+          pnpm exec prettier --write \
+            services/svc-pay/src/payment-service.ts \
+            services/svc-pay/src/payment-service.test.ts \
+            services/svc-pay/src/router.ts \
+            services/svc-pay/src/router.test.ts \
+            services/svc-pay/src/public-rest.ts \
+            services/svc-pay/src/rails/crypto-native.ts
+          rm -f .github/workflows/format-pay-refund-once.yml
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo nothing to commit
+            exit 0
+          fi
+          git commit -m "style(svc-pay): prettier merchant refund files"
+          git push
