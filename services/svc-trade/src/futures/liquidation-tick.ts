@@ -21,7 +21,6 @@
 import { formatAmount, parseAmount, type Amount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { planLiquidation, summarizeLiquidation, type LiquidationPosition, type LiquidationDecision } from './liquidation-planner.js';
 import {
-  DEFAULT_FUTURES_LADDER_POLICY,
   DEPTH_UNKNOWN,
   FuturesLadderError,
   mayLiquidateFromExpiredMarginCallGrace,
@@ -137,6 +136,10 @@ export interface DepthNotionalSource {
 export interface LiquidationLadderDeps {
   depth: DepthNotionalSource;
   reducer: PositionReducer;
+  /**
+   * Owner D3 table. Omitted is skip, not `DEFAULT_FUTURES_LADDER_POLICY`
+   * placeholders — those numbers are not a risk opinion.
+   */
   policy?: FuturesLadderPolicy;
 }
 
@@ -266,6 +269,7 @@ export interface LiquidationTickItemResult {
     | 'skipped_no_mark'
     | 'skipped_mark_unusable'
     | 'skipped_no_depth'
+    | 'skipped_d3_unset'
     | 'skipped_healthy'
     | 'skipped_already'
     | 'skipped_insurance_underfunded'
@@ -478,6 +482,15 @@ async function runLadderRung(
   markPrice: Amount,
   liquidationId: string,
 ): Promise<LiquidationTickItemResult> {
+  if (ladder.policy == null) {
+    return {
+      positionId: row.positionId,
+      outcome: 'skipped_d3_unset',
+      reason: 'trade.ladder_d3_unset',
+      summary: `${row.marketId}: D3 ladder numbers are owner-unset — will not rate or seize on placeholder rungs`,
+    };
+  }
+
   let depthNotional: Amount | null;
   try {
     depthNotional = await ladder.depth.depthNotional({ marketId: row.marketId, side: row.side, symbol: row.symbol });
@@ -510,7 +523,7 @@ async function runLadderRung(
       position: row,
       markPrice,
       depthNotional,
-      policy: ladder.policy ?? DEFAULT_FUTURES_LADDER_POLICY,
+      policy: ladder.policy,
     });
   } catch (err) {
     // An incoherent policy is an operator problem on every position, not a market

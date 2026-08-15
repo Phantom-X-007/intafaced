@@ -69,11 +69,9 @@ export interface FuturesJobsDeps {
   now?: () => Date;
   onError?: (name: string, err: unknown) => void;
   /**
-   * Maintenance ladder parameters. Omitted → `DEFAULT_FUTURES_LADDER_POLICY`.
-   *
-   * A hook for the owner's `DIRECTION` §8 item 8 ruling to land in without any
-   * call site moving. The DEFAULT is a placeholder, not a risk opinion — see
-   * `maintenance-ladder.ts`.
+   * Maintenance ladder parameters. Omitted → liquidation tick skips
+   * (`skipped_d3_unset`) rather than applying placeholder rungs.
+   * Owner `DIRECTION` §8 names the table; this process does not.
    */
   ladderPolicy?: FuturesLadderPolicy;
 }

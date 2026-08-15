@@ -94,6 +94,7 @@ export interface PublicRestDeps {
     readonly orderableEnabled?: boolean;
     readonly profitSourceConfigured?: boolean;
     readonly fundingMaxAbsRateConfigured?: boolean;
+    readonly fundingMarketCount?: number;
   };
 }
 

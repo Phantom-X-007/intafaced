@@ -394,6 +394,7 @@ describe('public REST routes', () => {
       insuranceTargetSize: 'owner_unset',
       fundingMaxAbsRateConfigured: false,
       fundingMaxAbsRateDefault: false,
+      fundingMarketCount: 0,
     });
     expect(body.notes.openPositionGates).toBe(OPEN_POSITION_GATES_NOTE);
     expect(body.notes.openPositionGates).toContain('leverage required 400');

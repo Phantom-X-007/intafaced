@@ -106,6 +106,10 @@ export type PrincipalSummary = z.infer<typeof principalSummarySchema>;
  * The shape svc-identity must implement. Declaring it here means a breaking
  * change to identity's API is a compile error in this package — caught in the
  * contracts PR, before any consumer is touched (§15.2).
+ *
+ * Deliberately absent: `certPerk` / `grantCertPerk` / `applyCertMap`.
+ * A certification is an XP source (`rank.awardXp`). Perks stay `rank.perks`
+ * (§4.1 SoT). Shared refuse-closed law: `./academy-cert-perks.ts`.
  */
 export interface IdentityContract {
   rank: {

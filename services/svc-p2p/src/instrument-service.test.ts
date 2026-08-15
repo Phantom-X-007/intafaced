@@ -282,11 +282,56 @@ if (!available) {
 
     it('a leftover destination is not payable once the operator registry is empty', async () => {
       const created = await sellerInstrument();
+      await fund(SELLER, '1000');
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+
       await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
 
       expect(await instruments.liveMethodKeys(SELLER, 'USD')).toEqual(new Set());
       expect(await instruments.enabledMethodKeys()).toEqual(new Set());
       expect(created.status).toBe('active');
+
+      // #1858 closed create/board. Take still used `loadOfferRaw` + attach on
+      // any active dest, so a leftover row after the operator emptied the
+      // registry still locked escrow. The dest is still there; it is not a rail.
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.take_refused',
+      });
+
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log.some((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toBe(true);
+    });
+
+    it('a leftover destination is not payable after the operator disables the schema', async () => {
+      await sellerInstrument();
+      await fund(SELLER, '1000');
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+
+      await instruments.setMethodSchemaEnabled(METHOD, ANY_COUNTRY, false);
+
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.take_refused',
+      });
     });
 
     it('rejects a field the operator never declared instead of dropping it', async () => {
