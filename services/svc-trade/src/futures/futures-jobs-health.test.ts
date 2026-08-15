@@ -25,6 +25,8 @@ describe('presentFuturesJobsHealth', () => {
     expect(h.fundingScheduled).toBe(false);
     expect(h.reason).toBe('jobs_off');
     expect(h.fundingMaxAbsRateDefault).toBe(false);
+    expect(h.fundingIntervalConfigured).toBe(false);
+    expect(h.fundingIntervalDefault).toBe(false);
     expect(h.venueMarkConfigured).toBe(false);
     expect(h.venueMarkDefault).toBe(false);
   });
@@ -42,16 +44,29 @@ describe('presentFuturesJobsHealth', () => {
     expect(h.fundingMaxAbsRateConfigured).toBe(true);
   });
 
+  it('enabled with named markets but no interval is liquidation only', () => {
+    const h = presentFuturesJobsHealth({
+      enabled: true,
+      fundingMarketCount: 2,
+      fundingMaxAbsRateConfigured: true,
+    });
+    expect(h.fundingScheduled).toBe(false);
+    expect(h.fundingIntervalConfigured).toBe(false);
+    expect(h.reason).toBe('liq_only');
+  });
+
   it('enabled with named markets advertises funding ticks without echoing ids', () => {
     const h = presentFuturesJobsHealth({
       enabled: true,
       fundingMarketCount: 2,
       fundingMaxAbsRateConfigured: false,
+      fundingIntervalConfigured: true,
     });
     expect(h.fundingScheduled).toBe(true);
     expect(h.fundingMarketCount).toBe(2);
     expect(h.reason).toBe('funding_scheduled');
     expect(h.fundingMaxAbsRateConfigured).toBe(false);
+    expect(h.fundingIntervalConfigured).toBe(true);
     expect(h).not.toHaveProperty('fundingMarketIds');
     expect(h).not.toHaveProperty('fundingMaxAbsRate');
     expect(h).not.toHaveProperty('venueId');
