@@ -5,7 +5,7 @@ import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } fro
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { copyIntelAgentGuardrail } from './guardrail.js';
-import { COPY_INTEL_AGENT_ID, COPY_INTEL_LEADERS_TOOL, COPY_INTEL_STATS_WRITE_TOOL, runCopyIntelStatsSession } from './session-run.js';
+import { COPY_INTEL_AGENT_ID, runCopyIntelStatsSession } from './session-run.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const SESSION = '33333333-3333-4333-8333-333333333333';
@@ -142,43 +142,37 @@ function baseInput(fake: FakeRuntime) {
 }
 
 describe('copy_intel.stats metered session run', () => {
-  it('builds stats through the runtime, then settles and closes', async () => {
+  it('refuses live leader plane before opening a session — no invent stats', async () => {
     const fake = new FakeRuntime();
     const result = await runCopyIntelStatsSession({
       ...baseInput(fake),
       fixtures: [fixture('leader-a'), fixture('leader-b', { realisedPnl: '3.0', winningTrades: 2 })],
+      leaderAllowlist: ['leader-a', 'leader-b'],
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') return;
-    expect(result.stats).toHaveLength(2);
-    // Tip #1708: fixture/input order (directory leaderId sort is presentDirectory only).
-    expect(result.stats.map((s) => s.leaderId)).toEqual(['leader-a', 'leader-b']);
-    expect(result.fixturesAccepted).toBe(2);
-    expect(result.writesRefusedByGuardrail).toBe(0);
-    // read ×2 then audited write ×2 — write path is the mountain promise
-    expect(fake.toolCalls).toEqual([
-      COPY_INTEL_LEADERS_TOOL,
-      COPY_INTEL_LEADERS_TOOL,
-      COPY_INTEL_STATS_WRITE_TOOL,
-      COPY_INTEL_STATS_WRITE_TOOL,
-    ]);
-    expect(fake.openCalls).toBe(1);
-    expect(fake.settleCalls).toBe(1);
-    expect(fake.closeCalls).toBe(1);
-    expect(result.metering.sessionClosed).toBe(true);
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_leaders',
+      userMessageKey: 'agents.copy_intel.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(fake.toolCalls).toEqual([]);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
   });
 
-  it('bills zero for a run that never called the engine — no invent fee share charge', async () => {
+  it('bills zero when live plane is refused — no invent fee share charge', async () => {
     const fake = new FakeRuntime();
     const result = await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [fixture('leader-a')] });
 
+    expect(result.status).toBe('refuse');
     expect(result.metering.billedAmount).toBe('0');
     expect(result.metering.settlements).toEqual([]);
     expect(typeof result.metering.billedAmount).toBe('string');
+    expect(fake.openCalls).toBe(0);
   });
 
-  it('sums settled windows as decimal strings via bigint', async () => {
+  it('does not settle invented windows while the live plane is closed', async () => {
     const fake = new FakeRuntime();
     fake.settlements = [
       {
@@ -199,7 +193,9 @@ describe('copy_intel.stats metered session run', () => {
       },
     ];
     const result = await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [fixture('leader-a')] });
-    expect(result.metering.billedAmount).toBe('4');
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_leaders' });
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(0);
   });
 
   it('refuses a dark copy plane before opening a metered session', async () => {
@@ -243,32 +239,8 @@ describe('copy_intel.stats metered session run', () => {
     expect(fake.openCalls).toBe(0);
   });
 
-  it('counts a guardrail refusal instead of inventing stats around it', async () => {
+  it('does not open a session to discover a missing live allowlist — even with a write budget', async () => {
     const fake = new FakeRuntime();
-    fake.guardrail = copyIntelAgentGuardrail();
-    // Budget 1: first leader is read; extra fixtures refuse. Reads happen before
-    // writes, so the audited write is also refused — never invent stats for
-    // refused leaders and never ship unwritten audit as "ok".
-    (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
-
-    const result = await runCopyIntelStatsSession({
-      ...baseInput(fake),
-      fixtures: [fixture('a'), fixture('b'), fixture('c')],
-    });
-
-    expect(result).toMatchObject({
-      status: 'refuse',
-      reason: 'writes_refused',
-      fixturesRefusedByGuardrail: 2,
-      writesRefusedByGuardrail: 1,
-    });
-    if (result.status !== 'refuse') return;
-    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL]);
-  });
-
-  it('writes audited stats only for leaders that passed the write tool', async () => {
-    const fake = new FakeRuntime();
-    // Budget exactly covers one read + one write — product write path on the wire.
     fake.guardrail = copyIntelAgentGuardrail();
     (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 2;
 
@@ -277,69 +249,32 @@ describe('copy_intel.stats metered session run', () => {
       fixtures: [fixture('solo')],
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') return;
-    expect(result.stats.map((s) => s.leaderId)).toEqual(['solo']);
-    expect(result.audit).toHaveLength(1);
-    expect(result.writesRefusedByGuardrail).toBe(0);
-    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL, COPY_INTEL_STATS_WRITE_TOOL]);
-  });
-
-  it('refuses the whole run when every fixture was refused by the guardrail', async () => {
-    const fake = new FakeRuntime();
-    fake.guardrail = copyIntelAgentGuardrail();
-    (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 0;
-
-    const result = await runCopyIntelStatsSession({
-      ...baseInput(fake),
-      fixtures: [fixture('a'), fixture('b')],
-    });
-
     expect(result).toMatchObject({
       status: 'refuse',
       reason: 'no_live_leaders',
-      fixturesRefusedByGuardrail: 2,
+      fixturesRefusedByGuardrail: 0,
       writesRefusedByGuardrail: 0,
     });
-    expect(fake.settleCalls).toBe(1);
-    expect(fake.closeCalls).toBe(1);
+    expect(fake.openCalls).toBe(0);
+    expect(fake.toolCalls).toEqual([]);
   });
 
-  it('refuses when reads succeed but every audited write is blocked by budget', async () => {
-    const fake = new FakeRuntime();
-    fake.guardrail = copyIntelAgentGuardrail();
-    // One action: the read; the write tool then hits the budget.
-    (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
-
-    const result = await runCopyIntelStatsSession({
-      ...baseInput(fake),
-      fixtures: [fixture('a')],
-    });
-
-    expect(result).toMatchObject({
-      status: 'refuse',
-      reason: 'writes_refused',
-      fixturesRefusedByGuardrail: 0,
-      writesRefusedByGuardrail: 1,
-    });
-    expect(fake.toolCalls).toEqual([COPY_INTEL_LEADERS_TOOL]);
-  });
-
-  it('settles and closes even when the run throws', async () => {
+  it('does not call tools when live leaders are not allowlisted', async () => {
     const fake = new FakeRuntime();
     fake.act = async () => {
       throw new Error('storage exploded');
     };
-    await expect(runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [fixture('a')] })).rejects.toThrow('storage exploded');
-    expect(fake.settleCalls).toBe(1);
-    expect(fake.closeCalls).toBe(1);
+    const result = await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [fixture('a')] });
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_leaders' });
+    expect(fake.settleCalls).toBe(0);
+    expect(fake.closeCalls).toBe(0);
   });
 
-  it('uses only declared read + write tools — never trade.order or fee-share invent paths', async () => {
+  it('never reaches trade.order or fee-share invent paths while live plane is closed', async () => {
     const fake = new FakeRuntime();
     await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [fixture('a'), fixture('b')] });
 
-    expect(new Set(fake.toolCalls)).toEqual(new Set([COPY_INTEL_LEADERS_TOOL, COPY_INTEL_STATS_WRITE_TOOL]));
+    expect(fake.toolCalls).toEqual([]);
     expect(fake.toolCalls.some((t) => t === 'trade.order' || t === 'ledger.post' || t.includes('fee'))).toBe(false);
   });
 });
