@@ -93,6 +93,30 @@ The distinction the earlier ADR missed, stated once so it is not missed again:
 
 ## What still needs the owner
 
-- **The dark-feed horizon** — how long a market may sit dark before frozen positions become an operator alert, and what that alert does. A posture parameter, `DIRECTION` §8.
+- **The dark-feed horizon hours** — still **unset**. See the PKT-C7 addendum: unset means no auto-alert timing invent. Do not reuse `liquidationMaxAgeSeconds` (or any other existing clock) as that horizon.
 - **Which account funds realised profit**, unchanged and still open from the parent ADR. Freezing does not resolve it; it defers the moment it is asked.
-- Whether a `closing` position may be settled by an operator at an adjudicated price if a feed never returns. That is an external-value-movement carve-out (`DIRECTION` §3) and it is not decided here. **Until it is decided, the answer is no.**
+- Operator settlement of a `closing` position at an adjudicated price: **sealed in the PKT-C7 addendum** (human-only; price + author on the row). The 2026-08-07 “until decided, no” sentence is superseded for that question only.
+
+---
+
+## Addendum — PKT-C7 (2026-08-15): human-only frozen settlement; horizon hours unset
+
+**Status:** **Accepted — 2026-08-15.** Seals packet PKT-C7. Does not rewrite the freeze / `closing` decision above. **Decision owner:** repo owner. **Written by:** Denon.
+**Supersedes:** the PKT-C7 paragraph in [`2026-08-14-remaining-p0-money-law.md`](2026-08-14-remaining-p0-money-law.md) insofar as it reused `MarkPolicy.liquidationMaxAgeSeconds` as the dark-feed horizon or as a gate before operator adjudication. That reuse invented a duration the owner never named.
+
+### The two rules (operator settlement)
+
+A `closing` / frozen position **may** be settled by an operator at an adjudicated price if a feed never returns (`DIRECTION` §3 carve-out), and **only** under both of these:
+
+1. **A human adjudicates. Never a job.** Ticks, schedulers, and workers must not settle frozen positions. Ordinary settlement at the first **usable feed mark** (parent ADR item 4) is unchanged; that is a mark return, not an adjudicated price.
+2. **The adjudicated price and its author are recorded on the row.** Missing either field is a refuse. Price on the wire is a decimal string, never a `number`. A caller-supplied mark on the close request is still forbidden; this is operator-authored, not trader-authored.
+
+### Horizon hours remain unset
+
+**How many hours a market may sit dark before frozen positions become an auto-timed operator alert is unset.** Unset means **no auto-alert timing invent.** Agents must not pick an N-hour constant, a default, a silent timer, or an existing policy clock (`liquidationMaxAgeSeconds` included) as that horizon. Alert posture: **refuse** auto-alert scheduling until an owner names the hours. Frozen positions remaining after a dark feed stay an operator problem the parent ADR already named — they do not become a timed job because nobody wrote a number.
+
+### What this still does not change
+
+- The freeze decision, the `closing` state, and the eight parent done-bar items.
+- Profit still cannot be paid on an unusable mark.
+- No `svc-trade` craft in this seal. Implementation follows these rules; it does not invent the horizon.
