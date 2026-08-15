@@ -17,6 +17,8 @@ import {
   MM_SEED_ORDER_TYPE,
   MM_SEED_TIF,
   mmSeedJobsArmed,
+  mmSeedPlacePathArmed,
+  parseMmSeedEnabled,
   seedSubmitShape,
   seedVolumeCountsTowardUserStats,
 } from './seed-honesty.js';
@@ -115,6 +117,8 @@ describe('D26-P1-T10 seed/mm honesty contract', () => {
   });
 
   it('SD-4: kill-switch — disabled or empty targets leave jobs unarmed', () => {
+    expect(mmSeedJobsArmed(parseMmSeedEnabled(undefined), 3)).toBe(false);
+    expect(mmSeedPlacePathArmed(parseMmSeedEnabled(undefined))).toBe(false);
     expect(mmSeedJobsArmed(false, 3)).toBe(false);
     expect(mmSeedJobsArmed(true, 0)).toBe(false);
     expect(mmSeedJobsArmed(true, 2)).toBe(true);
@@ -125,7 +129,7 @@ describe('D26-P1-T10 seed/mm honesty contract', () => {
       midSource: () => '100',
       marketFor: () => ACTIVE_SPOT,
       config: {
-        enabled: false,
+        enabled: parseMmSeedEnabled(undefined),
         intervalMs: 1000,
         halfSpreadBps: 10,
         stepBps: 10,
