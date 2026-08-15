@@ -30,12 +30,12 @@ These are the doors the shell may read. This spec does **not** change them.
 
 ### Matching — engine book (not the listing)
 
-| Door | File | Honest empty / dark |
-| ---- | ---- | ------------------- |
-| `GET /markets/:marketId/depth?limit=` | [`services/svc-matching/src/router.ts`](../../services/svc-matching/src/router.ts) | **404** `MarketNotFound` when the engine holds no book. Reading must not allocate. A 200 with `bids: []` / `asks: []` is only for a book that **exists** and is empty. |
-| `GET /markets` | same | Journal markets only — not `trade.markets` listing authority. |
-| `GET /ready` | [`services/svc-matching/src/index.ts`](../../services/svc-matching/src/index.ts) | **503** when `MATCHING_ENGINE_ENABLED` is off (`matching.engine flag is off`). |
-| Writes when disabled | [`services/svc-matching/src/engine/engine.ts`](../../services/svc-matching/src/engine/engine.ts) | Submit refuses when the engine flag is off. Depth **reads** still go through `existingBook` — do not treat a still-served empty ladder as “the venue is live” if `/ready` is 503. |
+| Door                                  | File                                                                                             | Honest empty / dark                                                                                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /markets/:marketId/depth?limit=` | [`services/svc-matching/src/router.ts`](../../services/svc-matching/src/router.ts)               | **404** `MarketNotFound` when the engine holds no book. Reading must not allocate. A 200 with `bids: []` / `asks: []` is only for a book that **exists** and is empty.            |
+| `GET /markets`                        | same                                                                                             | Journal markets only — not `trade.markets` listing authority.                                                                                                                     |
+| `GET /ready`                          | [`services/svc-matching/src/index.ts`](../../services/svc-matching/src/index.ts)                 | **503** when `MATCHING_ENGINE_ENABLED` is off (`matching.engine flag is off`).                                                                                                    |
+| Writes when disabled                  | [`services/svc-matching/src/engine/engine.ts`](../../services/svc-matching/src/engine/engine.ts) | Submit refuses when the engine flag is off. Depth **reads** still go through `existingBook` — do not treat a still-served empty ladder as “the venue is live” if `/ready` is 503. |
 
 Contract text: [`services/svc-matching/README.md`](../../services/svc-matching/README.md) (depth is public because a price is not a secret).
 
@@ -45,28 +45,28 @@ Edge does **not** proxy matching. Halt new risk via the **trade** module, not a 
 
 Do **not** edit this service in the D26-P4-06 ship. Named so the shell knows which contract it is already on:
 
-| Door | File | Honest empty / dark |
-| ---- | ---- | ------------------- |
-| `GET /api/v1/markets` | [`services/svc-trade/src/public-rest.ts`](../../services/svc-trade/src/public-rest.ts) | Listing authority. A listed market that has never traded is still listed. `orderable` is the kill-switch the place path already enforces — listed ≠ orderable. |
-| `GET /api/v1/orderbook/:symbol` | same | Matching **404** (no book) is mapped to `{ bids: [], asks: [], sequence: 0 }` in [`services/svc-trade/src/spot/matching-client.ts`](../../services/svc-trade/src/spot/matching-client.ts) — **200 empty**, not 502. Engine **down / 5xx** is `MatchingUnavailableError` → **502**. Empty ≠ down. |
-| `GET /api/v1/ticker/:symbol` | same | BBO from depth; `bid`/`ask` **null** when both sides empty. Last from public tape or **null**. 24h high/low/vwap/volume stay **null** until a real windowed job exists — `presentTicker` must not invent stats. |
-| `GET /api/v1/tickers` | same | Bulk path: a missing book must not 502 the whole map; that market still appears with empty BBO. |
-| `GET /api/v1/trades/:symbol` | same | **200 + `[]`** when nothing has printed. Seed volume is excluded from this tape (SD-3). |
-| `GET /api/v1/ohlcv/:symbol` | same | Candles from the **real taker fill tape** only. Empty chart when never traded — not a fabricated candle. |
-| `GET /api/v1/funding-rate/:symbol` | same | Published rate or refuse. Never invent zero. |
+| Door                               | File                                                                                   | Honest empty / dark                                                                                                                                                                                                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /api/v1/markets`              | [`services/svc-trade/src/public-rest.ts`](../../services/svc-trade/src/public-rest.ts) | Listing authority. A listed market that has never traded is still listed. `orderable` is the kill-switch the place path already enforces — listed ≠ orderable.                                                                                                                                   |
+| `GET /api/v1/orderbook/:symbol`    | same                                                                                   | Matching **404** (no book) is mapped to `{ bids: [], asks: [], sequence: 0 }` in [`services/svc-trade/src/spot/matching-client.ts`](../../services/svc-trade/src/spot/matching-client.ts) — **200 empty**, not 502. Engine **down / 5xx** is `MatchingUnavailableError` → **502**. Empty ≠ down. |
+| `GET /api/v1/ticker/:symbol`       | same                                                                                   | BBO from depth; `bid`/`ask` **null** when both sides empty. Last from public tape or **null**. 24h high/low/vwap/volume stay **null** until a real windowed job exists — `presentTicker` must not invent stats.                                                                                  |
+| `GET /api/v1/tickers`              | same                                                                                   | Bulk path: a missing book must not 502 the whole map; that market still appears with empty BBO.                                                                                                                                                                                                  |
+| `GET /api/v1/trades/:symbol`       | same                                                                                   | **200 + `[]`** when nothing has printed. Seed volume is excluded from this tape (SD-3).                                                                                                                                                                                                          |
+| `GET /api/v1/ohlcv/:symbol`        | same                                                                                   | Candles from the **real taker fill tape** only. Empty chart when never traded — not a fabricated candle.                                                                                                                                                                                         |
+| `GET /api/v1/funding-rate/:symbol` | same                                                                                   | Published rate or refuse. Never invent zero.                                                                                                                                                                                                                                                     |
 
 Proofs (do not dual-edit): `public-rest.test.ts`, `promise-falsify-public-doors.test.ts`.
 
 ### WS — shell live feed (empty ≠ zero)
 
-| Door | File | Honest empty / dark |
-| ---- | ---- | ------------------- |
-| `GET /markets/:marketId/depth` | [`services/svc-ws/src/routes.ts`](../../services/svc-ws/src/routes.ts) | Unlisted → **404** `MarketNotFound`. Listed with no resting depth → **404** `NoBook` — **never** `200` with `bids/asks []`. Kill-switch → **503**. Matching 5xx → **502** `UpstreamUnavailable`. |
-| `GET /markets/:marketId/trades` | same | Listed with no prints → **404** `NoTape` — never `200 { trades: [] }`. |
-| Depth poll | [`services/svc-ws/src/depth/source.ts`](../../services/svc-ws/src/depth/source.ts) | Matching 404 → `DepthNoBookError`. Callers must not coerce that into `{ sequence: 0, bids: [], asks: [] }`. |
-| Socket | [`services/svc-ws/README.md`](../../services/svc-ws/README.md) · `empty-book-honesty.test.ts` · `empty-trades-honesty.test.ts` | Socket stays **open with no snapshot** until matching has resting depth. First real quote is a **snapshot**, not a delta off a fake sequence 0. No invented prints or mids. |
-| `GET /ready` | `routes.ts` | **503** when `WS_GATEWAY_ENABLED` is off. Bus down ≠ not ready (depth still works). |
-| Kill-switch | [`services/svc-ws/src/ws/gateway.ts`](../../services/svc-ws/src/ws/gateway.ts) | Upgrade **503**; hub closes sockets with a reason. svc-ws is **not** behind svc-edge (`socket.ws-behind-the-edge`) — flipping edge `ws` does not stop the browser socket. |
+| Door                            | File                                                                                                                           | Honest empty / dark                                                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /markets/:marketId/depth`  | [`services/svc-ws/src/routes.ts`](../../services/svc-ws/src/routes.ts)                                                         | Unlisted → **404** `MarketNotFound`. Listed with no resting depth → **404** `NoBook` — **never** `200` with `bids/asks []`. Kill-switch → **503**. Matching 5xx → **502** `UpstreamUnavailable`. |
+| `GET /markets/:marketId/trades` | same                                                                                                                           | Listed with no prints → **404** `NoTape` — never `200 { trades: [] }`.                                                                                                                           |
+| Depth poll                      | [`services/svc-ws/src/depth/source.ts`](../../services/svc-ws/src/depth/source.ts)                                             | Matching 404 → `DepthNoBookError`. Callers must not coerce that into `{ sequence: 0, bids: [], asks: [] }`.                                                                                      |
+| Socket                          | [`services/svc-ws/README.md`](../../services/svc-ws/README.md) · `empty-book-honesty.test.ts` · `empty-trades-honesty.test.ts` | Socket stays **open with no snapshot** until matching has resting depth. First real quote is a **snapshot**, not a delta off a fake sequence 0. No invented prints or mids.                      |
+| `GET /ready`                    | `routes.ts`                                                                                                                    | **503** when `WS_GATEWAY_ENABLED` is off. Bus down ≠ not ready (depth still works).                                                                                                              |
+| Kill-switch                     | [`services/svc-ws/src/ws/gateway.ts`](../../services/svc-ws/src/ws/gateway.ts)                                                 | Upgrade **503**; hub closes sockets with a reason. svc-ws is **not** behind svc-edge (`socket.ws-behind-the-edge`) — flipping edge `ws` does not stop the browser socket.                        |
 
 Listing union: `TRADE_URL` `GET /api/v1/markets` is authority; matching `GET /markets` is unioned. Engine unreachable → listed markets stay subscribable **without a fabricated book**. Both unreachable → keep last known list; never report zero markets. Law: [`docs/adr/2026-08-04-market-id-authority.md`](../adr/2026-08-04-market-id-authority.md). WS later tightened “empty ≠ zero” on the **socket** (404 / no snapshot) so a client cannot treat absence as a priced empty ladder.
 
@@ -74,17 +74,17 @@ Listing union: `TRADE_URL` `GET /api/v1/markets` is authority; matching `GET /ma
 
 ## 2 · What the shell MAY show
 
-| Condition | May show | Must not show |
-| --------- | -------- | ------------- |
+| Condition                                         | May show                                                                                                                               | Must not show                                                                                   |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | Listed, never traded (matching 404 / WS `NoBook`) | Market row from listing. Copy equivalent to **No bids / No asks** or **no book yet**. REST orderbook may be a 200 empty ladder (CCXT). | Spinner-as-error, fabricated rungs, invented last/mid, “market closed” unless schedule says so. |
-| Engine has a book and both sides empty | Same as empty book. | A mid. |
-| Matching / trade hop **5xx or unreachable** | Outage / retry / last **labelled stale** if the client already held a snapshot. | Coerce to empty book. That lie is exactly the 404-vs-5xx rule. |
-| Unknown id | Refuse by name (`unknown market` / CCXT bad symbol). | Widen id pattern to accept `BTC/USDT` as a market id. |
-| Matching kill-switch (`/ready` 503) | Dark / unavailable. | Quiet market with a live-looking empty ladder. |
-| Trade spot/seed/algo kill-switch | Listed, **not orderable**. Depth/tape still only what matching actually holds. | Seed the book to look open. |
-| WS gateway kill-switch | No live stream (503). REST may still answer. | Invent a last snapshot. |
-| Dark venue / desynced mark feed | **null** mark (existing venue/OTC/futures ports). | Invented mid from last print, dust, or house quotes. |
-| Seed / mm resting (ops ON, flagged `seeded`) | Resting size that is **actually in the engine**, if the operator has armed seed. | Seed **fills** on the public tape; manufactured crosses; unflagged seed as organic volume. |
+| Engine has a book and both sides empty            | Same as empty book.                                                                                                                    | A mid.                                                                                          |
+| Matching / trade hop **5xx or unreachable**       | Outage / retry / last **labelled stale** if the client already held a snapshot.                                                        | Coerce to empty book. That lie is exactly the 404-vs-5xx rule.                                  |
+| Unknown id                                        | Refuse by name (`unknown market` / CCXT bad symbol).                                                                                   | Widen id pattern to accept `BTC/USDT` as a market id.                                           |
+| Matching kill-switch (`/ready` 503)               | Dark / unavailable.                                                                                                                    | Quiet market with a live-looking empty ladder.                                                  |
+| Trade spot/seed/algo kill-switch                  | Listed, **not orderable**. Depth/tape still only what matching actually holds.                                                         | Seed the book to look open.                                                                     |
+| WS gateway kill-switch                            | No live stream (503). REST may still answer.                                                                                           | Invent a last snapshot.                                                                         |
+| Dark venue / desynced mark feed                   | **null** mark (existing venue/OTC/futures ports).                                                                                      | Invented mid from last print, dust, or house quotes.                                            |
+| Seed / mm resting (ops ON, flagged `seeded`)      | Resting size that is **actually in the engine**, if the operator has armed seed.                                                       | Seed **fills** on the public tape; manufactured crosses; unflagged seed as organic volume.      |
 
 Marks that move money stay refuse-closed on dust / one-sided / internal quotes ([`docs/adr/2026-08-13-mark-dust-floor.md`](../adr/2026-08-13-mark-dust-floor.md), P0-01 Q3). The desk must not display a payout-grade mid the engine itself refused.
 
@@ -104,12 +104,12 @@ Internal market-making on **our** book stays blocked (D26-P0-01 Q1). `trade.mm-b
 
 ## 4 · SLO statement (honesty)
 
-| Claim | Status |
-| ----- | ------ |
-| Empty book / no tape is distinguishable from engine-down | **In force** on the doors in §1. |
-| Seed volume is not user volume | **In force** (T10 / SD-3). |
-| Mid never invented | **In force** (venue mark, OTC, MM seed mid, D-S-18 capture hole ≠ quiet market). |
-| Depth/tape **latency** SLO (p50/p99, staleness budget) | **Does not exist.** No dashboard, no probe, no published number. Refuse to invent one. Residual: measure later, then write the number. |
+| Claim                                                    | Status                                                                                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Empty book / no tape is distinguishable from engine-down | **In force** on the doors in §1.                                                                                                       |
+| Seed volume is not user volume                           | **In force** (T10 / SD-3).                                                                                                             |
+| Mid never invented                                       | **In force** (venue mark, OTC, MM seed mid, D-S-18 capture hole ≠ quiet market).                                                       |
+| Depth/tape **latency** SLO (p50/p99, staleness budget)   | **Does not exist.** No dashboard, no probe, no published number. Refuse to invent one. Residual: measure later, then write the number. |
 
 D-S-18 ([`docs/adr/2026-08-04-predict-quant-connect-law.md`](../adr/2026-08-04-predict-quant-connect-law.md)): a venue that is not connected is **absent in the record, never an empty book**. Same shape: a hole in capture or a dark socket is a hole, not a quiet market.
 
