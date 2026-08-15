@@ -381,8 +381,8 @@ services:
       # line still has NO compose default — a host that blanks .env keeps
       # futures profit refused; a typed-wrong pot still fails boot.
       TRADE_FUTURES_PROFIT_SOURCE: ${TRADE_FUTURES_PROFIT_SOURCE:-}
-      # Maximum leverage on a futures open. Empty = refuse opens (no invented 10x).
-      # DIRECTION §8 item 8. Owner names the decimal; compose does not.
+      # Maximum leverage on a futures open. Empty = DIRECTION §1 10× in code.
+      # Set only to tighten (≤ 10). Compose does not pin a raise.
       TRADE_FUTURES_MAX_LEVERAGE: ${TRADE_FUTURES_MAX_LEVERAGE:-}
       # D26-P0-02 copy fee-share + D26-P0-15 geo — pass-through, no compose default.
       # Published JSON lives in `.env.example`. Blank host still refuse-closed.

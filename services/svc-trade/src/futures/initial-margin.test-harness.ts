@@ -1,8 +1,7 @@
 /**
- * Test-only leverage cap. Not owner §8. Not imported by production modules.
- *
- * Live host leaves TRADE_FUTURES_MAX_LEVERAGE empty until the owner names it.
- * These values exist so mechanism tests have a coherent ceiling.
+ * Test inject of the DIRECTION §1 cap. Production ships the same 10× in
+ * `DEFAULT_MAX_LEVERAGE` — this file exists so mechanism tests can name it
+ * without reading env.
  */
 import { parseAmount, type Amount } from '@intafaced/ledger-client';
 
