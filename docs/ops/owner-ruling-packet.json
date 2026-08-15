@@ -132,13 +132,14 @@
       "status": "sealed",
       "kind": "product_ruling",
       "title": "Listings / treasury / house commission law",
-      "blocks": ["market.commerce"],
-      "primaryDoc": "docs/adr/2026-08-13-house-commission-authority.md",
+      "blocks": ["market.commerce rate invent"],
+      "unblocked": ["market.commerce refuse-blank mechanism"],
+      "primaryDoc": "docs/adr/2026-08-15-house-commission-refuse-blank.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-10--listings--treasury--house-commission-law",
       "related": ["D26-P0-02"],
       "answerShape": "commission_authority_plus_refuse_blank",
       "priority": 3,
-      "notes": "2026-08-13 seal: blank MARKET_HOUSE_COMMISSION_BPS = market.commission_not_configured. P0-02 2026-08-13: magnitude stays blank (launch-closed). Explicit 0 only if owner later wants a free-cut."
+      "notes": "2026-08-15: blank MARKET_HOUSE_COMMISSION_BPS (or successor authority) refuses market.commission_not_configured. 0 only if owner publishes 0 (P0-02). This row does not invent free commission. Tip tracker market.commerce already refuse-blank. #1790 mechanism stands; magnitudes remain P0-02."
     },
     {
       "id": "D26-P0-11",
