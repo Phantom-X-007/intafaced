@@ -1161,16 +1161,14 @@ export const FEATURES = [
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
-    status: 'ready',
+    status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
     requires: ['services/svc-agents/src/support-agent', 'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts'],
     note:
-      '**D26-P1-O3 2026-08-15 (desk vs agent split):** this row is the assist surface, not the desk and not a production KB plane. ' +
-      'Unstamp `done` — Stage-1/A2 code on tip is not live ops.support KB grounding in a production env. Residual: live KB+account-state env (Class X credentials). Do not edit svc-agents on this mountain (open agents PRs). ' +
-      '**D26-P1-A2 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
-      'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
-      'No packages/i18n.',
+      '**D26-P1-A2 2026-08-15:** KB-dark / missing catalog refuses (`kb_empty`, `kb_plane_ungrounded`) or escalates; money denylist unchanged; fixture articles cannot compose an ok reply. ' +
+      'STILL NOT done: live ops.support KB plane in production env. Not tracker done until grounded env. ' +
+      '**D26-P1-O3 desk vs agent split:** this row is the assist surface, not the desk and not a production KB plane. Residual: live KB+account-state env (Class X credentials).',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',

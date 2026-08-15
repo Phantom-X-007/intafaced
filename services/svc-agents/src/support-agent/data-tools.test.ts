@@ -66,6 +66,14 @@ describe('support Stage-2 data tools — nothing is invented', () => {
     });
   });
 
+  it('a dark KB plane refuses even when article fixtures are supplied', async () => {
+    expect(await call({ kbPlane: 'dark' })).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_empty',
+      userMessageKey: 'agents.support.unavailable',
+    });
+  });
+
   it('blank tier law refuses closed — no default grant', async () => {
     expect(await call({ tierLaw: null })).toMatchObject({ reason: 'tier_law_blank', userMessageKey: 'agents.support.tier_closed' });
     expect(await call({ userTier: '' })).toMatchObject({ reason: 'tier_not_granted' });

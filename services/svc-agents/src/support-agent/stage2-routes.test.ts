@@ -169,6 +169,7 @@ describe('support Stage-2 routes', () => {
       await caller().support.answerOrEscalate({
         tool: 'support.kb.search',
         plane: 'live',
+        kbPlane: 'live',
         userTier: 'free',
         law,
         articles,
@@ -177,7 +178,7 @@ describe('support Stage-2 routes', () => {
   });
 
   it('answerOrEscalate sends an empty KB, a dark desk and a money ask to a person', async () => {
-    const base = { tool: 'support.kb.search' as const, plane: 'live' as const, userTier: 'free', law };
+    const base = { tool: 'support.kb.search' as const, plane: 'live' as const, kbPlane: 'live' as const, userTier: 'free', law };
     expect(
       await caller(stubDeps(createFixtureSupportDesk({ articles: [] }))).support.answerOrEscalate({ ...base, articles: [] }),
     ).toMatchObject({
@@ -189,5 +190,17 @@ describe('support Stage-2 routes', () => {
     expect(await caller().support.answerOrEscalate({ ...base, articles, moneyRequest: true })).toMatchObject({
       reason: 'money_request',
     });
+  });
+
+  it('answerOrEscalate never answers from fixture articles when the KB plane is omitted (dark)', async () => {
+    const result = await caller().support.answerOrEscalate({
+      tool: 'support.kb.search',
+      plane: 'live',
+      userTier: 'free',
+      law,
+      articles,
+    });
+    expect(result.status).not.toBe('answer');
+    expect(result).toMatchObject({ status: 'escalate', reason: 'desk_refused' });
   });
 });

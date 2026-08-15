@@ -114,6 +114,20 @@ describe('support.runSession route', () => {
     expect(result.caseFile.reason).toBe('money_request');
   });
 
+  it('refuses fixture KB articles when no catalog is published — never a composed ok', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .support.runSession({ plane: 'live', userTier: 'free', law, asks: [ask] });
+
+    expect(result.status).not.toBe('ok');
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
   it('refuses when nothing was asked — not a live KB plane', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
@@ -130,7 +144,19 @@ describe('support.runSession route', () => {
   it('live without a desk port refuses no_live_kb and bills nothing', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
-      .support.runSession({ plane: 'live', userTier: 'free', law, asks: [ask] });
+      .support.runSession({
+        plane: 'live',
+        userTier: 'free',
+        law,
+        kbCatalog: [
+          {
+            id: 'support.kb.withdrawal_hold',
+            titleKey: 'support.kb.withdrawal_hold.title',
+            bodyKey: 'support.kb.withdrawal_hold.body',
+          },
+        ],
+        asks: [ask],
+      });
 
     expect(result).toMatchObject({
       status: 'refuse',
