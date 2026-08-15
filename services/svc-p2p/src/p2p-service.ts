@@ -45,6 +45,7 @@ import {
   type XpPolicy,
 } from './reputation.js';
 import { InstrumentError, methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
 
@@ -611,7 +612,7 @@ export class P2pService {
     // refuse at take, honestly — breaking live offers to close a hole would
     // cost makers real liquidity for a fix they did not ask for.
     if (!Array.isArray(input.methods) || input.methods.length === 0) {
-      throw new PricingError('An offer must declare at least one payment method it accepts', 'p2p.offer_methods_required');
+      throw new PricingError(resolveP2pCopy(P2P_COPY.offerMethodsRequired), 'p2p.offer_methods_required');
     }
 
     /**
@@ -627,10 +628,7 @@ export class P2pService {
      */
     const registered = await this.instruments.enabledMethodKeys();
     if (missingSellDestinations(input.methods, registered).length > 0) {
-      throw new InstrumentError(
-        'No payment method is registered — an operator must register its field requirements first',
-        'p2p.instrument_method_unknown',
-      );
+      throw new InstrumentError(resolveP2pCopy(P2P_COPY.methodUnknown), 'p2p.instrument_method_unknown');
     }
 
     /**
@@ -645,10 +643,7 @@ export class P2pService {
       const live = await this.instruments.liveMethodKeys(input.makerId, fiatCurrency);
       const missing = missingSellDestinations(input.methods, live);
       if (missing.length > 0) {
-        throw new PricingError(
-          'A sell offer can only list payment methods you have an active destination for in this currency. Register the destination first, then list the method.',
-          'p2p.offer_method_no_destination',
-        );
+        throw new PricingError(resolveP2pCopy(P2P_COPY.offerMethodNoDestination), 'p2p.offer_method_no_destination');
       }
     }
 

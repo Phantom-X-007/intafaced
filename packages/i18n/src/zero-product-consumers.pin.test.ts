@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
  *   · `svc-pay` — payer-visible hosted checkout copy (not a product SPA)
  *   · `svc-ws` — close/error reason keys on the socket path (not a keyed UI)
  *   · `apps/admin` — operator console status / kill-switch / banner copy
+ *   · `svc-p2p` — offer/instrument refuse copy (wire codes, not a keyed UI)
  *
  * Other product apps and services must not depend on the package until they
  * key screens in the same PR. Do not loosen the scan to stay green. Do not
@@ -27,7 +28,7 @@ const IMPORT_RE = /['"]@intafaced\/i18n(?:\/[^'"]*)?['"]/;
 /** Product UI + product services. Allowlisted dirs already resolve catalog keys. */
 const PRODUCT_ROOTS = ['apps', 'services'] as const;
 const ALLOWED_APP_DIRS = new Set(['admin']);
-const ALLOWED_SERVICE_DIRS = new Set(['svc-notify', 'svc-pay', 'svc-ws']);
+const ALLOWED_SERVICE_DIRS = new Set(['svc-notify', 'svc-pay', 'svc-ws', 'svc-p2p']);
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', '.git']);
 const SOURCE_EXT = /\.(?:[cm]?[jt]sx?|vue|json)$/;
@@ -84,6 +85,7 @@ describe('@intafaced/i18n — zero product consumers until surfaces key it', () 
     expect(WORKSPACES.some((w) => w.name === 'services/svc-notify')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-pay')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-ws')).toBe(false);
+    expect(WORKSPACES.some((w) => w.name === 'services/svc-p2p')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'apps/admin')).toBe(false);
     expect(statSync(join(REPO_ROOT, 'apps', 'admin', 'package.json')).isFile()).toBe(true);
   });

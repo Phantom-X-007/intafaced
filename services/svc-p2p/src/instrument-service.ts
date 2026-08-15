@@ -16,6 +16,7 @@ import {
   type MethodSchema,
 } from './instruments.js';
 import { recordSwallowed, withSpan } from './tracing.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 
 /**
  * PAYMENT INSTRUMENTS — storage, disclosure, and the record of both.
@@ -320,10 +321,7 @@ export class InstrumentService {
       // that turns out to be unpayable when a buyer tries. Empty registry uses
       // the same code (`p2p.instrument_method_unknown`) so a missing catalog
       // cannot look like a rail the seller merely has not filled in yet.
-      throw new InstrumentError(
-        `No payment method "${methodId}" is registered for ${country} — an operator must register its field requirements first`,
-        'p2p.instrument_method_unknown',
-      );
+      throw emptyRegistry();
     }
     if (!schema.enabled) {
       throw new InstrumentError(`Payment method "${methodId}" is not currently accepted in ${country}`, 'p2p.instrument_method_disabled');
@@ -1071,10 +1069,7 @@ function toSchema(row: SchemaRow): MethodSchema {
  * information about someone else's account.
  */
 function emptyRegistry(): InstrumentError {
-  return new InstrumentError(
-    'No payment method is registered — an operator must register its field requirements first',
-    'p2p.instrument_method_unknown',
-  );
+  return new InstrumentError(resolveP2pCopy(P2P_COPY.methodUnknown), 'p2p.instrument_method_unknown');
 }
 
 function notFound(id: string): InstrumentError {
