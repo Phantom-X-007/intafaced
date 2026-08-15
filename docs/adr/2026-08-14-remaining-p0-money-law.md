@@ -58,7 +58,7 @@ Until Shehzad lands a verifier that meets this bar, the product surface stays a 
 
 > **Raise math is refuse-closed until Nitro publishes named params in an authority store. On-chain implement is Shehzad. Agents never invent caps, vest cliffs, or stake-tier allocations.**
 
-Named params (when published — not invented here): raise cap, per-tier allocation, vest start/cliff/duration, accepted settlement asset. Empty store → typed refuse, not a default curve. Staking _gates_ may exist; they do not imply a live raise.
+**Catalog (2026-08-15):** named params vs sockets live in [`2026-08-15-launchpad-raise-economics-law.md`](2026-08-15-launchpad-raise-economics-law.md). This section’s refuse still binds. Empty store → typed refuse, not a default curve. Staking _gates_ may exist; they do not imply a live raise.
 
 ---
 
