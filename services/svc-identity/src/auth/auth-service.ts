@@ -58,6 +58,11 @@ export class AuthError extends Error {
       | 'auth.not_found'
       /** A KYC record exists but is not in a state an operator can act on. */
       | 'auth.kyc_not_pending'
+      /**
+       * KYC approve/reject tried to write `reviewed_by` from an agent principal
+       * (service caller or API-key token). Approval is an operator action.
+       */
+      | 'auth.kyc_agent_refused'
       /** Step-up asked for on an account with no second factor to step up with. */
       | 'auth.mfa_not_enrolled'
       /** WebAuthn ceremony failed (bad signature, origin, challenge, counter). */
@@ -97,6 +102,17 @@ export class AuthError extends Error {
 }
 
 export type { WebAuthnConfig, StoredWebAuthnCredential };
+
+/**
+ * Pin: `reviewed_by` is an operator name. A service caller (`svc-agents`) or
+ * an API-key principal (`kid`) is an agent, not a compliance operator — refuse
+ * before the UPDATE. Interactive operator sessions omit both.
+ */
+export function assertOperatorKycReview(input: { service?: string | null; kid?: string | null }): void {
+  if (input.service || input.kid) {
+    throw new AuthError('KYC review is an operator action — an agent must never write reviewed_by', 'auth.kyc_agent_refused');
+  }
+}
 
 export type KycTier = 'none' | 'basic' | 'full' | 'institutional';
 export type SubmittableKycTier = Exclude<KycTier, 'none'>;
@@ -1117,7 +1133,14 @@ export class AuthService {
    * Idempotent: approving an already-approved record returns it and re-announces
    * nothing new, because both the event and the XP award carry business keys.
    */
-  async approveKycRecord(input: { recordId: string; reviewerId: string; expiresAt?: Date | null }): Promise<KycRecordView> {
+  async approveKycRecord(input: {
+    recordId: string;
+    reviewerId: string;
+    expiresAt?: Date | null;
+    service?: string | null;
+    kid?: string | null;
+  }): Promise<KycRecordView> {
+    assertOperatorKycReview({ service: input.service, kid: input.kid });
     const outcome = await transaction(this.sql, async (tx) => {
       const rows = await tx<KycRow[]>`
         SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${input.recordId} FOR UPDATE
@@ -1149,7 +1172,13 @@ export class AuthService {
   }
 
   /** Reject a pending record. No tier is granted, nothing is announced. */
-  async rejectKycRecord(input: { recordId: string; reviewerId: string }): Promise<KycRecordView> {
+  async rejectKycRecord(input: {
+    recordId: string;
+    reviewerId: string;
+    service?: string | null;
+    kid?: string | null;
+  }): Promise<KycRecordView> {
+    assertOperatorKycReview({ service: input.service, kid: input.kid });
     return transaction(this.sql, async (tx) => {
       const rows = await tx<KycRow[]>`
         SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${input.recordId} FOR UPDATE

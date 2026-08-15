@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
 import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
-import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
+import { AuthError, assertOperatorKycReview, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import {
@@ -176,6 +176,8 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
     case 'auth.kyc_not_pending':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+    case 'auth.kyc_agent_refused':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.session_invalid':
     case 'auth.session_reused':
       return new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
@@ -749,11 +751,14 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
+            assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
             return presentKyc(
               await auth.approveKycRecord({
                 recordId: input.recordId,
                 reviewerId: ctx.principal.userId,
                 expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+                service: ctx.service,
+                kid: ctx.principal.kid,
               }),
             );
           } catch (err) {
@@ -768,7 +773,15 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            return presentKyc(await auth.rejectKycRecord({ recordId: input.recordId, reviewerId: ctx.principal.userId }));
+            assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
+            return presentKyc(
+              await auth.rejectKycRecord({
+                recordId: input.recordId,
+                reviewerId: ctx.principal.userId,
+                service: ctx.service,
+                kid: ctx.principal.kid,
+              }),
+            );
           } catch (err) {
             throw toTrpcError(err);
           }
