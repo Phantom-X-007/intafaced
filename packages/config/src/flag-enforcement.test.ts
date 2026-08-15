@@ -2,7 +2,18 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FLAG_REGISTRY, NOT_ENFORCED, enforcedFlags, enforcementOf, isEnabled, isEnforced, unenforcedFlags } from './flags.js';
+import {
+  FLAG_REGISTRY,
+  NOT_ENFORCED,
+  WAITLIST_REFERRAL_FLAGS,
+  assertEnabled,
+  enforcedFlags,
+  enforcementOf,
+  FlagDisabledError,
+  isEnabled,
+  isEnforced,
+  unenforcedFlags,
+} from './flags.js';
 
 /**
  * DOES THE REGISTRY'S ENFORCEMENT CLAIM SURVIVE CONTACT WITH THE SERVICES?
@@ -260,5 +271,38 @@ describe('the specific capabilities the audit found flagged off and serving', ()
 
     expect(isEnabled('indexer.ingest', { drop: CURRENT_DROP })).toBe(false);
     expect(enforcementOf('indexer.ingest')).toEqual({ kind: 'service-env', service: 'svc-indexer', envVar: 'INDEXER_INGEST_ENABLED' });
+  });
+});
+
+/**
+ * Pin: waitlist / referral stay refuse-closed when the switch is OFF.
+ * `isEnabled === false` is not enough — `assertEnabled` must throw
+ * `FlagDisabledError`. Do not treat OFF as ready.
+ */
+describe('waitlist / referral stay refuse-closed when OFF', () => {
+  it.each(WAITLIST_REFERRAL_FLAGS)('%s: assertEnabled throws FlagDisabledError when overridden off', (key) => {
+    expect(isEnabled(key, { drop: '0', overrides: { [key]: false } })).toBe(false);
+    expect(() => assertEnabled(key, { drop: '0', overrides: { [key]: false } })).toThrow(FlagDisabledError);
+    expect(() => assertEnabled(key, { drop: 'V', overrides: { [key]: false } })).toThrow(FlagDisabledError);
+  });
+
+  it('waitlist.enabled: env pin off is FlagDisabledError, not silent serve', () => {
+    const ctx = { drop: '0' as const, env: { INTAFACED_FLAG_WAITLIST_ENABLED: 'off' } };
+    expect(isEnabled('waitlist.enabled', ctx)).toBe(false);
+    try {
+      assertEnabled('waitlist.enabled', ctx);
+      expect.unreachable('must refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(FlagDisabledError);
+      const e = err as FlagDisabledError;
+      expect(e.code).toBe('flag.waitlist.enabled.disabled');
+      expect(e.key).toBe('waitlist.enabled');
+    }
+  });
+
+  it('referral.queue: env pin off is FlagDisabledError, not silent serve', () => {
+    const ctx = { drop: '0' as const, env: { INTAFACED_FLAG_REFERRAL_QUEUE: 'off' } };
+    expect(isEnabled('referral.queue', ctx)).toBe(false);
+    expect(() => assertEnabled('referral.queue', ctx)).toThrow(FlagDisabledError);
   });
 });

@@ -401,11 +401,23 @@ export function isEnabled(key: string, ctx: FlagContext): boolean {
 }
 
 /**
+ * Waitlist capture + referral queue — the switch mountain (`infra.drop-flags`).
+ *
+ * Callers must `assertEnabled` these keys. When OFF they are refuse-closed
+ * (`FlagDisabledError`) and `offReadiness` is `unbuilt`, never "ready".
+ * Founding-badge mint is `launch.nft` (chain), not this list.
+ */
+export const WAITLIST_REFERRAL_FLAGS = ['waitlist.enabled', 'referral.queue'] as const;
+
+/**
  * Refuse when the flag is off — the product Done bar for drop phases.
  *
  * `isEnabled` is a read. This is a gate. Waitlist capture, referral queue
  * position, and every other drop-mapped surface call this (or an equivalent
  * service-env check) before doing work; wrong phase → throw, not silent serve.
+ *
+ * OFF is refuse-closed, not ready: a false `isEnabled` without a throw is a
+ * missed gate. `WAITLIST_REFERRAL_FLAGS` pin that contract in tests.
  *
  * Returns void on success so call sites read as a precondition, not a branch.
  */
@@ -541,6 +553,9 @@ export function isCapabilityBuilt(key: string): boolean {
  *   - `overridden`   — explicit or env pin holding it off
  *   - `killed`       — module kill-switch
  *   - `phase-gated`  — drop:null, never opens by clock alone
+ *
+ * Waitlist / referral (`WAITLIST_REFERRAL_FLAGS`) stay `unbuilt` while OFF.
+ * `null` here would mean ON — never treat OFF as ready.
  */
 export type OffReadiness = 'unbuilt' | 'drop-pending' | 'overridden' | 'killed' | 'phase-gated';
 
