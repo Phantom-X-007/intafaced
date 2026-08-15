@@ -1023,6 +1023,32 @@ if (!available) {
       expect(await auth.kycTier(session.userId)).toBe('basic');
     });
 
+    it('refuses an agent principal writing reviewed_by — service or API-key kid', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      await expect(
+        auth.approveKycRecord({
+          recordId: submitted.id,
+          reviewerId: operator.userId,
+          service: 'svc-agents',
+        }),
+      ).rejects.toMatchObject({ code: 'auth.kyc_agent_refused' });
+
+      const second = await auth.submitKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+      await expect(
+        auth.rejectKycRecord({
+          recordId: second.id,
+          reviewerId: operator.userId,
+          kid: 'agent-key',
+        }),
+      ).rejects.toMatchObject({ code: 'auth.kyc_agent_refused' });
+
+      expect(await auth.kycTier(session.userId)).toBe('none');
+      expect((await auth.getKycRecord(submitted.id))?.reviewedBy).toBeNull();
+    });
+
     it('unblocks the custodial matrix rule that was blocking every new account', async () => {
       const session = await register();
       const operator = await register();

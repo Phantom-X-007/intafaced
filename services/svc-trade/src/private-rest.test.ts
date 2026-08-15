@@ -1833,6 +1833,7 @@ describe('private REST — mount boundary + order write path', () => {
         headers: { ...signedHeaders(), 'content-type': 'application/json' },
         payload: { symbol: 'BTC/USDT', leverage: '10', marginMode: 'cross' },
       });
+      expect(res.statusCode).not.toBe(200);
       expect(res.statusCode).toBe(501);
       expect(res.json().code).toBe('NotSupported');
       expect(res.json().intafacedCode).toBe(intafacedCode);

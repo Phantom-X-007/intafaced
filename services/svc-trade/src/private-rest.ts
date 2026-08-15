@@ -23,6 +23,7 @@ import type { MarginCallWire } from './futures/margin-call-transport.js';
 import type { AdlDisclosureWire } from './futures/adl-disclosure.js';
 import type { AdlActionDisclosureWire } from './futures/adl-last-resort.js';
 import { AdlDisclosureError } from './futures/adl-disclosure.js';
+import { refuseArmById } from './ccxt-capability-matrix.js';
 
 /**
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
@@ -941,8 +942,20 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open; live re-leverage not built`, intafacedCode));
     };
 
-  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', 'trade.leverage_unsupported'));
-  app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', 'trade.margin_mode_unsupported'));
+  const setLeverageArm = refuseArmById('setLeverage');
+  const setMarginModeArm = refuseArmById('setMarginMode');
+  if (
+    !setLeverageArm ||
+    !setMarginModeArm ||
+    setLeverageArm.httpStatus !== 501 ||
+    setMarginModeArm.httpStatus !== 501 ||
+    setLeverageArm.ccxtCode !== 'NotSupported' ||
+    setMarginModeArm.ccxtCode !== 'NotSupported'
+  ) {
+    throw new Error('ccxt matrix setLeverage/setMarginMode must stay 501 NotSupported — never invent leverage');
+  }
+  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', setLeverageArm.intafacedCode));
+  app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', setMarginModeArm.intafacedCode));
 
   // ── Create (money path) ───────────────────────────────────────────────────
 

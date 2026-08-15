@@ -1088,6 +1088,24 @@ if (!available) {
     });
 
     /**
+     * Underfunded `loanReserve` must refuse the draw. The reserve is a module
+     * account (hard non-negative); inventing the shortfall would be printing.
+     * Existing product LTV / APR — no invented rates.
+     */
+    it('refuses an underfunded loanReserve draw rather than printing principal', async () => {
+      await fundReserve('USDT', '1000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+
+      await expect(
+        loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }),
+      ).rejects.toMatchObject({ code: 'bank.loan_reserve_underfunded' });
+
+      expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('1000');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+    });
+
+    /**
      * ═══════════════════════════════════════════════════════════════════════════
      * "SAME TERMS" HAS TO INCLUDE WHO IS ASKING
      * ═══════════════════════════════════════════════════════════════════════════
