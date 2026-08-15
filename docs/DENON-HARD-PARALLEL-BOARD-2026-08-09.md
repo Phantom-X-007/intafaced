@@ -290,7 +290,7 @@ Backend product-complete only — **not** shell craft.
 | **D26-P4-03** | GitHub admin rails (optional)                  | Branch protection / CODEOWNERS only if you want rails |
 | **D26-P4-04** | Issue board reconcile                          | Close shipped stubs; link issue→ADR→tracker           |
 | **D26-P4-05** | **Private positions stream payload freeze**    | Event payloads frozen → agents wire WS                |
-| **D26-P4-06** | **Depth/tape product SLO** (honest empty book) | Spec for shell client; no fake depth                  |
+| **D26-P4-06** | **Depth/tape product SLO** (honest empty book) | Spec for shell client; no fake depth — [`docs/DEPTH-TAPE-SLO.md`](DEPTH-TAPE-SLO.md) |
 | **D26-P4-07** | **Vendor Upstream money map seal**             | What stays Java vs TS forever                         |
 | **D26-P4-08** | **features.mjs thrash protocol**               | Batch rule agents must follow                         |
 | **D26-P4-09** | **Tracker honesty pass on trade/pay/bank**     | Notes match tip; no ghost Done                        |
