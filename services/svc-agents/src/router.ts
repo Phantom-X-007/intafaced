@@ -36,7 +36,7 @@ import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
 import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
 import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
-import { envCoachGrounding, runCoachSession } from './coach/grounded-session.js';
+import { envCoachGrounding, runCoachSession, type CoachGrounding } from './coach/grounded-session.js';
 import { envGrowthWarehouse, proposeGrowthCampaign } from './growth/campaign-proposal.js';
 
 /**
@@ -266,10 +266,12 @@ export interface AgentsRouterDeps {
   readonly gateway: ModelGateway;
   readonly meter: UsageMeter;
   readonly feeAssetId: string;
+  /** Academy spine (or test inject). Absent → `envCoachGrounding()`. */
+  readonly loadCoachGrounding?: () => Promise<CoachGrounding>;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const { runtime, gateway, meter, feeAssetId } = deps;
+  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding } = deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -3153,9 +3155,10 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           ]),
         )
-        .query(({ input }) => {
+        .query(async ({ input }) => {
+          const grounding = (await loadCoachGrounding?.()) ?? envCoachGrounding();
           const result = runCoachSession({
-            grounding: envCoachGrounding(),
+            grounding,
             ...(input.ask === undefined ? {} : { ask: input.ask }),
             ...(input.requestedSlug === undefined ? {} : { requestedSlug: input.requestedSlug }),
             ...(input.includePositions === undefined ? {} : { includePositions: input.includePositions }),

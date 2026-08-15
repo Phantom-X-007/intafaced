@@ -52,6 +52,10 @@ const bool = z
   .union([z.boolean(), z.string()])
   .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
 
+/** Compose interpolates unset optional URLs to "". Blank is absent, not an invalid URL. */
+const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), inner);
+
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // Only mounting services merge this — a service reached solely through the
 // gateway has no edge header to verify, and demanding the secret there would
@@ -66,6 +70,13 @@ const schema = serviceEnvSchema
 
       /** svc-ledger's internal address. Metered usage is billed through it. */
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
+
+      /**
+       * Academy base URL for coach curriculum grounding
+       * (`GET /internal/curriculum`). Unset / blank → envCoachGrounding() empty
+       * catalog (chatbot refuse). Set → S2S fetch; 401/dark academy still empty.
+       */
+      ACADEMY_URL: blankAsAbsent(z.string().url().optional()),
 
       /** Asset premium agent tiers are billed in (§8.2). */
       AGENTS_FEE_ASSET_ID: z.string().default('IFC'),

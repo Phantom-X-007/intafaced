@@ -15,6 +15,7 @@ import { AgentRuntime } from './runtime.js';
 import { registerProductAgentsAtBoot } from './fleet/boot-register.js';
 import { fleetMatrixBoardCard } from './fleet/matrix.js';
 import { agentsReadiness } from './readiness.js';
+import { createAcademyCurriculumSource } from './coach/academy-curriculum-source.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -116,7 +117,16 @@ const runtime = new AgentRuntime(sql, gateway, meter, bus, {
 // agent_definitions; a process with zero rows makes every runSession 404.
 const bootAgents = await registerProductAgentsAtBoot(runtime);
 
-const appRouter = createAgentsRouter({ runtime, gateway, meter, feeAssetId: env.AGENTS_FEE_ASSET_ID });
+const academyUrl = env.ACADEMY_URL;
+const loadCoachGrounding = academyUrl ? () => createAcademyCurriculumSource(academyUrl, env.INTERNAL_SERVICE_SECRET).load() : undefined;
+
+const appRouter = createAgentsRouter({
+  runtime,
+  gateway,
+  meter,
+  feeAssetId: env.AGENTS_FEE_ASSET_ID,
+  ...(loadCoachGrounding ? { loadCoachGrounding } : {}),
+});
 
 // Built before the listener opens: a service that cannot authenticate the edge
 // must fail to start, not start and serve every request as anonymous.
