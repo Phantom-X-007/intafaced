@@ -239,6 +239,7 @@ AGENTS_PROVIDER=mock                     # 'mock' (default) or 'upstream'
 AGENTS_FEE_ASSET_ID=IFC
 AGENTS_USAGE_WINDOW_MINUTES=60           # must divide 1440
 AGENTS_METERING_ENABLED=true
+ACADEMY_URL=http://svc-academy:4016      # coach spine; blank = empty catalog refuse
 
 # Only when AGENTS_PROVIDER=upstream. Secrets come from vault in prod (§9).
 AGENTS_UPSTREAM_BASE_URL=https://…

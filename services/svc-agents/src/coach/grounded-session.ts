@@ -7,8 +7,9 @@
  * writes lesson bodies, and never references the user's positions — that
  * ruling is owner-only (education vs regulated advice).
  *
- * Production grounding is empty + licensedLibraryImported:false until a
- * read-port from academy is wired. Tests inject a spine seam.
+ * Production can load academy over S2S (`ACADEMY_URL` →
+ * `createAcademyCurriculumSource`). `envCoachGrounding()` is still the empty
+ * default (unset URL, tests, fail-closed). Tests inject a spine seam.
  */
 
 import type { CopyKey } from '../copy.js';
@@ -62,7 +63,7 @@ export type CoachSessionInput = {
   readonly includePositions?: boolean;
   /** Asking the agent to recommend a trade is always refused. */
   readonly asAdvice?: boolean;
-  /** Test seam. Production uses `envCoachGrounding()`. */
+  /** Test seam. Production uses `loadCoachGrounding` or `envCoachGrounding()`. */
   readonly grounding?: CoachGrounding;
 };
 

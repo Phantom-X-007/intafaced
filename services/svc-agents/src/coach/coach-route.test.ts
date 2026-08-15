@@ -29,14 +29,20 @@ function signed() {
   });
 }
 
-function stubDeps(): AgentsRouterDeps {
+function stubDeps(overrides: Partial<AgentsRouterDeps> = {}): AgentsRouterDeps {
   return {
     runtime: {} as AgentsRouterDeps['runtime'],
     gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
     meter: {} as AgentsRouterDeps['meter'],
     feeAssetId: 'IFC',
+    ...overrides,
   };
 }
+
+const spine = {
+  items: [{ slug: 'foundations-risk-first', title: 'Risk first' }],
+  licensedLibraryImported: false as const,
+};
 
 describe('coach public doors', () => {
   it('session refuses when curriculum grounding is empty — not a chatbot', async () => {
@@ -63,5 +69,28 @@ describe('coach public doors', () => {
       .createCaller(signed())
       .coach.session({ requestedSlug: 'foundations-risk-first', asAdvice: true });
     expect(result).toMatchObject({ status: 'refuse', reason: 'advice_forbidden' });
+  });
+
+  it('requestedSlug on an injected spine slug grounds a citation', async () => {
+    const result = await createAgentsRouter(stubDeps({ loadCoachGrounding: async () => spine }))
+      .createCaller(signed())
+      .coach.session({ requestedSlug: 'foundations-risk-first' });
+    expect(result.status).toBe('grounded');
+    if (result.status !== 'grounded') return;
+    expect(result.kind).toBe('citation');
+    expect(result.isAdvice).toBe(false);
+    expect(result.licensedLibraryImported).toBe(false);
+    expect(result.citations).toEqual([{ slug: 'foundations-risk-first', title: 'Risk first' }]);
+  });
+
+  it('free-text ask stays library_import_pending while licensed dump is false', async () => {
+    const result = await createAgentsRouter(stubDeps({ loadCoachGrounding: async () => spine }))
+      .createCaller(signed())
+      .coach.session({ ask: 'walk the whole library' });
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'library_import_pending',
+      licensedLibraryImported: false,
+    });
   });
 });

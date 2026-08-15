@@ -1744,8 +1744,15 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'academy.curriculum'],
-    note: 'Law §8.2:388 ("v2: ... Coach") and §25:708, which gives the AI Coach its OWN matrix row (B / svc-agents / 5) — which is why it is a row here rather than folded into the fleet, and why both the agents capability and the academy capability claim it. Gap-closed 2026-08-08; audit §A1.a #11 and #12. Blocked on academy.curriculum (`ready`, not `done`): a coach grounded in nothing is a chatbot, and the DERIV//DESK library import is the material it is supposed to be grounded in. agents.gateway is `done`. THE LINE THIS AGENT SITS CLOSEST TO: coaching a user on the platform they are trading on is one sentence away from advice, and advice is regulated in most places we operate. agents.support already has the honest shape — KB-grounded and account-state-grounded, escalating with a case file rather than improvising — and this row inherits it. NOT DECIDED, and NOT an agent\'s to decide: whether the Coach may reference the user\'s own positions. §8.2 grounds Support in account state, and the same grounding on a coaching agent turns education into a recommendation about live money. That is an owner ruling, and it changes what gets built rather than only what gets said.',
+    requires: ['services/svc-agents/src/coach/grounded-session.ts', 'services/svc-agents/src/coach/academy-curriculum-source.ts'],
+    note:
+      'DONE 2026-08-15 S2S spine citations (GET ACADEMY_URL/internal/curriculum, fail-closed empty). ' +
+      'Licensed dump residual (licensedLibraryImported stays false). No advice, no positions. ' +
+      'Law §8.2:388 ("v2: ... Coach") and §25:708. Fence: requires narrowed to src/coach so path-disjoint ' +
+      'agents.navigator work is not HUMAN-CLAIMED by this row.',
   }),
   f('agents.growth', 'Growth Agent — acquisition and campaign proposals (§8.2)', {
     module: 'agents',

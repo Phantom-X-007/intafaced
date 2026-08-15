@@ -618,6 +618,10 @@ services:
       HTTP_PORT: '4008'
       DATABASE_URL: postgres://svc_agents:svc_agents@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
+      # Coach cites academy platform spine over S2S. Unset locally stays empty
+      # (chatbot refuse). Compose pins the academy service so the fleet is not
+      # dark forever while academy is on the same network.
+      ACADEMY_URL: http://svc-academy:4016
       # `mock` by default so bringing the fleet up cannot spend money. The
       # upstream's identity is deployment configuration — set the
       # AGENTS_UPSTREAM_* block in .env to point it somewhere real.
