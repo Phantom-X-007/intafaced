@@ -12,16 +12,16 @@ This is a **runbook**, not a backup policy. Retention location, encryption at re
 
 ## 0 · Verdict from this host (2026-08-15)
 
-| Question                                         | Answer                                                                                                                                                          |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Compose Postgres present?                        | **Yes** — `intafaced-postgres` healthy, image `postgres:16-alpine`, `pg_dump` **16.13**, host map `${POSTGRES_HOST_PORT:-5433}:5432`.                             |
-| Live ledger schema present?                      | **Yes** — schema `ledger` with eight relations (see §1).                                                                                                        |
-| Dump exercised?                                  | **Yes** — custom-format `pg_dump --schema=ledger --no-owner` inside the container, **105394 bytes**, written to `/tmp` only. **Not committed. Not retained.** |
-| Restore exercised?                               | **Yes, throwaway only** — `CREATE DATABASE intafaced_restore_drill`, `pg_restore --no-owner`, SQL proofs in §3, then **`DROP DATABASE`**. Live `intafaced` was not overwritten. |
-| Full `verifyChain` / `hashTx` SHA recompute?     | **Not run** — needs the Node path in `postgres-ledger.ts`. SQL predecessor-link check **was** run and was clean (necessary, not sufficient).                    |
-| `POST /operator/reconcile` (`admin:treasury`+MFA)? | **Not run** — no operator token was minted and none will be invented.                                                                                         |
-| Restore onto live `intafaced`?                   | **Not run** (destructive).                                                                                                                                      |
-| Staging pre-deploy backup / prod PITR / off-host store? | **Unexercised** — no staging backup policy, no prod, no retention target.                                                                                 |
+| Question                                                | Answer                                                                                                                                                                          |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compose Postgres present?                               | **Yes** — `intafaced-postgres` healthy, image `postgres:16-alpine`, `pg_dump` **16.13**, host map `${POSTGRES_HOST_PORT:-5433}:5432`.                                           |
+| Live ledger schema present?                             | **Yes** — schema `ledger` with eight relations (see §1).                                                                                                                        |
+| Dump exercised?                                         | **Yes** — custom-format `pg_dump --schema=ledger --no-owner` inside the container, **105394 bytes**, written to `/tmp` only. **Not committed. Not retained.**                   |
+| Restore exercised?                                      | **Yes, throwaway only** — `CREATE DATABASE intafaced_restore_drill`, `pg_restore --no-owner`, SQL proofs in §3, then **`DROP DATABASE`**. Live `intafaced` was not overwritten. |
+| Full `verifyChain` / `hashTx` SHA recompute?            | **Not run** — needs the Node path in `postgres-ledger.ts`. SQL predecessor-link check **was** run and was clean (necessary, not sufficient).                                    |
+| `POST /operator/reconcile` (`admin:treasury`+MFA)?      | **Not run** — no operator token was minted and none will be invented.                                                                                                           |
+| Restore onto live `intafaced`?                          | **Not run** (destructive).                                                                                                                                                      |
+| Staging pre-deploy backup / prod PITR / off-host store? | **Unexercised** — no staging backup policy, no prod, no retention target.                                                                                                       |
 
 The dump file and the throwaway database are **gone**. Repeating the drill requires taking a new dump.
 
@@ -33,16 +33,16 @@ Doctrine §0.6: the only book is `packages/ledger-client` + `svc-ledger`. A dump
 
 Dump **schema `ledger` only**, including sequences. On this host the live relations were:
 
-| Relation             | Role                                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------------- |
-| `ledger.assets`      | Registered assets (scale / identity of the book)                                              |
-| `ledger.accounts`    | Identity + denormalised `balance` cache                                                       |
-| `ledger.ledger_tx`   | Hash-chained journal (`seq`, `hash`, `previous_hash`)                                         |
-| `ledger.ledger_entries` | Posting lines; replay source for `reconcileBalances`                                       |
-| `ledger.chain_tip`   | Singleton tip (`seq` + `hash`); posting lock target                                           |
-| `ledger.posting_freeze` | Durable kill-switch                                                                         |
-| `ledger.balance_snapshots` | Hourly anchors (`writeSnapshots`) — large; include them                                     |
-| `ledger.__migrations` | Drizzle history — restore without it and the next migrate will lie                            |
+| Relation                   | Role                                                               |
+| -------------------------- | ------------------------------------------------------------------ |
+| `ledger.assets`            | Registered assets (scale / identity of the book)                   |
+| `ledger.accounts`          | Identity + denormalised `balance` cache                            |
+| `ledger.ledger_tx`         | Hash-chained journal (`seq`, `hash`, `previous_hash`)              |
+| `ledger.ledger_entries`    | Posting lines; replay source for `reconcileBalances`               |
+| `ledger.chain_tip`         | Singleton tip (`seq` + `hash`); posting lock target                |
+| `ledger.posting_freeze`    | Durable kill-switch                                                |
+| `ledger.balance_snapshots` | Hourly anchors (`writeSnapshots`) — large; include them            |
+| `ledger.__migrations`      | Drizzle history — restore without it and the next migrate will lie |
 
 **Do not dump** `pgdata` volume files as the restore path. The exercised path is `pg_dump` / `pg_restore`.
 
@@ -112,15 +112,15 @@ These do **not** recompute SHA-256. They prove row counts, tip alignment, predec
 
 Live source counts (schema `ledger` on `intafaced`) and restored counts were identical:
 
-| Relation             | Count   |
-| -------------------- | ------- |
-| `ledger_tx`          | 52      |
-| `ledger_entries`     | 120     |
-| `accounts`           | 58      |
-| `assets`             | 22      |
-| `balance_snapshots`  | 12172   |
-| `chain_tip.seq`      | 52      |
-| `max(ledger_tx.seq)` | 52      |
+| Relation             | Count |
+| -------------------- | ----- |
+| `ledger_tx`          | 52    |
+| `ledger_entries`     | 120   |
+| `accounts`           | 58    |
+| `assets`             | 22    |
+| `balance_snapshots`  | 12172 |
+| `chain_tip.seq`      | 52    |
+| `max(ledger_tx.seq)` | 52    |
 
 Proof queries (no money amounts printed — mismatches only):
 
@@ -173,18 +173,18 @@ Do **not** treat a green SQL predecessor check as a substitute for `verifyChain`
 
 ## 4 · What is unexercised on this machine
 
-| Item                                                         | Why it stayed unexercised                                                                                          |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Restore onto live database `intafaced`                       | Destructive. Fleet including `svc-ledger` was healthy and posting.                                                 |
-| Production restore                                           | There is no production host.                                                                                       |
-| Staging pre-migrate backup                                   | Staging ADR D4 / §8 — no retention policy, no staging host backup. Rebuild-staging is the named residual, not this drill. |
-| `verifyChain` / `hashTx` SHA recompute                       | Not invoked; would require a Node harness or operator reconcile against the throwaway.                             |
-| `POST /operator/reconcile`                                   | Requires `admin:treasury` + MFA. No token was created.                                                             |
-| Freeze-then-dump procedure                                   | Drill dump was a read of a live book. Procedure for a restore-quality dump is freeze first (§2 step 1).            |
-| WAL / PITR (`restore_command`, base backup + WAL ship)       | Not configured on compose.                                                                                         |
-| Encrypted off-host retention                                 | Owner decision (Class X / ops). No bucket, no vault path invented.                                                 |
-| Other service schemas as money SoT                           | Forbidden.                                                                                                         |
-| Volume-file copy of `pgdata`                                 | Not the documented path.                                                                                           |
+| Item                                                   | Why it stayed unexercised                                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Restore onto live database `intafaced`                 | Destructive. Fleet including `svc-ledger` was healthy and posting.                                                        |
+| Production restore                                     | There is no production host.                                                                                              |
+| Staging pre-migrate backup                             | Staging ADR D4 / §8 — no retention policy, no staging host backup. Rebuild-staging is the named residual, not this drill. |
+| `verifyChain` / `hashTx` SHA recompute                 | Not invoked; would require a Node harness or operator reconcile against the throwaway.                                    |
+| `POST /operator/reconcile`                             | Requires `admin:treasury` + MFA. No token was created.                                                                    |
+| Freeze-then-dump procedure                             | Drill dump was a read of a live book. Procedure for a restore-quality dump is freeze first (§2 step 1).                   |
+| WAL / PITR (`restore_command`, base backup + WAL ship) | Not configured on compose.                                                                                                |
+| Encrypted off-host retention                           | Owner decision (Class X / ops). No bucket, no vault path invented.                                                        |
+| Other service schemas as money SoT                     | Forbidden.                                                                                                                |
+| Volume-file copy of `pgdata`                           | Not the documented path.                                                                                                  |
 
 ---
 
