@@ -262,7 +262,7 @@ describe('gap-series liquidation proof (DIRECTION §1 MVP items 4 and 5)', () =>
     expect(formatAmount(live.row.size)).toBe('10');
   });
 
-  it('leaves the legacy full-close path untouched when no ladder is wired', async () => {
+  it('without a ladder, omitted maintenanceBps does not invent a 50% full-close', async () => {
     const live = livePosition();
     const { ledger, posts } = recordingLedger();
     const result = await runLiquidationTick({
@@ -274,11 +274,15 @@ describe('gap-series liquidation proof (DIRECTION §1 MVP items 4 and 5)', () =>
       ledger,
     });
 
-    // The old planner liquidates at 50% of initial margin and closes in full.
-    expect(result.liquidated).toBe(1);
-    expect(result.partial).toBe(0);
-    expect(live.closed).not.toBeNull();
-    expect(posts.length).toBeGreaterThan(0);
+    // Mark 94 / entry 100 / margin 100: equity is still positive. The old
+    // planner invented 50% maintenance and full-closed. Unset D3 skips.
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]).toMatchObject({
+      outcome: 'skipped_healthy',
+      reason: 'maintenance_bps_unset',
+    });
+    expect(live.closed).toBeNull();
+    expect(posts).toHaveLength(0);
   });
 
   /**

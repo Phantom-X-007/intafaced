@@ -1071,12 +1071,14 @@ if (!available) {
       acceptedMarks: sqlAcceptedMarkStore(sql),
       ledger,
       now: () => NOW,
+      maintenanceBps: 5000, // fixture — not product law (D3)
     });
   }
 
   /**
-   * entry 100, size 10, leverage 10 → margin 100, maintenance 50 (the planner's
-   * 5000bps default). At mark 95 equity is exactly 50 and it liquidates.
+   * entry 100, size 10, leverage 10 → margin 100, maintenance 50 (named 5000 bps
+   * fixture on the tick; omitted MM no longer invents 50%).
+   * At mark 95 equity is exactly 50 and it liquidates.
    */
   async function marginal() {
     feed('100');

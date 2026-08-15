@@ -95,6 +95,7 @@ export interface PublicRestDeps {
     readonly profitSourceConfigured?: boolean;
     readonly fundingMaxAbsRateConfigured?: boolean;
     readonly fundingMarketCount?: number;
+    readonly venueMarkConfigured?: boolean;
   };
 }
 
