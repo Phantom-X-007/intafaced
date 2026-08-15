@@ -15,7 +15,14 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
-import { ceilingOnWire, limitsConfigured, limitsOnWire, NO_OFFER_LIMITS, offerLimitsPosture, type OfferLimitPolicy } from './merchant-limits.js';
+import {
+  ceilingOnWire,
+  limitsConfigured,
+  limitsOnWire,
+  NO_OFFER_LIMITS,
+  offerLimitsPosture,
+  type OfferLimitPolicy,
+} from './merchant-limits.js';
 import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
