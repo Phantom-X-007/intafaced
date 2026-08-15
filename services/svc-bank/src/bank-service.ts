@@ -92,13 +92,18 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   // fails with `bank.mark_missing`. The correct posture for a deployment that has
   // not decided where its prices come from.
   const loans = new LoanService(sql, ledger, options.loans ?? { priceSource: fixedPriceSource({}) });
+  // No convert port = DCA refuses rates-unset; threshold sweeps still work.
+  // Constructed before cards so the capture hook can call applyRoundUp without
+  // a setter or a circular constructor.
+  const autoInvest = new AutoInvestService(sql, ledger, earn, spaces, options.autoInvest ?? {});
   // No issuer configured = no card programme, and every card procedure refuses
   // by name rather than simulating one. See `cards/issuer.ts`.
-  const cards = new CardService(sql, ledger, options.cards ?? {});
+  const cards = new CardService(sql, ledger, {
+    ...(options.cards ?? {}),
+    onCaptureSettled: options.cards?.onCaptureSettled ?? ((event) => autoInvest.applyRoundUp(event)),
+  });
   // No ramp programme = every ramp procedure refuses `bank.no_ramp_rail`.
   const ramps = new RampService(sql, ledger, options.ramps ?? {});
-  // No convert port = DCA refuses rates-unset; threshold sweeps still work.
-  const autoInvest = new AutoInvestService(sql, ledger, earn, spaces, options.autoInvest ?? {});
   const business = new BusinessService(sql, ledger, spaces, transfers);
 
   return { spaces, transfers, earn, analytics, loans, cards, ramps, autoInvest, business };
@@ -173,6 +178,7 @@ export {
   type CaptureResult,
   type CashbackOutcome,
   type ConversionRecord,
+  type RoundUpOutcome,
 } from './cards/card-service.js';
 export {
   DEFAULT_CARD_CONVERSION_POLICY,

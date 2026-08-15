@@ -968,7 +968,7 @@ export const userWithdrawDestinations = bank.table(
 // ── Auto-invest (§31:805 F-plane) ────────────────────────────────────────────
 // Rules are instructions; runs are write-once records. No balance column.
 
-export const autoInvestKindEnum = bank.enum('auto_invest_kind', ['threshold_sweep', 'dca']);
+export const autoInvestKindEnum = bank.enum('auto_invest_kind', ['threshold_sweep', 'dca', 'card_roundup']);
 export const autoInvestRuleStatusEnum = bank.enum('auto_invest_rule_status', ['active', 'paused', 'cancelled']);
 export const autoInvestRunStatusEnum = bank.enum('auto_invest_run_status', ['pending', 'settled', 'rejected', 'skipped']);
 

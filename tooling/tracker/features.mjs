@@ -1638,15 +1638,15 @@ export const FEATURES = [
     phase: '5',
     plane: 'B',
     status: 'wip',
-    owner: 'nitro-w10-l08',
+    owner: 'nitro-bank-roundup',
     dependsOn: ['bank.accounts', 'bank.cards', 'bank.earn', 'trade.convert', 'protocol.smart-accounts'],
     // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` and fenced ALL bank mountains
     // including ramps/cards/earn. Owner + wip unchanged — only the claim-check fence matches the real dir.
     requires: ['services/svc-bank/src/auto-invest'],
     note:
-      'Law §31:805 F-plane PARTIAL (W10 L08): threshold_sweep → earn via earnDeposit on main path; ' +
-      'createDca refuses bank.auto_invest_rate_unset without ConvertPort (no invent §8); ops.runAutoInvest + AUTO_INVEST_ENABLED. ' +
-      'Still open: card round-ups (capture hook), ConvertPort→trade.convert wire, P-plane session-key allowance (protocol.smart-accounts / Shehzad). ' +
+      'Law §31:805 F-plane PARTIAL: threshold_sweep → earn via earnDeposit; card_roundup spare change on capture → same-asset earn (kill AUTO_INVEST_ENABLED also stops the hook); ' +
+      'createDca / cross-asset round-up refuse bank.auto_invest_rate_unset (no invent §8). ops.runAutoInvest + AUTO_INVEST_ENABLED. ' +
+      'Still open: ConvertPort→trade.convert wire, P-plane session-key allowance (protocol.smart-accounts / Shehzad). ' +
       '§0.6: rules hold no balance. Residual law: gap-closed 2026-08-08 note on both planes still stands for Done. ' +
       'Fence: requires narrowed to src/auto-invest so path-disjoint bank.ramps/cards work is not HUMAN-CLAIMED.',
   }),
