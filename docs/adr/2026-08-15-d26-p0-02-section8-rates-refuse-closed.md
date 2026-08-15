@@ -22,12 +22,12 @@ Done bar for **D26-P0-02:** explicit launch-closed on the four fee-share surface
 
 ## Refuse-closed parameters (no magnitudes)
 
-| Named param (authority key) | Surface it gates | Residual posture until owner publish |
-| --------------------------- | ---------------- | ------------------------------------ |
-| Copy `leader_share` (`leader_share_bps` / `TRADE_COPY_FEE_SHARE_LAW`) | `trade.copy` payout | Same as `COPY_FEE_SHARE_RESIDUAL`: DIRECTION §8 / D26-P0-02 — refuse-closed, never invent fee-share rates |
-| Market commission | `market.commerce` house cut | Refuse-blank; silence is not a decided zero |
-| Affiliate commission tiers | `ops.affiliates` accrual | Refuse-unset / invent-refused; no hop table from source |
-| Pay fee table | PSP pricing surfaces | Refuse-closed until owner publishes the table into config authority (not a seed in git) |
+| Named param (authority key)                                           | Surface it gates            | Residual posture until owner publish                                                                      |
+| --------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Copy `leader_share` (`leader_share_bps` / `TRADE_COPY_FEE_SHARE_LAW`) | `trade.copy` payout         | Same as `COPY_FEE_SHARE_RESIDUAL`: DIRECTION §8 / D26-P0-02 — refuse-closed, never invent fee-share rates |
+| Market commission                                                     | `market.commerce` house cut | Refuse-blank; silence is not a decided zero                                                               |
+| Affiliate commission tiers                                            | `ops.affiliates` accrual    | Refuse-unset / invent-refused; no hop table from source                                                   |
+| Pay fee table                                                         | PSP pricing surfaces        | Refuse-closed until owner publishes the table into config authority (not a seed in git)                   |
 
 Copy **jurisdiction list** is **D26-P0-15**, not this mountain. This ADR does not publish geo.
 
@@ -56,7 +56,7 @@ A later document that embeds example JSON with `published: true` is still a sour
 
 **Still blocked:** any payout, commission, affiliate accrual, or PSP price that needs a magnitude. Those wait on owner publish into config authority.
 
-**Out of this ADR:** PKT-B5 futures profit pot, PAYOUT-01 hop-depth click, D26-P0-10 commission *mechanism* (authority + refuse-blank), D26-P0-15 geo list, Class X secrets, Vue, `svc-edge`.
+**Out of this ADR:** PKT-B5 futures profit pot, PAYOUT-01 hop-depth click, D26-P0-10 commission _mechanism_ (authority + refuse-blank), D26-P0-15 geo list, Class X secrets, Vue, `svc-edge`.
 
 ---
 
@@ -72,4 +72,4 @@ Agents must not:
 
 ## Internet leverage
 
-Phase A: existing `svc-trade` copy refuse (`COPY_FEE_SHARE_RESIDUAL`) + ledger recipes when a rate *is* later published. Horizon: `trade.copy` is **LAW→IN** — this file is the LAW slice (launch-closed). No second SPA, no second money book, no greenfield fee engine.
+Phase A: existing `svc-trade` copy refuse (`COPY_FEE_SHARE_RESIDUAL`) + ledger recipes when a rate _is_ later published. Horizon: `trade.copy` is **LAW→IN** — this file is the LAW slice (launch-closed). No second SPA, no second money book, no greenfield fee engine.
