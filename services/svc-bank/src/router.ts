@@ -5,6 +5,7 @@ import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '
 import { BankError } from './errors.js';
 import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
 import type { BankServices } from './bank-service.js';
+import { userFacingBankMessage } from './user-copy.js';
 
 /**
  * svc-bank's API.
@@ -41,6 +42,8 @@ const amountString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amount must be an u
  *      return `err.message` verbatim for every code nobody had thought about,
  *      which is how `Space "Holiday fund" is archived` — a sentence written for
  *      an owner — ended up being delivered to a stranger who guessed a uuid.
+ *   3. Ramp / card refusals the user reads are catalog keys via `@intafaced/i18n`.
+ *      Missing keys render as the dotted code — never invented English.
  *
  * Rule 2 is why the switch is exhaustive over `BankErrorCode` and the default
  * carries a `never` assignment: adding a code without deciding what a caller
@@ -86,6 +89,7 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   if (err instanceof BankError) {
+    const message = userFacingBankMessage(err.code, err.message);
     switch (err.code) {
       case 'bank.space_not_found':
       case 'bank.schedule_not_found':
@@ -96,13 +100,13 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.auto_invest_not_found':
       case 'bank.business_not_found':
       case 'bank.business_approval_not_found':
-        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+        return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
       case 'bank.not_owner':
-        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+        return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
       case 'bank.pool_underfunded':
         // Not the caller's fault and not something a retry fixes — the pool
         // needs funding before this day can accrue.
-        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
       // ── Loans: refusals that are NOT the caller's fault ───────────────────
       //
@@ -116,13 +120,13 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.mark_invalid':
       case 'bank.no_liquidation_counterparty':
       case 'bank.accrual_backlog':
-        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
       // The loudest one. Collateral was exhausted and the insurance fund could
       // not make the reserve whole — a platform-side loss, not a client error.
       case 'bank.bad_debt_uncovered':
       case 'bank.policy_incoherent':
-        return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+        return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
 
       // Ordering refusals. Genuinely the caller's request being wrong for the
       // current state of the loan, so 409 rather than 400: nothing about the
@@ -132,7 +136,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.loan_liquidating':
       case 'bank.margin_call_required':
       case 'bank.loan_closed':
-        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+        return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
       // ── The codes that used to fall through `default:` ────────────────────
       //
@@ -179,7 +183,7 @@ function toTrpcError(err: unknown): TRPCError {
       // to — so FORBIDDEN would be both wrong and more disclosing.
       case 'bank.loan_borrower_mismatch':
       case 'bank.position_conflict':
-        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+        return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
       case 'bank.same_space':
       case 'bank.asset_mismatch':
@@ -201,7 +205,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.ramp_invalid_asset':
       case 'bank.ramp_invalid_destination':
       case 'bank.ramp_conflict':
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
       // Named refusals where the platform, not the caller, is missing something.
       // Same shape and the same reason as `bank.no_liquidation_counterparty`.
@@ -213,7 +217,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.withdraw_destination_missing':
       case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
-        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
       // Kill switches. Same 503 class as the matching HTTP job endpoints —
       // operator flipped the flag off; tRPC must not be a back door past it.
@@ -224,7 +228,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.auto_invest_disabled':
       case 'bank.loans_disabled':
       case 'bank.cards_disabled':
-        return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: err.message, cause: err });
+        return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message, cause: err });
 
       default: {
         // EXHAUSTIVENESS. If this line stops compiling, a `BankErrorCode` was
