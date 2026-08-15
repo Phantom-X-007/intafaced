@@ -1,0 +1,30 @@
+import { describe, expect, it } from 'vitest';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
+
+describe('resolveP2pCopy — catalog keys, never invented English', () => {
+  it('returns a key that is not in the catalog as the key itself', () => {
+    const key = 'p2p.offer.surface.that.was.never.keyed';
+    expect(resolveP2pCopy(key)).toBe(key);
+  });
+
+  it('unknown key does not invent copy', () => {
+    const key = 'p2p.instrument.surface.that.was.never.keyed';
+    const rendered = resolveP2pCopy(key);
+    expect(rendered).toBe(key);
+    expect(rendered).not.toMatch(/something went wrong/i);
+    expect(rendered).not.toMatch(/try again/i);
+    expect(rendered).not.toMatch(/cannot be taken/i);
+    expect(rendered).not.toContain(' ');
+  });
+
+  it('resolves a key that already exists on tip', () => {
+    expect(resolveP2pCopy('error.generic')).toBe('Something went wrong. Try again.');
+  });
+
+  it('offer/instrument refuse keys stay the dotted name until a catalog row lands', () => {
+    expect(resolveP2pCopy(P2P_COPY.takeRefused)).toBe(P2P_COPY.takeRefused);
+    expect(resolveP2pCopy(P2P_COPY.methodUnknown)).toBe(P2P_COPY.methodUnknown);
+    expect(resolveP2pCopy(P2P_COPY.offerMethodsRequired)).toBe(P2P_COPY.offerMethodsRequired);
+    expect(resolveP2pCopy(P2P_COPY.offerMethodNoDestination)).toBe(P2P_COPY.offerMethodNoDestination);
+  });
+});

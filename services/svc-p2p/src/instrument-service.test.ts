@@ -239,7 +239,10 @@ if (!available) {
       // seller/register/pay door still looks like a live rail with zero methods.
       await expect(instruments.listMethodSchemas()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
       await expect(callerFor(SELLER).instruments.methods.list({})).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-      await expect(sellerInstrument()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+      await expect(sellerInstrument()).rejects.toMatchObject({
+        code: 'p2p.instrument_method_unknown',
+        message: 'p2p.instrument_method_unknown',
+      });
       await expect(
         callerFor(SELLER).instruments.create({
           methodId: METHOD,
@@ -757,7 +760,7 @@ if (!available) {
       expect(a).toEqual(b);
       // And the message names nothing the caller was not entitled to see: not
       // the method they asked for, not the currency, not the seller.
-      expect(a.message).toBe('This offer cannot be taken with the selected payment method');
+      expect(a.message).toBe('p2p.take_refused');
       expect(a.message).not.toContain('other-rail');
       expect(a.message).not.toContain(METHOD);
       expect(a.message).not.toContain('USD');
