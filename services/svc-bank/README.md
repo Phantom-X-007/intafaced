@@ -127,11 +127,12 @@ Interest **capitalises** (raises debt, posts nothing). Mark / margin call / liqu
 | --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | `autoInvest.list`                 | `bank:read`  | The user's rules. Rules hold **no balance** — instructions only                                                             |
 | `autoInvest.createThresholdSweep` | `bank:write` | Keep `threshold` in primary available; excess → earn pool (**same asset**, no rate)                                         |
+| `autoInvest.createRoundUp`        | `bank:write` | Spare change after card capture → same-asset earn pool. Cross-asset `buyAssetId` **refuses `bank.auto_invest_rate_unset`**  |
 | `autoInvest.createDca`            | `bank:write` | Scheduled cross-asset buy — **refuses `bank.auto_invest_rate_unset`** until a convert port is wired. Never invents §8 rates |
 | `autoInvest.pause` / `resume`     | `bank:write` | Hold a rule without cancelling; resume applies normal due rules (no multi-fire invent)                                      |
 | `autoInvest.cancel`               | `bank:write` | Stop future firings. Does not reverse past runs                                                                             |
 
-`ops.runAutoInvest` (`admin:treasury`) and `POST /internal/jobs/run-auto-invest` fire due rules. Kill switch: `AUTO_INVEST_ENABLED` — same code `bank.auto_invest_disabled` on both surfaces. Card round-ups and sovereign allowance plane are not here — round-ups need the capture path; P-plane is `protocol.smart-accounts` (Shehzad).
+`ops.runAutoInvest` (`admin:treasury`) and `POST /internal/jobs/run-auto-invest` fire due **threshold / DCA** rules. Card round-ups fire on `ops.cardCapture`, not the runner. Kill switch: `AUTO_INVEST_ENABLED` — same code `bank.auto_invest_disabled` on HTTP, tRPC runner, **and the capture hook**. Sovereign allowance plane is not here — P-plane is `protocol.smart-accounts` (Shehzad). No APY is invented; the destination is an existing earn pool.
 
 ### `business` — **maker/checker with ledger holds. Not full bank-biz.**
 
@@ -411,7 +412,7 @@ Editing a standing order cancels it and writes a new one, so the history of what
 | `INTEREST_ACCRUAL_ENABLED`                      | A reserve drained by a runaway job cannot be un-paid without asking users to return money                          |
 | `LOAN_ACCRUAL_ENABLED`                          | Loan interest capitalisation is its own flag — stopping earn payout must not stop charging borrowers               |
 | `LOAN_RISK_SWEEP_ENABLED`                       | Defaults **off**. Sells people's collateral; a fresh deploy must not liquidate until a human has checked marks     |
-| `AUTO_INVEST_ENABLED`                           | Stops threshold sweeps and DCA runs after an operator hit stop                                                     |
+| `AUTO_INVEST_ENABLED`                           | Stops threshold/DCA runs **and** the card-capture round-up hook — same code `bank.auto_invest_disabled`            |
 | `BANK_LOANS_ENABLED`                            | Module kill for loans (`FLAG_REGISTRY` bank.loans) — OFF refuses new opens                                         |
 | `BANK_CARDS_ENABLED`                            | Module kill for cards ledger half (`bank.cards`) — OFF refuses issue and authorise                                 |
 | `TRANSFER_BATCH_SIZE` / `LOAN_SWEEP_BATCH_SIZE` | Bounds the blast radius of a single bad pass                                                                       |

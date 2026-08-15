@@ -158,6 +158,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.loan_product_closed':
       case 'bank.auto_invest_inactive':
       case 'bank.auto_invest_invalid_threshold':
+      case 'bank.auto_invest_roundup_exists':
       case 'bank.auto_invest_run_failed':
       case 'bank.auto_invest_below_threshold':
       case 'bank.business_closed':
@@ -1602,6 +1603,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             amount: amountString,
             reason: z.string().optional(),
           }),
+          /**
+           * Spare-change sweep. Capture still stands when this is skipped or
+           * refused — same reporting rule as cashback.
+           */
+          roundUp: z.object({
+            status: z.enum(['none', 'skipped', 'settled', 'refused']),
+            amount: amountString,
+            reason: z.string().optional(),
+            positionId: z.string().optional(),
+          }),
         }),
       )
       .mutation(async ({ input }) =>
@@ -1627,6 +1638,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               status: result.cashback.status,
               amount: formatAmount(result.cashback.amount),
               ...(result.cashback.status === 'refused' ? { reason: result.cashback.reason } : {}),
+            },
+            roundUp: {
+              status: result.roundUp.status,
+              amount: formatAmount(result.roundUp.amount),
+              ...(result.roundUp.status === 'skipped' || result.roundUp.status === 'refused' ? { reason: result.roundUp.reason } : {}),
+              ...(result.roundUp.status === 'settled' ? { positionId: result.roundUp.positionId } : {}),
             },
           };
         }),
@@ -1850,7 +1867,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
   const autoInvestRuleOutput = z.object({
     id: z.string(),
-    kind: z.enum(['threshold_sweep', 'dca']),
+    kind: z.enum(['threshold_sweep', 'dca', 'card_roundup']),
     assetId: z.string(),
     threshold: amountString.nullable(),
     targetPoolId: z.string().nullable(),
@@ -1912,6 +1929,34 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             assetId: input.assetId,
             threshold: parseAmount(input.threshold),
             targetPoolId: input.targetPoolId,
+          });
+          return mapRule(rule);
+        }),
+      ),
+
+    /**
+     * Card round-up. Same-asset spare change → earn pool on capture.
+     * `buyAssetId` that differs from `assetId` refuses `bank.auto_invest_rate_unset`
+     * — the surface exists so the dishonest half is named, not silent.
+     */
+    createRoundUp: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          assetId: z.string().min(1).max(16),
+          granularity: amountString,
+          targetPoolId: z.string().uuid(),
+          buyAssetId: z.string().min(1).max(16).optional(),
+        }),
+      )
+      .output(autoInvestRuleOutput)
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const rule = await bank.autoInvest.createCardRoundUp({
+            userId: ctx.principal.userId,
+            assetId: input.assetId,
+            granularity: parseAmount(input.granularity),
+            targetPoolId: input.targetPoolId,
+            ...(input.buyAssetId ? { buyAssetId: input.buyAssetId } : {}),
           });
           return mapRule(rule);
         }),

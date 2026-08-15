@@ -22,14 +22,18 @@ import type { Cadence } from '../transfers/schedule.js';
  *   dca              scheduled buy of another asset — REQUIRES a convert port
  *                    that supplies a real rate. Absent the port, create and run
  *                    both refuse `bank.auto_invest_rate_unset`. No §8 invent.
+ *   card_roundup     spare change after a card capture → same-asset earn pool.
+ *                    Fires from the capture hook, not the runner. Cross-asset
+ *                    destination refuses `bank.auto_invest_rate_unset`.
  *
  * ═════════════════════════════════════════════════════════════════════════════
  * WHAT IS NOT HERE
  * ═════════════════════════════════════════════════════════════════════════════
  *
- *   · Card round-ups — need the capture path to emit spare change; partial later.
  *   · Sovereign / session-key allowance plane — protocol.smart-accounts (Shehzad).
  *   · Any rate, APR, or convert quote invented in this service.
+ *   · A yield number. The destination is an existing earn pool; its APR is
+ *     already on that pool. This service does not invent one.
  */
 
 /**
@@ -52,9 +56,25 @@ export interface ConvertPort {
   }): Promise<{ toAmount: Amount; ledgerTxId: string }>;
 }
 
-export type AutoInvestKind = 'threshold_sweep' | 'dca';
+export type AutoInvestKind = 'threshold_sweep' | 'dca' | 'card_roundup';
 export type AutoInvestRuleStatus = 'active' | 'paused' | 'cancelled';
 export type AutoInvestRunStatus = 'pending' | 'settled' | 'rejected' | 'skipped';
+
+/**
+ * Spare change on a capture: next multiple of `granularity` minus `captured`.
+ * Exact multiples produce zero — nothing to sweep, nothing to invent.
+ */
+export function spareChange(captured: Amount, granularity: Amount): Amount {
+  if (granularity <= 0n || captured <= 0n) return 0n;
+  const rem = captured % granularity;
+  return rem === 0n ? 0n : granularity - rem;
+}
+
+export type RoundUpOutcome =
+  | { readonly status: 'none'; readonly amount: Amount }
+  | { readonly status: 'skipped'; readonly amount: Amount; readonly reason: string }
+  | { readonly status: 'settled'; readonly amount: Amount; readonly positionId: string }
+  | { readonly status: 'refused'; readonly amount: Amount; readonly reason: string };
 
 export interface AutoInvestRule {
   id: string;
@@ -160,11 +180,18 @@ export interface AutoInvestServiceOptions {
   convert?: ConvertPort;
   /** Max rules one runner pass claims. Bounds blast radius of a bad pass. */
   batchSize?: number;
+  /**
+   * Emergency stop for the runner AND the capture hook. Default true.
+   * Off → applyRoundUp is a skip (capture still stands); runDue is also
+   * gated at HTTP/tRPC so this is the hook's own backstop.
+   */
+  enabled?: boolean;
 }
 
 export class AutoInvestService {
   private readonly convert: ConvertPort | null;
   private readonly batchSize: number;
+  private readonly enabled: boolean;
 
   constructor(
     private readonly sql: Sql,
@@ -175,6 +202,7 @@ export class AutoInvestService {
   ) {
     this.convert = options.convert ?? null;
     this.batchSize = options.batchSize ?? 200;
+    this.enabled = options.enabled !== false;
   }
 
   // ── Create ─────────────────────────────────────────────────────────────────
@@ -253,6 +281,158 @@ export class AutoInvestService {
                 amount, cadence, next_run_at, status, created_at
     `;
     return toRule(rows[0]!);
+  }
+
+  /**
+   * Card round-up — spare change after capture into a same-asset earn pool.
+   *
+   * `amount` on the row is the granularity (round-to), not a balance.
+   * A different `buyAssetId` is the convert half and refuses by name rather
+   * than inventing a rate so the instruction can look live.
+   */
+  async createCardRoundUp(input: {
+    userId: string;
+    assetId: string;
+    granularity: Amount;
+    targetPoolId: string;
+    buyAssetId?: string;
+  }): Promise<AutoInvestRule> {
+    if (input.buyAssetId && input.buyAssetId !== input.assetId) {
+      throw new BankError(
+        'Card round-up into another asset needs a convert rate counterparty — rates are not invented here (§8 / bank.auto_invest_rate_unset)',
+        'bank.auto_invest_rate_unset',
+      );
+    }
+    if (input.granularity <= 0n) {
+      throw new BankError('A card round-up needs a positive granularity', 'bank.auto_invest_invalid_threshold');
+    }
+    const pool = await this.earn.pool(input.targetPoolId);
+    if (pool.status !== 'open') {
+      throw new BankError(`Pool "${pool.name}" is closed`, 'bank.pool_closed');
+    }
+    if (pool.assetId !== input.assetId) {
+      throw new BankError(`Round-up asset ${input.assetId} does not match pool asset ${pool.assetId}`, 'bank.asset_mismatch');
+    }
+    await this.spaces.ensurePrimary(input.userId, input.assetId);
+
+    try {
+      const rows = await this.sql<RuleRow[]>`
+        INSERT INTO bank.auto_invest_rules
+          (user_id, kind, asset_id, target_pool_id, amount, status)
+        VALUES (
+          ${input.userId}, 'card_roundup', ${input.assetId},
+          ${input.targetPoolId}::uuid, ${formatAmount(input.granularity)}::numeric, 'active'
+        )
+        RETURNING id, user_id, kind, asset_id, threshold, target_pool_id, buy_asset_id,
+                  amount, cadence, next_run_at, status, created_at
+      `;
+      return toRule(rows[0]!);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new BankError(
+          'An active card round-up already exists for this asset — pause or cancel it first',
+          'bank.auto_invest_roundup_exists',
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Capture hook. Capture has already settled; this may not undo it.
+   *
+   * Kill switch, no rule, and exact-multiple captures are skips. Failures
+   * become `refused` with a named code — same posture as cashback.
+   */
+  async applyRoundUp(input: { userId: string; assetId: string; authorizationId: string; captured: Amount }): Promise<RoundUpOutcome> {
+    if (!this.enabled) {
+      return { status: 'skipped', amount: 0n, reason: 'bank.auto_invest_disabled' };
+    }
+
+    const rows = await this.sql<RuleRow[]>`
+      SELECT id, user_id, kind, asset_id, threshold, target_pool_id, buy_asset_id,
+             amount, cadence, next_run_at, status, created_at
+        FROM bank.auto_invest_rules
+       WHERE user_id = ${input.userId}
+         AND asset_id = ${input.assetId}
+         AND kind = 'card_roundup'
+         AND status = 'active'
+       ORDER BY created_at ASC
+       LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row) return { status: 'none', amount: 0n };
+
+    const rule = toRule(row);
+    const granularity = rule.amount!;
+    const spare = spareChange(input.captured, granularity);
+    const clientRunId = `roundup:${rule.id}:${input.authorizationId}`;
+
+    if (spare <= 0n) {
+      await this.recordSkipped(rule.id, clientRunId, null, 'bank.auto_invest_no_spare');
+      return { status: 'skipped', amount: 0n, reason: 'bank.auto_invest_no_spare' };
+    }
+
+    return withMoneySpan(
+      'bank.auto_invest.card_roundup',
+      { operation: 'auto-invest-card-roundup', ruleId: rule.id, userId: rule.userId, assetId: rule.assetId },
+      async () => {
+        const claimed = await this.sql<Array<{ id: string }>>`
+          INSERT INTO bank.auto_invest_runs (rule_id, client_run_id, status, amount)
+          VALUES (
+            ${rule.id}::uuid, ${clientRunId}, 'pending',
+            ${formatAmount(spare)}::numeric
+          )
+          ON CONFLICT (rule_id, client_run_id) DO NOTHING
+          RETURNING id
+        `;
+        if (claimed.length === 0) {
+          const existing = await this.sql<Array<{ status: AutoInvestRunStatus; position_id: string | null }>>`
+            SELECT status, position_id FROM bank.auto_invest_runs
+             WHERE rule_id = ${rule.id}::uuid AND client_run_id = ${clientRunId}
+          `;
+          const prior = existing[0];
+          if (prior?.status === 'settled' && prior.position_id) {
+            return { status: 'settled', amount: spare, positionId: prior.position_id };
+          }
+          return { status: 'skipped', amount: spare, reason: 'bank.auto_invest_run_failed' };
+        }
+
+        const runId = claimed[0]!.id;
+        const now = new Date();
+        try {
+          const position = await this.earn.deposit({
+            poolId: rule.targetPoolId!,
+            userId: rule.userId,
+            amount: spare,
+            positionId: runId,
+            now,
+          });
+          await this.sql`
+            UPDATE bank.auto_invest_runs
+               SET status = 'settled',
+                   position_id = ${position.id},
+                   settled_at = ${now},
+                   amount = ${formatAmount(spare)}::numeric
+             WHERE id = ${runId}::uuid
+          `;
+          return { status: 'settled', amount: spare, positionId: position.id };
+        } catch (err) {
+          const code =
+            err instanceof BankError
+              ? err.code
+              : err instanceof InsufficientFundsError
+                ? 'ledger.insufficient_funds'
+                : 'bank.auto_invest_run_failed';
+          await this.sql`
+            UPDATE bank.auto_invest_runs
+               SET status = 'rejected', rejection_code = ${code}, settled_at = ${now}
+             WHERE id = ${runId}::uuid AND status = 'pending'
+          `;
+          return { status: 'refused', amount: spare, reason: code };
+        }
+      },
+    );
   }
 
   async listRules(userId: string): Promise<AutoInvestRule[]> {
@@ -374,7 +554,10 @@ export class AutoInvestService {
     if (rule.kind === 'threshold_sweep') {
       return this.driveThresholdSweep(rule, now);
     }
-    return this.driveDca(rule, now);
+    if (rule.kind === 'dca') {
+      return this.driveDca(rule, now);
+    }
+    throw new BankError('Card round-ups fire on capture, not on the runner', 'bank.auto_invest_run_failed');
   }
 
   private async driveThresholdSweep(rule: AutoInvestRule, now: Date): Promise<'settled' | 'skipped' | 'rejected'> {
@@ -537,6 +720,10 @@ export class AutoInvestService {
     `;
     return rows.map(toRun);
   }
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }
 
 function advanceCadence(from: Date, cadence: Cadence): Date {
