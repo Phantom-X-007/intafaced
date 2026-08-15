@@ -16,18 +16,21 @@ afterEach(() => {
   delete process.env.ANALYTICS_REPLICA_LEDGER_URL;
   delete process.env.ANALYTICS_REPLICA_TRADE_URL;
   delete process.env.ANALYTICS_REPLICA_IDENTITY_URL;
+  delete process.env.ANALYTICS_ETL_WATERMARK_AT;
   setWarehouseLagProbeForTests(null);
 });
 
 describe('GET /api/analytics/warehouse', () => {
   it('returns unavailable when replica is not configured — never invents volume', async () => {
     process.env.ANALYTICS_REPLICA_CONFIGURED = 'false';
+    process.env.ANALYTICS_ETL_WATERMARK_AT = '2026-08-12T10:00:00.000Z';
     const res = await GET(new Request('http://admin.local/api/analytics/warehouse'));
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.status).toBe('unavailable');
     expect(body.reason).toBe('replica_unconfigured');
     expect(body.mayLabelLive).toBe(false);
+    expect(body.etlWatermark).toBe('present');
   });
 
   it('returns empty when dry-run flag + env lag — never mayLabelLive from typed lag', async () => {
@@ -86,8 +89,34 @@ describe('POST /api/analytics/warehouse', () => {
     expect(body.lagSource).toBe('configured');
   });
 
-  it('probe + readonly URL + fixtures → mayLabelLive true with lagMeasuredAt', async () => {
+  it('probe + fixtures without watermark cannot paint live cubes', async () => {
     process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://analytics_ro:x@replica:5432/ledger';
+    setWarehouseLagProbeForTests(({ nowMs }) => ({
+      lagSeconds: 6,
+      measuredAt: nowMs,
+    }));
+
+    const res = await POST(
+      new Request('http://admin.local/api/analytics/warehouse', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          facts: [{ metricId: 'trade.fills.count', value: '3' }],
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('ok');
+    expect(body.mayLabelLive).toBe(false);
+    expect(body.etlWatermark).toBe('absent');
+    expect(body.lagSource).toBe('probed');
+    expect(body.freshness).toBe('live');
+  });
+
+  it('probe + watermark + fixtures → mayLabelLive true with lagMeasuredAt', async () => {
+    process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://analytics_ro:x@replica:5432/ledger';
+    process.env.ANALYTICS_ETL_WATERMARK_AT = '2026-08-12T10:00:00.000Z';
     setWarehouseLagProbeForTests(({ nowMs }) => ({
       lagSeconds: 6,
       measuredAt: nowMs,
@@ -109,5 +138,7 @@ describe('POST /api/analytics/warehouse', () => {
     expect(body.lagSource).toBe('probed');
     expect(typeof body.lagMeasuredAt).toBe('number');
     expect(body.freshness).toBe('live');
+    expect(body.etlWatermark).toBe('present');
+    expect(body.etlWatermarkAt).toBe('2026-08-12T10:00:00.000Z');
   });
 });

@@ -1,5 +1,6 @@
 import {
   queryWarehouseSurface,
+  resolveEtlWatermark,
   resolveWarehouseReplicaConfig,
   type CubeFactRow,
   type WarehouseLagProbe,
@@ -11,13 +12,14 @@ import { adminBffGate } from '@/lib/admin-bff-gate';
  * Admin read path for ops.analytics Stage-1 warehouse surface (Class N).
  *
  * Honest empty/lag only — never invents trading volume. Fixture facts may be
- * POSTed for operator dry-runs.
+ * POSTed for operator dry-runs. Never a second money book.
  *
- * Lag law (wave-3 residual):
+ * Live-cube law (D26-P1-O4 admin door):
  *   · ANALYTICS_REPLICA_*_URL are read and assertAnalyticsReplicaRole runs.
  *   · ANALYTICS_REPLICA_LAG_SECONDS alone is lagSource=configured — never live.
- *   · Optional lag probe (injectable) stamps lagMeasuredAt → mayLabelLive only
- *     when measurement is fresh.
+ *   · Optional lag probe (injectable) stamps lagMeasuredAt.
+ *   · ANALYTICS_ETL_WATERMARK_AT absent/junk → mayLabelLive false.
+ *   · Dark/unavailable replica or missing watermark cannot paint live cubes.
  *
  * Law: docs/adr/2026-08-07-ops-analytics-warehouse-read-replica.md
  */
@@ -49,6 +51,7 @@ function surfaceResponse(result: WarehouseSurfaceResult): Response {
 }
 
 async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
+  const etl = resolveEtlWatermark(process.env);
   const resolved = await resolveWarehouseReplicaConfig({
     env: process.env,
     probe: lagProbe,
@@ -62,6 +65,9 @@ async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
         mayLabelLive: false as const,
         lagSource: 'unknown' as const,
         lagMeasuredAt: null,
+        etlWatermark: etl.state,
+        etlWatermarkAt: etl.at,
+        etlNote: etl.note,
       },
       { status: 400 },
     );
@@ -73,6 +79,8 @@ async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
     lagMeasuredAt: resolved.lagMeasuredAt,
     lagSource: resolved.lagSource,
     facts,
+    etlWatermark: etl.state,
+    etlWatermarkAt: etl.at,
   });
   return surfaceResponse(result);
 }

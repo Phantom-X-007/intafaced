@@ -61,21 +61,26 @@ configured + facts       → ok points (decimal strings for money)
 
 Use `queryWarehouseSurface` from contracts. Do not paint fake 24h notional in admin.
 
+**Live cubes (D26-P1-O4):** `mayPaintLiveCubes` requires replica configured + fresh probed lag in the live band + ETL watermark present (`ANALYTICS_ETL_WATERMARK_AT`) + facts. Missing watermark or a dark replica → `mayLabelLive=false`. Watermark alone never paints live. Admin door: `GET/POST /api/analytics/warehouse`.
+
 ---
 
 ## 5 · Local check
 
 ```bash
 pnpm --filter @intafaced/contracts test -- ops-analytics-warehouse
+pnpm --filter @intafaced/admin test -- src/app/api/analytics/warehouse
 ```
 
-Expect: writer URLs refuse; empty facts → `empty`; money-as-number → `refuse`.
+Expect: writer URLs refuse; empty facts → `empty`; money-as-number → `refuse`; probe without watermark → not live.
 
 ---
 
 ## 6 · Residual (not this Stage)
 
 - Physical logical-replication slots in compose
+- Real pg lag probe on a production pool (SQL helper exists; wiring a live standby is residual)
 - Cube ETL job / ClickHouse (Phase B late)
-- Admin read-only consumer UI
+- Admin read-only consumer UI (Vue HUMAN)
 - Tracker `done` for `ops.analytics`
+- svc-edge warehouse door (#2001) — not this admin-door PR

@@ -1554,17 +1554,15 @@ export const FEATURES = [
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
     phase: '5',
-    status: 'done',
+    status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     requires: ['packages/contracts/src/ops-analytics-warehouse.ts', 'services/svc-edge/src/compliance-honesty.ts'],
     note:
-      '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — `ANALYTICS_ETL_WATERMARK_AT` + ' +
-      '`resolveEtlWatermark` absent/present honesty; stamp never paints live cubes alone; writer URLs refuse. ' +
-      '**2026-08-15:** production SQL lag probe — `createSqlWarehouseLagProbe` runs ANALYTICS_REPLICA_LAG_SQL; ' +
-      'svc-edge `/admin/analytics/warehouse` is the caller (one-shot postgres.js, ANALYTICS_REPLICA_PROBE=off kill). ' +
-      'URL absent / connect fail / not-a-standby → unknown, never invented live. ' +
-      'Residual (not invent): cube job callers (Phase B late — no warehouse process). Never second balances.',
+      '**D26-P1-O4 admin door 2026-08-15:** `mayPaintLiveCubes` — dark replica or missing ETL watermark cannot paint live cubes; ' +
+      'admin `/api/analytics/warehouse` wires `resolveEtlWatermark`. Never second money book. Tracker stays **not done**. ' +
+      'Prior: watermark + SQL probe helper on contracts; svc-edge warehouse door (#2001) not this PR. ' +
+      'Residual: real pg lag probe on production pool, cube job callers (Phase B late). Never second balances.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
