@@ -1,7 +1,8 @@
 /**
  * Unit card (D26-P2-01e):
- * Promise: earn / cards / ramps refuse invent through mounted tRPC public doors
- *   (createBankRouter + signed createEdgeContext) — not service-unit-only guards.
+ * Promise: earn / cards / ramps refuse invent through mounted Fastify+tRPC
+ *   public doors (`/trpc` as index.ts mounts, signed createEdgeContext) —
+ *   not createCaller-only or service-unit-only guards.
  * Break: underfunded earn accrual could invent yield; JIT card auth could invent
  *   an FX rate when rates are unset; ramp money paths could invent a rail or
  *   a fiat PSP when the programme / socket is absent.
@@ -11,14 +12,17 @@
  *   · cards.issue + ops.cardAuthorize with settlement ≠ funding and no rates →
  *     PRECONDITION_FAILED / bank.mark_missing; no authorization row; no hold.
  *   · ramps.offramp / ops.creditOnramp with programme none → PRECONDITION_FAILED /
- *     bank.no_ramp_rail; fiat kind → bank.fiat_ramp_no_pay_adapter before any row.
+ *     bank.no_ramp_rail; fiat kind → bank.fiat_ramp_socket /
+ *     bank.fiat_ramp_no_pay_adapter before any row.
  * Class: N (honesty) / M surface (no invent yields or §8 rates). Leverage:
- *   createBankRouter + createBankServices + MemoryLedger (Phase A shell/ledger).
+ *   createBankRouter + Fastify TRPC mount + MemoryLedger (Phase A IN).
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
@@ -28,7 +32,7 @@ import { memoryLedgerHistory } from './analytics/ledger-history.js';
 import { createBankServices } from './bank-service.js';
 import { CARD_ISSUER_SETTINGS, cardIssuerFor } from './cards/issuer.js';
 import { noConversionRates } from './cards/conversion.js';
-import { createBankRouter } from './router.js';
+import { createBankRouter, type BankRouter } from './router.js';
 import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './ramps/rails.js';
 
 const SECRET = 'bank-promise-falsify-public-doors-secret-32b';
@@ -44,9 +48,10 @@ const MIGRATIONS = readdirSync(drizzle)
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Closed selectors — rates / programmes unset mean refuse, never invent.
-// ═══════════════════════════════════════════════════════════════════════════════
+type WireBody = {
+  result?: { data?: unknown };
+  error?: { message?: string; data?: { code?: string; httpStatus?: number } };
+};
 
 describe('D26-P2-01e refuse-closed defaults (no invent)', () => {
   it('card issuer silence is none — never the simulator', () => {
@@ -93,6 +98,18 @@ if (!available) {
     } as Principal;
   }
 
+  function signedHeaders(p: Principal = principal()): Record<string, string> {
+    const raw = encodePrincipal(p);
+    return {
+      'x-intafaced-principal': raw,
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+      'x-intafaced-region': 'DE',
+      'content-type': 'application/json',
+    };
+  }
+
+  const treasury = () => principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] });
+
   function caller(bank: ReturnType<typeof createBankServices>, p: Principal = principal()) {
     const raw = encodePrincipal(p);
     return createBankRouter(bank).createCaller(
@@ -105,6 +122,45 @@ if (!available) {
         id: `req-${randomUUID()}`,
       }),
     );
+  }
+
+  /** Same Fastify+tRPC mount as index.ts — the public door, not createCaller theater. */
+  async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
+    const router = createBankRouter(bank);
+    const app = Fastify({ logger: false });
+    await app.register(fastifyTRPCPlugin, {
+      prefix: '/trpc',
+      trpcOptions: {
+        router,
+        createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+      } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
+    });
+    await app.ready();
+    return app;
+  }
+
+  async function post(
+    app: FastifyInstance,
+    path: string,
+    input: Record<string, unknown>,
+    headers: Record<string, string> = signedHeaders(),
+  ): Promise<{ statusCode: number; body: WireBody }> {
+    const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
+    return { statusCode: res.statusCode, body: res.json() as WireBody };
+  }
+
+  function expectNamedRefuse(body: WireBody, named: string) {
+    expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
+    const wire = JSON.stringify(body.error);
+    expect(wire).toMatch(new RegExp(named.replace('.', '\\.')));
+  }
+
+  function procedureData(body: WireBody): unknown {
+    const data = body.result?.data;
+    if (data && typeof data === 'object' && data !== null && 'json' in data) {
+      return (data as { json: unknown }).json;
+    }
+    return data;
   }
 
   async function fund(ledger: MemoryLedger, userId: string, assetId: string, value: string) {
@@ -150,7 +206,7 @@ if (!available) {
       });
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(0n);
 
-      const ops = caller(bank, principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] }));
+      const ops = caller(bank, treasury());
       await expect(ops.ops.accrueInterest({ poolId: pool.id, at: '2026-03-02T00:00:00.000Z' })).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
         cause: { code: 'bank.pool_underfunded' },
@@ -177,13 +233,43 @@ if (!available) {
         now: new Date('2026-03-01T00:00:00.000Z'),
       });
 
-      const ops = caller(bank, principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] }));
+      const ops = caller(bank, treasury());
       const report = await ops.ops.accrueInterest({ at: '2026-03-02T00:00:00.000Z' });
 
       expect(report.failures).toEqual(
         expect.arrayContaining([expect.objectContaining({ poolId: empty.id, code: 'bank.pool_underfunded' })]),
       );
       expect(report.results.some((r) => r.poolId === empty.id)).toBe(false);
+      expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(0n);
+    });
+
+    it('HTTP /trpc/ops.accrueInterest refuses unfunded pool; retry proves the day was not consumed', async () => {
+      const pool = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'HTTP unfunded day',
+        aprBps: 3650,
+      });
+      await fund(ledger, HOLDER, 'USDT', '1000');
+      await bank.earn.deposit({
+        poolId: pool.id,
+        userId: HOLDER,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00.000Z'),
+      });
+
+      const app = await mountDoors(bank);
+      const first = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T00:00:00.000Z' }, signedHeaders(treasury()));
+      expect(first.statusCode).toBe(412);
+      expectNamedRefuse(first.body, 'bank.pool_underfunded');
+
+      const second = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T12:00:00.000Z' }, signedHeaders(treasury()));
+      expect(second.statusCode).toBe(412);
+      expectNamedRefuse(second.body, 'bank.pool_underfunded');
+      await app.close();
+
+      expect((await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${pool.id}`)).toHaveLength(0);
+      expect(ledger.journal().some((tx) => tx.reason === 'bank.earn.interest')).toBe(false);
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(0n);
     });
   });
@@ -215,7 +301,7 @@ if (!available) {
         perAuthorizationLimit: '1',
       });
 
-      const ops = caller(bank, principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] }));
+      const ops = caller(bank, treasury());
       await expect(
         ops.ops.cardAuthorize({
           cardId: card.id,
@@ -243,6 +329,43 @@ if (!available) {
         code: 'PRECONDITION_FAILED',
         cause: { code: 'bank.no_card_issuer' },
       });
+    });
+
+    it('HTTP /trpc/ops.cardAuthorize JIT with settlement≠funding and no mark writes no hold', async () => {
+      await fund(ledger, HOLDER, 'BTC', '1');
+      const app = await mountDoors(bank);
+      const issued = await post(
+        app,
+        'cards.issue',
+        {
+          cardId: randomUUID(),
+          assetId: 'BTC',
+          settlementAssetId: 'USDT',
+          perAuthorizationLimit: '1',
+        },
+        signedHeaders(),
+      );
+      expect(issued.statusCode).toBe(200);
+      const cardId = (procedureData(issued.body) as { id: string }).id;
+
+      const auth = await post(
+        app,
+        'ops.cardAuthorize',
+        {
+          cardId,
+          authorizationRef: `auth-${randomUUID()}`,
+          amount: '100',
+        },
+        signedHeaders(treasury()),
+      );
+      expect(auth.statusCode).toBe(412);
+      expectNamedRefuse(auth.body, 'bank.mark_missing');
+      await app.close();
+
+      expect((await sql`SELECT id FROM bank.card_authorizations WHERE card_id = ${cardId}`)).toHaveLength(0);
+      expect((await sql`SELECT id FROM bank.card_conversions`)).toHaveLength(0);
+      expect(ledger.journal().some((tx) => tx.reason === 'withdraw.held')).toBe(false);
+      expect((await ledger.balance(userAvailable(HOLDER, 'BTC'))).amount).toBe(amt('1'));
     });
   });
 
@@ -279,7 +402,7 @@ if (!available) {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
       });
-      const ops = caller(bank, principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] }));
+      const ops = caller(bank, treasury());
       await expect(
         ops.ops.creditOnramp({
           userId: HOLDER,
@@ -301,7 +424,7 @@ if (!available) {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: NO_RAMP_PROGRAMME },
       });
-      const ops = caller(bank, principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] }));
+      const ops = caller(bank, treasury());
       await expect(
         ops.ops.creditOnramp({
           userId: HOLDER,
@@ -314,6 +437,71 @@ if (!available) {
         code: 'PRECONDITION_FAILED',
         cause: { code: 'bank.no_ramp_rail' },
       });
+    });
+
+    it('HTTP /trpc ramps: programme none and fiat socket refuse before any row', async () => {
+      await fund(ledger, HOLDER, 'USDT', '50');
+      const none = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: NO_RAMP_PROGRAMME },
+      });
+      const crypto = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+      });
+
+      const noneApp = await mountDoors(none);
+      const offramp = await post(
+        noneApp,
+        'ramps.offramp',
+        {
+          offrampId: randomUUID(),
+          assetId: 'USDT',
+          amount: '10',
+          kind: 'crypto',
+          destinationRef: '0xdead',
+          clientRef: `c-${randomUUID()}`,
+        },
+        signedHeaders(),
+      );
+      expect(offramp.statusCode).toBe(412);
+      expectNamedRefuse(offramp.body, 'bank.no_ramp_rail');
+
+      const fiatNone = await post(
+        noneApp,
+        'ops.creditOnramp',
+        {
+          userId: HOLDER,
+          assetId: 'USDT',
+          amount: '10',
+          kind: 'fiat',
+          railRef: `fiat-none-${randomUUID()}`,
+        },
+        signedHeaders(treasury()),
+      );
+      expect(fiatNone.statusCode).toBe(412);
+      expectNamedRefuse(fiatNone.body, 'bank.fiat_ramp_socket');
+      await noneApp.close();
+
+      const cryptoApp = await mountDoors(crypto);
+      const fiatSocket = await post(
+        cryptoApp,
+        'ops.creditOnramp',
+        {
+          userId: HOLDER,
+          assetId: 'USDT',
+          amount: '10',
+          kind: 'fiat',
+          railRef: `fiat-crypto-${randomUUID()}`,
+        },
+        signedHeaders(treasury()),
+      );
+      expect(fiatSocket.statusCode).toBe(412);
+      expectNamedRefuse(fiatSocket.body, 'bank.fiat_ramp_no_pay_adapter');
+      await cryptoApp.close();
+
+      expect((await sql`SELECT count(*)::text AS c FROM bank.ramp_offramps`)[0]?.c).toBe('0');
+      expect((await sql`SELECT count(*)::text AS c FROM bank.ramp_onramps`)[0]?.c).toBe('0');
+      expect(ledger.journal().some((tx) => tx.reason === 'withdraw.held')).toBe(false);
+      expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('50'));
     });
   });
 }
