@@ -637,12 +637,24 @@ export class InstrumentService {
     input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string; sink: DenialSink },
   ): Promise<{ instrumentId: string; fingerprint: string }> {
     const methodId = methodIdKey(input.methodId);
+    // Same payable rule as `liveMethodKeys`: an active row is not a rail once
+    // the operator has emptied or disabled the schema. EXISTS, not JOIN, so a
+    // country row plus a `*` wildcard cannot duplicate the instrument and pick
+    // by an ordering nobody designed. A leftover destination still refuses
+    // through `refuseTake` — same sentence as "no destination" — so the take
+    // path cannot become an oracle for "schema gone vs dest gone".
     const rows = await tx<InstrumentRow[]>`
-      SELECT * FROM p2p.payment_instruments
-       WHERE owner_id = ${input.sellerId}
-         AND method_id = ${methodId}
-         AND fiat_currency = ${input.fiatCurrency}
-         AND status = 'active'
+      SELECT * FROM p2p.payment_instruments i
+       WHERE i.owner_id = ${input.sellerId}
+         AND i.method_id = ${methodId}
+         AND i.fiat_currency = ${input.fiatCurrency}
+         AND i.status = 'active'
+         AND EXISTS (
+           SELECT 1 FROM p2p.payment_method_schemas s
+            WHERE s.method_id = i.method_id
+              AND s.enabled = true
+              AND (s.country = i.country OR s.country = ${ANY_COUNTRY})
+         )
     `;
 
     const instrument = rows[0];
