@@ -48,11 +48,7 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(presentFuturesJobsCapabilityNote({ venueMarkConfigured: true })).not.toHaveProperty('venueId');
     expect(presentFuturesJobsCapabilityNote({ venueMarkConfigured: true })).not.toHaveProperty('symbols');
     expect(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true }).fundingIntervalConfigured).toBe(true);
-    expect(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true })).not.toHaveProperty(
-      'fundingIntervalMs',
-    );
-    expect(JSON.stringify(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true }))).not.toMatch(
-      /28_?800_?000|28800000/,
-    );
+    expect(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true })).not.toHaveProperty('fundingIntervalMs');
+    expect(JSON.stringify(presentFuturesJobsCapabilityNote({ fundingIntervalConfigured: true }))).not.toMatch(/28_?800_?000|28800000/);
   });
 });
