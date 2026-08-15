@@ -182,7 +182,7 @@ export class AlertService {
    */
   async evaluateMarket(marketId: string, at: Date = new Date()): Promise<EvaluateMarketReport> {
     const raw = await this.marks.quote(marketId, at);
-    const quote = acceptAlertMark(this.marks, raw);
+    const quote = acceptAlertMark(this.marks, raw, at);
     const ooa = this.namedOutOfAppRefusal();
     const actives = await this.store.listActiveByMarket(marketId);
     const results: EvaluateMarketReport['results'][number][] = [];
