@@ -481,6 +481,18 @@ describe('the shipped configuration does not turn the venue mark stream on', () 
   });
 });
 
+describe('the shipped configuration does not invent a venue mark map', () => {
+  it('hands the container empty venue id and empty symbol map on a clean clone', () => {
+    expect(shipped.get('TRADE_VENUE_MARK_VENUE')).toBe('');
+    expect(shipped.get('TRADE_VENUE_MARK_SYMBOLS')).toBe('');
+  });
+
+  it('compose pins both keys empty rather than omitting them (host env cannot leak a map)', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_VENUE_MARK_VENUE:\s*\$\{TRADE_VENUE_MARK_VENUE:-\}/);
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_VENUE_MARK_SYMBOLS:\s*\$\{TRADE_VENUE_MARK_SYMBOLS:-\}/);
+  });
+});
+
 describe('the shipped configuration does not invent a funding market list', () => {
   it('declares TRADE_FUTURES_FUNDING_MARKET_IDS default empty', () => {
     const src = joinChains(read('services/svc-trade/src/env.ts'));
