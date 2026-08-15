@@ -1,5 +1,7 @@
 # Spine branch disposition — 2026-08-09
 
+**CURRENT table is** [`SPINE-BRANCH-DISPOSITION-2026-08-15.md`](SPINE-BRANCH-DISPOSITION-2026-08-15.md). This file stays for seal mechanisms (§3–§6). Do not treat the 1,220-behind counts or DIRECTION §6 RESUME rows as live.
+
 **Board item:** D26-P4-01, `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` §8 — _"architecture cleanup — only you seal without destroy."_
 **Method:** read-only. Nothing was merged, rebased, pushed to, or deleted. No code was edited. Every verdict below is from `git show` / `git diff` against `origin/main`.
 **Tip at write:** `2d85e546`. Main moved four times during this pass (`6701c4d3 → 0070b551 → 80daedf0 → 2d85e546`); re-derive before acting.
