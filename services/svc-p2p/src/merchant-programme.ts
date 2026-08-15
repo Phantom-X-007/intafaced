@@ -34,6 +34,15 @@ import type { ReputationSnapshot } from './reputation.js';
 export type MerchantStatus = 'applied' | 'approved' | 'rejected' | 'suspended' | 'withdrawn';
 
 /**
+ * Stage 3 merchant API keys / scopes / rate limits are EXPLICITLY CUT.
+ *
+ * `identity.apikeys` already owns named keys. A second mint/revoke/table plane
+ * inside svc-p2p would dual-write credentials. Membership here is standing
+ * only; machine credentials never live in this file.
+ */
+export const MERCHANT_API_KEY_PLANE = 'identity.apikeys' as const;
+
+/**
  * Who may make each transition.
  *
  * `self` is the applicant acting on their own record; `operator` needs the

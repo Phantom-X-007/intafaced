@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
@@ -8,6 +11,7 @@ import {
   limitsConfigured,
   limitsOnWire,
   NO_OFFER_LIMITS,
+  offerLimitsFromEnv,
   type OfferLimitPolicy,
 } from './merchant-limits.js';
 import type { MerchantStatus } from './merchant-programme.js';
@@ -20,7 +24,55 @@ const policy = (standard: string | null, merchant: string | null): OfferLimitPol
 /** Every status the programme can be in, so a new one cannot be added silently. */
 const ALL_STATUSES: MerchantStatus[] = ['applied', 'approved', 'rejected', 'suspended', 'withdrawn'];
 
+const here = dirname(fileURLToPath(import.meta.url));
+const limitsSource = readFileSync(join(here, 'merchant-limits.ts'), 'utf8');
+
 describe('merchant offer limits', () => {
+  describe('unset env stays unlimited — no invented ceiling', () => {
+    it('maps missing P2P_OFFER_MAX_STANDARD/MERCHANT to both-null policy', () => {
+      const policy = offerLimitsFromEnv({});
+      expect(policy.standardMaxAmount).toBeNull();
+      expect(policy.merchantMaxAmount).toBeNull();
+      expect(limitsConfigured(policy)).toBe(false);
+      expect(limitsOnWire(policy).standardMax).toBeNull();
+      expect(limitsOnWire(policy).merchantMax).toBeNull();
+    });
+
+    it('treats blank env strings as unset, not as zero or a default max', () => {
+      const policy = offerLimitsFromEnv({
+        P2P_OFFER_MAX_STANDARD: '',
+        P2P_OFFER_MAX_MERCHANT: '   ',
+      });
+      expect(policy).toEqual(NO_OFFER_LIMITS);
+      expect(
+        checkOfferLimit({
+          status: null,
+          maxAmt: parseAmount('999999999'),
+          asset: 'USDT',
+          policy,
+        }).withinLimit,
+      ).toBe(true);
+    });
+
+    it('does not bake a numeric default into NO_OFFER_LIMITS or this module', () => {
+      expect(NO_OFFER_LIMITS.standardMaxAmount).toBeNull();
+      expect(NO_OFFER_LIMITS.merchantMaxAmount).toBeNull();
+      expect(limitsSource).toMatch(/standardMaxAmount:\s*null/);
+      expect(limitsSource).toMatch(/merchantMaxAmount:\s*null/);
+      expect(limitsSource).not.toMatch(/DEFAULT_OFFER_MAX/);
+      expect(limitsSource).not.toMatch(/P2P_OFFER_MAX_(?:STANDARD|MERCHANT).*(?:\?\?|\.default\()/);
+    });
+
+    it('still parses an owner-set decimal when present — magnitudes stay env-only', () => {
+      const policy = offerLimitsFromEnv({
+        P2P_OFFER_MAX_STANDARD: '1000',
+        P2P_OFFER_MAX_MERCHANT: '5000',
+      });
+      expect(policy.standardMaxAmount).toBe(parseAmount('1000'));
+      expect(policy.merchantMaxAmount).toBe(parseAmount('5000'));
+    });
+  });
+
   describe('the default is no limit', () => {
     it('lets any account offer any size when nothing is configured', () => {
       // This is the load-bearing non-breaking property: Stage 2 ships the
