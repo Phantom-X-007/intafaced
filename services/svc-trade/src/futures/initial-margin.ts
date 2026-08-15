@@ -39,33 +39,46 @@
  * price the caller pays.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE NUMBER IS THE OWNER'S. THE MECHANISM IS NOT.
+ * THE NUMBER IS DIRECTION §1. RAISES ARE THE OWNER'S.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * `DIRECTION` §8 item 8 reserves "leverage, margin and liquidation parameters
- * beyond §1's stated defaults" to the owner, and §1 states no leverage default,
- * so the maximum is unruled. What is implemented here is the MECHANISM and its
- * refusal. Unset is refuse-closed (`trade.leverage_cap_unset`), not a shipped
- * 10x. The ruling lands on `TRADE_FUTURES_MAX_LEVERAGE` / `PositionServiceDeps.maxLeverage`.
+ * `DIRECTION` §1 names max leverage v1 as **10×**. D26-P0-07
+ * (`docs/adr/2026-08-13-leverage-defaults-frozen.md`) froze that cell: it is
+ * not a placeholder, and agents must not treat unset env as "no cap" or as an
+ * excuse to invent 20×. `TRADE_FUTURES_MAX_LEVERAGE` may only TIGHTEN (≤ 10).
+ * A value above 10× is a raise and fails boot.
  */
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 
-/** Owner cap omitted — opens refuse rather than inventing 10x. */
-export const LEVERAGE_CAP_UNSET = 'trade.leverage_cap_unset';
+/** DIRECTION §1 / D26-P0-07 — live v1 cap. Not a placeholder. */
+export const DEFAULT_MAX_LEVERAGE = '10';
+export const DEFAULT_MAX_LEVERAGE_AMOUNT: Amount = parseAmount(DEFAULT_MAX_LEVERAGE);
 
-/** Positive configured cap, or null when the owner has not named one. */
-export function resolveMaxLeverage(configured?: Amount | null): Amount | null {
-  if (configured != null && configured > 0n) return configured;
-  return null;
+/** Positive configured cap ≤ 10×, or the DIRECTION default when omitted. */
+export function resolveMaxLeverage(configured?: Amount | null): Amount {
+  if (configured != null && configured > 0n) {
+    if (configured > DEFAULT_MAX_LEVERAGE_AMOUNT) {
+      throw new Error(
+        'TRADE_FUTURES_MAX_LEVERAGE above 10× is a raise — D26-P0-07 / DIRECTION §1 (docs/adr/2026-08-13-leverage-defaults-frozen.md)',
+      );
+    }
+    return configured;
+  }
+  return DEFAULT_MAX_LEVERAGE_AMOUNT;
 }
 
-/** Parse `TRADE_FUTURES_MAX_LEVERAGE`. Empty → null (no invented 10). Invalid → throw at boot. */
+/** Parse `TRADE_FUTURES_MAX_LEVERAGE`. Empty → null (code uses 10×). Invalid or >10 → throw at boot. */
 export function parseConfiguredMaxLeverage(raw: string): Amount | null {
   const s = raw.trim();
   if (s === '') return null;
   const n = parseAmount(s);
   if (n <= 0n) {
-    throw new Error('TRADE_FUTURES_MAX_LEVERAGE must be a positive decimal, or empty (no invented 10x)');
+    throw new Error('TRADE_FUTURES_MAX_LEVERAGE must be a positive decimal ≤ 10, or empty (DIRECTION §1 10×)');
+  }
+  if (n > DEFAULT_MAX_LEVERAGE_AMOUNT) {
+    throw new Error(
+      'TRADE_FUTURES_MAX_LEVERAGE above 10× is a raise — D26-P0-07 / DIRECTION §1 (docs/adr/2026-08-13-leverage-defaults-frozen.md)',
+    );
   }
   return n;
 }

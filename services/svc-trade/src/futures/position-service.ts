@@ -34,7 +34,7 @@ import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
-import { checkLeverage, initialMargin, LEVERAGE_CAP_UNSET, resolveMaxLeverage } from './initial-margin.js';
+import { checkLeverage, initialMargin, resolveMaxLeverage } from './initial-margin.js';
 import { planClose } from './close-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
@@ -150,9 +150,8 @@ export interface PositionServiceDeps {
   /**
    * THE LEVERAGE CEILING FOR THIS DEPLOYMENT.
    *
-   * Omitted → refuse opens (`trade.leverage_cap_unset`). Unbounded was the
-   * defect; inventing 10x is the same class of silent product law. Owner names
-   * the number via `TRADE_FUTURES_MAX_LEVERAGE`.
+   * Omitted → DIRECTION §1 10× (`resolveMaxLeverage`). Env may only tighten
+   * (≤ 10). A raise above 10× is D26-P0-07 and fails at parse, not here.
    */
   maxLeverage?: Amount;
   now?: () => Date;
@@ -205,7 +204,7 @@ export interface PositionRow {
 export class PositionService {
   private readonly bus: EventBus | null;
   private readonly markPolicy: MarkPolicy;
-  private readonly maxLeverage: Amount | null;
+  private readonly maxLeverage: Amount;
   private readonly now: () => Date;
 
   constructor(
@@ -441,15 +440,8 @@ export class PositionService {
      * something it does not offer. Validating here makes it a named 400 that
      * never locked anything, so there is nothing to compensate.
      *
-     * The cap itself is owner §8 — unset refuses rather than inventing 10x.
+     * The cap is DIRECTION §1 10× unless the host tightened it.
      */
-    if (this.maxLeverage == null) {
-      throw new FuturesError(
-        'Futures is not open on this deployment — TRADE_FUTURES_MAX_LEVERAGE is unset (no invented 10x cap)',
-        LEVERAGE_CAP_UNSET,
-        403,
-      );
-    }
     const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
     if (!leverageCheck.ok) {
       throw new FuturesError(leverageCheck.reason ?? 'leverage refused', leverageCheck.code ?? 'trade.leverage_invalid', 400);

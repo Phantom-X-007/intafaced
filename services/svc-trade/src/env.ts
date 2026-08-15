@@ -118,11 +118,9 @@ const schema = serviceEnvSchema
        *     remove the one ceiling there is. Orders on a futures book are funded
        *     by the same hold as spot (`holdFor` / `assertTradable` in
        *     `spot/risk.ts`), and a MARGIN position opened through
-       *     `futures/position-service.ts` is refused above
-       *     `TRADE_FUTURES_MAX_LEVERAGE` however this flag is set. Unset cap
-       *     refuses opens (`trade.leverage_cap_unset`) — there used to be no
-       *     ceiling at all, then a shipped 10x placeholder; see
-       *     `futures/initial-margin.ts`.
+       *     `futures/position-service.ts` is refused above the DIRECTION §1
+       *     10× cap (D26-P0-07), or a tighter `TRADE_FUTURES_MAX_LEVERAGE`.
+       *     Empty env is 10× in code — not refuse-closed, not a raise.
        *   · It does not lower the mark bar. `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`
        *     still refuses a dust book, which is the whole reason this flag
        *     could be added at all (`c7dfb5e4`, `cc90c2f4`) — and
@@ -241,8 +239,8 @@ const schema = serviceEnvSchema
 
       /**
        * Maximum leverage on a futures open (decimal string, same units as the
-       * request). EMPTY = refuse opens (`trade.leverage_cap_unset`).
-       * DIRECTION §8 item 8 — no product 10x.
+       * request). EMPTY = DIRECTION §1 10× in code (D26-P0-07). Set only to
+       * tighten (≤ 10). A value above 10× fails boot — that is a raise.
        */
       TRADE_FUTURES_MAX_LEVERAGE: z.string().default(''),
 
