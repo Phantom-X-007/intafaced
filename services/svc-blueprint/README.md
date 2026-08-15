@@ -25,17 +25,19 @@ Two things enforce it:
 
 ## API
 
-tRPC (`src/router.ts`). Every procedure operates on `ctx.principal.userId` and never on an id from the input — there is no "export that account" path, by design.
+tRPC (`src/router.ts`). Owner procedures operate on `ctx.principal.userId` and never on an id from the input — there is no "export that account" path, by design. `cardOf` is the exception: its input names whose share card, and visibility decides.
 
-| Procedure | Scope             | Purpose                                                        |
-| --------- | ----------------- | -------------------------------------------------------------- |
-| `health`  | public            | Liveness                                                       |
-| `onboard` | `blueprint:write` | Session → engine → profile → crew placement → mentor shortlist |
-| `me`      | `blueprint:read`  | The caller's own Blueprint                                     |
-| `card`    | `blueprint:read`  | **§7.2 share card** — the caller's own, at either share size   |
-| `mentors` | `blueprint:read`  | The caller's mentor shortlist — its own query, not `export()`  |
-| `export`  | `blueprint:read`  | **§7.2 portable** — everything this service holds, as JSON     |
-| `erase`   | `blueprint:write` | **§7.2 deletable** — hard delete that cascades                 |
+| Procedure       | Scope             | Purpose                                                                         |
+| --------------- | ----------------- | ------------------------------------------------------------------------------- |
+| `health`        | public            | Liveness                                                                        |
+| `onboard`       | `blueprint:write` | Session → engine → profile → crew placement → mentor shortlist                  |
+| `me`            | `blueprint:read`  | The caller's own Blueprint                                                      |
+| `card`          | `blueprint:read`  | **§7.2 share card** — the caller's own, at either share size                    |
+| `cardOf`        | `blueprint:read`  | Someone else's share card — gated by `blueprints.visibility` (not a public URL) |
+| `setVisibility` | `blueprint:write` | Change the caller's own `private` / `crew` / `public`                           |
+| `mentors`       | `blueprint:read`  | The caller's mentor shortlist — its own query, not `export()`                   |
+| `export`        | `blueprint:read`  | **§7.2 portable** — everything this service holds, as JSON                      |
+| `erase`         | `blueprint:write` | **§7.2 deletable** — hard delete that cascades                                  |
 
 HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Blueprint cannot be produced without it and reporting ready while it is down routes onboarding at a service that can only fail it. It reports the card renderer too, but does **not** gate on it: a card can be produced without a rasterizer, and refusing traffic because the PNG rail is absent would take onboarding down over a share image.
 
@@ -270,7 +272,7 @@ There is deliberately **no default URL**. One pointing at a host that does not e
 ## Not in this feature
 
 - **A hosted PNG.** See above — the adapter exists, the rail does not, and the service says so rather than pretending.
-- **Public card URLs.** `blueprint.card` is authenticated and self-only. Whose card may be seen is what `blueprints.visibility` decides, and that check is not built; a public endpoint shipped ahead of it would make every Blueprint's crew role enumerable by user id, including the `private` ones.
+- **Unauthenticated public card URLs.** `cardOf` is authenticated and gated by `blueprints.visibility` (`private` = owner only, `crew` = same crew, `public` = any signed principal). Denied and missing are the same `not_found`, so private Blueprints are not enumerable by id. A session-less unfurl URL (OG crawlers, share tokens) is still unbuilt — that is object storage + a revocable token (`ops.social-promotion` / Class X), not this procedure.
 - On-chain rank attestations (`blueprint.attestations`, §19).
 - Crew vaults (§33) — Phase 5P, and the money lives in the ledger when it arrives.
 

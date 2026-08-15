@@ -4,11 +4,13 @@ import {
   blueprintExportSchema,
   blueprintSchema,
   cardInput,
+  cardOfInput,
   cardRenderSchema,
   eraseReceiptSchema,
   mentorMatchSchema,
   onboardInput,
   onboardOutput,
+  setVisibilityInput,
 } from '@intafaced/contracts';
 import { BlueprintError, type BlueprintService } from './blueprint-service.js';
 
@@ -18,12 +20,16 @@ import { BlueprintError, type BlueprintService } from './blueprint-service.js';
  * The contract shape lives in `packages/contracts` — this implements it.
  *
  * ── Authorisation, stated once ──────────────────────────────────────────────
- * Every procedure here operates on `ctx.principal.userId` and **never on a
- * userId from the input**. There is deliberately no "onboard this other person"
+ * Every owner procedure operates on `ctx.principal.userId` and never on a
+ * userId from the input. There is deliberately no "onboard this other person"
  * or "erase that account" path: a Blueprint is the most personal object in the
  * OS and an export endpoint that takes an arbitrary id is a data-exfiltration
  * endpoint with extra steps. Operator access, when it is specced, goes through
  * apps/admin with `admin:compliance` and an audit trail — not through here.
+ *
+ * The one exception is `cardOf`: the input names whose *share card* to read,
+ * and the viewer is still the signed principal. `blueprints.visibility` decides
+ * whether that read succeeds. Profile / export / erase stay self-only.
  *
  * `blueprint` is non-custodial and `minTier: 'none'` in the jurisdiction matrix
  * (packages/config), so the guard's job is scope and region, not verification.
@@ -80,19 +86,12 @@ export function createBlueprintRouter(blueprint: BlueprintService) {
       .query(({ ctx }) => blueprint.get({ userId: ctx.principal.userId })),
 
     /**
-     * The share card (§7.1 "the acquisition artifact", §7.2 exit criterion).
+     * The caller's own share card (§7.1, §7.2). Always allowed for the owner,
+     * including when visibility is `private`. `cardOf` is the other-user path.
      *
-     * `blueprint:read`, and the caller's OWN card — the same rule as everything
-     * else on this router. It is tempting to make this public, since the card
-     * carries no personal data and exists to be shared: a public `card(userId)`
-     * would let a page render anyone's unfurl with no session at all.
-     *
-     * It is not public, because *whose* card may be seen is what
-     * `blueprints.visibility` decides, and that check does not exist yet. A
-     * public endpoint shipped ahead of it would make every Blueprint's crew role
-     * enumerable by user id — including the ones set to `private` — and walking
-     * that back later breaks URLs other people have already embedded.
-     * Authenticated and self-only is the reversible direction.
+     * Still not a public unauthenticated URL — walking that back later would
+     * break embedded unfurls. Authenticated + visibility is the reversible
+     * direction; OG/share tokens stay ops.social-promotion / Class X.
      */
     card: scopedProcedure('blueprint:read', { module: 'blueprint' })
       .input(cardInput)
@@ -100,6 +99,43 @@ export function createBlueprintRouter(blueprint: BlueprintService) {
       .query(async ({ ctx, input }) => {
         try {
           return await blueprint.card({ userId: ctx.principal.userId, size: input.size });
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /**
+     * Someone else's share card, gated by `blueprints.visibility`.
+     *
+     * `userId` is the subject. The viewer is the signed principal — a forged
+     * header still cannot pick the viewer. Denied and missing are the same
+     * `NOT_FOUND`, so private Blueprints are not enumerable by id.
+     */
+    cardOf: scopedProcedure('blueprint:read', { module: 'blueprint' })
+      .input(cardOfInput)
+      .output(cardRenderSchema)
+      .query(async ({ ctx, input }) => {
+        try {
+          return await blueprint.cardFor({
+            viewerId: ctx.principal.userId,
+            subjectUserId: input.userId,
+            size: input.size,
+          });
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /**
+     * Change the caller's own visibility. Write-once at onboard would leave
+     * the column decorative for anyone who accepted the default (`private`).
+     */
+    setVisibility: scopedProcedure('blueprint:write', { module: 'blueprint' })
+      .input(setVisibilityInput.omit({ userId: true }))
+      .output(blueprintSchema)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await blueprint.setVisibility({ userId: ctx.principal.userId, visibility: input.visibility });
         } catch (err) {
           throw toTrpcError(err);
         }
