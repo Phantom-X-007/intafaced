@@ -89,6 +89,9 @@ describe('presenters', () => {
     expect(perp.active).toBe(true);
     expect(perp.swap).toBe(true);
     expect(perp.orderable).toBe(false);
+    expect(perp.settle).toBeNull();
+    expect(perp.linear).toBeNull();
+    expect(perp.inverse).toBeNull();
     expect(marketSchema.safeParse(perp).success).toBe(true);
 
     const live = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }), Date.now(), {

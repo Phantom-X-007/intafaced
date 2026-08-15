@@ -313,8 +313,13 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), fl
     future: false,
     option: market.kind === 'options',
     contract: !isSpot,
-    linear: isSpot ? null : true,
-    inverse: isSpot ? null : false,
+    /**
+     * Linear/inverse are a function of settle (quote vs base). Settle is
+     * unpublished on this listing (`null`), so these stay null too — claiming
+     * `linear: true` while `settle` is null is an invented USDT-margined book.
+     */
+    linear: null as boolean | null,
+    inverse: null as boolean | null,
     active: market.status === 'active',
     /**
      * TRUE = the order path will accept a new order/open here (subject to
