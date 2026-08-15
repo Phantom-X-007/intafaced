@@ -127,6 +127,7 @@ If tracker owner is **shehzad002** (Protocol Plane / INTACHAIN) or LIVE-LANES hu
 
 ## Related
 
+- Agent batch rule (MAY vs MUST NOT edit `features.mjs`): [`TRACKER-THRASH-PROTOCOL.md`](TRACKER-THRASH-PROTOCOL.md)
 - Plan + anti-list: [`TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md`](TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md)
 - Evidence: [`DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md`](DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md)
 - Claim how-to: `CONTRIBUTING.md` §3.5 · `AGENTS.md`
