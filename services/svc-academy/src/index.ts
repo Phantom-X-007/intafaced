@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
+import { registerInternalCurriculumRoute } from './curriculum/internal-curriculum.js';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AcademyService } from './academy-service.js';
@@ -153,6 +154,8 @@ app.get('/ready', async () => ({
   // /ready is the least authenticated surface this service has.
   xp: { id: certXp.id, usable: certXp.usable, publishes: 'intafaced.identity.xp.earned' },
 }));
+
+registerInternalCurriculumRoute(app, env.INTERNAL_SERVICE_SECRET);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
