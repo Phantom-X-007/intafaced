@@ -129,6 +129,19 @@ if (!available) {
       await expect(service.claimSlot({ userId: OTHER_USER, ref: 'b' })).rejects.toMatchObject({ code: 'market.slots_exhausted' });
     });
 
+    it('refuses a claim when owner slot magnitudes are unset rather than inventing a count', async () => {
+      const unset: SlotEntitlementSource = {
+        entitlementOf: async () => ({ tierName: 'Operator', vendorSlots: Number.NaN }),
+      };
+      const service = new VendorService(sql, unset);
+      await approvedVendor(VENDOR_USER, withCapacity(3));
+
+      await expect(service.claimSlot({ userId: VENDOR_USER, ref: 'listing-1' })).rejects.toMatchObject({
+        code: 'market.stake_unavailable',
+      });
+      expect(await service.openSlotCount((await service.myVendor(VENDOR_USER))!.id)).toBe(0);
+    });
+
     it('fails closed when the stake gate cannot be read', async () => {
       const dead: SlotEntitlementSource = {
         entitlementOf: async () => {

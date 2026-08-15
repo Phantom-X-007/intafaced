@@ -86,3 +86,20 @@ describe('usableSlots — DoD clause 5, suspended or under-staked cannot present
     expect(usableSlots({ status: 'approved', capacity: 10 }, { open: 2 })).toBe(2);
   });
 });
+
+describe('pin: refuse unset owner stake/slot magnitudes — do not invent a slot count', () => {
+  it('refuses a claim when capacity is unset rather than admitting a free slot', () => {
+    for (const capacity of [undefined, null, Number.NaN, 1.5, -1] as unknown as number[]) {
+      expect(decideVendorSlot({ status: 'approved', capacity }, { open: 0 })).toMatchObject({
+        allowed: false,
+        code: 'market.stake_unavailable',
+      });
+    }
+  });
+
+  it('reports zero usable slots when capacity is unset — never a guessed quota', () => {
+    for (const capacity of [undefined, null, Number.NaN] as unknown as number[]) {
+      expect(usableSlots({ status: 'approved', capacity }, { open: 3 })).toBe(0);
+    }
+  });
+});
