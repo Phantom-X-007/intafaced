@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { exchangeErrorSchema, marketSchema, ohlcvSchema, orderBookSchema, tickerSchema, tradeSchema } from '@intafaced/exchange-contract';
@@ -841,6 +842,7 @@ describe('public REST routes', () => {
     expect(res.statusCode).toBe(501);
     expect(res.json().code).toBe('NotSupported');
     expect(res.json().intafacedCode).toBe('trade.funding_rate_unavailable');
+    expect(res.json().retryAfter).toBeUndefined();
     expect(JSON.stringify(res.json())).not.toMatch(/"fundingRate"/);
     await app.close();
   });
@@ -869,6 +871,7 @@ describe('public REST routes', () => {
     const body = res.json();
     expect(body.symbol).toBe('BTC/USDT-PERP');
     expect(body.fundingRate).toBe('0.0001');
+    expect(body.nextFundingTimestamp).toBeNull();
     await app.close();
   });
 
@@ -976,5 +979,13 @@ describe('public REST routes', () => {
       expect(parsed.success, `${url} → ${res.body}`).toBe(true);
     }
     await app.close();
+  });
+
+  it('does not invent nextFundingTimestamp from TRADE_FUTURES_FUNDING_INTERVAL_MS', () => {
+    const src = readFileSync(new URL('./public-rest.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/nextFundingTimestamp:\s*quote\.nextFundingTimestamp/);
+    expect(src).not.toMatch(/TRADE_FUTURES_FUNDING_INTERVAL_MS/);
+    expect(src).not.toMatch(/8 \* 60 \* 60/);
+    expect(src).not.toMatch(/28_?800_?000/);
   });
 });
