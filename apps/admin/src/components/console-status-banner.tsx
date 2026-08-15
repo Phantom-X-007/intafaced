@@ -1,4 +1,5 @@
 import { Chip } from '@/components/chip';
+import { consoleCopy } from '@/lib/console-copy';
 import { AUTHORITY_REACH, type ConsoleStatus } from '@/lib/console-status';
 
 /**
@@ -25,6 +26,9 @@ import { AUTHORITY_REACH, type ConsoleStatus } from '@/lib/console-status';
  *
  * Never renders a credential — `ConsoleStatus` carries booleans and variable
  * NAMES only, which is the property `console-status.ts` maintains.
+ *
+ * Operator-visible sentences resolve through `@intafaced/i18n`. A missing key
+ * renders the key name — never invented English.
  */
 
 export interface ConsoleStatusBannerProps {
@@ -39,17 +43,15 @@ export function ConsoleStatusBanner({ status }: ConsoleStatusBannerProps) {
   return (
     <div className="adm-alertstrip" data-severity={status.canHaltAnything ? 'partial' : 'none'} role="status">
       <Chip tone="danger" dot>
-        {status.canHaltAnything ? 'Partly unconfigured' : 'Cannot halt anything'}
+        {status.canHaltAnything ? consoleCopy('admin.console.banner.chip.partial') : consoleCopy('admin.console.banner.chip.none')}
       </Chip>
       <span className="adm-alertstrip__body">
         <strong>
-          {status.canHaltAnything
-            ? 'This console cannot reach every platform switch.'
-            : 'This console cannot halt anything. Every switch below is inert.'}
+          {status.canHaltAnything ? consoleCopy('admin.console.banner.title.partial') : consoleCopy('admin.console.banner.title.none')}
         </strong>{' '}
         {blocked.map((authority) => (
           <span key={authority.authority} className="adm-alertstrip__item">
-            Cannot {AUTHORITY_REACH[authority.authority]} — set{' '}
+            {consoleCopy('admin.console.banner.item.lead', { reach: AUTHORITY_REACH[authority.authority] })}{' '}
             {authority.missing.map((name, i) => (
               <span key={name}>
                 {i > 0 && ' + '}
@@ -59,8 +61,7 @@ export function ConsoleStatusBanner({ status }: ConsoleStatusBannerProps) {
             .{' '}
           </span>
         ))}{' '}
-        Nothing here is a value: these are variable names on the <code>admin</code> container. See{' '}
-        <code>docs/OWNER-OPS-CHECKLIST-2026-07-31.md</code> §7.
+        {consoleCopy('admin.console.banner.disclaimer')}
       </span>
     </div>
   );

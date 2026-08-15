@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { Panel, StatBlock } from '@intafaced/ui';
 import type { Drop, ModuleId } from '@intafaced/config';
 import { Chip } from '@/components/chip';
+import { consoleCopy } from '@/lib/console-copy';
 import { dropLabel } from '@/lib/drops';
 import { type ControlPlaneState, type KillSwitchSnapshot, postKillSwitch } from '@/lib/control-plane-browser';
 import {
@@ -414,12 +415,13 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
 
 function ControlPlanePanel({ plane }: { plane: ControlPlaneState }) {
   const tone = plane.status === 'reachable' ? 'info' : plane.status === 'unconfigured' ? 'warn' : 'danger';
-  const title =
+  const title = consoleCopy(
     plane.status === 'reachable'
-      ? 'Control plane: reachable'
+      ? 'admin.console.plane.reachable'
       : plane.status === 'unconfigured'
-        ? 'Control plane: not configured'
-        : 'Control plane: unreachable';
+        ? 'admin.console.plane.unconfigured'
+        : 'admin.console.plane.unreachable',
+  );
 
   return (
     <Panel title={title} className={plane.status === 'reachable' ? undefined : 'adm-panel--warn'}>
