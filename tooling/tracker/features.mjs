@@ -1240,11 +1240,19 @@ export const FEATURES = [
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
     module: 'academy',
     phase: '5',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
+    requires: [
+      'services/svc-trade/drizzle/0006_paper_markets.sql',
+      'services/svc-academy/src/paper/workbook-loop.ts',
+      'services/svc-academy/src/paper/ops-gate.ts',
+      'services/svc-academy/src/paper/ledger-isolation.test.ts',
+    ],
     note:
-      'Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). ' +
-      'Stage-2 workbook wire + fill-ref attach. ' +
-      'Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected) — #1001.',
+      'DONE 2026-08-15: title bar met on tip — paper market flag + placeOrder zero-ledger isolation, workbook drill loop with trade fill-refs only, ' +
+      'ACADEMY_PAPER_TRADING_ENABLED kill-switch (live trade unaffected, #1001). XP/rank from paper is academy.certs (not this row). ' +
+      'Stage-1 2026-08-04: trade.markets.paper + placeOrder isolation. Stage-2 workbook wire. Stage-3 ops gate.',
   }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
     owner: 'shehzad002',
