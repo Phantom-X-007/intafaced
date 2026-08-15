@@ -97,6 +97,15 @@ describe('copy-intel buildLeaderStats (Stage-1 fixtures)', () => {
     });
   });
 
+  it('Stage-2: copy plane live without sealed allowlist → still dark (no invent leaders)', () => {
+    const r = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW, copyPlane: 'live', leaderAllowlist: ['L1'] });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.copy_intel.unavailable',
+      reason: 'copy_plane_dark',
+    });
+  });
+
   it('Stage-2 L3: leader allowlist drops out-of-scope — no invent leaders', () => {
     const r = buildLeaderStats([row({ leaderId: 'L1' }), row({ leaderId: 'L2', realisedPnl: '5' })], {
       now: NOW,

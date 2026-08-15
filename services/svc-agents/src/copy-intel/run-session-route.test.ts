@@ -79,6 +79,20 @@ describe('copyIntel.runSession route', () => {
     expect(result.metering.billedAmount).toBe('0');
   });
 
+  it('refuses live plane with fixtures until leaders are allowlisted — no invent board', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .copyIntel.runSession({ plane: 'live', fixtures: [fixture], leaderAllowlist: ['leader-a'] });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_leaders',
+      userMessageKey: 'agents.copy_intel.unavailable',
+    });
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result.metering.sessionId).toBeNull();
+  });
+
   it('requires agents:execute', async () => {
     const readOnly = signed(principal({ scopes: ['agents:read'] }));
     await expect(
