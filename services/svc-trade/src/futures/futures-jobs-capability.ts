@@ -21,6 +21,8 @@ export type FuturesJobsCapabilityNote = {
   /** BUILD-STOP D2 — no invented |rate| ceiling. True only when env is a non-empty string. */
   readonly fundingMaxAbsRateConfigured: boolean;
   readonly fundingMaxAbsRateDefault: false;
+  /** Count only — never the UUID list. Omitted / non-positive → 0. */
+  readonly fundingMarketCount: number;
 };
 
 export function presentFuturesJobsCapabilityNote(input: {
@@ -28,7 +30,10 @@ export function presentFuturesJobsCapabilityNote(input: {
   readonly orderableEnabled?: boolean;
   readonly profitSourceConfigured?: boolean;
   readonly fundingMaxAbsRateConfigured?: boolean;
+  readonly fundingMarketCount?: number;
 }): FuturesJobsCapabilityNote {
+  const raw = input.fundingMarketCount;
+  const fundingMarketCount = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
   return {
     orderableEnabled: input.orderableEnabled === true,
     orderableDefault: false,
@@ -43,5 +48,6 @@ export function presentFuturesJobsCapabilityNote(input: {
     insuranceTargetSize: 'owner_unset',
     fundingMaxAbsRateConfigured: input.fundingMaxAbsRateConfigured === true,
     fundingMaxAbsRateDefault: false,
+    fundingMarketCount,
   };
 }
