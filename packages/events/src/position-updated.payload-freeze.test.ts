@@ -135,9 +135,7 @@ describe('D26-P4-05 positionUpdated payload freeze', () => {
   });
 
   it.each(POSITION_UPDATED_MONEY_FIELDS)('rejects JSON number on money field %s', (field: MoneyField) => {
-    const poisoned = JSON.parse(
-      JSON.stringify({ ...legalPayload(), [field]: 1.25 }),
-    ) as Record<string, unknown>;
+    const poisoned = JSON.parse(JSON.stringify({ ...legalPayload(), [field]: 1.25 })) as Record<string, unknown>;
     expect(typeof poisoned[field]).toBe('number');
     expect(() => validatePayload('positionUpdated', poisoned)).toThrow(EventValidationError);
   });
