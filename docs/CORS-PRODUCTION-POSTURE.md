@@ -21,20 +21,20 @@ This document does not invent a production hostname. There is none in-tree to gu
 
 Two different variables. Mixing them is a misconfig, not a merge.
 
-| Surface                         | Variable                | Credentials | Wildcard `*`                         | Unset on `APP_ENV=staging` or `prod`                                      |
-| ------------------------------- | ----------------------- | ----------- | ------------------------------------ | ------------------------------------------------------------------------- |
-| **svc-edge** (browser REST)     | `EDGE_ALLOWED_ORIGINS`  | **never**   | **boot failure**                     | **closed door** (process still boots; no browser origin is echoed)        |
-| **Vendored Java HTTP** (shell)  | `CORS_ALLOWED_ORIGINS`  | **true**    | **silently skipped** (fail closed)   | Falls back to **localhost defaults**, not a closed door                   |
+| Surface                        | Variable               | Credentials | Wildcard `*`                       | Unset on `APP_ENV=staging` or `prod`                               |
+| ------------------------------ | ---------------------- | ----------- | ---------------------------------- | ------------------------------------------------------------------ |
+| **svc-edge** (browser REST)    | `EDGE_ALLOWED_ORIGINS` | **never**   | **boot failure**                   | **closed door** (process still boots; no browser origin is echoed) |
+| **Vendored Java HTTP** (shell) | `CORS_ALLOWED_ORIGINS` | **true**    | **silently skipped** (fail closed) | Falls back to **localhost defaults**, not a closed door            |
 
 Shape for both lists: comma-separated **exact** origins — `scheme://host[:port]`, no path, no trailing slash, no `null`, no userinfo.
 
 ### Per `APP_ENV` (edge — the production door)
 
-| `APP_ENV`        | Allowed origins                                                                                         | What happens if you leave `EDGE_ALLOWED_ORIGINS` empty                                                                 |
-| ---------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `dev` / `test`   | Dev default only: `http://localhost:3100`, `http://127.0.0.1:3100` (`CORS_ENFORCED_ENVS` does not apply) | Frictionless local console. **Do not re-add `:3000`** — that port belonged to deleted `apps/web`.                      |
-| **`staging`**    | **Only** what you set in `EDGE_ALLOWED_ORIGINS`                                                         | Closed door. `/ready` and boot log say so. Same-origin `:8090` shell and non-browser clients are unaffected.           |
-| **`prod`**       | **Only** what you set in `EDGE_ALLOWED_ORIGINS`                                                         | Same closed door. A public browser SPA that is not same-origin with the edge **will look down** until this is set.     |
+| `APP_ENV`      | Allowed origins                                                                                          | What happens if you leave `EDGE_ALLOWED_ORIGINS` empty                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `dev` / `test` | Dev default only: `http://localhost:3100`, `http://127.0.0.1:3100` (`CORS_ENFORCED_ENVS` does not apply) | Frictionless local console. **Do not re-add `:3000`** — that port belonged to deleted `apps/web`.                  |
+| **`staging`**  | **Only** what you set in `EDGE_ALLOWED_ORIGINS`                                                          | Closed door. `/ready` and boot log say so. Same-origin `:8090` shell and non-browser clients are unaffected.       |
+| **`prod`**     | **Only** what you set in `EDGE_ALLOWED_ORIGINS`                                                          | Same closed door. A public browser SPA that is not same-origin with the edge **will look down** until this is set. |
 
 `CORS_ENFORCED_ENVS` in `cors.ts` is exactly `staging` and `prod`. That is the production-like pair on purpose: staging is where a forgotten localhost grant would otherwise get normalised.
 
@@ -80,10 +80,10 @@ Historical STATUS (`docs/STATUS-2026-07-29-EVENING.md`): **wildcard-with-credent
 
 **Still live wildcard (the residual this mountain names, does not patch):**
 
-| Where                                                                                          | What it does                                      | Why it is the leftover “wildcard + session” hole |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
-| `vendor/.../chat/.../WebSocketConfig.java` — `/chat-webSocket` `.setAllowedOrigins("*")`       | SockJS/STOMP accepts any Origin                   | MEGA-AUDIT: `vendor-shell-scan` only matches `addAllowedOrigin("*")`, so this prints clean |
-| `vendor/.../market/.../WebSocketConfig.java` — `/market-ws` `.setAllowedOrigins("*")`          | Same                                              | Same scan miss                                   |
+| Where                                                                                    | What it does                    | Why it is the leftover “wildcard + session” hole                                           |
+| ---------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `vendor/.../chat/.../WebSocketConfig.java` — `/chat-webSocket` `.setAllowedOrigins("*")` | SockJS/STOMP accepts any Origin | MEGA-AUDIT: `vendor-shell-scan` only matches `addAllowedOrigin("*")`, so this prints clean |
+| `vendor/.../market/.../WebSocketConfig.java` — `/market-ws` `.setAllowedOrigins("*")`    | Same                            | Same scan miss                                                                             |
 
 Do **not** mass-edit those Java files on this PR. Origin list for SockJS is a deploy + product-UI decision (same class as `CORS_ALLOWED_ORIGINS`), and it collides with whoever owns Java/CORS code next. HTTP credentials-true + localhost fallback on hosted Java is the second residual: **set `CORS_ALLOWED_ORIGINS` at deploy** if Java HTTP is browser-reachable; do not treat unset as “production closed.”
 
@@ -93,12 +93,12 @@ Do **not** mass-edit those Java files on this PR. Origin list for SockJS is a de
 
 ## 4 · Pointers (siblings stay in their files)
 
-| Topic                         | File                                                                 |
-| ----------------------------- | -------------------------------------------------------------------- |
+| Topic                           | File                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------------------- |
 | Staging deploy workflow threats | [`THREAT-MODEL-STAGING-DEPLOY.md`](THREAT-MODEL-STAGING-DEPLOY.md) (D26-P3-01/02 slice) |
-| Closed CORS domain decision   | [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md) §4               |
-| Edge operator notes           | `services/svc-edge/README.md` (Browser origins)                      |
-| Env comments                  | `.env.example` (`EDGE_ALLOWED_ORIGINS` vs `CORS_ALLOWED_ORIGINS`)    |
+| Closed CORS domain decision     | [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md) §4                                 |
+| Edge operator notes             | `services/svc-edge/README.md` (Browser origins)                                         |
+| Env comments                    | `.env.example` (`EDGE_ALLOWED_ORIGINS` vs `CORS_ALLOWED_ORIGINS`)                       |
 
 ---
 
