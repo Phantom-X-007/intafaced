@@ -294,17 +294,17 @@
     },
     {
       "id": "PKT-C9",
-      "status": "mechanism_only",
+      "status": "sealed",
       "kind": "product_ruling",
       "title": "Four token numbers (emission / buyback / burn / staking)",
       "blocks": ["svc-token magnitudes"],
-      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
+      "primaryDoc": "docs/adr/2026-08-15-pkt-c9-token-magnitudes-owner-only.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#9--four-token-numbers",
       "related": ["D26-P0-04"],
       "satelliteDocs": ["docs/adr/2026-08-04-token-economics-outcomes.md"],
       "answerShape": "owner_magnitudes_no_agent_invent",
       "priority": 3,
-      "notes": "2026-08-14: magnitudes stay unpublished (Nitro). Seeds are not live numbers. User-facing APY/supply refuses until token_params is owner-set."
+      "notes": "2026-08-15 seal: emission, buyback, burn, staking magnitudes all unset → refuse-closed. Agents never seed numbers. Distinct from D26-P0-04 authority/drift."
     },
     {
       "id": "PKT-D10",
