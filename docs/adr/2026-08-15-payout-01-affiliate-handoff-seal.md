@@ -10,12 +10,12 @@
 
 ## Clicked (v1 law)
 
-| Decision | Accepted default | Named home (do not edit in this PR) |
-| -------- | ---------------- | ----------------------------------- |
-| Max commissionable hops | **`MAX_PAYOUT_TIER_DEPTH` = 5** (same as referral tree write cap `DEFAULT_MAX_REFERRAL_DEPTH`) | `services/svc-identity/src/affiliates/payout-engine.ts` |
-| Fee pool source module | Keep **`AFFILIATE_PAYOUT_SOURCE_MODULE` = `"identity"`** as the named plan-level default, plus the existing override / per-row `sourceModule` | same file + `commission.ts` `DEFAULT_AFFILIATE_FEE_SOURCE_MODULE` |
-| Atomic multi-leg payout | **Replay-safe by business key.** Crash mid-fan-out may leave a partial tree; re-run completes; nobody is paid twice | `affiliatePayoutRowKey` → `affiliate:<feeEventId>:<beneficiaryId>:h<hop>` |
-| Multi-beneficiary recipe | **Do not invent.** Fan-out stays existing `sweepFeesToRewards` + `rewardPay` (DIRECTION §3 carve-out) | `packages/ledger-client` recipes already used by the engine |
+| Decision                 | Accepted default                                                                                                                              | Named home (do not edit in this PR)                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Max commissionable hops  | **`MAX_PAYOUT_TIER_DEPTH` = 5** (same as referral tree write cap `DEFAULT_MAX_REFERRAL_DEPTH`)                                                | `services/svc-identity/src/affiliates/payout-engine.ts`                   |
+| Fee pool source module   | Keep **`AFFILIATE_PAYOUT_SOURCE_MODULE` = `"identity"`** as the named plan-level default, plus the existing override / per-row `sourceModule` | same file + `commission.ts` `DEFAULT_AFFILIATE_FEE_SOURCE_MODULE`         |
+| Atomic multi-leg payout  | **Replay-safe by business key.** Crash mid-fan-out may leave a partial tree; re-run completes; nobody is paid twice                           | `affiliatePayoutRowKey` → `affiliate:<feeEventId>:<beneficiaryId>:h<hop>` |
+| Multi-beneficiary recipe | **Do not invent.** Fan-out stays existing `sweepFeesToRewards` + `rewardPay` (DIRECTION §3 carve-out)                                         | `packages/ledger-client` recipes already used by the engine               |
 
 Raise or lower depth, change the default pool name, or add a multi-beneficiary recipe **only after written law**. Agents must not invent a fifth hop, a new rate, or a batch post.
 
