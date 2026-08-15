@@ -15,6 +15,9 @@ export type FuturesJobsHealth = {
   readonly fundingScheduled: boolean;
   readonly fundingMaxAbsRateConfigured: boolean;
   readonly fundingMaxAbsRateDefault: false;
+  /** True only when a known venue adapter + non-empty symbol map is wired. Never echoes venue id or symbols. */
+  readonly venueMarkConfigured: boolean;
+  readonly venueMarkDefault: false;
   readonly reason: FuturesJobsHealthReason;
 };
 
@@ -22,6 +25,7 @@ export function presentFuturesJobsHealth(input: {
   readonly enabled: boolean;
   readonly fundingMarketCount: number;
   readonly fundingMaxAbsRateConfigured: boolean;
+  readonly venueMarkConfigured?: boolean;
 }): FuturesJobsHealth {
   const enabled = input.enabled === true;
   const fundingMarketCount =
@@ -38,6 +42,8 @@ export function presentFuturesJobsHealth(input: {
     fundingScheduled,
     fundingMaxAbsRateConfigured,
     fundingMaxAbsRateDefault: false,
+    venueMarkConfigured: input.venueMarkConfigured === true,
+    venueMarkDefault: false,
     reason,
   };
 }

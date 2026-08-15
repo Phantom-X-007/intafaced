@@ -465,6 +465,7 @@ app.get('/health', async () => ({
     enabled: env.TRADE_FUTURES_JOBS_ENABLED,
     fundingMarketCount: fundingMarketIds.length,
     fundingMaxAbsRateConfigured: fundingMaxAbsRate !== null,
+    venueMarkConfigured: venueMarkConfigured != null,
   }),
   insuranceListing: presentInsuranceListingPolicy(),
 }));
@@ -625,7 +626,7 @@ app.log.info(
     futuresEnabled: env.TRADE_FUTURES_ENABLED,
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
-    venueMark: venueMarkConfigured ? { venueId: venueMarkConfigured.venueId, symbols: venueMarkConfigured.symbolCount } : null,
+    venueMark: venueMarkConfigured ? { configured: true, symbolCount: venueMarkConfigured.symbolCount } : null,
     candleJobsEnabled: env.TRADE_CANDLE_JOBS_ENABLED,
     candleJobs: candleJobs.host.list(),
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
