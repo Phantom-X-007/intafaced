@@ -51,6 +51,26 @@ export type AddCommentInput = {
   body: string;
 };
 
+/**
+ * Comment write + the lifecycle it may carry.
+ *
+ * A user reply on `resolved` must reopen the SAME ticket (`resolved → open`)
+ * in this same transaction: the lifecycle table already names that edge as
+ * the "not fixed" path, and a comment that lands while the ticket stays
+ * `resolved` is a reply nobody will see in the shared queue.
+ *
+ * `closed` is terminal. A user comment there is refused rather than stored
+ * as a ghost reply. Operator notes after close are allowed (no reopen).
+ */
+export type AddCommentResult =
+  | {
+      readonly status: 'ok';
+      readonly comment: SupportComment;
+      readonly ticket: SupportTicket;
+      readonly reopened: boolean;
+    }
+  | { readonly status: 'refuse'; readonly reason: 'not_found' | 'terminal' };
+
 export type AppendEventInput = {
   ticketId: string;
   /** Pure read only. Escalation uses `putCaseFileWithEscalated`. */
@@ -82,7 +102,7 @@ export interface SupportStore {
   listByUser(userId: string): Promise<SupportTicket[]>;
   listAll(): Promise<SupportTicket[]>;
   findById(ticketId: string): Promise<SupportTicket | null>;
-  addComment(input: AddCommentInput): Promise<SupportComment>;
+  addComment(input: AddCommentInput): Promise<AddCommentResult>;
   listComments(ticketId: string): Promise<SupportComment[]>;
   /** Lifecycle move + its audit row, atomically. Refuses illegal transitions. */
   setStatus(input: SetStatusInput): Promise<SetStatusResult>;
@@ -327,22 +347,47 @@ export class MemorySupportStore implements SupportStore {
     return this.tickets.get(ticketId) ?? null;
   }
 
-  async addComment(input: AddCommentInput): Promise<SupportComment> {
+  async addComment(input: AddCommentInput): Promise<AddCommentResult> {
     const ticket = this.tickets.get(input.ticketId);
-    if (!ticket) throw new Error('ticket not found for comment');
+    if (!ticket) return { status: 'refuse', reason: 'not_found' };
+    // Closed is terminal for the owner. An operator note after close is a
+    // desk annotation, not a reopen, so it is allowed.
+    if (ticket.status === 'closed' && input.authorRole === 'user') {
+      return { status: 'refuse', reason: 'terminal' };
+    }
+
+    const now = new Date().toISOString();
     const comment: SupportComment = {
       id: randomUUID(),
       ticketId: input.ticketId,
       authorId: input.authorId,
       authorRole: input.authorRole,
       body: input.body,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     };
     const list = this.comments.get(input.ticketId) ?? [];
     list.push(comment);
     this.comments.set(input.ticketId, list);
-    this.tickets.set(ticket.id, { ...ticket, updatedAt: comment.createdAt });
-    return comment;
+
+    const reopened = ticket.status === 'resolved' && input.authorRole === 'user';
+    const updated: SupportTicket = reopened
+      ? { ...ticket, status: 'open', assigneeId: null, updatedAt: now }
+      : { ...ticket, updatedAt: now };
+    this.tickets.set(ticket.id, updated);
+
+    if (reopened) {
+      this.record({
+        ticketId: ticket.id,
+        kind: 'status_changed',
+        actorId: input.authorId,
+        actorRole: 'user',
+        fromStatus: 'resolved',
+        toStatus: 'open',
+        note: 'user_reply_reopen',
+        at: now,
+      });
+    }
+    return { status: 'ok', comment, ticket: updated, reopened };
   }
 
   async listComments(ticketId: string): Promise<SupportComment[]> {
@@ -512,21 +557,61 @@ export class PostgresSupportStore implements SupportStore {
     return rows[0] ? ticketFromPg(rows[0]) : null;
   }
 
-  async addComment(input: AddCommentInput): Promise<SupportComment> {
-    const rows = await this.sql.begin(async (tx) => {
+  async addComment(input: AddCommentInput): Promise<AddCommentResult> {
+    return this.sql.begin(async (tx): Promise<AddCommentResult> => {
+      const locked = await tx<PgTicket[]>`
+        SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+        FROM support.tickets
+        WHERE id = ${input.ticketId}
+        FOR UPDATE
+      `;
+      if (!locked[0]) return { status: 'refuse', reason: 'not_found' };
+      const existing = ticketFromPg(locked[0]);
+      if (existing.status === 'closed' && input.authorRole === 'user') {
+        return { status: 'refuse', reason: 'terminal' };
+      }
+
       const comments = await tx<PgComment[]>`
         INSERT INTO support.comments (ticket_id, author_id, author_role, body)
         VALUES (${input.ticketId}, ${input.authorId}, ${input.authorRole}, ${input.body})
         RETURNING id, ticket_id, author_id, author_role, body, created_at
       `;
-      await tx`
-        UPDATE support.tickets
-        SET updated_at = now()
-        WHERE id = ${input.ticketId}
-      `;
-      return comments;
+
+      const reopened = existing.status === 'resolved' && input.authorRole === 'user';
+      const rows = reopened
+        ? await tx<PgTicket[]>`
+            UPDATE support.tickets
+            SET status = 'open', assignee_id = NULL, updated_at = now()
+            WHERE id = ${input.ticketId}
+            RETURNING id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+          `
+        : await tx<PgTicket[]>`
+            UPDATE support.tickets
+            SET updated_at = now()
+            WHERE id = ${input.ticketId}
+            RETURNING id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+          `;
+      if (!rows[0]) return { status: 'refuse', reason: 'not_found' };
+
+      if (reopened) {
+        await insertEvent(tx, {
+          ticketId: input.ticketId,
+          kind: 'status_changed',
+          actorId: input.authorId,
+          actorRole: 'user',
+          fromStatus: 'resolved',
+          toStatus: 'open',
+          note: 'user_reply_reopen',
+        });
+      }
+
+      return {
+        status: 'ok',
+        comment: commentFromPg(comments[0]!),
+        ticket: ticketFromPg(rows[0]),
+        reopened,
+      };
     });
-    return commentFromPg(rows[0]!);
   }
 
   async listComments(ticketId: string): Promise<SupportComment[]> {

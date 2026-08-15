@@ -53,7 +53,8 @@ function mapError(err: unknown): never {
       err.code === 'support.case_file.ungrounded' ||
       err.code === 'support.case_file.empty_summary' ||
       // Closed is terminal — same family as illegal lifecycle moves.
-      err.code === 'support.escalation.terminal'
+      err.code === 'support.escalation.terminal' ||
+      err.code === 'support.comment.terminal'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
     }

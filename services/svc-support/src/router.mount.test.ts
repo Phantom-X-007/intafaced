@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createSupportRouter } from './router.js';
-import type { SupportService } from './support-service.js';
+import { SupportError, type SupportService } from './support-service.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -175,6 +175,18 @@ describe('svc-support mount', () => {
         .createCaller(signed())
         .setStatus({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', status: 'resolved' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('maps a terminal user comment to PRECONDITION_FAILED', async () => {
+    const support = stubSupport({
+      comment: vi.fn(async () => {
+        throw new SupportError('comment refused: ticket is terminal', 'support.comment.terminal');
+      }),
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.comment({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', body: 'Please reopen.' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
   });
 
   it('listComments requires authentication', async () => {
