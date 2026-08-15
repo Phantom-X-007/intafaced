@@ -25,6 +25,8 @@ describe('presentFuturesJobsHealth', () => {
     expect(h.fundingScheduled).toBe(false);
     expect(h.reason).toBe('jobs_off');
     expect(h.fundingMaxAbsRateDefault).toBe(false);
+    expect(h.venueMarkConfigured).toBe(false);
+    expect(h.venueMarkDefault).toBe(false);
   });
 
   it('enabled with no named markets is liquidation only', () => {
@@ -52,6 +54,19 @@ describe('presentFuturesJobsHealth', () => {
     expect(h.fundingMaxAbsRateConfigured).toBe(false);
     expect(h).not.toHaveProperty('fundingMarketIds');
     expect(h).not.toHaveProperty('fundingMaxAbsRate');
+    expect(h).not.toHaveProperty('venueId');
+    expect(h).not.toHaveProperty('symbols');
+  });
+
+  it('venueMarkConfigured is true only when the caller says true', () => {
+    expect(
+      presentFuturesJobsHealth({
+        enabled: false,
+        fundingMarketCount: 0,
+        fundingMaxAbsRateConfigured: false,
+        venueMarkConfigured: true,
+      }).venueMarkConfigured,
+    ).toBe(true);
   });
 
   it('NaN / negative counts do not invent a market list', () => {
