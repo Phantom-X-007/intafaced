@@ -38,10 +38,11 @@ export interface RampProgramme {
   /**
    * TRUE MEANS NO LIVE RAMP EXISTS.
    *
-   * Always true today on this surface. Crypto live send/confirm is svc-pay +
-   * Class X; fiat live is Class X on the pay RailAdapter (not inventable here).
+   * Literal `true` — cannot be omitted and cannot be flipped to live on this
+   * surface. Crypto live send/confirm is svc-pay + Class X; fiat live is Class X
+   * on the pay RailAdapter (not inventable here).
    */
-  readonly simulated: boolean;
+  readonly simulated: true;
   /** Human label. Never a PSP or partner brand (§0.7). */
   readonly displayName: string;
   /** Ledger rail string used on deposit/withdraw recipes, or null when none. */
@@ -118,4 +119,14 @@ export function refuseFiatRamp(): never {
       'Reuse a live svc-pay RailAdapter via PayFiatRampPort; do not invent APY, card BIN, or a bank-local PSP.',
     'bank.fiat_ramp_socket',
   );
+}
+
+/**
+ * BANK_RAMP_MODE default is `none`. Fiat stays `bank.fiat_ramp_socket` on that
+ * programme — an injected live pay adapter must not sneak a default fiat rail.
+ */
+export function assertFiatSocketWhenNone(programme: RampProgramme): void {
+  if (programme.id === 'none' || programme.cryptoRail === null) {
+    refuseFiatRamp();
+  }
 }

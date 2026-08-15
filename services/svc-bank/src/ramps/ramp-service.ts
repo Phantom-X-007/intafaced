@@ -14,7 +14,7 @@ import {
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
-import { assertCryptoRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
+import { assertCryptoRamp, assertFiatSocketWhenNone, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
 import {
   destKindForRamp,
   UserWithdrawDestinationStore,
@@ -193,8 +193,10 @@ export class RampService {
   /**
    * Public settle probe: either a live pay adapter can host both fiat legs,
    * or refuse with `bank.fiat_ramp_no_pay_adapter`. Empty rails cannot look live.
+   * Mode `none` refuses `bank.fiat_ramp_socket` first — no default fiat rail.
    */
   async fiatSettle(): Promise<{ canSettle: true; onrampRailId: string; offrampRailId: string }> {
+    assertFiatSocketWhenNone(this.programme);
     const rails = await Promise.resolve(this.payFiat.listFiatRails());
     assertEmptyRailsCannotLookLive(rails, { simulated: this.programme.simulated });
     const onrampRailId = await resolvePayFiatRailId(this.payFiat, 'onramp');
@@ -237,6 +239,7 @@ export class RampService {
       throw new BankError('On-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
     assertRampAssetId(input.assetId);
+    if (input.kind === 'fiat') assertFiatSocketWhenNone(this.programme);
     const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'onramp') : assertCryptoRamp(this.programme);
 
     return withMoneySpan(
@@ -292,6 +295,7 @@ export class RampService {
       throw new BankError('Off-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
     assertRampAssetId(input.assetId);
+    if (input.kind === 'fiat') assertFiatSocketWhenNone(this.programme);
     const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
     const dest = await this.resolveWithdrawDestination(input.userId, input.kind, input.destinationRef);
 

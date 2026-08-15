@@ -9,7 +9,16 @@ import { createBankServices, type BankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { BankError } from '../errors.js';
 import type { PayFiatRampPort } from './pay-fiat-adapter.js';
-import { BANK_CRYPTO_LEDGER_RAIL, CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './rails.js';
+import {
+  BANK_CRYPTO_LEDGER_RAIL,
+  CRYPTO_LEDGER_PROGRAMME,
+  NO_RAMP_PROGRAMME,
+  RAMP_SETTINGS,
+  assertFiatSocketWhenNone,
+  rampProgrammeFor,
+  refuseFiatRamp,
+  type RampProgramme,
+} from './rails.js';
 import { RampService } from './ramp-service.js';
 import { assertOnlyWithdrawDestinations, memoryWithdrawDestinations } from '../withdraw-destination.js';
 
@@ -51,6 +60,31 @@ describe('choosing a ramp programme is a closed decision with a refusing default
     expect(p.fiatLeg).toBe('socket.psp-partners');
     expect(p.fiatVia).toBe('svc-pay.RailAdapter');
   });
+
+  it('simulated is required true — cannot be omitted or flipped live', () => {
+    const required: true = NO_RAMP_PROGRAMME.simulated;
+    const cryptoRequired: true = CRYPTO_LEDGER_PROGRAMME.simulated;
+    expect(required).toBe(true);
+    expect(cryptoRequired).toBe(true);
+    type SimulatedMustBeTrue = RampProgramme extends { simulated: true } ? true : never;
+    const pin: SimulatedMustBeTrue = true;
+    expect(pin).toBe(true);
+  });
+
+  it('mode none keeps fiat on bank.fiat_ramp_socket — no default fiat rail', () => {
+    expect(() => refuseFiatRamp()).toThrow(BankError);
+    try {
+      refuseFiatRamp();
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'bank.fiat_ramp_socket' });
+    }
+    try {
+      assertFiatSocketWhenNone(NO_RAMP_PROGRAMME);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'bank.fiat_ramp_socket' });
+    }
+    expect(() => assertFiatSocketWhenNone(CRYPTO_LEDGER_PROGRAMME)).not.toThrow();
+  });
 });
 
 const available = await postgresAvailable(URL);
@@ -81,6 +115,37 @@ if (!available) {
   }, 30_000);
 
   describe('refuse-closed defaults', () => {
+    it('refuses fiat on bank.fiat_ramp_socket when mode is none — live pay adapter cannot sneak a default rail', async () => {
+      const livePay: PayFiatRampPort = {
+        listFiatRails: () => [{ railId: 'pay-fiat-ach', mode: 'live', capabilities: ['onramp', 'offramp'] }],
+      };
+      const none = new RampService(sql, ledger, { programme: NO_RAMP_PROGRAMME, payFiat: livePay });
+      await expect(
+        none.creditOnramp({
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'fiat',
+          railRef: 'sneak-1',
+          creditedBy: OPERATOR,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      await expect(
+        none.offramp({
+          offrampId: randomUUID(),
+          userId: USER,
+          assetId: 'USDT',
+          amount: amt('10'),
+          kind: 'fiat',
+          destinationRef: 'IBAN',
+          clientRef: 'sneak-off',
+        }),
+      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      await expect(none.fiatSettle()).rejects.toMatchObject({ code: 'bank.fiat_ramp_socket' });
+      const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
+      expect(count[0]!.n).toBe(0);
+    });
+
     it('refuses every money path when no programme is configured', async () => {
       const none = new RampService(sql, ledger, { programme: NO_RAMP_PROGRAMME });
       await expect(
