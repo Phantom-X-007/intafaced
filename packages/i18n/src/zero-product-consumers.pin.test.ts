@@ -6,23 +6,25 @@ import { describe, expect, it } from 'vitest';
 /**
  * Honesty pin for infra.i18n.
  *
- * §9 wants every surface keyed. Tracker truth is the opposite: no product app
- * or product service imports `@intafaced/i18n` yet. `svc-notify` renders
- * out-of-app copy from this package; that is not a product surface. This suite
- * fails if a product workspace starts depending on the package without the
- * mountain actually keying screens — so we cannot invent a 100-language
- * product by adding a catalog and calling it shipped.
+ * §9 wants every surface keyed. That is not "the catalog exists". Allowlisted
+ * consumers are the surfaces that actually resolve keys:
  *
- * When a real surface keys, update PRODUCT_ROOTS / the notify allowlist here
- * in the same PR that wires the import. Do not loosen the scan to stay green.
+ *   · `svc-notify` — out-of-app channel copy (not a product screen)
+ *   · `apps/admin` — operator console status / kill-switch / banner copy
+ *
+ * Other product apps and services must not depend on the package until they
+ * key screens in the same PR. Do not loosen the scan to stay green. Do not
+ * treat this allowlist as infra.i18n done — 100+ languages is still catalogs,
+ * not this slice.
  */
 
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 const I18N = '@intafaced/i18n';
 const IMPORT_RE = /['"]@intafaced\/i18n(?:\/[^'"]*)?['"]/;
 
-/** Product UI + product services. Backend notify copy is not a surface. */
+/** Product UI + product services. Allowlisted dirs already resolve catalog keys. */
 const PRODUCT_ROOTS = ['apps', 'services'] as const;
+const ALLOWED_APP_DIRS = new Set(['admin']);
 const ALLOWED_SERVICE_DIRS = new Set(['svc-notify']);
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', '.git']);
@@ -58,6 +60,7 @@ function productWorkspaces(): { name: string; dir: string }[] {
   for (const root of PRODUCT_ROOTS) {
     const parent = join(REPO_ROOT, root);
     for (const name of listDirs(parent)) {
+      if (root === 'apps' && ALLOWED_APP_DIRS.has(name)) continue;
       if (root === 'services' && ALLOWED_SERVICE_DIRS.has(name)) continue;
       const dir = join(parent, name);
       try {
@@ -75,9 +78,10 @@ const WORKSPACES = productWorkspaces();
 describe('@intafaced/i18n — zero product consumers until surfaces key it', () => {
   it('finds product workspaces (otherwise this pin is vacuous)', () => {
     expect(WORKSPACES.length).toBeGreaterThan(5);
-    expect(WORKSPACES.some((w) => w.name.startsWith('apps/'))).toBe(true);
     expect(WORKSPACES.some((w) => w.name.startsWith('services/'))).toBe(true);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-notify')).toBe(false);
+    expect(WORKSPACES.some((w) => w.name === 'apps/admin')).toBe(false);
+    expect(statSync(join(REPO_ROOT, 'apps', 'admin', 'package.json')).isFile()).toBe(true);
   });
 
   it('has no product package.json depending on the package', () => {

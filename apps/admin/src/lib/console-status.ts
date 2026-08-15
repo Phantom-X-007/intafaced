@@ -37,6 +37,8 @@
  * a half-configured console renders without setting global state.
  */
 
+import { consoleCopy } from './console-copy';
+
 /**
  * The two authorities, which are deliberately not one credential.
  *
@@ -53,10 +55,16 @@ export const TOKEN_VAR: Readonly<Record<Authority, 'ADMIN_OPERATOR_TOKEN' | 'ADM
   treasury: 'ADMIN_TREASURY_TOKEN',
 };
 
+/** Catalog keys for what each authority reaches. */
+export const AUTHORITY_REACH_KEY: Readonly<Record<Authority, string>> = {
+  module: 'admin.console.reach.module',
+  treasury: 'admin.console.reach.treasury',
+};
+
 /** What each authority reaches, in the words an operator would use. */
 export const AUTHORITY_REACH: Readonly<Record<Authority, string>> = {
-  module: 'halt a module (stop new commitments on one market)',
-  treasury: 'freeze the ledger (stop ALL value movement platform-wide)',
+  module: consoleCopy(AUTHORITY_REACH_KEY.module),
+  treasury: consoleCopy(AUTHORITY_REACH_KEY.treasury),
 };
 
 export interface AuthorityStatus {
@@ -135,8 +143,11 @@ export function consoleLooksFullyGreen(status: ConsoleStatus): boolean {
  * variable that was already correct.
  */
 export function describeUnconfigured(status: AuthorityStatus): string {
-  const names = status.missing.join(' and ');
-  return `This console cannot ${AUTHORITY_REACH[status.authority]} — ${names} ${status.missing.length === 1 ? 'is' : 'are'} not set on this app.`;
+  const reach = consoleCopy(AUTHORITY_REACH_KEY[status.authority]);
+  if (status.missing.length === 1) {
+    return consoleCopy('admin.console.unconfigured.one', { reach, name: status.missing[0]! });
+  }
+  return consoleCopy('admin.console.unconfigured.many', { reach, names: status.missing.join(' and ') });
 }
 
 /**
