@@ -23,6 +23,9 @@ export type FuturesJobsCapabilityNote = {
   readonly fundingMaxAbsRateDefault: false;
   /** Count only — never the UUID list. Omitted / non-positive → 0. */
   readonly fundingMarketCount: number;
+  /** True only when a known venue adapter + non-empty symbol map is wired. Never echoes venue id or symbols. */
+  readonly venueMarkConfigured: boolean;
+  readonly venueMarkDefault: false;
 };
 
 export function presentFuturesJobsCapabilityNote(input: {
@@ -31,6 +34,7 @@ export function presentFuturesJobsCapabilityNote(input: {
   readonly profitSourceConfigured?: boolean;
   readonly fundingMaxAbsRateConfigured?: boolean;
   readonly fundingMarketCount?: number;
+  readonly venueMarkConfigured?: boolean;
 }): FuturesJobsCapabilityNote {
   const raw = input.fundingMarketCount;
   const fundingMarketCount = typeof raw === 'number' && Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
@@ -49,5 +53,7 @@ export function presentFuturesJobsCapabilityNote(input: {
     fundingMaxAbsRateConfigured: input.fundingMaxAbsRateConfigured === true,
     fundingMaxAbsRateDefault: false,
     fundingMarketCount,
+    venueMarkConfigured: input.venueMarkConfigured === true,
+    venueMarkDefault: false,
   };
 }
