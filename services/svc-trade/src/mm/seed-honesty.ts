@@ -36,11 +36,43 @@ export function seedVolumeCountsTowardUserStats(): false {
 }
 
 /**
+ * TRADE_MM_SEED_ENABLED default. Must stay `false` — ops opts in; nothing
+ * in this module may treat unset / unknown as on.
+ */
+export const MM_SEED_ENABLED_DEFAULT = false as const;
+
+/**
+ * Only these tokens (plus boolean `true`) arm seed. Anything else — including
+ * JS-truthy strings like `"false"`, `"0"`, `"enabled"` — stays OFF so a
+ * default-ON or "any non-empty string" parser cannot sneak in.
+ * Matches `env.ts` TRADE_MM_SEED_ENABLED transform (allowlist, default false).
+ */
+export const MM_SEED_ENABLE_TOKENS = ['1', 'true', 'on', 'yes'] as const;
+
+/**
+ * Parse TRADE_MM_SEED_ENABLED. Unset / null / non-string / unknown → OFF.
+ * Same kill for jobs and `placeOrder({ seeded: true })` (SD-4).
+ */
+export function parseMmSeedEnabled(raw?: boolean | string | null): boolean {
+  if (raw === true) return true;
+  if (typeof raw !== 'string') return false;
+  return (MM_SEED_ENABLE_TOKENS as readonly string[]).includes(raw.toLowerCase());
+}
+
+/**
  * Kill-switch surface (SD-4): jobs arm only when ops enables AND names markets.
  * Empty targets stay unarmed even if enabled — never invent a market list.
  */
 export function mmSeedJobsArmed(enabled: boolean, targetCount: number): boolean {
   return enabled === true && Number.isFinite(targetCount) && targetCount > 0;
+}
+
+/**
+ * placeOrder seeded path uses the same flag as jobs. Default OFF.
+ * Does not invent a mid and does not arm from target count alone.
+ */
+export function mmSeedPlacePathArmed(enabled: boolean): boolean {
+  return enabled === true;
 }
 
 export type SeedSubmitHonesty =
