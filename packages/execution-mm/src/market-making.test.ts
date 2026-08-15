@@ -146,6 +146,21 @@ describe('quoteExternalMm — D26-P1-X5', () => {
     expect(result.detail).toMatch(/D26-P0-01/);
   });
 
+  it('refuses an internal book used as a live mid on an external quote venue (Q3)', () => {
+    const result = quoteExternalMm(
+      baseQuote({
+        venueId: 'binance',
+        kind: 'external-cex',
+        midKind: 'internal',
+        mid: amt('100'),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('internal_venue');
+    expect(result.detail).toMatch(/live mid/);
+  });
+
   it('refuseInternalMm always blocks with honest reason', () => {
     const r = refuseInternalMm();
     expect(r.ok).toBe(false);
@@ -157,9 +172,19 @@ describe('quoteExternalMm — D26-P1-X5', () => {
     expect(result).toMatchObject({ ok: false, reason: 'missing_mid' });
   });
 
+  it('refuses non-positive mid rather than inventing a price', () => {
+    const result = quoteExternalMm(baseQuote({ mid: 0n }));
+    expect(result).toMatchObject({ ok: false, reason: 'missing_mid' });
+  });
+
   it('refuses missing book rather than inventing depth', () => {
     const result = quoteExternalMm(baseQuote({ book: null }));
     expect(result).toMatchObject({ ok: false, reason: 'missing_book' });
+  });
+
+  it('refuses empty depth rather than inventing size', () => {
+    const result = quoteExternalMm(baseQuote({ book: { bidSize: 0n, askSize: 0n }, quoteSize: amt('1') }));
+    expect(result).toMatchObject({ ok: false, reason: 'insufficient_book' });
   });
 
   it('refuses insufficient book depth', () => {
@@ -172,9 +197,29 @@ describe('quoteExternalMm — D26-P1-X5', () => {
     expect(result).toMatchObject({ ok: false, reason: 'zero_weight' });
   });
 
-  it('missing fee → incomplete_cost', () => {
+  it('missing fee → incomplete_cost (fees not invented)', () => {
     const result = quoteExternalMm(baseQuote({ costTerms: completeTerms({ feeBps: null }) }));
     expect(result).toMatchObject({ ok: false, reason: 'incomplete_cost' });
+  });
+
+  it('missing impact → incomplete_cost (depth/impact not invented)', () => {
+    const result = quoteExternalMm(baseQuote({ costTerms: completeTerms({ expectedImpactBps: null }) }));
+    expect(result).toMatchObject({ ok: false, reason: 'incomplete_cost' });
+  });
+
+  it('missing transfer cost → incomplete_cost', () => {
+    const result = quoteExternalMm(baseQuote({ costTerms: completeTerms({ transferCostBps: null }) }));
+    expect(result).toMatchObject({ ok: false, reason: 'incomplete_cost' });
+  });
+
+  it('does not invent owner half-spread — invalid halfSpreadBps refuses', () => {
+    const result = quoteExternalMm(baseQuote({ halfSpreadBps: 1.5 }));
+    expect(result).toMatchObject({ ok: false, reason: 'invalid_owner_params' });
+  });
+
+  it('does not invent owner skew — non-integer inventorySkewBps refuses', () => {
+    const result = quoteExternalMm(baseQuote({ inventorySkewBps: 2.25 }));
+    expect(result).toMatchObject({ ok: false, reason: 'invalid_owner_params' });
   });
 
   it('kill_switch blocks quoting on volatility breach', () => {
@@ -262,6 +307,26 @@ describe('planExternalMmHedge — cross-venue', () => {
       },
     });
     expect(result).toMatchObject({ ok: false, reason: 'internal_venue' });
+  });
+
+  it('refuses an internal book used as a live hedge mid on an external hedge venue (Q3)', () => {
+    const result = planExternalMmHedge({
+      symbol: 'BTC/USDT',
+      quoteVenueId: 'binance',
+      inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
+      hedge: {
+        venueId: 'bybit',
+        kind: 'external-cex',
+        midKind: 'internal',
+        mid: amt('100'),
+        costTerms: completeTerms(),
+        availableSize: amt('10'),
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('internal_venue');
+    expect(result.detail).toMatch(/live hedge mid/);
   });
 
   it('refuses same_venue hedge', () => {

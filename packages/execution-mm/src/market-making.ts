@@ -150,6 +150,12 @@ export interface QuoteExternalMmInput {
   readonly venueId: string;
   readonly kind: VenueKind;
   /**
+   * Kind of the book that produced `mid`. Defaults to `kind`.
+   * `internal` always refuses — Q3 hard exclusion: an internal book is never
+   * a live mid, even when the quote venue is labelled external.
+   */
+  readonly midKind?: VenueKind;
+  /**
    * Mid from a walked / graded external book. `null` → refuse `missing_mid`.
    * Never synthesised from thin or empty depth inside this package.
    */
@@ -227,6 +233,15 @@ export function quoteExternalMm(input: QuoteExternalMmInput): QuoteExternalMmRes
       ok: false,
       reason: 'internal_venue',
       detail: 'D26-P0-01 external-only — internal house MM (seeding/quoting our own books) remains blocked until a later owner ruling',
+    };
+  }
+
+  const midKind = input.midKind ?? input.kind;
+  if (!isExternalVenueKind(midKind)) {
+    return {
+      ok: false,
+      reason: 'internal_venue',
+      detail: 'D26-P0-01 / Q3 — internal book cannot be used as a live mid',
     };
   }
 
@@ -341,6 +356,11 @@ export function refuseInternalMm(detail?: string): MmRefusal {
 export interface MmHedgeVenue {
   readonly venueId: string;
   readonly kind: VenueKind;
+  /**
+   * Kind of the book that produced `mid`. Defaults to `kind`.
+   * Internal books are never a live hedge mid (Q3 hard exclusion).
+   */
+  readonly midKind?: VenueKind;
   /** Mid on the hedge venue — null → refuse missing_mid. */
   readonly mid: Amount | null;
   readonly costTerms: SorCostTerms;
@@ -384,6 +404,15 @@ export function planExternalMmHedge(input: PlanExternalMmHedgeInput): PlanExtern
       ok: false,
       reason: 'internal_venue',
       detail: 'D26-P0-01 external-only — hedge may not target the internal house venue',
+    };
+  }
+
+  const hedgeMidKind = input.hedge.midKind ?? input.hedge.kind;
+  if (!isExternalVenueKind(hedgeMidKind)) {
+    return {
+      ok: false,
+      reason: 'internal_venue',
+      detail: 'D26-P0-01 / Q3 — internal book cannot be used as a live hedge mid',
     };
   }
 
