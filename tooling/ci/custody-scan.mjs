@@ -287,11 +287,11 @@ for (const module of RUNTIME_RISK_MODULES) {
 for (const { module, root } of resolvedModules) {
   const mainJava = join(root, 'src', 'main', 'java');
   let moduleFiles = 0;
-    for (const _file of walk(mainJava, ['.java'])) {
-      moduleFiles++;
-      javaFilesScanned++;
-      filesScanned++;
-    }
+  for (const _file of walk(mainJava, ['.java'])) {
+    moduleFiles++;
+    javaFilesScanned++;
+    filesScanned++;
+  }
   if (moduleFiles === 0) {
     violations.push({
       check: 'java-runtime-risk-surface',
