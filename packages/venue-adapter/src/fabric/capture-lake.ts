@@ -1,5 +1,7 @@
+import type { Amount } from '@intafaced/ledger-client/money';
 import {
   VenueUnavailableError,
+  midFromSnapshot,
   type MarketDataAdapter,
   type VenueBookSnapshot,
   type VenueUnavailableReason,
@@ -81,6 +83,14 @@ export function isQuietMarketBook(record: CaptureRecord): boolean {
  */
 export function bookFromCapture(record: CaptureRecord): VenueBookSnapshot | null {
   return record.kind === 'book' ? record.snapshot : null;
+}
+
+/**
+ * Mid from a capture record. Holes, empty books, and one-sided books are
+ * `null` — never a last-trade and never zero-as-price.
+ */
+export function midFromCapture(record: CaptureRecord): Amount | null {
+  return midFromSnapshot(bookFromCapture(record));
 }
 
 function holeReasonFromUnavailable(reason: VenueUnavailableReason): CaptureHoleReason {

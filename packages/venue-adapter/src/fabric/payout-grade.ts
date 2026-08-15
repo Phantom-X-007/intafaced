@@ -1,5 +1,5 @@
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
-import { VenueUnavailableError, type PriceLevel, type VenueBookSnapshot } from '@intafaced/venue-contracts';
+import { VenueUnavailableError, midFromSnapshot, type PriceLevel, type VenueBookSnapshot } from '@intafaced/venue-contracts';
 
 /**
  * PAYOUT-GRADE BOOKS — the absolute floor the fabric refuses to serve below.
@@ -83,6 +83,7 @@ export function bestLevelMeetsPayoutFloor(level: PriceLevel | undefined, policy:
  * `true`.
  */
 export function isPayoutGradeBook(snapshot: VenueBookSnapshot, policy: PayoutGradePolicy = {}): boolean {
+  if (midFromSnapshot(snapshot) === null) return false;
   return bestLevelMeetsPayoutFloor(snapshot.bids[0], policy) && bestLevelMeetsPayoutFloor(snapshot.asks[0], policy);
 }
 

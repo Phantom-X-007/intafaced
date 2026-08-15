@@ -1,4 +1,5 @@
-import type { MarketDataAdapter } from '@intafaced/venue-contracts';
+import type { Amount } from '@intafaced/ledger-client/money';
+import { midFromSnapshot, parseUnifiedSymbol, type MarketDataAdapter, type VenueBookSnapshot } from '@intafaced/venue-contracts';
 import { BinanceSpotMarketData } from './binance-spot.js';
 import { BybitSpotMarketData } from './bybit-spot.js';
 import { OkxSpotMarketData } from './okx-spot.js';
@@ -44,4 +45,23 @@ export function createVenueMarketDataAdapter(venueId: string, options?: VenueMar
   if (id === 'bybit-spot') return new BybitSpotMarketData(options);
   if (id === 'okx-spot') return new OkxSpotMarketData(options);
   return null;
+}
+
+/**
+ * Mid from a public venue book — or `null`.
+ *
+ * Dark / off / unknown venue id, unmapped (non-unified) market spelling, a
+ * missing snapshot, a snapshot stamped for a different venue or symbol, and
+ * an empty or one-sided book all return `null`. A thick book on an unknown
+ * or dark id still cannot become a number: the factory refuse is first.
+ *
+ * Does not add a venue. Does not touch the trading half.
+ */
+export function publicVenueBookMid(venueId: string, symbol: string, snapshot: VenueBookSnapshot | null | undefined): Amount | null {
+  if (createVenueMarketDataAdapter(venueId) === null) return null;
+  if (parseUnifiedSymbol(symbol) === null) return null;
+  if (!snapshot) return null;
+  const id = venueId.trim().toLowerCase();
+  if (snapshot.venueId !== id || snapshot.symbol !== symbol) return null;
+  return midFromSnapshot(snapshot);
 }

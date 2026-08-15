@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { readDecimal, readInteger, readLevels, readOptionalDecimal, readSignedDecimal, VenueDecimalError } from './decimal.js';
 import { parseUnifiedSymbol, roundToLot, roundToTick, unifiedSymbol } from './market.js';
-import { isCrossed, topOfBook } from './book.js';
+import { isCrossed, midFromSnapshot, topOfBook } from './book.js';
 import { annualisedFundingRate } from './rates.js';
 import { assertTradeOnly, requireCredentials, type VenueCredentials } from './adapter.js';
 import { VenueCredentialScopeError, VenueCredentialsMissingError } from './errors.js';
@@ -165,6 +165,26 @@ describe('book top', () => {
     expect(top.bestAsk).toBeNull();
     expect(top.spread).toBeNull();
     expect(top.mid).toBeNull();
+  });
+
+  it('returns a null mid on an empty book — never zero, never a last-trade', () => {
+    const top = topOfBook([], []);
+    expect(top.bestBid).toBeNull();
+    expect(top.bestAsk).toBeNull();
+    expect(top.mid).toBeNull();
+    expect(
+      midFromSnapshot({
+        venueId: 'binance-spot',
+        symbol: 'BTC/USDT',
+        bids: [],
+        asks: [],
+        sequence: 1,
+        sequenced: true,
+        observedAt: new Date(0),
+      }),
+    ).toBeNull();
+    expect(midFromSnapshot(null)).toBeNull();
+    expect(midFromSnapshot(undefined)).toBeNull();
   });
 
   it('detects a crossed book — the symptom of a missed removal', () => {
