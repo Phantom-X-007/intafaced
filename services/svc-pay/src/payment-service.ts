@@ -1632,11 +1632,10 @@ export class PayService {
         const row = await lockPayment(tx, paymentId);
 
         if (row.status !== 'captured' && row.status !== 'settled') {
-          throw new PayError(
-            `Payment ${row.id} has nothing captured (status ${row.status}) — refund refused`,
-            'pay.nothing_captured',
-            { paymentId: row.id, status: row.status },
-          );
+          throw new PayError(`Payment ${row.id} has nothing captured (status ${row.status}) — refund refused`, 'pay.nothing_captured', {
+            paymentId: row.id,
+            status: row.status,
+          });
         }
 
         // Pre-settlement only: a pending settlement freeze has claimed this
@@ -1665,11 +1664,7 @@ export class PayService {
 
         const totals = await totalsFor(tx, row.id);
         if (totals.captured <= 0n) {
-          throw new PayError(
-            `Payment ${row.id} has nothing captured — refund refused`,
-            'pay.nothing_captured',
-            { paymentId: row.id },
-          );
+          throw new PayError(`Payment ${row.id} has nothing captured — refund refused`, 'pay.nothing_captured', { paymentId: row.id });
         }
 
         // A COMPLETED `refundId` IS A REPLAY, NOT A SECOND REFUND.

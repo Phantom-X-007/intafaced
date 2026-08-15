@@ -441,9 +441,7 @@ if (!available) {
 
       expect(formatAmount(refunded.refundedAmount)).toBe('40');
       expect(refunded.status).toBe('captured');
-      expect(
-        ledger.journal().some((tx) => tx.idempotencyKey.startsWith(`payment.refund:${payment.id}:`)),
-      ).toBe(true);
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.startsWith(`payment.refund:${payment.id}:`))).toBe(true);
       expect(await clearingOf(m.id)).toBe('60');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
