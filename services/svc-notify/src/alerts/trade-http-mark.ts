@@ -9,6 +9,7 @@
  * `unavailable` (unknown market, empty book, network error) — never invent.
  */
 
+import { refuseIfMarkAged } from './accepted-mark.js';
 import { isValidPositivePrice, parseDecimalString } from './decimal.js';
 import type { MarkQuote, MarkSource } from './types.js';
 
@@ -104,7 +105,8 @@ export function createTradeHttpMarkSource(options: TradeHttpMarkOptions): MarkSo
 
   return {
     kind: 'live',
-    async quote(marketId: string, _at?: Date): Promise<MarkQuote> {
+    async quote(marketId: string, at?: Date): Promise<MarkQuote> {
+      const now = at ?? new Date();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -166,9 +168,11 @@ export function createTradeHttpMarkSource(options: TradeHttpMarkOptions): MarkSo
           };
         }
 
-        const at = typeof body.timestamp === 'number' && Number.isFinite(body.timestamp) ? new Date(body.timestamp) : new Date();
+        // Missing timestamp → "we just fetched this" (now). A present timestamp
+        // that is older than the bank marking window is stale, not a price.
+        const quotedAt = typeof body.timestamp === 'number' && Number.isFinite(body.timestamp) ? new Date(body.timestamp) : now;
 
-        return { kind: 'ok', price: priced.price, at };
+        return refuseIfMarkAged({ kind: 'ok', price: priced.price, at: quotedAt }, now);
       } finally {
         clearTimeout(timer);
       }

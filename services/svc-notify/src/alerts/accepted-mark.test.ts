@@ -3,8 +3,9 @@
  * 1. Promise: tracker v22.alerts + §31 — accepted-mark vocabulary; OOA required
  *    that cannot deliver refuses by name
  * 2. Break: MarkSource.kind dark still returns ok and evaluateMarket fires;
- *    absent quote treated as zero; required email silently skipped
- * 3. Done bar: dark/absent → refuse alert.price_unavailable, zero inbox;
+ *    absent quote treated as zero; required email silently skipped;
+ *    live ok quote with hours-old `at` fires the one-shot
+ * 3. Done bar: dark/absent/stale/future → refuse alert.price_unavailable, zero inbox;
  *    required OOA unavailable → channel.not_configured, watch stays active
  * 4. Class N (no money movement; decimal strings only)
  * 5. Paths: services/svc-notify/src/alerts/**
@@ -18,7 +19,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
-import { acceptAlertMark, outOfAppRequiredRefusal } from './accepted-mark.js';
+import {
+  ALERT_MARK_FUTURE_SLACK_MS,
+  ALERT_MARK_MAX_AGE_MS,
+  acceptAlertMark,
+  outOfAppRequiredRefusal,
+  refuseIfMarkAged,
+} from './accepted-mark.js';
 import { AlertService } from './service.js';
 import { MemoryAlertStore } from './store.js';
 import type { MarkSource } from './types.js';
@@ -44,7 +51,39 @@ describe('acceptAlertMark — dark/absent never become a live price', () => {
 
   it('a live source may still pass through an honest ok quote', () => {
     const at = new Date('2026-08-14T00:00:00Z');
-    expect(acceptAlertMark({ kind: 'live' }, { kind: 'ok', price: '100.5', at })).toEqual({
+    // `now` must be the sweep clock — defaulting to wall time would refuse a
+    // fixture dated yesterday and hide a real stale-mark hole behind the test.
+    expect(acceptAlertMark({ kind: 'live' }, { kind: 'ok', price: '100.5', at }, at)).toEqual({
+      kind: 'ok',
+      price: '100.5',
+      at,
+    });
+  });
+
+  it('a live ok quote older than the bank marking window is stale, not a price', () => {
+    const now = new Date('2026-08-14T00:10:00Z');
+    const at = new Date(now.getTime() - ALERT_MARK_MAX_AGE_MS - 1_000);
+    const accepted = acceptAlertMark({ kind: 'live' }, { kind: 'ok', price: '100.5', at }, now);
+    expect(accepted).toMatchObject({ kind: 'unavailable', reason: 'stale' });
+    if (accepted.kind === 'unavailable') {
+      expect(accepted.detail).toMatch(/301s old, limit 300s/);
+    }
+  });
+
+  it('a live ok quote dated further ahead than clock slack is refused', () => {
+    const now = new Date('2026-08-14T00:00:00Z');
+    const at = new Date(now.getTime() + ALERT_MARK_FUTURE_SLACK_MS + 1_000);
+    const accepted = acceptAlertMark({ kind: 'live' }, { kind: 'ok', price: '100.5', at }, now);
+    expect(accepted).toMatchObject({ kind: 'unavailable', reason: 'refused' });
+    if (accepted.kind === 'unavailable') {
+      expect(accepted.detail).toMatch(/31s in the future/);
+    }
+  });
+
+  it('an ok quote on the age boundary still passes (300s is the last fresh second)', () => {
+    const now = new Date('2026-08-14T00:05:00Z');
+    const at = new Date(now.getTime() - ALERT_MARK_MAX_AGE_MS);
+    expect(refuseIfMarkAged({ kind: 'ok', price: '100.5', at }, now)).toEqual({
       kind: 'ok',
       price: '100.5',
       at,
@@ -114,6 +153,41 @@ describe('AlertService — dark kind cannot fire even with an invented quote', (
       markSource: 'dark',
       canFire: false,
       code: 'alert.price_unavailable',
+    });
+  });
+
+  it('refuses a live source whose ok quote is older than the marking window — no inbox, watch stays active', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const notify = new NotifyService(notifyStore, { fanoutEnabled: true });
+    const now = new Date('2026-08-14T00:10:00Z');
+    const marks: MarkSource = {
+      kind: 'live',
+      async quote() {
+        return { kind: 'ok', price: '100.5', at: new Date(now.getTime() - 301_000) };
+      },
+    };
+    const alerts = new AlertService(new MemoryAlertStore(), marks, notify);
+    await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+
+    const report = await alerts.evaluateMarket('BTC-USD', now);
+    expect(report.mark).toBeNull();
+    expect(report.results[0]!.outcome).toMatchObject({
+      kind: 'refuse',
+      code: 'alert.price_unavailable',
+    });
+    expect(report.results[0]!.notificationId).toBeNull();
+    expect((await alerts.list('u1'))[0]!.status).toBe('active');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+    // Wiring is still live — stale is weather, not "no feed configured".
+    expect(alerts.evaluationStatus()).toEqual({
+      markSource: 'live',
+      canFire: true,
+      code: null,
     });
   });
 
