@@ -103,11 +103,11 @@
  *   `mayLiquidateFromExpiredMarginCallGrace`) are the only lawful way a future
  *   grace field may start or expire into seizure. Grace *duration* numbers are
  *   DIRECTION §8 / D3 owner-reserved — never invent them here.
- * · It does not choose the numbers. Every value in `DEFAULT_FUTURES_LADDER_POLICY`
- *   is a placeholder for a `DIRECTION` §8 item 8 ruling — "any leverage or margin
- *   parameter beyond §1's stated defaults" is the owner's. The MECHANISM is
- *   agent-implementable per the ADR; the tier table is not, so it lives in one
- *   named constant with somewhere for the owner's answer to land.
+ * · It does not choose the numbers. Owner D3 / DIRECTION §8 item 8 names the
+ *   tier table. The MECHANISM is agent-implementable per the ADR; this module
+ *   takes `FuturesLadderPolicy` as an argument. Live jobs omit the policy
+ *   (`skipped_d3_unset`) until that ruling exists. A numeric placeholder table
+ *   must not ship from this file — test harnesses may hold one.
  * · It adds no ledger recipe. Partial rungs post through `futuresRealizeLoss` and
  *   `futuresMarginRelease`, which already exist. Adding a recipe is a
  *   `DIRECTION` §3 carve-out reserved to the owner.
@@ -236,26 +236,6 @@ export interface FuturesLadderPolicy {
   /** Ceiling on ONE rung, as bps of the position's remaining size. */
   readonly maxTrancheBps: number;
 }
-
-/**
- * PLACEHOLDERS. Not a risk opinion — see the file header.
- *
- * The tiers are deliberately coarse and the steps deliberately large, so that
- * nothing downstream reads them as a calibrated table: a position under 5% of
- * the depth it must be sold into is treated as ordinary, and one over half of it
- * is treated as barely closable.
- */
-export const DEFAULT_FUTURES_LADDER_POLICY: FuturesLadderPolicy = {
-  tiers: [
-    { uptoDepthBps: 500, maintenanceBps: 50 },
-    { uptoDepthBps: 2_000, maintenanceBps: 100 },
-    { uptoDepthBps: 5_000, maintenanceBps: 250 },
-    { uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 500 },
-  ],
-  marginCallBps: 12_000,
-  targetBps: 15_000,
-  maxTrancheBps: 2_500,
-};
 
 export function assertLadderPolicyCoherent(policy: FuturesLadderPolicy): void {
   if (policy.tiers.length === 0) {
