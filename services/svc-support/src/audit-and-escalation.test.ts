@@ -173,9 +173,7 @@ describe('account-state grounding', () => {
     };
     const { support } = desk(unwired);
     const t = await openTicket(support);
-    expect(await codeOf(() => support.readAccountState({ operatorId: OP, ticketId: t.id }))).toBe(
-      IDENTITY_GROUNDING_UNWIRED,
-    );
+    expect(await codeOf(() => support.readAccountState({ operatorId: OP, ticketId: t.id }))).toBe(IDENTITY_GROUNDING_UNWIRED);
     const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
     expect(trail.filter((e) => e.kind === 'grounding_read')).toHaveLength(0);
   });

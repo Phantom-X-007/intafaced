@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  IDENTITY_GROUNDING_UNWIRED,
-  composePretendsGroundingLoopServing,
-  identityGroundingProof,
-} from './identity-grounding-honesty.js';
+import { IDENTITY_GROUNDING_UNWIRED, composePretendsGroundingLoopServing, identityGroundingProof } from './identity-grounding-honesty.js';
 
 const COMPOSE = resolve(import.meta.dirname, '../../../docker-compose.apps.yml');
 

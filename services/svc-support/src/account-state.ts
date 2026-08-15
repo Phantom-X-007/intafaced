@@ -1,8 +1,5 @@
 import { accountStateSchema, serviceAuthHeaders, type AccountState } from '@intafaced/contracts';
-import {
-  IdentityGroundingUnwiredError,
-  identityGroundingProof,
-} from './identity-grounding-honesty.js';
+import { IdentityGroundingUnwiredError, identityGroundingProof } from './identity-grounding-honesty.js';
 
 /**
  * ACCOUNT STATE, READ FROM THE SERVICE THAT OWNS IT (§8.2 "account-state

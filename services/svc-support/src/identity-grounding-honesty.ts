@@ -15,22 +15,17 @@ export const IDENTITY_GROUNDING_UNWIRED = 'support.identity_grounding_unwired' a
 export class IdentityGroundingUnwiredError extends Error {
   readonly code = IDENTITY_GROUNDING_UNWIRED;
   constructor() {
-    super(
-      'identity grounding unwired: INTERNAL_SERVICE_SECRET missing (named refuse, not plane_dark)',
-    );
+    super('identity grounding unwired: INTERNAL_SERVICE_SECRET missing (named refuse, not plane_dark)');
     this.name = 'IdentityGroundingUnwiredError';
   }
 }
 
 export type IdentityGroundingProof =
-  | { readonly wired: true; readonly refuse: null }
-  | { readonly wired: false; readonly refuse: typeof IDENTITY_GROUNDING_UNWIRED };
+  { readonly wired: true; readonly refuse: null } | { readonly wired: false; readonly refuse: typeof IDENTITY_GROUNDING_UNWIRED };
 
 export function identityGroundingProof(secret: string | undefined | null): IdentityGroundingProof {
   const wired = typeof secret === 'string' && secret.trim().length > 0;
-  return wired
-    ? { wired: true, refuse: null }
-    : { wired: false, refuse: IDENTITY_GROUNDING_UNWIRED };
+  return wired ? { wired: true, refuse: null } : { wired: false, refuse: IDENTITY_GROUNDING_UNWIRED };
 }
 
 /**
@@ -40,7 +35,6 @@ export function identityGroundingProof(secret: string | undefined | null): Ident
  */
 export function composePretendsGroundingLoopServing(svcSupportBlock: string): boolean {
   const claimsIdentityLoop = /^\s+IDENTITY_URL\s*:/m.test(svcSupportBlock);
-  const hasSecret =
-    /\*internal-secret/.test(svcSupportBlock) || /^\s+INTERNAL_SERVICE_SECRET\s*:/m.test(svcSupportBlock);
+  const hasSecret = /\*internal-secret/.test(svcSupportBlock) || /^\s+INTERNAL_SERVICE_SECRET\s*:/m.test(svcSupportBlock);
   return claimsIdentityLoop && !hasSecret;
 }
