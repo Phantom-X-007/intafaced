@@ -26,22 +26,22 @@ This is settled. Agents implement adapters and residual D-S-17 work; they do not
 
 These may stay in-tree as product **shape**, not as money truth:
 
-| Stay | Path | Role forever |
-| ---- | ---- | ------------ |
-| Trader shell | `vendor/upstream-exchange/05_Web_Front` | Sole product UI (Vue). Screens call our services; they do not own balances. |
-| Staff console | `vendor/upstream-exchange/04_Web_Admin` | Operator workflows. Same rule. |
-| Non-money Java shape | `00_framework` chat / cloud / job (and other modules with no value surface) | Workflow / ops shape only. |
-| Wallet RPC | `vendor/upstream-exchange/01_wallet_rpc` | Chain custody **RPC** after owner security review and Class X for real value. Keys and sends are not a ledger. A daemon that moves coin still posts through `ledger-client`. |
+| Stay                 | Path                                                                        | Role forever                                                                                                                                                                 |
+| -------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trader shell         | `vendor/upstream-exchange/05_Web_Front`                                     | Sole product UI (Vue). Screens call our services; they do not own balances.                                                                                                  |
+| Staff console        | `vendor/upstream-exchange/04_Web_Admin`                                     | Operator workflows. Same rule.                                                                                                                                               |
+| Non-money Java shape | `00_framework` chat / cloud / job (and other modules with no value surface) | Workflow / ops shape only.                                                                                                                                                   |
+| Wallet RPC           | `vendor/upstream-exchange/01_wallet_rpc`                                    | Chain custody **RPC** after owner security review and Class X for real value. Keys and sends are not a ledger. A daemon that moves coin still posts through `ledger-client`. |
 
 **ADOPT AS-IS** from the adoption ADR still holds for screens and non-balance workflows. Stop rebuilding them.
 
 ### 3 · Java that stays frozen — must not grow a second book
 
-| Frozen | Why |
-| ------ | --- |
-| `member_wallet` / `MemberWallet*` / the four DAO mutators | The second book. Read-only projection at most; never a write SoT. |
+| Frozen                                                                                                                                              | Why                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `member_wallet` / `MemberWallet*` / the four DAO mutators                                                                                           | The second book. Read-only projection at most; never a write SoT.                                                                                                        |
 | `00_framework` money apps (`admin`, `ucenter-api`, `otc-api`, `exchange-api`, `exchange` / `exchange-core`, `market`, `wallet`, `core` money paths) | Controllers and jobs may keep workflow **shape**. Balance writes stay disabled, deleted, or redirected to `ledger-client`. **No new Java mint, debit, freeze, or thaw.** |
-| New Java money modules | Forbidden. A new Maven module that holds a balance is a doctrine break, not an adoption. |
+| New Java money modules                                                                                                                              | Forbidden. A new Maven module that holds a balance is a doctrine break, not an adoption.                                                                                 |
 
 **ADOPT AND ADAPT** still holds: keep the controller; redirect only the write. That queue lives in D-S-17. This seal does not change grades, jar truth, or scan evidence rules.
 
