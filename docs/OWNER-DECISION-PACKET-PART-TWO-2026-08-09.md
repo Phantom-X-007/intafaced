@@ -33,11 +33,11 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-05 · Options / forex settlement asset law
 
-**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-options-forex-settlement-asset-law.md`](adr/2026-08-13-options-forex-settlement-asset-law.md).  
-**Blocks:** `trade.options`, `trade.forex` product-complete paths (still). The ADR is shape-law, not a live catalogue.  
-**Settled:** European cash-settled full-collateral options on one book; opaque `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` = “this ADR is in force,” never a parsed coin table; forex production waits on **true fiat rails** (euro-stable ≠ rails). Live set stays owner (P0-06).  
+**Status:** **SEALED freeze 2026-08-15** — [`docs/adr/2026-08-13-options-forex-settlement-asset-law.md`](adr/2026-08-13-options-forex-settlement-asset-law.md).  
+**Blocks:** `trade.options`, `trade.forex` product-complete paths (still).  
+**Settled:** (1) live instrument set = **empty** until a later owner stamp; (2) settlement asset = **unset**; (3) empty/unset → named refuse. Opaque `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` stays empty under this freeze and is never a parsed coin table. T6 already refuse-closes options listing. Forex production waits on **true fiat rails** (euro-stable ≠ rails).  
 **Refuse when unset:** `trade.options_settlement_law_unset` · `trade.options_fixing_unconfigured` · `trade.options_terms_incomplete` · `trade.market_kind_unsupported` (orders) · `trade.unsettled_asset_class_listing` (FX/commodity production).  
-**Not invented here:** USDT/USDC/quote-as-cash, FX pair list, D7 fixing content, bank rails.
+**Not invented here:** USDT/USDC/USD/IFC/quote-as-cash, FX pair list, D7 fixing content, bank rails. This freeze does **not** authorize a host stamp.
 
 ---
 

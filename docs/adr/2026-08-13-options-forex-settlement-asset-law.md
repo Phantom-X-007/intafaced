@@ -1,144 +1,143 @@
 # ADR: options / forex settlement asset law
 
-**Status:** **Accepted — 2026-08-13 (D26-P0-05 sealed).**  
-**Decision owner:** repo owner (Denon). **Written by:** Denon.  
-**Board:** D26-P0-05 — Options / forex settlement asset law.  
-**Packet:** [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](../OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) §P0-05.  
-**Builds on:** [`DIRECTION-2026-07-31.md`](../DIRECTION-2026-07-31.md) §2 (instrument model; forex/commodities do not production-list until fiat rails exist) and §8 item 5 (agents do not decide the catalogue); [`2026-08-12-listing-delisting-policy.md`](2026-08-12-listing-delisting-policy.md) (D26-P0-06); D-S-06 one matching book.  
-**Does not invent:** which option underlyings list, which FX pairs go live, which ledger asset is the cash payoff asset, D7 fixing source/window/payor, fee bps, or a euro-stablecoin standing in for fiat.
+**Status:** **Accepted freeze — 2026-08-15 (D26-P0-05 sealed).** Shape from 2026-08-13 still binds. This freeze **names** the live set and the settlement asset as empty/unset so engines cannot invent a catalogue.
+**Decision owner:** repo owner (Denon). **Written by:** Denon.
+**Board:** D26-P0-05 — Options / forex settlement asset law.
+**Packet:** [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](../OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) §P0-05.
+**Builds on:** [`DIRECTION-2026-07-31.md`](../DIRECTION-2026-07-31.md) §2 (instrument model; forex/commodities do not production-list until fiat rails exist) and §8 item 5 (agents do not decide the catalogue); [`2026-08-12-listing-delisting-policy.md`](2026-08-12-listing-delisting-policy.md) (D26-P0-06); D-S-06 one matching book; D26-P1-T6 refuse-close already on tip.
+**Does not invent:** option underlyings, FX pairs, a cash payoff coin, D7 fixing source/window/payor, fee bps, or a euro-stablecoin standing in for fiat.
 
 ---
 
 ## The decision
 
-> **Options v1 is European, cash-settled, full collateral, on the one matching book. The live instrument set and the settlement asset are owner law. Until a deploy sets the opaque stamp `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`, options cannot list. That stamp means “this ADR is in force on this host.” It is never a parsed table of coins. Agents do not write USDT, USDC, or “use the quote asset” into source to close a tracker row.**
+> **(1) Live instrument set — empty.** No options chain and no settleable forex/commodity production set is published. Modelled or seeded rows are not this set. Until a later **owner stamp** names instruments, the live set is the empty set.
 >
-> **Forex and commodities may be modelled. They may not be production-tradable until this ADR is in force _and_ real fiat settlement rails exist. Mapping EUR to a euro-denominated crypto asset is not a fiat rail. It is a second book dressed as FX.**
+> **(2) Settlement asset — unset.** There is no owner-named ledger asset for options cash payoff or for FX PnL. Agents do not write USDT, USDC, USD, IFC, or “use the quote asset” into source, env defaults, or compose to close a tracker row.
 >
-> **Refuse is the answer when any of those gates fail — never a silent list, never a default asset, never an IV surface pretending to be settlement.**
+> **(3) Refuse matrix — named codes, never a parsed list.** Empty/unset is a named refuse. `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` stays empty under this freeze. If it is later non-empty, it is an **opaque** operator id — never parsed for assets, pairs, or matrix rows.
 
 This is settled. Agents implement against it. They do not re-litigate the live set.
 
 ---
 
-## Why this ADR exists
+## Why the 2026-08-13 shape was not enough
 
-`trade.options` and `trade.forex` have been `ready` in the tracker long enough that a craft PR could “finish” them by inventing a settlement asset. That would be DIRECTION §8 crime with a green CI.
+`trade.options` and `trade.forex` have been `ready` long enough that a craft PR could “finish” them by inventing a settlement asset. DIRECTION §8 item 5 forbids that.
 
-Tip already refuse-closes the doors:
+The 2026-08-13 seal wrote the refuse names and the European/full-collateral **shape**, then left the live set and the settlement asset “owner-open” and treated `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` as “this ADR is in force.” That invited a host stamp that would unlock **listing** while the live set was still unnamed — a parsed-from-empty-env failure by another door.
 
-- Options list: `resolveOptionsListing` → `trade.options_settlement_law_unset` while the opaque stamp is empty (`socket.options-settlement-asset-law`). Fixing is a second opaque string (`TRADE_OPTIONS_SETTLEMENT_FIXING`, D7). Incomplete European terms refuse. Orders still `trade.market_kind_unsupported` until an options engine exists.
-- Forex/commodity production list and place: `assertProductionUnsettledAssetClassListing` / `assertSettlementRails` → `trade.unsettled_asset_class_listing` (`socket.forex-settlement`). Paper and non-active rows stay honest.
-
-What was missing was the **owner ruling those sockets wait on**: live set · settlement asset · refuse matrix — without filling in the catalogue.
-
-D26-P0-05’s done bar is **this document**. Setting the env stamp on a host is an operator click after they accept the seal. It is not an agent inventing USDT in `options-listing.ts`.
+D26-P0-05’s done bar is one ADR that **states** all three: live set, settlement asset, refuse matrix. This freeze fills those three without inventing contents. T6 already refuse-closes options listing while the law env is empty (`trade.options_settlement_law_unset`). This ADR documents that door; it does **not** dual-edit `services/svc-trade`.
 
 ---
 
-## Authority split
+## (1) Live instrument set — frozen empty
 
-| Question                                             | Authority                                                                                |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| May options list at all on this deploy?              | Opaque `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` — empty = this ADR not in force              |
-| **Which option underlyings / FX pairs list?**        | Owner catalogue (D26-P0-06 / DIRECTION §8 item 5)                                        |
-| **Which ledger asset is the cash payoff posted in?** | Owner, when they publish it — **not** this ADR, **not** source defaults                  |
-| Settlement _price_ (fixing source / window / payor)  | Owner D7 — `TRADE_OPTIONS_SETTLEMENT_FIXING` opaque; never parsed here                   |
-| European terms (call/put, strike, expiry)            | Listing row + DB check `markets_options_terms_ck`                                        |
-| Full-collateral cash payoff mechanics                | This ADR (shape) + future ledger-client recipe when an engine exists — no second book    |
-| Fiat rails actually moving EUR/USD/JPY bank money    | Owner + pay rails posture (Class X / commercial). Not `PAY_CRYPTO_ASSETS` coincidentally |
-| IV / American style / credit-margined options        | **Out of v1.** Explicit non-european style already refuses                               |
+| Kind                    | Live set under this freeze                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Options (European cash) | **Empty.** No underlyings, expiries, or strikes are published as live.                                           |
+| Forex / commodities     | **Empty as settleable production.** Seeded majors in the instrument migration are model/seed, not this live set. |
 
-**Modelling ≠ live.** A forex pair in `trade.markets` with `paper=true` or `status=pending` is honest. Six seed majors that are `active` in the DB remain **unfundable** on the place path. That is not a listing licence.
+A later owner stamp may publish a non-empty set. That stamp is a new ruling (and still sits under P0-06 catalogue law). Until then, engines must not assemble a live set from env, comments, vendor UI, or `PAY_CRYPTO_ASSETS`.
+
+**Modelling ≠ live.** Paper or `pending` rows are honest. Six seed FX majors that appear `active: true` remain **unfundable** on the place path. That is not a listing licence and not a live set.
 
 ---
 
-## What is sealed — options
+## (2) Settlement asset — frozen unset
 
-1. **Product title is mechanical payoff, not a pricing engine.** v1 options are European, cash-settled, full collateral. No IV surface. No American exercise. No invent D7 source. Payoff, when an engine exists, is a ledger-client post in an owner-named settlement asset — never a balance held in `svc-trade`.
+| Path                  | Settlement asset under this freeze                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Options cash payoff   | **Unset.** Payoff, when an engine exists, posts through `packages/ledger-client` in an owner-named asset — none is named here. |
+| Forex / commodity PnL | **Unset.** DIRECTION §2: production list waits on **true fiat rails**. Euro-stable ≠ rails.                                    |
 
-2. **One book.** Options do not get a second matching engine or a Java wallet table. D-S-06 holds.
-
-3. **The law stamp is opaque on purpose.** `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` non-empty means the operator has put **this ADR** in force on that deploy. Agents must not parse it for asset ids, live-set rows, or refuse-matrix cells. Putting `"USDT"` in the default env is inventing the settlement asset.
-
-4. **Fixing is a second door.** A published law stamp does **not** unlock listing by itself. `TRADE_OPTIONS_SETTLEMENT_FIXING` must also be non-empty, and European terms must be complete. Half-listed options are a lie.
-
-5. **Listing is not trading.** After both stamps and terms, `listMarket(kind=options)` may succeed. `assertTradable` still refuses options orders (`trade.market_kind_unsupported`) until a real options engine exists. Closing the _listing_ socket is not marking `trade.options` Done.
-
-6. **Live set is not in this file.** There is no BTC-29DEC-C-100000 table here. Underlyings enter through P0-06 like any other market. Agents do not mint an options chain to green a mountain.
+Empty/unset is the sealed answer, not a hole. Filling it with a default coin is doctrine crime.
 
 ---
 
-## What is sealed — forex / commodities
+## (3) Refuse matrix (names on tip — do not rename to look busy)
 
-1. **DIRECTION §2 stands.** Instrument model and venue hours may exist. Production list (`active` + not paper) and production place stay refused until **both** this ADR is in force **and** fiat settlement rails exist.
+Empty or unset **must** hit a named refuse. Never a silent list. Never a default asset. Never an IV surface pretending to be settlement. Never a CSV/JSON parse of opaque env into an asset list.
 
-2. **Stablecoin substitution is forbidden as FX settlement.** `PAY_CRYPTO_ASSETS` mapping EUR → a euro-ticker crypto asset does not close `socket.forex-settlement`. That would be a second money plane: crypto labelled as fiat. True fiat omnibus / sponsor-bank rails are owner/commercial. Agents do not pick a stablecoin “so FX can ship.”
+| Situation                                                | Named refuse                          | Residual                                              |
+| -------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------- |
+| Options `listMarket`, law env empty/unset                | `trade.options_settlement_law_unset`  | `socket.options-settlement-asset-law` (T6 on tip)     |
+| Options `listMarket`, fixing empty                       | `trade.options_fixing_unconfigured`   | D7 owner law — fixing alone must not unlock           |
+| Options `listMarket`, terms partial / non-european       | `trade.options_terms_incomplete`      | DB `markets_options_terms_ck`                         |
+| Options order while no engine                            | `trade.market_kind_unsupported`       | engine not this ADR                                   |
+| FX/commodity production list or non-paper place          | `trade.unsettled_asset_class_listing` | `socket.forex-settlement` (this freeze **and** rails) |
+| Opaque env parsed as live set / coins / matrix rows      | **Forbidden**                         | Not a code — revert. Empty means refuse by name.      |
+| Invented settlement asset in source / env seed / compose | **Forbidden**                         | Doctrine fail. Revert.                                |
 
-3. **Seeded majors that look listed are not live.** Existing `active` forex rows in the instrument migration stay **unfundable**. New production-active forex/commodity listings refuse the same code. Paper drills remain allowed.
-
-4. **Same engine.** Forex is not a second matching stack. Quote convention / tick / lot / schedule live on the instrument model (DIRECTION §2). Settlement is the missing rail, not a missing book.
+T6 already wires the options listing refuses. This ADR does not change that code. D7 fixing remains a second door after a **later** owner stamp — not after this freeze.
 
 ---
 
-## Refuse matrix (names on tip — do not rename to look busy)
+## Opaque env law (load-bearing)
 
-| Situation                                      | Code                                  | Socket / residual                                    |
-| ---------------------------------------------- | ------------------------------------- | ---------------------------------------------------- |
-| Options list, law stamp empty                  | `trade.options_settlement_law_unset`  | `socket.options-settlement-asset-law`                |
-| Options list, fixing empty                     | `trade.options_fixing_unconfigured`   | D7 owner law                                         |
-| Options list, terms partial / non-european     | `trade.options_terms_incomplete`      | —                                                    |
-| Options order while no engine                  | `trade.market_kind_unsupported`       | engine not this ADR                                  |
-| FX/commodity production list or place          | `trade.unsettled_asset_class_listing` | `socket.forex-settlement` (P0-05 **and** fiat rails) |
-| Invented settlement asset in source / env seed | **Forbidden**                         | Not a code — a doctrine fail. Revert.                |
+`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` stays **empty in committed defaults** and **empty under this freeze**.
 
-Empty published allowlists (copy P0-15 shape) are **not** this matrix. Do not borrow copy JSON into options stamps.
+- Empty → `trade.options_settlement_law_unset`. That is the correct production posture until a later owner ruling publishes a non-empty live set **and** a named settlement asset.
+- Non-empty, if an operator later sets it, is an opaque id only. **Never parse** it for asset ids, pair lists, or refuse-matrix cells. Putting `"USDT"` in the default env is inventing the settlement asset.
+- This freeze **does not** authorize setting the stamp merely because this file landed. “ADR exists” ≠ “live set published.”
+
+`TRADE_OPTIONS_SETTLEMENT_FIXING` is a second opaque string (D7). It is not a live set and not a settlement asset.
+
+---
+
+## What remains sealed from 2026-08-13 (shape)
+
+1. **Product title is mechanical payoff, not a pricing engine.** v1 options are European, cash-settled, full collateral. No IV surface. No American exercise.
+2. **One book.** Options and forex do not get a second matching engine or a Java wallet table. D-S-06 holds.
+3. **Listing is not trading.** Even after a later owner stamp + D7 + complete terms, `assertTradable` still refuses options orders until a real options engine exists.
+4. **Stablecoin substitution is forbidden as FX settlement.** `PAY_CRYPTO_ASSETS` mapping EUR → a euro-ticker crypto asset does not close `socket.forex-settlement`.
+5. **Same engine.** Forex quote convention / tick / lot / schedule live on the instrument model. Settlement is the missing rail, not a missing book.
 
 ---
 
 ## What remains owner-open (not inventable here)
 
-- The actual settlement **asset id** (when they choose to publish one, it will be a new owner stamp or a market-row field — **not** a parse of today’s opaque env).
-- The live options chain and live FX pair list (P0-06).
+- A **non-empty** live set (later stamp; still under P0-06).
+- A **named** settlement asset id (later stamp or market-row field — **not** a parse of today’s opaque env).
 - D7 fixing content.
 - Fiat rail vendor, BIN, and which fiat currencies those rails actually settle (Class X / commercial).
-- Options engine, margin for options (v1 is full collateral — no invent partial-margin options), and any recipe names for option premium/payoff (ledger recipes are DIRECTION §8 item 6).
-
-`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` stays **unset in committed defaults**. Operator publish is deploy config.
+- Options engine, partial-margin options (v1 is full collateral), and any new ledger recipe names for option premium/payoff (DIRECTION §8 item 6).
 
 ---
 
 ## What agents may do without asking again
 
 - Keep and deepen the refuse paths and tests that blank stamps never list options and never production-place FX.
-- After an operator sets the opaque law stamp **and** D7 fixing, allow options **listing** that already passes European terms — still no invent asset, still no options **orders** until an engine exists.
-- Cite this ADR on any new options/forex entry.
+- Cite this ADR (this freeze) on any new options/forex entry.
 
 ## What agents must not do
 
-- Commit a default settlement asset (USDT/USDC/quote-as-cash) in env examples, compose, or `options-listing.ts`.
+- Commit a default settlement asset (USDT/USDC/USD/IFC/quote-as-cash) in env examples, compose, or listing code.
+- Treat this freeze as licence to set `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` on a host.
 - Treat `PAY_CRYPTO_ASSETS` euro-stable as FX rails.
-- Mark `trade.options` or `trade.forex` Done because this ADR landed.
+- Mark `trade.options` or `trade.forex` Done because this ADR landed or because T6 refuse-closes.
 - Parse `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` for a live set.
+- Dual-edit `services/svc-trade` on this mountain while #1946 and other Denon trade lanes are open.
 - Build an IV surface or American options to “complete” T6.
 
 ---
 
 ## Proof on tip (already; this ADR does not dual-edit trade)
 
-- Options listing socket: `services/svc-trade/src/spot/options-listing.ts`
+- Options listing socket: `services/svc-trade/src/spot/options-listing.ts` — T6 refuse-closes until this law env is empty-named.
 - Forex socket: `services/svc-trade/src/spot/forex-settlement.ts`
 - Listing policy adjacency: D26-P0-06 ADR
 - Tracker sockets: `socket.options-settlement-asset-law`, `socket.forex-settlement`
 
 ---
 
-## How a later owner click closes the _listing_ half
+## How a later owner click thaws listing (not this PR)
 
-1. This ADR is on main (now).
-2. Operator sets `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` to any non-empty opaque id on that deploy (meaning: we accepted this file).
-3. Operator sets `TRADE_OPTIONS_SETTLEMENT_FIXING` (D7 content — still owner).
-4. Owner catalogues specific option markets under P0-06.
-5. Forex production still waits on **fiat rails**, not on step 2 alone.
+1. This freeze is on main.
+2. Owner publishes a **non-empty live set** and a **named settlement asset** in a later ruling (not by stuffing coins into opaque env).
+3. Operator may then set `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` to an opaque id on that deploy. Still never parsed.
+4. Operator sets `TRADE_OPTIONS_SETTLEMENT_FIXING` (D7 — still owner).
+5. Owner catalogues specific option markets under P0-06.
+6. Forex production still waits on **fiat rails**, not on step 3 alone.
 
-Steps 2–4 are not agent craft. Step 5 is not a stablecoin.
+Steps 2–6 are not agent craft. Step 6 is not a stablecoin.
