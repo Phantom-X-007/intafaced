@@ -508,3 +508,10 @@ describe('the shipped configuration does not invent a funding market list', () =
     expect(read('docker-compose.apps.yml')).not.toMatch(/^\s*TRADE_FUTURES_FUNDING_MARKET_IDS:/m);
   });
 });
+
+describe('the shipped configuration does not inject an 8h funding interval', () => {
+  it('compose does not pin TRADE_FUTURES_FUNDING_INTERVAL_MS (no second 8h)', () => {
+    expect(read('docker-compose.apps.yml')).not.toMatch(/^\s*TRADE_FUTURES_FUNDING_INTERVAL_MS:/m);
+    expect(read('docker-compose.apps.yml')).not.toMatch(/28_?800_?000/);
+  });
+});
