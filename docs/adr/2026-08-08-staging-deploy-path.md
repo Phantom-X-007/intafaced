@@ -26,14 +26,14 @@
 
 **Implemented by:** [`.github/workflows/staging-deploy.yml`](../../.github/workflows/staging-deploy.yml). Threat model remains sibling **D26-P3-02** (`docs/THREAT-MODEL-STAGING-DEPLOY.md`) — this ADR does not rewrite it.
 
-| ADR rule | How the workflow matches |
-| --- | --- |
-| Staging deploys **only** via `workflow_dispatch` | `on:` is `workflow_dispatch` only. No `push`, `schedule`, `pull_request`, `pull_request_target`, or `repository_dispatch`. |
-| Deploy-on-merge-to-main is **forbidden** while operator and swarm share one identity (G5) | Same surface. Preflight step `No unattended trigger` re-reads the `on:` block on every run and fails if those keys appear. |
-| Documented exception (G1 branch protection) | **Not wired.** Flip conditions below re-open merge-to-staging as a later decision. G1 landing does **not** add a `push:` trigger. Dispatch-only stands until an explicit PR. |
-| **`APP_ENV=staging` fail-closed** | Deploy job names `env.APP_ENV: staging`. The runner asserts that value before ssh. The remote shell asserts again and starts compose with `APP_ENV=staging`, which wins over a host `.env`. Setting `APP_ENV=dev` to force a boot is unreachable from this workflow. |
-| Attended GitHub environment named `staging` | Deploy job `environment: staging`. Reviewers / wait timer / branch allow-list are owner settings (Class X), not this file. |
-| Host purchase and real credentials are Class X2 | No host, domain, URL, or IP in the workflow. Missing transport secrets fail closed **by name**. No secret **values** in the repo. |
+| ADR rule                                                                                  | How the workflow matches                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Staging deploys **only** via `workflow_dispatch`                                          | `on:` is `workflow_dispatch` only. No `push`, `schedule`, `pull_request`, `pull_request_target`, or `repository_dispatch`.                                                                                                                                           |
+| Deploy-on-merge-to-main is **forbidden** while operator and swarm share one identity (G5) | Same surface. Preflight step `No unattended trigger` re-reads the `on:` block on every run and fails if those keys appear.                                                                                                                                           |
+| Documented exception (G1 branch protection)                                               | **Not wired.** Flip conditions below re-open merge-to-staging as a later decision. G1 landing does **not** add a `push:` trigger. Dispatch-only stands until an explicit PR.                                                                                         |
+| **`APP_ENV=staging` fail-closed**                                                         | Deploy job names `env.APP_ENV: staging`. The runner asserts that value before ssh. The remote shell asserts again and starts compose with `APP_ENV=staging`, which wins over a host `.env`. Setting `APP_ENV=dev` to force a boot is unreachable from this workflow. |
+| Attended GitHub environment named `staging`                                               | Deploy job `environment: staging`. Reviewers / wait timer / branch allow-list are owner settings (Class X), not this file.                                                                                                                                           |
+| Host purchase and real credentials are Class X2                                           | No host, domain, URL, or IP in the workflow. Missing transport secrets fail closed **by name**. No secret **values** in the repo.                                                                                                                                    |
 
 ---
 
