@@ -4,6 +4,7 @@ import type { NotifyService } from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
+import { renderInboxCopy } from './channels/render.js';
 import type { AlertService } from './alerts/service.js';
 import { AlertPortfolioUnpublishedError, type PriceAlert } from './alerts/types.js';
 
@@ -36,6 +37,10 @@ const notificationOutput = z.object({
   kind: z.string(),
   titleKey: z.string(),
   bodyKey: z.string(),
+  /** Catalog-resolved title. Unknown keys are the key string, never invented English. */
+  title: z.string(),
+  /** Catalog-resolved body. Unknown keys are the key string, never invented English. */
+  body: z.string(),
   params: z.record(z.unknown()),
   href: z.string().nullable(),
   severity: severitySchema,
@@ -98,12 +103,15 @@ const registerInput = z.discriminatedUnion('channel', [
 ]);
 
 function toWire(n: Notification) {
+  const copy = renderInboxCopy(n, 'en');
   return {
     id: n.id,
     userId: n.userId,
     kind: n.kind,
     titleKey: n.titleKey,
     bodyKey: n.bodyKey,
+    title: copy.title,
+    body: copy.body,
     params: n.params,
     href: n.href,
     severity: n.severity,

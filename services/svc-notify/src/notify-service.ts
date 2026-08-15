@@ -9,6 +9,11 @@ import { withNotifySpan } from './tracing.js';
 import type { ChannelMutePrefs, MuteStore, MuteableChannel } from './preferences/mute.js';
 import { TargetRateLimiter, type TargetRateLimiterPort } from './target-rate-limit.js';
 
+/** Insert plus delivery scope. `outOfApp: false` is inbox-only (agentActionCompleted). */
+export type CreateNotificationInput = InsertNotificationInput & {
+  readonly outOfApp?: boolean;
+};
+
 /**
  * svc-notify — event-driven fan-out (ops.notifications).
  *
@@ -99,7 +104,7 @@ export class NotifyService {
    * When fan-out is killed, returns inserted:false without writing — consumers
    * still ack the bus message.
    */
-  async create(input: InsertNotificationInput): Promise<CreateResult> {
+  async create(input: CreateNotificationInput): Promise<CreateResult> {
     return withNotifySpan('notify.create', { op: 'create', kind: input.kind, sourceSubject: input.sourceSubject }, async (span) => {
       if (!this.options.fanoutEnabled) {
         span.setAttribute('intafaced.notify.fanout_enabled', false);
@@ -107,8 +112,10 @@ export class NotifyService {
       }
       span.setAttribute('intafaced.notify.fanout_enabled', true);
 
-      const result = await this.store.insert(input);
+      const { outOfApp = true, ...rowInput } = input;
+      const result = await this.store.insert(rowInput);
       span.setAttribute('intafaced.notify.inserted', result.inserted);
+      span.setAttribute('intafaced.notify.out_of_app', outOfApp);
 
       if (!this.deps) return { inserted: result.inserted, notification: result.notification, dispatch: null };
 
@@ -120,7 +127,7 @@ export class NotifyService {
       const row = result.notification ?? (await this.store.findBySource(input.userId, input.sourceSubject, input.sourceIdempotencyKey));
       if (!row) return { inserted: result.inserted, notification: result.notification, dispatch: null };
 
-      const dispatch = await this.deps.dispatcher.dispatch(row);
+      const dispatch = await this.deps.dispatcher.dispatch(row, { outOfApp });
       return { inserted: result.inserted, notification: result.notification, dispatch };
     });
   }

@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, createTranslator, hasCatalog, type ParamValue } from '@intafaced/i18n';
+import { DEFAULT_LOCALE, createTranslator, hasCatalog, isMessageKey, type ParamValue } from '@intafaced/i18n';
 import type { Notification } from '../store.js';
 
 /**
@@ -89,7 +89,7 @@ export function normaliseLocale(locale: string | null | undefined): string {
  * at all (closeout residual). Appending it here is the whole fix: every email /
  * push / SMS body the dispatcher builds goes through this function.
  *
- * In-app never uses this path (inbox stores keys; the client renders).
+ * In-app inbox copy uses `renderInboxCopy` (no consent footer).
  */
 export function renderNotification(notification: Notification, locale: string): RenderedCopy {
   const t = createTranslator(normaliseLocale(locale), undefined, { mode: 'prod' });
@@ -103,6 +103,32 @@ export function renderNotification(notification: Notification, locale: string): 
     body: footer ? `${bodyCore}\n\n${footer}` : bodyCore,
     footer: footer || null,
   };
+}
+
+/**
+ * IN-APP INBOX COPY.
+ *
+ * The inbox stores keys. This is the first product read path that resolves them
+ * through `@intafaced/i18n` for the in-app list — not a second catalog, and not
+ * the out-of-app renderer (that one appends a consent footer an inbox must not
+ * claim).
+ *
+ * An unknown key is refused by name: the dotted key string is returned. Prod
+ * `tUnsafe` would do the same; we also refuse before interpolate so a missing
+ * key cannot be replaced with invented English.
+ */
+export function renderInboxCopy(notification: Notification, locale: string): { title: string; body: string } {
+  const t = createTranslator(normaliseLocale(locale), undefined, { mode: 'prod' });
+  const params = toParamValues(notification.params);
+  return {
+    title: resolveInboxString(t, notification.titleKey, params),
+    body: resolveInboxString(t, notification.bodyKey, params),
+  };
+}
+
+function resolveInboxString(t: ReturnType<typeof createTranslator>, key: string, params: Record<string, ParamValue>): string {
+  if (!isMessageKey(key)) return key;
+  return t.tUnsafe(key, params);
 }
 
 /**

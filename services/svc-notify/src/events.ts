@@ -650,6 +650,8 @@ export async function subscribeNotificationEvents(
           severity: agentCompletedPolicy.severity,
           sourceSubject: agentActionCompleted.subject,
           sourceIdempotencyKey: `${payload.sessionId}:${payload.sequence}`,
+          // Inbox only — email/SMS/push stay refuse-until-credentials (#1991).
+          outOfApp: false,
         }),
       );
     }),
