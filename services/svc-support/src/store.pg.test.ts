@@ -268,6 +268,48 @@ describe.skipIf(!available)('audit trail and case file — enforced in Postgres'
     expect(trail.map((e) => e.sequence)).toEqual([1, 2, 3]);
   });
 
+  it('a user reply on resolved reopens and clears the assignee in the same transaction', async () => {
+    const s = store();
+    const t = await open();
+    expect((await s.claimTicket({ ticketId: t.id, operatorId: OP_A })).status).toBe('ok');
+    expect((await s.setStatus({ ticketId: t.id, status: 'resolved', operatorId: OP_A })).status).toBe('ok');
+
+    const result = await s.addComment({
+      ticketId: t.id,
+      authorId: USER,
+      authorRole: 'user',
+      body: 'This is not fixed.',
+    });
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.reopened).toBe(true);
+    expect(result.ticket.status).toBe('open');
+    expect(result.ticket.assigneeId).toBeNull();
+
+    const trail = await s.listEvents(t.id);
+    const reopen = trail.filter((e) => e.kind === 'status_changed' && e.toStatus === 'open' && e.fromStatus === 'resolved');
+    expect(reopen).toHaveLength(1);
+    expect(reopen[0]).toMatchObject({ actorId: USER, actorRole: 'user', note: 'user_reply_reopen' });
+  });
+
+  it('a user comment on closed is refused and writes neither comment nor trail', async () => {
+    const s = store();
+    const t = await open();
+    expect((await s.setStatus({ ticketId: t.id, status: 'closed', operatorId: OP_A })).status).toBe('ok');
+    const before = await s.listEvents(t.id);
+
+    const result = await s.addComment({
+      ticketId: t.id,
+      authorId: USER,
+      authorRole: 'user',
+      body: 'Please reopen.',
+    });
+    expect(result).toEqual({ status: 'refuse', reason: 'terminal' });
+    expect(await s.listComments(t.id)).toHaveLength(0);
+    expect(await s.listEvents(t.id)).toHaveLength(before.length);
+    expect((await s.findById(t.id))?.status).toBe('closed');
+  });
+
   it('a case file round-trips its citations and grounding through jsonb', async () => {
     const s = store();
     const t = await open();

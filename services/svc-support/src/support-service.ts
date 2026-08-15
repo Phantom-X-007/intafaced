@@ -94,6 +94,18 @@ export class SupportService implements SupportContract {
     });
   }
 
+  /**
+   * Add a comment. Visibility is the same as `getTicket`.
+   *
+   * A USER reply on `resolved` reopens the same ticket (`resolved → open`) and
+   * clears the assignee so the row returns to the shared queue — that is the
+   * lifecycle edge already named "a user saying not fixed". An operator note
+   * on `resolved` does not reopen (they are not the user).
+   *
+   * A user comment on `closed` is refused (`support.comment.terminal`). Closed
+   * is finished; storing a reply nobody will queue is a ghost. Operators may
+   * still annotate a closed ticket.
+   */
   async comment(input: { userId: string; ticketId: string; body: string; asOperator?: boolean }): Promise<SupportComment> {
     return withSupportSpan('support.comment', { op: 'comment', ticketId: input.ticketId }, async () => {
       await this.getTicket({
@@ -101,12 +113,17 @@ export class SupportService implements SupportContract {
         ticketId: input.ticketId,
         asOperator: input.asOperator,
       });
-      return this.store.addComment({
+      const result = await this.store.addComment({
         ticketId: input.ticketId,
         authorId: input.userId,
         authorRole: input.asOperator ? 'operator' : 'user',
         body: input.body,
       });
+      if (result.status === 'refuse') {
+        if (result.reason === 'not_found') throw ticketNotFound();
+        throw new SupportError('comment refused: ticket is terminal', 'support.comment.terminal');
+      }
+      return result.comment;
     });
   }
 
