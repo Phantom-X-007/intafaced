@@ -277,7 +277,7 @@ describe('TradeHub fan-out', () => {
 
     // Pin: CLOSE_POLICY + fixed phrase. Market id is client-supplied; reason
     // must not embed stack traces or ensureKnownMarket error bodies.
-    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'unknown market "NOPE"' });
+    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'ws.close.unknown_market' });
     expect(hub.connections).toBe(0);
   });
 
@@ -400,8 +400,8 @@ describe('per-hub capacity (not process-wide)', () => {
     trade.attach('BTC-USDT', sink());
     depth.attach('BTC-USDT', sink());
     expect(closed).toEqual([
-      { code: CLOSE_TRY_LATER, reason: 'gateway at capacity' },
-      { code: CLOSE_TRY_LATER, reason: 'gateway at capacity' },
+      { code: CLOSE_TRY_LATER, reason: 'ws.close.at_capacity' },
+      { code: CLOSE_TRY_LATER, reason: 'ws.close.at_capacity' },
     ]);
     expect(depth.connections).toBe(1);
     expect(trade.connections).toBe(1);

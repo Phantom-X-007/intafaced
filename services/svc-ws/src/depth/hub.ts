@@ -8,6 +8,7 @@ import {
   type DepthSnapshot,
   type WireLevel,
 } from '@intafaced/market-data';
+import { resolveWsCopy, WS_COPY } from '../copy.js';
 import type { MarketRegistry } from './registry.js';
 import type { DepthSource } from './source.js';
 
@@ -236,7 +237,7 @@ export class DepthHub {
    */
   attach(marketId: string, sink: DepthSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
-      sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
       return null;
     }
 
@@ -257,7 +258,7 @@ export class DepthHub {
         // Not listed anywhere. Typed close — never a fabricated empty ladder.
         // A LISTED market with no book stays open with no snapshot until
         // matching has resting depth (empty ≠ zero).
-        this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
+        this.#evict(sub, CLOSE_POLICY, resolveWsCopy(WS_COPY.unknownMarket));
         return;
       }
       if (sub.closed) return;

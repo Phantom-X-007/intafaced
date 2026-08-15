@@ -113,7 +113,7 @@ describe('empty book is absent, not a zero book', () => {
     hub.attach('NOT-A-MARKET', sink);
     await settle();
 
-    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'unknown market "NOT-A-MARKET"' });
+    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'ws.close.unknown_market' });
     expect(sink.frames).toEqual([]);
     expectNoPricedEmptyBook(sink.frames);
   });
@@ -167,7 +167,7 @@ describe('empty book is absent, not a zero book', () => {
     await settle();
 
     expect(sink.closed?.code).toBe(CLOSE_POLICY);
-    expect(sink.closed?.reason).toMatch(/unknown market/);
+    expect(sink.closed?.reason).toBe('ws.close.unknown_market');
     expect(sink.frames).toEqual([]);
   });
 });

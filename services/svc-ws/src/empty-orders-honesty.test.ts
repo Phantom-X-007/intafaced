@@ -202,7 +202,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
     depth.attach('NOPE', sink);
     await settle();
 
-    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'unknown market "NOPE"' });
+    expect(sink.closed).toEqual({ code: CLOSE_POLICY, reason: 'ws.close.unknown_market' });
     expect(sink.frames).toEqual([]);
     expectNoLiveZeroBlotter(sink.frames);
   });

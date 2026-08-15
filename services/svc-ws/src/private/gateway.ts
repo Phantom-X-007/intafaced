@@ -2,6 +2,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
+import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
 
@@ -56,7 +57,8 @@ export interface PrivateWebSocketGateway {
 }
 
 function closeReason(reason: string): string {
-  return reason.length <= 120 ? reason : `${reason.slice(0, 117)}...`;
+  const copy = resolveWsCopy(reason);
+  return copy.length <= 120 ? copy : `${copy.slice(0, 117)}...`;
 }
 
 function sinkFor(socket: WebSocket): DepthSink {
@@ -241,10 +243,11 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
     async close(reason: string) {
       clearInterval(heartbeat);
       server.off('upgrade', onUpgrade);
-      await hub.close(reason);
+      const copy = resolveWsCopy(reason);
+      await hub.close(copy);
       for (const client of wss.clients) {
         try {
-          client.close(CLOSE_GOING_AWAY, closeReason(reason));
+          client.close(CLOSE_GOING_AWAY, closeReason(copy));
         } catch {
           /* ignore */
         }

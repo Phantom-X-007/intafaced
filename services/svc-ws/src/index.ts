@@ -11,6 +11,7 @@ import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
 import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
+import { WS_COPY } from './copy.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -296,8 +297,8 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       enabled = false;
       poller.stop();
       await busLifecycle.stop();
-      await gateway.close('gateway shutting down');
-      await privateGateway.close('gateway shutting down');
+      await gateway.close(WS_COPY.shuttingDown);
+      await privateGateway.close(WS_COPY.shuttingDown);
       await app.close();
       process.exit(0);
     })();

@@ -481,7 +481,7 @@ describe('DepthHub — an unknown market never reaches svc-matching', () => {
     await settle();
 
     expect(sink.closed?.code).toBe(CLOSE_POLICY);
-    expect(sink.closed?.reason).toMatch(/unknown market/);
+    expect(sink.closed?.reason).toBe('ws.close.unknown_market');
     expect(source.snapshotCalls).toEqual([]);
     expect(hub.connections).toBe(0);
   });
@@ -590,7 +590,7 @@ describe('DepthHub — an unknown market never reaches svc-matching', () => {
     await settle();
 
     expect(refused.closed?.code).toBe(CLOSE_POLICY);
-    expect(refused.closed?.reason).toMatch(/unknown market/);
+    expect(refused.closed?.reason).toBe('ws.close.unknown_market');
     expect(source.marketCalls).toBe(2);
 
     // After the window, a miss may refresh again.
@@ -768,7 +768,7 @@ describe('DepthHub — the listing decides, not the engine', () => {
     await settle();
 
     expect(sink.closed?.code).toBe(CLOSE_POLICY);
-    expect(sink.closed?.reason).toMatch(/unknown market/);
+    expect(sink.closed?.reason).toBe('ws.close.unknown_market');
     expect(source.snapshotCalls).toEqual([]);
   });
 
