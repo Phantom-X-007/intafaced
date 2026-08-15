@@ -60,6 +60,24 @@ describe('parseCopyFeeShareLawJson', () => {
       expect(() => parseCopyFeeShareLawJson(JSON.stringify({ ...bases, leaderShareBps }))).toThrow(CopyError);
     }
   });
+
+  it('blank owner share bps stays refuse-closed — never invents a rate', () => {
+    const blanks: unknown[] = [undefined, null, ''];
+    for (const leaderShareBps of blanks) {
+      const raw = JSON.stringify({ published: true, earningsCapPerFollower: '1', leaderShareBps });
+      try {
+        parseCopyFeeShareLawJson(raw);
+        expect.unreachable(`should refuse blank leaderShareBps=${String(leaderShareBps)}`);
+      } catch (err) {
+        expect(err).toBeInstanceOf(CopyError);
+        expect((err as CopyError).code).toBe('trade.copy_fee_share_blank');
+        expect((err as CopyError).residual).toBe(COPY_FEE_SHARE_RESIDUAL);
+      }
+    }
+    expect(() => parseCopyFeeShareLawJson(JSON.stringify({ published: true, earningsCapPerFollower: '1' }))).toThrow(
+      expect.objectContaining({ code: 'trade.copy_fee_share_blank', residual: COPY_FEE_SHARE_RESIDUAL }),
+    );
+  });
 });
 
 describe('parseCopyJurisdictionLawJson', () => {
