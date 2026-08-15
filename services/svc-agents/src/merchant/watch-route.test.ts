@@ -76,9 +76,7 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
   });
 
   it('empty points → empty (never invent rails)', async () => {
-    const result = await createAgentsRouter(stubDeps())
-      .createCaller(signed())
-      .merchant.watch({ points: [], payPlane: 'live' });
+    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).merchant.watch({ points: [], payPlane: 'live' });
     expect(result).toEqual({ status: 'empty', userMessageKey: 'agents.merchant.empty' });
   });
 

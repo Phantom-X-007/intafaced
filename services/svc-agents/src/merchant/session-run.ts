@@ -35,13 +35,7 @@
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
-import {
-  resolveMerchantPayPlane,
-  watchApprovalFixtures,
-  type ApprovalRatePoint,
-  type MerchantAlert,
-  type PayPlaneState,
-} from './watch.js';
+import { resolveMerchantPayPlane, watchApprovalFixtures, type ApprovalRatePoint, type MerchantAlert, type PayPlaneState } from './watch.js';
 
 /** The agent id the merchant guardrail is registered under. */
 export const MERCHANT_AGENT_ID = 'merchant';
