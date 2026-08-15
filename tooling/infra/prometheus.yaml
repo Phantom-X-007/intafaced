@@ -5,6 +5,14 @@ global:
     platform: intafaced
     env: dev
 
+# D26-P3-08 — named alert routes. The files live next to this config in the
+# repo (`tooling/infra/prometheus/alerts/`) and are bound onto this path by
+# docker-compose.yml. A `rule_files` entry with no matching mount is the same
+# silent joint Grafana had before the dashboard provider: Prometheus starts,
+# evaluates nothing, and the diff still looks complete.
+rule_files:
+  - /etc/prometheus/alerts/*.yaml
+
 scrape_configs:
   - job_name: prometheus
     static_configs:

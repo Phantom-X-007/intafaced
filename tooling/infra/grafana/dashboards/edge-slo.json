@@ -1,7 +1,7 @@
 {
   "uid": "intafaced-edge-slo",
   "title": "INTAFACED — Front Door SLO",
-  "description": "§14.5 — traces plus at least one SLO dashboard panel. Availability and latency as the CALLER experiences them, measured at svc-edge where the promise to the user is made. Series come from packages/telemetry/src/metrics.ts; the scrape target is the svc-edge job in tooling/infra/prometheus.yaml. Metric names in these queries are asserted against the endpoint's real output by services/svc-edge/src/observability-wiring.test.ts.",
+  "description": "§14.5 — traces plus at least one SLO dashboard panel. Availability and latency as the CALLER experiences them, measured at svc-edge where the promise to the user is made. Series come from packages/telemetry/src/metrics.ts; the scrape target is the svc-edge job in tooling/infra/prometheus.yaml. Metric names in these queries are asserted against the endpoint's real output by services/svc-edge/src/observability-wiring.test.ts. Empty or missing scrape is NO SERIES — not a green SLO. Panel thresholds and §20 99.9%/2s figures are engineering targets, not proven production.",
   "tags": ["intafaced", "slo", "section-14"],
   "editable": true,
   "schemaVersion": 39,
@@ -32,8 +32,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Availability — non-5xx share of all requests (SLO 99.9%)",
-      "description": "THE SLO PANEL. Denominator is every reply the edge sent, including the ones that never reached a handler — 429s from the limiter, 503s from the kill-switch, 400s from the path resolver, 502s from a dead upstream. An availability ratio computed only over requests that reached a handler is 100% by construction and reports green through an outage.",
+      "title": "Availability — non-5xx share of all requests (engineering SLO 99.9%)",
+      "description": "THE SLO PANEL. Denominator is every reply the edge sent, including the ones that never reached a handler — 429s from the limiter, 503s from the kill-switch, 400s from the path resolver, 502s from a dead upstream. An availability ratio computed only over requests that reached a handler is 100% by construction and reports green through an outage. No clamp_min fake denominator: if the series is absent (no scrape, no samples), the panel is NO SERIES — not green. lastNotNull is forbidden here so a dead scrape cannot freeze the last good ratio. 99.9% is the §20 target, not a proven prod measurement.",
       "datasource": { "type": "prometheus", "uid": "intafaced-prom" },
       "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
       "targets": [
@@ -44,11 +44,11 @@
           "range": true,
           "instant": false,
           "legendFormat": "availability",
-          "expr": "sum(rate(intafaced_http_requests_total{service=~\"$service\", status!=\"5xx\"}[5m])) / clamp_min(sum(rate(intafaced_http_requests_total{service=~\"$service\"}[5m])), 0.0001)"
+          "expr": "sum(rate(intafaced_http_requests_total{service=~\"$service\", status!=\"5xx\"}[5m])) / sum(rate(intafaced_http_requests_total{service=~\"$service\"}[5m]))"
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
@@ -61,6 +61,21 @@
           "decimals": 3,
           "min": 0,
           "max": 1,
+          "noValue": "NO SERIES",
+          "mappings": [
+            {
+              "type": "special",
+              "options": { "match": "null", "result": { "text": "NO SERIES", "index": 0, "color": "orange" } }
+            },
+            {
+              "type": "special",
+              "options": { "match": "empty", "result": { "text": "NO SERIES", "index": 1, "color": "orange" } }
+            },
+            {
+              "type": "special",
+              "options": { "match": "nan", "result": { "text": "NO SERIES", "index": 2, "color": "orange" } }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [

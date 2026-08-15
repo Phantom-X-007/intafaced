@@ -105,6 +105,7 @@ services:
       - '--enable-feature=exemplar-storage'
     volumes:
       - ./tooling/infra/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./tooling/infra/prometheus/alerts:/etc/prometheus/alerts:ro
       - promdata:/prometheus
     ports:
       - '9090:9090'

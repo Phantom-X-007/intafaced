@@ -1,0 +1,39 @@
+# D26-P3-08 — fail-closed alert routes for the edge scrape that already exists.
+#
+# These rules name routes. They do not invent live traffic, p99 numbers, or a
+# production SLO. They fire when the scrape (or the series the edge actually
+# emits) is missing. Local `docker compose` evaluates them inside the laptop
+# Prometheus; paging a human from a real host is Class X — see
+# docs/ops/OBSERVABILITY-ALERTS-LOCAL-VS-HOST-2026-08-15.md.
+#
+# Metric names: `up` is Prometheus-generated for the job in prometheus.yaml;
+# `intafaced_http_requests_total` is the counter packages/telemetry emits on
+# svc-edge `/metrics`. No other application series are assumed.
+groups:
+  - name: intafaced.edge.fail_closed
+    rules:
+      - alert: IntafacedEdgeScrapeFailClosed
+        expr: (up{job="svc-edge"} == 0) or absent(up{job="svc-edge"})
+        for: 1m
+        labels:
+          severity: page
+          route: intafaced-edge-scrape
+        annotations:
+          summary: svc-edge scrape is down or absent (fail-closed)
+          description: >-
+            job=svc-edge is named in tooling/infra/prometheus.yaml. up==0 or
+            absent(up) is an alert, not a green dashboard. This evaluation is
+            only as real as the Prometheus process that loaded the file.
+
+      - alert: IntafacedEdgeHttpSeriesAbsent
+        expr: absent(intafaced_http_requests_total)
+        for: 2m
+        labels:
+          severity: warning
+          route: intafaced-edge-metrics
+        annotations:
+          summary: intafaced_http_requests_total is absent from the TSDB
+          description: >-
+            Fail-closed on the /metrics name the edge actually emits. Absence
+            is not an SLO and is not proof of traffic. Do not treat a missing
+            series as 99.9% availability.
