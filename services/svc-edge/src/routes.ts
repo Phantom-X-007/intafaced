@@ -182,3 +182,54 @@ export function resolve(pathname: string): Resolved | null {
   }
   return null;
 }
+
+/**
+ * S2S surfaces (`/internal/…`) must never cross this door.
+ *
+ * Pay, identity, token, bank, trade, p2p all mount cron/stake/rank jobs at
+ * `/internal/*`, authenticated by `INTERNAL_SERVICE_SECRET`. The edge strips
+ * every `x-intafaced-*` header, so those credentials cannot arrive through
+ * here — but forwarding the path still makes the door a probe surface, and
+ * a service-side auth bug would become an internet bug. 404, same as an
+ * unlisted prefix: do not advertise that the job exists.
+ */
+export function isS2sPath(path: string): boolean {
+  return path === '/internal' || path.startsWith('/internal/');
+}
+
+/**
+ * Same envs as CORS enforcement: a hosted deploy must not silently fall back
+ * to `localhost`. `dev`/`test` keep the table's `devUrl`.
+ */
+export const UPSTREAM_ENFORCED_ENVS = ['staging', 'prod'] as const;
+
+export function isUpstreamWired(upstream: Upstream, envLookup: (name: string) => string | undefined): boolean {
+  const raw = envLookup(upstream.envVar);
+  return typeof raw === 'string' && raw.trim().length > 0;
+}
+
+export function resolveUpstreamBase(
+  upstream: Upstream,
+  envLookup: (name: string) => string | undefined,
+  appEnv: string,
+): { readonly base: string } | { readonly unwired: true } {
+  const raw = envLookup(upstream.envVar);
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return { base: raw.replace(/\/$/, '') };
+  }
+  if ((UPSTREAM_ENFORCED_ENVS as readonly string[]).includes(appEnv)) {
+    return { unwired: true };
+  }
+  return { base: upstream.devUrl.replace(/\/$/, '') };
+}
+
+export interface ReadyRoute {
+  readonly prefix: string;
+  readonly module: ModuleId;
+  readonly wired: boolean;
+}
+
+/** `/ready` route table: prefixes plus whether the env var is actually set. No URLs. */
+export function readyRoutes(envLookup: (name: string) => string | undefined): readonly ReadyRoute[] {
+  return UPSTREAMS.map((u) => ({ prefix: u.prefix, module: u.module, wired: isUpstreamWired(u, envLookup) }));
+}

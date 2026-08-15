@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { verifyForwardedPrincipal, EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER } from '@intafaced/contracts';
-import { exchangePrincipal, looksLikeApiKey, stripReserved } from './principal-exchange.js';
+import { exchangePrincipal, looksLikeApiKey, requestOrigin, stripReserved } from './principal-exchange.js';
 
 const tokens: TokenConfig = {
   secret: 'edge-test-jwt-signing-secret-32-chars',
@@ -156,6 +156,16 @@ describe('reserved headers are stripped, not overwritten', () => {
     expect(Object.keys(out)).toEqual(['accept']);
   });
 
+  it('strips a client-supplied x-forwarded-origin (identity domain_whitelist)', () => {
+    const out = stripReserved({
+      origin: 'https://evil.example',
+      'x-forwarded-origin': 'https://app.example.com',
+      accept: '*/*',
+    });
+    expect(out['x-forwarded-origin']).toBeUndefined();
+    expect(out.origin).toBe('https://evil.example');
+  });
+
   /**
    * Audit 2026-08-08 #7: the filter claimed the hop-by-hop class and only
    * stripped `connection`. The full RFC 7230 set (plus host/content-length)
@@ -175,6 +185,7 @@ describe('reserved headers are stripped, not overwritten', () => {
       connection: 'close',
       host: 'evil.test',
       'content-length': '999',
+      'x-forwarded-origin': 'https://forged.example',
     });
     expect(out).toEqual({ accept: 'application/json', 'content-type': 'application/json' });
     for (const name of [
@@ -188,6 +199,7 @@ describe('reserved headers are stripped, not overwritten', () => {
       'connection',
       'host',
       'content-length',
+      'x-forwarded-origin',
     ]) {
       expect(out[name], name).toBeUndefined();
     }
@@ -291,5 +303,62 @@ describe('API key bearers (ifc_…) exchange into access JWTs', () => {
     expect(result.principal).toBeNull();
     expect(result.rejected).toBe('invalid');
     expect(result.headers[EDGE_PRINCIPAL_HEADER]).toBeUndefined();
+  });
+
+  it('forwards the real Origin to identity so domain_whitelist can fail closed', async () => {
+    const { token: accessToken } = await issueAccessToken(
+      { userId: USER, sessionId: SESSION, scopes: ['pay:write'], tier: 'basic', mfa: false },
+      tokens,
+    );
+
+    const seen: string[] = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      seen.push(headers.get('origin') ?? '');
+      return new Response(JSON.stringify({ result: { data: { json: { accessToken } } } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    };
+
+    await exchangePrincipal(
+      { authorization: 'Bearer ifc_browser_key', origin: 'https://app.example.com' },
+      { ...options, identityUrl: 'http://identity.test', fetch: fetchMock },
+    );
+
+    expect(seen).toEqual(['https://app.example.com']);
+  });
+
+  it('does not let a client x-forwarded-origin stand in for Origin', async () => {
+    expect(requestOrigin({ 'x-forwarded-origin': 'https://app.example.com' })).toBeNull();
+
+    const seen: Array<string | null> = [];
+    const fetchMock: typeof fetch = async (_input, init) => {
+      const headers = new Headers(init?.headers);
+      seen.push(headers.get('origin'));
+      return new Response(JSON.stringify({ error: { message: 'nope' } }), { status: 401 });
+    };
+
+    const result = await exchangePrincipal(
+      { authorization: 'Bearer ifc_stolen', 'x-forwarded-origin': 'https://app.example.com' },
+      { ...options, identityUrl: 'http://identity.test', fetch: fetchMock },
+    );
+
+    expect(seen).toEqual([null]);
+    expect(result.headers['x-forwarded-origin']).toBeUndefined();
+    expect(result.rejected).toBe('invalid');
+  });
+
+  it('rewrites x-forwarded-origin from the real Origin on the proxied path', async () => {
+    const result = await exchangePrincipal(
+      {
+        ...(await bearer()),
+        origin: 'https://app.example.com',
+        'x-forwarded-origin': 'https://evil.example',
+      },
+      options,
+    );
+    expect(result.headers.origin).toBe('https://app.example.com');
+    expect(result.headers['x-forwarded-origin']).toBe('https://app.example.com');
   });
 });

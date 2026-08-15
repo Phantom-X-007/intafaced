@@ -75,8 +75,13 @@ export interface ExchangeOptions {
  *
  * `host` is not hop-by-hop in the RFC sense; it is stripped because the
  * upstream's host must be the edge's own choice, never the caller's.
- * `content-length` is stripped because the proxy re-serialises the body with
- * `JSON.stringify` and a stale length would lie.
+ * `content-length` is stripped because the proxy may re-encode the body and a
+ * stale length would lie.
+ *
+ * `x-forwarded-origin` is stripped here, then re-set from the real `Origin`
+ * in `exchangePrincipal`. Identity's `apiKeys.exchange` reads
+ * `origin ?? x-forwarded-origin` for domain_whitelist. A client-supplied
+ * value would let a stolen browser key pick its own allowed origin.
  */
 export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
   'connection',
@@ -89,7 +94,17 @@ export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
   'upgrade',
   'host',
   'content-length',
+  'x-forwarded-origin',
 ]);
+
+/** Browser `Origin` only. Never `x-forwarded-origin` — that header is ours to write. */
+export function requestOrigin(headers: Record<string, string | string[] | undefined>): string | null {
+  const raw = headers.origin ?? headers.Origin;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 /** Strip every reserved header, whatever its case. */
 export function stripReserved(headers: Record<string, string | string[] | undefined>): Record<string, string> {
@@ -131,13 +146,21 @@ export async function exchangeApiKeyForAccessToken(
   key: string,
   identityUrl: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
+  origin?: string | null,
 ): Promise<string | null> {
   const base = identityUrl.replace(/\/$/, '');
   let response: Response;
   try {
     response = await fetchFn(`${base}/trpc/apiKeys.exchange`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        // Identity domain_whitelist fails closed on a missing origin when the
+        // key is locked. Omitting this made every browser key land anonymous
+        // at the door, and a client-supplied x-forwarded-origin was the
+        // forgeable bypass on the proxied tRPC path.
+        ...(origin ? { origin } : {}),
+      },
       // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
       body: JSON.stringify({ json: { key } }),
       signal: AbortSignal.timeout(5_000),
@@ -182,6 +205,13 @@ export async function exchangePrincipal(
   const forward = stripReserved(headers);
   forward['x-intafaced-region'] = options.region;
 
+  // Edge-attested origin only. Client x-forwarded-origin was stripped above.
+  const origin = requestOrigin(headers);
+  if (origin) {
+    forward.origin = origin;
+    forward['x-forwarded-origin'] = origin;
+  }
+
   let token = bearerFrom(headers);
   if (!token) return { headers: forward, principal: null, rejected: null };
 
@@ -192,7 +222,7 @@ export async function exchangePrincipal(
     if (!options.identityUrl) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
-    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch);
+    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin);
     if (!exchanged) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
