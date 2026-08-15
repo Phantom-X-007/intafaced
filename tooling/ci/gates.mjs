@@ -151,6 +151,15 @@ export const GATES = [
       'reason, and that list may only shrink.',
   },
   {
+    id: 'notice-pin',
+    script: 'tooling/ci/notice-pin.mjs',
+    doctrine: 'D26-P3-04 / NOTICE freshness',
+    why:
+      'root NOTICE was compiled 2026-07-29 against 4311cff and can silently diverge from the vendor Apache pin, ' +
+      'compose image tags, jar count, and the Path A charting working tree. This gate fails on that silent drift; ' +
+      'named divergences must be written in NOTICE §11. It does not purchase licences and is not legal advice.',
+  },
+  {
     id: 'brand',
     script: 'tooling/ci/brand-scan.mjs',
     doctrine: '§0.7',

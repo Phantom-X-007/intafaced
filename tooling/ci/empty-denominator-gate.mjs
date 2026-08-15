@@ -146,6 +146,11 @@ export const ENFORCED = {
     must: /missing required auto-load file/,
     note: 'denominator is a fixed required-file list; with the tree gone every entry is missing and it refuses by name.',
   },
+  'notice-pin': {
+    kind: 'guard',
+    must: /NOTICE PIN FAILED — missing required file/,
+    note: 'denominator is a fixed required-file list (NOTICE, vendor NOTICE, LICENSE, compose); with the tree gone every entry is missing and it refuses by name.',
+  },
   tracker: {
     kind: 'guard',
     must: /TRACKER REGISTRY INVALID/,
