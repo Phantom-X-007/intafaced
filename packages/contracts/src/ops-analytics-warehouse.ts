@@ -241,12 +241,7 @@ export function mayPaintLiveCubes(input: {
   readonly etlWatermark: EtlWatermarkState;
   readonly hasFacts: boolean;
 }): boolean {
-  return (
-    input.replicaConfigured === true &&
-    input.lagMayLabelLive === true &&
-    input.etlWatermark === 'present' &&
-    input.hasFacts === true
-  );
+  return input.replicaConfigured === true && input.lagMayLabelLive === true && input.etlWatermark === 'present' && input.hasFacts === true;
 }
 
 /**
@@ -297,37 +292,37 @@ export type WarehouseEtlHonesty = {
 };
 
 export type WarehouseSurfaceResult =
-  | {
+  | ({
       readonly status: 'ok';
       readonly points: readonly CubePoint[];
       readonly freshness: LagFreshness;
       readonly mayLabelLive: boolean;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    } & WarehouseEtlHonesty
-  | {
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'empty';
       readonly reason: 'no_facts';
       readonly freshness: LagFreshness;
       readonly mayLabelLive: false;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    } & WarehouseEtlHonesty
-  | {
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'unavailable';
       readonly reason: 'replica_unconfigured' | 'lag_unknown' | 'lag_stale';
       readonly freshness: LagFreshness;
       readonly mayLabelLive: false;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    } & WarehouseEtlHonesty
-  | {
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'refuse';
       readonly reason: string;
       readonly mayLabelLive: false;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    } & WarehouseEtlHonesty;
+    } & WarehouseEtlHonesty);
 
 export type WarehouseSurfaceInput = {
   /** False until ANALYTICS_REPLICA_* URLs (or dry-run flag) are configured. */
