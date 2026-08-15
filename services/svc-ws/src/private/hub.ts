@@ -19,6 +19,9 @@ import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js
 
 export type PrivateSink = DepthSink;
 
+/** Private socket catalog. Omit on attach = all three (back-compat). */
+export type PrivateStreamChannel = 'orders' | 'fills' | 'positions';
+
 export interface PrivateOrderUpdate {
   readonly orderId: string;
   readonly userId: string;
@@ -121,6 +124,8 @@ export function isLiveZeroBlotterFrame(frame: string): boolean {
 interface Subscription {
   readonly userId: string;
   readonly sink: PrivateSink;
+  /** `null` = every private channel (default attach). */
+  readonly channel: PrivateStreamChannel | null;
   lagTicks: number;
   closed: boolean;
 }
@@ -170,8 +175,11 @@ export class PrivateOrderHub {
    * hub is at capacity (sink is closed with 1013 before return). Callers must
    * not send ready frames after a null — that would claim a subscription the
    * hub never held.
+   *
+   * `channel` is an optional fan-out filter. Omitted / null still delivers all
+   * three private channels; owner isolation is unchanged.
    */
-  attach(userId: string, sink: PrivateSink): (() => void) | null {
+  attach(userId: string, sink: PrivateSink, channel: PrivateStreamChannel | null = null): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
       sink.close(CLOSE_TRY_LATER, 'private gateway at capacity');
       return null;
@@ -187,7 +195,7 @@ export class PrivateOrderHub {
       return null;
     }
 
-    const sub: Subscription = { userId, sink, lagTicks: 0, closed: false };
+    const sub: Subscription = { userId, sink, channel, lagTicks: 0, closed: false };
     this.#subscriptions.add(sub);
     if (this.#options.seedOrders || this.#options.seedPositions) {
       void this.#seed(sub);
@@ -264,22 +272,23 @@ export class PrivateOrderHub {
   }
 
   publish(update: PrivateOrderUpdate): void {
-    this.#fanout(update.userId, JSON.stringify({ channel: 'orders', ...update }));
+    this.#fanout(update.userId, 'orders', JSON.stringify({ channel: 'orders', ...update }));
   }
 
   publishFill(update: PrivateFillUpdate): void {
-    this.#fanout(update.userId, JSON.stringify({ channel: 'fills', ...update }));
+    this.#fanout(update.userId, 'fills', JSON.stringify({ channel: 'fills', ...update }));
   }
 
   publishPosition(update: PrivatePositionUpdate): void {
-    this.#fanout(update.userId, JSON.stringify({ channel: 'positions', ...update }));
+    this.#fanout(update.userId, 'positions', JSON.stringify({ channel: 'positions', ...update }));
   }
 
-  #fanout(userId: string, frame: string): void {
+  #fanout(userId: string, channel: PrivateStreamChannel, frame: string): void {
     this.#updates++;
 
     for (const sub of this.#subscriptions) {
       if (sub.closed || sub.userId !== userId) continue;
+      if (sub.channel !== null && sub.channel !== channel) continue;
 
       if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         this.#noteLag(sub);

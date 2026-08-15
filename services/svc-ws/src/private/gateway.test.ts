@@ -226,6 +226,169 @@ describe('private WebSocket gateway', () => {
     client.socket.close();
   });
 
+  it('rejects unknown channel with HTTP 400', async () => {
+    await boot();
+    const token = await accessToken(['trade:read']);
+    expect(await upgradeStatus(`${PRIVATE_STREAM_PATH}?access_token=${token}&channel=depth`)).toBe(400);
+    expect(await upgradeStatus(`${PRIVATE_STREAM_PATH}?access_token=${token}&channel=trades`)).toBe(400);
+    expect(await upgradeStatus(`${PRIVATE_STREAM_PATH}?access_token=${token}&channel=nope`)).toBe(400);
+    expect(await upgradeStatus(`${PRIVATE_STREAM_PATH}?access_token=${token}&channel=ORDERS`)).toBe(400);
+  });
+
+  it('channel=orders announces only orders and drops fills/positions data', async () => {
+    await boot();
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
+    await client.frameCount(1);
+    expect(client.frames).toHaveLength(1);
+    const ready = JSON.parse(client.frames[0]!);
+    expect(ready).toMatchObject({ channel: 'orders', type: 'ready', userId: USER, bus: true });
+
+    hub.publish({
+      orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      userId: USER,
+      marketId: 'btc-usdt',
+      status: 'open',
+      side: 'buy',
+      type: 'limit',
+      qty: '1.5',
+      filledQty: '0',
+      price: '64000.5',
+      clientOrderId: null,
+      ts: '2026-07-31T00:00:00.000Z',
+    });
+    hub.publishFill({
+      fillId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      userId: USER,
+      marketId: 'btc-usdt',
+      side: 'buy',
+      liquidity: 'taker',
+      price: '64000.5',
+      qty: '0.25',
+      quoteAmount: '16000.125',
+      feeAsset: 'USDT',
+      feeAmount: '16.000125',
+      feeBps: 10,
+      sequence: 42,
+      ts: '2026-07-31T00:00:01.000Z',
+    });
+    hub.publishPosition({
+      positionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      userId: USER,
+      marketId: 'btc-usdt-perp',
+      symbol: 'BTC/USDT:USDT',
+      status: 'open',
+      side: 'long',
+      contracts: '1',
+      entryPrice: '100',
+      markPrice: '101',
+      notional: '101',
+      leverage: '2',
+      collateral: '50.5',
+      unrealizedPnl: '1',
+      realizedPnl: '0',
+      liquidationPrice: '80',
+      marginMode: 'cross',
+      fundingPaid: '0',
+      ts: '2026-07-31T00:00:00.000Z',
+    });
+    await client.frameCount(2);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(client.frames).toHaveLength(2);
+    expect(JSON.parse(client.frames[1]!).channel).toBe('orders');
+    client.socket.close();
+  });
+
+  it('channel=fills announces only fills and does not invent positions', async () => {
+    await boot();
+    const token = await accessToken(['trade:write']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=fills`);
+    await client.frameCount(1);
+    expect(JSON.parse(client.frames[0]!)).toMatchObject({ channel: 'fills', type: 'ready', userId: USER });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(client.frames).toHaveLength(1);
+
+    hub.publishFill({
+      fillId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      userId: USER,
+      marketId: 'btc-usdt',
+      side: 'buy',
+      liquidity: 'taker',
+      price: '64000.5',
+      qty: '0.25',
+      quoteAmount: '16000.125',
+      feeAsset: 'USDT',
+      feeAmount: '16.000125',
+      feeBps: 10,
+      sequence: 42,
+      ts: '2026-07-31T00:00:01.000Z',
+    });
+    await client.frameCount(2);
+    expect(JSON.parse(client.frames[1]!).channel).toBe('fills');
+    client.socket.close();
+  });
+
+  it('channel=positions announces ready only; silence until a real publish', async () => {
+    await boot();
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=positions`);
+    await client.frameCount(1);
+    expect(JSON.parse(client.frames[0]!)).toMatchObject({ channel: 'positions', type: 'ready', userId: USER });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(client.frames).toHaveLength(1);
+
+    hub.publishPosition({
+      positionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      userId: USER,
+      marketId: 'btc-usdt-perp',
+      symbol: 'BTC/USDT:USDT',
+      status: 'open',
+      side: 'long',
+      contracts: '1',
+      entryPrice: '100',
+      markPrice: '101',
+      notional: '101',
+      leverage: '2',
+      collateral: '50.5',
+      unrealizedPnl: '1',
+      realizedPnl: '0',
+      liquidationPrice: '80',
+      marginMode: 'cross',
+      fundingPaid: '0',
+      ts: '2026-07-31T00:00:00.000Z',
+    });
+    await client.frameCount(2);
+    const update = JSON.parse(client.frames[1]!);
+    expect(update.channel).toBe('positions');
+    expect(update.contracts).toBe('1');
+    client.socket.close();
+  });
+
+  it("channel=orders still never delivers another user's order", async () => {
+    await boot();
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
+    await client.frameCount(1);
+    hub.publish({
+      orderId: '11111111-1111-4111-8111-111111111111',
+      userId: OTHER,
+      marketId: 'btc-usdt',
+      status: 'open',
+      side: 'sell',
+      type: 'market',
+      qty: '9',
+      filledQty: '0',
+      price: null,
+      clientOrderId: null,
+      ts: '2026-07-31T00:00:02.000Z',
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(client.frames).toHaveLength(1);
+    client.socket.close();
+  });
+
   it('ready frames say bus:false when private consumers are not attached', async () => {
     await boot({ tokens, busAttached: () => false });
     const token = await accessToken(['trade:read']);

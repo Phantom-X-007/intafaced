@@ -3,7 +3,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
-import type { PrivateOrderHub } from './hub.js';
+import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
 
 /**
  * Authenticated private stream (orders, fills, positions).
@@ -12,12 +12,27 @@ import type { PrivateOrderHub } from './hub.js';
  * credential. Token is `?access_token=` on the upgrade URL (browsers cannot
  * set Authorization on WebSocket upgrades reliably).
  *
+ * `?channel=orders|fills|positions` selects one catalog. Omitted (or empty)
+ * announces and fans all three — back-compat. Unknown channel is HTTP 400.
+ * Positions updates still only arrive when `trade.futures` publishes
+ * `positionUpdated`; a positions ready frame is not a fabricated book.
+ *
  * When `tokens` is null the private path is disabled (403 on upgrade).
- * Positions updates only arrive when `trade.futures` publishes `positionUpdated`;
- * the channel still announces ready so clients do not invent a second socket.
  */
 
 export const PRIVATE_STREAM_PATH = '/private/stream';
+
+const PRIVATE_CHANNELS: readonly PrivateStreamChannel[] = ['orders', 'fills', 'positions'];
+
+/**
+ * `null` = unknown (caller 400s). `'all'` = omitted/empty query (three frames).
+ * Mirrors public `parseChannel` shape, with a different default.
+ */
+function parsePrivateChannel(raw: string | null): PrivateStreamChannel | 'all' | null {
+  if (raw === null || raw === '') return 'all';
+  if (raw === 'orders' || raw === 'fills' || raw === 'positions') return raw;
+  return null;
+}
 
 export interface PrivateWebSocketGatewayOptions {
   readonly server: Server;
@@ -139,8 +154,15 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           return;
         }
 
+        const channelSel = parsePrivateChannel(url.searchParams.get('channel'));
+        if (channelSel === null) {
+          reject(socket, 400, 'Bad Request');
+          return;
+        }
+
         wss.handleUpgrade(req, socket, head, (ws) => {
-          const detach = hub.attach(userId, sinkFor(ws));
+          const attachChannel = channelSel === 'all' ? null : channelSel;
+          const detach = hub.attach(userId, sinkFor(ws), attachChannel);
           // Capacity refuse closes the sink inside attach — never announce ready
           // for a subscription the hub did not take (fail-closed, no false start).
           if (!detach) {
@@ -166,9 +188,10 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             // `bus` is honesty, not a second auth: false means the process has no
             // private consumer yet (or it failed), so silence is unsubscribed not quiet.
             const bus = busAttached();
-            ws.send(JSON.stringify({ channel: 'orders', type: 'ready', userId, bus }));
-            ws.send(JSON.stringify({ channel: 'fills', type: 'ready', userId, bus }));
-            ws.send(JSON.stringify({ channel: 'positions', type: 'ready', userId, bus }));
+            const announced = channelSel === 'all' ? PRIVATE_CHANNELS : [channelSel];
+            for (const channel of announced) {
+              ws.send(JSON.stringify({ channel, type: 'ready', userId, bus }));
+            }
           } catch {
             /* ignore */
           }
