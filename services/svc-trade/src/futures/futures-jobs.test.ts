@@ -158,4 +158,10 @@ describe('startFuturesJobs', () => {
     const src = readFileSync(new URL('./futures-jobs.ts', import.meta.url), 'utf8');
     expect(src).not.toMatch(/DEFAULT_FUTURES_LADDER_POLICY/);
   });
+
+  it('does not pass a maintenanceBps number into the live tick', () => {
+    const src = readFileSync(new URL('./futures-jobs.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/maintenanceBps\s*:/);
+    expect(src).toMatch(/policy:\s*deps\.ladderPolicy/);
+  });
 });
