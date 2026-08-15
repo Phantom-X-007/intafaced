@@ -43,15 +43,32 @@ const OPERATOR = '22222222-2222-4222-8222-222222222222';
 const RECORD = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 
-async function ctx(scopes: string[], opts: { mfa?: boolean; userId?: string; region?: string } = {}): Promise<Context> {
+async function ctx(
+  scopes: string[],
+  opts: { mfa?: boolean; userId?: string; region?: string; service?: string | null; apiKeyId?: string } = {},
+): Promise<Context> {
   const region = opts.region ?? 'DE';
-  if (scopes.length === 0) return { principal: null, service: null, region, requestId: 'req-1' };
+  if (scopes.length === 0) {
+    return { principal: null, service: opts.service ?? null, region, requestId: 'req-1' };
+  }
 
   const { token } = await issueAccessToken(
-    { userId: opts.userId ?? USER, sessionId: SESSION, scopes, tier: 'none', mfa: opts.mfa ?? true },
+    {
+      userId: opts.userId ?? USER,
+      sessionId: SESSION,
+      scopes,
+      tier: 'none',
+      mfa: opts.mfa ?? true,
+      ...(opts.apiKeyId ? { apiKeyId: opts.apiKeyId } : {}),
+    },
     authConfig,
   );
-  return { principal: await verifyAccessToken(token, authConfig), service: null, region, requestId: 'req-1' };
+  return {
+    principal: await verifyAccessToken(token, authConfig),
+    service: opts.service ?? null,
+    region,
+    requestId: 'req-1',
+  };
 }
 
 // ── The stub ─────────────────────────────────────────────────────────────────
@@ -327,6 +344,29 @@ describe('kyc.approve is the operator action that grants custodial access', () =
     stub.fail(new AuthError('KYC record not found', 'auth.not_found'));
     const api = await caller(['admin:compliance'], { userId: OPERATOR });
     expect(codeOf(await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e))).toBe('NOT_FOUND');
+  });
+
+  it('refuses an agent service caller writing reviewed_by even with compliance + MFA', async () => {
+    const api = await caller(['admin:compliance'], { userId: OPERATOR, service: 'svc-agents' });
+    const err = await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toMatch(/agent must never write reviewed_by/);
+    expect(stub.calls.filter((c) => c.method === 'approveKycRecord')).toHaveLength(0);
+
+    const rejectErr = await api.kyc.reject({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(rejectErr)).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method === 'rejectKycRecord')).toHaveLength(0);
+  });
+
+  it('refuses an API-key (agent) principal writing reviewed_by', async () => {
+    const api = await caller(['admin:compliance'], {
+      userId: OPERATOR,
+      apiKeyId: '55555555-5555-4555-8555-555555555555',
+    });
+    const err = await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toMatch(/agent must never write reviewed_by/);
+    expect(stub.calls.filter((c) => c.method === 'approveKycRecord')).toHaveLength(0);
   });
 });
 
