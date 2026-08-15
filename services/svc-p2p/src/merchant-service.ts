@@ -5,7 +5,7 @@ import {
   checkEligibility,
   DEFAULT_ELIGIBILITY,
   describeReputationSnapshot,
-  mayRestoreProgrammePrivileges,
+  mayGrantProgrammePrivileges,
   standingBrokenByDisputeLaw,
   type EligibilityPolicy,
   type MerchantStatus,
@@ -181,20 +181,27 @@ export class MerchantService {
     if (!currentStanding) throw new P2pError('No merchant application for this account.', 'p2p.merchant_not_found');
 
     const freezing = currentStanding.status === 'approved' && input.to === 'suspended';
-    const restoring = currentStanding.status === 'suspended' && input.to === 'approved';
+    /**
+     * ANY grant of `approved` re-reads live reputation — first approval as
+     * well as unfreeze. Restore already refused a failing snapshot; first
+     * approval used to stamp the badge on the apply-time row even after a
+     * later dispute loss. Same rule, same sentence, both edges.
+     */
+    const granting = input.to === 'approved';
     let recordedReason = reason;
-    if (freezing || restoring) {
+    if (freezing || granting) {
       const snapshot = await this.p2p.reputationOf(input.userId);
-      if (restoring) {
-        const restore = mayRestoreProgrammePrivileges(snapshot, this.eligibility);
-        if (!restore.eligible) {
+      if (granting) {
+        const grant = mayGrantProgrammePrivileges(snapshot, this.eligibility);
+        if (!grant.eligible) {
           throw new P2pError(
-            `Cannot restore programme privileges while live reputation fails the same rule badges use. ${restore.reason}`,
+            `Cannot grant programme privileges while live reputation fails the same rule badges use. ${grant.reason}`,
             'p2p.merchant_ineligible',
           );
         }
       }
-      recordedReason = `${reason} Snapshot at ${freezing ? 'freeze' : 'restore'}: ${describeReputationSnapshot(snapshot)}.`;
+      const moment = granting ? (currentStanding.status === 'suspended' ? 'restore' : 'approve') : 'freeze';
+      recordedReason = `${reason} Snapshot at ${moment}: ${describeReputationSnapshot(snapshot)}.`;
     }
 
     return transaction(
