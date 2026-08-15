@@ -16,3 +16,7 @@ docs/TRACKER.md
 # only turns CI red (main after #73) without improving trust. Brand-scan already
 # skips vendor/; format must match.
 vendor/
+
+# Official Graphify skill (copied by `graphify install --project`). Upstream
+# formatting; Prettier would fight every graphify upgrade.
+.agents/skills/graphify/
