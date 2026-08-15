@@ -97,7 +97,7 @@ const MUTANTS = [
   },
   {
     id: 'perimeter-claim-mint-removed',
-    from: "    'perimeter',\n    `continuous refuse held for mainnet/sign/width",
+    from: "  establish('perimeter',",
     to: '  return (',
     detected: true,
     why: 'summary still consumes claim("perimeter"); removing the mint must go red',
