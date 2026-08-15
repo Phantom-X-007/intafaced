@@ -118,8 +118,8 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-15 · Copy jurisdiction list
 
-**Covered in part one item 3 table** — geo list is counsel/Nitro (see also `CLASS-X-SANCTIONS` in the JSON index).  
-**Recommendation:** list **or** refuse-closed regions; engineers never draft the list.
+**Status:** **SEALED 2026-08-15** — refuse-closed in all regions until a counsel-supplied list exists. No agent-authored country table. ADR: [`adr/2026-08-15-copy-jurisdiction-refuse-closed.md`](adr/2026-08-15-copy-jurisdiction-refuse-closed.md). List content remains `CLASS-X-SANCTIONS`.  
+**Covered in part one item 3 table** — same refuse-closed shape as copy fee-share (`COPY_FEE_SHARE_RESIDUAL`): unset is a closed door, not a guessed ISO table. Engineers never draft the list.
 
 ---
 
