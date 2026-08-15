@@ -1,7 +1,7 @@
 {
   "board": "D26-P2-02",
-  "generatedAt": "2026-08-13T03:31:19.616Z",
-  "headHint": "d3b8f311",
+  "generatedAt": "2026-08-15T12:42:26.339Z",
+  "headHint": "1723273b",
   "counts": {
     "javaAll": 897,
     "javaMain": 871,
@@ -93,24 +93,40 @@
     {
       "id": "market.settlement",
       "fileEnds": "ExchangeTradeConsumer.java",
-      "topics": ["exchange-trade", "exchange-order-completed", "exchange-order-cancel-success"],
+      "topics": [
+        "exchange-trade",
+        "exchange-order-completed",
+        "exchange-order-cancel-success"
+      ],
       "valueMove": "spot settle / refund via exchange-core service",
       "disposition": "THROW",
       "note": "HTTP door cannot reach Kafka; service throw is the control",
       "present": true,
       "classId": "market:ExchangeTradeConsumer.java",
-      "topicsFound": ["exchange-trade", "exchange-order-completed", "exchange-order-cancel-success"]
+      "topicsFound": [
+        "exchange-trade",
+        "exchange-order-completed",
+        "exchange-order-cancel-success"
+      ]
     },
     {
       "id": "wallet.finance",
       "fileEnds": "FinanceConsumer.java",
-      "topics": ["deposit", "withdraw", "withdraw-notify"],
+      "topics": [
+        "deposit",
+        "withdraw",
+        "withdraw-notify"
+      ],
       "valueMove": "deposit credit + withdraw chain send then book",
       "disposition": "§13",
       "note": "chain send before dual-book throw on withdraw path; module absent from compose today",
       "present": true,
       "classId": "wallet:FinanceConsumer.java",
-      "topicsFound": ["deposit", "withdraw", "withdraw-notify"]
+      "topicsFound": [
+        "deposit",
+        "withdraw",
+        "withdraw-notify"
+      ]
     }
   ],
   "walletRpc": {
@@ -218,6 +234,16 @@
     ],
     "cronSpenders": [
       {
+        "classId": "erc-eusdt:CoinCollectJob.java",
+        "disposition": "§13",
+        "note": "@Scheduled spender — HTTP interceptor cannot cover"
+      },
+      {
+        "classId": "erc-token:CoinCollectJob.java",
+        "disposition": "§13",
+        "note": "@Scheduled spender — HTTP interceptor cannot cover"
+      },
+      {
         "classId": "eth-support:PaymentHandler.java",
         "disposition": "§13",
         "note": "@Scheduled spender — HTTP interceptor cannot cover"
@@ -254,10 +280,10 @@
   "brandCustody": {
     "brandScanSkipsVendorTree": true,
     "shellBrandScanPresent": true,
-    "custodyScanDeclaresJavaOutOfScope": true,
+    "custodyScanOpensJavaRuntimeRisk": true,
     "javaMoneySuccessorGate": "tooling/ci/vendor-java-money-scan.mjs",
     "doorGate": "tooling/ci/dual-book-door-scan.mjs",
-    "verdict": "REAL — brand product surface via shell-brand-scan; Java money via vendor-java-money + door gates; custody-scan correctly Protocol-Plane only"
+    "verdict": "REAL — brand product surface via shell-brand-scan; dual-book via vendor-java-money + door gates; custody-scan check 3 opens framework money-plane runtime surface (not wallet_rpc spend daemons)"
   },
   "doorTable": [
     {
@@ -270,7 +296,7 @@
     {
       "surface": "ucenter-api HTTP (withdraw/ctc/approve/envelope/promotion)",
       "canMoveValue": "source-yes / deploy-yes",
-      "control": "DOOR + THROW (Grade C: door-only on approve/envelope)",
+      "control": "DOOR + THROW (Grade C empty — approve/envelope throw at controller)",
       "disposition": "CLOSED",
       "proof": "door fragments include /promotion; compose has ucenter"
     },

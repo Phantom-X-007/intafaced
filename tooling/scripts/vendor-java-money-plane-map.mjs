@@ -56,7 +56,9 @@ function controllerIsRpcStub(text) {
   if (!hasMapping) return false;
   return !controllerHasRpcSpend(text);
 }
-const RPC_CRON_SEND = /@(?:Scheduled|Async)[\s\S]{0,400}?(?:sendFrom|sendtoaddress|eth_send|transfer\(|withdraw\()/i;
+/** Send helpers that move chain value from a scheduled method (not HTTP). */
+const CRON_SEND =
+  /sendTransaction|sendFrom|sendtoaddress|eth_send|transferFromWithdrawWallet|transferTokenFromWithdrawWallet|transferToken\s*\(|transferEth\s*\(|\btransfer\s*\(\s*payment/i;
 
 function die(msg, code = 1) {
   console.error(`✖ vendor-java-money-plane-map: ${msg}`);
@@ -214,14 +216,22 @@ function findWalletRpcSpendDoors(javaFiles) {
           : 'no rpc transfer/withdraw mapping detected',
     });
   }
-  // Cron spenders (floor, not door)
+  // Cron spenders (floor, not door). Split on @Scheduled so a status-poll
+  // method listed first cannot hide a later spender in the same class, and so
+  // a 800-char window does not miss transferFromWithdrawWallet ~20 lines down.
   const cronRows = [];
   for (const p of rpcRoot) {
-    const raw = readFileSync(p, 'utf8');
-    if (!/@Scheduled/.test(raw)) continue;
-    if (!RPC_CRON_SEND.test(raw) && !/transfer|withdraw|sendFrom|sendtoaddress/i.test(raw)) continue;
-    // Narrow: scheduled + money verb in same file
-    if (!/@Scheduled[\s\S]{0,800}?(transfer|withdraw|sendFrom|sendtoaddress|eth_send)/i.test(raw)) continue;
+    const code = stripComments(readFileSync(p, 'utf8'));
+    if (!/@Scheduled/.test(code)) continue;
+    const chunks = code.split(/@Scheduled/);
+    let spends = false;
+    for (let i = 1; i < chunks.length; i++) {
+      if (CRON_SEND.test(chunks[i].slice(0, 4000))) {
+        spends = true;
+        break;
+      }
+    }
+    if (!spends) continue;
     cronRows.push({
       classId: moduleClassKey(p),
       disposition: '§13',
@@ -249,16 +259,16 @@ function brandCustodyPosture() {
   const custodySrc = readFileSync(join(ROOT, 'tooling', 'ci', 'custody-scan.mjs'), 'utf8');
   const shellBrandExists = existsSync(join(ROOT, 'tooling', 'ci', 'shell-brand-scan.mjs'));
   const brandSkipsVendor = /['"]vendor['"]/.test(brandSrc) && /SKIP_DIRS/.test(brandSrc);
-  const custodyDeclaresJavaOut = /All \d+ files under vendor\//.test(custodySrc) || /vendor-java-money-scan/.test(custodySrc);
+  const custodyOpensRuntimeRisk = /RUNTIME_RISK_MODULES/.test(custodySrc) && /vendor-java-money-scan/.test(custodySrc);
   return {
     brandScanSkipsVendorTree: brandSkipsVendor,
     shellBrandScanPresent: shellBrandExists,
-    custodyScanDeclaresJavaOutOfScope: custodyDeclaresJavaOut,
+    custodyScanOpensJavaRuntimeRisk: custodyOpensRuntimeRisk,
     javaMoneySuccessorGate: 'tooling/ci/vendor-java-money-scan.mjs',
     doorGate: 'tooling/ci/dual-book-door-scan.mjs',
     verdict:
-      brandSkipsVendor && shellBrandExists && custodyDeclaresJavaOut
-        ? 'REAL — brand product surface via shell-brand-scan; Java money via vendor-java-money + door gates; custody-scan correctly Protocol-Plane only'
+      brandSkipsVendor && shellBrandExists && custodyOpensRuntimeRisk
+        ? 'REAL — brand product surface via shell-brand-scan; dual-book via vendor-java-money + door gates; custody-scan check 3 opens framework money-plane runtime surface (not wallet_rpc spend daemons)'
         : 'DRIFT — re-check brand/custody wiring',
   };
 }
@@ -299,7 +309,7 @@ function buildInventory() {
     {
       surface: 'ucenter-api HTTP (withdraw/ctc/approve/envelope/promotion)',
       canMoveValue: 'source-yes / deploy-yes',
-      control: 'DOOR + THROW (Grade C: door-only on approve/envelope)',
+      control: 'DOOR + THROW (Grade C empty — approve/envelope throw at controller)',
       disposition: 'CLOSED',
       proof: 'door fragments include /promotion; compose has ucenter',
     },
@@ -396,7 +406,13 @@ function renderMarkdown(inv) {
   lines.push(`**Board:** D26-P2-02 · **Generated:** ${inv.generatedAt.slice(0, 10)} · **Tip:** \`${inv.headHint}\``);
   lines.push('**Proof runner:** `pnpm map:vendor-java-money-plane` → `tooling/scripts/vendor-java-money-plane-map.mjs`');
   lines.push(`**Machine proof:** \`tooling/vendor-maps/java-money-plane-proof.json\``);
-  lines.push('**Builds on:** `docs/VENDOR-JAVA-MONEY-PLANE-MAP-2026-08-09.md` (narrative) · ADR `2026-08-04-java-dual-book-residual.md`');
+  lines.push(
+    '**Builds on:** [`VENDOR-JAVA-MONEY-PLANE-MAP-2026-08-15.md`](VENDOR-JAVA-MONEY-PLANE-MAP-2026-08-15.md) (tip inventory) · [`VENDOR-JAVA-MONEY-PLANE-MAP-2026-08-09.md`](VENDOR-JAVA-MONEY-PLANE-MAP-2026-08-09.md) (narrative) · ADR [`adr/2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md)',
+  );
+  lines.push('');
+  lines.push(
+    '**Honesty:** this is a source map. It does **not** claim the Java book is closed or dual-book “fixed.” Compose still runs gitignored jars. SoT for balances is TypeScript `packages/ledger-client` + `svc-ledger`.',
+  );
   lines.push('');
   lines.push('## 0 · Counts (executed)');
   lines.push('');
@@ -464,7 +480,7 @@ function renderMarkdown(inv) {
   lines.push(`| --- | --- |`);
   lines.push(`| \`brand-scan\` skips \`vendor/\` | ${inv.brandCustody.brandScanSkipsVendorTree} |`);
   lines.push(`| \`shell-brand-scan\` present (product surface) | ${inv.brandCustody.shellBrandScanPresent} |`);
-  lines.push(`| \`custody-scan\` declares Java out of scope (successor gate) | ${inv.brandCustody.custodyScanDeclaresJavaOutOfScope} |`);
+  lines.push(`| \`custody-scan\` check 3 opens Java runtime risk modules | ${inv.brandCustody.custodyScanOpensJavaRuntimeRisk} |`);
   lines.push(`| Java money gate | \`${inv.brandCustody.javaMoneySuccessorGate}\` |`);
   lines.push(`| Door gate | \`${inv.brandCustody.doorGate}\` |`);
   lines.push(`| Verdict | ${inv.brandCustody.verdict} |`);
@@ -517,13 +533,15 @@ function selfTest(inv) {
   );
   expect(inv.walletRpc.spendControllers.length >= 4, 'expected ≥4 wallet RPC spend controllers');
   expect(inv.walletRpc.spendControllers.length <= 8, 'expected ≤8 live spend controllers (stubs excluded)');
+  expect(inv.walletRpc.cronSpenders.length >= 4, `expected ≥4 wallet RPC cron spend files, got ${inv.walletRpc.cronSpenders.length}`);
+  expect(inv.walletRpc.cronSpenders.length <= 6, `expected ≤6 cron spend files, got ${inv.walletRpc.cronSpenders.length}`);
   expect(
     !inv.walletRpc.spendControllers.some((r) => ['bch', 'bsv', 'btm', 'ltc'].includes(r.module)),
     'stub modules bch/bsv/btm/ltc must not count as spend',
   );
   expect(inv.brandCustody.brandScanSkipsVendorTree, 'brand-scan must skip vendor/');
   expect(inv.brandCustody.shellBrandScanPresent, 'shell-brand-scan must exist');
-  expect(inv.brandCustody.custodyScanDeclaresJavaOutOfScope, 'custody-scan must declare Java out of scope');
+  expect(inv.brandCustody.custodyScanOpensJavaRuntimeRisk, 'custody-scan must name RUNTIME_RISK_MODULES + vendor-java-money-scan');
   expect(
     inv.doorTable.some((r) => r.disposition === '§13' && r.socket),
     'door table must name at least one §13 socket',
