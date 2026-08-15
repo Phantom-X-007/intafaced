@@ -132,9 +132,34 @@ describe('runLiquidationTick', () => {
       attempts: memoryLiquidationAttemptStore(),
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
+      maintenanceBps: 5000, // fixture — not product law (D3)
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_healthy');
+    expect(posts).toHaveLength(0);
+  });
+
+  it('omitted maintenanceBps is skipped_d3_unset — not a silent healthy', async () => {
+    const { ledger, posts } = recordingLedger();
+    const result = await runLiquidationTick({
+      marks: fixedMark('100'),
+      positions: {
+        async listOpen() {
+          return [healthyLong()];
+        },
+      },
+      closer: {
+        async markLiquidated() {
+          throw new Error('should not close');
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+    });
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_d3_unset');
+    expect(result.items[0]!.reason).toBe('maintenance_bps_unset');
     expect(posts).toHaveLength(0);
   });
 
