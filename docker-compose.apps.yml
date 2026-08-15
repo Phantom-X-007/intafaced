@@ -363,6 +363,11 @@ services:
       # `${VAR:-true}` here would treat a clean clone as stream-first while
       # env.ts still read as snapshot poll. Empty symbol map still starts nothing.
       TRADE_VENUE_MARK_STREAM: ${TRADE_VENUE_MARK_STREAM:-false}
+      # Venue id + market UUID→symbol map. Empty = mark port off (depth mid
+      # only). No invented venue, no invented UUID list. Host env cannot leak
+      # a map into a clean clone because compose names the empty default.
+      TRADE_VENUE_MARK_VENUE: ${TRADE_VENUE_MARK_VENUE:-}
+      TRADE_VENUE_MARK_SYMBOLS: ${TRADE_VENUE_MARK_SYMBOLS:-}
       # Absolute max |period funding rate| — empty refuses publish/settle.
       # Required when funding market ids are non-empty. No invented ceiling.
       TRADE_FUTURES_FUNDING_MAX_ABS_RATE: ${TRADE_FUTURES_FUNDING_MAX_ABS_RATE:-}
