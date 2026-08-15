@@ -1133,7 +1133,11 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway'],
-    note: '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment.',
+    // Path-narrowed 2026-08-15: was whole svc-agents; fence matches navigator dir like bank.auto-invest.
+    requires: ['services/svc-agents/src/navigator'],
+    note:
+      '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment. ' +
+      'Fence: requires narrowed to src/navigator so path-disjoint agents.coach residual is not HUMAN-CLAIMED.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
@@ -1233,9 +1237,12 @@ export const FEATURES = [
     dependsOn: ['academy.lobbies', 'trade.spot'],
     owner: 'Phantom-X-007',
     status: 'wip',
+    // Path-narrowed 2026-08-15: was whole svc-academy; fence matches tournaments dir like bank.auto-invest.
+    requires: ['services/svc-academy/src/tournaments'],
     note:
       'D26-P1-C3 2026-08-12: blank/unset prize pools typed refuse `academy.prize_pool_unset` — cannot start; no invent IFC. ' +
-      'Ladder Stage-1+lifecycle on tip; Class M fund/payout recipes still refuse-closed until owner amounts + ledger.',
+      'Ladder Stage-1+lifecycle on tip; Class M fund/payout recipes still refuse-closed until owner amounts + ledger. ' +
+      'Fence: requires narrowed to src/tournaments so path-disjoint academy residual is not HUMAN-CLAIMED.',
   }),
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
     module: 'academy',
