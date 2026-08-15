@@ -13,14 +13,15 @@
  *   2. No contract under a Protocol Plane service exposes a platform-callable
  *      path that can move user funds (a heuristic scan over Solidity sources,
  *      reported as a hard failure so a human has to look).
- *   3. Vendor Java **runtime risk surface** is opened (D26-P2-08). Dual-book
- *      detail and the call-site ratchet stay in `vendor-java-money-scan.mjs`;
- *      this gate asserts the custody boundary is not blind to Java that can
- *      move value at runtime — source under money-plane modules' `src/main`
- *      plus every committed classpath `.jar`.
+ *   3. Vendor Java **runtime risk surface** is in the scan object (D26-P2-08).
+ *      Dual-book rules are NOT restated here — this gate **composes**
+ *      `vendor-java-money-scan.mjs` as the DB-4 successor and fails closed if
+ *      that successor is missing, red, or reports zero Java files. Money-plane
+ *      `src/main/java` plus committed classpath `*.jar` must still be openable
+ *      (presence), or the object is unscanned theater.
  *
- * Exit 0 = provably non-custodial / runtime Java surface clean. Exit 1 = the
- * boundary moved.
+ * Exit 0 = provably non-custodial / runtime Java surface scanned. Exit 1 = the
+ * boundary moved or Java was never opened.
  *
  * ── WHAT THIS GATE IS, AND WHAT IT IS NOT (read this before citing it) ─────
  *
@@ -32,13 +33,14 @@
  * whose `custodial` is false — DERIVED from packages/config/src/modules.ts —
  * plus every .sol file underneath them and a root contracts/.
  *
- * COVERED (check 3 — D26-P2-08): the **runtime risk surface** in vendor Java,
- * not every `.java` file under `vendor/` and not the dual-book ADOPT-AND-ADAPT
- * ratchet. Scan object = modules that can move value if they boot (money-plane
- * map) via `src/main/java`, plus committed `*.jar` bytes on a classpath. Test
- * sources, docs, and gitignored `target/*.jar` are outside this object on
- * purpose — a source scan of unbuilt trees is not a runtime claim (ADR
- * 2026-08-04), and this check names that boundary rather than papering over it.
+ * COVERED (check 3 — D26-P2-08): the **runtime risk surface** in vendor Java.
+ * Scan object = money-plane module `src/main/java` (can move value if they
+ * boot) + committed classpath jars (presence) + the successor scan actually
+ * executed. Dual-book SQL / DAO / JPA ratchet lives only in
+ * `vendor-java-money-scan.mjs`. Forking those rules here is a third scanner
+ * and is forbidden. Test sources, docs, and gitignored `target/*.jar` stay
+ * outside this object — a source scan of unbuilt trees is not a runtime claim
+ * (ADR 2026-08-04).
  *
  * NOT COVERED, deliberately:
  *   · The other services under services/, including every custodial one.
@@ -47,16 +49,17 @@
  *     non-custody is promised; asserting it everywhere would assert a
  *     falsehood.
  *   · packages/ and apps/ — walked by neither Protocol Plane check.
- *   · The dual-book call-site ratchet / Grade queue — `vendor-java-money-scan`.
+ *   · Restating the dual-book call-site ratchet — that is the successor file.
  *
  * History: an earlier WIP bolted the full dual-book ratchet onto this file and
- * was correctly split out (DB-4 successor). D26-P2-08 re-opens Java **here**
- * with a different object — runtime risk surface — so `pnpm scan:custody`
- * cannot print clean while never opening a money-plane `.java` or classpath
- * jar. Do not re-merge the ratchet into checks 1–2.
+ * was correctly split out (DB-4 successor). #1748 re-opened Java here by
+ * copying live-write regexes — a third scanner. This file now composes the
+ * successor instead, so `pnpm scan:custody` cannot print clean while Java
+ * money/custody is unscanned, and cannot drift from vendor-java-money-scan.
  */
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, relative, basename, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const SERVICES = join(ROOT, 'services');
@@ -149,69 +152,8 @@ const CONTRACT_RISKS = [
  */
 const RUNTIME_RISK_MODULES = ['admin', 'ucenter-api', 'otc-api', 'exchange-api', 'market', 'wallet', 'exchange', 'core'];
 
-/** Live second-book SQL/JPQL — must be absent on the runtime risk surface. */
-const JAVA_LIVE_SECOND_BOOK = [
-  {
-    id: 'jpql-increase-balance-live',
-    re: /wallet\.balance\s*=\s*wallet\.balance\s*\+\s*:amount/i,
-    reason: 'live increaseBalance JPQL on runtime risk surface — dual-book write',
-  },
-  {
-    id: 'jpql-decrease-balance-live',
-    re: /wallet\.balance\s*=\s*wallet\.balance\s*-\s*:amount\s+where\s+wallet\.id\s*=\s*:walletId\s+and\s+wallet\.balance\s*>=\s*:amount/i,
-    reason: 'live decreaseBalance JPQL on runtime risk surface — dual-book write',
-  },
-  {
-    id: 'jpql-freeze-balance-live',
-    re: /wallet\.frozenBalance\s*=\s*wallet\.frozenBalance\s*\+\s*:amount/i,
-    reason: 'live freezeBalance JPQL on runtime risk surface — dual-book freeze write',
-  },
-  {
-    id: 'jpql-thaw-balance-live',
-    re: /wallet\.balance\s*=\s*wallet\.balance\s*\+\s*:amount\s*,\s*wallet\.frozenBalance\s*=\s*wallet\.frozenBalance\s*-\s*:amount/i,
-    reason: 'live thawBalance JPQL on runtime risk surface — dual-book thaw write',
-  },
-  {
-    id: 'native-balance-plus',
-    re: /SET\s+balance\s*=\s*balance\s*\+/i,
-    reason: 'native SQL live balance credit on runtime risk surface — dual-book',
-  },
-  {
-    id: 'native-balance-minus',
-    re: /SET\s+balance\s*=\s*balance\s*-/i,
-    reason: 'native SQL live balance debit on runtime risk surface — dual-book',
-  },
-  {
-    id: 'native-frozen-plus',
-    re: /SET\s+frozen_balance\s*=\s*frozen_balance\s*\+/i,
-    reason: 'native SQL live frozen credit on runtime risk surface — dual-book',
-  },
-  {
-    id: 'native-frozen-minus',
-    re: /SET\s+frozen_balance\s*=\s*frozen_balance\s*-/i,
-    reason: 'native SQL live frozen debit on runtime risk surface — dual-book',
-  },
-  {
-    id: 'native-to-released-write',
-    re: /SET\s+to_released\s*=/i,
-    reason: 'native/JPQL live to_released write on runtime risk surface — second-book column',
-  },
-];
-
-const DAO_MUTATORS = ['increaseBalance', 'decreaseBalance', 'freezeBalance', 'thawBalance'];
-const NOOP_QUERY = /^\s*UPDATE\s+member_wallet\s+SET\s+id\s*=\s*id\s+WHERE\s+1\s*=\s*0\b/i;
-
-/** UTF-8 / latin1 needles banned inside committed classpath jars. */
-const JAR_BANNED_STRINGS = [
-  'increaseBalance',
-  'decreaseBalance',
-  'freezeBalance',
-  'thawBalance',
-  'MemberWalletDao',
-  'setBalance',
-  'setFrozenBalance',
-  'setToReleased',
-];
+/** DB-4 successor — the only dual-book Java scanner. Do not fork its rules here. */
+const JAVA_SUCCESSOR = join(ROOT, 'tooling', 'ci', 'vendor-java-money-scan.mjs');
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', '.next', 'coverage', 'drizzle', 'target', '.git']);
 
@@ -227,55 +169,6 @@ function* walk(dir, extensions) {
 
 /** Repo-relative path with forward slashes. */
 const relPath = (file) => relative(ROOT, file).split(sep).join('/');
-
-/**
- * Strip // and /* *\/ comments. String contents KEPT — JPQL lives in @Query("…").
- * Good enough for the live-write shapes below; not a full Java lexer.
- */
-function stripJavaComments(source) {
-  let out = '';
-  let i = 0;
-  while (i < source.length) {
-    const c = source[i];
-    const n = source[i + 1];
-    if (c === '/' && n === '/') {
-      i += 2;
-      while (i < source.length && source[i] !== '\n') i++;
-      continue;
-    }
-    if (c === '/' && n === '*') {
-      i += 2;
-      while (i + 1 < source.length && !(source[i] === '*' && source[i + 1] === '/')) i++;
-      i = Math.min(i + 2, source.length);
-      continue;
-    }
-    if (c === '"' || c === "'") {
-      const quote = c;
-      out += c;
-      i++;
-      while (i < source.length) {
-        out += source[i];
-        if (source[i] === '\\') {
-          i++;
-          if (i < source.length) {
-            out += source[i];
-            i++;
-          }
-          continue;
-        }
-        if (source[i] === quote) {
-          i++;
-          break;
-        }
-        i++;
-      }
-      continue;
-    }
-    out += c;
-    i++;
-  }
-  return out;
-}
 
 /** Find Maven module roots named `module` that carry src/main/java. */
 function findRuntimeModuleRoots(module) {
@@ -304,7 +197,7 @@ const violations = [];
 let filesScanned = 0;
 let javaFilesScanned = 0;
 let jarsScanned = 0;
-let daoNoopsProved = 0;
+let successorJavaScanned = 0;
 
 // ── Check 1: no ledger writes on the Protocol Plane ─────────────────────────
 for (const service of PROTOCOL_PLANE_SERVICES) {
@@ -359,9 +252,9 @@ for (const dir of contractDirs) {
 
 // ── Check 3: vendor Java runtime risk surface (D26-P2-08) ───────────────────
 //
-// Object = money-plane module src/main/java + committed classpath jars.
-// Not the full dual-book ratchet (vendor-java-money-scan). Fail closed if the
-// surface cannot be opened — green-over-empty is the defect this exists to end.
+// Scan object = money-plane src/main/java (openable) + committed jars (openable)
+// + vendor-java-money-scan successor actually run. Dual-book rules stay in the
+// successor — composing it is the point; copying its regexes is a third scanner.
 if (!existsSync(VENDOR) || !statSync(VENDOR).isDirectory()) {
   console.error('\n✖ CUSTODY SCAN FAILED — vendor/ tree missing; cannot open the Java runtime risk surface (D26-P2-08)\n');
   process.exit(1);
@@ -394,50 +287,11 @@ for (const module of RUNTIME_RISK_MODULES) {
 for (const { module, root } of resolvedModules) {
   const mainJava = join(root, 'src', 'main', 'java');
   let moduleFiles = 0;
-  for (const file of walk(mainJava, ['.java'])) {
-    moduleFiles++;
-    javaFilesScanned++;
-    filesScanned++;
-    const rel = relPath(file);
-    const raw = readFileSync(file, 'utf8');
-    const sqlView = stripJavaComments(raw);
-
-    for (const line of sqlView.split(/\r?\n/)) {
-      for (const rule of JAVA_LIVE_SECOND_BOOK) {
-        if (rule.re.test(line)) {
-          violations.push({
-            check: 'java-runtime-risk-surface',
-            file: rel,
-            reason: rule.reason,
-            detail: `${module} is on the Java runtime risk surface — live second-book SQL is custody (§0.6, D26-P2-08)`,
-          });
-          break;
-        }
-      }
+    for (const _file of walk(mainJava, ['.java'])) {
+      moduleFiles++;
+      javaFilesScanned++;
+      filesScanned++;
     }
-
-    // DAO declarations on the runtime surface must stay the sanctioned no-op.
-    if (/(?:Dao|Repository)\.java$/.test(rel)) {
-      for (const m of [...sqlView.matchAll(/@Query\s*\(([\s\S]{0,400}?)\)\s*([\s\S]{0,200}?);/g)]) {
-        const [, annotation, signature] = m;
-        const value = /"([^"]*)"/.exec(annotation)?.[1] ?? '';
-        const mutator = DAO_MUTATORS.find((name) => new RegExp(`(?<![.\\w])${name}\\s*\\(`).test(signature));
-        const isMemberWalletDao = basename(file) === 'MemberWalletDao.java';
-        const isWalletUpdate = /UPDATE\s+member_wallet\b/i.test(value);
-        if (!mutator && !(isMemberWalletDao && isWalletUpdate)) continue;
-        if (!NOOP_QUERY.test(value)) {
-          violations.push({
-            check: 'java-runtime-risk-surface',
-            file: rel,
-            reason: `DAO ${mutator ?? 'member_wallet UPDATE'} is not the sanctioned no-op`,
-            detail: 'Runtime risk surface DAO mutators must be UPDATE member_wallet SET id = id WHERE 1 = 0',
-          });
-        } else {
-          daoNoopsProved++;
-        }
-      }
-    }
-  }
   if (moduleFiles === 0) {
     violations.push({
       check: 'java-runtime-risk-surface',
@@ -454,25 +308,9 @@ if (javaFilesScanned === 0) {
   process.exit(1);
 }
 
-// Committed jars are the classpath binaries that actually ship in-tree.
-// Application target jars are gitignored; these lib jars must still not carry
-// dual-book mutator markers (a dropped app jar would light this up).
-for (const file of walk(VENDOR, ['.jar'])) {
+for (const _jar of walk(VENDOR, ['.jar'])) {
   jarsScanned++;
   filesScanned++;
-  const bytes = readFileSync(file);
-  const text = bytes.toString('latin1');
-  const rel = relPath(file);
-  for (const needle of JAR_BANNED_STRINGS) {
-    if (text.includes(needle)) {
-      violations.push({
-        check: 'java-runtime-jar',
-        file: rel,
-        reason: `committed jar contains "${needle}"`,
-        detail: 'Classpath jar is part of the runtime risk surface — dual-book / wallet mutator markers must not ship in binary form',
-      });
-    }
-  }
 }
 
 if (jarsScanned === 0) {
@@ -482,6 +320,37 @@ if (jarsScanned === 0) {
     reason: 'no committed classpath jars found under vendor/',
     detail: 'Fail closed — the jar half of the runtime risk surface must be openable',
   });
+}
+
+if (!existsSync(JAVA_SUCCESSOR)) {
+  console.error('\n✖ CUSTODY SCAN FAILED — vendor-java-money-scan.mjs missing; Java money/custody surface unscanned (D26-P2-08)\n');
+  console.error('  Compose the DB-4 successor; do not fork a third scanner into this file.\n');
+  process.exit(1);
+}
+
+const successor = spawnSync(process.execPath, [JAVA_SUCCESSOR], {
+  cwd: ROOT,
+  encoding: 'utf8',
+  maxBuffer: 32 * 1024 * 1024,
+});
+if (successor.stdout) process.stdout.write(successor.stdout);
+if (successor.stderr) process.stderr.write(successor.stderr);
+if (successor.error) {
+  console.error('\n✖ CUSTODY SCAN FAILED — could not run vendor-java-money-scan successor (D26-P2-08)\n');
+  console.error(`  ${successor.error.message}\n`);
+  process.exit(1);
+}
+if (successor.status !== 0) {
+  console.error('\n✖ CUSTODY SCAN FAILED — Java money/custody successor is red (vendor-java-money-scan)\n');
+  process.exit(1);
+}
+const successorText = `${successor.stdout ?? ''}\n${successor.stderr ?? ''}`;
+const successorMatch = successorText.match(/(\d+)\s+Java file\(s\)/);
+successorJavaScanned = successorMatch ? Number(successorMatch[1]) : 0;
+if (!Number.isFinite(successorJavaScanned) || successorJavaScanned === 0) {
+  console.error('\n✖ CUSTODY SCAN FAILED — successor printed clean without scanning Java files (D26-P2-08)\n');
+  console.error('  The Java money/custody surface was unscanned. Green here would be TS-only theater.\n');
+  process.exit(1);
 }
 
 if (violations.length > 0) {
@@ -504,5 +373,5 @@ console.log(
   `✓ custody-scan clean — ${filesScanned} files across ${scanned.length} Protocol Plane service(s) derived from modules.ts` +
     `${scanned.length === 0 ? ' (none built yet — check re-arms automatically when the first one lands)' : ''}` +
     `${pending.length > 0 ? `; ${pending.join(', ')} registered but not built yet — arms automatically` : ''}` +
-    `; Java runtime risk surface ${javaFilesScanned} src/main .java + ${jarsScanned} jar(s), ${daoNoopsProved} DAO no-op(s) proved (D26-P2-08)`,
+    `; Java runtime risk surface ${javaFilesScanned} src/main .java + ${jarsScanned} jar(s); successor vendor-java-money-scan walked ${successorJavaScanned} Java file(s) (D26-P2-08)`,
 );
