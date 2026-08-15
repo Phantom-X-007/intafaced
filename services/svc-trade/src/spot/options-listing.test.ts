@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import { resolveOptionsListing } from './options-listing.js';
+import { OPTIONS_SETTLEMENT_LAW_UNSET, assertOptionsSettlementAssetLawStamped, resolveOptionsListing } from './options-listing.js';
 import { TradeError } from './types.js';
 
 const expiry = new Date('2026-12-26T08:00:00.000Z');
@@ -41,10 +41,58 @@ describe('resolveOptionsListing — refuse until P0-05 + fixing + complete terms
       throw new Error('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(TradeError);
-      expect((err as TradeError).code).toBe('trade.options_settlement_law_unset');
+      expect((err as TradeError).code).toBe(OPTIONS_SETTLEMENT_LAW_UNSET);
       expect((err as Error).message).toContain('TRADE_OPTIONS_SETTLEMENT_ASSET_LAW');
       expect((err as Error).message).toContain('socket.options-settlement-asset-law');
       expect((err as Error).message).toContain('D26-P0-05');
+      expect((err as Error).message).toContain('TRADE_OPTIONS_SETTLEMENT_FIXING alone does not unlock');
+    }
+  });
+
+  it('pin: fixing env + complete terms cannot unlock when settlement-asset law is unset', () => {
+    try {
+      resolveOptionsListing({
+        kind: 'options',
+        settlementAssetLawConfigured: '',
+        settlementFixingConfigured: 'TRADE_OPTIONS_SETTLEMENT_FIXING-would-be-set',
+        optionType: 'call',
+        optionStyle: 'european',
+        strike: amt('90000'),
+        expiryAt: expiry,
+      });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe(OPTIONS_SETTLEMENT_LAW_UNSET);
+      expect((err as TradeError).code).not.toBe('trade.options_fixing_unconfigured');
+      expect((err as TradeError).code).not.toBe('trade.options_terms_incomplete');
+    }
+  });
+
+  it('pin: empty law wins over incomplete terms and empty fixing (no D7 invent)', () => {
+    try {
+      resolveOptionsListing({
+        kind: 'options',
+        settlementAssetLawConfigured: '',
+        settlementFixingConfigured: '',
+      });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe(OPTIONS_SETTLEMENT_LAW_UNSET);
+    }
+  });
+
+  it('assertOptionsSettlementAssetLawStamped refuses blank / whitespace stamps', () => {
+    try {
+      assertOptionsSettlementAssetLawStamped('');
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe(OPTIONS_SETTLEMENT_LAW_UNSET);
+    }
+    try {
+      assertOptionsSettlementAssetLawStamped('  \n\t');
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe(OPTIONS_SETTLEMENT_LAW_UNSET);
     }
   });
 
@@ -60,7 +108,7 @@ describe('resolveOptionsListing — refuse until P0-05 + fixing + complete terms
       });
       throw new Error('should have thrown');
     } catch (err) {
-      expect((err as TradeError).code).toBe('trade.options_settlement_law_unset');
+      expect((err as TradeError).code).toBe(OPTIONS_SETTLEMENT_LAW_UNSET);
     }
   });
 
