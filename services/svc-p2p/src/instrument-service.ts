@@ -286,6 +286,12 @@ export class InstrumentService {
          AND (${country}::text IS NULL OR country IN (${country ?? ANY_COUNTRY}, ${ANY_COUNTRY}))
        ORDER BY method_id ASC, country ASC
     `;
+    if (rows.length === 0 && filter.includeDisabled !== true) {
+      // An empty catalogue is not "pick a method". It is no rail. Returning []
+      // here is how a seller/register/pay screen still looks live against zero
+      // operator methods. Operator `includeDisabled` stays a listing of rows.
+      await this.refuseIfRegistryEmpty();
+    }
     return rows.map(toSchema);
   }
 
@@ -311,7 +317,9 @@ export class InstrumentService {
     if (!schema) {
       // The honest refusal. We do not know what this market needs, so we cannot
       // accept a destination for it — rather than accept a plausible-looking one
-      // that turns out to be unpayable when a buyer tries.
+      // that turns out to be unpayable when a buyer tries. Empty registry uses
+      // the same code (`p2p.instrument_method_unknown`) so a missing catalog
+      // cannot look like a rail the seller merely has not filled in yet.
       throw new InstrumentError(
         `No payment method "${methodId}" is registered for ${country} — an operator must register its field requirements first`,
         'p2p.instrument_method_unknown',
@@ -894,6 +902,16 @@ export class InstrumentService {
 
   // ── internals ──────────────────────────────────────────────────────────────
 
+  /**
+   * Zero enabled schemas is not an empty picker — it is no payable rail.
+   * Same code as an unknown method, so a catalog screen cannot tell "none yet"
+   * apart from "this string is not a rail" and paper over the gap with UX.
+   */
+  private async refuseIfRegistryEmpty(): Promise<void> {
+    const enabled = await this.enabledMethodKeys();
+    if (enabled.size === 0) throw emptyRegistry();
+  }
+
   private async ownedInstrument(instrumentId: string, ownerId: string): Promise<InstrumentRow> {
     const rows = await this.sql<InstrumentRow[]>`
       SELECT * FROM p2p.payment_instruments WHERE id = ${instrumentId} AND owner_id = ${ownerId} AND status = 'active'
@@ -1052,6 +1070,13 @@ function toSchema(row: SchemaRow): MethodSchema {
  * cause: the difference between "no such instrument" and "not yours" is itself
  * information about someone else's account.
  */
+function emptyRegistry(): InstrumentError {
+  return new InstrumentError(
+    'No payment method is registered — an operator must register its field requirements first',
+    'p2p.instrument_method_unknown',
+  );
+}
+
 function notFound(id: string): InstrumentError {
   return new InstrumentError(`No payment instrument is available for ${id}`, 'p2p.instrument_not_found');
 }
