@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { router, publicProcedure, scopedProcedure } from '@intafaced/contracts';
+import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { NotifyService } from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
 import type { AlertService } from './alerts/service.js';
-import type { PriceAlert } from './alerts/types.js';
+import { AlertPortfolioUnpublishedError, type PriceAlert } from './alerts/types.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -423,12 +423,18 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
 
       createAlert: scopedProcedure('notify:write', { module: 'notify' })
         .input(
-          z.object({
-            marketId: z.string().min(1).max(64),
-            direction: z.enum(['above', 'below']),
-            /** Decimal string — never a JSON number. */
-            targetPrice: z.string().min(1).max(64),
-          }),
+          z.union([
+            z.object({
+              kind: z.literal('price').optional(),
+              marketId: z.string().min(1).max(64),
+              direction: z.enum(['above', 'below']),
+              /** Decimal string — never a JSON number. */
+              targetPrice: z.string().min(1).max(64),
+            }),
+            z.object({
+              kind: z.literal('portfolio'),
+            }),
+          ]),
         )
         // The watch AND whether it can fire, in the same answer. A create that
         // returned only `status: 'active'` is what let this surface promise
@@ -437,6 +443,26 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         .mutation(async ({ ctx, input }) => {
           if (!alerts) {
             throw new Error('price alerts are not configured on this deployment');
+          }
+          if (input.kind === 'portfolio') {
+            try {
+              alerts.createPortfolio({ kind: 'portfolio', userId: ctx.principal.userId });
+            } catch (err) {
+              if (err instanceof AlertPortfolioUnpublishedError) {
+                throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: err.message,
+                  cause: err,
+                });
+              }
+              throw err;
+            }
+          }
+          if (!('marketId' in input)) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'alert.portfolio_view_unpublished: ledger portfolio view unpublished — notify holds no balance',
+            });
           }
           const row = await alerts.create({
             userId: ctx.principal.userId,

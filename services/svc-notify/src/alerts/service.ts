@@ -11,9 +11,17 @@
 
 import type { CreateResult, NotifyService } from '../notify-service.js';
 import { acceptAlertMark, outOfAppRequiredRefusal } from './accepted-mark.js';
-import { evaluatePriceAlert } from './evaluate.js';
+import { evaluatePortfolioAlert, evaluatePriceAlert } from './evaluate.js';
 import type { AlertStore } from './store.js';
-import type { AlertEvalOutcome, AlertRefuseCode, CreatePriceAlertInput, MarkSource, PriceAlert } from './types.js';
+import {
+  AlertPortfolioUnpublishedError,
+  type AlertEvalOutcome,
+  type AlertRefuseCode,
+  type CreatePortfolioAlertInput,
+  type CreatePriceAlertInput,
+  type MarkSource,
+  type PriceAlert,
+} from './types.js';
 
 /**
  * How often the mounted sweep evaluates every market holding an active watch.
@@ -79,6 +87,22 @@ export class AlertService {
 
   create(input: CreatePriceAlertInput): Promise<PriceAlert> {
     return this.store.create(input);
+  }
+
+  /**
+   * Portfolio watches are refuse-closed. Nothing is stored, no balance is read,
+   * and silence is not a fire. Callers must not invent a second book here.
+   */
+  createPortfolio(_input: CreatePortfolioAlertInput): never {
+    throw new AlertPortfolioUnpublishedError();
+  }
+
+  /**
+   * Same refuse as create — evaluate never fires a portfolio watch and never
+   * carries a money field. The sweep does not call this; there is no stored row.
+   */
+  evaluatePortfolio(): AlertEvalOutcome {
+    return evaluatePortfolioAlert();
   }
 
   list(userId: string): Promise<readonly PriceAlert[]> {
