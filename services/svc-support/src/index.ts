@@ -8,6 +8,7 @@ import { SupportService } from './support-service.js';
 import { PostgresSupportStore } from './store.js';
 import { createSupportRouter, type SupportRouter } from './router.js';
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
+import { identityGroundingProof } from './identity-grounding-honesty.js';
 import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE } from './ticket-kb-loop-observation.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -60,12 +61,21 @@ const edgeContext = createEdgeContext({
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
+app.get('/health', async () => {
+  const grounding = identityGroundingProof(env.INTERNAL_SERVICE_SECRET);
+  return {
+    ok: grounding.wired,
+    service: env.SERVICE_NAME,
+    identityGroundingWired: grounding.wired,
+    identityGroundingRefuse: grounding.refuse,
+  };
+});
 app.get('/ready', async () => {
   // D26-P1-O3: desk mountain vs agents.support assist — same constants as tests.
   const split = deskVsAgentSplit();
+  const grounding = identityGroundingProof(env.INTERNAL_SERVICE_SECRET);
   return {
-    ready: true,
+    ready: grounding.wired,
     stage: split.stage,
     store: 'postgres',
     // Named so an operator can tell "no account state was readable" from "this
@@ -74,6 +84,8 @@ app.get('/ready', async () => {
     deskMountain: split.deskMountain,
     agentAssist: split.agentAssist,
     deskStandalone: split.deskStandalone,
+    identityGroundingWired: grounding.wired,
+    identityGroundingRefuse: grounding.refuse,
     // Proven in unit tests + migrations only. Compose `/health` is liveness,
     // not a ticket create + KB search observation. Do not invent SLA times.
     ticketKbLoopObservedInLiveCompose: TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE,

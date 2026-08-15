@@ -426,6 +426,22 @@ describe('svc-support mount', () => {
     expect(support.readAccountState).toHaveBeenCalledWith({ operatorId: OP, ticketId: TICKET });
   });
 
+  it('accountState names identity grounding unwired as PRECONDITION_FAILED, not unread', async () => {
+    const support = stubSupport({
+      readAccountState: vi.fn(async () => {
+        throw new SupportError(
+          'identity grounding unwired: INTERNAL_SERVICE_SECRET missing (named refuse, not plane_dark)',
+          'support.identity_grounding_unwired',
+        );
+      }),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    await expect(createSupportRouter(support).createCaller(signed(op)).accountState({ ticketId: TICKET })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/support\.identity_grounding_unwired|unwired/),
+    });
+  });
+
   it('accountState takes NO userId — there is no platform-wide account lookup here', async () => {
     const support = stubSupport();
     const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });

@@ -55,7 +55,8 @@ function mapError(err: unknown): never {
       // Closed is terminal — same family as illegal lifecycle moves.
       err.code === 'support.escalation.terminal' ||
       err.code === 'support.comment.terminal' ||
-      err.code === 'support.kb.not_published'
+      err.code === 'support.kb.not_published' ||
+      err.code === 'support.identity_grounding_unwired'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
     }
