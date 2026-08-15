@@ -467,6 +467,21 @@ export function decidePublicResidencyPayQuote(input: {
 }
 
 /**
+ * Pin: production defaults stay unpublished — no sneaky IFC credit or share %.
+ * A later invented bps / session credit on UNPUBLISHED_* fails this.
+ */
+export function ambassadorIfcDefaultsCarryNoRates(
+  ifc: AmbassadorIfcPayLaw = UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+  share: AmbassadorRevenueShareLaw = UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW,
+): boolean {
+  if (ifc.published === true) return false;
+  if (share.published === true) return false;
+  if ('sessionCredit' in ifc || 'asset' in ifc || 'period' in ifc) return false;
+  if ('shareOfFeeBps' in share || 'feeBasis' in share) return false;
+  return true;
+}
+
+/**
  * Honesty guard: unset (or any public refuse) must not look payable.
  * A later fake quote with ok/sessionCredit/bps fails this.
  */
