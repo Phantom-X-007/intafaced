@@ -16,28 +16,43 @@ export const PLATFORM_KB_SPINE: readonly SupportKbArticle[] = [
     id: 'kb-account-access',
     titleKey: 'support.kb.account_access.title',
     bodyKey: 'support.kb.account_access.body',
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-security-basics',
     titleKey: 'support.kb.security_basics.title',
     bodyKey: 'support.kb.security_basics.body',
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-orders-status',
     titleKey: 'support.kb.orders_status.title',
     bodyKey: 'support.kb.orders_status.body',
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-deposit-withdraw-honest',
     titleKey: 'support.kb.deposit_withdraw.title',
     bodyKey: 'support.kb.deposit_withdraw.body',
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-paper-vs-live',
     titleKey: 'support.kb.paper_vs_live.title',
     bodyKey: 'support.kb.paper_vs_live.body',
+    revision: 1,
+    published: true,
   },
 ] as const;
+
+/** Public doors: published === true only. Missing flag is not a public article. */
+export function publishedOnly(catalog: readonly SupportKbArticle[]): SupportKbArticle[] {
+  return catalog.filter((a) => a.published === true).map((a) => ({ ...a }));
+}
 
 const VENDOR_SMELL = /\b(binance|coinbase|kraken|okx|bybit|deriv|metatrader|tradingview)\b/i;
 
