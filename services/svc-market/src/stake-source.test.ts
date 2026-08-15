@@ -72,6 +72,22 @@ describe('createStakeSource — refuses rather than guessing', () => {
     await expect(createStakeSource(url, SECRET).entitlementOf(USER)).rejects.toMatchObject({ code: 'market.stake_unavailable' });
   });
 
+  it('refuses unset owner slot magnitudes rather than inventing a count', async () => {
+    for (const body of [
+      { staked: '10000', tier: { name: 'Operator', minStake: '10000' } },
+      { staked: '10000', tier: { name: 'Operator', minStake: '10000', vendorSlots: undefined } },
+      { staked: '10000', tier: { name: 'Operator', minStake: '10000', vendorSlots: null } },
+      {},
+    ]) {
+      const url = await serve(200, body);
+      await expect(createStakeSource(url, SECRET).entitlementOf(USER)).rejects.toMatchObject({
+        code: 'market.stake_unavailable',
+      });
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      server = undefined;
+    }
+  });
+
   it('refuses a vendorSlots that is not a non-negative integer', async () => {
     for (const vendorSlots of ['3', 1.5, -1, null]) {
       const url = await serve(200, { staked: '10000', tier: { name: 'Operator', minStake: '10000', vendorSlots } });
