@@ -121,11 +121,12 @@
       "kind": "product_ruling",
       "title": "Fee + revenue recipe map",
       "blocks": ["ledger recipe invent"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-15-d26-p0-09-fee-revenue-recipe-map.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-09--fee--revenue-recipe-map",
       "related": ["PKT-B5"],
       "answerShape": "closed_matrix_recipe_or_socket",
-      "priority": 2
+      "priority": 2,
+      "notes": "2026-08-15 law seal: closed matrix = ledger-client live inventory (#1745). No new recipes without owner carve-out. TRADE_FUTURES_PROFIT_SOURCE still has no compose default (PKT-B5). Docs only — do not edit packages/ledger-client."
     },
     {
       "id": "D26-P0-10",
