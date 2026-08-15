@@ -122,7 +122,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing; null = unlimited)                                              |
 | `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                                                        |
 | `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                                                                     |
-| `merchants.decide`               | `admin:compliance`       | Operator approve / reject / freeze (`suspended`); unfreeze re-checks live reputation snapshot                      |
+| `merchants.decide`               | `admin:compliance`       | Operator approve / reject / freeze (`suspended`); approve and unfreeze re-check live reputation snapshot           |
 | `merchants.history`              | `admin:compliance`       | Audit trail of standing changes                                                                                    |
 | `ops.lateSettlements`            | `admin:compliance`       | Committed decisions with no ledger stamp yet (+ durable last settle error)                                         |
 | `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                                                          |

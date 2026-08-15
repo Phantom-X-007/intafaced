@@ -34,7 +34,12 @@ import { ANY_COUNTRY } from './instruments.js';
 import { InstrumentService } from './instrument-service.js';
 import { P2pError, P2pService } from './p2p-service.js';
 import { createP2pRouter } from './router.js';
-import { mayRestoreProgrammePrivileges, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
+import {
+  mayGrantProgrammePrivileges,
+  mayRestoreProgrammePrivileges,
+  programmeVouch,
+  reputationOnPublicDoor,
+} from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
 
 const EDGE_SECRET = 'p2p-promise-falsify-public-doors-edge-secret-32';
@@ -537,7 +542,7 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
       get: async () => merchantRow('suspended'),
       transition: async () => {
         throw new P2pError(
-          `Cannot restore programme privileges while live reputation fails the same rule badges use. ${restore.eligible === false ? restore.reason : ''}`,
+          `Cannot grant programme privileges while live reputation fails the same rule badges use. ${restore.eligible === false ? restore.reason : ''}`,
           'p2p.merchant_ineligible',
         );
       },
@@ -550,6 +555,34 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
       app,
       'merchants.decide',
       { userId: SELLER, to: 'approved', reason: 'operator unfreeze' },
+      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error!.message).toMatch(/live reputation fails the same rule badges use/i);
+    await app.close();
+  });
+
+  it('first approval refuses when live reputation would fail the apply rule', async () => {
+    const broken = snapshotOf({ ...clean, disputed: 1, disputesLost: 1 });
+    const grant = mayGrantProgrammePrivileges(broken);
+    expect(grant.eligible).toBe(false);
+    const merchants = {
+      get: async () => merchantRow('applied'),
+      transition: async () => {
+        throw new P2pError(
+          `Cannot grant programme privileges while live reputation fails the same rule badges use. ${grant.eligible === false ? grant.reason : ''}`,
+          'p2p.merchant_ineligible',
+        );
+      },
+    };
+    const app = await mountStub({
+      p2p: stubP2p({ reputationOf: async () => broken }),
+      merchants: merchants as never,
+    });
+    const res = await post(
+      app,
+      'merchants.decide',
+      { userId: SELLER, to: 'approved', reason: 'operator first approve' },
       signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
     );
     expect(res.statusCode).toBe(400);
