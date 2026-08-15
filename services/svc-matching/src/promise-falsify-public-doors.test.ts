@@ -236,9 +236,7 @@ describe('D26-P2-01d public doors — cancel integrity', () => {
     expect(res.json().code).toBe('OrderNotFound');
 
     const live = await orders(app, MARKET);
-    expect(live.json().orders.map((o: { orderId: string; remaining: string }) => [o.orderId, o.remaining])).toEqual([
-      [maker, '1'],
-    ]);
+    expect(live.json().orders.map((o: { orderId: string; remaining: string }) => [o.orderId, o.remaining])).toEqual([[maker, '1']]);
     expect(engine.hasMarket(MARKET)).toBe(true);
     await app.close();
   });
