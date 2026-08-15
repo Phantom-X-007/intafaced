@@ -128,7 +128,9 @@ describe('evaluatePortfolioAlert — refuse-closed, no invented book', () => {
   it('silence is not a fire — no quote, no balance, still refuse', () => {
     const out = evaluatePortfolioAlert();
     expect(out.kind).toBe('refuse');
-    expect(out.code).toBe('alert.portfolio_view_unpublished');
+    if (out.kind === 'refuse') {
+      expect(out.code).toBe('alert.portfolio_view_unpublished');
+    }
     assertNoNumberMoney(out);
   });
 });
