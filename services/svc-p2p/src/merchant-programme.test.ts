@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   canTransition,
@@ -7,6 +10,7 @@ import {
   isActiveMerchant,
   mayGrantProgrammePrivileges,
   mayRestoreProgrammePrivileges,
+  MERCHANT_API_KEY_PLANE,
   programmeVouch,
   reputationOnPublicDoor,
   standingBrokenByDisputeLaw,
@@ -215,5 +219,20 @@ describe('the state machine', () => {
     for (const other of ['applied', 'rejected', 'suspended', 'withdrawn'] as const) {
       expect(isActiveMerchant(other)).toBe(false);
     }
+  });
+});
+
+describe('Stage 3 merchant API-key plane stays cut', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const programmeSource = readFileSync(join(here, 'merchant-programme.ts'), 'utf8');
+
+  it('names identity.apikeys as the only key plane — no dual mint in svc-p2p', () => {
+    expect(MERCHANT_API_KEY_PLANE).toBe('identity.apikeys');
+  });
+
+  it('does not grow a second key table, mint, or revoke API in this module', () => {
+    expect(programmeSource).not.toMatch(/p2p_merchant_api_keys/i);
+    expect(programmeSource).not.toMatch(/createApiKey|mintApiKey|revokeApiKey|issueApiKey/);
+    expect(programmeSource).not.toMatch(/api_secret|hashedSecret|key_prefix/);
   });
 });

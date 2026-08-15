@@ -1,4 +1,4 @@
-import { formatAmount, type Amount } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { isActiveMerchant, type MerchantStatus } from './merchant-programme.js';
 
 /**
@@ -50,6 +50,30 @@ export const NO_OFFER_LIMITS: OfferLimitPolicy = Object.freeze({
   standardMaxAmount: null,
   merchantMaxAmount: null,
 });
+
+/**
+ * Owner env → policy. Unset / blank stays unlimited (`null`).
+ *
+ * `P2P_OFFER_MAX_STANDARD` / `P2P_OFFER_MAX_MERCHANT` are product law. A
+ * default numeric max invented here would start refusing offers that an unset
+ * deployment allows today. Armed values are decimal strings; empty is missing.
+ */
+export function offerLimitsFromEnv(env: {
+  P2P_OFFER_MAX_STANDARD?: string | undefined;
+  P2P_OFFER_MAX_MERCHANT?: string | undefined;
+}): OfferLimitPolicy {
+  return {
+    standardMaxAmount: amountFromUnsetEnv(env.P2P_OFFER_MAX_STANDARD),
+    merchantMaxAmount: amountFromUnsetEnv(env.P2P_OFFER_MAX_MERCHANT),
+  };
+}
+
+function amountFromUnsetEnv(raw: string | undefined): Amount | null {
+  if (raw === undefined) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  return parseAmount(trimmed);
+}
 
 /**
  * The ceiling that applies to one maker, or `null` for none.
