@@ -3,7 +3,7 @@
 **Status:** **Accepted — 2026-08-04.** Owner decision, stated and confirmed.
 **Decision owner:** repo owner. **Written by:** Denon.
 **Spec id:** D-S-17.
-**Builds on:** [`2026-08-02-adopt-vendored-product-keep-our-ledger.md`](2026-08-02-adopt-vendored-product-keep-our-ledger.md) ("Yes for the product. No for the book."), which is unchanged. This ADR states the **residual** that decision left, because the residual has been read as smaller than it is.
+**Builds on:** [`2026-08-02-adopt-vendored-product-keep-our-ledger.md`](2026-08-02-adopt-vendored-product-keep-our-ledger.md) ("Yes for the product. No for the book."), which is unchanged. This ADR states the **residual** that decision left, because the residual has been read as smaller than it is. **See P4-07:** forever Java vs TS money SoT is sealed in [`2026-08-15-java-vs-ts-money-sot-seal.md`](2026-08-15-java-vs-ts-money-sot-seal.md) — this residual is not re-opened.
 
 ---
 
