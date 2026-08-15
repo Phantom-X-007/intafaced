@@ -60,9 +60,7 @@ describe('D26-P2-15 fillId engine SoT', () => {
   });
 
   it('refuses an extra derived identity key rather than stripping it', () => {
-    expect(() => validatePayload('fillSettled', settled({ derivedFillId: 'btc-usdt:41' }), 'svc-trade')).toThrow(
-      EventSchemaDriftError,
-    );
+    expect(() => validatePayload('fillSettled', settled({ derivedFillId: 'btc-usdt:41' }), 'svc-trade')).toThrow(EventSchemaDriftError);
   });
 
   it('orderFilled does not carry fillId — stuffing one is drift, not a second SoT', () => {
