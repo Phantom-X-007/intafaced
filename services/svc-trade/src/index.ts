@@ -23,6 +23,7 @@ import {
   AdlDisclosureError,
 } from './futures/adl-disclosure.js';
 import { presentAdlActionDisclosureWire, sqlAdlDisclosureEventStore } from './futures/adl-last-resort.js';
+import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
 import { parseConfiguredMaxLeverage } from './futures/initial-margin.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
