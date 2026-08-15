@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { planLiquidation, summarizeLiquidation, unrealizedPnl } from './liquidation-planner.js';
 
@@ -19,14 +20,25 @@ describe('liquidation-planner', () => {
     expect(formatAmount(unrealizedPnl('long', amt('1'), amt('50000'), amt('49000')))).toBe('-1000');
   });
 
-  it('healthy long above maintenance → skip', () => {
+  it('healthy long above named maintenance → skip', () => {
     const d = planLiquidation({
       liquidationId: 'liq-1',
       position: base,
       markPrice: '50000',
+      maintenanceBps: 5000, // fixture — not product law (D3)
     });
     expect(d.liquidate).toBe(false);
     if (!d.liquidate) expect(d.reason).toBe('healthy');
+  });
+
+  it('omitted maintenanceBps does not invent 50% — parks unless equity is gone', () => {
+    const d = planLiquidation({
+      liquidationId: 'liq-d3',
+      position: base,
+      markPrice: '47000', // would liquidate under invented 5000 bps
+    });
+    expect(d.liquidate).toBe(false);
+    if (!d.liquidate) expect(d.reason).toBe('maintenance_bps_unset');
   });
 
   it('long wiped by mark drop → full margin loss', () => {
@@ -154,5 +166,10 @@ describe('liquidation-planner', () => {
       expect(formatAmount(d.fromMargin)).toBe('5000');
       expect(formatAmount(d.fromInsurance)).toBe('5000');
     }
+  });
+
+  it('does not invent a 50% maintenance table', () => {
+    const src = readFileSync(new URL('./liquidation-planner.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/maintenanceBps\s*\?\?\s*5000/);
   });
 });
