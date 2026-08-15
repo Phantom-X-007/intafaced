@@ -315,9 +315,14 @@ otherwise.
 - **Crash re-drive:** a pending purchase settles from the **claim snapshot**
   (price + commission_bps on the row), not a later env rate. Settle updates only
   while `status = 'pending'`.
-- **Subscriptions:** listing `offer_type=subscription` is storable; **public
-  catalogue omits them** until Stage C3; purchase refuses
-  `market.subscription_not_built` (needs product law).
+- **Subscriptions:** `createListing(subscription)` refuses
+  `market.subscription_not_built` **before insert or slot claim** — same
+  refuse-closed posture as a blank commission. An unbuilt offer must not burn
+  a stake slot or steal oldest-first entitled quota from a one-time listing.
+  The schema still stores `offer_type=subscription` so leftover rows and a
+  future C3 stay representable; public catalogue omits them; purchase of a
+  leftover row still refuses the same code. Period / past-due / cancel law is
+  C3 (Nitro); this does not invent it. Venue / pair catalogues stay owner-only.
 
 No balance column exists on `market.listings` or `market.purchases`. Price and
 commission_bps are intent records; the only balances live in svc-ledger.

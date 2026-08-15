@@ -501,6 +501,24 @@ describe('svc-market mount — commerce scopes', () => {
    * Blank commission must surface as PRECONDITION_FAILED on create + purchase
    * and empty catalogue; never invent success / free rate at the mount.
    */
+  it('maps unbuilt-subscription createListing refuse to PRECONDITION_FAILED', async () => {
+    const commerce = stubCommerce();
+    commerce.createListing = vi.fn(async () => {
+      throw new MarketError(
+        'Subscription listings are not built yet — creating one would take a listing slot for inventory that cannot be sold',
+        'market.subscription_not_built',
+      );
+    });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .createListing({ title: 'Sub', description: 'monthly', offerType: 'subscription', assetId: 'USDT', price: '10' }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'Subscription listings are not built yet — creating one would take a listing slot for inventory that cannot be sold',
+    });
+  });
+
   it('maps blank-commission createListing refuse to PRECONDITION_FAILED', async () => {
     const commerce = stubCommerce({ commissionBps: null });
     commerce.createListing = vi.fn(async () => {
