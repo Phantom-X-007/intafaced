@@ -583,6 +583,13 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.paper_trading_disabled':
       return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
 
+    case 'academy.paper_flag_unverified':
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+
+    case 'academy.paper_flag_mismatch':
+    case 'academy.paper_market_unlisted':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+
     case 'academy.season_not_live':
       return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
@@ -603,6 +610,7 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
     case 'academy.host_rights_unavailable':
+    case 'academy.paper_flag_unavailable':
       // All three are OUR infrastructure, not the caller's request, and the
       // distinction matters to a client: a 403 tells someone to go and stake or
       // rank up, and telling them that because svc-token was unreachable sends
@@ -813,6 +821,7 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
         guard(async () => {
           assertPaperInputNeverClaimsLive(input);
           academy.assertPaperTradingEnabled();
+          await academy.assertCallerPaperFlagVerified(input.market);
           const item = getCurriculumItem(input.slug);
           if (!item) {
             throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
@@ -889,6 +898,7 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
         guard(async () => {
           assertPaperInputNeverClaimsLive(input);
           academy.assertPaperTradingEnabled();
+          await academy.assertCallerPaperFlagVerified(input.market);
           const item = getCurriculumItem(input.slug);
           if (!item) {
             throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');

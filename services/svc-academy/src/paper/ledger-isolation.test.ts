@@ -108,6 +108,7 @@ describe('paper drills are structurally incapable of a real ledger post', () => 
     expect(names).toContain('workbook-loop.ts');
     expect(names).toContain('simulated-result.ts');
     expect(names).toContain('ops-gate.ts');
+    expect(names).toContain('market-flag-verify.ts');
   });
 
   it.each(paperSources())('$name imports no part of the ledger write surface', ({ name, text }) => {

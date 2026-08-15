@@ -8,6 +8,7 @@ import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
 import { certPerkPlaneStatus } from './certs/perk-plane.js';
 import type { AcademyService } from './academy-service.js';
 import type { PaperOpsStatus } from './paper/ops-gate.js';
+import { assertCallerCannotLiePaperFlag, memoryPaperFlagPort } from './paper/market-flag-verify.js';
 
 /**
  * THE MOUNT BOUNDARY for svc-academy (docs/decisions/mount-boundary.md).
@@ -65,6 +66,12 @@ function forged(p: Principal = principal()) {
   });
 }
 
+/** Trade listing the mount stub consults — caller `paper: true` is not enough. */
+const MOUNT_PAPER_FLAG_PORT = memoryPaperFlagPort([
+  { marketId: 'mkt-paper-1', symbol: 'BTC-USDT', paper: true },
+  { marketId: 'mkt-live-1', symbol: 'BTC/USDT', paper: false },
+]);
+
 const room = {
   id: ROOM,
   slug: 'meme-war-room',
@@ -101,6 +108,9 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
     createRoom: vi.fn(async () => room),
     invite: vi.fn(async () => undefined),
     assertPaperTradingEnabled: vi.fn(() => undefined),
+    assertCallerPaperFlagVerified: vi.fn(async (market) => {
+      await assertCallerCannotLiePaperFlag(MOUNT_PAPER_FLAG_PORT, market);
+    }),
     paperOpsStatus: vi.fn((): PaperOpsStatus => ({
       enabled: true,
       flagId: 'academy.paper-trading',
@@ -497,6 +507,26 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
     expect(result).toMatchObject({ ok: false, reason: 'not_paper' });
   });
 
+  it('REFUSES when the caller labels a live listing as paper', async () => {
+    await expect(
+      caller().paperDrill({
+        slug: 'foundations-paper-workbook',
+        market: { marketId: 'mkt-live-1', paper: true, symbol: 'BTC/USDT' },
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('REFUSES paper: true when TRADE_URL / verification port is unset', async () => {
+    const academy = stubAcademy({
+      assertCallerPaperFlagVerified: vi.fn(async (market) => {
+        await assertCallerCannotLiePaperFlag(undefined, market);
+      }),
+    });
+    await expect(
+      createAcademyRouter(academy).createCaller(signed()).paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  });
+
   it('refuses with no market rather than defaulting to one', async () => {
     const result = await caller().paperDrill({ slug: 'foundations-paper-workbook', market: null });
 
@@ -664,6 +694,12 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
   it('REFUSES a live market — a result is never produced off a real book', async () => {
     const result = await caller().paperDrillResult(drill({ market: { ...paperMarket, paper: false } }) as never);
     expect(result).toMatchObject({ ok: false, reason: 'not_paper' });
+  });
+
+  it('REFUSES a result when the caller labels a live listing as paper', async () => {
+    await expect(
+      caller().paperDrillResult(drill({ market: { marketId: 'mkt-live-1', paper: true, symbol: 'BTC/USDT' } }) as never),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('refuses with no market rather than picking one', async () => {

@@ -1137,6 +1137,9 @@ services:
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      # Public markets listing — paper drills verify `paper` here. Unset would
+      # refuse academy.paper_flag_unverified rather than trust the caller.
+      TRADE_URL: http://svc-trade:4004
       ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
       ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
       # Paper-drill ops kill. env.ts already names this (default true); without
