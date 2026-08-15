@@ -6,9 +6,8 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
-import { parseAmount } from '@intafaced/ledger-client';
+import { describeLimits, limitsConfigured, offerLimitsFromEnv, offerLimitsPosture } from './merchant-limits.js';
 import { createLedgerClient } from './ledger-client.js';
-import { describeLimits, limitsConfigured } from './merchant-limits.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
@@ -80,16 +79,13 @@ const instruments = new InstrumentService(sql, { retentionDays: env.P2P_INSTRUME
 /**
  * Offer ceilings by merchant standing (TRK-p2p.merchants Stage 2).
  *
- * Unset means unlimited, which is the behaviour before Stage 2 — the numbers
- * are open product law and `merchant-limits.ts` argues why they are not
- * invented here. `limitPosture` below says which posture this deployment is in,
- * rather than leaving an operator to infer it from an offer that did or did
- * not refuse.
+ * Unset still refuses nothing (pre-Stage-2 behaviour). The literal `unlimited`
+ * is owner confirmation of that choice. Numbers are open product law and are
+ * not invented here. `limitPosture` below says which of unset / unlimited /
+ * configured this deployment is in, rather than leaving a client to infer it
+ * from an offer that did or did not refuse.
  */
-const offerLimits = {
-  standardMaxAmount: env.P2P_OFFER_MAX_STANDARD ? parseAmount(env.P2P_OFFER_MAX_STANDARD) : null,
-  merchantMaxAmount: env.P2P_OFFER_MAX_MERCHANT ? parseAmount(env.P2P_OFFER_MAX_MERCHANT) : null,
-};
+const offerLimits = offerLimitsFromEnv(env);
 const limitPosture = describeLimits(offerLimits);
 
 const p2p: P2pService = new P2pService(sql, ledger, bus, {
@@ -150,12 +146,14 @@ app.get('/health', async () => ({
   moderationReachable: moderatorUserIds.length > 0,
   /** False until env ceilings arm Stage 2 — badge must not imply a higher limit when none is set. */
   offerLimitsConfigured: limitsConfigured(offerLimits),
+  offerLimitsPosture: offerLimitsPosture(offerLimits),
 }));
 app.get('/ready', async () => ({
   ready: true,
   tradingEnabled: env.P2P_TRADING_ENABLED,
   moderationReachable: moderatorUserIds.length > 0,
   offerLimitsConfigured: limitsConfigured(offerLimits),
+  offerLimitsPosture: offerLimitsPosture(offerLimits),
 }));
 
 /**

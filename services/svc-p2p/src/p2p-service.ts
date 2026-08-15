@@ -655,16 +655,16 @@ export class P2pService {
      * scams. The merchant programme is the record that justifies a bigger
      * promise, so the badge and the ceiling are one control seen from two sides.
      *
-     * CREATE only, and no ceiling is configured by default — `merchant-limits.ts`
-     * says why the numbers are an operator decision rather than invented here.
+     * CREATE only. Standing is read on every create (or treated as not-in-
+     * programme when no reader is wired) so a non-approved maker never inherits
+     * the merchant slot. Missing reader + armed policy still applies the
+     * standard band — skipping the check would let every size through.
      * Existing offers are never re-judged: breaking live liquidity to apply a
      * new rule costs makers real money for a change they did not ask for.
      */
-    if (this.merchantStatusOf) {
-      const standing = await this.merchantStatusOf(input.makerId);
-      const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
-      if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
-    }
+    const standing = this.merchantStatusOf ? await this.merchantStatusOf(input.makerId) : null;
+    const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
+    if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
 
     const totalAmt = input.totalAmt ?? input.maxAmt;
     const offerId = input.offerId ?? crypto.randomUUID();
