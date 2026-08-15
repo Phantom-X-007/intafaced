@@ -28,6 +28,7 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(n.insuranceTargetSize).toBe('owner_unset');
     expect(n.fundingMaxAbsRateConfigured).toBe(false);
     expect(n.fundingMaxAbsRateDefault).toBe(false);
+    expect(n.fundingMarketCount).toBe(0);
   });
 
   it('live flags are only true when the caller says true', () => {
@@ -36,5 +37,8 @@ describe('presentFuturesJobsCapabilityNote', () => {
     expect(presentFuturesJobsCapabilityNote({ profitSourceConfigured: true }).profitSourceConfigured).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ fundingMaxAbsRateConfigured: true }).fundingMaxAbsRateConfigured).toBe(true);
     expect(presentFuturesJobsCapabilityNote({ jobsEnabled: false, orderableEnabled: false }).jobsEnabled).toBe(false);
+    expect(presentFuturesJobsCapabilityNote({ fundingMarketCount: 2 }).fundingMarketCount).toBe(2);
+    expect(presentFuturesJobsCapabilityNote({ fundingMarketCount: -1 }).fundingMarketCount).toBe(0);
+    expect(presentFuturesJobsCapabilityNote({ fundingMarketCount: 2 })).not.toHaveProperty('fundingMarketIds');
   });
 });
