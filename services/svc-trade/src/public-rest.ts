@@ -4,6 +4,7 @@ import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intaf
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
 import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capability.js';
+import { DEFAULT_MAX_LEVERAGE } from './futures/initial-margin.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -377,7 +378,14 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), fl
       // than guessing a ceiling a client would clamp against.
       price: { min: tick, max: null as string | null },
       cost: { min: formatAmount(market.minNotional), max: null as string | null },
-      leverage: { min: null as string | null, max: null as string | null },
+      /**
+       * DIRECTION §1 / D26-P0-07 sealed 10× on futures. Spot and options have
+       * no leverage product — leave max null rather than copying the perp cap.
+       */
+      leverage: {
+        min: null as string | null,
+        max: market.kind === 'futures' ? DEFAULT_MAX_LEVERAGE : null,
+      },
     },
   };
 }

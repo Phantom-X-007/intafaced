@@ -73,6 +73,7 @@ describe('presenters', () => {
   it('says out loud when a market is simulated', () => {
     const real = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT' }));
     expect(real.paper).toBe(false);
+    expect(real.limits.leverage.max).toBeNull();
     // Still a valid CCXT market — the extra field must not break the schema.
     expect(marketSchema.safeParse(real).success).toBe(true);
 
@@ -92,6 +93,8 @@ describe('presenters', () => {
     expect(perp.settle).toBeNull();
     expect(perp.linear).toBeNull();
     expect(perp.inverse).toBeNull();
+    expect(perp.limits.leverage.max).toBe('10');
+    expect(perp.limits.leverage.min).toBeNull();
     expect(marketSchema.safeParse(perp).success).toBe(true);
 
     const live = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }), Date.now(), {
