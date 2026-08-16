@@ -298,10 +298,12 @@ Rules:
 
 ## Graphify corpus (INTAFACED)
 
-`graphify-out/` is **gitignored local cache** (per-worktree). Do not commit it.
+The map **ships in git** (`graphify-out/graph.json`). A clone / Bot `/workspace` / worktree that pulled tip already has it. Do not re-extract from scratch unless the file is missing.
 
-- **First build in a worktree:** `graphify extract .` (AST only, no API key). `.graphifyignore` allowlists `services/` + `packages/` and excludes markdown / paste walls / vendor.
-- **After that:** `graphify query` / `path` / `explain`. Then open the one source file you will edit.
+GitHub is the code database. Graphify is not a second GitHub. `gh pr list` stays live and cheap. Graphify cuts **reading `services/`**, not status.
+
+- After `git pull` / clone: `graphify query` / `path` / `explain`. Then open the one source file you will edit.
+- If `graphify-out/graph.json` is missing: `pnpm graphify:extract` (AST only). `.graphifyignore` allowlists `services/` + `packages/` and excludes markdown / paste walls / vendor.
 - Do **not** start a mountain from god-nodes (academy hubs dominate degree). Do **not** `path` to `createLedgerClient` — that name is 8 service wrappers, not `packages/ledger-client`. Money book = `packages/ledger-client`.
 - If extract/update prints `Operation not permitted`, retry with `GRAPHIFY_MAX_WORKERS=1`.
 - After a cook, or when Nitro says **graphify peace**: run `pnpm graphify:peace` and report the RESULT line.

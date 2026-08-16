@@ -27,13 +27,13 @@ Read `graphify-out/GRAPH_REPORT.md` only for broad architecture. Do not dump it 
 
 ## When the graph is missing
 
-`graphify-out/` is gitignored local cache. Once per worktree:
+The map is supposed to be **in git**. If `graph.json` is missing after pull, then:
 
 ```
 pnpm graphify:extract
 ```
 
-That is AST-only (no API key). `.graphifyignore` allowlists `services/` + `packages/` and excludes markdown / paste walls / vendor.
+AST-only, no API key. `.graphifyignore` allowlists `services/` + `packages/`.
 
 Do **not** run extract on `docs/paste-w*` or old boards.
 

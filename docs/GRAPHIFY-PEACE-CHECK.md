@@ -7,6 +7,17 @@ GREEN = the **map** works. GREEN does **not** mean the last builder queried firs
 
 ---
 
+## GitHub is the database — is Graphify useless?
+
+**No.** GitHub holds the code. Every agent still works on a **checkout** (this Mac worktree, or a Bot `/workspace` clone). Graphify queries that checkout. It does **not** replace `gh pr list`.
+
+**Wrong:** “the waste is `git status` / fetching GitHub.” Those are cheap and must stay live.  
+**Right:** the waste is **re-reading `services/` + law + boards**. Graphify cuts that.
+
+**What was broken:** we gitignored the map (#1671). A GitHub-only clone had no `graph.json`, so Bot/new worktree could not query until an 80s extract. Official Graphify **team** setup is: **commit the map**. This PR does that (`graph.json` + report + html). Cache stays local.
+
+---
+
 ## What we actually tested (not vibed)
 
 | Kind                                   | What                                                                                    | Result                                                                                                                      |
