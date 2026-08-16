@@ -550,6 +550,12 @@ services:
       WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
       WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
+      # Host can pin tape replay length and JetStream durable names. Defaults
+      # match services/svc-ws/src/env.ts (50 / ws-trade-tape / ws-private-orders).
+      # Without these names, a host `.env` never reaches the container.
+      WS_TRADE_RECENT_LIMIT: ${WS_TRADE_RECENT_LIMIT:-50}
+      WS_TRADES_DURABLE: ${WS_TRADES_DURABLE:-ws-trade-tape}
+      WS_PRIVATE_ORDERS_DURABLE: ${WS_PRIVATE_ORDERS_DURABLE:-ws-private-orders}
       # Private /private/stream (#119/#122) needs the SAME JWT material as
       # svc-identity / svc-edge. Without these, privateTokens stays null and
       # every private upgrade returns 403 (mega-audit L5-4 / WS-JWT).
@@ -680,6 +686,14 @@ services:
       # traffic at an engine that cannot answer.
       BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-mock}
       BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-http://host.docker.internal:4108}
+      # Host can pin engine call ceiling, default crew size, mentor shortlist,
+      # and season. Defaults match services/svc-blueprint/src/env.ts
+      # (20_000 / 6 / 3 / 1). Without these names, a host `.env` never
+      # reaches the container.
+      BLUEPRINT_ENGINE_TIMEOUT_MS: ${BLUEPRINT_ENGINE_TIMEOUT_MS:-20000}
+      BLUEPRINT_CREW_CAPACITY: ${BLUEPRINT_CREW_CAPACITY:-6}
+      BLUEPRINT_MENTOR_SHORTLIST_SIZE: ${BLUEPRINT_MENTOR_SHORTLIST_SIZE:-3}
+      BLUEPRINT_SEASON: ${BLUEPRINT_SEASON:-1}
       # The card rasterizer. DELIBERATELY has no default: unset means this
       # deployment has no renderer, and the service says so with a typed code
       # while still serving the full vector card. A default pointing at a host
