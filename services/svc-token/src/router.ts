@@ -3,6 +3,7 @@ import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
 import { TokenError, type TokenService } from './token-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * svc-token API surface.
@@ -74,27 +75,28 @@ export interface TokenRouterOptions {
 
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
-  if (err instanceof InsufficientFundsError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  if (err instanceof InsufficientFundsError || err instanceof LedgerError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
   if (err instanceof TokenError) {
+    const message = userCopy(err.code);
     switch (err.code) {
       case 'token.proposal_not_found':
       case 'token.stake_not_found':
-        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+        return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
       case 'token.proposal_not_allowed':
       case 'token.already_voted':
-        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+        return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
       // 409: the request is well-formed, but the revenue window (or the run id)
       // is already spoken for. This is the refusal that used to arrive as a raw
       // PG 23505 — an opaque INTERNAL_SERVER_ERROR, *after* the burn had already
       // posted irreversibly.
       case 'token.buyback_window_overlap':
       case 'token.buyback_run_conflict':
-        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+        return new TRPCError({ code: 'CONFLICT', message, cause: err });
       case 'token.buyback_window_invalid':
       case 'token.buyback_revenue_invalid':
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
       case 'token.stake_conflict':
@@ -105,15 +107,12 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.yield_source_underfunded':
       case 'token.params_missing':
       case 'token.params_invalid':
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       default:
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
     }
   }
-  if (err instanceof LedgerError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
-  }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Token operation failed', cause: err });
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('error.generic'), cause: err });
 }
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
@@ -126,7 +125,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
 
 function assertSelf(principalUserId: string | undefined, ownerId: string): void {
   if (principalUserId !== ownerId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'This stake belongs to another user' });
+    throw new TRPCError({ code: 'FORBIDDEN', message: userCopy('error.forbidden') });
   }
 }
 
