@@ -24,6 +24,17 @@ export {
   type HostSceneWriteResult,
 } from './edit-policy.js';
 
+export {
+  persistSceneState,
+  loadSceneState,
+  requirePopulatedScene,
+  isDurableSceneEmpty,
+  SCENE_EMPTY_REFUSE,
+  type SceneOccupancy,
+  type SceneStateResult,
+  type RequirePopulatedResult,
+} from './scene-state.js';
+
 /** Max UTF-8 bytes of JSON.stringify(scene). Oversized rooms DoS the host UI. */
 export const SCENE_MAX_BYTES = 64 * 1024;
 
