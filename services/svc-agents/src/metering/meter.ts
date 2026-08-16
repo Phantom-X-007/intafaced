@@ -1,6 +1,13 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  affiliateLegAfterUsageFeeCharge,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
 import { AgentError } from '../errors.js';
 import type { ModelPrice } from '../gateway/routing.js';
 import type { TokenUsage } from '../providers/provider.js';
@@ -52,6 +59,10 @@ export interface UsageMeterOptions {
   readonly windowMinutes: number;
   /** Ledger `module` for the charge. Always 'agents' in production. */
   readonly module?: string;
+  /** Identity accrue after feeCharge. Default noop when IDENTITY_URL is unset. */
+  readonly affiliateAccrue?: AffiliateAccruePort;
+  /** Identity payout after accrue. Default noop when IDENTITY_URL is unset. */
+  readonly affiliatePayout?: AffiliatePayoutPort;
 }
 
 export interface RecordUsageInput {
@@ -103,6 +114,8 @@ export class UsageMeter {
   private readonly assetId: string;
   private readonly windowMinutes: number;
   private readonly module: string;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
 
   constructor(
     private readonly sql: Sql,
@@ -112,6 +125,8 @@ export class UsageMeter {
     this.assetId = options.assetId;
     this.windowMinutes = options.windowMinutes;
     this.module = options.module ?? 'agents';
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   windowFor(at: Date = new Date()): string {
@@ -345,6 +360,9 @@ export class UsageMeter {
       }),
     );
 
+    await this.notifyAgentsAffiliateAccrue(chargeKey, input.userId, sealed.amount);
+    await this.notifyAgentsAffiliatePayout(chargeKey, input.userId, sealed.amount);
+
     // ── Step 3 · record the ledger id ───────────────────────────────────────
     await this.sql`
       UPDATE agents.usage_windows
@@ -360,6 +378,32 @@ export class UsageMeter {
       chargeTxId: ledgerTx.id,
       settled: true,
     };
+  }
+
+  /** Best-effort; never throws. feeCharge already posted. */
+  private async notifyAgentsAffiliateAccrue(feeEventId: string, userId: string, feeAmount: Amount): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterUsageFeeCharge({
+        feeEventId,
+        userId,
+        feeAmount,
+        feeAsset: this.assetId,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. feeCharge already posted. */
+  private async notifyAgentsAffiliatePayout(feeEventId: string, userId: string, feeAmount: Amount): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterUsageFeeCharge({
+        feeEventId,
+        userId,
+        feeAmount,
+        feeAsset: this.assetId,
+      }),
+    );
   }
 
   /**
