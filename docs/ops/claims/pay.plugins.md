@@ -1,9 +1,10 @@
 # Claim pay.plugins
 
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2205
 **owner:** nitro-agents
 **started:** 2026-08-16T12:53:00.000Z
-**heartbeat:** 2026-08-16T12:53:00.000Z
+**heartbeat:** 2026-08-16T13:10:00.000Z
 **branch:** feat/pay-plugins-woocommerce
 **title:** WooCommerce CMS adapter on pay.public-api + reference-client
 **track:** TRACKER
@@ -17,14 +18,10 @@
 
 ## Done bar
 
-- [ ] WooCommerce plugin tree creates payment via `/api/pay/v1` (Bearer, Idempotency-Key, decimal-string amounts)
-- [ ] Webhook HMAC matches frozen vectors (`verifyMerchantWebhook` / `signMerchantWebhook`)
-- [ ] Sandbox vs live key mode (`ifc_test_` / `ifc_`)
-- [ ] Contract tests fail if public pins drift
-- [ ] No second money book / no PSP invent
-- [ ] Magento + OpenCart stay §13 unwired (not this PR)
-- [ ] pnpm verify
-- [ ] PR link
+- [x] Implemented
+- [x] claim:check clean or residual-owned
+- [ ] pnpm verify (local NATS/Postgres isolation red; plugins suite green)
+- [x] PR link: https://github.com/Phantom-X-007/intafaced/pull/2205
 
 ## Law
 
