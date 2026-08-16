@@ -17,8 +17,7 @@ export const CURRICULUM_IMPORT_REFUSE = {
   missingObjectives: 'academy.curriculum_missing_objectives',
 } as const;
 
-export type CurriculumImportRefuseCode =
-  (typeof CURRICULUM_IMPORT_REFUSE)[keyof typeof CURRICULUM_IMPORT_REFUSE];
+export type CurriculumImportRefuseCode = (typeof CURRICULUM_IMPORT_REFUSE)[keyof typeof CURRICULUM_IMPORT_REFUSE];
 
 export type LessonSubstanceIssue = {
   readonly field: 'body' | 'objectives';
@@ -39,11 +38,7 @@ const MIN_UNIQUE_WORDS = 90;
 const MIN_UNIQUE_RATIO = 0.28;
 const PAD_LINE_REPEATS = 4;
 
-function issue(
-  field: LessonSubstanceIssue['field'],
-  code: CurriculumImportRefuseCode,
-  message: string,
-): LessonSubstanceIssue {
+function issue(field: LessonSubstanceIssue['field'], code: CurriculumImportRefuseCode, message: string): LessonSubstanceIssue {
   return { field, code, message };
 }
 
@@ -125,10 +120,7 @@ function isLengthPaddedJunk(body: string): boolean {
  * Named substance gate for one import body (+ optional objectives field).
  * Callers that only have markdown still pass `{ body }`.
  */
-export function lessonSubstanceChecklist(
-  body: string,
-  extras?: { readonly objectives?: unknown },
-): LessonSubstanceIssue[] {
+export function lessonSubstanceChecklist(body: string, extras?: { readonly objectives?: unknown }): LessonSubstanceIssue[] {
   const emptyCode = classifyEmptyBody(body);
   if (emptyCode === CURRICULUM_IMPORT_REFUSE.empty) {
     return [issue('body', emptyCode, 'Import body is empty — refuse academy.curriculum_empty')];

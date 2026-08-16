@@ -2,12 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getCurriculumItem, listCurriculum } from './catalog.js';
 import { CURRICULUM_MIN_BODY_CHARS } from './catalog.js';
 import { validateImportRecord } from './import-pipeline.js';
-import {
-  CURRICULUM_IMPORT_REFUSE,
-  countInstructionalSteps,
-  countMarkdownSections,
-  lessonSubstanceChecklist,
-} from './lesson-substance.js';
+import { CURRICULUM_IMPORT_REFUSE, countInstructionalSteps, countMarkdownSections, lessonSubstanceChecklist } from './lesson-substance.js';
 
 const OBJECTIVES = [
   'State the maximum you are willing to lose on an idea before you look at the entry.',
@@ -47,16 +42,18 @@ describe('lesson substance named refuses — D26-P1-C5', () => {
     expect(body.trim().length).toBeGreaterThanOrEqual(CURRICULUM_MIN_BODY_CHARS);
     const issues = lessonSubstanceChecklist(body, { objectives: OBJECTIVES });
     expect(issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.paddedJunk)).toBe(true);
-    expect(validateImportRecord({
-      slug: 'pad-junk',
-      title: 'Pad junk',
-      kind: 'playbook',
-      path: 'foundations',
-      order: 1,
-      summary: 'Summary long enough to pass the twelve character floor.',
-      body,
-      objectives: OBJECTIVES,
-    }).ok).toBe(false);
+    expect(
+      validateImportRecord({
+        slug: 'pad-junk',
+        title: 'Pad junk',
+        kind: 'playbook',
+        path: 'foundations',
+        order: 1,
+        summary: 'Summary long enough to pass the twelve character floor.',
+        body,
+        objectives: OBJECTIVES,
+      }).ok,
+    ).toBe(false);
   });
 
   it('refuses a long unique wall that lacks ## sections', () => {
@@ -79,15 +76,17 @@ describe('lesson substance named refuses — D26-P1-C5', () => {
     const body = `# Title\n\n${uniqueProse('obj')}\n\n## Mechanism\n\n- Size from invalidation, not from conviction on the day.\n- Write the risk fraction before you look at the entry.\n\n## Mistakes\n\n${uniqueProse('obj2')}`;
     const issues = lessonSubstanceChecklist(body);
     expect(issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.missingObjectives)).toBe(true);
-    expect(validateImportRecord({
-      slug: 'no-objectives',
-      title: 'No objectives',
-      kind: 'lesson',
-      path: 'foundations',
-      order: 2,
-      summary: 'Summary long enough to pass the twelve character floor.',
-      body,
-    }).ok).toBe(false);
+    expect(
+      validateImportRecord({
+        slug: 'no-objectives',
+        title: 'No objectives',
+        kind: 'lesson',
+        path: 'foundations',
+        order: 2,
+        summary: 'Summary long enough to pass the twelve character floor.',
+        body,
+      }).ok,
+    ).toBe(false);
   });
 
   it('accepts a body with sections, steps, and objectives (field or ## Objectives)', () => {

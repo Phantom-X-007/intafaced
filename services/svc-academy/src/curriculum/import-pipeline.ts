@@ -30,12 +30,7 @@ import {
   type CurriculumImportRefuseCode,
 } from './lesson-substance.js';
 
-export {
-  CURRICULUM_IMPORT_REFUSE,
-  classifyEmptyBody,
-  lessonSubstanceChecklist,
-  lessonSubstanceOk,
-} from './lesson-substance.js';
+export { CURRICULUM_IMPORT_REFUSE, classifyEmptyBody, lessonSubstanceChecklist, lessonSubstanceOk } from './lesson-substance.js';
 export type { CurriculumImportRefuseCode, LessonSubstanceIssue } from './lesson-substance.js';
 
 /** Tracker title promise (academy.curriculum). */

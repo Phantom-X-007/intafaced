@@ -122,12 +122,10 @@ describe('validateImportRecord', () => {
 
 describe('D26-P1-C5 lesson substance (not char-count theater)', () => {
   it('refuses empty, whitespace, and length-padded junk by name', () => {
-    expect(validateImportRecord({ ...good, body: '' }).issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.empty)).toBe(
+    expect(validateImportRecord({ ...good, body: '' }).issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.empty)).toBe(true);
+    expect(validateImportRecord({ ...good, body: '   \n\t  ' }).issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.whitespace)).toBe(
       true,
     );
-    expect(
-      validateImportRecord({ ...good, body: '   \n\t  ' }).issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.whitespace),
-    ).toBe(true);
     expect(theaterBody.trim().length).toBeGreaterThanOrEqual(900);
     const substanceIssues = lessonSubstanceChecklist(theaterBody, { objectives: good.objectives });
     expect(substanceIssues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.paddedJunk)).toBe(true);
