@@ -11,8 +11,10 @@ import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCos
  *   · Inventory-based execution: both sides must be pre-positioned. A DEX↔CEX
  *     (or any) opportunity that needs a bridge completing inside the spread is
  *     refused as bridge fantasy — never sized on transfer latency hope.
- *   · Never invents fees, spreads, impact, or transfer. Missing cost terms →
- *     refuse (weight 0 / incomplete_cost). Unscored latency → weight 0.
+ *   · Never invents fees, spreads, impact, mids, or transfer. Missing cost
+ *     terms → refuse (weight 0 / incomplete_cost). Unscored latency → weight 0.
+ *   · Missing or stale quotes are skipped — a spread is never synthesised from
+ *     one live leg plus a guessed mid, default bps, or a house book.
  *
  * Leverage: `@intafaced/venue-adapter` cost-model (D26-P1-X3 / #1673). This
  * package is a thin scanner path — not a second money book or SOR.
@@ -26,6 +28,18 @@ import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCos
  * filled with a house bps (including the SOR 5 bps internal tie-break).
  */
 export const CROSS_EXCHANGE_DEFAULT_SPREAD_BPS: null = null;
+
+/**
+ * Pin: there is no default mid. A missing quote is refused, not filled from
+ * the other venue or from averaging two sides of a book.
+ */
+export const CROSS_EXCHANGE_DEFAULT_MID: null = null;
+
+/**
+ * Pin: house books get no ranking thumb. Typed `null` so a later
+ * `edge + HOUSE_ARB_PREFERENCE_BPS` cannot compile without changing this export.
+ */
+export const HOUSE_ARB_PREFERENCE_BPS: null = null;
 
 const INTERNAL_KINDS: ReadonlySet<VenueKind> = new Set(['internal']);
 
@@ -48,10 +62,18 @@ export function isCrossRailPair(a: VenueKind, b: VenueKind): boolean {
 export interface ArbVenueQuote {
   readonly venueId: string;
   readonly kind: VenueKind;
-  /** Average fill price for `amount` on this venue (walked book or firm quote). */
-  readonly price: Amount;
+  /**
+   * Average fill price for `amount` on this venue (walked book or firm quote).
+   * `null` = missing — refuse; never substitute `CROSS_EXCHANGE_DEFAULT_MID`.
+   */
+  readonly price: Amount | null;
   /** Size available at `price`. */
   readonly amount: Amount;
+  /**
+   * Observation time of this quote (ms), not read time. `null` = missing —
+   * refuse rather than treat as live.
+   */
+  readonly asOfMs: number | null;
 }
 
 /**
@@ -72,7 +94,9 @@ export type ArbRefuseReason =
   | 'missing_cost_terms'
   | 'same_venue'
   | 'no_edge'
-  | 'insufficient_size';
+  | 'insufficient_size'
+  | 'missing_quote'
+  | 'stale_quote';
 
 export interface ArbRefusal {
   readonly ok: false;
@@ -117,6 +141,13 @@ export interface ScanExternalArbInput {
   /** §28 complete cost model — required; omit a venue → refuse that leg. */
   readonly costTermsByVenue: Readonly<Record<string, SorCostTerms>>;
   readonly inventory: ArbInventory;
+  /** Caller clock — never `Date.now()` inside the scanner. */
+  readonly nowMs: number;
+  /**
+   * Owner freshness window. `null` / non-integer / negative → every quote is
+   * stale (we do not invent a max-age).
+   */
+  readonly maxQuoteAgeMs: number | null;
 }
 
 export interface ScanExternalArbResult {
@@ -153,18 +184,95 @@ function scoreVenue(
   return { ok: true, totalCostBps: scored.totalCostBps };
 }
 
+function skipRefusal(venueId: string, reason: ArbRefuseReason, detail: string): ArbRefusal {
+  return { ok: false, buyVenueId: venueId, sellVenueId: venueId, reason, detail };
+}
+
+/**
+ * House books are skipped before pairing — they are not a buy or sell leg.
+ * P0-01: internal house MM/arb stays blocked.
+ */
+export function isHouseBookKind(kind: VenueKind): boolean {
+  return INTERNAL_KINDS.has(kind);
+}
+
+function quoteUsable(
+  quote: ArbVenueQuote,
+  nowMs: number,
+  maxQuoteAgeMs: number | null,
+): { ok: true; price: Amount } | { ok: false; reason: ArbRefuseReason; detail: string } {
+  if (quote.price === null) {
+    return {
+      ok: false,
+      reason: 'missing_quote',
+      detail: 'quote price missing — mid/spread not invented',
+    };
+  }
+  if (quote.asOfMs === null || !Number.isFinite(quote.asOfMs)) {
+    return {
+      ok: false,
+      reason: 'missing_quote',
+      detail: 'quote asOf missing — not treated as live',
+    };
+  }
+  if (maxQuoteAgeMs === null || !Number.isInteger(maxQuoteAgeMs) || maxQuoteAgeMs < 0) {
+    return {
+      ok: false,
+      reason: 'stale_quote',
+      detail: 'maxQuoteAgeMs unset — freshness window not invented',
+    };
+  }
+  if (!Number.isFinite(nowMs)) {
+    return {
+      ok: false,
+      reason: 'stale_quote',
+      detail: 'nowMs missing — clock not invented',
+    };
+  }
+  if (nowMs < quote.asOfMs) {
+    return {
+      ok: false,
+      reason: 'stale_quote',
+      detail: 'quote asOf is in the future of caller clock — refused',
+    };
+  }
+  if (nowMs - quote.asOfMs > maxQuoteAgeMs) {
+    return {
+      ok: false,
+      reason: 'stale_quote',
+      detail: 'quote older than owner maxQuoteAgeMs — spread not invented from stale book',
+    };
+  }
+  return { ok: true, price: quote.price };
+}
+
 /**
  * Scan external-only cross-exchange spot arb pairs.
  *
  * Pure: quotes, cost terms, and inventory are caller-supplied. Returns every
  * pair evaluation (opportunity or refuse) so the terminal / OMS can show why
- * a pair was not sized.
+ * a pair was not sized. House books and missing/stale quotes are skipped
+ * before pairing so they cannot invent a spread.
  */
 export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanExternalArbResult {
   const opportunities: ArbOpportunity[] = [];
   const refused: ArbRefusal[] = [];
 
-  const quotes = input.quotes;
+  const pairable: ArbVenueQuote[] = [];
+  for (const quote of input.quotes) {
+    if (isHouseBookKind(quote.kind) || !isExternalVenueKind(quote.kind)) {
+      refused.push(skipRefusal(quote.venueId, 'internal_venue', 'D26-P0-01 external-only — house/internal book skipped, not paired'));
+      continue;
+    }
+    const usable = quoteUsable(quote, input.nowMs, input.maxQuoteAgeMs);
+    if (!usable.ok) {
+      refused.push(skipRefusal(quote.venueId, usable.reason, usable.detail));
+      continue;
+    }
+    pairable.push(quote);
+  }
+
+  const quotes = pairable;
   for (let i = 0; i < quotes.length; i++) {
     for (let j = 0; j < quotes.length; j++) {
       if (i === j) continue;
@@ -243,13 +351,34 @@ export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanE
         continue;
       }
 
+      const buyPrice = buyQ.price;
+      const sellPrice = sellQ.price;
+      if (buyPrice === null || sellPrice === null) {
+        refused.push({
+          ok: false,
+          buyVenueId: buyQ.venueId,
+          sellVenueId: sellQ.venueId,
+          reason: 'missing_quote',
+          detail: 'pair reached scoring with a null price — mid not invented',
+        });
+        continue;
+      }
+
+      const houseThumb: number | null = HOUSE_ARB_PREFERENCE_BPS;
+      if (houseThumb !== null) {
+        throw new Error('house arb preference is forbidden — do not prefer internal books');
+      }
+      const defaultMidPin: Amount | null = CROSS_EXCHANGE_DEFAULT_MID;
+      if (defaultMidPin !== null) {
+        throw new Error('cross-exchange default mid is forbidden — do not invent');
+      }
       // Pin: never substitute CROSS_EXCHANGE_DEFAULT_SPREAD_BPS (null) for a
       // missing raw quote spread. Equal or inverted quotes refuse as no_edge.
       const inventedSpreadBps: number | null = CROSS_EXCHANGE_DEFAULT_SPREAD_BPS;
       if (inventedSpreadBps !== null) {
         throw new Error('cross-exchange default spread is forbidden — do not invent');
       }
-      const rawSpread = sub(sellQ.price, buyQ.price);
+      const rawSpread = sub(sellPrice, buyPrice);
       if (rawSpread <= 0n) {
         refused.push({
           ok: false,
@@ -261,8 +390,8 @@ export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanE
         continue;
       }
 
-      const buyAllIn = allInEffectivePrice(buyQ.price, buyScore.totalCostBps, 'buy');
-      const sellAllIn = allInEffectivePrice(sellQ.price, sellScore.totalCostBps, 'sell');
+      const buyAllIn = allInEffectivePrice(buyPrice, buyScore.totalCostBps, 'buy');
+      const sellAllIn = allInEffectivePrice(sellPrice, sellScore.totalCostBps, 'sell');
       const edgePerUnit = sub(sellAllIn, buyAllIn);
 
       if (edgePerUnit <= 0n) {
