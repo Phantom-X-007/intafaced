@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
+import { userCopy } from './user-copy.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
 import {
   AmbassadorPayRefuseError,
@@ -529,21 +530,23 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
   }
 
+  const message = userCopy(err.code);
+
   switch (err.code) {
     case 'academy.room_not_found':
     case 'academy.session_not_found':
     case 'academy.curriculum_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.not_host':
     case 'academy.stake_required':
     case 'academy.invite_required':
     case 'academy.host_rights_required':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
 
     case 'academy.room_full':
     case 'academy.session_not_live':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
     case 'academy.scene_invalid':
     case 'academy.scene_conflict':
@@ -553,11 +556,11 @@ function toTrpcError(err: unknown): TRPCError {
       // Client sent a scene that fails Stage-1 schema or size gate /
       // freeze reason that fails Stage-1 programme rules /
       // residency statement/cohort that fails Stage-1 rules.
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
     case 'academy.ambassador_not_found':
     case 'academy.residency_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.ambassador_already_active':
     case 'academy.ambassador_already_frozen':
@@ -565,27 +568,27 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.residency_not_pending':
     case 'academy.cert_already_granted':
     case 'academy.cert_incomplete':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
     case 'academy.cert_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.cert_invalid':
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
     case 'academy.season_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.tournament_disabled':
     case 'academy.paper_trading_disabled':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
 
     case 'academy.season_not_live':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
     case 'academy.season_invalid':
     case 'academy.standing_invalid':
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
     case 'academy.paper_price_unavailable':
     case 'academy.paper_result_unlabelled':
@@ -595,7 +598,7 @@ function toTrpcError(err: unknown): TRPCError {
       // simulated label", and "this payload claimed real custody" are all
       // states where the only safe payload is no payload — a 200 carrying a
       // best guess is the incident this row exists to prevent.
-      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
 
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
@@ -604,7 +607,7 @@ function toTrpcError(err: unknown): TRPCError {
       // distinction matters to a client: a 403 tells someone to go and stake or
       // rank up, and telling them that because svc-token was unreachable sends
       // them to do something they have already done. A 500 says "try again".
-      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
   }
 }
 
