@@ -648,7 +648,7 @@ export const FEATURES = [
       'docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md',
     ],
     note:
-      '**READY 2026-08-16 (gateway area map on tRPC)** — REST + tRPC money doors now read `PAYFAC_SURFACE_AREAS` ' +
+      '**READY 2026-08-16 (#2210)** — REST + tRPC money doors now read `PAYFAC_SURFACE_AREAS` ' +
       '(ancestor-or-self + area). Hosted `checkout.open` stays public (payer, no principal). Title still says 14; eleven shipped ' +
       '(owner decision). STILL NOT done: §13 sockets `socket.payfac-settling-party-partner` + `socket.payfac-split-fee-recipes` ' +
       '(no invent settling partner / split-fee recipes). Trees + journal + REST permissions #1741. Not full underwriting.',
