@@ -639,7 +639,7 @@ export const FEATURES = [
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.psp'],
     requires: [
@@ -648,10 +648,10 @@ export const FEATURES = [
       'docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md',
     ],
     note:
-      '**DONE 2026-08-12 (D26-P1-P2):** Honest partial + §13 — REST /v1/submerchant-permissions/* + shared surface→area map ' +
-      '(#1741) · trees + area fence on money paths · named sockets `socket.payfac-settling-party-partner` + ' +
-      '`socket.payfac-split-fee-recipes`. Title "14 areas" is historical; eleven shipped. Public-door: ' +
-      '`public-rest.payfac-permissions.test.ts`. Not full underwriting / invent fee splits.',
+      '**READY 2026-08-16 (#2210)** — REST + tRPC money doors now read `PAYFAC_SURFACE_AREAS` ' +
+      '(ancestor-or-self + area). Hosted `checkout.open` stays public (payer, no principal). Title still says 14; eleven shipped ' +
+      '(owner decision). STILL NOT done: §13 sockets `socket.payfac-settling-party-partner` + `socket.payfac-split-fee-recipes` ' +
+      '(no invent settling partner / split-fee recipes). Trees + journal + REST permissions #1741. Not full underwriting.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
