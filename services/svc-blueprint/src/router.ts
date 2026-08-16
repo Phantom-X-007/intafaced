@@ -12,6 +12,7 @@ import {
   onboardOutput,
   setVisibilityInput,
 } from '@intafaced/contracts';
+import { AttestationSurfaceError } from './attestations/zero-pii.js';
 import { BlueprintError, type BlueprintService } from './blueprint-service.js';
 
 /**
@@ -36,6 +37,9 @@ import { BlueprintError, type BlueprintService } from './blueprint-service.js';
  */
 
 function toTrpcError(err: unknown): TRPCError {
+  if (err instanceof AttestationSurfaceError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
   if (!(err instanceof BlueprintError)) {
     return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
   }

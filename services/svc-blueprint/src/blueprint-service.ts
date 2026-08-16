@@ -19,6 +19,7 @@ import {
   type Visibility,
 } from '@intafaced/contracts';
 import { composeCard } from './card/compose.js';
+import { assertZeroPiiSurface } from './attestations/zero-pii.js';
 import { mayViewCard } from './visibility.js';
 import type { CardRenderer } from './card/card-renderer.js';
 import { EngineProtocolError, EngineUnavailableError, type BlueprintRequest, type NeuralEngineClient } from './engine/neural-engine.js';
@@ -612,7 +613,9 @@ export class BlueprintService implements BlueprintContract {
     const raster = await this.renderer.rasterize({ svg, size, width, height, blueprintId: blueprint.id });
 
     const shareMode = raster.status === 'rendered' ? 'png' : 'svg';
-    return { size, width, height, svg, raster, shareMode };
+    const render: CardRender = { size, width, height, svg, raster, shareMode };
+    assertZeroPiiSurface('card.render', render);
+    return render;
   }
 
   /**
