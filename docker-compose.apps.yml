@@ -614,6 +614,11 @@ services:
       # restart. No rate, APY, or schedule is named here (empty must not invent).
       SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
+      # Earn-pool interest accrual kill. env.ts already names this (default true);
+      # without compose pass-through a host `.env` never reaches the container and
+      # cannot halt a runaway payout. Loan interest stays BANK.LOANS
+      # (LOAN_ACCRUAL_ENABLED) — not named here. No APY or pool rate is invented.
+      INTEREST_ACCRUAL_ENABLED: ${INTEREST_ACCRUAL_ENABLED:-true}
       # Loans module kill + collateral-sale sweep. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # BANK_LOANS_ENABLED defaults ON (matches env.ts). LOAN_RISK_SWEEP_ENABLED
