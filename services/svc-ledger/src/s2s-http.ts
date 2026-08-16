@@ -9,6 +9,7 @@ import {
 import {
   formatAmount,
   parseAmount,
+  accountPurpose,
   accountRefSchema,
   postRequestSchema,
   InsufficientFundsError,
@@ -107,9 +108,9 @@ export async function handleS2sBalance(ledger: LedgerService, body: unknown) {
     accountId: balance.accountId,
     assetId: input.assetId,
     kind: input.kind,
-    // Purpose is account IDENTITY (P0-3). See balances mapper for why it must
-    // travel on the wire, not only inside accountId.
-    purpose: input.purpose ?? '',
+    // Purpose is account IDENTITY (P0-3). Canonical trim — echoing the request
+    // string would let padded "order:x " and "order:x" look like two pots.
+    purpose: accountPurpose(input),
     amount: formatAmount(balance.amount),
   };
 }
