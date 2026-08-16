@@ -1472,11 +1472,12 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-support', 'docker-compose.apps.yml'],
     note:
+      '**2026-08-16 process loop (wip, not done):** mounted Fastify/tRPC inject proves ticket create + searchKb/getKb; `/ready` reports process timestamps (zeros until first success). `TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE` stays false (live-env Class X). Vue/SLA residual. ' +
       '**D26-P1-O3 2026-08-15 (desk vs agents.support split):** unstamp `done`. Desk code + compose pin on tip is not a live-env ticket+KB loop; `/health` liveness ≠ served loop (`ticketKbLoopObservedInLiveCompose: false`). ' +
       '`agents.support` is assist, not this mountain. Named refuse `support.identity_grounding_unwired` when INTERNAL_SERVICE_SECRET is blank — not silent `plane_dark`. Vue/admin HUMAN; no invented SLA. ' +
       'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +

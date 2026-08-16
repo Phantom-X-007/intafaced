@@ -28,7 +28,7 @@ describe('D26-P1-O3 desk vs agent surface split', () => {
   });
 
   it('composition root /ready advertises the same stage + identity account source', () => {
-    const src = readFileSync(join(here, 'index.ts'), 'utf8');
+    const src = readFileSync(join(here, 'http-app.ts'), 'utf8');
     expect(src).toMatch(/deskVsAgentSplit/);
     expect(src).toMatch(/stage:\s*split\.stage/);
     expect(src).toMatch(/accountStateSource:\s*split\.accountStateSource/);

@@ -15,6 +15,7 @@ import {
   supportTicketStatusSchema,
 } from '@intafaced/contracts';
 import { SupportError, SupportService, requireSupportOps } from './support-service.js';
+import type { TicketKbLoopObserver } from './ticket-kb-loop-observation.js';
 import { userCopy } from './user-copy.js';
 
 const queueEntrySchema = z.object({
@@ -67,14 +68,16 @@ function mapError(err: unknown): never {
   throw err;
 }
 
-export function createSupportRouter(support: SupportService) {
+export function createSupportRouter(support: SupportService, loop?: TicketKbLoopObserver) {
   return router({
     create: scopedProcedure('support:write')
       .input(createTicketInputSchema)
       .output(supportTicketSchema)
       .mutation(async ({ ctx, input }) => {
         try {
-          return await support.createTicket({ userId: ctx.principal!.userId, ...input });
+          const ticket = await support.createTicket({ userId: ctx.principal!.userId, ...input });
+          loop?.markTicketCreateSuccess();
+          return ticket;
         } catch (err) {
           mapError(err);
         }
@@ -256,7 +259,9 @@ export function createSupportRouter(support: SupportService) {
       .input(z.object({ q: z.string().max(200).optional() }).optional())
       .output(z.array(supportKbArticleSchema))
       .query(async ({ input }) => {
-        return support.searchKb(input?.q ?? '');
+        const found = await support.searchKb(input?.q ?? '');
+        if (found.length > 0) loop?.markKbSearchSuccess();
+        return found;
       }),
 
     /** Single KB article by id — null when missing / unpublished (never invent). */
@@ -264,7 +269,9 @@ export function createSupportRouter(support: SupportService) {
       .input(z.object({ id: z.string().min(1).max(200) }))
       .output(supportKbArticleSchema.nullable())
       .query(async ({ input }) => {
-        return support.getKbArticle(input.id);
+        const article = await support.getKbArticle(input.id);
+        if (article) loop?.markKbGetSuccess();
+        return article;
       }),
 
     /** Operator publish. Bumps revision. Stale baseRevision → CONFLICT. */
