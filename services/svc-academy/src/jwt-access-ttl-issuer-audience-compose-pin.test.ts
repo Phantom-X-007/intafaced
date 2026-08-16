@@ -46,9 +46,7 @@ describe('compose JWT access TTL issuer audience for svc-academy', () => {
   const block = academyServiceBlock(compose);
 
   it('authEnvSchema still defaults 900 / intafaced / intafaced.api', () => {
-    expect(authEnv).toMatch(
-      /JWT_ACCESS_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(3600\)\.default\(900\)/,
-    );
+    expect(authEnv).toMatch(/JWT_ACCESS_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(3600\)\.default\(900\)/);
     expect(authEnv).toMatch(/JWT_ISSUER:\s*z\.string\(\)\.default\('intafaced'\)/);
     expect(authEnv).toMatch(/JWT_AUDIENCE:\s*z\.string\(\)\.default\('intafaced\.api'\)/);
   });
