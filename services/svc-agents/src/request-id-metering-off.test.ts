@@ -62,9 +62,7 @@ describe('request-id replay gate is metering-gated', () => {
     const runtimeSrc = readFileSync(join(HERE, 'runtime.test.ts'), 'utf8');
     expect(runtimeSrc).toContain('D26-P2-01h public doors — real AgentRuntime metering-off');
     expect(runtimeSrc).toContain('run.complete through createCaller never bills / never feeCharges');
-    expect(runtimeSrc).toContain(
-      'run.complete same requestId twice through createCaller never invents a charge or request_id_replay',
-    );
+    expect(runtimeSrc).toContain('run.complete same requestId twice through createCaller never invents a charge or request_id_replay');
   });
 
   it('GET /ready public door pins audit-only when metering is off', () => {
