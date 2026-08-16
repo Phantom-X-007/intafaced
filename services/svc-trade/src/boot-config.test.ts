@@ -611,3 +611,38 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
     expect(compose).toMatch(/TRADE_CONVERT_SPREAD_BPS:\s*\$\{TRADE_CONVERT_SPREAD_BPS:-10\}/);
   });
 });
+
+describe('the shipped configuration passes OTC desk flags into svc-trade', () => {
+  const otcKeys = envTsTradeKeys(/\b(TRADE_OTC_DESK_LAW|TRADE_OTC_MIDS|TRADE_OTC_MID_FROM_VENUE|TRADE_OTC_VENUE_SYMBOLS)\s*:/g);
+
+  it('env.ts still declares the OTC names this pin tracks', () => {
+    expect(otcKeys.sort()).toEqual(['TRADE_OTC_DESK_LAW', 'TRADE_OTC_MIDS', 'TRADE_OTC_MID_FROM_VENUE', 'TRADE_OTC_VENUE_SYMBOLS'].sort());
+  });
+
+  it('compose svc-trade block names every TRADE_OTC_* flag from env.ts', () => {
+    for (const name of otcKeys) {
+      expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
+    }
+  });
+
+  it('lists each svc-trade compose environment key once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container empty law, empty mids, venue OFF, empty symbols on a clean clone', () => {
+    expect(shipped.get('TRADE_OTC_DESK_LAW')).toBe('');
+    expect(shipped.get('TRADE_OTC_MIDS')).toBe('');
+    expect(shipped.get('TRADE_OTC_MID_FROM_VENUE')).toBe('false');
+    expect(shipped.get('TRADE_OTC_VENUE_SYMBOLS')).toBe('');
+  });
+
+  it('compose pins empty law/mids/symbols and venue default false (never invent JSON or mids)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_OTC_DESK_LAW:\s*\$\{TRADE_OTC_DESK_LAW:-\}/);
+    expect(compose).toMatch(/TRADE_OTC_MIDS:\s*\$\{TRADE_OTC_MIDS:-\}/);
+    expect(compose).toMatch(/TRADE_OTC_MID_FROM_VENUE:\s*\$\{TRADE_OTC_MID_FROM_VENUE:-false\}/);
+    expect(compose).toMatch(/TRADE_OTC_VENUE_SYMBOLS:\s*\$\{TRADE_OTC_VENUE_SYMBOLS:-\}/);
+    expect(compose).not.toMatch(/TRADE_OTC_MID_FROM_VENUE:\s*\$\{TRADE_OTC_MID_FROM_VENUE:-true\}/);
+  });
+});
