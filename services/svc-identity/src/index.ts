@@ -14,7 +14,7 @@ import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
 import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
-import { kycRouterBootOptions } from './kyc/boot-vault.js';
+import { bootKycVault } from './kyc/boot-vault.js';
 import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
 import { WaitlistService } from './waitlist/waitlist-service.js';
 import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
@@ -127,11 +127,11 @@ const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TI
 const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET) : undefined;
 
 /**
- * §10 KYC encrypted vault. Unset IDENTITY_KYC_DOC_KEY → no store (procedures
- * named-refuse `[kyc_doc.unwired]`). Set but invalid → boot throws `kyc_doc.key_missing`.
- * Never invent a key. Live vendor webhook remains Class X.
+ * §10 KYC encrypted vault. Unset IDENTITY_KYC_DOC_KEY → vault null (procedures
+ * named-refuse `[kyc_doc.unwired]`). Set but invalid → boot throws `kyc_doc.key_missing`
+ * (not a silent missing store). Never invent a key. Live vendor webhook remains Class X.
  */
-const kycBoot = kycRouterBootOptions(sql, env.IDENTITY_KYC_DOC_KEY);
+const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
 
 const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
   drop: env.LAUNCH_DROP,
@@ -149,7 +149,7 @@ export const appRouter = createIdentityRouter(auth, rank, {
   accruals,
   accrualTierLaw,
   ledger,
-  ...kycBoot,
+  ...(vault ?? {}),
   waitlist,
 });
 export type AppRouter = typeof appRouter;
