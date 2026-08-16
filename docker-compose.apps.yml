@@ -353,6 +353,9 @@ services:
       LEDGER_URL: http://svc-ledger:4001
       IDENTITY_URL: http://svc-identity:4002
       MATCHING_URL: http://svc-matching:4005
+      # Worst price a market BUY may be funded at, above the best ask (env.ts 200 = 2%).
+      # Host `.env` can pin or tighten; compose does not invent a new cap.
+      TRADE_MARKET_SLIPPAGE_CAP_BPS: ${TRADE_MARKET_SLIPPAGE_CAP_BPS:-200}
       # MAY A FUTURES MARKET ACCEPT AN ORDER? Default `false`, and the default is
       # the decision this line exists to make explicit rather than leave to a zod
       # schema nobody reads at deploy time.
@@ -493,6 +496,11 @@ services:
       TRADE_URL: http://svc-trade:4004
       WS_DEPTH_LIMIT: ${WS_DEPTH_LIMIT:-50}
       WS_POLL_INTERVAL_MS: ${WS_POLL_INTERVAL_MS:-250}
+      # Host can pin listing refresh and per-hub socket ceiling. Defaults match
+      # services/svc-ws/src/env.ts (30_000 / 5_000). Without these names, a
+      # host `.env` never reaches the container.
+      WS_MARKETS_REFRESH_MS: ${WS_MARKETS_REFRESH_MS:-30000}
+      WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-5000}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
       # Private /private/stream (#119/#122) needs the SAME JWT material as
       # svc-identity / svc-edge. Without these, privateTokens stays null and

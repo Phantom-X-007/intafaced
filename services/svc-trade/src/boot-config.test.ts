@@ -674,3 +674,37 @@ describe('the shipped configuration passes options settlement-asset-law into svc
     expect(compose).toMatch(/TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:\s*\$\{TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:-\}/);
   });
 });
+
+/**
+ * Market IOC hold cap only reaches the container if compose names it.
+ * env.ts already defaults 200; without this line a host `.env` cannot pin or tighten.
+ */
+describe('the shipped configuration passes TRADE_MARKET_SLIPPAGE_CAP_BPS into svc-trade', () => {
+  const slippageKeys = envTsTradeKeys(/\b(TRADE_MARKET_SLIPPAGE_CAP_BPS)\s*:/g);
+
+  it('env.ts still declares the slippage cap this pin tracks', () => {
+    expect(slippageKeys).toEqual(['TRADE_MARKET_SLIPPAGE_CAP_BPS']);
+  });
+
+  it('declares the env default as 200, matching compose', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_MARKET_SLIPPAGE_CAP_BPS:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_MARKET_SLIPPAGE_CAP_BPS is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(200)');
+  });
+
+  it('compose svc-trade block names TRADE_MARKET_SLIPPAGE_CAP_BPS once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.filter((k) => k === 'TRADE_MARKET_SLIPPAGE_CAP_BPS')).toHaveLength(1);
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container 200 bps on a clean clone', () => {
+    expect(shipped.get('TRADE_MARKET_SLIPPAGE_CAP_BPS')).toBe('200');
+  });
+
+  it('compose defaults the cap to 200 (host can pin or tighten; no invented cap)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_MARKET_SLIPPAGE_CAP_BPS:\s*\$\{TRADE_MARKET_SLIPPAGE_CAP_BPS:-200\}/);
+  });
+});
