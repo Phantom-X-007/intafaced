@@ -1,9 +1,10 @@
 # Claim academy.paper-trading
 
-**status:** claimed
+**status:** pr-open
 **owner:** nitro-agent
 **tracker:** academy.paper-trading
 **branch:** feat/academy-paper-cert-progress
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2208
 **updated:** 2026-08-16
 **Class:** N
 
