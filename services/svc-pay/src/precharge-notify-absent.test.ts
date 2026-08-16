@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { PRECHARGE_NOTIFY_SOCKET, preChargeNotifyGap } from './subscriptions/mandate-product.js';
 
 /**
- * SPEC §4: "Every charge is notified before it lands, not after."
+ * SPEC 4: "Every charge is notified before it lands, not after."
  *
  * Honest residual: the due runner acknowledges `socket.pay-precharge-notify`
  * before openInvoice with `notified: false`. Merchant webhooks fire on payment
@@ -20,16 +20,18 @@ function stripComments(src: string): string {
 }
 
 describe('pre-charge notify ? honest absent', () => {
-  it('names §13 socket.pay-precharge-notify and forbids invent', () => {
+  it('names 13 socket.pay-precharge-notify and forbids invent', () => {
     expect(preChargeNotifyGap().socket).toBe(PRECHARGE_NOTIFY_SOCKET);
     expect(preChargeNotifyGap().status).toBe('absent');
     expect(preChargeNotifyGap().inventForbidden).toBe(true);
     expect(preChargeNotifyGap().notified).toBe(false);
+    expect(preChargeNotifyGap().code).toBe('pay.precharge_notify_unpublished');
   });
 
   it('subscription fire path acknowledges the gap then opens invoice ? no invent delivery', () => {
     const fire = stripComments(readFileSync(join(here, 'subscriptions/subscription-service.ts'), 'utf8'));
     expect(fire).toMatch(/acknowledgePreChargeNotifyBeforeCharge/);
+    expect(fire).toMatch(/assertPrechargeNotifyUnpublished/);
     expect(fire).toMatch(/mandateChargeDisposition/);
     expect(fire).toMatch(/openInvoice/);
     // Invent-shaped call sites only. Do not match substrings inside

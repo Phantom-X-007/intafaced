@@ -243,6 +243,7 @@ if (!available) {
         socket: CARD_MANDATE_CHARGE_SOCKET,
       });
       expect(data.preChargeNotify.notified).toBe(false);
+      expect(data.preChargeNotify.code).toBe('pay.precharge_notify_unpublished');
       expect(data.preChargeNotify.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
       expect(data.dunning.maxAttemptsPerCycle).toBe(MAX_ATTEMPTS_PER_CYCLE);
       expect(mandateChargeDisposition('card').kind).toBe('refuse');
@@ -284,9 +285,14 @@ if (!available) {
         payload: {},
       });
       expect(fire.statusCode).toBe(200);
-      const fireBody = fire.json() as { fired: number; outcomes: Array<{ outcome: string }> };
+      const fireBody = fire.json() as {
+        fired: number;
+        outcomes: Array<{ outcome: string; noticeCode?: string; rejectionCode?: string }>;
+      };
       expect(fireBody.fired).toBe(1);
       expect(fireBody.outcomes[0]!.outcome).toBe('invoiced');
+      expect(fireBody.outcomes[0]!.noticeCode).toBe('pay.precharge_notify_unpublished');
+      expect(fireBody.outcomes[0]!.rejectionCode).toBeUndefined();
       expect(opened).toHaveLength(1);
 
       const cyclesBefore = await get(app, 'subscription.cycles', { subscriptionId: sub.id });

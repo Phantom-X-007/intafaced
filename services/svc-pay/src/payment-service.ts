@@ -221,6 +221,13 @@ export type PayErrorCode =
   | 'pay.subscription_invalid'
   | 'pay.subscription_driver_absent'
   | 'pay.mandate_rail_absent'
+  /**
+   * Recurring pre-charge notify is unpublished (`socket.pay-precharge-notify`).
+   * Named refuse when a path would invent delivery or claim `notified: true`.
+   * Crypto invoice-and-watch still opens an invoice; it must carry this code
+   * on the cycle report so the gap is never a silent skip.
+   */
+  | 'pay.precharge_notify_unpublished'
   // ── Recurring charge cycle (`subscriptions/charge-cycle.ts`) ──
   /**
    * The charge is larger than the mandate authorises, or falls outside its
