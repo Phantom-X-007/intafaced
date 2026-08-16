@@ -363,6 +363,29 @@ describe('D26-P2-01h public doors — metering-off never feeCharges', () => {
     expect(meterSettleCalls).toEqual([]);
   });
 
+  it('run.complete same requestId twice never calls meter.settle', async () => {
+    const { deps, meterSettleCalls } = meteringOffDeps();
+    const caller = createAgentsRouter(deps).createCaller(signed());
+    const first = await caller.run.complete({
+      sessionId: SESSION,
+      requestId: 'req-metering-off-replay',
+      task: 'plan',
+      messages: [{ role: 'user', content: 'replay while billing is off' }],
+    });
+    const second = await caller.run.complete({
+      sessionId: SESSION,
+      requestId: 'req-metering-off-replay',
+      task: 'plan',
+      messages: [{ role: 'user', content: 'replay while billing is off' }],
+    });
+
+    expect(first.metered).toBe(false);
+    expect(second.metered).toBe(false);
+    expect(first.cost).toBe('0');
+    expect(second.cost).toBe('0');
+    expect(meterSettleCalls).toEqual([]);
+  });
+
   it('router never posts feeCharge itself — settle doors only call runtime', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
     expect(src).not.toMatch(/recipes\.feeCharge/);

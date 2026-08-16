@@ -1,5 +1,6 @@
 import { isUsable, supports, type ModelProvider } from './providers/provider.js';
 import type { RoutingTable } from './gateway/routing.js';
+import { meteringPublicCard, type MeteringPublicMode } from './metering/product-law.js';
 
 /**
  * HONEST READINESS FOR svc-agents (Board Clear A-P5-AGENTS).
@@ -80,6 +81,10 @@ export interface AgentsReadiness {
   readonly providerMode: ProviderMode;
   readonly providers: readonly ProviderReadiness[];
   readonly meteringEnabled: boolean;
+  /** D26-P1-A6: `audit_only` when the kill-switch is off — never silent feeCharge. */
+  readonly meteringMode: MeteringPublicMode;
+  /** Forever false while metering is off. */
+  readonly meteringAllowsFeeCharge: boolean;
   readonly tasks: readonly string[];
   /** Product guardrails written at boot — not the same as live inference. */
   readonly productAgentsRegistered: number;
@@ -157,11 +162,15 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     }
   }
 
+  const metering = meteringPublicCard(input.meteringEnabled);
+
   return {
     ready: true,
     providerMode: input.providerMode,
     providers,
-    meteringEnabled: input.meteringEnabled,
+    meteringEnabled: metering.meteringEnabled,
+    meteringMode: metering.meteringMode,
+    meteringAllowsFeeCharge: metering.meteringAllowsFeeCharge,
     tasks,
     productAgentsRegistered,
     fleet,

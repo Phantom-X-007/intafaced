@@ -84,6 +84,8 @@ describe('agentsReadiness — honest about mock vs useful', () => {
     expect(status.ready).toBe(true);
     expect(status.providerMode).toBe('mock');
     expect(status.meteringEnabled).toBe(true);
+    expect(status.meteringMode).toBe('billed');
+    expect(status.meteringAllowsFeeCharge).toBe(true);
     expect(status.tasks).toEqual(['support.classify', 'index.embed']);
     expect(status.usefulPath.available).toBe(true);
     expect(status.usefulPath.task).toBe('support.classify');
@@ -150,6 +152,8 @@ describe('agentsReadiness — honest about mock vs useful', () => {
     expect(status.usefulPath.available).toBe(false);
     expect(status.usefulPath.residual).toMatch(/not registered/);
     expect(status.meteringEnabled).toBe(false);
+    expect(status.meteringMode).toBe('audit_only');
+    expect(status.meteringAllowsFeeCharge).toBe(false);
   });
 
   it('never puts a vendor product name on the readiness body', () => {
@@ -200,5 +204,34 @@ describe('L3 wave54 agents readiness status/export', () => {
     if (r.usefulPath.available) {
       expect(isMockEngineResidual(r)).toBe(true);
     }
+    expect(r.meteringMode).toBe('audit_only');
+    expect(r.meteringAllowsFeeCharge).toBe(false);
+  });
+});
+
+describe('D26-P1-A6 public /ready door — metering-off never advertises feeCharge', () => {
+  it('kill-switch off is audit_only and meteringAllowsFeeCharge is false', () => {
+    const status = agentsReadiness({
+      providerMode: 'mock',
+      providers: [new MockModelProvider({ id: 'primary' })],
+      table: TABLE,
+      meteringEnabled: false,
+    });
+    expect(status.meteringEnabled).toBe(false);
+    expect(status.meteringMode).toBe('audit_only');
+    expect(status.meteringAllowsFeeCharge).toBe(false);
+  });
+
+  it('would fail if metering-off still claimed a feeCharge door', () => {
+    const status = agentsReadiness({
+      providerMode: 'upstream',
+      providers: [new MockModelProvider({ id: 'primary' })],
+      table: TABLE,
+      meteringEnabled: false,
+    });
+    // Process-ready + useful path must not be readable as billed.
+    expect(status.ready).toBe(true);
+    expect(status.meteringAllowsFeeCharge).toBe(false);
+    expect(JSON.stringify(status)).not.toMatch(/"meteringAllowsFeeCharge":true/);
   });
 });

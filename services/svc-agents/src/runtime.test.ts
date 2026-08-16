@@ -1009,6 +1009,33 @@ if (!available) {
       expect(usageRows).toHaveLength(0);
     });
 
+    it('run.complete same requestId twice through createCaller never invents a charge or request_id_replay', async () => {
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await off.openSession({ userId: USER_A, agentId: 'probe' });
+      const caller = createAgentsRouter(routerDeps(off)).createCaller(doorsSigned());
+      const first = await caller.run.complete({
+        sessionId: session.id,
+        requestId: 'doors-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      const second = await caller.run.complete({
+        sessionId: session.id,
+        requestId: 'doors-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+
+      expect(first.metered).toBe(false);
+      expect(second.metered).toBe(false);
+      expect(first.cost).toBe('0');
+      expect(second.cost).toBe('0');
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+    });
+
     it('usage.settle / settleSession / session.close refuse leftover windows without feeCharge', async () => {
       const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
       const session = await on.openSession({ userId: USER_A, agentId: 'probe' });

@@ -83,7 +83,9 @@ Also `GET /health` and `GET /ready`.
 | `ready`                | Process is up (schema + listen succeeded). Always true after boot.                                  |
 | `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**                               |
 | `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).                                     |
-| `meteringEnabled`      | Billing kill-switch. When off: no bill; token counts stay on the action audit only.                 |
+| `meteringEnabled`      | Billing kill-switch. When off (D26-P1-A6): audit-only forever — no usage_records, no feeCharge.     |
+| `meteringMode`         | `billed` when the kill-switch is on; `audit_only` when off.                                         |
+| `meteringAllowsFeeCharge` | Forever `false` while metering is off. Process-ready is not a silent bill.                       |
 | `fleet`                | Stage-1 matrix card (agents / runSession / bootRegistered / missing routes). Zeros if not supplied. |
 | `tasks`                | Routing task ids currently configured.                                                              |
 | `usefulPath.available` | Whether a **completion** can leave this process right now.                                          |
