@@ -342,10 +342,7 @@ export class CommerceService {
    * skips the router still cannot invent a charge or a second book.
    */
   async subscribe(_input?: { listingId?: string }): Promise<never> {
-    throw new MarketError(
-      'Subscription purchase is not built yet (market.commerce Stage 3 residual)',
-      'market.subscription_not_built',
-    );
+    throw new MarketError('Subscription purchase is not built yet (market.commerce Stage 3 residual)', 'market.subscription_not_built');
   }
 
   /**

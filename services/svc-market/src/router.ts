@@ -432,18 +432,13 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
      * Public so a missing procedure cannot be mistaken for a 404 bug.
      * Does not call purchase / ledger; does not invent commission.
      */
-    subscribe: publicProcedure
-      .input(z.object({ listingId: z.string().uuid().optional() }).optional())
-      .mutation(async () => {
-        try {
-          throw new MarketError(
-            'Subscription purchase is not built yet (market.commerce Stage 3 residual)',
-            'market.subscription_not_built',
-          );
-        } catch (err) {
-          mapError(err);
-        }
-      }),
+    subscribe: publicProcedure.input(z.object({ listingId: z.string().uuid().optional() }).optional()).mutation(async () => {
+      try {
+        throw new MarketError('Subscription purchase is not built yet (market.commerce Stage 3 residual)', 'market.subscription_not_built');
+      } catch (err) {
+        mapError(err);
+      }
+    }),
 
     /**
      * One-time purchase. `purchaseId` is client-supplied so a retry is the same
