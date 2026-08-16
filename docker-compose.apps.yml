@@ -981,6 +981,12 @@ services:
       # localhost:4001 which is unreachable inside the compose network — purchase
       # would invent a broken settle path instead of posting marketPurchase.
       LEDGER_URL: http://svc-ledger:4001
+      # Access-token lifetime / iss / aud match identity + authEnvSchema defaults.
+      # Host `.env` can pin them; without these lines the container keeps schema-only
+      # 900 / intafaced / intafaced.api. Do not raise TTL above 900 here.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # D26-P0-02 owner click 2026-08-13: explicit free-cut via host env.
       # Pass-through only — no compose default. Silence still refuses
       # market.commission_not_configured. Copy .env.example → .env for 0.
