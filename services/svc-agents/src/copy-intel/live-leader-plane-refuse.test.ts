@@ -90,7 +90,7 @@ describe('copy-intel live leader plane pin (Class X / no invent)', () => {
     expect(() => presentLiveLeaderBoard(ranked, { rankBy: 'realisedPnl' })).toThrow(AgentError);
     expect(presentLiveLeaderBoard(ranked, { leaderAllowlist: ['ghost-high'] })).toEqual({
       status: 'refuse',
-      reason: 'marketing_board',
+      reason: 'no_live_leaders',
       userMessageKey: 'agents.copy_intel.unavailable',
     });
   });

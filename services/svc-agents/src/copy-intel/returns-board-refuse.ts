@@ -9,8 +9,23 @@
 import { AgentError } from '../errors.js';
 import type { IntelOk, IntelResult, LeaderStat } from './stats.js';
 
-/** Rank keys that would produce a returns-ranked marketing board. */
-export const FORBIDDEN_RETURNS_RANK_KEYS = ['realisedPnl', 'winRate', 'returns', 'pnl', 'performance', 'profit', 'roi'] as const;
+/** Rank keys that would produce a returns-ranked marketing board. Named refuse surface. */
+export const FORBIDDEN_RETURNS_RANK_KEYS = [
+  'realisedPnl',
+  'realizedPnl',
+  'winRate',
+  'win_rate',
+  'returns',
+  'return',
+  'pnl',
+  'performance',
+  'profit',
+  'roi',
+  'rank',
+] as const;
+
+/** Machine reason on the named throw (`rankLeadersByReturns`). */
+export const RETURNS_RANKED_BOARD_REFUSE_REASON = 'returns_ranked_board_forbidden' as const;
 
 export type ForbiddenReturnsRankKey = (typeof FORBIDDEN_RETURNS_RANK_KEYS)[number];
 
@@ -30,13 +45,18 @@ export function refuseReturnsRankedMarketingBoard(rankBy = 'returns'): never {
     `Returns-ranked marketing board refused (rankBy=${rankBy}) — D26-P1-A5 / SPEC-SOVEREIGN §4; audited stats only, never sort by PnL or win rate`,
     'agents.refused',
     'agents.copy_intel.unavailable',
-    { reason: 'returns_ranked_board_forbidden', rankBy },
+    { reason: RETURNS_RANKED_BOARD_REFUSE_REASON, rankBy },
   );
 }
 
 /** Named mountain surface — same refuse as trade.copy ranking ban. */
 export function rankLeadersByReturns(): never {
   return refuseReturnsRankedMarketingBoard('returns');
+}
+
+/** Alias — the board named `returnsRankedBoard` always refuses. */
+export function returnsRankedBoard(): never {
+  return rankLeadersByReturns();
 }
 
 /**
