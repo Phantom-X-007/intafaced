@@ -7,13 +7,14 @@
  * 2. Break: compose booted bank without BANK_LOANS_ENABLED → operator stop
  *    is a no-op; without an explicit false default, sweep could inherit ON.
  * 3. Done bar: docker-compose.apps.yml svc-bank has
- *    BANK_LOANS_ENABLED: ${BANK_LOANS_ENABLED:-true} and
- *    LOAN_RISK_SWEEP_ENABLED: ${LOAN_RISK_SWEEP_ENABLED:-false}
+ *    BANK_LOANS_ENABLED: ${BANK_LOANS_ENABLED:-true},
+ *    LOAN_RISK_SWEEP_ENABLED: ${LOAN_RISK_SWEEP_ENABLED:-false},
+ *    TRADE_URL: http://svc-trade:4004 and depends_on svc-trade healthy
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-bank block only)
- * 6. RED: pin fails if either name drops off the svc-bank service block or
- *    the sweep default flips to true
- * 7. Collision: jobs-compose-pin.test.ts — this pin only names loans keys
+ * 6. RED: pin fails if loans keys drop off, sweep default flips to true,
+ *    or TRADE_URL stays localhost (marks stay bank.mark_missing)
+ * 7. Collision: jobs-compose-pin.test.ts — this pin only names loans + TRADE_URL
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -52,6 +53,12 @@ describe('compose loans kill-switches for svc-bank', () => {
     const sweepHits = compose.match(/^\s+LOAN_RISK_SWEEP_ENABLED:/gm) ?? [];
     expect(loansHits, 'BANK_LOANS_ENABLED must appear once (svc-bank only)').toHaveLength(1);
     expect(sweepHits, 'LOAN_RISK_SWEEP_ENABLED must appear once (svc-bank only)').toHaveLength(1);
+  });
+
+  it('wires svc-bank TRADE_URL to the trade public surface (not localhost)', () => {
+    expect(block).toMatch(/TRADE_URL:\s*http:\/\/svc-trade:4004/);
+    expect(block).not.toMatch(/TRADE_URL:\s*http:\/\/localhost:4004/);
+    expect(block).toMatch(/svc-trade:\s*\n\s*condition:\s*service_healthy/);
   });
 
   it('does not invent LTV, a price source, or a liquidation venue on the compose block', () => {
