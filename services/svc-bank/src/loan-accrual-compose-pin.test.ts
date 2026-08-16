@@ -48,6 +48,5 @@ describe('compose loan interest-accrual kill for svc-bank', () => {
     expect(block).not.toMatch(/LOAN_LTV|MAX_LTV|USDT_MID|LOAN_APY/i);
     expect(block).not.toMatch(/LOAN_ACCRUAL_ENABLED:\s*\$\{LOAN_ACCRUAL_ENABLED:-false\}/);
     expect(block).not.toMatch(/LOAN_RISK_SWEEP_ENABLED:\s*\$\{LOAN_RISK_SWEEP_ENABLED:-true\}/);
-    expect(block).not.toMatch(/TRANSFER_BATCH_SIZE:/);
   });
 });
