@@ -594,6 +594,10 @@ services:
       HTTP_PORT: '4009'
       DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
+      # Loan LTV marks read svc-trade public REST. env.ts defaults to
+      # http://localhost:4004, which is unreachable inside compose and leaves
+      # every mark as bank.mark_missing. Same surface notify already uses.
+      TRADE_URL: http://svc-trade:4004
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
       # `none` means this deployment has NO CARD PROGRAMME, and every card
       # procedure refuses `bank.no_card_issuer` by name. The only other value is
@@ -610,6 +614,13 @@ services:
       # restart. No rate, APY, or schedule is named here (empty must not invent).
       SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
+      # Loans module kill + collateral-sale sweep. env.ts already names these;
+      # without compose pass-through a host `.env` never reaches the container.
+      # BANK_LOANS_ENABLED defaults ON (matches env.ts). LOAN_RISK_SWEEP_ENABLED
+      # MUST stay default OFF — a host must not inherit a schema flip that sells
+      # collateral. No LTV, price source, or liquidation venue is named here.
+      BANK_LOANS_ENABLED: ${BANK_LOANS_ENABLED:-true}
+      LOAN_RISK_SWEEP_ENABLED: ${LOAN_RISK_SWEEP_ENABLED:-false}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4009']
     healthcheck: *healthcheck
@@ -620,6 +631,9 @@ services:
       # transport is a grace clock running against a borrower who was never told.
       <<: [*needs-schema, *needs-bus]
       svc-ledger:
+        condition: service_healthy
+      # Compose sets TRADE_URL, so trade must be answerable for LTV marks.
+      svc-trade:
         condition: service_healthy
 
   # ── The AI gateway socket (docs/AI-GATEWAY-SOCKET.md) ─────────────────────
