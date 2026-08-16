@@ -2315,6 +2315,67 @@ if (!available) {
       });
     });
 
+    it('live-only money doors: none/pending/rejected refuse; operator decideKyb approved passes KYB gate', async () => {
+      const livePay = new PayService(sql, ledger, rails, {
+        valueMovement: 'live-only',
+        // Isolate Layer B KYB from public-rail posture (crypto MemoryChain is not a live rail).
+        publicCheckoutMovement: 'allow-sandbox',
+        checkoutRails: [{ railId: 'crypto-native', method: 'crypto' }],
+        checkoutRiskBand: 'low',
+      });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      const createArgs = {
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'crypto' as const,
+        railAdapter: 'crypto-native',
+      };
+
+      await expect(livePay.createPayment(createArgs)).rejects.toMatchObject({ code: 'pay.kyb_required' });
+
+      // Link minted on the sandbox fixture instance so we can prove checkout KYB
+      // without the live-only createPaymentLink gate blocking the setup.
+      const link = await pay.createPaymentLink({
+        merchantId: m.id,
+        label: 'Live KYB checkout',
+        amount: amt('10'),
+        currency: 'USDT',
+      });
+      const openArgs = { linkToken: link.token, geoCountry: 'DE' };
+      await expect(livePay.openCheckoutSession(openArgs)).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-live-ops' });
+      expect((await livePay.getMerchant(m.id)).kybStatus).toBe('pending');
+      await expect(livePay.createPayment(createArgs)).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      await expect(livePay.openCheckoutSession(openArgs)).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+      await expect(livePay.decideKybStub({ merchantId: m.id, decision: 'rejected' })).rejects.toMatchObject({
+        code: 'pay.kyb_operator_required',
+      });
+
+      const rejected = await livePay.decideKyb({ merchantId: m.id, decision: 'rejected' });
+      expect(rejected.kybStatus).toBe('rejected');
+      await expect(livePay.createPayment(createArgs)).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      await expect(livePay.openCheckoutSession(openArgs)).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-live-ops-2' });
+      const approved = await livePay.decideKyb({ merchantId: m.id, decision: 'approved' });
+      expect(approved.kybStatus).toBe('approved');
+      expect(approved.kybRef).toBe('case-live-ops-2');
+
+      const payment = await livePay.createPayment(createArgs);
+      expect(payment.status).toBe('created');
+
+      const { session } = await livePay.openCheckoutSession(openArgs);
+      expect(session.status).toBe('open');
+    });
+
     it('live-only money door refuses without approved KYB (D26-P1-P10 Layer B)', async () => {
       const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
       const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
@@ -2328,8 +2389,8 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'pay.kyb_required' });
 
-      // Operator-approved KYB (simulated — no invent grant of pay:* scopes).
-      await sql`UPDATE pay.merchants SET kyb_status = 'approved' WHERE id = ${m.id}`;
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-p10' });
+      await livePay.decideKyb({ merchantId: m.id, decision: 'approved' });
       const payment = await livePay.createPayment({
         merchantId: m.id,
         amount: amt('10'),
