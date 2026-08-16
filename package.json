@@ -35,6 +35,7 @@
     "scan:agent-autoload": "node tooling/ci/agent-autoload-scan.mjs",
     "graphify:extract": "graphify extract . --no-cluster && graphify cluster-only . --no-label --no-viz && graphify export html",
     "graphify:update": "graphify update .",
+    "graphify:peace": "node tooling/scripts/graphify-peace-check.mjs",
     "gates": "node tooling/ci/gates.mjs",
     "value-gate:self-test": "node tooling/ci/value-gate.mjs --self-test",
     "pr": "node tooling/scripts/agent-pr.mjs",

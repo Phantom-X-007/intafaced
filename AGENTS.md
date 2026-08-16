@@ -302,6 +302,8 @@ Rules:
 
 - **First build in a worktree:** `graphify extract .` (AST only, no API key). `.graphifyignore` allowlists `services/` + `packages/` and excludes markdown / paste walls / vendor.
 - **After that:** `graphify query` / `path` / `explain`. Then open the one source file you will edit.
+- If extract/update prints `Operation not permitted`, retry with `GRAPHIFY_MAX_WORKERS=1`.
+- After a cook, or when Nitro says **graphify peace**: run `pnpm graphify:peace` and report the RESULT line.
 - The official git hook skips linked worktrees (`git-dir != common-dir`). This repo works in worktrees — **you** run `graphify update .` after code changes. Do not wait for Nitro.
 - Graph is a map, not law. `AGENTS.md` / doctrine / live `gh` win on ownership, money, and tip state.
 - Never ingest `docs/paste-w*` or old boards into the graph.
