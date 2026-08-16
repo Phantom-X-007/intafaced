@@ -12,14 +12,58 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat/bank-user-to-user-transfer
-      - name: apply patch and self-delete
+      - name: apply python edits and self-delete
         run: |
           set -euo pipefail
-          if [ ! -f services/svc-bank/scripts/user-transfer.patch ]; then
-            echo already applied
-            exit 0
-          fi
-          git apply services/svc-bank/scripts/user-transfer.patch
+          python3 << 'PY'
+          from pathlib import Path
+
+          p = Path('services/svc-bank/src/errors.ts')
+          t = p.read_text()
+          old = """  | 'bank.withdraw_destination_missing'\n  /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */"""
+          new = """  | 'bank.withdraw_destination_missing'\n  /** Dest user has no primary space — refuse before ledger-client posts. */\n  | 'bank.dest_user_missing'\n  /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */"""
+          if old not in t:
+              raise SystemExit('errors anchor missing')
+          p.write_text(t.replace(old, new, 1))
+
+          p = Path('services/svc-bank/src/spaces/space-service.ts')
+          t = p.read_text()
+          old = """    if (!row) throw new BankError(`Could not resolve the primary ${assetId} space for ${userId}`, 'bank.space_not_found');\n    return toRecord(row);\n  }\n\n  async create(input: {"""
+          new = """    if (!row) throw new BankError(`Could not resolve the primary ${assetId} space for ${userId}`, 'bank.space_not_found');\n    return toRecord(row);\n  }\n\n  /** Lookup only. Does not invent a dest user or a primary space. */\n  async findPrimary(userId: string, assetId: string): Promise<SpaceRecord | null> {\n    const id = userId.trim();\n    if (!id) return null;\n    const rows = await this.sql<SpaceRow[]>`\n      SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at\n        FROM bank.spaces\n       WHERE user_id = ${id} AND asset_id = ${assetId} AND kind = 'primary' AND archived_at IS NULL\n    `;\n    const row = rows[0];\n    return row ? toRecord(row) : null;\n  }\n\n  async create(input: {"""
+          if old not in t:
+              raise SystemExit('space-service anchor missing')
+          p.write_text(t.replace(old, new, 1))
+
+          p = Path('services/svc-bank/src/transfers/transfer-service.ts')
+          t = p.read_text()
+          old = """        return { transferId: input.transferId, occurrence: 0, ledgerTxId: tx.id, amount: formatAmount(input.amount) };\n      },\n    );\n  }\n\n  // ── Standing orders"""
+          new = """        return { transferId: input.transferId, occurrence: 0, ledgerTxId: tx.id, amount: formatAmount(input.amount) };\n      },\n    );\n  }\n\n  async transferToUser(input: {\n    transferId: string;\n    fromSpaceId: string;\n    toUserId: string;\n    amount: Amount;\n    now?: Date;\n  }): Promise<TransferResult> {\n    const now = input.now ?? new Date();\n    return withMoneySpan(\n      'bank.transferToUser',\n      { operation: 'transfer', amount: formatAmount(input.amount), spaceId: input.fromSpaceId },\n      async () => {\n        const destUserId = input.toUserId.trim();\n        const from = await this.spaces.resolveForDebit(input.fromSpaceId, now);\n        const dest = destUserId ? await this.spaces.findPrimary(destUserId, from.assetId) : null;\n        if (!dest) {\n          throw new BankError(\n            `Dest user ${destUserId || '(empty)'} has no primary ${from.assetId} space — transfer refused`,\n            'bank.dest_user_missing',\n          );\n        }\n        return this.transfer({\n          transferId: input.transferId,\n          fromSpaceId: input.fromSpaceId,\n          toSpaceId: dest.id,\n          amount: input.amount,\n          now,\n        });\n      },\n    );\n  }\n\n  // ── Standing orders"""
+          if old not in t:
+              raise SystemExit('transfer-service anchor missing')
+          p.write_text(t.replace(old, new, 1))
+
+          p = Path('services/svc-bank/src/router.ts')
+          t = p.read_text()
+          old = """      case 'bank.withdraw_destination_missing':\n      case 'bank.earn_rate_unset':"""
+          new = """      case 'bank.withdraw_destination_missing':\n      case 'bank.dest_user_missing':\n      case 'bank.earn_rate_unset':"""
+          if old not in t:
+              raise SystemExit('router error map missing')
+          t = t.replace(old, new, 1)
+          old = """          return { ledgerTxId: result.ledgerTxId, amount: result.amount };\n        }),\n      ),\n\n    schedule: scopedProcedure('bank:write', { module: 'bank' })"""
+          new = """          return { ledgerTxId: result.ledgerTxId, amount: result.amount };\n        }),\n      ),\n\n    toUser: scopedProcedure('bank:write', { module: 'bank' })\n      .input(\n        z.object({\n          transferId: z.string().min(8).max(64),\n          fromSpaceId: z.string().uuid(),\n          toUserId: z.string().min(1).max(64),\n          amount: amountString,\n        }),\n      )\n      .output(z.object({ ledgerTxId: z.string(), amount: amountString }))\n      .mutation(async ({ ctx, input }) =>\n        guard(async () => {\n          const from = await bank.spaces.get(input.fromSpaceId);\n          assertSelf(ctx.principal.userId, from.userId);\n          const result = await bank.transfers.transferToUser({\n            transferId: input.transferId,\n            fromSpaceId: input.fromSpaceId,\n            toUserId: input.toUserId,\n            amount: parseAmount(input.amount),\n          });\n          return { ledgerTxId: result.ledgerTxId, amount: result.amount };\n        }),\n      ),\n\n    schedule: scopedProcedure('bank:write', { module: 'bank' })"""
+          if old not in t:
+              raise SystemExit('router create/schedule missing')
+          p.write_text(t.replace(old, new, 1))
+
+          p = Path('services/svc-bank/src/bank-service.test.ts')
+          t = p.read_text()
+          old = """      expect(await availableOf(USER_B, 'USDT')).toBe('80');\n      expect(ledger.totalsByAsset().USDT).toBe('0');\n    });\n  });\n\n  // ══ Scheduled transfers"""
+          new = """      expect(await availableOf(USER_B, 'USDT')).toBe('80');\n      expect(ledger.totalsByAsset().USDT).toBe('0');\n    });\n\n    it('refuses user-to-user transfer when dest user is missing — nothing posted', async () => {\n      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');\n      await fund(USER_A, 'USDT', '50');\n      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);\n      await expect(\n        bank.transfers.transferToUser({\n          transferId: 'user-transfer-missing',\n          fromSpaceId: a.id,\n          toUserId: USER_C,\n          amount: amt('10'),\n        }),\n      ).rejects.toMatchObject({ code: 'bank.dest_user_missing' });\n      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);\n      expect(await availableOf(USER_A, 'USDT')).toBe('50');\n    });\n\n    it('transfers to the dest user through ledger-client', async () => {\n      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');\n      await bank.spaces.ensurePrimary(USER_B, 'USDT');\n      await fund(USER_A, 'USDT', '25');\n      const moved = await bank.transfers.transferToUser({\n        transferId: 'user-transfer-stored',\n        fromSpaceId: a.id,\n        toUserId: USER_B,\n        amount: amt('25'),\n      });\n      expect(moved.amount).toBe('25');\n      expect(moved.ledgerTxId).toBeTruthy();\n      expect(ledger.journal().some((tx) => tx.idempotencyKey.includes('user-transfer-stored'))).toBe(true);\n      expect(await availableOf(USER_A, 'USDT')).toBe('0');\n      expect(await availableOf(USER_B, 'USDT')).toBe('25');\n      expect(ledger.reconcile()).toEqual({ ok: true });\n    });\n  });\n\n  // ══ Scheduled transfers"""
+          if old not in t:
+              raise SystemExit('test anchor missing')
+          p.write_text(t.replace(old, new, 1))
+          print('applied')
+          PY
           rm -f services/svc-bank/scripts/user-transfer.patch
           rm -f .github/workflows/wire-bank-user-transfer-once.yml
           git config user.name "Sovereign Builder"
