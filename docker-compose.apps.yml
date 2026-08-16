@@ -423,6 +423,12 @@ services:
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
       # listing. Opaque stamp only — never invent fixing source/window/payor.
       TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}
+      # OTC RFQ desk (trade.otc). Empty law = unpublished refuse. Host `.env`
+      # can publish; compose never invents desk JSON, mids, or symbols.
+      TRADE_OTC_DESK_LAW: ${TRADE_OTC_DESK_LAW:-}
+      TRADE_OTC_MIDS: ${TRADE_OTC_MIDS:-}
+      TRADE_OTC_MID_FROM_VENUE: ${TRADE_OTC_MID_FROM_VENUE:-false}
+      TRADE_OTC_VENUE_SYMBOLS: ${TRADE_OTC_VENUE_SYMBOLS:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4004']
     healthcheck: *healthcheck
