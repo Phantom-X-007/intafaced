@@ -22,7 +22,7 @@ This is settled. Agents do not write those words into user-facing copy to make a
 
 #1749 already landed the scan. The packet row still pointed at the open-shape human packet, so a later craft PR could treat D26-P0-16 as “gate exists, invent the claim.” The owner seal is: **words stay banned until a real owner line is sealed**; the machine check is `marketing-language-scan`.
 
-Honest negation and status fields stay allowed (`not audited`, `audited: false`, i18n keys that only *label* the honesty field). Affirmative copy (`fully audited`, `insured deposits`, `guaranteed yield`) without the marker is refuse.
+Honest negation and status fields stay allowed (`not audited`, `audited: false`, i18n keys that only _label_ the honesty field). Affirmative copy (`fully audited`, `insured deposits`, `guaranteed yield`) without the marker is refuse.
 
 ---
 
@@ -30,7 +30,7 @@ Honest negation and status fields stay allowed (`not audited`, `audited: false`,
 
 1. **Ban + seal.** DIRECTION §8.9 is product law. `OWNER-SEAL(§8.9)` on the claim line or the previous line is the only exception the gate honours.
 2. **Where it walks.** Locale catalogues: `packages/i18n`, vendor shell `05_Web_Front/src/assets/lang`, vendor admin `04_Web_Admin/src/locale` (the tree that actually exists; `assets/lang` under admin is also walked if present). Not every TypeScript comment that says “guaranteed by the primary key.”
-3. **No invented claim.** Sealing this row does not assert an audit happened, that deposits are insured, or that returns are guaranteed. P0-17 (insurance *fund* listing) is a different ruling and is not marketing copy.
+3. **No invented claim.** Sealing this row does not assert an audit happened, that deposits are insured, or that returns are guaranteed. P0-17 (insurance _fund_ listing) is a different ruling and is not marketing copy.
 4. **Vue leftover stays HUMAN.** Hardcoded strings under `nitro-frontend-all` are not rewritten here. The scan reads catalogues; it does not craft Vue.
 
 ---
