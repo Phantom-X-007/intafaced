@@ -11,6 +11,7 @@ import {
   lastErrorServingReason,
   nullChainServingReason,
 } from './serving.js';
+import { userCopy } from './user-copy.js';
 import { withReadSpan } from './tracing.js';
 
 /**
@@ -97,9 +98,9 @@ function toWirePosition(position: PositionRecord): z.infer<typeof positionSchema
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
   if (err instanceof ChainDataError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Indexer request failed', cause: err });
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('indexer.request_failed'), cause: err });
 }
 
 /**

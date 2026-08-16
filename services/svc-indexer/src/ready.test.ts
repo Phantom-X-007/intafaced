@@ -47,8 +47,8 @@ describe('readinessOf — lastError that makes the book untrustworthy', () => {
     expect(answer.httpStatus).toBe(503);
     expect(answer.body.ready).toBe(false);
     if (answer.body.ready) throw new Error('expected 503');
-    expect(answer.body.reason).toMatch(/indexer\.chain_unreachable/);
-    expect(answer.body.reason).toMatch(/no answer from the EVM RPC/);
+    expect(answer.body.reason).toBe('indexer.chain_unreachable');
+    expect(answer.body.reason).not.toMatch(/no answer from the EVM RPC|will not serve/i);
   });
 
   it('returns 503 on startHeight above tip — empty book is not "no orders"', () => {

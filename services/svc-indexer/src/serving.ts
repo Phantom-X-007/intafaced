@@ -1,4 +1,5 @@
 import type { HaltState, SyncFailure } from './indexer.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * lastError codes that make a served book a lie about live chain state.
@@ -27,13 +28,13 @@ export function lastErrorRefusesServing(failure: SyncFailure | null | undefined)
   return Boolean(failure?.code && SERVING_REFUSE_CODES.has(failure.code));
 }
 
-/** Operator-facing reason for `/ready` and data-path 503s. Halt keeps its own wording. */
+/** Public/read-model refuse copy for data-path 503s. Goes through i18n (missing → dotted name). */
 export function lastErrorServingReason(failure: SyncFailure & { code: string }): string {
-  return `Indexer will not serve projected books as live (${failure.code}). ${failure.message}`;
+  return userCopy(failure.code);
 }
 
-export function haltServingReason(halt: HaltState): string {
-  return `Indexer halted — projection is known wrong and will not serve data until re-indexed. ${halt.reason}`;
+export function haltServingReason(_halt: HaltState): string {
+  return userCopy('indexer.halted');
 }
 
 /**
@@ -47,8 +48,5 @@ export function chainSourceRefusesServing(chainSource: string): boolean {
 }
 
 export function nullChainServingReason(): string {
-  return (
-    `Indexer will not serve holdings or books as live (indexer.chain_not_configured). ` +
-    `No chain is wired — a holding we cannot currently read is absent, never zero.`
-  );
+  return userCopy('indexer.chain_not_configured');
 }
