@@ -1,53 +1,77 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MemoryBroadcastStore } from './broadcast-store.js';
+import { MemoryBroadcastStore, type BroadcastStore } from './broadcast-store.js';
 import { runDurableBroadcast } from './durable-broadcast.js';
+
+function trackingStore(inner: MemoryBroadcastStore): { store: BroadcastStore; order: string[] } {
+  const order: string[] = [];
+  return {
+    order,
+    store: {
+      get: (k) => inner.get(k),
+      hasSigned: (k) => inner.hasSigned(k),
+      claim: (k) => inner.claim(k),
+      putSigned: async (k, raw) => {
+        order.push('putSigned');
+        await inner.putSigned(k, raw);
+      },
+      put: async (k, h) => {
+        order.push('put');
+        return inner.put(k, h);
+      },
+    },
+  };
+}
 
 /**
  * Public door for D26-P1-P9: this path fails closed if putSigned is skipped
  * before broadcast — crash-resume would then re-sign a second spend.
  */
 describe('runDurableBroadcast — signed persist before send (D26-P1-P9)', () => {
-  it('persists signed raw before calling broadcast', async () => {
-    const store = new MemoryBroadcastStore();
-    const order: string[] = [];
+  it('fails if broadcast() is invoked before putSigned on a fresh claim', async () => {
+    const inner = new MemoryBroadcastStore();
+    const { store, order } = trackingStore(inner);
     const signedRaw = '0xsigneddeadbeef';
 
     const hash = await runDurableBroadcast({
       store,
       idempotencyKey: 'payout:d26:1',
-      sign: async () => {
-        order.push('sign');
-        return signedRaw;
-      },
+      sign: async () => signedRaw,
       broadcast: async (raw) => {
         order.push('broadcast');
-        // Would fail if persistence were skipped: resume path needs signed_raw.
-        expect(await store.claim('payout:d26:1')).toEqual({ kind: 'resume', signedRaw: raw });
+        expect(order.indexOf('putSigned')).toBe(0);
+        expect(order.indexOf('broadcast')).toBeGreaterThan(order.indexOf('putSigned'));
+        expect(await inner.hasSigned('payout:d26:1')).toBe(true);
         expect(raw).toBe(signedRaw);
         return '0xhash1';
       },
     });
 
     expect(hash).toBe('0xhash1');
-    expect(order).toEqual(['sign', 'broadcast']);
-    expect(await store.get('payout:d26:1')).toBe('0xhash1');
+    expect(order.slice(0, 2)).toEqual(['putSigned', 'broadcast']);
+    expect(await inner.get('payout:d26:1')).toBe('0xhash1');
   });
 
-  it('crash after putSigned before put resumes same bytes without re-signing', async () => {
+  it('crash between putSigned and put resumes identical signed raw without sign()', async () => {
     const store = new MemoryBroadcastStore();
     const signedRaw = '0xsignedcrashresume';
     const sign = vi.fn(async () => signedRaw);
-    const broadcast = vi.fn(async (raw: string) => {
-      expect(raw).toBe(signedRaw);
-      // Simulate crash after sendRaw succeeded on chain but before put:
-      // first attempt never journals the hash.
-      throw new Error('simulated crash after broadcast RPC');
-    });
 
-    await store.claim('payout:d26:crash');
-    await store.putSigned('payout:d26:crash', signedRaw);
+    await expect(
+      runDurableBroadcast({
+        store,
+        idempotencyKey: 'payout:d26:crash',
+        sign,
+        broadcast: async (raw) => {
+          expect(raw).toBe(signedRaw);
+          expect(await store.hasSigned('payout:d26:crash')).toBe(true);
+          throw new Error('simulated crash after persist before put');
+        },
+      }),
+    ).rejects.toThrow(/simulated crash after persist before put/);
 
-    // Process-equivalent retry: claim sees signed_raw → resume, no sign().
+    expect(sign).toHaveBeenCalledTimes(1);
+    sign.mockClear();
+
     await expect(
       runDurableBroadcast({
         store,
@@ -62,29 +86,31 @@ describe('runDurableBroadcast — signed persist before send (D26-P1-P9)', () =>
 
     expect(sign).not.toHaveBeenCalled();
     expect(await store.get('payout:d26:crash')).toBe('0xrecovered');
-
-    // Control: proving the first broadcast path would have used the same bytes.
-    await expect(broadcast(signedRaw).catch((e: Error) => e.message)).resolves.toMatch(/simulated crash/);
   });
 
-  it('refuses to broadcast when putSigned is omitted (door fails if persistence skipped)', async () => {
-    const store = new MemoryBroadcastStore();
-    await store.claim('payout:d26:skip');
+  it('refuses RPC when hasSigned is false (putSigned skipped)', async () => {
+    const inner = new MemoryBroadcastStore();
+    const broadcast = vi.fn(async () => '0xshould-not');
+    const store: BroadcastStore = {
+      get: (k) => inner.get(k),
+      hasSigned: async () => false,
+      claim: (k) => inner.claim(k),
+      putSigned: async (k, raw) => inner.putSigned(k, raw),
+      put: (k, h) => inner.put(k, h),
+    };
 
-    // Adversarial: skip putSigned and try to broadcast anyway, then retry.
-    // Without putSigned, claim stays pending with no resume payload — a second
-    // mine is impossible while pending, and resume is unavailable. That is the
-    // failure mode D26 closes by requiring putSigned before send.
-    const again = store.claim('payout:d26:skip');
-    const raced = Promise.race([again.then((c) => c.kind), new Promise<string>((r) => setTimeout(() => r('still-pending'), 30))]);
-    expect(await raced).toBe('still-pending');
-
-    // Honest path: persist then resume works.
-    await store.putSigned('payout:d26:skip', '0xraw');
-    expect(await store.claim('payout:d26:skip')).toEqual({ kind: 'resume', signedRaw: '0xraw' });
+    await expect(
+      runDurableBroadcast({
+        store,
+        idempotencyKey: 'payout:d26:skip',
+        sign: async () => '0xraw',
+        broadcast,
+      }),
+    ).rejects.toThrow(/putSigned must precede RPC/);
+    expect(broadcast).not.toHaveBeenCalled();
   });
 
-  it('settled hash short-circuits without sign or broadcast', async () => {
+  it('done claim returns existing hash and must not broadcast again', async () => {
     const store = new MemoryBroadcastStore();
     await store.claim('payout:d26:done');
     await store.putSigned('payout:d26:done', '0xraw');
