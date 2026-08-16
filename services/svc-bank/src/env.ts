@@ -19,6 +19,12 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
+       * svc-identity base for affiliate accrue/payout after loan house fees.
+       * Unset → noop port (loanRepay / loanLiquidate still post). No localhost default.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * The native asset. svc-bank refuses it in earn pools because native
        * staking lives in svc-token (§8.1) — one asset, one owner.
        *
