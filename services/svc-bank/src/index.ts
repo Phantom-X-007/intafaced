@@ -5,6 +5,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { tradeConvertPort, usableTradeConvertUrl } from './auto-invest/trade-convert-port.js';
 import { cardIssuerFor } from './cards/issuer.js';
 import { rampProgrammeFor } from './ramps/rails.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
@@ -131,8 +132,20 @@ const bank = createBankServices(sql, ledger, history, {
    * `enabled` is the same flag as the HTTP/tRPC runner kill. The capture hook
    * has no other door; without this a flipped AUTO_INVEST_ENABLED would still
    * sweep spare change on every card capture.
+   *
+   * ConvertPort was the other missing half (same shape as cards / ramps):
+   * createDca already refused `bank.auto_invest_rate_unset` when convert was
+   * null, tests injected a stub, and `index.ts` never passed one — so every
+   * deployment stayed refuse-closed. `trade.convert` (quote + execute) is the
+   * rate counterparty. Unusable TRADE_URL keeps convert unwired. Convert
+   * failure still refuses — this service does not invent a §8 mid.
    */
-  autoInvest: { enabled: env.AUTO_INVEST_ENABLED },
+  autoInvest: {
+    enabled: env.AUTO_INVEST_ENABLED,
+    ...(usableTradeConvertUrl(env.TRADE_URL)
+      ? { convert: tradeConvertPort({ baseUrl: env.TRADE_URL, edgeSecret: env.EDGE_PRINCIPAL_SECRET }) }
+      : {}),
+  },
   /**
    * RAMPS — same missing-wiring shape as cards.
    *
