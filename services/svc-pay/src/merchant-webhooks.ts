@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { PayError, type PaymentStatus, type PaymentView } from './payment-service.js';
+import { paymentModeFromRail } from './sandbox-key-routing.js';
 import { signPayload } from './rails/webhook-signature.js';
 
 /**
@@ -104,6 +105,7 @@ export function paymentStateBody(payment: PaymentView): Record<string, unknown> 
     railAdapter: payment.railAdapter,
     railRef: payment.railRef,
     status: payment.status as PaymentStatus,
+    mode: paymentModeFromRail(payment.railAdapter),
     capturedAmount: formatAmount(payment.capturedAmount as Amount),
     refundedAmount: formatAmount(payment.refundedAmount as Amount),
     createdAt: payment.createdAt.toISOString(),
@@ -746,6 +748,27 @@ export class MerchantWebhookService {
     let disabled = 0;
 
     for (const item of due) {
+      if (!item.secret || item.secret.trim().length < 32) {
+        const err = 'pay.webhook_not_configured';
+        const attempts = item.attempts + 1;
+        const dead = attempts >= this.maxAttempts;
+        const backoff = BACKOFF_SECONDS[Math.min(attempts - 1, BACKOFF_SECONDS.length - 1)] ?? 86_400;
+        const next = new Date(this.now().getTime() + backoff * 1000);
+        await this.store.markRetry(item.id, attempts, next, null, err, dead);
+        failed += 1;
+        const consecutive = await this.store.bumpEndpointFailure(item.endpointId);
+        if (consecutive >= this.disableAfter || dead) {
+          await this.store.setEndpointStatus(
+            item.endpointId,
+            'disabled',
+            dead ? 'delivery_exhausted' : 'consecutive_failures',
+            consecutive,
+          );
+          disabled += 1;
+        }
+        continue;
+      }
+
       const rawBody = JSON.stringify(item.payload);
       const timestamp = String(Math.floor(this.now().getTime() / 1000));
       const headers = buildSignedHeaders(item.secret, timestamp, rawBody);

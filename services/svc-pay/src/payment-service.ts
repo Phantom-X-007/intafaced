@@ -167,6 +167,12 @@ export type PayErrorCode =
   /** Merchant outbound webhook endpoint URL refused (ADR §2.4). */
   | 'pay.webhook_url_invalid'
   | 'pay.webhook_endpoint_not_found'
+  /**
+   * Outbound merchant webhooks are not wired on this process (REST asked, no
+   * service) or a delivery has no signing secret. Named refuse — never HMAC
+   * with an empty key, never a Fastify 404 that looks like the surface is gone.
+   */
+  | 'pay.webhook_not_configured'
   | 'pay.nothing_to_settle'
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
@@ -187,6 +193,16 @@ export type PayErrorCode =
    * movement). ADR pay.public-api §2.5 / posture assertRailMayMoveValue.
    */
   | 'pay.sandbox_rail_refused'
+  /**
+   * A sandbox API key would have observed or returned a live-mode payment.
+   * Sandbox credentials must not look live (ADR §2.5).
+   */
+  | 'pay.sandbox_looks_live'
+  /**
+   * Payment has no rail id, so `mode` cannot be disclosed. Refusing is the
+   * safe direction — defaulting missing rail to `live` is the lie.
+   */
+  | 'pay.rail_mode_undisclosed'
   /** Request body failed a surface-level validation (missing railAdapter, …). */
   | 'pay.validation_failed'
   /**

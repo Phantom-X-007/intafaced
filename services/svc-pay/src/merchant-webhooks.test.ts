@@ -93,6 +93,16 @@ describe('merchant webhook signing (ADR §2.4)', () => {
     expect(body.amount).toBe('1.1');
     expect(typeof body.amount).toBe('string');
     expect(typeof body.capturedAmount).toBe('string');
+    expect(body.mode).toBe('sandbox');
+  });
+
+  it('REFUSES a missing rail on the webhook body rather than omitting mode (looks live)', () => {
+    try {
+      paymentStateBody(payment({ railAdapter: '' }));
+      expect.unreachable('should have refused');
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'pay.rail_mode_undisclosed' });
+    }
   });
 });
 
@@ -257,5 +267,32 @@ describe('MerchantWebhookService', () => {
     expect(enabled.status).toBe('active');
     expect(enabled.consecutiveFailures).toBe(0);
     expect(enabled.disabledReason).toBeNull();
+  });
+
+  it('processDue with a blank signing secret refuses by name and does not POST', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    let posts = 0;
+    const { url, server: s } = await listen((_req, res) => {
+      posts += 1;
+      res.writeHead(200);
+      res.end('ok');
+    });
+    server = s;
+
+    const svc = new MerchantWebhookService(store, { disableAfterFailures: 8, maxAttempts: 8 });
+    const created = await svc.registerEndpoint(MERCHANT, url);
+    const ep = store.endpoints.get(created.id);
+    expect(ep).toBeTruthy();
+    ep!.secret = '';
+
+    await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
+
+    const result = await svc.processDue();
+    expect(posts).toBe(0);
+    expect(result.delivered).toBe(0);
+    expect(result.failed).toBe(1);
+    const [delivery] = [...store.deliveries.values()];
+    expect(delivery?.lastError).toBe('pay.webhook_not_configured');
   });
 });
