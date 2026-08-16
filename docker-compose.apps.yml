@@ -775,6 +775,9 @@ services:
       # stack, so it is empty here and `blueprint.card` reports
       # `blueprint.card_renderer_unconfigured`.
       BLUEPRINT_CARD_RENDERER_URL: ${BLUEPRINT_CARD_RENDERER_URL:-}
+      # Host can shorten a hung rasterizer. Default 10000 matches env.ts.
+      # URL stays empty — this does not invent a renderer.
+      BLUEPRINT_CARD_RENDERER_TIMEOUT_MS: ${BLUEPRINT_CARD_RENDERER_TIMEOUT_MS:-10000}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4011']
     healthcheck: *healthcheck

@@ -86,6 +86,5 @@ describe('compose passes crew capacity, season, and engine timeout into svc-blue
     expect(block).not.toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-http\}/);
     expect(block).not.toMatch(/BLUEPRINT_ENGINE_API_KEY:/);
     expect(block).not.toMatch(/BLUEPRINT_CARD_RENDERER_API_KEY:/);
-    expect(block).not.toMatch(/BLUEPRINT_CARD_RENDERER_TIMEOUT_MS:/);
   });
 });
