@@ -864,6 +864,13 @@ services:
       # never reaches the container. Window must divide 1440 (env.ts).
       AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
       AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
+      # Access-token TTL / iss / aud (authEnvSchema defaults 900 / intafaced /
+      # intafaced.api). Without compose pass-through a host `.env` pin never
+      # reaches the container. Do not add JWT_ACCESS_SECRET here — agents
+      # authenticates the edge via *edge-secret, not a local signing key.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Pass-through form (key, no value): compose forwards these ONLY if they
       # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
       # them to the empty string instead, and the schema types them as an
