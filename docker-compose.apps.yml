@@ -378,6 +378,10 @@ services:
       LEDGER_URL: http://svc-ledger:4001
       IDENTITY_URL: http://svc-identity:4002
       MATCHING_URL: http://svc-matching:4005
+      # Spot kill-switch (env.ts boolish default true). Host `.env` can halt
+      # new places; cancels still work. `${VAR:-false}` here would refuse every
+      # new spot order on a clean clone while env.ts still reads as on.
+      TRADE_SPOT_ENABLED: ${TRADE_SPOT_ENABLED:-true}
       # Worst price a market BUY may be funded at, above the best ask (env.ts 200 = 2%).
       # Host `.env` can pin or tighten; compose does not invent a new cap.
       TRADE_MARKET_SLIPPAGE_CAP_BPS: ${TRADE_MARKET_SLIPPAGE_CAP_BPS:-200}
@@ -612,6 +616,10 @@ services:
       PAY_LINK_DEFAULT_TTL_DAYS: ${PAY_LINK_DEFAULT_TTL_DAYS:-30}
       PAY_LINK_MAX_TTL_DAYS: ${PAY_LINK_MAX_TTL_DAYS:-365}
       PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:-300}
+      # Operator-credit allow-list. env.ts already names this (default
+      # card-sandbox — not the public checkout path). Without compose
+      # pass-through a host `.env` never reaches the container.
+      PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-card-sandbox}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
@@ -753,9 +761,14 @@ services:
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
       # Earn-pool interest accrual kill. env.ts already names this (default true);
       # without compose pass-through a host `.env` never reaches the container and
-      # cannot halt a runaway payout. Loan interest stays BANK.LOANS
-      # (LOAN_ACCRUAL_ENABLED) — not named here. No APY or pool rate is invented.
+      # cannot halt a runaway payout. Loan charging is a separate key (below).
+      # No APY or pool rate is invented.
       INTEREST_ACCRUAL_ENABLED: ${INTEREST_ACCRUAL_ENABLED:-true}
+      # Loan interest capitalisation kill. env.ts already names this (default true);
+      # without compose pass-through a host `.env` never reaches the container.
+      # Separate from INTEREST_ACCRUAL_ENABLED so stopping earn payout does not
+      # also stop charging borrowers. No APY, LTV, or USDT mid is invented.
+      LOAN_ACCRUAL_ENABLED: ${LOAN_ACCRUAL_ENABLED:-true}
       # Loans module kill + collateral-sale sweep. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # BANK_LOANS_ENABLED defaults ON (matches env.ts). LOAN_RISK_SWEEP_ENABLED
