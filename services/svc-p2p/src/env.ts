@@ -21,6 +21,12 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
+       * svc-identity base for affiliate accrue/payout after escrowRelease.
+       * Unset → noop port (release still posts). No localhost default.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * KILL-SWITCH (§14 admin controls).
        *
        * OFF stops new offers and new takes. It deliberately does NOT stop
