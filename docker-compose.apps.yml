@@ -524,6 +524,14 @@ services:
       # env.ts (`true` / `2000`). No RPC, mnemonic, hot wallet, or card rail.
       PAY_CRYPTO_WATCHER_ENABLED: ${PAY_CRYPTO_WATCHER_ENABLED:-true}
       PAY_CRYPTO_WATCHER_INTERVAL_MS: ${PAY_CRYPTO_WATCHER_INTERVAL_MS:-2000}
+      # Hosted checkout + confirmation depth. env.ts already names these;
+      # without compose pass-through a host `.env` never reaches the container.
+      # Defaults match env.ts. Sandbox rails stay OFF. No owner fee bps, RPC,
+      # mnemonic, hot wallet, or card rail.
+      PAY_MIN_CONFIRMATIONS: ${PAY_MIN_CONFIRMATIONS:-6}
+      PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:-900}
+      PAY_PUBLIC_BASE_PATH: ${PAY_PUBLIC_BASE_PATH:-/api/pay}
+      PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
