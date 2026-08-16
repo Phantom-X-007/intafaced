@@ -129,6 +129,37 @@ export function decideItemComplete(input: { userId: string; itemSlug: string; ex
   };
 }
 
+/** Named refuse when a workbook slug is not a required item on any cert. */
+export const PAPER_CERT_UNBOUND = 'academy.paper_cert_unbound' as const;
+
+export type WorkbookCertBinding =
+  | {
+      readonly progress: 'bound';
+      readonly certId: string;
+      readonly itemSlug: string;
+    }
+  | {
+      readonly progress: 'unbound';
+      readonly itemSlug: string;
+      readonly reason: typeof PAPER_CERT_UNBOUND;
+    };
+
+/**
+ * Bind a workbook (curriculum item slug) to a cert that lists it as required.
+ * Unbound → honest named refuse, never a fake grant.
+ */
+export function workbookCertBinding(itemSlug: string, certs: readonly CertDefinition[]): WorkbookCertBinding {
+  const slug = itemSlug.trim();
+  if (!slug || slug.length > 120) {
+    throw new CertError('Invalid item slug', 'academy.cert_invalid');
+  }
+  const cert = certs.find((c) => c.requiredItemSlugs.includes(slug));
+  if (!cert) {
+    return { progress: 'unbound', itemSlug: slug, reason: PAPER_CERT_UNBOUND };
+  }
+  return { progress: 'bound', certId: cert.id, itemSlug: slug };
+}
+
 /** In-memory Stage-1 store for tests and early API. */
 export class MemoryCertStore {
   private enrollments = new Map<string, EnrollmentRecord>();
