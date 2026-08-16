@@ -537,6 +537,10 @@ services:
       PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:-900}
       PAY_PUBLIC_BASE_PATH: ${PAY_PUBLIC_BASE_PATH:-/api/pay}
       PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
+      # Open-session cap + operator risk band. env.ts already names these;
+      # blank risk band refuses — never invent `low`. Defaults match env.ts.
+      PAY_CHECKOUT_MAX_OPEN_SESSIONS: ${PAY_CHECKOUT_MAX_OPEN_SESSIONS:-25}
+      PAY_CHECKOUT_RISK_BAND: ${PAY_CHECKOUT_RISK_BAND:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
