@@ -12,6 +12,7 @@ import {
   InvalidEntryError,
   type EntryInput,
 } from '@intafaced/ledger-client';
+import { portfolioViewFromLedgerBalances, portfolioViewSchema } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -148,6 +149,26 @@ export function createLedgerRouter(ledger: LedgerService) {
           purpose: b.account.purpose ?? '',
           amount: formatAmount(b.amount),
         }));
+      }),
+
+    /**
+     * Stage-1 portfolio VIEW (§25:723). Reads `ledger.balances`. Does not post.
+     * Indexer/readmodels are unbuilt — named absent, never a zero chain balance.
+     */
+    portfolio: scopedProcedure('ledger:read')
+      .input(z.object({ ownerType: z.enum(['user', 'subaccount', 'module', 'house', 'treasury']), ownerId: z.string() }))
+      .output(portfolioViewSchema)
+      .query(async ({ ctx, input }) => {
+        if (input.ownerType === 'user' && ctx.principal.userId !== input.ownerId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'This account belongs to another user' });
+        }
+
+        const balances = await ledger.balances(input.ownerType, input.ownerId);
+        return portfolioViewFromLedgerBalances({
+          ownerType: input.ownerType,
+          ownerId: input.ownerId,
+          balances,
+        });
       }),
 
     /**

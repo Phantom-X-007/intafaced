@@ -19,6 +19,7 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { z } from 'zod';
+import { portfolioViewFromLedgerBalances } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -163,6 +164,20 @@ export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
 }
 
 /**
+ * Portfolio Stage-1 view. Same owner input as `balances`. Same door as every
+ * other S2S route. Does not post. Indexer half is named absent by the view.
+ */
+export async function handleS2sPortfolio(ledger: LedgerService, body: unknown) {
+  const input = balancesInput.parse(body);
+  const balances = await ledger.balances(input.ownerType, input.ownerId);
+  return portfolioViewFromLedgerBalances({
+    ownerType: input.ownerType,
+    ownerId: input.ownerId,
+    balances,
+  });
+}
+
+/**
  * THIS is the surface that is actually served.
  *
  * `createLedgerRouter` is constructed in `index.ts` and exported for its TYPE.
@@ -255,4 +270,5 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
   // would have been unauthenticated exactly as the money plane once was. There
   // is one door, and every route goes through it.
   app.post('/trpc/history', guarded(handleS2sHistory));
+  app.post('/trpc/portfolio', guarded(handleS2sPortfolio));
 }
