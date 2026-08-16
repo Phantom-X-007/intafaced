@@ -59,10 +59,7 @@ describe('createAffiliatePayoutClient', () => {
   });
 
   it('412 is success (rates unset / unpublished / frozen / nothing accrued)', async () => {
-    vi.stubGlobal(
-      'fetch',
-      async () => new Response('{"code":"affiliate.payout.rates_unset"}', { status: 412 }),
-    );
+    vi.stubGlobal('fetch', async () => new Response('{"code":"affiliate.payout.rates_unset"}', { status: 412 }));
     const client = createAffiliatePayoutClient('http://identity.example', SECRET);
     await expect(client.payoutPayFee(FEE)).resolves.toBeUndefined();
   });

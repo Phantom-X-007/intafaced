@@ -25,10 +25,7 @@ export class NoopAffiliatePayout implements AffiliatePayoutPort {
 }
 
 /** Awaited after accrue; never throws (settlement already happened). */
-export async function fireAffiliatePayout(
-  port: AffiliatePayoutPort,
-  legs: readonly AffiliatePayFeeLeg[],
-): Promise<void> {
+export async function fireAffiliatePayout(port: AffiliatePayoutPort, legs: readonly AffiliatePayFeeLeg[]): Promise<void> {
   for (const leg of legs) {
     try {
       await port.payoutPayFee(leg.feeEventId);
