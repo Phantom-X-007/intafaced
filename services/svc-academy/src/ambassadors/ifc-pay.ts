@@ -495,3 +495,46 @@ export function ambassadorPayLooksPayable(quote: object): boolean {
   if ('amount' in rec || 'rate' in rec || 'quote' in rec) return true;
   return false;
 }
+
+const NAMED_PAY_REFUSE = new Set<string>([
+  'academy.ambassador_pay.rates_unset',
+  'academy.ambassador_pay.class_m',
+  'academy.ambassador_pay.recipe_unset',
+  'academy.ambassador_pay.invent_refused',
+  'academy.ambassador_pay.residency_not_accepted',
+  'academy.ambassador_revenue_share.rates_unset',
+  'academy.ambassador_revenue_share.class_m',
+  'academy.ambassador_revenue_share.recipe_unset',
+  'academy.ambassador_revenue_share.invent_refused',
+  'academy.ambassador_revenue_share.residency_not_accepted',
+]);
+
+/**
+ * Unwrap a public-door / tRPC reject to the named ambassador pay refuse code.
+ * Returns undefined when the error is not a named refuse (would mean pay leaked).
+ */
+export function ambassadorPayRefuseCodeFromUnknown(err: unknown): AmbassadorPayRefuseCode | undefined {
+  if (err instanceof AmbassadorPayRefuseError) return err.code;
+  if (err == null || typeof err !== 'object') return undefined;
+  const rec = err as { code?: unknown; cause?: unknown };
+  if (typeof rec.code === 'string' && NAMED_PAY_REFUSE.has(rec.code)) {
+    return rec.code as AmbassadorPayRefuseCode;
+  }
+  if (rec.cause !== undefined && rec.cause !== err) {
+    return ambassadorPayRefuseCodeFromUnknown(rec.cause);
+  }
+  return undefined;
+}
+
+/** Public-door pin: unset rates must refuse by name and must not look payable. */
+export function unsetRatesPublicDoorHolds(quote: PublicAmbassadorPayQuote): boolean {
+  if (ambassadorPayLooksPayable(quote)) return false;
+  if (quote.ok !== false || quote.payable !== false || quote.inventedIfc !== false) return false;
+  if (quote.reason === 'unset') {
+    return quote.code === 'academy.ambassador_pay.rates_unset' || quote.code === 'academy.ambassador_revenue_share.rates_unset';
+  }
+  if (quote.reason === 'invent') {
+    return quote.code === 'academy.ambassador_pay.invent_refused' || quote.code === 'academy.ambassador_revenue_share.invent_refused';
+  }
+  return quote.code === 'academy.ambassador_pay.recipe_unset' || quote.code === 'academy.ambassador_revenue_share.recipe_unset';
+}
