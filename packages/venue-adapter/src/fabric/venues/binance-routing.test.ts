@@ -18,6 +18,17 @@ describe('D26-P1-X1 — Binance measured connection feeds routing weight', () =>
     expect(routingWeightFromGrade(terms.latencyGrade!)).toBe(0);
   });
 
+  it('does not score a silent Binance adapter as fast', () => {
+    const adapter = new BinanceSpotMarketData();
+    const grade = adapter.latencyGrade!(new Date(T0));
+
+    expect(grade.grade).toBeNull();
+    expect(grade.grade).not.toBe('A');
+    expect(grade.p95Ms).toBeNull();
+    expect(grade.p95Ms).not.toBe(0);
+    expect(routingWeightFromGrade(grade)).toBe(0);
+  });
+
   it('routes only after ten real adapter calls produce a non-provisional measured grade', async () => {
     let now = T0;
     const requests: string[] = [];
