@@ -651,6 +651,12 @@ services:
       # rather than left unset, so the choice is visible in the file an operator
       # actually reads instead of living only in a zod schema.
       BANK_CARD_ISSUER: ${BANK_CARD_ISSUER:-none}
+      # WHICH BANK RAMP PROGRAMME THIS DEPLOYMENT HAS. env.ts already names
+      # BANK_RAMP_MODE (none | crypto-ledger, default none). Without compose
+      # pass-through a host `.env` never reaches the container. Default stays
+      # `none` — `crypto-ledger` is an operator act, not a stack default. Fiat
+      # PSP, chain broadcast, and APY are not named here.
+      BANK_RAMP_MODE: ${BANK_RAMP_MODE:-none}
       # Standing-order + auto-invest runners. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # Defaults match env.ts (`true`) — an operator stop is host `.env` plus
