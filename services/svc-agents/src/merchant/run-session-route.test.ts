@@ -78,11 +78,23 @@ describe('merchant.runSession route', () => {
     });
   });
 
-  it('is empty when no points were supplied', async () => {
-    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).merchant.runSession({ plane: 'live', points: [] });
+  it('live without a metrics port refuses no_live_metrics — body points are not live truth', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .merchant.runSession({ plane: 'live', points: [point] });
 
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.merchant.empty' });
-    expect(result.metering.billedAmount).toBe('0');
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_metrics',
+      userMessageKey: 'agents.merchant.unavailable',
+    });
+    expect(result.metering).toEqual({
+      sessionId: null,
+      billedAmount: '0',
+      assetId: 'IFC',
+      sessionClosed: false,
+      settlements: [],
+    });
   });
 
   it('fat fixture rates on dark plane refuse — no invented live approval board', async () => {

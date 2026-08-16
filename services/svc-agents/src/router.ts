@@ -36,6 +36,7 @@ import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/di
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
+import type { PayMetricsPort } from './merchant/pay-metrics-port.js';
 import { serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
@@ -282,10 +283,24 @@ export interface AgentsRouterDeps {
   readonly supportDesk?: SupportDeskPort | null;
   /** Signs forwarded principal for support ticket `get`. */
   readonly edgePrincipalSecret?: string;
+  /**
+   * Live pay approval-rate samples. Unset in production (Class X) — live
+   * merchant.runSession then refuses `no_live_metrics` rather than invent rates.
+   */
+  readonly payMetricsPort?: PayMetricsPort;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret } = deps;
+  const {
+    runtime,
+    gateway,
+    meter,
+    feeAssetId,
+    loadCoachGrounding,
+    supportDesk,
+    edgePrincipalSecret,
+    payMetricsPort,
+  } = deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -2890,6 +2905,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * `openSession → act → settle → closeSession`, so every metrics read is
        * guardrail-checked and audited, and the run settles through the meter.
        * Dark pay plane refuses before any session opens (unbilled).
+       * Live requires PayMetricsPort; request-body points are not live truth.
        */
       runSession: scopedProcedure('agents:execute', { module: 'agents' })
         .input(
@@ -2962,6 +2978,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               points: input.points,
+              ...(payMetricsPort === undefined ? {} : { payMetricsPort }),
               ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
               ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
               ...(input.minAttempts === undefined ? {} : { minAttempts: input.minAttempts }),
