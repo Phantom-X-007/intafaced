@@ -29,10 +29,7 @@ function keyMaterialPresent(keyMaterial: string | undefined): boolean {
 export function bootKycVault(sql: Sql, keyMaterial: string | undefined): KycVaultBoot | null {
   const parsed = parseKycDocKey(keyMaterial);
   if (keyMaterialPresent(keyMaterial) && !parsed) {
-    throw new KycDocumentError(
-      'IDENTITY_KYC_DOC_KEY is set but is not a 32-byte key (base64 or hex)',
-      'kyc_doc.key_missing',
-    );
+    throw new KycDocumentError('IDENTITY_KYC_DOC_KEY is set but is not a 32-byte key (base64 or hex)', 'kyc_doc.key_missing');
   }
   if (!parsed) return null;
   const kycDocs = new KycDocumentStore(sql, keyMaterial);

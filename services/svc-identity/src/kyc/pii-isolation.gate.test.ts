@@ -63,7 +63,10 @@ describe('PII isolation gate (kyc_records)', () => {
     const schema = routerSrc.slice(schemaStart, routerSrc.indexOf('});', schemaStart));
     expect(schema).not.toMatch(/providerRef|provider_ref|bytes|ciphertext/);
     const fnStart = routerSrc.indexOf('function presentKyc');
-    const returned = routerSrc.slice(routerSrc.indexOf('return {', fnStart), routerSrc.indexOf('};', routerSrc.indexOf('return {', fnStart)));
+    const returned = routerSrc.slice(
+      routerSrc.indexOf('return {', fnStart),
+      routerSrc.indexOf('};', routerSrc.indexOf('return {', fnStart)),
+    );
     expect(returned).not.toMatch(/providerRef|provider_ref|bytes|ciphertext/);
     const statusBlock = routerSrc.slice(routerSrc.indexOf('status: scopedProcedure'), routerSrc.indexOf('approve: scopedProcedure'));
     expect(statusBlock).toMatch(/presentKyc/);
