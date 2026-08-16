@@ -12,6 +12,20 @@ describe('route resolution', () => {
   });
 
   /**
+   * Public KB doors (#2078 wire) land on svc-support `/trpc/{list,search,get}Kb`
+   * after the edge strips `/api/support`. preservePath would miss the mount.
+   */
+  it('strips /api/support so public KB trpc lands on /trpc/*', () => {
+    const support = UPSTREAMS.find((u) => u.prefix === '/api/support');
+    expect(support?.envVar).toBe('SUPPORT_URL');
+    expect(support?.preservePath).toBeFalsy();
+
+    expect(resolve('/api/support/trpc/listKb')?.path).toBe('/trpc/listKb');
+    expect(resolve('/api/support/trpc/searchKb')?.path).toBe('/trpc/searchKb');
+    expect(resolve('/api/support/trpc/getKb')?.path).toBe('/trpc/getKb');
+  });
+
+  /**
    * Merchant public REST lives at edge `/api/pay/v1/*`. The pay upstream has
    * NO preservePath, so the edge strips `/api/pay` and svc-pay must mount at
    * `/v1/*` — not `/api/pay/v1/*`. If this ever flips to preservePath, trpc and
