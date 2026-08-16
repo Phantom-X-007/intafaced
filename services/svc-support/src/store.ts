@@ -11,7 +11,7 @@ import type {
   SupportTicketEventKind,
   SupportTicketStatus,
 } from '@intafaced/contracts';
-import { assertKbArticle, KbCatalogError, PLATFORM_KB_SPINE } from './kb-catalog.js';
+import { assertKbArticle, KbCatalogError, PLATFORM_KB_SPINE, kbVersionOf, toPublicKb } from './kb-catalog.js';
 import { checkTransition } from './lifecycle.js';
 import { claimTicket, type ClaimResult } from './operator-queue.js';
 
@@ -135,6 +135,8 @@ export interface SupportStore {
   listPublishedKb(): Promise<SupportKbArticle[]>;
   /** One published article, or null when missing / unpublished. */
   getPublishedKb(id: string): Promise<SupportKbArticle | null>;
+  /** Every stored version for an id (including after unpublish). Empty when the id never existed. */
+  listKbVersions(id: string): Promise<SupportKbArticle[]>;
   /**
    * Insert (baseRevision 0) or update a row. Publish bumps revision.
    * Unpublish hides the same revision. Stale baseRevision refuses.
@@ -271,13 +273,33 @@ type PgKb = {
 };
 
 function kbFromPg(row: PgKb): SupportKbArticle {
-  return {
+  const revision = Number(row.revision);
+  return toPublicKb({
     id: row.id,
     titleKey: row.title_key,
     bodyKey: row.body_key,
-    revision: Number(row.revision),
+    version: revision,
+    revision,
     published: row.published,
-  };
+  });
+}
+
+type PgKbVersion = {
+  id: string;
+  title_key: string;
+  body_key: string;
+  version: number;
+};
+
+function kbFromVersionPg(row: PgKbVersion): SupportKbArticle {
+  const version = Number(row.version);
+  return toPublicKb({
+    id: row.id,
+    titleKey: row.title_key,
+    bodyKey: row.body_key,
+    version,
+    revision: version,
+  });
 }
 
 function assertPersistable(article: Pick<SupportKbArticle, 'id' | 'titleKey' | 'bodyKey'>): PutKbRevisionResult | null {
@@ -346,14 +368,17 @@ export class MemorySupportStore implements SupportStore {
   private readonly events = new Map<string, SupportTicketEvent[]>();
   private readonly cases = new Map<string, SupportCaseFile[]>();
   private readonly kb = new Map<string, SupportKbArticle>();
+  private readonly kbVersions = new Map<string, SupportKbArticle[]>();
 
   constructor() {
     for (const article of PLATFORM_KB_SPINE) {
-      this.kb.set(article.id, {
+      const row = toPublicKb({
         ...article,
         revision: article.revision ?? 1,
         published: article.published ?? true,
       });
+      this.kb.set(article.id, row);
+      this.kbVersions.set(article.id, [{ ...row }]);
     }
   }
 
@@ -586,6 +611,16 @@ export class MemorySupportStore implements SupportStore {
     return article && article.published === true ? { ...article } : null;
   }
 
+  async listKbVersions(id: string): Promise<SupportKbArticle[]> {
+    return (this.kbVersions.get(id) ?? []).map((a) => ({ ...a }));
+  }
+
+  private rememberVersion(article: SupportKbArticle): void {
+    const list = this.kbVersions.get(article.id) ?? [];
+    list.push({ ...article });
+    this.kbVersions.set(article.id, list);
+  }
+
   async putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult> {
     const current = this.kb.get(input.id);
     if (input.published) {
@@ -593,25 +628,30 @@ export class MemorySupportStore implements SupportStore {
       if (bad) return bad;
       if (!current) {
         if (input.baseRevision !== 0) return { status: 'refuse', reason: 'revision_stale' };
-        const created: SupportKbArticle = {
+        const created = toPublicKb({
           id: input.id,
           titleKey: input.titleKey,
           bodyKey: input.bodyKey,
+          version: 1,
           revision: 1,
           published: true,
-        };
+        });
         this.kb.set(input.id, created);
+        this.rememberVersion(created);
         return { status: 'ok', article: { ...created } };
       }
-      if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
-      const next: SupportKbArticle = {
+      if (kbVersionOf(current) !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
+      const nextVersion = kbVersionOf(current) + 1;
+      const next = toPublicKb({
         id: input.id,
         titleKey: input.titleKey,
         bodyKey: input.bodyKey,
-        revision: current.revision! + 1,
+        version: nextVersion,
+        revision: nextVersion,
         published: true,
-      };
+      });
       this.kb.set(input.id, next);
+      this.rememberVersion(next);
       return { status: 'ok', article: { ...next } };
     }
 
@@ -951,6 +991,16 @@ export class PostgresSupportStore implements SupportStore {
     return rows[0] ? kbFromPg(rows[0]) : null;
   }
 
+  async listKbVersions(id: string): Promise<SupportKbArticle[]> {
+    const rows = await this.sql<PgKbVersion[]>`
+      SELECT id, title_key, body_key, version
+      FROM support.kb_article_versions
+      WHERE id = ${id}
+      ORDER BY version
+    `;
+    return rows.map(kbFromVersionPg);
+  }
+
   async putKbRevision(input: PutKbRevisionInput): Promise<PutKbRevisionResult> {
     return this.sql.begin(async (tx): Promise<PutKbRevisionResult> => {
       const locked = await tx<PgKb[]>`
@@ -971,6 +1021,10 @@ export class PostgresSupportStore implements SupportStore {
             VALUES (${input.id}, ${input.titleKey}, ${input.bodyKey}, 1, true)
             RETURNING id, title_key, body_key, revision, published, updated_at
           `;
+          await tx`
+            INSERT INTO support.kb_article_versions (id, version, title_key, body_key)
+            VALUES (${input.id}, 1, ${input.titleKey}, ${input.bodyKey})
+          `;
           return { status: 'ok', article: kbFromPg(rows[0]!) };
         }
         if (current.revision !== input.baseRevision) return { status: 'refuse', reason: 'revision_stale' };
@@ -985,7 +1039,12 @@ export class PostgresSupportStore implements SupportStore {
           RETURNING id, title_key, body_key, revision, published, updated_at
         `;
         if (!rows[0]) return { status: 'refuse', reason: 'revision_stale' };
-        return { status: 'ok', article: kbFromPg(rows[0]) };
+        const bumped = kbFromPg(rows[0]);
+        await tx`
+          INSERT INTO support.kb_article_versions (id, version, title_key, body_key)
+          VALUES (${input.id}, ${kbVersionOf(bumped)}, ${input.titleKey}, ${input.bodyKey})
+        `;
+        return { status: 'ok', article: bumped };
       }
 
       if (!current) return { status: 'refuse', reason: 'invalid' };

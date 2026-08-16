@@ -2,7 +2,16 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { assertKbArticle, getKbById, KbCatalogError, listPlatformKb, PLATFORM_KB_SPINE, searchKb, toPublicKb } from './kb-catalog.js';
+import {
+  assertKbArticle,
+  getKb,
+  getKbById,
+  KbCatalogError,
+  listPlatformKb,
+  PLATFORM_KB_SPINE,
+  searchKb,
+  toPublicKb,
+} from './kb-catalog.js';
 import { SupportError, SupportService } from './support-service.js';
 
 describe('support Stage-2 KB catalog', () => {
@@ -64,6 +73,7 @@ describe('support Stage-2 KB catalog', () => {
       id: 'kb-account-access',
       titleKey: 'support.kb.account_access.title',
       bodyKey: 'support.kb.account_access.body',
+      version: 3,
       revision: 3,
       published: true,
     });
@@ -156,6 +166,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
       id: 'kb-account-access',
       titleKey: 'support.kb.account_access.title',
       bodyKey: 'support.kb.account_access.body',
+      version: 2,
       revision: 2,
       published: true,
     });
@@ -211,5 +222,77 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     expect(create).toMatch(/title_key/);
     expect(create).toMatch(/revision/);
     expect(create).toMatch(/published/);
+  });
+});
+
+describe('ops.kb-workflow article versions', () => {
+  const v1 = {
+    id: 'kb-account-access',
+    titleKey: 'support.kb.account_access.title',
+    bodyKey: 'support.kb.account_access.body',
+    version: 1,
+    revision: 1,
+    published: true,
+  };
+  const v2 = {
+    ...v1,
+    bodyKey: 'support.kb.account_access.body_v2',
+    version: 2,
+    revision: 2,
+  };
+
+  it('spine articles carry version ≥ 1 and immutable id', () => {
+    for (const a of listPlatformKb()) {
+      expect(a.id.length).toBeGreaterThan(0);
+      expect(a.version).toBeGreaterThanOrEqual(1);
+      expect(Number.isInteger(a.version)).toBe(true);
+    }
+  });
+
+  it('omitted version returns latest published; explicit version returns that body', () => {
+    const catalog = [v1, v2];
+    expect(getKb({ id: 'kb-account-access' }, catalog)?.bodyKey).toBe('support.kb.account_access.body_v2');
+    expect(getKb({ id: 'kb-account-access', version: 1 }, catalog)?.bodyKey).toBe('support.kb.account_access.body');
+    expect(getKb({ id: 'kb-account-access', version: 2 }, catalog)?.version).toBe(2);
+  });
+
+  it('unknown version is a named refuse, not a silent older body', () => {
+    const catalog = [v1, v2];
+    expect(() => getKb({ id: 'kb-account-access', version: 9 }, catalog)).toThrow(KbCatalogError);
+    try {
+      getKb({ id: 'kb-account-access', version: 9 }, catalog);
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'support.kb_version_unknown' });
+    }
+  });
+
+  it('searchKb returns latest only — no duplicate ids after a bump', () => {
+    const catalog = [...PLATFORM_KB_SPINE, v2];
+    const found = searchKb('account', catalog);
+    const ids = found.map((a) => a.id);
+    expect(ids.filter((id) => id === 'kb-account-access')).toHaveLength(1);
+    expect(found.find((a) => a.id === 'kb-account-access')?.version).toBe(2);
+  });
+
+  it('publishKb bumps version and prior version stays readable', async () => {
+    const svc = new SupportService();
+    const bumped = await svc.publishKb({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body_v2',
+      baseRevision: 1,
+    });
+    expect(bumped).toMatchObject({ id: 'kb-account-access', version: 2, revision: 2, published: true });
+    const latest = await svc.getKbArticle({ id: 'kb-account-access' });
+    expect(latest?.version).toBe(2);
+    expect(latest?.bodyKey).toBe('support.kb.account_access.body_v2');
+    const prior = await svc.getKbArticle({ id: 'kb-account-access', version: 1 });
+    expect(prior).toMatchObject({ version: 1, bodyKey: 'support.kb.account_access.body' });
+    await expect(svc.getKbArticle({ id: 'kb-account-access', version: 9 })).rejects.toMatchObject({
+      code: 'support.kb_version_unknown',
+    });
+    const hits = await svc.searchKb('account');
+    expect(hits.filter((a) => a.id === 'kb-account-access')).toHaveLength(1);
+    expect(hits.find((a) => a.id === 'kb-account-access')?.version).toBe(2);
   });
 });

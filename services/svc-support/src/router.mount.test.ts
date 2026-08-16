@@ -75,17 +75,19 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
         published: true,
       },
     ]),
-    getKbArticle: vi.fn(async (id: string) =>
-      id === 'kb-account-access'
+    getKbArticle: vi.fn(async (q: string | { id: string }) => {
+      const id = typeof q === 'string' ? q : q.id;
+      return id === 'kb-account-access'
         ? {
             id: 'kb-account-access',
             titleKey: 'support.kb.account_access.title',
             bodyKey: 'support.kb.account_access.body',
+            version: 1,
             revision: 1,
             published: true,
           }
-        : null,
-    ),
+        : null;
+    }),
     listOperatorQueue: vi.fn(async () => ({ status: 'empty' as const })),
     peekNext: vi.fn(async () => null),
     claimForOperator: vi.fn(),
@@ -201,8 +203,33 @@ describe('svc-support mount', () => {
     expect(support.searchKb).toHaveBeenCalledWith('account');
     const one = await caller.getKb({ id: 'kb-account-access' });
     expect(one).toMatchObject({ id: 'kb-account-access', revision: 1, published: true });
+    expect(support.getKbArticle).toHaveBeenCalledWith({ id: 'kb-account-access', version: undefined });
     const missing = await caller.getKb({ id: 'nope' });
     expect(missing).toBeNull();
+  });
+
+  it('getKb passes an explicit version and maps unknown-version refuse by name', async () => {
+    const support = stubSupport({
+      getKbArticle: vi.fn(async (q: { id: string; version?: number }) => {
+        if (q.version === 99) throw new SupportError('support.kb_version_unknown', 'support.kb_version_unknown');
+        return {
+          id: q.id,
+          titleKey: 'support.kb.account_access.title',
+          bodyKey: 'support.kb.account_access.body',
+          version: q.version ?? 1,
+          revision: q.version ?? 1,
+          published: true,
+        };
+      }),
+    });
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    const v1 = await caller.getKb({ id: 'kb-account-access', version: 1 });
+    expect(v1).toMatchObject({ version: 1 });
+    expect(support.getKbArticle).toHaveBeenCalledWith({ id: 'kb-account-access', version: 1 });
+    await expect(caller.getKb({ id: 'kb-account-access', version: 99 })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('support.kb_version_unknown'),
+    });
   });
 
   it('searchKb/getKb stay empty when the desk has no published articles', async () => {

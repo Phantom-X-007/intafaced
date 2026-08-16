@@ -66,6 +66,11 @@ describe('supportKbArticleSchema — revision and published', () => {
     expect(supportKbArticleSchema.safeParse({ ...SPINE, revision: 1.5 }).success).toBe(false);
   });
 
+  it('accepts optional positive version', () => {
+    expect(supportKbArticleSchema.parse({ ...SPINE, version: 1 })).toEqual({ ...SPINE, version: 1 });
+    expect(supportKbArticleSchema.safeParse({ ...SPINE, version: 0 }).success).toBe(false);
+  });
+
   it('refuses non-boolean published', () => {
     expect(supportKbArticleSchema.safeParse({ ...SPINE, published: 'yes' }).success).toBe(false);
   });
@@ -97,6 +102,11 @@ describe('SupportContract searchKb / getKbArticle — public doors', () => {
     expect(searchKbInputSchema.parse(undefined)).toBeUndefined();
     expect(searchKbInputSchema.parse({ q: 'account' })).toEqual({ q: 'account' });
     expect(getKbArticleInputSchema.parse({ id: 'kb-account-access' }).id).toBe('kb-account-access');
+    expect(getKbArticleInputSchema.parse({ id: 'kb-account-access', version: 2 })).toEqual({
+      id: 'kb-account-access',
+      version: 2,
+    });
     expect(getKbArticleInputSchema.safeParse({ id: '' }).success).toBe(false);
+    expect(getKbArticleInputSchema.safeParse({ id: 'kb-account-access', version: 0 }).success).toBe(false);
   });
 });

@@ -51,7 +51,12 @@ export const supportKbArticleSchema = z.object({
   /** i18n catalog key — never raw third-party product names */
   titleKey: z.string().min(1),
   bodyKey: z.string().min(1),
-  /** Monotonic content revision. Locale copy is not a revision. */
+  /**
+   * Immutable content version for this `id` (integer ≥ 1). Identity is `id`;
+   * a new published body is a new version, not a mutated row.
+   */
+  version: z.number().int().positive().optional(),
+  /** Operator CAS counter on the head row. Same integer as `version` on the wire. */
   revision: z.number().int().positive().optional(),
   /** Public doors return published rows only. Optional so older callers still parse. */
   published: z.boolean().optional(),
@@ -62,8 +67,11 @@ export type SupportKbArticle = z.infer<typeof supportKbArticleSchema>;
 export const searchKbInputSchema = z.object({ q: z.string().max(200).optional() }).optional();
 export type SearchKbInput = z.infer<typeof searchKbInputSchema>;
 
-/** Router `getKb` input. Unknown ids stay unknown — the door does not invent. */
-export const getKbArticleInputSchema = z.object({ id: z.string().min(1).max(200) });
+/** Router `getKb` input. Omitted version → latest published. Unknown version is a named refuse, not a silent older body. */
+export const getKbArticleInputSchema = z.object({
+  id: z.string().min(1).max(200),
+  version: z.number().int().positive().optional(),
+});
 export type GetKbArticleInput = z.infer<typeof getKbArticleInputSchema>;
 
 /**
@@ -254,7 +262,8 @@ export interface SupportContract {
   searchKb(query: string): Promise<SupportKbArticle[]>;
   /**
    * One published article, or null when missing / unpublished.
-   * Matches the public `getKb` query: unknown is null, not a throw.
+   * Matches the public `getKb` query without `version`: unknown is null, not a throw.
+   * Explicit version is a service/router concern (`getKbArticleInputSchema.version`).
    * Workflow triggers are not part of this contract.
    */
   getKbArticle(id: string): Promise<SupportKbArticle | null>;

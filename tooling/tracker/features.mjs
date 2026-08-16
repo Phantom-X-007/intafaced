@@ -1810,7 +1810,10 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'F',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['ops.support'],
+    requires: ['services/svc-support'],
     note: 'Law §25:720 ("Knowledge base / Workflow automation | — | svc-core-ops | 5"), gap-closed 2026-08-08. ops.support carries "KB" in its TITLE, which is precisely how this stayed invisible: a word in another row\'s title is not a row, and the workflow-automation engine beside it had no board presence at all (audit §A1.a #9). Blocked on ops.support (`ready`, not `done`), which is the right edge in both directions — the standalone KB is an extraction of what the support desk already stores, and agents.support is grounded in it. PLANE: §25 gives "—"; `F` states operator-side and identity-bearing, not a plane ruling. TWO CAPABILITIES IN ONE MATRIX LINE, AND THEY ARE NOT THE SAME SIZE. A public, versioned knowledge base is a content surface and ordinary work. A WORKFLOW AUTOMATION ENGINE — user-defined triggers running actions across modules — is an agent runtime with a different name, and it must not become a second one: agents.gateway already owns the fleet runtime, the guardrail schema and the `agent_actions` audit log, and anything that executes on a user\'s behalf belongs behind those or the Agentic Law has a hole in it. Worth an owner ruling on whether the automation half ships at all, rather than discovering the overlap after it is built.',
   }),
   f('ops.social-promotion', 'Social promotion — share pipeline and tracked attribution, every surface (§25:725)', {
