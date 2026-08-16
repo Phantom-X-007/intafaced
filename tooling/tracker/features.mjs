@@ -270,15 +270,19 @@ export const FEATURES = [
     module: 'identity',
     phase: '1',
     plane: 'F',
-    status: 'wip',
-    owner: 'ZenYoda3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.kyc', 'identity.kyc-review'],
     requires: [
       'services/svc-identity/src/kyc/document-store.ts',
       'services/svc-identity/src/kyc/provider-ref-bind.ts',
       'services/svc-identity/drizzle/0010_kyc_document_store.sql',
     ],
-    note: 'Law §10:443. WIP L11 wave 13 (2026-08-10): encrypted vault (#1348) + principal-bound getFor/deleteFor (no free get-by-id cross-user read) + operator tRPC storeDocument/listDocuments/bindDocument (meta only, never bytes) + provider_ref bind ownership gate + monorepo gate no foreign service touches kyc_documents. STILL NOT done: (1) production index.ts must wire kycDocs when IDENTITY_KYC_DOC_KEY set — held while Denon #1626 dual-writes index/auth-service; (2) live verification vendor webhook Class X owner. Services get status flags only; kyc.status never returns provider_ref or document bytes.',
+    note:
+      '**DONE 2026-08-16:** Title is the encrypted KYC document store (§10), not a live vendor. ' +
+      'Vault + principal-bound getFor/deleteFor + operator tRPC meta-only + provider_ref bind + foreign-service gate on main (#1348). ' +
+      'Production `index.ts` constructs/wires `kycDocs` via `kycRouterBootOptions(sql, env.IDENTITY_KYC_DOC_KEY)` when the key is set (#1806, #2101); unset → procedures named-refuse `kyc_doc.unwired`; invalid key → `kyc_doc.key_missing`. Pin: `kyc/index-boot-wire.test.ts`. ' +
+      'Named Class X residual (not this title): live verification vendor webhook — no vendor invented. Services get status flags only; kyc.status never returns provider_ref or document bytes.',
   }),
   f('infra.drop-flags', 'Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11)', {
     module: 'core-ops',
