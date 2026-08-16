@@ -258,6 +258,8 @@ services:
       # TOTP enrol at rest. Pass-through only — no compose default, no invented key.
       # Host sets IDENTITY_TOTP_SECRET_KEY → enrol can run. Blank stays refuse-closed.
       IDENTITY_TOTP_SECRET_KEY: ${IDENTITY_TOTP_SECRET_KEY:-}
+      # Live-partition cap (env.ts default 25). Host can pin or lower; do not raise above 25 here.
+      IDENTITY_MAX_SUB_ACCOUNTS: ${IDENTITY_MAX_SUB_ACCOUNTS:-25}
       # ops.affiliates: payout posts sweepFeesToRewards + rewardPay. Without this,
       # compose identity refuses affiliate.payout.ledger_unwired (env stays optional
       # and undefaulted — unset is still a legible refuse, not a localhost invent).
@@ -281,6 +283,13 @@ services:
       DATABASE_URL: postgres://svc_token:svc_token@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+      # Emissions kill + auto-tick (token.emissions). Host `.env` can stop
+      # minting without a rebuild. AUTO_TICK stays default false — do not
+      # open the faucet on a clean clone. Tick interval matches env.ts (1d).
+      # Do not pass the weekly yield cron — token.yield is still a socket.
+      EMISSIONS_ENABLED: ${EMISSIONS_ENABLED:-true}
+      EMISSIONS_AUTO_TICK: ${EMISSIONS_AUTO_TICK:-false}
+      EMISSIONS_TICK_MS: ${EMISSIONS_TICK_MS:-86400000}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4003']
     healthcheck: *healthcheck
@@ -423,6 +432,12 @@ services:
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
       # listing. Opaque stamp only — never invent fixing source/window/payor.
       TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}
+      # OTC RFQ desk (trade.otc). Empty law = unpublished refuse. Host `.env`
+      # can publish; compose never invents desk JSON, mids, or symbols.
+      TRADE_OTC_DESK_LAW: ${TRADE_OTC_DESK_LAW:-}
+      TRADE_OTC_MIDS: ${TRADE_OTC_MIDS:-}
+      TRADE_OTC_MID_FROM_VENUE: ${TRADE_OTC_MID_FROM_VENUE:-false}
+      TRADE_OTC_VENUE_SYMBOLS: ${TRADE_OTC_VENUE_SYMBOLS:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4004']
     healthcheck: *healthcheck
@@ -504,6 +519,11 @@ services:
       # boot rather than verify everything.
       PAY_CRYPTO_WEBHOOK_SECRET: ${PAY_CRYPTO_WEBHOOK_SECRET:?missing — copy .env.example to .env}
       PAY_CARD_SANDBOX_WEBHOOK_SECRET: ${PAY_CARD_SANDBOX_WEBHOOK_SECRET:?missing — copy .env.example to .env}
+      # In-process chain watcher. env.ts already names these; without compose
+      # pass-through a host `.env` never reaches the container. Defaults match
+      # env.ts (`true` / `2000`). No RPC, mnemonic, hot wallet, or card rail.
+      PAY_CRYPTO_WATCHER_ENABLED: ${PAY_CRYPTO_WATCHER_ENABLED:-true}
+      PAY_CRYPTO_WATCHER_INTERVAL_MS: ${PAY_CRYPTO_WATCHER_INTERVAL_MS:-2000}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
