@@ -678,6 +678,12 @@ services:
       # always uses the schema default. Default 90d is longer than the 7-day
       # dispute SLA (env.ts forbids retention shorter than SLA).
       P2P_INSTRUMENT_RETENTION_DAYS: ${P2P_INSTRUMENT_RETENTION_DAYS:-90}
+      # Access-token TTL / iss / aud. authEnvSchema defaults match identity
+      # (900 / intafaced / intafaced.api). Without compose pass-through a host
+      # `.env` never reaches the container. Do not bake P2P_FEE_BPS.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4007']
     healthcheck: *healthcheck
