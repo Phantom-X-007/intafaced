@@ -81,8 +81,9 @@ export type MmKillEvaluation = MmKillClear | MmKillTripped;
 
 /**
  * Evaluate MM kill-switches. Admin kill, volatility breach, and inventory
- * breach all halt quoting / hedging. Missing realised vol → volatility_breach
- * (refuse rather than assume calm).
+ * breach all halt quoting. Hedging uses the same evaluator but ignores
+ * inventory_breach so excess can still be sized. Missing realised vol →
+ * volatility_breach (refuse rather than assume calm).
  */
 export function evaluateMmKillSwitches(config: MmKillConfig): MmKillEvaluation {
   const reasons: MmKillReason[] = [];
@@ -373,6 +374,11 @@ export interface PlanExternalMmHedgeInput {
   /** Venue we are quoting / holding inventory on. */
   readonly quoteVenueId: string;
   readonly inventory: MmInventoryState;
+  /**
+   * Same kill-switches as quoting. Inventory already outside bands is still
+   * sized; admin kill and unmeasured/breached vol refuse `kill_switch`.
+   */
+  readonly kill: MmKillConfig;
   readonly hedge: MmHedgeVenue;
 }
 
@@ -397,6 +403,8 @@ export type PlanExternalMmHedgeResult = MmHedgePlan | MmRefusal;
  *
  * Sizes only the excess outside owner bands (never invents a hedge size).
  * Internal hedge venues refuse. Missing mid / cost / depth refuse honestly.
+ * Admin kill and unmeasured/breached vol halt the plan; inventory_breach
+ * does not — that is the reason a hedge is sized.
  */
 export function planExternalMmHedge(input: PlanExternalMmHedgeInput): PlanExternalMmHedgeResult {
   if (!isExternalVenueKind(input.hedge.kind)) {
@@ -440,6 +448,23 @@ export function planExternalMmHedge(input: PlanExternalMmHedgeInput): PlanExtern
       reason: 'hedge_not_required',
       detail: 'position inside owner inventory bands — no hedge sized',
     };
+  }
+
+  const kill = evaluateMmKillSwitches({
+    adminKill: input.kill.adminKill,
+    volatility: input.kill.volatility,
+    inventory: input.inventory,
+  });
+  if (kill.killed) {
+    const reasons = kill.reasons.filter((r) => r !== 'inventory_breach');
+    if (reasons.length > 0) {
+      return {
+        ok: false,
+        reason: 'kill_switch',
+        detail: kill.detail,
+        killReasons: reasons,
+      };
+    }
   }
 
   if (input.hedge.mid === null || input.hedge.mid <= 0n) {
