@@ -129,6 +129,12 @@ services:
       # `--force-recreate` of another service pulled the dependency chain with
       # it. workspace-sync check 3b now fails on this shape.
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
+      # Posting freeze + reconcile cadence. env.ts already names these (default
+      # true / 60). Without compose pass-through a host `.env` freeze after a
+      # reconcile mismatch never reaches the container. Do not default posting
+      # OFF — that would halt the money plane on a clean clone.
+      LEDGER_POSTING_ENABLED: ${LEDGER_POSTING_ENABLED:-true}
+      RECONCILE_CRON_MINUTES: ${RECONCILE_CRON_MINUTES:-60}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4001']
     healthcheck: *healthcheck
