@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { assertKbArticle, getKbById, KbCatalogError, listPlatformKb, PLATFORM_KB_SPINE, searchKb } from './kb-catalog.js';
+import { assertKbArticle, getKbById, KbCatalogError, listPlatformKb, PLATFORM_KB_SPINE, searchKb, toPublicKb } from './kb-catalog.js';
 import { SupportError, SupportService } from './support-service.js';
 
 describe('support Stage-2 KB catalog', () => {
@@ -51,6 +51,24 @@ describe('support Stage-2 KB catalog', () => {
     ).toThrow(KbCatalogError);
   });
 
+  it('toPublicKb carries revision and published from the store row', () => {
+    expect(
+      toPublicKb({
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        revision: 3,
+        published: true,
+      }),
+    ).toEqual({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      revision: 3,
+      published: true,
+    });
+  });
+
   it('refuses keys outside support.kb.*', () => {
     expect(() =>
       assertKbArticle({
@@ -73,7 +91,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     await svc.unpublishKb({ id: 'kb-paper-vs-live', baseRevision: 1 });
     const after = await svc.listKb();
     expect(after.some((a) => a.id === 'kb-paper-vs-live')).toBe(false);
-    expect(after.every((a) => !('published' in a) && !('revision' in a))).toBe(true);
+    expect(after.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
     expect(after.length).toBe(before.length - 1);
   });
 
@@ -101,7 +119,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     const svc = new SupportService();
     await svc.unpublishKb({ id: 'kb-security-basics', baseRevision: 1 });
     const empty = await svc.searchKb('');
-    expect(empty.every((a) => !('published' in a) && !('revision' in a))).toBe(true);
+    expect(empty.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
     expect(empty.some((a) => a.id === 'kb-security-basics')).toBe(false);
     expect(empty.length).toBe((await svc.listKb()).length);
   });
@@ -138,6 +156,8 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
       id: 'kb-account-access',
       titleKey: 'support.kb.account_access.title',
       bodyKey: 'support.kb.account_access.body',
+      revision: 2,
+      published: true,
     });
     await expect(
       svc.publishKb({
@@ -149,8 +169,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     ).rejects.toMatchObject({ code: 'support.kb.revision_stale' });
     const still = await svc.getKbArticle('kb-account-access');
     expect(still).toEqual(bumped);
-    expect(still).not.toHaveProperty('revision');
-    expect(still).not.toHaveProperty('published');
+    expect(still).toMatchObject({ revision: 2, published: true });
   });
 
   it('unpublishKb hides the article on public listKb', async () => {

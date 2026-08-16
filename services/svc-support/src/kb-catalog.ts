@@ -55,11 +55,18 @@ export function publishedOnly(catalog: readonly SupportKbArticle[]): SupportKbAr
 }
 
 /**
- * Wire shape until SupportContract carries revision/published (T-001).
- * Store columns stay server-side; public doors must not leak them.
+ * Public wire after SupportContract (#2012): published rows carry `revision`
+ * and `published: true`. Store-only columns (e.g. updated_at) stay off the wire.
+ * Unpublished still never appear on public list/search/get — callers filter first.
  */
 export function toPublicKb(article: SupportKbArticle): SupportKbArticle {
-  return { id: article.id, titleKey: article.titleKey, bodyKey: article.bodyKey };
+  return {
+    id: article.id,
+    titleKey: article.titleKey,
+    bodyKey: article.bodyKey,
+    ...(article.revision != null ? { revision: article.revision } : {}),
+    ...(article.published != null ? { published: article.published } : {}),
+  };
 }
 
 const VENDOR_SMELL = /\b(binance|coinbase|kraken|okx|bybit|deriv|metatrader|tradingview)\b/i;
