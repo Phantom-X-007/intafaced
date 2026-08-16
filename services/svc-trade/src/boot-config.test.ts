@@ -529,8 +529,15 @@ describe('the shipped configuration does not invent a funding market list', () =
     expect(read('.env.example')).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS/);
   });
 
-  it('compose does not inject a funding market UUID list', () => {
-    expect(read('docker-compose.apps.yml')).not.toMatch(/^\s*TRADE_FUTURES_FUNDING_MARKET_IDS:/m);
+  it('compose pins TRADE_FUTURES_FUNDING_MARKET_IDS empty rather than omitting it', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS:\s*\$\{TRADE_FUTURES_FUNDING_MARKET_IDS:-\}/);
+    expect(shipped.get('TRADE_FUTURES_FUNDING_MARKET_IDS')).toBe('');
+  });
+
+  it('lists TRADE_FUTURES_FUNDING_MARKET_IDS once among unique svc-trade compose keys', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+    expect(keys.filter((k) => k === 'TRADE_FUTURES_FUNDING_MARKET_IDS')).toHaveLength(1);
   });
 });
 
