@@ -1,0 +1,22 @@
+name: one-shot-wire-trade-payout
+on:
+  push:
+    branches:
+      - feat/trade-affiliate-producer-payout
+    paths:
+      - tooling/tmp-wire-trade-payout.py
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tooling/tmp-wire-trade-payout.py
+      - run: |
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git rm -f tooling/tmp-wire-trade-payout.py .github/workflows/one-shot-wire-trade-payout.yml
+          git add services/svc-trade/src/spot/trade-service.ts services/svc-trade/src/index.ts
+          git commit -m "feat(svc-trade): fire affiliate payout after fill accrue"
+          git push
