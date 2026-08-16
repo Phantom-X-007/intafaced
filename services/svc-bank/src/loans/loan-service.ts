@@ -1016,7 +1016,7 @@ export class LoanService {
             sequence,
           }),
         ),
-        table: 'loan_repayments',
+      table: 'loan_repayments',
     });
 
     await this.notifyBankAffiliateAccrue(
@@ -1464,8 +1464,8 @@ export class LoanService {
               markPrice: collateralMark.price,
             }),
           ),
-          table: 'loan_liquidations',
-        });
+        table: 'loan_liquidations',
+      });
 
       void ledgerTxId;
 

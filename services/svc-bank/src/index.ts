@@ -86,12 +86,8 @@ const bank = createBankServices(sql, ledger, history, {
     // a database column and svc-notify's finished consumer never sees one.
     marginCalls: eventMarginCallSink(bus),
     moduleEnabled: env.BANK_LOANS_ENABLED,
-    affiliateAccrue: env.IDENTITY_URL
-      ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
-      : undefined,
-    affiliatePayout: env.IDENTITY_URL
-      ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
-      : undefined,
+    affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+    affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   },
   /**
    * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
