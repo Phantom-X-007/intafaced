@@ -218,6 +218,10 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       DEFAULT_REGION: ${DEFAULT_REGION:-XX}
+      # Pass-through (key, no value): host `.env` reaches the container only
+      # when set. Unset omits the key so unresolved region stays fall-open.
+      # Do not default true — `:-true` would refuse XX on every compose boot.
+      INTAFACED_REGION_FAIL_CLOSED:
       EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
       EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
