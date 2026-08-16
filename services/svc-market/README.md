@@ -12,41 +12,43 @@ stake numbers stay in svc-token; value moves only through `packages/ledger-clien
 
 ## Stages
 
-| Stage  | What it is                                                 | Built    |
-| ------ | ---------------------------------------------------------- | -------- |
-| **1**  | Apply → vet, with an append-only decision history          | **✓**    |
-| **2**  | Stake-gated listing slots, from `vendorSlots` under a lock | **✓**    |
-| **3**  | Public listing eligibility, feeding `market.commerce`      | **✓**    |
-| **C1** | Listing catalog (no money)                                 | **✓**    |
-| **C2** | One-time purchase + house commission (Class M)             | **✓**    |
-| **C3** | Subscriptions                                              | residual |
+| Stage  | What it is                                                 | Built |
+| ------ | ---------------------------------------------------------- | ----- |
+| **1**  | Apply → vet, with an append-only decision history          | **✓** |
+| **2**  | Stake-gated listing slots, from `vendorSlots` under a lock | **✓** |
+| **3**  | Public listing eligibility, feeding `market.commerce`      | **✓** |
+| **C1** | Listing catalog (no money)                                 | **✓** |
+| **C2** | One-time purchase + house commission (Class M)             | **✓** |
+| **C3** | Subscriptions                                              | **✓** |
 
 ## API
 
 tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 (`EDGE_PRINCIPAL_SECRET`).
 
-| Procedure           | Scope          | Behaviour                                                 |
-| ------------------- | -------------- | --------------------------------------------------------- |
-| `profile`           | **public**     | One listed vendor's public profile                        |
-| `listed`            | **public**     | The directory of vendors listed right now                 |
-| `listings`          | **public**     | Active one-time listings (registration order, not ranked) |
-| `commerceProgramme` | **public**     | Whether house commission bps is configured                |
-| `applyAsVendor`     | `market:write` | Create the caller's own application (`applied`)           |
-| `mine`              | `market:read`  | The caller's own application, or `null`                   |
-| `createListing`     | `market:write` | Create a listing; claims a slot named by the listing id   |
-| `archiveListing`    | `market:write` | Archive own listing; releases its slot                    |
-| `myListings`        | `market:read`  | Caller's listings                                         |
-| `purchase`          | `market:write` | One-time purchase (client `purchaseId`); Class M          |
-| `myPurchases`       | `market:read`  | Caller's purchases                                        |
-| `claimSlot`         | `market:write` | Take a listing slot, if the caller's tier has one         |
-| `releaseSlot`       | `market:write` | Give a slot back                                          |
-| `slots`             | `market:read`  | Tier, capacity, held and **usable** slots                 |
-| `listApplications`  | `market:ops`   | Operator queue — undecided first, oldest first            |
-| `vet`               | `market:ops`   | Record an operator's decision and apply it                |
-| `history`           | `market:ops`   | The decision trail for one application                    |
+| Procedure            | Scope          | Behaviour                                                    |
+| -------------------- | -------------- | ------------------------------------------------------------ |
+| `profile`            | **public**     | One listed vendor's public profile                           |
+| `listed`             | **public**     | The directory of vendors listed right now                    |
+| `listings`           | **public**     | Active sellable listings (one-time + perioded subscriptions) |
+| `commerceProgramme`  | **public**     | Whether house commission bps is configured                   |
+| `applyAsVendor`      | `market:write` | Create the caller's own application (`applied`)              |
+| `mine`               | `market:read`  | The caller's own application, or `null`                      |
+| `createListing`      | `market:write` | Create a listing; claims a slot named by the listing id      |
+| `archiveListing`     | `market:write` | Archive own listing; releases its slot                       |
+| `myListings`         | `market:read`  | Caller's listings                                            |
+| `purchase`           | `market:write` | One-time or one-period subscription purchase (`purchaseId`)  |
+| `myPurchases`        | `market:read`  | Caller's purchases                                           |
+| `cancelSubscription` | `market:write` | Stop new access; no ledger reverse                           |
+| `subscriptionAccess` | `market:read`  | Time-bounded grant, or named past-due / cancelled            |
+| `claimSlot`          | `market:write` | Take a listing slot, if the caller's tier has one            |
+| `releaseSlot`        | `market:write` | Give a slot back                                             |
+| `slots`              | `market:read`  | Tier, capacity, held and **usable** slots                    |
+| `listApplications`   | `market:ops`   | Operator queue — undecided first, oldest first               |
+| `vet`                | `market:ops`   | Record an operator's decision and apply it                   |
+| `history`            | `market:ops`   | The decision trail for one application                       |
 
-HTTP: `GET /health`, `GET /ready` (`stage: commerce-one-time`, plus whether commission is configured).
+HTTP: `GET /health`, `GET /ready` (`stage: commerce-subscriptions`, plus whether commission is configured).
 
 Neither `claimSlot` nor `releaseSlot` takes a `vendorId`: a slot is always spent
 against the caller's own vendor row. A claim that could name its vendor would let
@@ -315,14 +317,15 @@ otherwise.
 - **Crash re-drive:** a pending purchase settles from the **claim snapshot**
   (price + commission_bps on the row), not a later env rate. Settle updates only
   while `status = 'pending'`.
-- **Subscriptions:** `createListing(subscription)` refuses
-  `market.subscription_not_built` **before insert or slot claim** — same
-  refuse-closed posture as a blank commission. An unbuilt offer must not burn
-  a stake slot or steal oldest-first entitled quota from a one-time listing.
-  The schema still stores `offer_type=subscription` so leftover rows and a
-  future C3 stay representable; public catalogue omits them; purchase of a
-  leftover row still refuses the same code. Period / past-due / cancel law is
-  C3 (Nitro); this does not invent it. Venue / pair catalogues stay owner-only.
+- **Subscriptions:** `createListing(subscription)` requires `periodSeconds` (whole
+  seconds, no default month). Unset period refuses `market.subscription_period_unset`
+  before insert or slot claim. Purchase of a perioded subscription posts the same
+  `marketPurchase` recipe as one-time; access is `settled_at + period`. Cancel
+  (`cancelSubscription`) stops new access and does **not** reverse the ledger.
+  After the window, access refuses `market.subscription_past_due` (or
+  `market.subscription_cancelled` if cancelled). Leftover rows without a period
+  stay off the public catalogue. Automatic recurring `subscribe` still refuses
+  `market.subscription_recurring_not_built` (no second recipe / scheduler).
 
 No balance column exists on `market.listings` or `market.purchases`. Price and
 commission_bps are intent records; the only balances live in svc-ledger.

@@ -70,6 +70,7 @@ export const MONEY_SKIP_REGISTER = [
 
   // ── svc-market ───────────────────────────────────────────────────────────
   { file: 'services/svc-market/src/commerce/commerce.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-market/src/commerce/commerce-subscriptions.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-market/src/listing-eligibility.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-market/src/vendor-slots.test.ts', kind: 'infra-journalled', why: PG },
 

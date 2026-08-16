@@ -4,9 +4,7 @@ import { MarketError } from '../vendor-service.js';
 
 /**
  * Recurring subscribe must refuse BEFORE any write or ledger post.
- *
- * Stage C3 is not built. A successful subscribe would invent a recurring
- * charge / second book. No Postgres: the proof is sql and ledger are untouched.
+ * One period is `purchase` + `marketPurchase`. This door is not a silent scheduler.
  */
 describe('subscribe — refuse unbuilt recurring before any write', () => {
   it('refuses without touching sql, slots, or ledger', async () => {
@@ -27,7 +25,7 @@ describe('subscribe — refuse unbuilt recurring before any write', () => {
 
     await expect(commerce.subscribe({ listingId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' })).rejects.toMatchObject({
       name: 'MarketError',
-      code: 'market.subscription_not_built',
+      code: 'market.subscription_recurring_not_built',
     });
     expect(sql).not.toHaveBeenCalled();
     expect(vendors.myVendor).not.toHaveBeenCalled();

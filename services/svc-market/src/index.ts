@@ -52,6 +52,9 @@ await sql`SELECT 1 FROM market.listings LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM market.purchases LIMIT 1`.catch(() => {
   throw new Error('market.purchases is missing — run migrations before starting svc-market');
 });
+await sql`SELECT 1 FROM market.subscription_state LIMIT 1`.catch(() => {
+  throw new Error('market.subscription_state is missing — run migrations before starting svc-market');
+});
 
 const vendors = new VendorService(sql, createStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET));
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
@@ -70,7 +73,7 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'commerce-one-time',
+  stage: 'commerce-subscriptions',
   commissionConfigured: env.MARKET_HOUSE_COMMISSION_BPS !== undefined,
 }));
 
@@ -86,7 +89,7 @@ await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
   {
     port: env.HTTP_PORT,
-    stage: 'commerce-one-time',
+    stage: 'commerce-subscriptions',
     commissionConfigured: env.MARKET_HOUSE_COMMISSION_BPS !== undefined,
     trpc: true,
   },

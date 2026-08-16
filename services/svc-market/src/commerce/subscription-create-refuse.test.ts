@@ -3,29 +3,23 @@ import { CommerceService } from './commerce-service.js';
 import { MarketError } from '../vendor-service.js';
 
 /**
- * createListing(subscription) must refuse BEFORE any write or slot claim.
- *
- * Stage C3 is not built. A successful create would burn a stake-gated listing
- * slot for inventory purchase already refuses — and oldest-slot-first it can
- * steal entitled quota from a later one-time listing. That is the same shopfront
- * lie blank commission used to make. No venue/pair catalogue is invented here.
- *
- * No Postgres: the proof is that sql and VendorService are never touched.
+ * createListing(subscription) without a period must refuse BEFORE any write.
+ * No default month is invented.
  */
-describe('createListing — refuse unbuilt subscription before any write', () => {
-  it('refuses subscription create without touching sql or slots', async () => {
+describe('createListing — refuse subscription with unset period before any write', () => {
+  it('refuses subscription create without period without touching sql or slots', async () => {
     const sql = Object.assign(
       vi.fn(() => {
-        throw new Error('sql must not run for an unbuilt offer type');
+        throw new Error('sql must not run when period is unset');
       }),
       { begin: vi.fn() },
     );
     const vendors = {
       myVendor: vi.fn(async () => {
-        throw new Error('vendor lookup must not run for an unbuilt offer type');
+        throw new Error('vendor lookup must not run when period is unset');
       }),
       claimSlot: vi.fn(async () => {
-        throw new Error('claimSlot must not run for an unbuilt offer type');
+        throw new Error('claimSlot must not run when period is unset');
       }),
     };
     const ledger = { post: vi.fn() };
@@ -42,7 +36,7 @@ describe('createListing — refuse unbuilt subscription before any write', () =>
       }),
     ).rejects.toMatchObject({
       name: 'MarketError',
-      code: 'market.subscription_not_built',
+      code: 'market.subscription_period_unset',
     });
     expect(sql).not.toHaveBeenCalled();
     expect(vendors.myVendor).not.toHaveBeenCalled();
@@ -50,9 +44,15 @@ describe('createListing — refuse unbuilt subscription before any write', () =>
     expect(ledger.post).not.toHaveBeenCalled();
   });
 
-  it('refuses subscription even when commission is configured (C3 is the gate, not the rate)', async () => {
-    const commerce = new CommerceService(vi.fn() as never, { myVendor: vi.fn(), claimSlot: vi.fn() } as never, { post: vi.fn() } as never, {
-      commissionBps: 0,
+  it('refuses blank commission on a subscription before inventing a period', async () => {
+    const sql = Object.assign(
+      vi.fn(() => {
+        throw new Error('sql must not run');
+      }),
+      { begin: vi.fn() },
+    );
+    const commerce = new CommerceService(sql as never, { myVendor: vi.fn(), claimSlot: vi.fn() } as never, { post: vi.fn() } as never, {
+      commissionBps: null,
     });
     await expect(
       commerce.createListing({
@@ -62,7 +62,20 @@ describe('createListing — refuse unbuilt subscription before any write', () =>
         offerType: 'subscription',
         assetId: 'USDT',
         price: '10',
+        periodSeconds: 86_400,
       }),
     ).rejects.toBeInstanceOf(MarketError);
+    await expect(
+      commerce.createListing({
+        userId: '11111111-1111-4111-8111-111111111111',
+        title: 'Sub',
+        description: 'monthly',
+        offerType: 'subscription',
+        assetId: 'USDT',
+        price: '10',
+        periodSeconds: 86_400,
+      }),
+    ).rejects.toMatchObject({ code: 'market.commission_not_configured' });
+    expect(sql).not.toHaveBeenCalled();
   });
 });
