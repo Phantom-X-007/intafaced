@@ -1,0 +1,67 @@
+/**
+ * Unit card — compose stack passes rate-limit flags into svc-edge
+ *
+ * 1. Promise: EDGE_RATE_LIMIT_ENABLED / MAX / WINDOW_MS from host `.env` reach
+ *    the container (env.ts already defaults true / 300 / 60000).
+ * 2. Break: compose booted edge with DEFAULT_REGION but no rate-limit vars →
+ *    operator throttle/kill from host `.env` is a no-op.
+ * 3. Done bar: docker-compose.apps.yml svc-edge has
+ *    EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
+ *    EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
+ *    EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
+ * 4. Class N
+ * 5. Paths: docker-compose.apps.yml (svc-edge block only)
+ * 6. RED: pin fails if a unique key drops, compose default drifts from env.ts,
+ *    EDGE_TRUST_PROXY appears, or DEFAULT_REGION / JWT lines are restamped
+ * 7. Collision: observability-wiring.test.ts — this pin does not restamp scrape
+ *    interval vs limiter budget
+ */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+function edgeServiceBlock(source: string): string {
+  const match = source.match(/^  svc-edge:\n(?:.*\n)*?(?=^  [a-z]|\Z)/m);
+  if (!match) throw new Error('svc-edge service block missing from docker-compose.apps.yml');
+  return match[0];
+}
+
+const ENABLED = /^\s+EDGE_RATE_LIMIT_ENABLED:\s*\$\{EDGE_RATE_LIMIT_ENABLED:-true\}\s*$/gm;
+const MAX = /^\s+EDGE_RATE_LIMIT_MAX:\s*\$\{EDGE_RATE_LIMIT_MAX:-300\}\s*$/gm;
+const WINDOW = /^\s+EDGE_RATE_LIMIT_WINDOW_MS:\s*\$\{EDGE_RATE_LIMIT_WINDOW_MS:-60000\}\s*$/gm;
+const DEFAULT_REGION = /^\s+DEFAULT_REGION:\s*\$\{DEFAULT_REGION:-XX\}\s*$/gm;
+const JWT_ACCESS = /^\s+JWT_ACCESS_SECRET:\s*\$\{JWT_ACCESS_SECRET:\?missing — copy \.env\.example to \.env\}\s*$/gm;
+const JWT_ISSUER = /^\s+JWT_ISSUER:\s*\$\{JWT_ISSUER:-intafaced\}\s*$/gm;
+const JWT_AUDIENCE = /^\s+JWT_AUDIENCE:\s*\$\{JWT_AUDIENCE:-intafaced\.api\}\s*$/gm;
+
+describe('compose rate-limit flags for svc-edge', () => {
+  const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
+  const envTs = readFileSync(join(ROOT, 'services/svc-edge/src/env.ts'), 'utf8');
+  const block = edgeServiceBlock(compose);
+
+  it('env.ts still defaults the flags this pin tracks, matching compose', () => {
+    expect(envTs).toMatch(/EDGE_RATE_LIMIT_ENABLED:\s*z[\s\S]*?\.default\(true\)/);
+    const max = /EDGE_RATE_LIMIT_MAX:[^\n]*?\.default\((\d+)\)/.exec(envTs)?.[1];
+    const windowMs = /EDGE_RATE_LIMIT_WINDOW_MS:[^\n]*?\.default\((\d+)(?:_(\d+))?\)/.exec(envTs);
+    expect(max).toBe('300');
+    expect(`${windowMs?.[1]}${windowMs?.[2] ?? ''}`).toBe('60000');
+  });
+
+  it('compose svc-edge block passes unique keys once with env.ts defaults', () => {
+    expect(block).toMatch(/SERVICE_NAME:\s*svc-edge/);
+    expect(block.match(ENABLED)).toHaveLength(1);
+    expect(block.match(MAX)).toHaveLength(1);
+    expect(block.match(WINDOW)).toHaveLength(1);
+  });
+
+  it('does not set EDGE_TRUST_PROXY or restamp DEFAULT_REGION / JWT secrets', () => {
+    expect(block).not.toMatch(/EDGE_TRUST_PROXY:/);
+    expect(block.match(DEFAULT_REGION)).toHaveLength(1);
+    expect(block.match(JWT_ACCESS)).toHaveLength(1);
+    expect(block.match(JWT_ISSUER)).toHaveLength(1);
+    expect(block.match(JWT_AUDIENCE)).toHaveLength(1);
+  });
+});
