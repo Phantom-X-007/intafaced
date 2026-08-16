@@ -48,6 +48,8 @@ import { InstrumentError, methodIdKey, methodsWithLiveDestination, missingSellDe
 import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
+import { affiliateLegAfterP2pRelease, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 
 /**
  * svc-p2p — PEER-TO-PEER TRADING WITH ESCROW (§6.2).
@@ -280,6 +282,16 @@ export interface P2pServiceOptions {
    * it. `index.ts` supplies it from `MerchantService`; tests supply a stub.
    */
   merchantStatusOf?: (userId: string) => Promise<MerchantStatus | null>;
+  /**
+   * Identity affiliate accrue after house p2p fees post. Default noop.
+   * Failures must not unwind escrowRelease.
+   */
+  affiliateAccrue?: AffiliateAccruePort;
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind escrowRelease. Body is `{ feeEventId }` only.
+   */
+  affiliatePayout?: AffiliatePayoutPort;
 }
 
 /**
@@ -538,6 +550,8 @@ export class P2pService {
   private readonly offerLimits: OfferLimitPolicy;
   private readonly merchantStatusOf: ((userId: string) => Promise<MerchantStatus | null>) | undefined;
   private readonly instruments: TradeInstrumentAttacher;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
   private tradingEnabled: boolean;
 
   constructor(
@@ -558,6 +572,8 @@ export class P2pService {
     this.referencePrices = options.referencePrices;
     this.offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
     this.merchantStatusOf = options.merchantStatusOf;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   /**
@@ -1830,6 +1846,8 @@ export class P2pService {
           feeBps: trade.feeBps,
         }),
       );
+      await this.notifyP2pAffiliateAccrue(trade, fee);
+      await this.notifyP2pAffiliatePayout(trade, fee);
     } else if (trade.resolution === 'refunded') {
       await this.ledger.post(
         recipes.escrowRefund({
@@ -1871,6 +1889,32 @@ export class P2pService {
       RETURNING *
     `;
     return rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
+  }
+
+  /** Best-effort; never throws. escrowRelease already posted. */
+  private async notifyP2pAffiliateAccrue(trade: TradeRecord, fee: Amount): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterP2pRelease({
+        tradeId: trade.id,
+        sellerId: trade.sellerId,
+        feeAmount: fee,
+        feeAsset: trade.asset,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. escrowRelease already posted. */
+  private async notifyP2pAffiliatePayout(trade: TradeRecord, fee: Amount): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterP2pRelease({
+        tradeId: trade.id,
+        sellerId: trade.sellerId,
+        feeAmount: fee,
+        feeAsset: trade.asset,
+      }),
+    );
   }
 
   /**

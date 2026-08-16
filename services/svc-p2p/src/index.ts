@@ -8,6 +8,8 @@ import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { describeLimits, limitsConfigured, offerLimitsFromEnv, offerLimitsPosture } from './merchant-limits.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
@@ -103,6 +105,8 @@ const p2p: P2pService = new P2pService(sql, ledger, bus, {
    * time this process boots.
    */
   merchantStatusOf: async (userId: string): Promise<MerchantStatus | null> => (await merchants.get(userId))?.status ?? null,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   deadlines: {
     escrowSeconds: env.P2P_ESCROW_DEADLINE_SECONDS,
     paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
