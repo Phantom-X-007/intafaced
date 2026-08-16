@@ -112,16 +112,9 @@ export function preChargeNotifyGap(): PreChargeNotifyGap {
  * or a published status refuses with `pay.precharge_notify_unpublished` and
  * must not open a money move.
  */
-export function assertPrechargeNotifyUnpublished(gap: {
-  notified: boolean;
-  status: string;
-  code?: string;
-}): void {
+export function assertPrechargeNotifyUnpublished(gap: { notified: boolean; status: string; code?: string }): void {
   if (gap.notified !== false || gap.status !== 'absent' || gap.code !== PRECHARGE_NOTIFY_UNPUBLISHED) {
-    throw new PayError(
-      'Pre-charge notify is unpublished — refusing to pretend the payer was notified',
-      PRECHARGE_NOTIFY_UNPUBLISHED,
-    );
+    throw new PayError('Pre-charge notify is unpublished — refusing to pretend the payer was notified', PRECHARGE_NOTIFY_UNPUBLISHED);
   }
 }
 
