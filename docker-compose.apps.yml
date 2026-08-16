@@ -255,9 +255,13 @@ services:
       INTAFACED_FLAG_WAITLIST_ENABLED: ${INTAFACED_FLAG_WAITLIST_ENABLED:-}
       INTAFACED_FLAG_REFERRAL_QUEUE: ${INTAFACED_FLAG_REFERRAL_QUEUE:-}
       # WebAuthn kill-switch (env.ts boolish default true). Host `.env` can
-      # disable WebAuthn without a TOTP redeploy. RP id/name/origin stay schema
-      # defaults — do not invent a production registrable domain here.
+      # disable WebAuthn without a TOTP redeploy.
       WEBAUTHN_ENABLED: ${WEBAUTHN_ENABLED:-true}
+      # RP id/name/origin match env.ts localhost defaults so the host can pin a
+      # real domain. Do not invent a production registrable domain here.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-INTAFACED}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:3000}
       # D26-P0-02 owner-published accrual tiers — pass-through, no compose default.
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}
       # #1806 KYC document vault. Pass-through only — no compose default, no invented key.
