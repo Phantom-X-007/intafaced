@@ -47,7 +47,7 @@ describe('compose JWT_ACCESS_TTL_SECONDS for svc-identity', () => {
   it('wires svc-identity JWT_ACCESS_TTL_SECONDS from the host, unique once, default 900', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-identity/);
     expect(block.match(LINE)).toHaveLength(1);
-    expect(countAssignments(compose, 'JWT_ACCESS_TTL_SECONDS')).toBe(1);
+    expect(countAssignments(block, 'JWT_ACCESS_TTL_SECONDS')).toBe(1);
   });
 
   it('does not restamp JWT secret/issuer/audience WEBAUTHN KYC TOTP waitlist max-sub ledger or affiliate tiers', () => {
