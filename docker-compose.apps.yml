@@ -63,6 +63,9 @@ x-edge-secret: &edge-secret
 
 x-internal-secret: &internal-secret
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or service-to-service calls return 401.}
+  # Host pin for S2S body-bind (internalServiceEnvSchema default accept-both).
+  # Do not default require — v1 callers 401 until the fleet finishes v2.
+  INTERNAL_SERVICE_BODY_BIND: ${INTERNAL_SERVICE_BODY_BIND:-accept-both}
 
 # `/health`, never `/ready` — the script explains why at length.
 x-healthcheck: &healthcheck
@@ -213,11 +216,13 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       DEFAULT_REGION: ${DEFAULT_REGION:-XX}
       EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
       EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
       EDGE_BODY_LIMIT_BYTES: ${EDGE_BODY_LIMIT_BYTES:-1048576}
+      EDGE_KILL_STATE_PATH: ${EDGE_KILL_STATE_PATH:-.data/edge-kill-state.json}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
       IDENTITY_URL: http://svc-identity:4002
       TRADE_URL: http://svc-trade:4004
@@ -255,6 +260,9 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      # Access-token lifetime (authEnvSchema default 900). Host `.env` can shorten
+      # it; do not raise the compose default above 900.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       # Waitlist / referral queue pins (env.ts optional). Empty default so
       # unset follows the drop clock — do not default these on. `off` in
@@ -302,6 +310,12 @@ services:
       DATABASE_URL: postgres://svc_token:svc_token@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+      # Access-token life + iss/aud (authEnvSchema / identity defaults). Host
+      # `.env` can pin without a rebuild. Do not add JWT_ACCESS_SECRET here —
+      # token authenticates via *edge-secret, not a second signing key.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Emissions kill + auto-tick (token.emissions). Host `.env` can stop
       # minting without a rebuild. AUTO_TICK stays default false — do not
       # open the faucet on a clean clone. Tick interval matches env.ts (1d).
@@ -335,7 +349,9 @@ services:
       # `http://localhost:4005`, and three services share 4004 as a default
       # because each was written without knowing the others' ports.
       HTTP_PORT: '4005'
-      MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+      # Journal lives on matchingjournal:/data/matching. Host `.env` can pin;
+      # default stays the volume path so replay still works after replace.
+      MATCHING_JOURNAL_PATH: ${MATCHING_JOURNAL_PATH:-/data/matching/engine_journal.ndjson}
       # Engine kill-switch (env.ts boolish default true). Host `.env` can halt
       # submissions before the journal. `${VAR:-false}` here would refuse every
       # order on a clean clone while env.ts still reads as on.
@@ -376,6 +392,14 @@ services:
       LEDGER_URL: http://svc-ledger:4001
       IDENTITY_URL: http://svc-identity:4002
       MATCHING_URL: http://svc-matching:4005
+      # Access-token lifetime / iss / aud (authEnvSchema defaults 900 /
+      # intafaced / intafaced.api). Host `.env` can pin token life for trade;
+      # without these names the container keeps schema-only defaults.
+      # Do not add JWT_ACCESS_SECRET here — trade authenticates users via
+      # *edge-secret, not the signing key.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Spot kill-switch (env.ts boolish default true). Host `.env` can halt
       # new places; cancels still work. `${VAR:-false}` here would refuse every
       # new spot order on a clean clone while env.ts still reads as on.
@@ -452,6 +476,9 @@ services:
       # D2: no product 8h. Pin empty so an omitted key cannot fall through to a
       # schema default if one is ever reintroduced.
       TRADE_FUTURES_FUNDING_INTERVAL_MS: ${TRADE_FUTURES_FUNDING_INTERVAL_MS:-}
+      # Funding market membership. Empty = no schedule even when jobs are on.
+      # Host `.env` pins ids; compose does not invent UUIDs.
+      TRADE_FUTURES_FUNDING_MARKET_IDS: ${TRADE_FUTURES_FUNDING_MARKET_IDS:-}
       # THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM — its balance is the
       # ceiling (docs/adr/2026-08-05-futures-risk-and-mark-law.md). PKT-B5
       # 2026-08-13 named `house:fees:trade:available` in `.env.example`. This
@@ -664,6 +691,12 @@ services:
       # always uses the schema default. Default 90d is longer than the 7-day
       # dispute SLA (env.ts forbids retention shorter than SLA).
       P2P_INSTRUMENT_RETENTION_DAYS: ${P2P_INSTRUMENT_RETENTION_DAYS:-90}
+      # Access-token TTL / iss / aud. authEnvSchema defaults match identity
+      # (900 / intafaced / intafaced.api). Without compose pass-through a host
+      # `.env` never reaches the container. Do not bake P2P_FEE_BPS.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4007']
     healthcheck: *healthcheck
@@ -726,6 +759,15 @@ services:
       HTTP_PORT: '4009'
       DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
+      # Access-token lifetime + iss/aud. Identity / authEnvSchema already
+      # default these (900 / intafaced / intafaced.api). Without compose
+      # pass-through a host `.env` pin never reaches the container and bank
+      # keeps schema-only defaults forever. Do not restamp JWT_ACCESS_SECRET —
+      # bank takes the edge principal via *edge-secret, not a second
+      # ACCESS_SECRET line.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Loan LTV marks read svc-trade public REST. env.ts defaults to
       # http://localhost:4004, which is unreachable inside compose and leaves
       # every mark as bank.mark_missing. Same surface notify already uses.
@@ -756,6 +798,10 @@ services:
       # Defaults match env.ts (`true`) — an operator stop is host `.env` plus
       # restart. No rate, APY, or schedule is named here (empty must not invent).
       SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
+      # How many due schedules one runner pass claims. env.ts already defaults
+      # 200; without compose pass-through a host `.env` cannot tighten blast
+      # radius. No APY, LTV, or schedule rate is named here.
+      TRANSFER_BATCH_SIZE: ${TRANSFER_BATCH_SIZE:-200}
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
       # Earn-pool interest accrual kill. env.ts already names this (default true);
       # without compose pass-through a host `.env` never reaches the container and
@@ -847,6 +893,18 @@ services:
       AGENTS_PROVIDER: ${AGENTS_PROVIDER:-mock}
       AGENTS_FEE_ASSET_ID: ${AGENTS_FEE_ASSET_ID:-IFC}
       AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:-true}
+      # Billing window + upstream HTTP timeout. env.ts already names these
+      # (default 60 / 60000). Without compose pass-through a host `.env` pin
+      # never reaches the container. Window must divide 1440 (env.ts).
+      AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
+      AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
+      # Access-token TTL / iss / aud (authEnvSchema defaults 900 / intafaced /
+      # intafaced.api). Without compose pass-through a host `.env` pin never
+      # reaches the container. Do not add JWT_ACCESS_SECRET here — agents
+      # authenticates the edge via *edge-secret, not a local signing key.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Pass-through form (key, no value): compose forwards these ONLY if they
       # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
       # them to the empty string instead, and the schema types them as an
@@ -934,6 +992,13 @@ services:
       # mountain moves no value (§0.6) and a refund is a request it files, not a
       # transaction it posts.
       IDENTITY_URL: http://svc-identity:4002
+      # Access-token life + iss/aud (edge/identity defaults). Host `.env` can
+      # pin them; without these lines the desk keeps schema-only 900 /
+      # intafaced / intafaced.api. No JWT_ACCESS_SECRET here — the desk
+      # verifies the edge principal, it does not mint access tokens.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
     expose: ['4017']
     healthcheck: *healthcheck
     depends_on:
@@ -1030,6 +1095,12 @@ services:
       DATABASE_URL: postgres://svc_academy:svc_academy@postgres:5432/intafaced
       TOKEN_URL: http://svc-token:4003
       IDENTITY_URL: http://svc-identity:4002
+      # Access-token lifetime / iss / aud (authEnvSchema + identity compose defaults).
+      # Host `.env` can pin token life and audience; schema-only defaults never
+      # reach the container without these names. Do not raise TTL above 900.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
       ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
       # Paper-drill ops kill. env.ts already names this (default true); without
@@ -1173,6 +1244,8 @@ services:
       INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-0x0000000000000000000000000000000000000000}
       INDEXER_START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
       INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-64}
+      INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-2000}
+      INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-200}
       INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4013']
