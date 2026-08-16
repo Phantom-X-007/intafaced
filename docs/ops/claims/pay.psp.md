@@ -1,6 +1,7 @@
 # Claim — pay.psp operator digital KYB (D26-P1-P1 residual)
 
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2214
 **branch:** feat/pay-psp-operator-kyb
 **owner:** Nitro agent
 **started:** 2026-08-16
