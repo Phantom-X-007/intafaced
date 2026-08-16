@@ -52,13 +52,9 @@ describe('compose passes matching engine kill-switch into svc-matching', () => {
 
   it('compose svc-matching block passes the kill from the host with default true', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-matching/);
-    expect(block, `${ENGINE} missing true-default pass-through`).toMatch(
-      new RegExp(`${ENGINE}:\\s*\\$\\{${ENGINE}:-true\\}`),
-    );
+    expect(block, `${ENGINE} missing true-default pass-through`).toMatch(new RegExp(`${ENGINE}:\\s*\\$\\{${ENGINE}:-true\\}`));
     expect(block).not.toMatch(new RegExp(`${ENGINE}:\\s*\\$\\{${ENGINE}:-false\\}`));
-    expect(block, `${SNAPSHOT} missing env.ts-matching default`).toMatch(
-      new RegExp(`${SNAPSHOT}:\\s*\\$\\{${SNAPSHOT}:-500\\}`),
-    );
+    expect(block, `${SNAPSHOT} missing env.ts-matching default`).toMatch(new RegExp(`${SNAPSHOT}:\\s*\\$\\{${SNAPSHOT}:-500\\}`));
   });
 
   it('names each matching host-env key once in compose (no duplicate assignments)', () => {
