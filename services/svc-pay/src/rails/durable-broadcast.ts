@@ -33,9 +33,7 @@ export async function runDurableBroadcast(opts: {
 
   // Fail closed: never invoke RPC unless the signed payload is already journalled.
   if (!signedRaw || !(await opts.store.hasSigned(opts.idempotencyKey))) {
-    throw new Error(
-      `durable broadcast refused for ${opts.idempotencyKey}: putSigned must precede RPC`,
-    );
+    throw new Error(`durable broadcast refused for ${opts.idempotencyKey}: putSigned must precede RPC`);
   }
 
   const hash = await opts.broadcast(signedRaw);
