@@ -1410,6 +1410,14 @@ services:
       # routes (`x-intafaced-admin-bff`), injected by a reverse proxy. Unset
       # means network ACL is the only thing in front of these routes.
       ADMIN_BFF_SHARED_SECRET:
+      # Warehouse replica door (`resolveWarehouseReplicaConfig`). Key-no-value
+      # like the tokens above: unset omits the key. Do not default CONFIGURED
+      # to true, and do not invent replica URLs or lag numbers here.
+      ANALYTICS_REPLICA_LEDGER_URL:
+      ANALYTICS_REPLICA_TRADE_URL:
+      ANALYTICS_REPLICA_IDENTITY_URL:
+      ANALYTICS_REPLICA_CONFIGURED:
+      ANALYTICS_REPLICA_LAG_SECONDS:
     ports: ['3100:3100']
     healthcheck: *healthcheck
 
