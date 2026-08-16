@@ -240,6 +240,63 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('live/production posture + card-sim named-refuses issue; zero card rows', async () => {
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        cards: { issuer: cardIssuerFor('card-sim', { NODE_ENV: 'production' }) },
+      });
+      await expect(
+        signedCaller(bank, principal(HOLDER, ['bank:read', 'bank:write'])).cards.issue({
+          cardId: randomUUID(),
+          assetId: 'USDT',
+          perAuthorizationLimit: '100',
+        }),
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', cause: { code: 'bank.card_sim_not_live' } });
+      const rows = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.cards`;
+      expect(rows[0]?.count).toBe('0');
+    });
+
+    it('live posture + card-sim named-refuses authorise on an existing sim card and holds nothing', async () => {
+      await fund(ledger, HOLDER, '500');
+      const armed = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        cards: { issuer: cardIssuerFor('card-sim', { live: false }) },
+      });
+      const issued = await signedCaller(armed, principal(HOLDER, ['bank:read', 'bank:write'])).cards.issue({
+        cardId: randomUUID(),
+        assetId: 'USDT',
+        perAuthorizationLimit: '100',
+      });
+
+      const live = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        cards: { issuer: cardIssuerFor('card-sim', { APP_ENV: 'prod' }) },
+      });
+      await expect(
+        signedCaller(live, principal(OPERATOR, ['admin:treasury'])).ops.cardAuthorize({
+          cardId: issued.id,
+          authorizationRef: `auth-${randomUUID()}`,
+          amount: '10',
+        }),
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', cause: { code: 'bank.card_sim_not_live' } });
+      expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('500'));
+      const auths = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.card_authorizations`;
+      expect(auths[0]?.count).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('CARD_ISSUER=none under live posture still bank.no_card_issuer; zero card rows', async () => {
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        cards: { issuer: cardIssuerFor('none', { NODE_ENV: 'production', APP_ENV: 'prod' }) },
+      });
+      await expect(
+        signedCaller(bank, principal(HOLDER, ['bank:read', 'bank:write'])).cards.issue({
+          cardId: randomUUID(),
+          assetId: 'USDT',
+          perAuthorizationLimit: '100',
+        }),
+      ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', cause: { code: 'bank.no_card_issuer' } });
+      const rows = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.cards`;
+      expect(rows[0]?.count).toBe('0');
+    });
+
     it('refuses user sessions on the authorisation ops door', async () => {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         cards: { issuer: cardIssuerFor('card-sim') },

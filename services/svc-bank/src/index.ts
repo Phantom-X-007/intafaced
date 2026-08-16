@@ -99,7 +99,7 @@ const bank = createBankServices(sql, ledger, history, {
    * deployment gets by SAYING ANYTHING.
    */
   cards: {
-    issuer: cardIssuerFor(env.BANK_CARD_ISSUER),
+    issuer: cardIssuerFor(env.BANK_CARD_ISSUER, { APP_ENV: env.APP_ENV, NODE_ENV: process.env.NODE_ENV }),
     /**
      * THE JIT CONVERSION RATE (§18), and what this wiring does NOT claim.
      *

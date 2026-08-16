@@ -18,6 +18,7 @@ const translator = createTranslator('en', undefined, { mode: 'prod', onMissing: 
 /** BankError codes whose TRPC `message` is resolved for a user, not an operator log. */
 const USER_VISIBLE_CODES = new Set<BankErrorCode>([
   'bank.no_card_issuer',
+  'bank.card_sim_not_live',
   'bank.cashback_pot_unfunded',
   'bank.card_not_found',
   'bank.card_not_active',

@@ -85,6 +85,13 @@ export type AuthorizationOutcome =
  */
 export interface CardIssuerAdapter {
   readonly programme: CardProgramme;
+  /**
+   * When set, CardService refuses issue/authorise before a row or hold.
+   * `card-sim` under live posture sets `bank.card_sim_not_live`. The unconfigured
+   * default throws the same code from its methods without this field, so
+   * authorise on a missing card stays `bank.card_not_found`.
+   */
+  readonly mutationRefuse?: 'bank.card_sim_not_live';
 
   /** Register a card with the issuer. Returns the issuer's handle on it. */
   issue(input: { cardId: string; userId: string; assetId: string }): Promise<IssuedCardHandle>;
@@ -221,6 +228,57 @@ export const CARD_ISSUER_SETTINGS = ['none', 'card-sim'] as const;
 export type CardIssuerSetting = (typeof CARD_ISSUER_SETTINGS)[number];
 
 /**
+ * Environments where a sandbox rail must not move value — same set pay uses
+ * (`RAIL_POSTURE_ENFORCED_ENVS`). `NODE_ENV=production` is the other live flag.
+ */
+export const CARD_SIM_LIVE_APP_ENVS = ['staging', 'prod'] as const;
+
+export type CardIssuerPosture = {
+  /** Explicit override. Wins over env inspection. */
+  readonly live?: boolean;
+  readonly NODE_ENV?: string;
+  /** Only the value passed in — tests must not inherit `.env` APP_ENV. */
+  readonly APP_ENV?: string;
+};
+
+/**
+ * True when this process must not treat `card-sim` as an issuer.
+ *
+ * `NODE_ENV=production` or `APP_ENV` staging/prod (the existing live flag).
+ * Explicit `live: false` keeps the ledger-half simulator usable in tests.
+ */
+export function cardSimIsLivePosture(posture: CardIssuerPosture = {}): boolean {
+  if (posture.live === true) return true;
+  if (posture.live === false) return false;
+  const nodeEnv = posture.NODE_ENV ?? process.env.NODE_ENV;
+  if (nodeEnv === 'production') return true;
+  return (CARD_SIM_LIVE_APP_ENVS as readonly string[]).includes(posture.APP_ENV ?? '');
+}
+
+const CARD_SIM_NOT_LIVE_MESSAGE = 'card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists';
+
+/**
+ * `card-sim` under live posture: still named as the simulator on the programme
+ * surface (`simulated: true`), and every mutation named-refuses. There is no BIN.
+ */
+export function cardSimNotLive(): CardIssuerAdapter {
+  const refuse = (): never => {
+    throw new BankError(CARD_SIM_NOT_LIVE_MESSAGE, 'bank.card_sim_not_live');
+  };
+  return {
+    programme: cardProgrammeOutput({
+      id: 'card-sim',
+      simulated: true,
+      displayName: 'Simulated card (no card programme)',
+    }),
+    mutationRefuse: 'bank.card_sim_not_live',
+    issue: async () => refuse(),
+    respondToAuthorization: async () => refuse(),
+    setStatus: async () => refuse(),
+  };
+}
+
+/**
  * LIVE-RAIL auth decision budget (tracker title "<2s auth decision").
  *
  * This number is NOT a claim about `card-sim`. An in-process simulator has no
@@ -265,11 +323,17 @@ export const LIVE_ISSUER_AUTH_DECISION_BUDGET_MS = 2_000;
  * programme, on every card row and on every router output, so no surface can
  * render one of these as real. The live rail is `socket.live-issuer`: a sponsor
  * bank and a contract, never a setting.
+ *
+ * ── Live posture ─────────────────────────────────────────────────────────────
+ *
+ * `card-sim` plus `NODE_ENV=production` or `APP_ENV` staging/prod named-refuses
+ * `bank.card_sim_not_live` rather than issuing or authorising as if a BIN
+ * exists. `none` is unchanged: `bank.no_card_issuer`.
  */
-export function cardIssuerFor(setting: CardIssuerSetting): CardIssuerAdapter {
+export function cardIssuerFor(setting: CardIssuerSetting, posture: CardIssuerPosture = {}): CardIssuerAdapter {
   switch (setting) {
     case 'card-sim':
-      return cardSim();
+      return cardSimIsLivePosture(posture) ? cardSimNotLive() : cardSim();
     case 'none':
       return noCardIssuer;
   }
