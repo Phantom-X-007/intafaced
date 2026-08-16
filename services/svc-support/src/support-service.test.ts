@@ -157,7 +157,7 @@ describe('SupportService Stage-2 operator queue', () => {
  * Answering a foreign ticket with `not_found` rather than a forbidden is a
  * deliberate choice, and it only works if the two are indistinguishable. They
  * were not: the missing case interpolated the id and the foreign case did not,
- * and `mapError` puts `err.message` on the wire — so a caller could ask about
+ * and `mapError` puts i18n `userCopy(err.code)` on the wire — so a caller could ask about
  * any id and read its existence off whether the id came back.
  */
 describe('a foreign ticket is indistinguishable from a missing one', () => {

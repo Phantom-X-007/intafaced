@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createSupportRouter } from './router.js';
 import { SupportError, type SupportService } from './support-service.js';
+import { userCopy } from './user-copy.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -271,6 +272,40 @@ describe('svc-support mount', () => {
     });
   });
 
+  it('maps a missing ticket to catalog not-found copy, not invented English', async () => {
+    const support = stubSupport({
+      getTicket: vi.fn(async () => {
+        throw new SupportError('ticket not found', 'support.not_found');
+      }),
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.get({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: userCopy('support.not_found'),
+    });
+  });
+
+  it('maps a KB stale-revision refuse to the dotted key, not English', async () => {
+    const support = stubSupport({
+      publishKb: vi.fn(async () => {
+        throw new SupportError('KB revision is stale', 'support.kb.revision_stale');
+      }),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    await expect(
+      caller.publishKb({
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        baseRevision: 1,
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: userCopy('support.kb.revision_stale'),
+    });
+  });
+
   it('listComments requires authentication', async () => {
     const support = stubSupport();
     await expect(
@@ -438,7 +473,7 @@ describe('svc-support mount', () => {
     const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
     await expect(createSupportRouter(support).createCaller(signed(op)).accountState({ ticketId: TICKET })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
-      message: expect.stringMatching(/support\.identity_grounding_unwired|unwired/),
+      message: userCopy('support.identity_grounding_unwired'),
     });
   });
 

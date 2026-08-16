@@ -1415,6 +1415,9 @@ importers:
       '@intafaced/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry

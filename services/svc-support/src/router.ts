@@ -15,6 +15,7 @@ import {
   supportTicketStatusSchema,
 } from '@intafaced/contracts';
 import { SupportError, SupportService, requireSupportOps } from './support-service.js';
+import { userCopy } from './user-copy.js';
 
 const queueEntrySchema = z.object({
   ticketId: z.string().uuid(),
@@ -36,11 +37,12 @@ const queueResultSchema = z.discriminatedUnion('status', [
 
 function mapError(err: unknown): never {
   if (err instanceof SupportError) {
+    const message = userCopy(err.code);
     if (err.code === 'support.not_found' || err.code === 'support.claim.not_found') {
-      throw new TRPCError({ code: 'NOT_FOUND', message: err.message });
+      throw new TRPCError({ code: 'NOT_FOUND', message });
     }
     if (err.code === 'support.claim.already_claimed' || err.code === 'support.kb.revision_stale') {
-      throw new TRPCError({ code: 'CONFLICT', message: err.message });
+      throw new TRPCError({ code: 'CONFLICT', message });
     }
     if (
       err.code === 'support.claim.not_queueable' ||
@@ -58,9 +60,9 @@ function mapError(err: unknown): never {
       err.code === 'support.kb.not_published' ||
       err.code === 'support.identity_grounding_unwired'
     ) {
-      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message });
     }
-    throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
+    throw new TRPCError({ code: 'BAD_REQUEST', message });
   }
   throw err;
 }
