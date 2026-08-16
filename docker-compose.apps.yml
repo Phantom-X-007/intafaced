@@ -533,6 +533,13 @@ services:
       P2P_MODERATOR_USER_IDS: ${P2P_MODERATOR_USER_IDS:-}
       # Kill new offers/takes. Default ON matches env.ts; host can set false.
       P2P_TRADING_ENABLED: ${P2P_TRADING_ENABLED:-true}
+      # Escrow clocks + sweep. env.ts already names these; without compose
+      # pass-through a host `.env` never reaches the container. Defaults match
+      # env.ts (120 / 15m / 30m / 30s). House take stays owner — not P2P_FEE_BPS.
+      P2P_ESCROW_DEADLINE_SECONDS: ${P2P_ESCROW_DEADLINE_SECONDS:-120}
+      P2P_PAYMENT_DEADLINE_SECONDS: ${P2P_PAYMENT_DEADLINE_SECONDS:-900}
+      P2P_RELEASE_DEADLINE_SECONDS: ${P2P_RELEASE_DEADLINE_SECONDS:-1800}
+      P2P_SWEEP_INTERVAL_SECONDS: ${P2P_SWEEP_INTERVAL_SECONDS:-30}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4007']
     healthcheck: *healthcheck
