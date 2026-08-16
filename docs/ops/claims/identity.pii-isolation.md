@@ -1,8 +1,9 @@
 # Claim identity.pii-isolation
 
-**status:** claimed
+**status:** pr-open
 **owner:** nitro-agent (ZenYoda3)
 **branch:** feat/identity-kyc-vault-boot
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2203
 **updated:** 2026-08-16
 
 Production-wire `bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY)` on `svc-identity` index and spread vault into `createIdentityRouter` when the key parses. Missing key → vault null, document procedures named-refuse. Never invent a key. Live vendor webhook stays Class X.
