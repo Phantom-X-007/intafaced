@@ -375,6 +375,9 @@ services:
       # ticks on a clean clone while env.ts still read as off. Does not invent
       # a market list or a |rate| ceiling; those stay empty until named.
       TRADE_FUTURES_JOBS_ENABLED: ${TRADE_FUTURES_JOBS_ENABLED:-false}
+      # Liquidation scan interval when jobs are on. Matches env.ts 15s.
+      # Does not turn jobs on. Host `.env` can pin cadence.
+      TRADE_FUTURES_LIQ_INTERVAL_MS: ${TRADE_FUTURES_LIQ_INTERVAL_MS:-15000}
       # Connect WS / MaintainedBook stream for venue marks. Default OFF.
       # `${VAR:-true}` here would treat a clean clone as stream-first while
       # env.ts still read as snapshot poll. Empty symbol map still starts nothing.
