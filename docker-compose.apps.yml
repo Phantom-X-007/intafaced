@@ -926,6 +926,11 @@ services:
       # compose pass-through a host `.env` never reaches the container. Live
       # trade on svc-trade is unaffected. No prize, IFC, or paper balance here.
       ACADEMY_PAPER_TRADING_ENABLED: ${ACADEMY_PAPER_TRADING_ENABLED:-true}
+      # Tournament ladder kill. env.ts already names this (default true) and
+      # refuses academy.tournament_disabled when off. Without compose
+      # pass-through a host `.env` never reaches the container. No prize,
+      # IFC, or programme JSON here.
+      ACADEMY_TOURNAMENT_ENABLED: ${ACADEMY_TOURNAMENT_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4016']
     healthcheck: *healthcheck
