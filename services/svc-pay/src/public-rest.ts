@@ -11,7 +11,7 @@ import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merch
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
-import { isSandboxRailId, resolveMerchantRail } from './sandbox-key-routing.js';
+import { assertSandboxKeyDoesNotLookLive, isSandboxRailId, paymentModeFromRail, resolveMerchantRail } from './sandbox-key-routing.js';
 
 /**
  * `pay.public-api` — the merchant REST surface.
@@ -329,6 +329,9 @@ function statusFor(code: string): number {
       return 409;
     case 'pay.rail_operation_unsupported':
     case 'pay.sandbox_rail_refused':
+    case 'pay.sandbox_looks_live':
+    case 'pay.rail_mode_undisclosed':
+    case 'pay.webhook_not_configured':
       return 503;
     default:
       return 400;
@@ -546,7 +549,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         tags: ['payments'],
         summary: 'Fetch one payment',
         params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
-        response: { 200: paymentSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        response: { 200: paymentSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema, 503: errorSchema },
       },
     },
     async (req: FastifyRequest<{ Params: { id: string } }>, reply) => {
@@ -555,6 +558,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       try {
         const payment = await deps.pay.getPayment(req.params.id);
         await assertAccess(principal.userId, payment.merchantId, areaForSurface('rest.payments.read'));
+        assertSandboxKeyDoesNotLookLive(principal.key_env, payment.railAdapter);
         return reply.send(toPaymentBody(payment));
       } catch (err) {
         return send(reply, err);
@@ -590,7 +594,10 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           status: req.query.status,
           limit: Math.min(req.query.limit ?? DEFAULT_LIMIT, MAX_LIMIT),
         });
-        return reply.send(rows.map(toPaymentBody));
+        // Sandbox keys must not see live rows (Stripe-shaped honesty). Skip, don't
+        // paint them live. Missing rail is skipped rather than invented as live.
+        const visible = principal.key_env === 'sandbox' ? rows.filter((row) => row.railAdapter && isSandboxRailId(row.railAdapter)) : rows;
+        return reply.send(visible.map(toPaymentBody));
       } catch (err) {
         return send(reply, err);
       }
@@ -693,6 +700,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
             customerRef: req.body.customerRef,
             metadata: req.body.metadata,
           });
+          assertSandboxKeyDoesNotLookLive(principal.key_env, payment.railAdapter);
           return reply.send(toPaymentBody(payment));
         } catch (err) {
           return send(reply, err);
@@ -732,6 +740,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.authorize'));
+          assertSandboxKeyDoesNotLookLive(principal.key_env, existing.railAdapter);
           const payment = await deps.pay.authorize(req.params.id);
           return reply.send(toPaymentBody(payment));
         } catch (err) {
@@ -772,6 +781,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.capture'));
+          assertSandboxKeyDoesNotLookLive(principal.key_env, existing.railAdapter);
           const opts = req.body?.amount === undefined ? {} : { amount: parseAmount(requireDecimalString(req.body.amount, 'amount')) };
           const payment = await deps.pay.capture(req.params.id, opts);
           return reply.send(toPaymentBody(payment));
@@ -813,6 +823,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.refund'));
+          assertSandboxKeyDoesNotLookLive(principal.key_env, existing.railAdapter);
           const amount = requireDecimalString(req.body.amount, 'amount');
           // The caller's own business key wins; otherwise their Idempotency-Key
           // IS the business key (see `restRefundId`). Never an attempt ordinal.
@@ -1044,9 +1055,27 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
   );
 
   // ── WEBHOOKS (step 3) ─────────────────────────────────────────────────────
+  // Always mount. A missing MerchantWebhookService is `pay.webhook_not_configured`,
+  // not a Fastify 404 that looks like the product surface does not exist.
 
-  if (deps.webhooks) {
-    const webhooks = deps.webhooks;
+  const requireWebhooks = (): MerchantWebhookService => {
+    if (!deps.webhooks) {
+      throw new PayError(
+        'Merchant outbound webhooks are not configured on this process. NOTHING WAS ATTEMPTED.',
+        'pay.webhook_not_configured',
+      );
+    }
+    return deps.webhooks;
+  };
+
+  {
+    const webhooks = {
+      registerEndpoint: (...args: Parameters<MerchantWebhookService['registerEndpoint']>) => requireWebhooks().registerEndpoint(...args),
+      listEndpoints: (...args: Parameters<MerchantWebhookService['listEndpoints']>) => requireWebhooks().listEndpoints(...args),
+      disableEndpoint: (...args: Parameters<MerchantWebhookService['disableEndpoint']>) => requireWebhooks().disableEndpoint(...args),
+      enableEndpoint: (...args: Parameters<MerchantWebhookService['enableEndpoint']>) => requireWebhooks().enableEndpoint(...args),
+      listDeliveries: (...args: Parameters<MerchantWebhookService['listDeliveries']>) => requireWebhooks().listDeliveries(...args),
+    };
 
     const endpointSchema = {
       type: 'object',
@@ -1102,7 +1131,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
               url: { type: 'string', minLength: 8, maxLength: 2048 },
             },
           },
-          response: { 200: endpointSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+          response: { 200: endpointSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema, 503: errorSchema },
         },
       },
       async (req: FastifyRequest<{ Body: { merchantId: string; url: string } }>, reply) => {
@@ -1567,7 +1596,7 @@ function toPaymentBody(view: {
   refundedAmount: Amount;
   createdAt: Date;
 }) {
-  const mode: 'live' | 'sandbox' = view.railAdapter && isSandboxRailId(view.railAdapter) ? 'sandbox' : 'live';
+  const mode = paymentModeFromRail(view.railAdapter);
   return {
     id: view.id,
     merchantId: view.merchantId,

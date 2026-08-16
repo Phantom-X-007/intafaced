@@ -29,6 +29,34 @@ export function isSandboxRailId(railId: string): boolean {
 }
 
 /**
+ * Disclose sandbox vs live from the rail id. Missing rail is NOT live —
+ * that default is how a sandbox payment looks live on the wire.
+ */
+export function paymentModeFromRail(railAdapter: string | null | undefined): 'live' | 'sandbox' {
+  if (!railAdapter || !railAdapter.trim()) {
+    throw new PayError(
+      'Payment rail is missing so mode cannot be disclosed. Refusing rather than reporting live. NOTHING WAS ATTEMPTED.',
+      'pay.rail_mode_undisclosed',
+    );
+  }
+  return isSandboxRailId(railAdapter) ? 'sandbox' : 'live';
+}
+
+/**
+ * Sandbox keys must not observe live payments. Apply on GET / mutate / create
+ * responses. List filters instead of throwing the whole page.
+ */
+export function assertSandboxKeyDoesNotLookLive(keyEnv: KeyEnv | undefined, railAdapter: string | null | undefined): void {
+  if (keyEnv !== 'sandbox') return;
+  if (paymentModeFromRail(railAdapter) === 'live') {
+    throw new PayError(
+      'A sandbox API key must not observe a live payment. Mint a live key for live rails. NOTHING WAS ATTEMPTED.',
+      'pay.sandbox_looks_live',
+    );
+  }
+}
+
+/**
  * Resolve which rail a merchant REST createPayment may use, given the
  * principal's key environment and the rail the body named.
  *

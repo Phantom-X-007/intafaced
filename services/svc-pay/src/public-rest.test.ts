@@ -825,6 +825,90 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
     const args = pay.calls.find((c) => c.method === 'createPayment')!.args[0] as { railAdapter: string };
     expect(args.railAdapter).toBe('crypto-native');
   });
+
+  it('sandbox GET of a live-rail payment refuses — key must not look live', async () => {
+    const pay = stubPay({
+      getPayment: async () => ({ ...paymentRow, railAdapter: 'crypto-native' }) as never,
+    });
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/payments/${PAYMENT}`,
+      headers: signed(principal({ key_env: 'sandbox', kid: 'k-sandbox-get' })),
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.code).toBe('pay.sandbox_looks_live');
+  });
+
+  it('sandbox list omits live-rail rows rather than painting them live', async () => {
+    const pay = stubPay({
+      listPayments: async () =>
+        [
+          { ...paymentRow, id: PAYMENT, railAdapter: 'card-sandbox' },
+          { ...paymentRow, id: '55555555-5555-4555-8555-555555555555', railAdapter: 'crypto-native' },
+        ] as never,
+    });
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/payments?merchantId=${MERCHANT}`,
+      headers: signed(principal({ key_env: 'sandbox', kid: 'k-sandbox-list' })),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as Array<{ railAdapter: string; mode: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.railAdapter).toBe('card-sandbox');
+    expect(rows[0]!.mode).toBe('sandbox');
+  });
+
+  it('sandbox create that the core echoes as live is refused, not returned as live', async () => {
+    const pay = stubPay({
+      createPayment: async () => ({ ...paymentRow, status: 'created' as const, railAdapter: 'crypto-native' }) as never,
+    });
+    app = await build(pay);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payments',
+      headers: {
+        ...signed(principal({ key_env: 'sandbox', kid: 'k-sandbox-echo' })),
+        'content-type': 'application/json',
+        'idempotency-key': 'sandbox:echo-live',
+      },
+      payload: createBody,
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.code).toBe('pay.sandbox_looks_live');
+  });
+});
+
+describe('missing webhook config refuses by name', () => {
+  it('POST webhook-endpoints without a wired service is pay.webhook_not_configured, not a 404', async () => {
+    const instance = Fastify({ logger: false });
+    await registerPublicPayRest(instance, {
+      edgeSecret: SECRET,
+      serviceName: 'svc-pay',
+      pay: stubPay(),
+      idempotency: new MemoryRestIdempotencyStore(),
+    });
+    await instance.ready();
+    app = instance;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/webhook-endpoints',
+      headers: { ...signed(), 'content-type': 'application/json' },
+      payload: { merchantId: MERCHANT, url: 'https://merchant.example/hooks/pay' },
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.code).toBe('pay.webhook_not_configured');
+  });
 });
 
 describe('payment-links — REST translation of createLink / listLinks / deactivateLink', () => {
