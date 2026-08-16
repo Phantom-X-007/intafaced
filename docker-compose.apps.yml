@@ -568,6 +568,11 @@ services:
       P2P_PAYMENT_DEADLINE_SECONDS: ${P2P_PAYMENT_DEADLINE_SECONDS:-900}
       P2P_RELEASE_DEADLINE_SECONDS: ${P2P_RELEASE_DEADLINE_SECONDS:-1800}
       P2P_SWEEP_INTERVAL_SECONDS: ${P2P_SWEEP_INTERVAL_SECONDS:-30}
+      # Dispute SLA + escalation re-check. env.ts already names these; without
+      # compose pass-through a host `.env` never reaches the container. Defaults
+      # match env.ts (7d / 1h). Escalation is a re-raise, not auto-settle.
+      P2P_DISPUTE_SLA_SECONDS: ${P2P_DISPUTE_SLA_SECONDS:-604800}
+      P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: ${P2P_DISPUTE_ESCALATION_RECHECK_SECONDS:-3600}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4007']
     healthcheck: *healthcheck
@@ -642,6 +647,11 @@ services:
       # restart. No rate, APY, or schedule is named here (empty must not invent).
       SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
+      # Earn-pool interest accrual kill. env.ts already names this (default true);
+      # without compose pass-through a host `.env` never reaches the container and
+      # cannot halt a runaway payout. Loan interest stays BANK.LOANS
+      # (LOAN_ACCRUAL_ENABLED) — not named here. No APY or pool rate is invented.
+      INTEREST_ACCRUAL_ENABLED: ${INTEREST_ACCRUAL_ENABLED:-true}
       # Loans module kill + collateral-sale sweep. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # BANK_LOANS_ENABLED defaults ON (matches env.ts). LOAN_RISK_SWEEP_ENABLED
@@ -906,6 +916,10 @@ services:
       IDENTITY_URL: http://svc-identity:4002
       ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
       ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
+      # Paper-drill ops kill. env.ts already names this (default true); without
+      # compose pass-through a host `.env` never reaches the container. Live
+      # trade on svc-trade is unaffected. No prize, IFC, or paper balance here.
+      ACADEMY_PAPER_TRADING_ENABLED: ${ACADEMY_PAPER_TRADING_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4016']
     healthcheck: *healthcheck
