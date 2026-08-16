@@ -209,10 +209,12 @@
       "kind": "product_ruling",
       "title": "Audited / insured / guaranteed language ban surface",
       "blocks": ["marketing copy", "§8.9 claims"],
-      "primaryDoc": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-16-marketing-claim-words-owner-seal.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-16--audited--insured--guaranteed-language-ban",
+      "satelliteDocs": ["tooling/ci/marketing-language-scan.mjs"],
       "answerShape": "product_copy_plus_gate_requiring_owner_seal",
-      "priority": 3
+      "priority": 3,
+      "notes": "2026-08-16 seal: product copy banned unless OWNER-SEAL(§8.9). Gate marketing-language-scan. No invented audit/insurance/guarantee. Vue leftover HUMAN; real policy Class X."
     },
     {
       "id": "D26-P0-17",
