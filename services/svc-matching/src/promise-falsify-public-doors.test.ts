@@ -188,9 +188,7 @@ describe('D26-P2-01d public doors — cancel integrity', () => {
 
     const listedBefore = (await app.inject({ method: 'GET', url: '/markets' })).json().markets;
     const liveBefore = await orders(app, MARKET);
-    expect(liveBefore.json().orders).toEqual(
-      expect.arrayContaining([expect.objectContaining({ orderId: maker, remaining: '3' })]),
-    );
+    expect(liveBefore.json().orders).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: maker, remaining: '3' })]));
 
     const res = await cancel(app, MARKET, maker);
     expect(res.statusCode).toBe(200);
@@ -377,9 +375,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     expect(res.json().accepted).toBe(true);
     expect(res.json().resting).toBeNull();
     expect(res.json().fills).toEqual([]);
-    expect(res.json().cancellations).toEqual([
-      expect.objectContaining({ remainingQty: '1', reason: 'ioc_remainder' }),
-    ]);
+    expect(res.json().cancellations).toEqual([expect.objectContaining({ remainingQty: '1', reason: 'ioc_remainder' })]);
     expect(engine.hasMarket(ghost)).toBe(false);
 
     const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
@@ -660,9 +656,7 @@ describe('D26-P2-01d public doors — determinism edges', () => {
     const recoveredApp = await mount(recovered);
     const listed = await recoveredApp.inject({ method: 'GET', url: '/markets' });
     expect(listed.json().markets).toEqual([]);
-    expect((await recoveredApp.inject({ method: 'GET', url: '/markets/LEGACY-CANCEL-PUBLIC-DOOR/depth' })).statusCode).toBe(
-      404,
-    );
+    expect((await recoveredApp.inject({ method: 'GET', url: '/markets/LEGACY-CANCEL-PUBLIC-DOOR/depth' })).statusCode).toBe(404);
     await recoveredApp.close();
   });
 });
