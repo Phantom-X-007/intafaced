@@ -10,8 +10,8 @@
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-bank block only)
  * 6. RED: pin fails if the key drops off, appears twice, defaults to
- *    crypto-ledger, or BANK_CARDS_ENABLED / fiat PSP / APY sneak in
- * 7. Collision: jobs/loans/earn compose pins — this pin only names BANK_RAMP_MODE
+ *    crypto-ledger, or fiat PSP / APY sneak in
+ * 7. Collision: jobs/loans/earn/cards compose pins — this pin only names BANK_RAMP_MODE
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -44,8 +44,7 @@ describe('compose BANK_RAMP_MODE for svc-bank', () => {
     expect(hits, 'BANK_RAMP_MODE must appear once (svc-bank only)').toHaveLength(1);
   });
 
-  it('does not add BANK_CARDS_ENABLED, fiat PSP, chain broadcast, or APY', () => {
-    expect(block).not.toMatch(/^\s+BANK_CARDS_ENABLED:/m);
+  it('does not add fiat PSP, chain broadcast, or APY', () => {
     expect(block).not.toMatch(/^\s+[A-Z0-9_]*(PSP_|FIAT_RAMP|CHAIN_BROADCAST|APY)[A-Z0-9_]*:/im);
   });
 });
