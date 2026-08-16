@@ -146,7 +146,7 @@ if (!available) {
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
     router = createBankRouter(bank);
-  });
+  }, 30_000);
 
   /**
    * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
@@ -408,7 +408,7 @@ if (!available) {
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
-    });
+    }, 20_000);
 
     /**
      * Isolation residual (audit B-3 class): a mid-drive throw (frozen ledger,
