@@ -51,12 +51,8 @@ describe('compose passes waitlist and referral flags into svc-identity', () => {
 
   it('compose svc-identity block passes both flags from the host with empty defaults', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-identity/);
-    expect(block, `${WAITLIST} missing empty-default pass-through`).toMatch(
-      new RegExp(`${WAITLIST}:\\s*\\$\\{${WAITLIST}:-\\}`),
-    );
-    expect(block, `${REFERRAL} missing empty-default pass-through`).toMatch(
-      new RegExp(`${REFERRAL}:\\s*\\$\\{${REFERRAL}:-\\}`),
-    );
+    expect(block, `${WAITLIST} missing empty-default pass-through`).toMatch(new RegExp(`${WAITLIST}:\\s*\\$\\{${WAITLIST}:-\\}`));
+    expect(block, `${REFERRAL} missing empty-default pass-through`).toMatch(new RegExp(`${REFERRAL}:\\s*\\$\\{${REFERRAL}:-\\}`));
     expect(block).not.toMatch(new RegExp(`${WAITLIST}:\\s*\\$\\{${WAITLIST}:-(on|true|1)\\}`));
     expect(block).not.toMatch(new RegExp(`${REFERRAL}:\\s*\\$\\{${REFERRAL}:-(on|true|1)\\}`));
   });
