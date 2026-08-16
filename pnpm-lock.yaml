@@ -141,6 +141,9 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../config
+      '@intafaced/quant-studio-risk':
+        specifier: workspace:*
+        version: link:../quant-studio-risk
       '@trpc/server':
         specifier: ^11.0.0-rc.660
         version: 11.18.0(typescript@5.9.3)
@@ -362,6 +365,21 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
 
   packages/quant-honesty:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/quant-studio-risk:
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

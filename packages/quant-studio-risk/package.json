@@ -1,5 +1,5 @@
 {
-  "name": "@intafaced/contracts",
+  "name": "@intafaced/quant-studio-risk",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,14 +9,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./identity": {
-      "types": "./dist/identity.d.ts",
-      "default": "./dist/identity.js"
-    },
-    "./academy-cert-perks": {
-      "types": "./dist/academy-cert-perks.d.ts",
-      "default": "./dist/academy-cert-perks.js"
     }
   },
   "scripts": {
@@ -25,13 +17,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rimraf dist .turbo"
-  },
-  "dependencies": {
-    "@intafaced/auth": "workspace:*",
-    "@intafaced/config": "workspace:*",
-    "@intafaced/quant-studio-risk": "workspace:*",
-    "@trpc/server": "^11.0.0-rc.660",
-    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

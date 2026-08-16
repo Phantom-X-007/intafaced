@@ -18,3 +18,4 @@ export * from './ops-analytics.js';
 export * from './ops-analytics-cube.js';
 export * from './ops-analytics-consume.js';
 export * from './ops-analytics-warehouse.js';
+export * from './quant-studio.js';
