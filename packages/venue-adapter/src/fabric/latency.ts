@@ -194,11 +194,12 @@ export class VenueLatencyGrader {
     //
     // Every derived statistic is `null` here for the same reason. A 0% reject
     // rate over zero samples reads as "never once refused us", which is a
-    // perfect score awarded for silence.
+    // perfect score awarded for silence. Defaulting p95 to 0ms would be worse:
+    // `gradeFor(0, p95Ms)` is **A** — silence scored as fastest.
     //
-    // `provisional` is true but it is not the point: `provisional` describes a
-    // grade with thin evidence, and this is a grade with NO evidence. Consumers
-    // must branch on `isGraded`, not on `provisional`.
+    // `provisional` is false. The contract word means "thin letter": a letter
+    // with too few samples. There is no letter here. Consumers must branch on
+    // `isGraded`, not on `provisional`.
     if (samples === 0) {
       return {
         venueId: this.venueId,
@@ -210,7 +211,7 @@ export class VenueLatencyGrader {
         rejectRateBps: null,
         errorRateBps: null,
         staleMs,
-        provisional: true,
+        provisional: false,
         reasons: ['ungraded — no observations in the window; not measured, so not scored'],
       };
     }
@@ -339,6 +340,9 @@ export const UNMEASURED_LATENCY_MS = Number.MAX_SAFE_INTEGER;
  */
 export function routingWeightFromGrade(grade: VenueLatencyGrade): 0 | 1 {
   if (!isGraded(grade)) return 0;
+  // Zero samples is ungraded even if a caller forged a letter. 0ms is grade A;
+  // treating silence as 0ms would score the quietest venue as the fastest.
+  if (grade.samples === 0) return 0;
   if (grade.p95Ms === null) return 0;
   return 1;
 }

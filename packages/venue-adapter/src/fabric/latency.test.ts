@@ -52,6 +52,40 @@ describe('VenueLatencyGrader', () => {
     expect(grade.p50Ms).toBeNull();
     expect(grade.p95Ms).toBeNull();
     expect(grade.staleMs).toBeNull();
+    // Ungraded is not a thin letter. `provisional` means evidence too thin to
+    // trust the letter; there is no letter.
+    expect(grade.provisional).toBe(false);
+  });
+
+  it('fails if silence is scored as fast', () => {
+    // D26-P1-X1 done-bar (3). Defaulting missing p95 to 0ms would grade A
+    // (`gradeFor(0, p95Ms)` is A) and win every equal-price tie.
+    const grade = new VenueLatencyGrader('silent').grade(T0);
+    const health = healthFromGrade(grade, T0);
+
+    expect(grade.grade).toBeNull();
+    expect(grade.grade).not.toBe('A');
+    expect(grade.p50Ms).not.toBe(0);
+    expect(grade.p95Ms).not.toBe(0);
+    expect(measuredLatencyMs(grade)).toBeNull();
+    expect(measuredLatencyMs(grade)).not.toBe(0);
+    expect(routingWeightFromGrade(grade)).toBe(0);
+    expect(health.healthy).toBe(false);
+    expect(health.latencyMs).toBe(UNMEASURED_LATENCY_MS);
+    expect(health.latencyMs).not.toBe(0);
+  });
+
+  it('computes the letter from recorded samples only', () => {
+    const grader = new VenueLatencyGrader('v');
+    expect(grader.grade(T0).grade).toBeNull();
+    expect(grader.grade(T0).samples).toBe(0);
+
+    feed(grader, 20, 2_000);
+    const measured = grader.grade(at(100));
+    expect(measured.samples).toBe(20);
+    expect(measured.p95Ms).toBe(2_000);
+    expect(measured.grade).toBe('D');
+    expect(measured.grade).not.toBe('A');
   });
 
   it('distinguishes ungraded from a measured F — the two need opposite responses', () => {
