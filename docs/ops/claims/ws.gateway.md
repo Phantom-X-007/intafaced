@@ -2,7 +2,8 @@
 
 **owner:** nitro-agent
 **branch:** feat/ws-private-orders-snapshot
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2216
 **paths:** `services/svc-ws/src/private/**`
 **updated:** 2026-08-16
 
