@@ -417,23 +417,28 @@ export const FEATURES = [
       '(no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169/#1220 + T7 socket refuse NEW production listing and place. ' +
       'What exists: asset_class + schedule; assertMarketOpen; D-S-05/T7 listing+place refuse. Full product blocked on rails, not on "no markets listed."',
   }),
-  f('trade.algo', 'TWAP / VWAP / POV execution', {
+  f('trade.algo', 'TWAP execution', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    note:
-      'W4 cancel-fail parks paused + haltReason cancel_incomplete (resume refused until re-cancel). tickAll isolation landed. ' +
-      '2026-08-16 hydrate-on-mutate proofs: cold pause/resume/cancel + cancel_incomplete resume refuse; getAlgo and mutate share owner hydrate. ' +
-      '2026-08-13 hydrate-on-mutate: pause/resume/cancel load durable store after restart and await save (onChange was fire-and-forget). ' +
-      '2026-08-13 persist-on-tick: tickAlgo hydrates from store; tick/tickAll await save so a crash cannot leave Postgres active after a miss/halt. ' +
-      '2026-08-14 durable place grant: createTwap persists presented scopes/session (no JWT); tick reinstalls after restart. Pre-migration rows still halt principal_unavailable. Grant errors name algo (not TWAP-only) so VWAP/POV create/tick refuse the same way. ' +
-      '2026-08-14 VWAP/POV: slices from non-seeded taker tape (candles lookback / interval volume); empty tape refuses trade.algo_volume_immature / algo_no_volume; POV participationBps is caller-published (no product default). Icebergs still out. ' +
-      '2026-08-14: live host passes TRADE_ALGO_ENABLED / TRADE_ALGO_JOBS_ENABLED into GET /api/v1/capabilities notes.algo (omitted still defaults). ' +
-      'Not Done — ready with jobs OFF default. ' +
-      'Owner released 2026-08-08. D-S-04 TWAP Stage #1002 + ADR #1145 + #1193 (re-space, cancel atomicity, scheduler mounted default OFF via TRADE_ALGO_JOBS_ENABLED). ' +
-      'Create works when TRADE_ALGO_ENABLED; children fire only when jobs ON.',
     requires: ['services/svc-trade/src/algo'],
+    note:
+      '**DONE 2026-08-16:** Title is TWAP only. Create + children when TRADE_ALGO_JOBS_ENABLED + cancel honesty (cancel-fail parks paused / haltReason cancel_incomplete; resume refused; next tick idle) on main. ' +
+      '2026-08-16 hydrate-on-mutate proofs: cold pause/resume/cancel + cancel_incomplete resume refuse; getAlgo and mutate share owner hydrate. ' +
+      'Jobs gated default OFF (TRADE_ALGO_JOBS_ENABLED denylist). Pin: twap-engine.test.ts cancel_incomplete. ' +
+      'D-S-04 #1002 + ADR #1145 + #1193 + hydrate-on-mutate + persist-on-tick + durable place grant (no JWT). ' +
+      'VWAP/POV are not this row — see socket.trade-vwap-pov (owner market maturity, not missing candles). TWAP on main + #2213; no new algo code.',
+  }),
+  f('socket.trade-vwap-pov', 'VWAP / POV execution', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.algo'],
+    note:
+      '§13 — owner market maturity, not missing candles. Agents must not invent VWAP/POV product, fills, volume curves, or participation defaults. ' +
+      'TWAP shipped on trade.algo. Empty-tape refuse in src/algo is honesty, not a claim these algos exist as product.',
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
