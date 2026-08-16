@@ -936,6 +936,11 @@ services:
       # pass-through a host `.env` never reaches the container. No prize,
       # IFC, or programme JSON here.
       ACADEMY_TOURNAMENT_ENABLED: ${ACADEMY_TOURNAMENT_ENABLED:-true}
+      # Owner-published ambassador rate law. env.ts already names these
+      # (empty default = unpublished refuse). Never invent session credits
+      # or fee %. Class M settlement stays owner JSON + ledger recipes.
+      ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON: ${ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON:-}
+      ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON: ${ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4016']
     healthcheck: *healthcheck

@@ -10,7 +10,8 @@
  * 5. Paths: docker-compose.apps.yml (svc-academy block) + this pin
  * 6. RED: pin fails if the key drops off, appears twice, or defaults off
  * 7. Collision: do not restamp STREAM_PROVIDER / MAX_ROOM_CAPACITY /
- *    PAPER_TRADING; no ambassador JSON, prize pool, or IFC pay keys
+ *    PAPER_TRADING. Ambassador rate-law is a separate compose pin. No
+ *    prize-pool or paper-balance keys here.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -45,10 +46,10 @@ describe('compose tournament kill for svc-academy', () => {
     expect(block).not.toMatch(/ACADEMY_TOURNAMENT_ENABLED:\s*\$\{ACADEMY_TOURNAMENT_ENABLED:-false\}/);
   });
 
-  it('does not restamp paper / stream / capacity or invent prize / ambassador keys', () => {
+  it('does not restamp paper / stream / capacity or invent prize-pool keys', () => {
     expect(block).toMatch(/ACADEMY_STREAM_PROVIDER:\s*\$\{ACADEMY_STREAM_PROVIDER:-none\}/);
     expect(block).toMatch(/ACADEMY_MAX_ROOM_CAPACITY:\s*\$\{ACADEMY_MAX_ROOM_CAPACITY:-5000\}/);
     expect(block).toMatch(/ACADEMY_PAPER_TRADING_ENABLED:\s*\$\{ACADEMY_PAPER_TRADING_ENABLED:-true\}/);
-    expect(block).not.toMatch(/AMBASSADOR|PRIZE_POOL|IFC_PAY|PAPER_BALANCE/i);
+    expect(block).not.toMatch(/PRIZE_POOL|PAPER_BALANCE/i);
   });
 });
