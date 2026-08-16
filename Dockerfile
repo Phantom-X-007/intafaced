@@ -62,6 +62,7 @@ COPY apps/admin/package.json                 apps/admin/
 COPY packages/academy-ambassadors-pay/package.json packages/academy-ambassadors-pay/
 COPY packages/auth/package.json              packages/auth/
 COPY packages/config/package.json            packages/config/
+COPY packages/connect-data-lake/package.json packages/connect-data-lake/
 COPY packages/contracts/package.json         packages/contracts/
 COPY packages/db/package.json                packages/db/
 COPY packages/events/package.json            packages/events/

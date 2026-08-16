@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TRADE_PRINT_PUBLIC_KEYS, tradePrintFromFill, type TradePrint } from './trade.js';
+import { CaptureLog } from '@intafaced/connect-data-lake';
+import { TRADE_PRINT_PUBLIC_KEYS, ingestVenueFill, ingestVenueTick, tradePrintFromFill, type TradePrint } from './trade.js';
 
 const FILL = {
   marketId: 'BTC-USDT',
@@ -46,5 +47,36 @@ describe('tradePrintFromFill', () => {
 
   it('refuses an empty market id', () => {
     expect(() => tradePrintFromFill({ ...FILL, marketId: '' })).toThrow(/marketId/);
+  });
+});
+
+describe('ingestVenueFill / ingestVenueTick — capture holes', () => {
+  it('does not mint a print for an unconnected venue', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:00.000Z') });
+    const result = ingestVenueFill(lake, {
+      venueId: 'unwired-venue',
+      connection: 'not_connected',
+      fill: FILL,
+    });
+    expect(result.print).toBeNull();
+    expect(result.record).toMatchObject({ status: 'absent', reason: 'venue_not_connected', kind: 'fill' });
+  });
+
+  it('writes a measured fill when connected', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:01.000Z') });
+    const result = ingestVenueFill(lake, { venueId: 'binance-spot', connection: 'connected', fill: FILL });
+    expect(result.print?.price).toBe('30125.5');
+    expect(result.record).toMatchObject({ status: 'measured', kind: 'fill' });
+  });
+
+  it('writes an absent tick when the adapter returned null', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:02.000Z') });
+    const record = ingestVenueTick(lake, {
+      venueId: 'binance-spot',
+      marketId: 'BTC-USDT',
+      connection: 'connected',
+      tick: null,
+    });
+    expect(record).toMatchObject({ status: 'absent', reason: 'adapter_no_connection', kind: 'tick' });
   });
 });
