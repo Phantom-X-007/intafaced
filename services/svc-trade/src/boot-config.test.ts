@@ -524,7 +524,8 @@ describe('the shipped configuration does not inject an 8h funding interval', () 
  */
 function envTsTradeKeys(pattern: RegExp): string[] {
   const src = joinChains(read('services/svc-trade/src/env.ts'));
-  return [...src.matchAll(pattern)].map((m) => m[1]!);
+  // Comments in env.ts repeat flag names; unique so the pin is names, not hits.
+  return [...new Set([...src.matchAll(pattern)].map((m) => m[1]!))];
 }
 
 describe('the shipped configuration passes MM seed and algo job flags into svc-trade', () => {
