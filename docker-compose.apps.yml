@@ -258,6 +258,8 @@ services:
       # TOTP enrol at rest. Pass-through only — no compose default, no invented key.
       # Host sets IDENTITY_TOTP_SECRET_KEY → enrol can run. Blank stays refuse-closed.
       IDENTITY_TOTP_SECRET_KEY: ${IDENTITY_TOTP_SECRET_KEY:-}
+      # Live-partition cap (env.ts default 25). Host can pin or lower; do not raise above 25 here.
+      IDENTITY_MAX_SUB_ACCOUNTS: ${IDENTITY_MAX_SUB_ACCOUNTS:-25}
       # ops.affiliates: payout posts sweepFeesToRewards + rewardPay. Without this,
       # compose identity refuses affiliate.payout.ledger_unwired (env stays optional
       # and undefaulted — unset is still a legible refuse, not a localhost invent).
