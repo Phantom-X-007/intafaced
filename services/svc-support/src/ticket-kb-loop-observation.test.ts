@@ -8,10 +8,10 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE } from './ticket-kb-loop-observation.js';
+import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE, createTicketKbLoopObserver } from './ticket-kb-loop-observation.js';
 
 const COMPOSE = resolve(import.meta.dirname, '../../../docker-compose.apps.yml');
-const INDEX = resolve(import.meta.dirname, 'index.ts');
+const HTTP_APP = resolve(import.meta.dirname, 'http-app.ts');
 
 function supportServiceBlock(source: string): string {
   const match = source.match(/^  svc-support:\n(?:.*\n)*?(?=^  [a-z]|\Z)/m);
@@ -33,7 +33,24 @@ describe('ticket+KB loop is not observed in a live compose env', () => {
 
   it('/ready refuses to claim a live compose ticket+KB observation', () => {
     expect(TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE).toBe(false);
-    const src = readFileSync(INDEX, 'utf8');
+    const src = readFileSync(HTTP_APP, 'utf8');
     expect(src).toMatch(/ticketKbLoopObservedInLiveCompose:\s*TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE/);
+  });
+
+  it('process observer starts at zeros and only advances on mark', () => {
+    const loop = createTicketKbLoopObserver();
+    expect(loop.snapshot()).toEqual({
+      lastTicketCreateAtMs: 0,
+      lastKbSearchAtMs: 0,
+      lastKbGetAtMs: 0,
+    });
+    const before = Date.now();
+    loop.markTicketCreateSuccess();
+    loop.markKbSearchSuccess();
+    loop.markKbGetSuccess();
+    const snap = loop.snapshot();
+    expect(snap.lastTicketCreateAtMs).toBeGreaterThanOrEqual(before);
+    expect(snap.lastKbSearchAtMs).toBeGreaterThanOrEqual(before);
+    expect(snap.lastKbGetAtMs).toBeGreaterThanOrEqual(before);
   });
 });
