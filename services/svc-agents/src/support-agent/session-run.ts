@@ -91,6 +91,7 @@ import {
   type SupportDataToolResult,
   type TicketFixture,
 } from './data-tools.js';
+import type { SupportDeskPort } from './desk-port.js';
 import type { SupportDeskPlane } from './grounded.js';
 import { resolveSupportAskFixtures } from './grounding-resolve.js';
 import { supportTierGate, type SupportTierLaw } from './tier-gate.js';
@@ -167,7 +168,9 @@ export type SupportRunRefuseReason =
   /** Account read was asked and missing/incomplete/invent — do not answer as if it existed. */
   | 'account_state_missing'
   /** Live plane claimed, but no published KB catalog — do not invent ops.support answers. */
-  | 'kb_plane_ungrounded';
+  | 'kb_plane_ungrounded'
+  /** Live plane claimed, but no SUPPORT_URL / desk port — do not invent KB hits. */
+  | 'no_live_kb';
 
 export type SupportRunEscalateReason = 'kb_no_hit' | 'money_request' | 'desk_refused';
 
@@ -368,6 +371,9 @@ export type SupportRunInput = {
    * Absent/empty catalog + kbQuery → refuse (`kb_plane_ungrounded`), never invented articles.
    */
   readonly kbCatalog?: readonly SupportKbArticle[] | null;
+  /** Live ops.support desk. Absent on live → `no_live_kb` (billedAmount 0). */
+  readonly desk?: SupportDeskPort | null;
+  readonly deskHeaders?: Readonly<Record<string, string>>;
 };
 
 /**
@@ -408,19 +414,6 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     };
   }
 
-  // A "live" desk with kbQuery but no published catalog is not a live ops.support
-  // KB plane. Refuse before a session opens — do not invent articles to answer with.
-  const asksLiveKbQuery = input.asks.some((ask) => ask.tool.trim() === SUPPORT_KB_TOOL && ask.kbQuery != null);
-  if (asksLiveKbQuery && (input.kbCatalog == null || input.kbCatalog.length === 0)) {
-    return {
-      status: 'refuse',
-      reason: 'kb_plane_ungrounded',
-      userMessageKey: 'agents.support.unavailable',
-      unanswered: [],
-      metering: unmetered(input.feeAssetId),
-    };
-  }
-
   const tier = supportTierGate({ law: input.tierLaw ?? null, userTier: input.userTier });
   if (tier.status === 'refuse') {
     return {
@@ -452,6 +445,16 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     return {
       status: 'empty',
       userMessageKey: 'agents.support.empty',
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
+  if (input.plane === 'live' && !input.desk) {
+    return {
+      status: 'refuse',
+      reason: 'no_live_kb',
+      userMessageKey: 'agents.support.unavailable',
+      unanswered: [],
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -549,6 +552,9 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
               requesterUserId: input.userId,
               tierLaw: input.tierLaw ?? null,
               userTier: input.userTier,
+              desk: input.desk ?? null,
+              ...(input.deskHeaders === undefined ? {} : { deskHeaders: input.deskHeaders }),
+              kbQuery: ask.kbQuery ?? '',
               articles: resolved.articles,
               ticket: resolved.ticket,
               account: resolved.account,

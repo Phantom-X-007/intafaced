@@ -18,6 +18,7 @@ import { registerProductAgentsAtBoot } from './fleet/boot-register.js';
 import { fleetMatrixBoardCard } from './fleet/matrix.js';
 import { agentsReadiness } from './readiness.js';
 import { createAcademyCurriculumSource } from './coach/academy-curriculum-source.js';
+import { createHttpSupportDeskPort } from './support-agent/desk-port.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -124,12 +125,21 @@ const bootAgents = await registerProductAgentsAtBoot(runtime);
 const academyUrl = env.ACADEMY_URL;
 const loadCoachGrounding = academyUrl ? () => createAcademyCurriculumSource(academyUrl, env.INTERNAL_SERVICE_SECRET).load() : undefined;
 
+const supportDesk = env.SUPPORT_URL
+  ? createHttpSupportDeskPort({
+      supportUrl: env.SUPPORT_URL,
+      ...(env.IDENTITY_URL ? { identityUrl: env.IDENTITY_URL } : {}),
+      internalSecret: env.INTERNAL_SERVICE_SECRET,
+    })
+  : undefined;
+
 const appRouter = createAgentsRouter({
   runtime,
   gateway,
   meter,
   feeAssetId: env.AGENTS_FEE_ASSET_ID,
   ...(loadCoachGrounding ? { loadCoachGrounding } : {}),
+  ...(supportDesk ? { supportDesk, edgePrincipalSecret: env.EDGE_PRINCIPAL_SECRET } : {}),
 });
 
 // Built before the listener opens: a service that cannot authenticate the edge

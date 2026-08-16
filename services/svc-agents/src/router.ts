@@ -1,6 +1,15 @@
 import { z } from 'zod';
 import { envScreeningList, SHIPPED_BUSINESS_BLOCKS } from '@intafaced/config';
-import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import {
+  router,
+  publicProcedure,
+  scopedProcedure,
+  TRPCError,
+  encodePrincipal,
+  signPrincipalHeader,
+  EDGE_PRINCIPAL_HEADER,
+  EDGE_SIGNATURE_HEADER,
+} from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
 import { AgentError } from './errors.js';
 import type { AuditedAction } from './fleet/audit.js';
@@ -32,6 +41,7 @@ import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
 import { supportTierGate } from './support-agent/tier-gate.js';
 import { invokeSupportDataTool, supportAnswerOrEscalate } from './support-agent/data-tools.js';
+import type { SupportDeskPort } from './support-agent/desk-port.js';
 import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
 import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
@@ -268,10 +278,14 @@ export interface AgentsRouterDeps {
   readonly feeAssetId: string;
   /** Academy spine (or test inject). Absent → `envCoachGrounding()`. */
   readonly loadCoachGrounding?: () => Promise<CoachGrounding>;
+  /** Live ops.support desk. Absent → support live tools refuse `no_live_kb`. */
+  readonly supportDesk?: SupportDeskPort | null;
+  /** Signs forwarded principal for support ticket `get`. */
+  readonly edgePrincipalSecret?: string;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding } = deps;
+  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret } = deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -1967,6 +1981,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 tool: z.string(),
                 reason: z.enum([
                   'desk_plane_dark',
+                  'no_live_kb',
                   'kb_empty',
                   'tier_law_blank',
                   'tier_not_granted',
@@ -1999,13 +2014,23 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           }),
         )
-        .query(({ ctx, input }) => {
-          const result = invokeSupportDataTool({
+        .query(async ({ ctx, input }) => {
+          const deskHeaders =
+            edgePrincipalSecret === undefined
+              ? undefined
+              : {
+                  [EDGE_PRINCIPAL_HEADER]: encodePrincipal(ctx.principal),
+                  [EDGE_SIGNATURE_HEADER]: signPrincipalHeader(encodePrincipal(ctx.principal), edgePrincipalSecret, ctx.region),
+                  'x-intafaced-region': ctx.region,
+                };
+          const result = await invokeSupportDataTool({
             tool: input.tool,
             plane: input.plane,
             requesterUserId: ctx.principal.userId,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
+            desk: supportDesk ?? null,
+            ...(deskHeaders === undefined ? {} : { deskHeaders }),
             articles: input.articles ?? null,
             ticket: input.ticket ?? null,
             account: input.account ?? null,
@@ -2086,13 +2111,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           ]),
         )
-        .query(({ ctx, input }) => {
-          const kbResult = invokeSupportDataTool({
+        .query(async ({ ctx, input }) => {
+          const kbResult = await invokeSupportDataTool({
             tool: input.tool,
             plane: input.plane,
             requesterUserId: ctx.principal.userId,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
+            desk: supportDesk ?? null,
             articles: input.articles ?? null,
           });
           const decision = supportAnswerOrEscalate({
@@ -2267,6 +2293,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 'no_grounded_read',
                 'account_state_missing',
                 'kb_plane_ungrounded',
+                'no_live_kb',
               ]),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
@@ -2286,6 +2313,16 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
               ...(signal === undefined ? {} : { signal }),
               kbCatalog: input.kbCatalog ?? null,
+              desk: supportDesk ?? null,
+              ...(edgePrincipalSecret === undefined
+                ? {}
+                : {
+                    deskHeaders: {
+                      [EDGE_PRINCIPAL_HEADER]: encodePrincipal(ctx.principal),
+                      [EDGE_SIGNATURE_HEADER]: signPrincipalHeader(encodePrincipal(ctx.principal), edgePrincipalSecret, ctx.region),
+                      'x-intafaced-region': ctx.region,
+                    },
+                  }),
               asks: input.asks.map((ask) => ({
                 tool: ask.tool,
                 articles: ask.articles ?? null,
