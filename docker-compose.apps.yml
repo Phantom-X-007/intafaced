@@ -246,6 +246,11 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # Waitlist / referral queue pins (env.ts optional). Empty default so
+      # unset follows the drop clock — do not default these on. `off` in
+      # `.env` refuse-closes capture.
+      INTAFACED_FLAG_WAITLIST_ENABLED: ${INTAFACED_FLAG_WAITLIST_ENABLED:-}
+      INTAFACED_FLAG_REFERRAL_QUEUE: ${INTAFACED_FLAG_REFERRAL_QUEUE:-}
       # WebAuthn kill-switch (env.ts boolish default true). Host `.env` can
       # disable WebAuthn without a TOTP redeploy. RP id/name/origin stay schema
       # defaults — do not invent a production registrable domain here.
