@@ -45,14 +45,30 @@ const schema = serviceEnvSchema
        * (operationally still no cap, same as before Stage 2). That is not the
        * same claim as writing `unlimited`.
        */
-      P2P_OFFER_MAX_STANDARD: z
-        .string()
-        .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string or the literal unlimited')
-        .optional(),
-      P2P_OFFER_MAX_MERCHANT: z
-        .string()
-        .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string or the literal unlimited')
-        .optional(),
+      /**
+       * Compose pass-through uses `${VAR:-}` so a clean clone injects "".
+       * Empty is unset (same as omitted) — never a baked magnitude.
+       */
+      P2P_OFFER_MAX_STANDARD: z.preprocess(
+        (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+        z
+          .string()
+          .regex(
+            /^(unlimited|\d+(\.\d+)?)$/i,
+            'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string or the literal unlimited',
+          )
+          .optional(),
+      ),
+      P2P_OFFER_MAX_MERCHANT: z.preprocess(
+        (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+        z
+          .string()
+          .regex(
+            /^(unlimited|\d+(\.\d+)?)$/i,
+            'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string or the literal unlimited',
+          )
+          .optional(),
+      ),
 
       /** `created` → the take never finished escrowing. Nothing is locked yet. */
       P2P_ESCROW_DEADLINE_SECONDS: z.coerce.number().int().min(30).default(120),
