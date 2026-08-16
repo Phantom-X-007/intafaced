@@ -38,7 +38,9 @@ describe('compose crypto watcher flags for svc-pay', () => {
 
   it('env.ts still declares the flags this pin tracks, matching compose defaults', () => {
     expect(envTs).toMatch(new RegExp(`${ENABLED}:\\s*z\\.enum\\(\\['true',\\s*'false'\\]\\)\\.default\\('true'\\)`));
-    expect(envTs).toMatch(new RegExp(`${INTERVAL}:\\s*z\\.coerce\\.number\\(\\)\\.int\\(\\)\\.min\\(500\\)\\.max\\(60_000\\)\\.default\\(2_000\\)`));
+    expect(envTs).toMatch(
+      new RegExp(`${INTERVAL}:\\s*z\\.coerce\\.number\\(\\)\\.int\\(\\)\\.min\\(500\\)\\.max\\(60_000\\)\\.default\\(2_000\\)`),
+    );
   });
 
   it('compose svc-pay block passes both flags from the host, unique keys once', () => {
