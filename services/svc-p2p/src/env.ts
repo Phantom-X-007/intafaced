@@ -38,19 +38,20 @@ const schema = serviceEnvSchema
        * real entitlement (`merchant-limits.ts` argues why the numbers are not
        * invented in code).
        *
-       * DECIMAL STRINGS, not numbers. These are amounts, and an amount that
-       * arrives through `z.coerce.number()` has already been through a float by
-       * the time anything reads it. Left unset they are `null` — unlimited,
-       * which is exactly the behaviour before offer limits existed, so adding
-       * this pair cannot refuse an offer any existing deployment allows today.
+       * DECIMAL STRINGS, not numbers — or the literal `unlimited` when the
+       * owner confirms no ceiling. An amount that arrives through
+       * `z.coerce.number()` has already been through a float by the time
+       * anything reads it. Left unset they are `null` with mode `unset`
+       * (operationally still no cap, same as before Stage 2). That is not the
+       * same claim as writing `unlimited`.
        */
       P2P_OFFER_MAX_STANDARD: z
         .string()
-        .regex(/^\d+(\.\d+)?$/, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string')
+        .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string or the literal unlimited')
         .optional(),
       P2P_OFFER_MAX_MERCHANT: z
         .string()
-        .regex(/^\d+(\.\d+)?$/, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string')
+        .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string or the literal unlimited')
         .optional(),
 
       /** `created` → the take never finished escrowing. Nothing is locked yet. */

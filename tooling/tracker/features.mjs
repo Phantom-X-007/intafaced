@@ -818,14 +818,16 @@ export const FEATURES = [
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'done',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
     note:
-      'DONE 2026-08-12 D26-P1-I2 under dispute law. Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings + honest API (W10 L07 offerLimits/myOfferCeiling/health.offerLimitsConfigured). ' +
+      'WIP 2026-08-15 Denon D26-P1-I2 merchant-ceiling honesty (feat/p2p-merchant-ceiling-honesty). ' +
+      'Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings + honest API (W10 L07 offerLimits/myOfferCeiling/health.offerLimitsConfigured). ' +
       'Stage 3 second key plane CUT — identity.apikeys + edge throttle + merchants.apiAccess (#1697); API keys cannot moderate (D-S-08). ' +
-      'Product-complete seal: moderated dispute loss suspends approved standing when live reputation fails programme eligibility (same maxDisputesLost policy as apply) — badge/API/ceilings stop vouching immediately; operator reinstate remains human override. ' +
-      'Unlimited ceilings when env unset accepted as product posture (magnitudes stay owner env, not invented). Eligibility defaults remain conservative (spec §5). Residual Class X / owner: who moderates, apps/admin console, optional ceiling magnitudes.',
+      'This deepen: clients learn posture unset vs owner-confirmed unlimited vs configured without refuse-first; createOffer re-reads standing; non-approved never inherits merchant ceiling; no invented P2P_OFFER_MAX_* numbers. ' +
+      'NOT done: owner must set ceiling env or confirm unlimited. Eligibility defaults remain conservative (spec §5). Residual Class X / owner: who moderates, apps/admin console, optional ceiling magnitudes.',
   }),
 
   f('api.gateway', 'Public API — ONE gateway in front of trade, pay and data (§9)', {

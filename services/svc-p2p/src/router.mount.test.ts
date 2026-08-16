@@ -728,6 +728,7 @@ describe('svc-p2p mount — the public surface', () => {
       service: 'svc-p2p',
       moderationReachable: false,
       offerLimitsConfigured: false,
+      offerLimitsPosture: 'unset',
     });
   });
 
@@ -742,6 +743,7 @@ describe('svc-p2p mount — the public surface', () => {
       service: 'svc-p2p',
       moderationReachable: true,
       offerLimitsConfigured: false,
+      offerLimitsPosture: 'unset',
     });
   });
 
@@ -761,6 +763,7 @@ describe('svc-p2p mount — the public surface', () => {
       service: 'svc-p2p',
       moderationReachable: false,
       offerLimitsConfigured: true,
+      offerLimitsPosture: 'configured',
     });
   });
 
@@ -850,6 +853,9 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
       standardMax: null,
       merchantMax: null,
       configured: false,
+      posture: 'unset',
+      standardMode: 'unset',
+      merchantMode: 'unset',
       summary: expect.stringMatching(/NONE CONFIGURED/),
     });
   });
@@ -869,6 +875,9 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
       standardMax: '1000',
       merchantMax: '5000',
       configured: true,
+      posture: 'configured',
+      standardMode: 'capped',
+      merchantMode: 'capped',
       summary: expect.stringContaining('1000'),
     });
   });
@@ -913,6 +922,7 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
     expect(ceiling).toEqual({
       maxAmount: '5000',
       band: 'merchant',
+      limitMode: 'capped',
       merchantStatus: 'approved',
     });
   });
@@ -937,7 +947,33 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
     expect(ceiling).toEqual({
       maxAmount: '1000',
       band: 'standard',
+      limitMode: 'capped',
       merchantStatus: 'suspended',
+    });
+  });
+
+  it('myOfferCeiling does not give an applicant the merchant ceiling', async () => {
+    const { parseAmount } = await import('@intafaced/ledger-client');
+    const ctx = signed(principal({ scopes: ['p2p:read'] }));
+    const ceiling = await createP2pRouter(
+      stubP2p(),
+      stubInstruments(),
+      undefined,
+      {
+        offerLimits: {
+          standardMaxAmount: parseAmount('1000'),
+          merchantMaxAmount: parseAmount('5000'),
+        },
+      },
+      merchantStub('applied') as never,
+    )
+      .createCaller(ctx)
+      .merchants.myOfferCeiling();
+    expect(ceiling).toEqual({
+      maxAmount: '1000',
+      band: 'standard',
+      limitMode: 'capped',
+      merchantStatus: 'applied',
     });
   });
 });

@@ -362,6 +362,93 @@ if (!available) {
     });
   });
 
+  describe('offer ceilings by merchant standing (D26-P1-I2)', () => {
+    const armedLimits = {
+      standardMaxAmount: amt('1000'),
+      merchantMaxAmount: amt('5000'),
+    };
+
+    it('re-reads standing on every createOffer', async () => {
+      const reads: string[] = [];
+      const gated = new P2pService(sql, ledger, bus, {
+        ...options,
+        offerLimits: armedLimits,
+        merchantStatusOf: async (userId) => {
+          reads.push(userId);
+          return 'approved';
+        },
+      });
+      await gated.createOffer({
+        makerId: MAKER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('4000'),
+        totalAmt: amt('4000'),
+        methods: ['sepa'],
+      });
+      await gated.createOffer({
+        makerId: MAKER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('4000'),
+        totalAmt: amt('4000'),
+        methods: ['sepa'],
+      });
+      expect(reads).toEqual([MAKER, MAKER]);
+    });
+
+    it('does not give a non-approved maker the merchant ceiling', async () => {
+      const gated = new P2pService(sql, ledger, bus, {
+        ...options,
+        offerLimits: armedLimits,
+        merchantStatusOf: async () => 'applied',
+      });
+      await expect(
+        gated.createOffer({
+          makerId: MAKER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('4000'),
+          totalAmt: amt('4000'),
+          methods: ['sepa'],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_limit_exceeded' });
+    });
+
+    it('applies the standard band when standing is not readable — never the merchant slot', async () => {
+      const gated = new P2pService(sql, ledger, bus, {
+        ...options,
+        offerLimits: armedLimits,
+      });
+      await expect(
+        gated.createOffer({
+          makerId: MAKER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('4000'),
+          totalAmt: amt('4000'),
+          methods: ['sepa'],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_limit_exceeded' });
+    });
+  });
+
   // ── Happy path ────────────────────────────────────────────────────────────
 
   describe('HAPPY PATH — lock, then release', () => {

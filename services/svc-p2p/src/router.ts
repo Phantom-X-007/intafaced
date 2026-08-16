@@ -15,7 +15,14 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
-import { ceilingOnWire, limitsConfigured, limitsOnWire, NO_OFFER_LIMITS, type OfferLimitPolicy } from './merchant-limits.js';
+import {
+  ceilingOnWire,
+  limitsConfigured,
+  limitsOnWire,
+  NO_OFFER_LIMITS,
+  offerLimitsPosture,
+  type OfferLimitPolicy,
+} from './merchant-limits.js';
 import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
@@ -405,6 +412,7 @@ export function createP2pRouter(
   });
   const moderationReachable = isModerationConfigured(moderatorUserIds);
   const offerLimitsConfigured = limitsConfigured(offerLimits);
+  const offerLimitsPostureValue = offerLimitsPosture(offerLimits);
 
   /**
    * Programme-gated P2P API procedure.
@@ -432,21 +440,27 @@ export function createP2pRouter(
     });
 
   const offerLimitsOutput = z.object({
-    /** Largest ordinary maxAmt, or null when unlimited. Decimal string. */
+    /** Largest ordinary maxAmt, or null when no numeric cap. Decimal string. */
     standardMax: z.string().nullable(),
-    /** Largest approved-merchant maxAmt, or null when unlimited. Decimal string. */
+    /** Largest approved-merchant maxAmt, or null when no numeric cap. Decimal string. */
     merchantMax: z.string().nullable(),
-    /** False until at least one of the env ceilings is set. */
+    /** True when at least one band is a number. */
     configured: z.boolean(),
+    /** unset = env absent; unlimited = owner confirmed; configured = at least one number. */
+    posture: z.enum(['unset', 'unlimited', 'configured']),
+    standardMode: z.enum(['unset', 'unlimited', 'capped']),
+    merchantMode: z.enum(['unset', 'unlimited', 'capped']),
     /** Same sentence the boot log prints — operator-readable posture. */
     summary: z.string(),
   });
 
   const myOfferCeilingOutput = z.object({
-    /** Ceiling that binds this caller right now, or null when unlimited. */
+    /** Ceiling that binds this caller right now, or null when no numeric cap. */
     maxAmount: z.string().nullable(),
     /** Which policy slot applied — applicant/suspended stay on standard. */
     band: z.enum(['standard', 'merchant']),
+    /** unset vs owner-confirmed unlimited vs capped for the binding band. */
+    limitMode: z.enum(['unset', 'unlimited', 'capped']),
     merchantStatus: z.enum(['applied', 'approved', 'rejected', 'suspended', 'withdrawn']).nullable(),
   });
 
@@ -495,6 +509,8 @@ export function createP2pRouter(
            * not imply the merchant badge buys a higher limit when none is set.
            */
           offerLimitsConfigured: z.boolean(),
+          /** Public three-way posture so probes never need a scoped refuse-first read. */
+          offerLimitsPosture: z.enum(['unset', 'unlimited', 'configured']),
         }),
       )
       .query(() => ({
@@ -502,6 +518,7 @@ export function createP2pRouter(
         service: 'svc-p2p' as const,
         moderationReachable,
         offerLimitsConfigured,
+        offerLimitsPosture: offerLimitsPostureValue,
       })),
 
     /**
