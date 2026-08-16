@@ -213,6 +213,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.cashback_pot_unfunded':
       case 'bank.no_ramp_rail':
       case 'bank.fiat_ramp_no_pay_adapter':
+      case 'bank.no_fiat_rail':
       case 'bank.fiat_ramp_socket':
       case 'bank.withdraw_destination_missing':
       case 'bank.earn_rate_unset':

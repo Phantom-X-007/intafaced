@@ -217,7 +217,7 @@ if (!available) {
           railRef: 'sandbox-ach',
           creditedBy: OPERATOR,
         }),
-      ).rejects.toMatchObject({ code: 'bank.fiat_ramp_no_pay_adapter' });
+      ).rejects.toMatchObject({ code: 'bank.no_fiat_rail' });
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);
     });

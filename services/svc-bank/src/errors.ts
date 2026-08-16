@@ -190,6 +190,12 @@ export type BankErrorCode =
    * relationship. Refusing by this code is the whole fiat half of the ADR split.
    */
   | 'bank.fiat_ramp_no_pay_adapter'
+  /**
+   * A pay adapter is present but none of its rails is a live fiat settle rail
+   * (sandbox, absent, or missing onramp/offramp capability). Distinct from
+   * empty-port `bank.fiat_ramp_no_pay_adapter` and programme-none `bank.fiat_ramp_socket`.
+   */
+  | 'bank.no_fiat_rail'
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'
   /**

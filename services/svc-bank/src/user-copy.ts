@@ -31,6 +31,7 @@ const USER_VISIBLE_CODES = new Set<BankErrorCode>([
   'bank.no_ramp_rail',
   'bank.fiat_ramp_socket',
   'bank.fiat_ramp_no_pay_adapter',
+  'bank.no_fiat_rail',
   'bank.ramp_invalid_amount',
   'bank.ramp_invalid_asset',
   'bank.ramp_invalid_destination',
