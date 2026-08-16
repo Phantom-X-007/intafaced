@@ -167,10 +167,7 @@ export function frozenMessage(reason: string | null): string {
   return `Ledger posting is frozen${reason ? `: ${reason}` : ''}`;
 }
 
-function attributedOverwriteError(
-  current: FreezeState,
-  next: { reason: string; actor: string },
-): LedgerError {
+function attributedOverwriteError(current: FreezeState, next: { reason: string; actor: string }): LedgerError {
   return new LedgerError(
     `Ledger already frozen by ${current.actor ?? 'unknown'}: ${current.reason ?? 'no reason'} — ` +
       `refusing to overwrite with ${next.actor}: ${next.reason} (STOP §4.2b #3)`,
