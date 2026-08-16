@@ -890,6 +890,12 @@ services:
       SERVICE_NAME: svc-notify
       HTTP_PORT: '4015'
       DATABASE_URL: postgres://svc_notify:svc_notify@postgres:5432/intafaced
+      # Access-token TTL / iss / aud (authEnvSchema + identity defaults).
+      # Host `.env` can pin them; without compose pass-through the container
+      # keeps schema-only defaults forever (900 / intafaced / intafaced.api).
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Same public ticker surface svc-bank already uses for loan marks (#1586).
       # Without this, price watches stay dark forever in the compose stack even
       # though trade is up and the live MarkSource factory is wired in code.
