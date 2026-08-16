@@ -1,6 +1,7 @@
 # Claim market.commerce — Stage C3 listing subscriptions
 
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2217
 **Lane:** this session
 **Tracker:** `market.commerce` (C1+C2 on main; C3 residual)
 **Branch:** `feat/market-commerce-subscriptions-c3`
