@@ -548,6 +548,12 @@ services:
       WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
       WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
+      # Host can pin tape replay length and JetStream durable names. Defaults
+      # match services/svc-ws/src/env.ts (50 / ws-trade-tape / ws-private-orders).
+      # Without these names, a host `.env` never reaches the container.
+      WS_TRADE_RECENT_LIMIT: ${WS_TRADE_RECENT_LIMIT:-50}
+      WS_TRADES_DURABLE: ${WS_TRADES_DURABLE:-ws-trade-tape}
+      WS_PRIVATE_ORDERS_DURABLE: ${WS_PRIVATE_ORDERS_DURABLE:-ws-private-orders}
       # Private /private/stream (#119/#122) needs the SAME JWT material as
       # svc-identity / svc-edge. Without these, privateTokens stays null and
       # every private upgrade returns 403 (mega-audit L5-4 / WS-JWT).
