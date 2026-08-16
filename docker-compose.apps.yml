@@ -751,9 +751,14 @@ services:
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
       # Earn-pool interest accrual kill. env.ts already names this (default true);
       # without compose pass-through a host `.env` never reaches the container and
-      # cannot halt a runaway payout. Loan interest stays BANK.LOANS
-      # (LOAN_ACCRUAL_ENABLED) — not named here. No APY or pool rate is invented.
+      # cannot halt a runaway payout. Loan charging is a separate key (below).
+      # No APY or pool rate is invented.
       INTEREST_ACCRUAL_ENABLED: ${INTEREST_ACCRUAL_ENABLED:-true}
+      # Loan interest capitalisation kill. env.ts already names this (default true);
+      # without compose pass-through a host `.env` never reaches the container.
+      # Separate from INTEREST_ACCRUAL_ENABLED so stopping earn payout does not
+      # also stop charging borrowers. No APY, LTV, or USDT mid is invented.
+      LOAN_ACCRUAL_ENABLED: ${LOAN_ACCRUAL_ENABLED:-true}
       # Loans module kill + collateral-sale sweep. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # BANK_LOANS_ENABLED defaults ON (matches env.ts). LOAN_RISK_SWEEP_ENABLED
