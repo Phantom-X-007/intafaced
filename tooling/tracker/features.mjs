@@ -420,6 +420,7 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     note:
       'W4 cancel-fail parks paused + haltReason cancel_incomplete (resume refused until re-cancel). tickAll isolation landed. ' +
+      '2026-08-16 hydrate-on-mutate proofs: cold pause/resume/cancel + cancel_incomplete resume refuse; getAlgo and mutate share owner hydrate. ' +
       '2026-08-13 hydrate-on-mutate: pause/resume/cancel load durable store after restart and await save (onChange was fire-and-forget). ' +
       '2026-08-13 persist-on-tick: tickAlgo hydrates from store; tick/tickAll await save so a crash cannot leave Postgres active after a miss/halt. ' +
       '2026-08-14 durable place grant: createTwap persists presented scopes/session (no JWT); tick reinstalls after restart. Pre-migration rows still halt principal_unavailable. Grant errors name algo (not TWAP-only) so VWAP/POV create/tick refuse the same way. ' +

@@ -2351,18 +2351,7 @@ export class TradeService {
 
   async getAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:read');
-    let parent = this.algo.get(parentId);
-    if (!parent) {
-      const loaded = await this.algoStore.load(parentId);
-      if (loaded && loaded.parent.userId === principal.userId) {
-        this.algo.hydrate(loaded.parent, loaded.plan);
-        parent = loaded.parent;
-      }
-    }
-    if (!parent || parent.userId !== principal.userId) {
-      throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
-    }
-    return parent;
+    return hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
   }
 
   async algoProgress(principal: Principal, parentId: string): Promise<AlgoProgressView> {
