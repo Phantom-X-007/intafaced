@@ -100,9 +100,9 @@ index 54dbd8f5..e218126a 100644
 +            toUserId: input.toUserId,
 +            amount: parseAmount(input.amount),
 +          });
-          return { ledgerTxId: result.ledgerTxId, amount: result.amount };
-        }),
-      ),
++          return { ledgerTxId: result.ledgerTxId, amount: result.amount };
++        }),
++      ),
 +
      schedule: scopedProcedure('bank:write', { module: 'bank' })
        .input(
@@ -176,6 +176,6 @@ index b2140ccc..e0f9f371 100644
 +    );
 +  }
 +
-   // ── Standing orders ────────────────────────────────────
+   // ── Standing orders ────────────────────────────────
  
    async schedule(input: {
