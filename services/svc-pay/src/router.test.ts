@@ -161,6 +161,7 @@ function stubService(): Stub {
     getMerchant: record('getMerchant', merchant),
     getMerchantByUserId: record('getMerchantByUserId', merchant),
     submitKyb: record('submitKyb', () => ({ ...merchant(), kybStatus: 'pending' as const, kybRef: 'dossier-1' })),
+    decideKyb: record('decideKyb', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
     decideKybStub: record('decideKybStub', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
     listPayments: record('listPayments', () => [paymentView({ status: 'captured', capturedAmount: amt('100') })]),
     createProfile: record('createProfile', () => ({ id: SETTLEMENT, merchantId: MERCHANT })),
@@ -838,6 +839,21 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     const call = stub.calls.find((c) => c.method === 'createMerchant');
     expect(call).toBeDefined();
     expect((call!.args[0] as { userId: string }).userId).toBe(USER);
+  });
+
+  it('merchant.decideKyb is operator admin:compliance, not merchant pay:write', async () => {
+    const merchantApi = await caller(['pay:write']);
+    const merchantErr = await merchantApi.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' }).catch((e: unknown) => e);
+    expect(codeOf(merchantErr)).toBe('FORBIDDEN');
+    expect(String((merchantErr as Error).message)).toMatch(/admin:compliance/);
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
+
+    const ops = await caller(['admin:compliance']);
+    const out = await ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' });
+    expect(out).toMatchObject({ id: MERCHANT, kybStatus: 'approved' });
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(1);
+    // Operator is not fenced as the merchant owner.
+    expect(stub.calls.filter((c) => c.method === 'getMerchant')).toHaveLength(0);
   });
 });
 

@@ -750,18 +750,31 @@ export class PayService {
   }
 
   /**
+   * Operator digital-KYB decide (`pay.psp`). Works under live-only.
+   * Writes `merchants.kyb_status` pending → approved|rejected.
+   * Does not invent a vendor webhook, fee bps, or `pay:*` scopes (Layer A).
+   */
+  async decideKyb(input: { merchantId: string; decision: 'approved' | 'rejected' }): Promise<MerchantRecord> {
+    return this.writeKybDecision(input.merchantId, input.decision);
+  }
+
+  /**
    * KYB stub decide — sandbox/dev path only under `allow-sandbox` valueMovement.
-   * Under live-only this refuses: a real operator / `pay.psp` path is required.
+   * Under live-only this refuses: use `merchant.decideKyb` (operator `admin:compliance`).
    * Never invents an external KYB vendor response.
    */
   async decideKybStub(input: { merchantId: string; decision: 'approved' | 'rejected' }): Promise<MerchantRecord> {
     if (this.valueMovement === 'live-only') {
       throw new PayError(
-        'KYB decide stub is disabled under live-only; use the digital KYB path (pay.psp) or an operator tool',
+        'KYB decide stub is disabled under live-only; use merchant.decideKyb (operator admin:compliance) or kyb.decide',
         'pay.kyb_operator_required',
       );
     }
-    const merchant = await this.getMerchant(input.merchantId);
+    return this.writeKybDecision(input.merchantId, input.decision);
+  }
+
+  private async writeKybDecision(merchantId: string, decision: 'approved' | 'rejected'): Promise<MerchantRecord> {
+    const merchant = await this.getMerchant(merchantId);
     if (merchant.kybStatus !== 'pending') {
       throw new PayError(`Merchant KYB must be pending to decide (is ${merchant.kybStatus})`, 'pay.kyb_invalid', {
         kybStatus: merchant.kybStatus,
@@ -769,10 +782,10 @@ export class PayService {
     }
     await this.sql`
       UPDATE pay.merchants
-         SET kyb_status = ${input.decision}, updated_at = now()
-       WHERE id = ${input.merchantId}
+         SET kyb_status = ${decision}, updated_at = now()
+       WHERE id = ${merchantId}
     `;
-    return this.getMerchant(input.merchantId);
+    return this.getMerchant(merchantId);
   }
 
   /**

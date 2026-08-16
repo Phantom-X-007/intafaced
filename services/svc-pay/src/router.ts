@@ -391,8 +391,29 @@ export function createPayRouter(
         ),
 
       /**
+       * Operator digital-KYB decide (`pay.psp`). `admin:compliance` — not merchant `pay:write`.
+       * Works under live-only. Does not invent a vendor, fee bps, or Layer A scopes.
+       * No merchant-ownership fence: the operator is not the merchant.
+       */
+      decideKyb: scopedProcedure('admin:compliance', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) }))
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
+            kybRef: z.string().nullable(),
+          }),
+        )
+        .mutation(({ input }) =>
+          wrap(async () => {
+            const merchant = await pay.decideKyb(input);
+            return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
+          }),
+        ),
+
+      /**
        * KYB stub decide — allowed only when valueMovement is allow-sandbox.
-       * Under live-only → `pay.kyb_operator_required` (honest refuse).
+       * Under live-only → `pay.kyb_operator_required` (use `merchant.decideKyb`).
        */
       decideKybStub: scopedProcedure('pay:write', { module: 'pay' })
         .input(z.object({ merchantId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) }))
