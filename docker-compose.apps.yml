@@ -281,6 +281,13 @@ services:
       DATABASE_URL: postgres://svc_token:svc_token@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
+      # Emissions kill + auto-tick (token.emissions). Host `.env` can stop
+      # minting without a rebuild. AUTO_TICK stays default false — do not
+      # open the faucet on a clean clone. Tick interval matches env.ts (1d).
+      # Do not pass the weekly yield cron — token.yield is still a socket.
+      EMISSIONS_ENABLED: ${EMISSIONS_ENABLED:-true}
+      EMISSIONS_AUTO_TICK: ${EMISSIONS_AUTO_TICK:-false}
+      EMISSIONS_TICK_MS: ${EMISSIONS_TICK_MS:-86400000}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4003']
     healthcheck: *healthcheck
