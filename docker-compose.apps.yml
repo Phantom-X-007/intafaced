@@ -139,7 +139,8 @@ services:
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
-      # Posting freeze + reconcile cadence. env.ts already names these (default
+      JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
+      # Posting freeze + reconcile cadence. env.ts already names these (default)
       # true / 60). Without compose pass-through a host `.env` freeze after a
       # reconcile mismatch never reaches the container. Do not default posting
       # OFF — that would halt the money plane on a clean clone.
