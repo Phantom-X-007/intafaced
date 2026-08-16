@@ -1,5 +1,6 @@
 import { CARD_DIMENSIONS, type BlueprintProfile, type CardSize } from '@intafaced/contracts';
 import { color, font } from '@intafaced/ui/tokens';
+import { assertZeroPiiSurface } from '../attestations/zero-pii.js';
 
 /**
  * THE SHARE CARD (§7.1, §7.2).
@@ -376,6 +377,7 @@ function landscape(subject: CardSubject): string {
  * depend on renderer defaults rather than on us.
  */
 export function composeCard(subject: CardSubject, size: CardSize): string {
+  assertZeroPiiSurface('card.subject', subject);
   const { width, height } = CARD_DIMENSIONS[size];
   const body = size === 'portrait' ? portrait(subject) : landscape(subject);
 

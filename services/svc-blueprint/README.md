@@ -273,7 +273,7 @@ There is deliberately **no default URL**. One pointing at a host that does not e
 
 - **A hosted PNG.** See above — the adapter exists, the rail does not, and the service says so rather than pretending.
 - **Unauthenticated public card URLs.** `cardOf` is authenticated and gated by `blueprints.visibility` (`private` = owner only, `crew` = same crew, `public` = any signed principal). Denied and missing are the same `not_found`, so private Blueprints are not enumerable by id. A session-less unfurl URL (OG crawlers, share tokens) is still unbuilt — that is object storage + a revocable token (`ops.social-promotion` / Class X), not this procedure.
-- On-chain rank attestations (`blueprint.attestations`, §19).
+- On-chain rank attestations (`blueprint.attestations`, §19) — **leftover Shehzad**. D26-P1-I4 ships Fiat-plane refuse: PII on a card/attestation DTO fails by named code; product Done stays refused while the P0-12 threat-model bar is unmet (`docs/THREAT-MODEL-BLUEPRINT-ATTESTATIONS.md`). This service does not write a chain.
 - Crew vaults (§33) — Phase 5P, and the money lives in the ledger when it arrives.
 
 ---

@@ -981,7 +981,7 @@ export const FEATURES = [
     plane: 'B',
     owner: 'shehzad002',
     dependsOn: ['blueprint.onboarding', 'protocol.smart-accounts'],
-    note: 'Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity.',
+    note: 'Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity. D26-P1-I4 2026-08-16: Fiat-plane zero-PII refuse + product-Done refuse while P0-12 unsealed (svc-blueprint attestations helper). STATUS stays ready — on-chain leftover Shehzad; do not flip done from this slice.',
   }),
 
   // ── PHASE 4P · INTACHAIN ─────────────────────────────────────────────────
