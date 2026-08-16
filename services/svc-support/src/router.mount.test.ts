@@ -57,14 +57,32 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     listComments: vi.fn(async () => []),
     setStatus: vi.fn(),
     listKb: vi.fn(async () => [
-      { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+      {
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        revision: 1,
+        published: true,
+      },
     ]),
     searchKb: vi.fn(async () => [
-      { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+      {
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        revision: 1,
+        published: true,
+      },
     ]),
     getKbArticle: vi.fn(async (id: string) =>
       id === 'kb-account-access'
-        ? { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' }
+        ? {
+            id: 'kb-account-access',
+            titleKey: 'support.kb.account_access.title',
+            bodyKey: 'support.kb.account_access.body',
+            revision: 1,
+            published: true,
+          }
         : null,
     ),
     listOperatorQueue: vi.fn(async () => ({ status: 'empty' as const })),
@@ -134,6 +152,7 @@ describe('svc-support mount', () => {
     const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
     expect(kb).toHaveLength(1);
     expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
+    expect(kb[0]).toMatchObject({ revision: 1, published: true });
   });
 
   it('refuses publishKb / unpublishKb without support:ops', async () => {
@@ -177,9 +196,10 @@ describe('svc-support mount', () => {
     const caller = createSupportRouter(support).createCaller(anonymous());
     const found = await caller.searchKb({ q: 'account' });
     expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ revision: 1, published: true });
     expect(support.searchKb).toHaveBeenCalledWith('account');
     const one = await caller.getKb({ id: 'kb-account-access' });
-    expect(one?.id).toBe('kb-account-access');
+    expect(one).toMatchObject({ id: 'kb-account-access', revision: 1, published: true });
     const missing = await caller.getKb({ id: 'nope' });
     expect(missing).toBeNull();
   });
