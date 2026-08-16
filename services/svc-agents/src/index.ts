@@ -7,6 +7,8 @@ import { env } from './env.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { DEFAULT_ROUTING_TABLE, parseRoutingTable, type RoutingTable } from './gateway/routing.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { UsageMeter } from './metering/meter.js';
 import { MockModelProvider } from './providers/mock.js';
 import { UpstreamModelProvider } from './providers/upstream.js';
@@ -106,6 +108,8 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const meter = new UsageMeter(sql, ledger, {
   assetId: env.AGENTS_FEE_ASSET_ID,
   windowMinutes: env.AGENTS_USAGE_WINDOW_MINUTES,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
 });
 
 const runtime = new AgentRuntime(sql, gateway, meter, bus, {

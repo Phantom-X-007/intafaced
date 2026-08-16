@@ -72,6 +72,13 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
+       * svc-identity base for affiliate accrue + payout after usage feeCharge.
+       * Blank → noop ports (feeCharge still posts). Never invent rates.
+       * No localhost default — unset is honest noop, not a guessed identity.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * Academy base URL for coach curriculum grounding
        * (`GET /internal/curriculum`). Unset / blank → envCoachGrounding() empty
        * catalog (chatbot refuse). Set → S2S fetch; 401/dark academy still empty.

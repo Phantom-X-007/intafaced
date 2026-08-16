@@ -908,6 +908,10 @@ services:
       HTTP_PORT: '4008'
       DATABASE_URL: postgres://svc_agents:svc_agents@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
+      # Affiliate accrue + payout after usage feeCharge. env.ts is optional with
+      # no localhost default (unset = noop). Compose pins identity on the fleet
+      # network. Never invents rates; identity owns the payout door.
+      IDENTITY_URL: http://svc-identity:4002
       # Coach cites academy platform spine over S2S. Unset locally stays empty
       # (chatbot refuse). Compose pins the academy service so the fleet is not
       # dark forever while academy is on the same network.
