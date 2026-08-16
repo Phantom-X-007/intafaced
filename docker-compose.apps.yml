@@ -651,6 +651,11 @@ services:
       # card-sandbox — not the public checkout path). Without compose
       # pass-through a host `.env` never reaches the container.
       PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-card-sandbox}
+      # Register `card-sandbox` at boot. env.ts types this as optional
+      # `'true' | 'false'`; empty string is invalid. Key-no-value forwards
+      # a host `.env` pin and omits the var when unset so schema default
+      # applies (yes in dev/test, no in staging/prod). Do not use `${VAR:-}`.
+      PAY_REGISTER_CARD_SANDBOX:
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck

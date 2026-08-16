@@ -67,6 +67,5 @@ describe('compose checkout and confirmation flags for svc-pay', () => {
     expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:/);
     expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:/);
     expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:/);
-    expect(block).not.toMatch(/PAY_REGISTER_CARD_SANDBOX:/);
   });
 });
