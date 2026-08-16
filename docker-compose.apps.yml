@@ -63,6 +63,9 @@ x-edge-secret: &edge-secret
 
 x-internal-secret: &internal-secret
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or service-to-service calls return 401.}
+  # Host pin for S2S body-bind (internalServiceEnvSchema default accept-both).
+  # Do not default require — v1 callers 401 until the fleet finishes v2.
+  INTERNAL_SERVICE_BODY_BIND: ${INTERNAL_SERVICE_BODY_BIND:-accept-both}
 
 # `/health`, never `/ready` — the script explains why at length.
 x-healthcheck: &healthcheck
@@ -760,6 +763,15 @@ services:
       HTTP_PORT: '4009'
       DATABASE_URL: postgres://svc_bank:svc_bank@postgres:5432/intafaced
       LEDGER_URL: http://svc-ledger:4001
+      # Access-token lifetime + iss/aud. Identity / authEnvSchema already
+      # default these (900 / intafaced / intafaced.api). Without compose
+      # pass-through a host `.env` pin never reaches the container and bank
+      # keeps schema-only defaults forever. Do not restamp JWT_ACCESS_SECRET —
+      # bank takes the edge principal via *edge-secret, not a second
+      # ACCESS_SECRET line.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Loan LTV marks read svc-trade public REST. env.ts defaults to
       # http://localhost:4004, which is unreachable inside compose and leaves
       # every mark as bank.mark_missing. Same surface notify already uses.
@@ -890,6 +902,13 @@ services:
       # never reaches the container. Window must divide 1440 (env.ts).
       AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
       AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
+      # Access-token TTL / iss / aud (authEnvSchema defaults 900 / intafaced /
+      # intafaced.api). Without compose pass-through a host `.env` pin never
+      # reaches the container. Do not add JWT_ACCESS_SECRET here — agents
+      # authenticates the edge via *edge-secret, not a local signing key.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       # Pass-through form (key, no value): compose forwards these ONLY if they
       # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
       # them to the empty string instead, and the schema types them as an
@@ -1229,6 +1248,8 @@ services:
       INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-0x0000000000000000000000000000000000000000}
       INDEXER_START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
       INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-64}
+      INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-2000}
+      INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-200}
       INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4013']
