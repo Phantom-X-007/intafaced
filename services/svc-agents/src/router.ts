@@ -27,7 +27,7 @@ import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/di
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
-import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
+import { serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
 import { supportTierGate } from './support-agent/tier-gate.js';
@@ -1298,9 +1298,10 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .query(() => serialiseGuardrail(navigatorAgentGuardrail())),
 
       /**
-       * Stage-2 tool_select: intersect candidates with declared read tools.
-       * Dark plane / empty candidates refuse; money-write candidates refused.
-       * Caller supplies the session guardrail tool grants — no invent tools.
+       * Stage-2 tool_select: intersect candidates with the product Stage-1
+       * allowlist. Dark plane / empty candidates refuse; money-write and
+       * off-list candidates refused. Caller-supplied `tools` cannot widen
+       * the grant — that was a public-door hole.
        */
       selectTools: scopedProcedure('agents:read', { module: 'agents' })
         .input(
@@ -1339,27 +1340,9 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           ]),
         )
         .query(({ input }) => {
-          const modules = [...new Set(input.tools.map((t) => t.module))];
-          const guardrail = parseGuardrail({
-            agentId: 'navigator',
-            version: 1,
-            tools: input.tools.map((t) => ({
-              name: t.name,
-              module: t.module,
-              mode: t.mode,
-              requiresApproval: t.requiresApproval ?? false,
-            })),
-            limits: {
-              maxActionsPerSession: 100,
-              maxOutputTokensPerCall: 4096,
-              maxSpendPerSession: null,
-              allowedModules: modules,
-              allowedTasks: ['navigator.plan', 'navigator.tool_select'],
-            },
-          });
           const result = selectNavigatorTools({
             plane: input.plane,
-            guardrail,
+            guardrail: navigatorAgentGuardrail(),
             candidates: input.candidates,
           });
           if (result.status === 'ok') {
@@ -1670,7 +1653,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['trade_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_answer']),
+              reason: z.enum(['trade_plane_dark', 'tier_law_blank', 'tier_not_granted', 'tool_not_declared', 'no_grounded_answer']),
               userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
               unanswered: z.array(navigatorUnansweredOutput),
               metering: runMeteringOutput,
