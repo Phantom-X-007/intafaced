@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client/money';
+import { CaptureLog } from '@intafaced/connect-data-lake';
 import {
   applyDelta,
   bookFromSnapshot,
   bookTop,
   diffDepth,
   emptyBook,
+  ingestVenueDepthDelta,
+  ingestVenueDepthSnapshot,
   ladder,
   type DepthBook,
   type DepthDelta,
@@ -378,5 +381,61 @@ describe('ladder ordering', () => {
       [],
     );
     expect(ladder(b, 'bids').map((r) => formatAmount(r.price))).toEqual(['1000', '100', '9']);
+  });
+});
+
+describe('ingestVenueDepthSnapshot — absent vs measured', () => {
+  it('returns no book and venue_not_connected when the venue is unwired', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:00:00.000Z') });
+    const result = ingestVenueDepthSnapshot(lake, {
+      venueId: 'unwired-venue',
+      marketId: MARKET,
+      connection: 'not_connected',
+      snapshot: snapshot(1, [], []),
+    });
+
+    expect(result.book).toBeNull();
+    expect(result.record).toMatchObject({ status: 'absent', reason: 'venue_not_connected', kind: 'book' });
+    expect(result.record).not.toHaveProperty('bids');
+  });
+
+  it('does not serve emptyBook as connected silence', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:00:01.000Z') });
+    const result = ingestVenueDepthSnapshot(lake, {
+      venueId: 'unwired-venue',
+      marketId: MARKET,
+      connection: 'not_connected',
+    });
+    expect(result.book).toBeNull();
+    expect(result.book).not.toEqual(emptyBook(MARKET));
+  });
+
+  it('builds a measured empty DepthBook only when the adapter said connected', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:00:02.000Z') });
+    const result = ingestVenueDepthSnapshot(lake, {
+      venueId: 'binance-spot',
+      marketId: MARKET,
+      connection: 'connected',
+      snapshot: snapshot(4, [], []),
+    });
+    expect(result.record).toMatchObject({ status: 'measured', occupancy: 'empty' });
+    expect(result.book).not.toBeNull();
+    expect(result.book?.bids.size).toBe(0);
+    expect(result.book?.asks.size).toBe(0);
+  });
+});
+
+describe('ingestVenueDepthDelta — missing book is absent', () => {
+  it('refuses to apply a delta onto a missing venue book', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:00:03.000Z') });
+    const result = ingestVenueDepthDelta(lake, {
+      venueId: 'binance-spot',
+      marketId: MARKET,
+      connection: 'connected',
+      book: null,
+      delta: { type: 'delta', marketId: MARKET, fromSequence: 1, sequence: 2, bids: [], asks: [] },
+    });
+    expect(result.apply).toEqual({ ok: false, reason: 'absent' });
+    expect(result.record.status).toBe('absent');
   });
 });
