@@ -655,6 +655,20 @@ services:
       # card-sandbox — not the public checkout path). Without compose
       # pass-through a host `.env` never reaches the container.
       PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-card-sandbox}
+      # Register `card-sandbox` at boot. env.ts types this as optional
+      # `'true' | 'false'`; empty string is invalid. Key-no-value forwards
+      # a host `.env` pin and omits the var when unset so schema default
+      # applies (yes in dev/test, no in staging/prod). Do not use `${VAR:-}`.
+      PAY_REGISTER_CARD_SANDBOX:
+      # Optional live-crypto rail. env.ts types RPC as url().optional(),
+      # chain id as optional int, mnemonic min 20, hot key 0x hex, assets
+      # min 1. `${VAR:-}` interpolates "" which fails those schemas.
+      # Key-no-value forwards a host `.env` pin and omits when unset.
+      PAY_CRYPTO_RPC_URL:
+      PAY_CRYPTO_CHAIN_ID:
+      PAY_CRYPTO_DEPOSIT_MNEMONIC:
+      PAY_CRYPTO_HOT_WALLET_KEY:
+      PAY_CRYPTO_ASSETS:
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
@@ -1055,6 +1069,9 @@ services:
       # localhost:4001 which is unreachable inside the compose network — purchase
       # would invent a broken settle path instead of posting marketPurchase.
       LEDGER_URL: http://svc-ledger:4001
+      # Affiliate accrue + payout after house commission posts. Swallow
+      # identity-down; never unwind marketPurchase. No localhost invent.
+      IDENTITY_URL: http://svc-identity:4002
       # D26-P0-02 owner click 2026-08-13: explicit free-cut via host env.
       # Pass-through only — no compose default. Silence still refuses
       # market.commission_not_configured. Copy .env.example → .env for 0.
