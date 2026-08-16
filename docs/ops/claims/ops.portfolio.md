@@ -1,9 +1,10 @@
 # Claim ops.portfolio
 
-**status:** claimed
+**status:** pr-open
 **owner:** ZenYoda3
 **started:** 2026-08-16
 **branch:** feat/ops-portfolio-ledger-view
+**pr:** https://github.com/Phantom-X-007/intafaced/pull/2218
 **title:** Portfolio Stage-1 — custodial ledger view, indexer named-absent
 **slice:** Stage-1
 
