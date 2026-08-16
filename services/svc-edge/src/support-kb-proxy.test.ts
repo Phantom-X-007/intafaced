@@ -41,14 +41,19 @@ function envelope(data: unknown): string {
   return JSON.stringify({ result: { data } });
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
 function readJsonInput(req: IncomingMessage, url: URL, body: string): Record<string, unknown> {
   const raw = url.searchParams.get('input') ?? (body || undefined);
   if (!raw) return {};
-  const parsed = JSON.parse(raw) as { json?: Record<string, unknown> } | Record<string, unknown>;
-  if (parsed && typeof parsed === 'object' && 'json' in parsed && parsed.json && typeof parsed.json === 'object') {
-    return parsed.json;
-  }
-  return parsed as Record<string, unknown>;
+  const parsed: unknown = JSON.parse(raw);
+  const wrapped = asRecord(parsed);
+  return 'json' in wrapped ? asRecord(wrapped.json) : wrapped;
 }
 
 function procedureName(pathname: string): string {
