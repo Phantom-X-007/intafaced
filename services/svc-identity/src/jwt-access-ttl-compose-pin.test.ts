@@ -41,9 +41,7 @@ describe('compose JWT_ACCESS_TTL_SECONDS for svc-identity', () => {
   const block = identityServiceBlock(compose);
 
   it('authEnvSchema still defaults JWT_ACCESS_TTL_SECONDS to 900', () => {
-    expect(authEnv).toMatch(
-      /JWT_ACCESS_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(3600\)\.default\(900\)/,
-    );
+    expect(authEnv).toMatch(/JWT_ACCESS_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(3600\)\.default\(900\)/);
   });
 
   it('wires svc-identity JWT_ACCESS_TTL_SECONDS from the host, unique once, default 900', () => {
