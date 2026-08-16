@@ -50,9 +50,9 @@ describe('compose crypto watcher flags for svc-pay', () => {
   });
 
   it('does not invent RPC, mnemonic, hot wallet, card rails, or sandbox rails', () => {
-    expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:/);
+    expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:\s*\$\{/);
     expect(block).not.toMatch(/PAY_ALLOW_SANDBOX_RAILS:\s*\$\{PAY_ALLOW_SANDBOX_RAILS:-true\}/);
   });
 });

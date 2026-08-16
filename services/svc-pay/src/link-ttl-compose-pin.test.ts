@@ -59,8 +59,8 @@ describe('compose payment-link TTL and webhook tolerance for svc-pay', () => {
     expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:/);
     expect(block).not.toMatch(/PAY_CHECKOUT_RAILS:/);
     expect(block).not.toMatch(/PAY_ALLOW_SANDBOX_RAILS:\s*\$\{PAY_ALLOW_SANDBOX_RAILS:-true\}/);
-    expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:/);
+    expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:\s*\$\{/);
   });
 });

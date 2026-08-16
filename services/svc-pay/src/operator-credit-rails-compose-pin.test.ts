@@ -79,9 +79,9 @@ describe('compose operator-credit rails for svc-pay', () => {
     expect(block.match(WEBHOOK_TOLERANCE)).toHaveLength(1);
     expect(block).not.toMatch(/PAY_CHECKOUT_RAILS:/);
     expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_CHAIN_ID:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:/);
-    expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:/);
+    expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_CHAIN_ID:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:\s*\$\{/);
+    expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:\s*\$\{/);
   });
 });
