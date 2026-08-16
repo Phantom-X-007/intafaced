@@ -10,7 +10,7 @@ import {
 } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import type { MarketRegistry } from './registry.js';
-import type { DepthSource } from './source.js';
+import { DepthNoBookError, type DepthSource } from './source.js';
 
 /** True when both sides have the same prices with the same quantities. */
 function sidesEqual(a: DepthSide, b: DepthSide): boolean {
@@ -90,6 +90,25 @@ export interface DepthSink {
 export const CLOSE_POLICY = 1008;
 export const CLOSE_TRY_LATER = 1013;
 export const CLOSE_GOING_AWAY = 1001;
+
+/**
+ * Named unavailability on a public door — NOT a `DepthMessage` field.
+ * Matching-down / seed-fail must not look like a live empty book (seq-0 snapshot).
+ * Control frame `{ type: 'status', code }` sits beside snapshot/delta; the
+ * market-data package still forbids extending `DepthMessage`.
+ */
+export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
+
+export interface DepthEngineStatusFrame {
+  readonly type: 'status';
+  readonly code: typeof DEPTH_ENGINE_UNAVAILABLE;
+  readonly marketId: string;
+}
+
+export function depthEngineUnavailableFrame(marketId: string): string {
+  const frame: DepthEngineStatusFrame = { type: 'status', code: DEPTH_ENGINE_UNAVAILABLE, marketId };
+  return JSON.stringify(frame);
+}
 
 export interface DepthHubOptions {
   readonly depthLimit: number;
@@ -182,6 +201,11 @@ export class DepthHub {
   #droppedFrames = 0;
   #evictions = 0;
   #repairs = 0;
+  /**
+   * Markets whose last depth read failed (matching down / seed-fail / 5xx).
+   * Distinct from a listed never-traded book (honest empty at sequence 0).
+   */
+  readonly #unavailable = new Set<string>();
 
   constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
     const { registry, ...rest } = options;
@@ -207,13 +231,35 @@ export class DepthHub {
     return [...active];
   }
 
-  get stats(): { connections: number; books: number; droppedFrames: number; evictions: number; repairs: number } {
+  get matchingAvailable(): boolean {
+    return this.#unavailable.size === 0;
+  }
+
+  get engineCode(): typeof DEPTH_ENGINE_UNAVAILABLE | null {
+    return this.matchingAvailable ? null : DEPTH_ENGINE_UNAVAILABLE;
+  }
+
+  isEngineUnavailable(marketId: string): boolean {
+    return this.#unavailable.has(marketId);
+  }
+
+  get stats(): {
+    connections: number;
+    books: number;
+    droppedFrames: number;
+    evictions: number;
+    repairs: number;
+    matchingAvailable: boolean;
+    code: typeof DEPTH_ENGINE_UNAVAILABLE | null;
+  } {
     return {
       connections: this.#subscriptions.size,
       books: this.#books.size,
       droppedFrames: this.#droppedFrames,
       evictions: this.#evictions,
       repairs: this.#repairs,
+      matchingAvailable: this.matchingAvailable,
+      code: this.engineCode,
     };
   }
 
@@ -271,7 +317,17 @@ export class DepthHub {
         return;
       }
 
-      this.#flush(sub);
+      if (!this.#books.has(sub.marketId)) {
+        // Listed, no proven book. Never-traded (404 / empty ingest) stays
+        // silent absence. Engine-down is named so a terminal cannot confuse
+        // the two.
+        if (this.isEngineUnavailable(sub.marketId)) {
+          this.#write(sub, depthEngineUnavailableFrame(sub.marketId));
+        }
+        return;
+      }
+
+      if (sub.pending !== null) this.#flush(sub);
     } catch (err) {
       this.#evict(sub, CLOSE_TRY_LATER, err instanceof Error ? err.message : 'depth unavailable');
     }
@@ -364,10 +420,14 @@ export class DepthHub {
       } catch (err) {
         // Listed, but matching has no book or is down. Do not invent
         // `{ bids: [], asks: [], sequence: 0 }` — that is a live zero book.
-        // The socket stays open; poll publishes the first real snapshot.
+        // 404 / DepthNoBookError = honest absence. Anything else = engine-down,
+        // named on the socket + `/ready` so it is not silent.
+        if (!(err instanceof DepthNoBookError)) this.#noteEngineDown(marketId);
         this.#log.warn(
           { marketId, err: err instanceof Error ? err.message : String(err) },
-          'ws: depth seed failed — no book on the wire; poll will publish when matching has depth',
+          err instanceof DepthNoBookError
+            ? 'ws: depth seed — matching holds no book (absence, not engine-down)'
+            : 'ws: depth seed failed — disclosing depth.engine_unavailable; poll will replace when matching recovers',
         );
       } finally {
         this.#seeding.delete(marketId);
@@ -396,6 +456,7 @@ export class DepthHub {
    * Returns the delta that was broadcast, or `null` when there was none.
    */
   ingest(snapshot: DepthSnapshot): DepthDelta | null {
+    this.#noteEngineUp(snapshot.marketId);
     const previous = this.#books.get(snapshot.marketId);
     const next = bookFromSnapshot(snapshot);
     if (!previous && !bookHasRestingDepth(next)) {
@@ -564,5 +625,34 @@ export class DepthHub {
   /** The current book for a market, if one is being maintained. */
   bookFor(marketId: string): DepthBook | undefined {
     return this.#books.get(marketId);
+  }
+
+  /** Matching answered (including 404 no-book). Clears engine-down for this id. */
+  noteMatchingReachable(marketId: string): void {
+    this.#noteEngineUp(marketId);
+  }
+
+  /**
+   * Matching could not be read (timeout / 5xx / unreachable). Named disclosure
+   * to current subscribers once per down-edge; `/ready` stays red until a
+   * successful ingest.
+   */
+  markEngineUnavailable(marketId: string): void {
+    const first = !this.#unavailable.has(marketId);
+    this.#noteEngineDown(marketId);
+    if (!first) return;
+    const frame = depthEngineUnavailableFrame(marketId);
+    for (const sub of [...this.#subscriptions]) {
+      if (sub.closed || sub.marketId !== marketId) continue;
+      this.#write(sub, frame);
+    }
+  }
+
+  #noteEngineDown(marketId: string): void {
+    this.#unavailable.add(marketId);
+  }
+
+  #noteEngineUp(marketId: string): void {
+    this.#unavailable.delete(marketId);
   }
 }

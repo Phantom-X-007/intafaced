@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
+import { DEPTH_ENGINE_UNAVAILABLE, snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
 import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
@@ -139,6 +139,13 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
         return reply.code(200).send(snap);
       }
 
+      if (hub.isEngineUnavailable(marketId)) {
+        return reply.code(502).send({
+          code: DEPTH_ENGINE_UNAVAILABLE,
+          message: `"${marketId}": matching engine unavailable`,
+        });
+      }
+
       const snapshot = await withWsSpan('ws.depth.snapshot', { marketId }, () => source.snapshot(marketId, depthLimit));
       if (!snapshotHasRestingDepth(snapshot)) {
         return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
@@ -152,7 +159,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       // needs to tell those apart before deciding whether to retry.
       const message = err instanceof DepthSourceError ? err.message : 'depth unavailable';
       req.log.error({ err, marketId }, 'ws: snapshot failed');
-      return reply.code(502).send({ code: 'UpstreamUnavailable', message });
+      return reply.code(502).send({ code: DEPTH_ENGINE_UNAVAILABLE, message });
     }
   });
 

@@ -656,7 +656,7 @@ describe('the HTTP half', () => {
     const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json()).toMatchObject({ code: 'UpstreamUnavailable' });
+    expect(response.json()).toMatchObject({ code: 'depth.engine_unavailable' });
   });
 
   it('reports not-ready when the kill-switch is off, while staying alive', async () => {
