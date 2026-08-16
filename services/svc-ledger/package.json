@@ -22,6 +22,7 @@
     "@intafaced/events": "workspace:*",
     "@intafaced/i18n": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
+    "@intafaced/portfolio-view": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "drizzle-orm": "^0.45.2",

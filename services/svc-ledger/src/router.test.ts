@@ -235,6 +235,29 @@ describe('balances — authorisation', () => {
     await expect(caller.balances({ ownerType: 'user', ownerId: USER })).resolves.toHaveLength(1);
   });
 
+  it('serves a portfolio view of own balances with indexer named absent', async () => {
+    const caller = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
+    await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
+      ownerId: USER,
+      custodial: [{ amount: '100', assetId: 'USDT' }],
+      indexer: { status: 'absent', reason: 'indexer.readmodels_unbuilt' },
+    });
+  });
+
+  it('refuses another user’s portfolio, and does not invent chain zeros on an empty book', async () => {
+    const caller = createLedgerRouter(
+      stubService({
+        balances: async () => [],
+      }),
+    ).createCaller(await ctx(['ledger:read']));
+
+    await expect(caller.portfolio({ ownerType: 'user', ownerId: OTHER })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
+      custodial: [],
+      indexer: { status: 'absent', reason: 'indexer.readmodels_unbuilt' },
+    });
+  });
+
   it('rejects an anonymous caller', async () => {
     const caller = createLedgerRouter(stubService()).createCaller(await ctx([]));
     await expect(caller.balance(userAvailable(USER, 'USDT'))).rejects.toThrow(/Authentication required/);
