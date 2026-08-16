@@ -8,6 +8,7 @@ import {
   MANDATE_PATH_MATRIX,
   PRECHARGE_NOTIFY_SOCKET,
   PRECHARGE_NOTIFY_UNPUBLISHED,
+  SUBSCRIPTION_NOTIFY_UNWIRED,
   acknowledgePreChargeNotifyBeforeCharge,
   assertChargeTracesToMandate,
   assertPrechargeNotifyUnpublished,
@@ -124,14 +125,15 @@ describe('mandate lifecycle law (SPEC §4 Done bar pieces)', () => {
   });
 });
 
-describe('pre-charge notify — refuse invent (§13 gap)', () => {
-  it('names the absent socket and forbids invent', () => {
+describe('pre-charge notify — refuse invent + durable attempt', () => {
+  it('names the unwired skip and forbids invent notified', () => {
     const gap = preChargeNotifyGap();
-    expect(gap.status).toBe('absent');
+    expect(gap.status).toBe('unwired');
+    expect(gap.notifyStatus).toBe('skipped_unwired');
     expect(gap.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
     expect(gap.inventForbidden).toBe(true);
     expect(gap.notified).toBe(false);
-    expect(gap.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
+    expect(gap.code).toBe(SUBSCRIPTION_NOTIFY_UNWIRED);
     expect(PRECHARGE_NOTIFY_SOCKET).toBe('socket.pay-precharge-notify');
     expect(PRECHARGE_NOTIFY_UNPUBLISHED).toBe('pay.precharge_notify_unpublished');
   });
@@ -143,33 +145,71 @@ describe('pre-charge notify — refuse invent (§13 gap)', () => {
       path: 'crypto_invoice',
     });
     expect(ack.notified).toBe(false);
-    expect(ack.status).toBe('absent');
+    expect(ack.status).toBe('unwired');
+    expect(ack.notifyStatus).toBe('skipped_unwired');
     expect(ack.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
-    expect(ack.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
+    expect(ack.code).toBe(SUBSCRIPTION_NOTIFY_UNWIRED);
     expect(() => assertPrechargeNotifyUnpublished(ack)).not.toThrow();
+  });
+
+  it('wired port records attempted; unwired records skipped_unwired', async () => {
+    const { recordPreChargeNotifyAttempt } = await import('./mandate-product.js');
+    const calls: unknown[] = [];
+    const unwired = await recordPreChargeNotifyAttempt({
+      subscriptionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      occurrence: 0,
+      path: 'crypto_invoice',
+      merchantId: 'm',
+      customerId: 'c',
+      amount: '10',
+      assetId: 'USDT',
+      idempotencyKey: 'pay.subscription:cccccccc-cccc-4ccc-8ccc-cccccccccccc:0',
+    });
+    expect(unwired.notifyStatus).toBe('skipped_unwired');
+    expect(unwired.code).toBe(SUBSCRIPTION_NOTIFY_UNWIRED);
+    expect(unwired.notified).toBe(false);
+
+    const wired = await recordPreChargeNotifyAttempt({
+      notify: (event) => {
+        calls.push(event);
+      },
+      subscriptionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      occurrence: 0,
+      path: 'crypto_invoice',
+      merchantId: 'm',
+      customerId: 'c',
+      amount: '10',
+      assetId: 'USDT',
+      idempotencyKey: 'pay.subscription:cccccccc-cccc-4ccc-8ccc-cccccccccccc:0',
+    });
+    expect(wired.notifyStatus).toBe('attempted');
+    expect(wired.code).toBeNull();
+    expect(wired.notified).toBe(false);
+    expect(calls).toHaveLength(1);
   });
 
   it('invented notified:true refuses pay.precharge_notify_unpublished — no pretend', () => {
     try {
-      assertPrechargeNotifyUnpublished({ notified: true, status: 'absent', code: PRECHARGE_NOTIFY_UNPUBLISHED });
+      assertPrechargeNotifyUnpublished({ notified: true, status: 'unwired', code: SUBSCRIPTION_NOTIFY_UNWIRED });
       throw new Error('should have refused');
     } catch (e) {
       expect((e as PayError).code).toBe('pay.precharge_notify_unpublished');
     }
     try {
-      assertPrechargeNotifyUnpublished({ notified: false, status: 'published', code: PRECHARGE_NOTIFY_UNPUBLISHED });
+      assertPrechargeNotifyUnpublished({ notified: false, status: 'published', code: SUBSCRIPTION_NOTIFY_UNWIRED });
       throw new Error('should have refused');
     } catch (e) {
       expect((e as PayError).code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
     }
   });
 
-  it('does not expose a notifyBeforeCharge or invoice_upcoming invent helper', async () => {
+  it('does not expose a notifyBeforeCharge invent helper that sets notified true', async () => {
     const mod = await import('./mandate-product.js');
     const keys = Object.keys(mod);
     expect(keys).not.toContain('notifyBeforeCharge');
     expect(keys).not.toContain('invoiceUpcoming');
     expect(keys).not.toContain('preChargeNotify');
+    expect(keys).toContain('recordPreChargeNotifyAttempt');
   });
 });
 
@@ -180,7 +220,8 @@ describe('subscriptionsProductPosture — Ready honesty', () => {
     expect(p.crypto.status).toBe('product_complete');
     expect(p.card.code).toBe('pay.mandate_rail_absent');
     expect(p.preChargeNotify.notified).toBe(false);
-    expect(p.preChargeNotify.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
+    expect(p.preChargeNotify.code).toBe(SUBSCRIPTION_NOTIFY_UNWIRED);
+    expect(p.preChargeNotify.notifyStatus).toBe('skipped_unwired');
     expect(p.preChargeNotify.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
     expect(p.cancel.immediacy).toBe('immediate');
     expect(p.reconsent.code).toBe('pay.subscription_reconsent_required');

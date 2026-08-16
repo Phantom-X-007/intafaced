@@ -96,6 +96,8 @@ export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: Subs
           paymentId: c.paymentId,
           exhausted: c.exhaustedAt !== null,
           settledAt: c.settledAt === null ? null : c.settledAt.toISOString(),
+          notifyStatus: c.notifyStatus,
+          notifyCode: c.notifyCode,
         })),
       };
     } catch (err) {

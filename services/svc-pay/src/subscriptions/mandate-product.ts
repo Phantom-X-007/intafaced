@@ -6,9 +6,11 @@
  *
  *  - crypto_invoice → open an invoice (never invent an on-chain pull)
  *  - card / card_mandate → refuse `pay.mandate_rail_absent` (`socket.psp-partners`)
- *  - pre-charge notify → named unpublished (`pay.precharge_notify_unpublished` /
- *    `socket.pay-precharge-notify`); fire acknowledges before openInvoice;
- *    `notified` is never true; invent delivery refuses by that code
+ *  - pre-charge notify → durable attempt on the execution (`notify_status`).
+ *    Wired port → `attempted`. Unwired → `skipped_unwired` +
+ *    `pay.subscription_notify_unwired`. `notified` is never true (attempt ≠
+ *    delivered). Invent `notified: true` refuses `pay.precharge_notify_unpublished`.
+ *    Customer inbox via svc-notify remains `socket.pay-precharge-notify`.
  *  - dunning → MAX_ATTEMPTS_PER_CYCLE then named stall (`arrears`), reachable
  *    from the fire path (not a docs-only bound)
  *
@@ -39,11 +41,34 @@ export function normaliseSubscriptionPath(path: string | undefined): Subscriptio
   });
 }
 
-/** §13 — SPEC §4 "Every charge is notified before it lands, not after." */
+/** §13 — customer inbox via svc-notify is still a socket. Attempt recording is not. */
 export const PRECHARGE_NOTIFY_SOCKET = 'socket.pay-precharge-notify' as const;
 
-/** Named refuse when notify is unpublished — never a silent skip or `notified: true`. */
+/** Named refuse when a caller invents `notified: true`. */
 export const PRECHARGE_NOTIFY_UNPUBLISHED = 'pay.precharge_notify_unpublished' as const;
+
+/** Honest skip when the notify/bus port is not injected. Written on the execution. */
+export const SUBSCRIPTION_NOTIFY_UNWIRED = 'pay.subscription_notify_unwired' as const;
+
+/** Port threw; attempt is recorded, money path still fail-closed independently. */
+export const SUBSCRIPTION_NOTIFY_FAILED = 'pay.subscription_notify_failed' as const;
+
+export type PreChargeNotifyStatus = 'attempted' | 'skipped_unwired' | 'failed';
+
+/**
+ * Same shape as PayService `afterPaymentEvent`: fire-and-forget outbound.
+ * Injected so tests can prove a wired attempt; production may omit it.
+ */
+export type SubscriptionPreChargeNotify = (event: {
+  readonly type: 'subscription.invoice_upcoming';
+  readonly subscriptionId: string;
+  readonly occurrence: number;
+  readonly merchantId: string;
+  readonly customerId: string;
+  readonly amount: string;
+  readonly assetId: string;
+  readonly idempotencyKey: string;
+}) => void | Promise<void>;
 
 /**
  * Card auto-pull rides the acquiring commercial socket. The rail port can store
@@ -85,45 +110,58 @@ export const MANDATE_PATH_MATRIX: readonly MandatePathRow[] = [
 ] as const;
 
 export type PreChargeNotifyGap = {
-  status: 'absent';
-  code: typeof PRECHARGE_NOTIFY_UNPUBLISHED;
+  status: 'unwired';
+  notifyStatus: 'skipped_unwired';
+  code: typeof SUBSCRIPTION_NOTIFY_UNWIRED;
   socket: typeof PRECHARGE_NOTIFY_SOCKET;
   inventForbidden: true;
   /** Merchants must never read this as a successful pre-charge delivery. */
   notified: false;
-  merchantReadable: 'Pre-charge notify is not delivered. Post-payment webhooks may fire after money-path work. Closing needs socket.pay-precharge-notify.';
+  merchantReadable: string;
 };
 
-/** Pre-charge notify is not wired. Merchants get post-payment webhooks only. */
+export type PreChargeNotifyRecord = {
+  notifyStatus: PreChargeNotifyStatus;
+  code: typeof SUBSCRIPTION_NOTIFY_UNWIRED | typeof SUBSCRIPTION_NOTIFY_FAILED | null;
+  notified: false;
+  socket: typeof PRECHARGE_NOTIFY_SOCKET;
+  subscriptionId: string;
+  occurrence: number;
+  path: SubscriptionPath;
+};
+
+/** Process-level posture: notify port omitted → executions skip by name. */
 export function preChargeNotifyGap(): PreChargeNotifyGap {
   return {
-    status: 'absent',
-    code: PRECHARGE_NOTIFY_UNPUBLISHED,
+    status: 'unwired',
+    notifyStatus: 'skipped_unwired',
+    code: SUBSCRIPTION_NOTIFY_UNWIRED,
     socket: PRECHARGE_NOTIFY_SOCKET,
     inventForbidden: true,
     notified: false,
     merchantReadable:
-      'Pre-charge notify is not delivered. Post-payment webhooks may fire after money-path work. Closing needs socket.pay-precharge-notify.',
+      'Pre-charge notify is recorded as skipped_unwired unless a NotifyPort is injected. Post-payment webhooks may fire after money-path work. Customer inbox still needs socket.pay-precharge-notify. notified is never true from an attempt alone.',
   };
 }
 
 /**
- * Fire-path pin: unpublished notify must be named. Inventing `notified: true`
- * or a published status refuses with `pay.precharge_notify_unpublished` and
- * must not open a money move.
+ * Fire-path pin: `notified: true` is invent. Attempted / skipped_unwired /
+ * failed are honest. Must not open a money move after pretending delivery.
  */
-export function assertPrechargeNotifyUnpublished(gap: { notified: boolean; status: string; code?: string }): void {
-  if (gap.notified !== false || gap.status !== 'absent' || gap.code !== PRECHARGE_NOTIFY_UNPUBLISHED) {
+export function assertPrechargeNotifyUnpublished(gap: {
+  notified: boolean;
+  status?: string;
+  code?: string | null;
+  notifyStatus?: string;
+}): void {
+  if (gap.notified !== false || gap.status === 'published' || gap.status === 'delivered') {
     throw new PayError('Pre-charge notify is unpublished — refusing to pretend the payer was notified', PRECHARGE_NOTIFY_UNPUBLISHED);
   }
 }
 
 /**
- * Fire-path acknowledge — call BEFORE openInvoice.
- *
- * Returns the honest gap (code `pay.precharge_notify_unpublished`). Never
- * invents `notified: true`. Does not call merchant webhooks, svc-notify, or
- * enqueue. Callers must `assertPrechargeNotifyUnpublished` before money work.
+ * Fire-path acknowledge without a port — honest skip. Prefer
+ * `recordPreChargeNotifyAttempt` on the due runner so a wired port is invoked.
  */
 export function acknowledgePreChargeNotifyBeforeCharge(input: {
   subscriptionId: string;
@@ -138,6 +176,51 @@ export function acknowledgePreChargeNotifyBeforeCharge(input: {
     occurrence: input.occurrence,
     path,
   };
+}
+
+/**
+ * BEFORE openInvoice: invoke the notify port or name the skip.
+ * Never returns `notified: true`. Failures of the port do not throw into money.
+ */
+export async function recordPreChargeNotifyAttempt(input: {
+  notify?: SubscriptionPreChargeNotify;
+  subscriptionId: string;
+  occurrence: number;
+  path: string;
+  merchantId: string;
+  customerId: string;
+  amount: string;
+  assetId: string;
+  idempotencyKey: string;
+}): Promise<PreChargeNotifyRecord> {
+  const path = normaliseSubscriptionPath(input.path);
+  const base = {
+    notified: false as const,
+    socket: PRECHARGE_NOTIFY_SOCKET,
+    subscriptionId: input.subscriptionId,
+    occurrence: input.occurrence,
+    path,
+  };
+  if (!input.notify) {
+    return { ...base, notifyStatus: 'skipped_unwired', code: SUBSCRIPTION_NOTIFY_UNWIRED };
+  }
+  try {
+    await Promise.resolve(
+      input.notify({
+        type: 'subscription.invoice_upcoming',
+        subscriptionId: input.subscriptionId,
+        occurrence: input.occurrence,
+        merchantId: input.merchantId,
+        customerId: input.customerId,
+        amount: input.amount,
+        assetId: input.assetId,
+        idempotencyKey: input.idempotencyKey,
+      }),
+    );
+    return { ...base, notifyStatus: 'attempted', code: null };
+  } catch {
+    return { ...base, notifyStatus: 'failed', code: SUBSCRIPTION_NOTIFY_FAILED };
+  }
 }
 
 /**
@@ -239,8 +322,9 @@ export function assertCardMandateCannotOpenMoney(path: string): void {
  * Merchant / Ready surface — product posture in one object.
  *
  * Crypto mandate lifecycle is product-complete on tip (invoice-and-watch).
- * Card charge-against-mandate and pre-charge delivery remain named sockets.
- * `notified` is always false here so Ready cannot be read as "customers were told".
+ * Card charge-against-mandate remains `pay.mandate_rail_absent`.
+ * Pre-charge attempts are recorded on executions; `notified` stays false
+ * so Ready cannot be read as "customers were told". Inbox is still the socket.
  */
 export function subscriptionsProductPosture(): {
   mountain: 'pay.subscriptions';

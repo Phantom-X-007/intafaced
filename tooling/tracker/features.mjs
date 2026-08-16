@@ -727,7 +727,10 @@ export const FEATURES = [
       '`pay.mandate_rail_absent` → `socket.psp-partners` (no invent pull). Bounded dunning = MAX_ATTEMPTS_PER_CYCLE then ' +
       'named `arrears` stall (reachable from fire). Pre-charge notify sealed §13 `socket.pay-precharge-notify` — fire ' +
       'acknowledges gap with `notified:false` before openInvoice; Ready door `subscription.productReady` never reports notified. ' +
-      'Parked sockets (not this mountain): live card charge-against-mandate (`socket.psp-partners`), real pre-charge delivery.',
+      'Parked sockets (not this mountain): live card charge-against-mandate (`socket.psp-partners`). ' +
+      'Pre-charge **attempt** is recorded on `subscription_executions.notify_status` (wired port → attempted; ' +
+      'unwired → skipped_unwired / `pay.subscription_notify_unwired`). `notified` stays false. Inbox delivery ' +
+      'still `socket.pay-precharge-notify`.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
@@ -2029,11 +2032,11 @@ export const FEATURES = [
     status: 'socket',
     dependsOn: ['pay.subscriptions', 'ops.notifications'],
     note:
-      '§13 — SPEC §4 requires every recurring charge notified BEFORE it lands. D26-P1-P6 sealed the gap honestly: fire path calls ' +
-      '`acknowledgePreChargeNotifyBeforeCharge` with `notified:false` before openInvoice; merchant Ready `subscription.productReady` ' +
-      'exposes the same socket so "notified" cannot be read as true. Closing still needs a real notify/journal delivery path ' +
-      '(svc-notify or merchant webhook upcoming event) — inventing a silent success event remains forbidden. ' +
-      'Channel credentials remain `socket.notify-*`. Pins: mandate-product.ts · precharge-notify-absent.test.ts · subscriptions-done-bar.test.ts.',
+      '§13 — customer inbox still needs svc-notify/credentials (`socket.notify-*`). Fire path now records a durable attempt on ' +
+      '`subscription_executions.notify_status` before openInvoice (wired → attempted; unwired → skipped_unwired / ' +
+      '`pay.subscription_notify_unwired`). `notified` stays false — an attempt is not a delivered inbox. Closing this socket is ' +
+      'customer-channel delivery, not inventing `notified:true`. Pins: mandate-product.ts · precharge-notify-unpublished.test.ts · ' +
+      'subscriptions-done-bar.test.ts.',
   }),
   f('socket.forex-settlement', 'Forex/commodity settlement asset law + fiat settle rails', {
     module: 'trade',
