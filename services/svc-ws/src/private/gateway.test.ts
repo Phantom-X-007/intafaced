@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { PrivateOrderHub } from './hub.js';
 import { createPrivateWebSocketGateway, PRIVATE_STREAM_PATH, type PrivateWebSocketGateway } from './gateway.js';
+import type { PrivateBookPort } from './book.js';
 
 const SECRET = 'test-access-secret-at-least-32-chars!!';
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -57,6 +58,18 @@ class Client {
       this.socket.once('close', () => resolve());
     });
   }
+
+  parsed(): Array<Record<string, unknown>> {
+    return this.frames.map((f) => JSON.parse(f) as Record<string, unknown>);
+  }
+
+  async untilSnapshot(channel: 'orders' | 'positions' = 'orders'): Promise<void> {
+    for (;;) {
+      if (this.parsed().some((f) => f.channel === channel && f.type === 'snapshot')) return;
+      if (this.closed) throw new Error(`closed before ${channel} snapshot`);
+      await this.frameCount(this.frames.length + 1);
+    }
+  }
 }
 
 describe('private WebSocket gateway', () => {
@@ -81,6 +94,7 @@ describe('private WebSocket gateway', () => {
       maxConnectionsPerUser?: number;
       heartbeatMs?: number;
       busAttached?: () => boolean;
+      book?: PrivateBookPort;
     } = { tokens },
   ): Promise<void> {
     hub = new PrivateOrderHub({
@@ -107,6 +121,7 @@ describe('private WebSocket gateway', () => {
       enabled: () => enabled,
       tokens: opts.tokens,
       busAttached: opts.busAttached,
+      book: opts.book,
     });
   }
 
@@ -214,15 +229,20 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.frameCount(3);
+    await client.untilSnapshot('orders');
 
-    const ready = client.frames.map((f) => JSON.parse(f) as { channel: string; type: string; userId: string; bus?: boolean });
+    const ready = client
+      .parsed()
+      .filter((r) => r.type === 'ready')
+      .map((r) => r as { channel: string; type: string; userId: string; bus?: boolean });
     expect(ready.map((r) => r.channel).sort()).toEqual(['fills', 'orders', 'positions']);
     for (const frame of ready) {
       expect(frame.type).toBe('ready');
       expect(frame.userId).toBe(USER);
-      // Default busAttached is true when tests omit the flag.
       expect(frame.bus).toBe(true);
     }
+    const ordersSnap = client.parsed().find((f) => f.channel === 'orders' && f.type === 'snapshot');
+    expect(ordersSnap).toMatchObject({ userId: USER, orders: [] });
     client.socket.close();
   });
 
@@ -240,9 +260,9 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
     await client.frameCount(1);
-    expect(client.frames).toHaveLength(1);
-    const ready = JSON.parse(client.frames[0]!);
-    expect(ready).toMatchObject({ channel: 'orders', type: 'ready', userId: USER, bus: true });
+    await client.untilSnapshot('orders');
+    expect(client.parsed()[0]).toMatchObject({ channel: 'orders', type: 'ready', userId: USER, bus: true });
+    expect(client.parsed().find((f) => f.type === 'snapshot')).toMatchObject({ channel: 'orders', orders: [] });
 
     hub.publish({
       orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -293,10 +313,11 @@ describe('private WebSocket gateway', () => {
       fundingPaid: '0',
       ts: '2026-07-31T00:00:00.000Z',
     });
-    await client.frameCount(2);
+    await client.frameCount(client.parsed().length + 1);
     await new Promise((r) => setTimeout(r, 40));
-    expect(client.frames).toHaveLength(2);
-    expect(JSON.parse(client.frames[1]!).channel).toBe('orders');
+    const data = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(data).toHaveLength(1);
+    expect(data[0]!.channel).toBe('orders');
     client.socket.close();
   });
 
@@ -307,7 +328,8 @@ describe('private WebSocket gateway', () => {
     await client.frameCount(1);
     expect(JSON.parse(client.frames[0]!)).toMatchObject({ channel: 'fills', type: 'ready', userId: USER });
     await new Promise((r) => setTimeout(r, 40));
-    expect(client.frames).toHaveLength(1);
+    expect(client.parsed().every((f) => f.channel === 'fills')).toBe(true);
+    expect(client.parsed().some((f) => f.type === 'snapshot')).toBe(false);
 
     hub.publishFill({
       fillId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
@@ -336,8 +358,8 @@ describe('private WebSocket gateway', () => {
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=positions`);
     await client.frameCount(1);
     expect(JSON.parse(client.frames[0]!)).toMatchObject({ channel: 'positions', type: 'ready', userId: USER });
-    await new Promise((r) => setTimeout(r, 40));
-    expect(client.frames).toHaveLength(1);
+    await client.untilSnapshot('positions');
+    expect(client.parsed().find((f) => f.type === 'snapshot')).toMatchObject({ channel: 'positions', positions: [] });
 
     hub.publishPosition({
       positionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -359,8 +381,8 @@ describe('private WebSocket gateway', () => {
       fundingPaid: '0',
       ts: '2026-07-31T00:00:00.000Z',
     });
-    await client.frameCount(2);
-    const update = JSON.parse(client.frames[1]!);
+    await client.frameCount(client.parsed().length + 1);
+    const update = client.parsed().find((f) => f.type !== 'ready' && f.type !== 'snapshot')!;
     expect(update.channel).toBe('positions');
     expect(update.contracts).toBe('1');
     client.socket.close();
@@ -371,6 +393,8 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
     await client.frameCount(1);
+    await client.untilSnapshot('orders');
+    const before = client.frames.length;
     hub.publish({
       orderId: '11111111-1111-4111-8111-111111111111',
       userId: OTHER,
@@ -385,7 +409,7 @@ describe('private WebSocket gateway', () => {
       ts: '2026-07-31T00:00:02.000Z',
     });
     await new Promise((r) => setTimeout(r, 50));
-    expect(client.frames).toHaveLength(1);
+    expect(client.frames).toHaveLength(before);
     client.socket.close();
   });
 
@@ -394,10 +418,9 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.frameCount(3);
-
-    for (const raw of client.frames) {
-      const frame = JSON.parse(raw) as { type: string; bus: boolean };
-      expect(frame.type).toBe('ready');
+    const readyOnly = client.parsed().filter((f) => f.type === 'ready');
+    expect(readyOnly).toHaveLength(3);
+    for (const frame of readyOnly) {
       expect(frame.bus).toBe(false);
     }
     client.socket.close();
@@ -408,7 +431,7 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:write']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}`, { Authorization: `Bearer ${token}` });
     await client.frameCount(3);
-    expect(client.frames).toHaveLength(3);
+    expect(client.parsed().filter((f) => f.type === 'ready')).toHaveLength(3);
     client.socket.close();
   });
 
@@ -416,7 +439,7 @@ describe('private WebSocket gateway', () => {
     await boot();
     const token = await accessToken(['trade:write']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await client.frameCount(3);
+    await client.untilSnapshot('orders');
 
     hub.publish({
       orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -462,9 +485,11 @@ describe('private WebSocket gateway', () => {
       ts: '2026-07-31T00:00:02.000Z',
     });
 
-    await client.frameCount(5);
-    const order = JSON.parse(client.frames[3]!);
-    const fill = JSON.parse(client.frames[4]!);
+    const before = client.frames.length;
+    await client.frameCount(before + 2);
+    const data = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    const order = data[0]!;
+    const fill = data[1]!;
     expect(order.channel).toBe('orders');
     expect(order.userId).toBe(USER);
     expect(typeof order.qty).toBe('string');
@@ -472,7 +497,7 @@ describe('private WebSocket gateway', () => {
     expect(fill.channel).toBe('fills');
     expect(fill.userId).toBe(USER);
     expect(typeof fill.price).toBe('string');
-    expect(client.frames).toHaveLength(5);
+    expect(data).toHaveLength(2);
     client.socket.close();
   });
 
@@ -480,9 +505,9 @@ describe('private WebSocket gateway', () => {
     await boot();
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await client.frameCount(3);
-    await new Promise((r) => setTimeout(r, 40));
-    expect(client.frames).toHaveLength(3);
+    await client.untilSnapshot('positions');
+    const liveBefore = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(liveBefore).toHaveLength(0);
 
     hub.publishPosition({
       positionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -504,9 +529,8 @@ describe('private WebSocket gateway', () => {
       fundingPaid: '0',
       ts: '2026-07-31T00:00:00.000Z',
     });
-    await client.frameCount(4);
-    const update = JSON.parse(client.frames[3]!);
-    expect(update.channel).toBe('positions');
+    await client.frameCount(client.frames.length + 1);
+    const update = client.parsed().find((f) => f.channel === 'positions' && f.type !== 'snapshot' && f.type !== 'ready')!;
     expect(update.contracts).toBe('1');
     expect(update.userId).toBe(USER);
     client.socket.close();
@@ -516,7 +540,8 @@ describe('private WebSocket gateway', () => {
     await boot();
     const token = await accessToken(['trade:write']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await client.frameCount(3);
+    await client.untilSnapshot('positions');
+    const before = client.frames.length;
 
     hub.publishPosition({
       positionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
@@ -540,7 +565,7 @@ describe('private WebSocket gateway', () => {
     });
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(client.frames).toHaveLength(3);
+    expect(client.frames).toHaveLength(before);
     client.socket.close();
   });
 
@@ -548,11 +573,12 @@ describe('private WebSocket gateway', () => {
     await boot();
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await client.frameCount(3);
+    await client.untilSnapshot('orders');
+    const inboundBefore = client.frames.length;
     client.socket.send(JSON.stringify({ op: 'subscribe', channel: 'orders' }));
     client.socket.send('not-json');
     await new Promise((r) => setTimeout(r, 40));
-    expect(client.frames).toHaveLength(3);
+    expect(client.frames).toHaveLength(inboundBefore);
     expect(client.closed).toBeNull();
     client.socket.close();
   });
@@ -561,7 +587,7 @@ describe('private WebSocket gateway', () => {
     await boot();
     const token = await accessToken(['trade:read']);
     const first = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await first.frameCount(3);
+    await first.untilSnapshot('orders');
     hub.publish({
       orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
       userId: USER,
@@ -575,18 +601,17 @@ describe('private WebSocket gateway', () => {
       clientOrderId: null,
       ts: '2026-07-31T00:00:00.000Z',
     });
-    await first.frameCount(4);
+    await first.frameCount(first.frames.length + 1);
     first.socket.close();
     await new Promise<void>((resolve) => first.socket.once('close', () => resolve()));
 
     const second = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await second.frameCount(3);
-    await new Promise((r) => setTimeout(r, 40));
-    // Ready only — historical order must not reappear.
-    expect(second.frames).toHaveLength(3);
-    for (const f of second.frames) {
-      expect(JSON.parse(f).type).toBe('ready');
-    }
+    await second.untilSnapshot('orders');
+    // Hub does not replay history. Empty snapshot is the reconnect book when
+    // the read port has no open rows (injected default).
+    const live = second.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(live).toHaveLength(0);
+    expect(second.parsed().find((f) => f.channel === 'orders' && f.type === 'snapshot')).toMatchObject({ orders: [] });
     second.socket.close();
   });
 
@@ -694,11 +719,69 @@ describe('private WebSocket gateway', () => {
     const b1 = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${tokenB}`);
     await b1.frameCount(3);
     expect(hub.connections).toBe(3);
-    expect(b1.frames).toHaveLength(3);
+    expect(b1.parsed().filter((f) => f.type === 'ready')).toHaveLength(3);
 
     a1.socket.close();
     a2.socket.close();
     b1.socket.close();
     if (!a3.closed) a3.socket.close();
+  });
+
+  it('sends orders snapshot before later order events', async () => {
+    const open = {
+      orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      userId: USER,
+      marketId: 'btc-usdt',
+      status: 'open',
+      side: 'buy',
+      type: 'limit',
+      qty: '1.5',
+      filledQty: '0',
+      price: '64000.5',
+      clientOrderId: null as string | null,
+      ts: '2026-07-31T00:00:00.000Z',
+    };
+    await boot({
+      tokens,
+      book: {
+        async listOpenOrders() {
+          return [open];
+        },
+        async listOpenPositions() {
+          return [];
+        },
+      },
+    });
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
+    await client.untilSnapshot('orders');
+    hub.publish({ ...open, filledQty: '0.25', ts: '2026-07-31T00:00:01.000Z' });
+    await client.frameCount(client.frames.length + 1);
+    const types = client.parsed().map((f) => `${String(f.channel)}:${String(f.type ?? 'delta')}`);
+    const snapAt = types.indexOf('orders:snapshot');
+    const liveAt = types.findIndex((t, i) => i > snapAt && t.startsWith('orders:') && t !== 'orders:snapshot' && t !== 'orders:ready');
+    expect(snapAt).toBeGreaterThanOrEqual(0);
+    expect(liveAt).toBeGreaterThan(snapAt);
+    expect(client.parsed()[snapAt]).toMatchObject({
+      orders: [expect.objectContaining({ orderId: open.orderId, qty: '1.5', price: '64000.5' })],
+    });
+    client.socket.close();
+  });
+
+  it('sends an empty orders snapshot when the user has none', async () => {
+    await boot();
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
+    await client.untilSnapshot('orders');
+    const snap = client.parsed().find((f) => f.channel === 'orders' && f.type === 'snapshot');
+    expect(snap).toEqual({ channel: 'orders', type: 'snapshot', userId: USER, orders: [] });
+    client.socket.close();
+  });
+
+  it('kill-switch still 503s after snapshot wiring', async () => {
+    await boot();
+    enabled = false;
+    const token = await accessToken(['trade:read']);
+    expect(await upgradeStatus(`${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(503);
   });
 });

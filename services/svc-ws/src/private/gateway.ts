@@ -5,6 +5,7 @@ import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
 import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
+import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
 
 /**
  * Authenticated private stream (orders, fills, positions).
@@ -49,6 +50,12 @@ export interface PrivateWebSocketGatewayOptions {
    * Defaults to true when omitted (unit tests that do not wire a bus).
    */
   readonly busAttached?: () => boolean;
+  /**
+   * Current open orders (and positions). Tests inject a fake; production uses
+   * `HttpPrivateBookPort` against svc-trade `GET /api/v1/orders/open`.
+   * Omitted → honest empty snapshot (`orders: []`), not omitted frames.
+   */
+  readonly book?: PrivateBookPort;
 }
 
 export interface PrivateWebSocketGateway {
@@ -89,8 +96,44 @@ function tokenFrom(url: URL, headers: IncomingMessage['headers']): string | null
   return m?.[1] ?? null;
 }
 
+async function hydratePrivateBook(input: {
+  hub: PrivateOrderHub;
+  book: PrivateBookPort;
+  sink: DepthSink;
+  userId: string;
+  accessToken: string;
+  channelSel: PrivateStreamChannel | 'all';
+  log: HubLogger;
+}): Promise<void> {
+  const { hub, book, sink, userId, accessToken, channelSel, log } = input;
+  const wantOrders = channelSel === 'all' || channelSel === 'orders';
+  const wantPositions = channelSel === 'all' || channelSel === 'positions';
+  try {
+    if (wantOrders) {
+      let orders: Awaited<ReturnType<PrivateBookPort['listOpenOrders']>> = [];
+      try {
+        orders = await book.listOpenOrders({ accessToken, userId });
+      } catch (err) {
+        log.warn({ userId, err: String(err) }, 'ws-private: open-orders snapshot read failed — empty list');
+      }
+      hub.sendOrdersSnapshot(sink, userId, orders);
+    }
+    if (wantPositions) {
+      let positions: Awaited<ReturnType<PrivateBookPort['listOpenPositions']>> = [];
+      try {
+        positions = await book.listOpenPositions({ accessToken, userId });
+      } catch (err) {
+        log.warn({ userId, err: String(err) }, 'ws-private: open-positions snapshot read failed — empty list');
+      }
+      hub.sendPositionsSnapshot(sink, userId, positions);
+    }
+  } finally {
+    hub.releaseSnapshot(sink);
+  }
+}
+
 export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOptions): PrivateWebSocketGateway {
-  const { server, hub, heartbeatMs, log, enabled, tokens, busAttached = () => true } = options;
+  const { server, hub, heartbeatMs, log, enabled, tokens, busAttached = () => true, book = EMPTY_PRIVATE_BOOK } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
 
   /**
@@ -164,7 +207,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
 
         wss.handleUpgrade(req, socket, head, (ws) => {
           const attachChannel = channelSel === 'all' ? null : channelSel;
-          const detach = hub.attach(userId, sinkFor(ws), attachChannel);
+          const sink = sinkFor(ws);
+          const detach = hub.attach(userId, sink, attachChannel, { holdUntilSnapshot: true });
           // Capacity refuse closes the sink inside attach — never announce ready
           // for a subscription the hub did not take (fail-closed, no false start).
           if (!detach) {
@@ -198,6 +242,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             /* ignore */
           }
           log.info({ userId }, 'ws-private: client connected');
+          void hydratePrivateBook({ hub, book, sink, userId, accessToken: raw, channelSel, log });
         });
       } catch (err) {
         // Only runs for PRIVATE_STREAM_PATH after the early return above.

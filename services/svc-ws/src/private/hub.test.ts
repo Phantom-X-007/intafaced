@@ -294,4 +294,16 @@ describe('PrivateOrderHub', () => {
     hub.announceBus(true);
     expect(alice.sent).toHaveLength(0);
   });
+
+  it('holds live frames until releaseSnapshot so snapshot stays first', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach('user-a', alice, null, { holdUntilSnapshot: true });
+    hub.publish(update('user-a'));
+    expect(alice.sent).toHaveLength(0);
+    hub.sendOrdersSnapshot(alice, 'user-a', []);
+    hub.releaseSnapshot(alice);
+    expect(JSON.parse(alice.sent[0]!).type).toBe('snapshot');
+    expect(JSON.parse(alice.sent[1]!).orderId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  });
 });
