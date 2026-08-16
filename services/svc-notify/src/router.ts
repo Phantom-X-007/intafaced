@@ -6,7 +6,13 @@ import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
 import { renderInboxCopy } from './channels/render.js';
 import type { AlertService } from './alerts/service.js';
-import { AlertPortfolioUnpublishedError, type PriceAlert } from './alerts/types.js';
+import {
+  AlertKindUnpublishedError,
+  AlertPortfolioUnpublishedError,
+  isUnpublishedAlertKind,
+  UNPUBLISHED_ALERT_KINDS,
+  type PriceAlert,
+} from './alerts/types.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -460,6 +466,12 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
               targetPrice: z.string().min(1).max(64),
             }),
             z.object({
+              kind: z.enum(UNPUBLISHED_ALERT_KINDS),
+              marketId: z.string().min(1).max(64).optional(),
+              direction: z.enum(['above', 'below']).optional(),
+              targetPrice: z.string().min(1).max(64).optional(),
+            }),
+            z.object({
               kind: z.literal('portfolio'),
             }),
           ]),
@@ -475,6 +487,20 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
               message: 'alert.price_unavailable',
             });
           }
+          if (isUnpublishedAlertKind(input.kind)) {
+            try {
+              alerts.createUnpublishedKind({ kind: input.kind, userId: ctx.principal.userId });
+            } catch (err) {
+              if (err instanceof AlertKindUnpublishedError) {
+                throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: err.message,
+                  cause: err,
+                });
+              }
+              throw err;
+            }
+          }
           if (input.kind === 'portfolio') {
             try {
               alerts.createPortfolio({ kind: 'portfolio', userId: ctx.principal.userId });
@@ -489,7 +515,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
               throw err;
             }
           }
-          if (!('marketId' in input)) {
+          if (!('marketId' in input) || input.marketId === undefined || input.direction === undefined || input.targetPrice === undefined) {
             throw new TRPCError({
               code: 'PRECONDITION_FAILED',
               message: 'alert.portfolio_view_unpublished: ledger portfolio view unpublished — notify holds no balance',
@@ -519,7 +545,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * refuses `alert.price_unavailable` and never returns fired as live.
        */
       evaluateAlert: scopedProcedure('notify:write', { module: 'notify' })
-        .input(z.object({ id: z.string().uuid() }))
+        .input(z.union([z.object({ id: z.string().uuid() }), z.object({ kind: z.enum(UNPUBLISHED_ALERT_KINDS) })]))
         .output(
           z.object({
             alert: priceAlertOutput.nullable(),
@@ -533,6 +559,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
                   'alert.not_active',
                   'alert.invalid_price',
                   'alert.portfolio_view_unpublished',
+                  'alert.kind_unpublished',
                   'channel.not_configured',
                   'channel.disabled',
                 ]),
@@ -552,6 +579,25 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
                 detail: 'mark source missing',
               },
               evaluation: NO_ALERT_SERVICE,
+            };
+          }
+          if ('kind' in input && isUnpublishedAlertKind(input.kind)) {
+            const outcome = alerts.evaluateUnpublishedKind(input.kind);
+            return {
+              alert: null,
+              outcome,
+              evaluation: alerts.evaluationStatus(),
+            };
+          }
+          if (!('id' in input)) {
+            return {
+              alert: null,
+              outcome: {
+                kind: 'refuse' as const,
+                code: 'alert.kind_unpublished' as const,
+                detail: 'unpublished kind has no sourced series',
+              },
+              evaluation: alerts.evaluationStatus(),
             };
           }
           const report = await alerts.evaluateAlert(ctx.principal.userId, input.id);

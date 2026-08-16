@@ -309,6 +309,47 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(listed.items[0]!.status).toBe('active');
   });
 
+  it.each(['funding', 'whale', 'liquidation_proximity', 'intelligence'] as const)(
+    'createAlert kind=%s refuses alert.kind_unpublished and never stores a live watch',
+    async (kind) => {
+      const { base, notifyStore } = await mount();
+      const res = await call(base, 'notify.createAlert', {
+        method: 'POST',
+        headers: edgeHeaders(),
+        input: { kind, marketId: 'BTC-USD', direction: 'above', targetPrice: '100' },
+      });
+      expect(res.status).not.toBe(200);
+      const text = JSON.stringify(res.body);
+      expect(text).toContain('alert.kind_unpublished');
+      expect(text).not.toMatch(/"status"\s*:\s*"fired"/);
+      expect(await notifyStore.unreadCount(USER)).toBe(0);
+
+      const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+      expect(data(listed.body)).toMatchObject({ items: [] });
+    },
+  );
+
+  it.each(['funding', 'whale', 'liquidation_proximity', 'intelligence'] as const)(
+    'evaluateAlert kind=%s refuses alert.kind_unpublished and never fires',
+    async (kind) => {
+      const { base, notifyStore } = await mount();
+      const evaluated = await call(base, 'notify.evaluateAlert', {
+        method: 'POST',
+        headers: edgeHeaders(),
+        input: { kind },
+      });
+      expect(evaluated.status).toBe(200);
+      const body = data(evaluated.body) as {
+        alert: { status: string } | null;
+        outcome: { kind: string; code?: string };
+      };
+      expect(body.alert).toBeNull();
+      expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.kind_unpublished' });
+      expect(body.outcome.kind).not.toBe('fire');
+      expect(await notifyStore.unreadCount(USER)).toBe(0);
+    },
+  );
+
   it('createAlert with kind=portfolio refuses unpublished and never fires', async () => {
     const { base, notifyStore } = await mount();
     const res = await call(base, 'notify.createAlert', {
