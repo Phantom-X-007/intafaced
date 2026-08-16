@@ -136,9 +136,7 @@ describe('matching package unimported', () => {
     expect(deps.some((d) => /matching/i.test(d))).toBe(false);
 
     const src = readFileSync(join(dir, 'house-tenant.ts'), 'utf8') + readFileSync(join(dir, 'index.ts'), 'utf8');
-    const imports = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)]
-      .map((m) => m[1])
-      .filter((s): s is string => typeof s === 'string');
+    const imports = [...src.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]).filter((s): s is string => typeof s === 'string');
     expect(imports.some((s) => /matching/i.test(s))).toBe(false);
   });
 });
