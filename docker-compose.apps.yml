@@ -208,6 +208,9 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       DEFAULT_REGION: ${DEFAULT_REGION:-XX}
+      EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
+      EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
+      EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
       IDENTITY_URL: http://svc-identity:4002
       TRADE_URL: http://svc-trade:4004
@@ -384,6 +387,9 @@ services:
       # ticks on a clean clone while env.ts still read as off. Does not invent
       # a market list or a |rate| ceiling; those stay empty until named.
       TRADE_FUTURES_JOBS_ENABLED: ${TRADE_FUTURES_JOBS_ENABLED:-false}
+      # Liquidation scan interval when jobs are on. Matches env.ts 15s.
+      # Does not turn jobs on. Host `.env` can pin cadence.
+      TRADE_FUTURES_LIQ_INTERVAL_MS: ${TRADE_FUTURES_LIQ_INTERVAL_MS:-15000}
       # Connect WS / MaintainedBook stream for venue marks. Default OFF.
       # `${VAR:-true}` here would treat a clean clone as stream-first while
       # env.ts still read as snapshot poll. Empty symbol map still starts nothing.
@@ -558,6 +564,12 @@ services:
       # blank risk band refuses — never invent `low`. Defaults match env.ts.
       PAY_CHECKOUT_MAX_OPEN_SESSIONS: ${PAY_CHECKOUT_MAX_OPEN_SESSIONS:-25}
       PAY_CHECKOUT_RISK_BAND: ${PAY_CHECKOUT_RISK_BAND:-}
+      # Payment-link lifetime + webhook skew window. env.ts already names these;
+      # without compose pass-through a host `.env` never reaches the container.
+      # Defaults match env.ts (30 / 365 / 300). No owner fee bps or rail list.
+      PAY_LINK_DEFAULT_TTL_DAYS: ${PAY_LINK_DEFAULT_TTL_DAYS:-30}
+      PAY_LINK_MAX_TTL_DAYS: ${PAY_LINK_MAX_TTL_DAYS:-365}
+      PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:-300}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
@@ -672,6 +684,11 @@ services:
       # rather than left unset, so the choice is visible in the file an operator
       # actually reads instead of living only in a zod schema.
       BANK_CARD_ISSUER: ${BANK_CARD_ISSUER:-none}
+      # Cards module kill. env.ts already names BANK_CARDS_ENABLED (default true);
+      # without compose pass-through a host `.env` cannot halt issue/authorise
+      # without changing issuer. Issuer stays `none` — this is the emergency
+      # product stop, not a live programme. No BIN, scheme, or live issuer.
+      BANK_CARDS_ENABLED: ${BANK_CARDS_ENABLED:-true}
       # WHICH BANK RAMP PROGRAMME THIS DEPLOYMENT HAS. env.ts already names
       # BANK_RAMP_MODE (none | crypto-ledger, default none). Without compose
       # pass-through a host `.env` never reaches the container. Default stays

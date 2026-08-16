@@ -542,6 +542,13 @@ describe('the shipped configuration does not inject an 8h funding interval', () 
   });
 });
 
+describe('the shipped configuration passes the futures liquidation-scan interval', () => {
+  it('compose pins TRADE_FUTURES_LIQ_INTERVAL_MS to 15s matching env.ts', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_LIQ_INTERVAL_MS:\s*\$\{TRADE_FUTURES_LIQ_INTERVAL_MS:-15000\}/);
+    expect(shipped.get('TRADE_FUTURES_LIQ_INTERVAL_MS')).toBe('15000');
+  });
+});
+
 /**
  * MM seed + algo jobs only reach the container if compose names them.
  * env.ts already defines the flags; without this block a host `.env` is
