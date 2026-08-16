@@ -612,31 +612,6 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
   });
 });
 
-/**
- * Own `environment:` keys on one service (not merged anchors), in file order.
- * A Set of these names is smaller than the list when YAML repeats a key —
- * compose last-wins, which would hide a second OTC/ALGO line.
- */
-function composeServiceOwnEnvKeys(service: string, compose: string): string[] {
-  const keys: string[] = [];
-  let inService = false;
-  let inEnv = false;
-  for (const line of compose.split(/\r?\n/)) {
-    const svcDecl = /^ {2}([a-z][a-z0-9-]*):\s*$/.exec(line);
-    if (svcDecl) {
-      inService = svcDecl[1] === service;
-      inEnv = false;
-      continue;
-    }
-    if (!inService) continue;
-    if (/^ {4}\S/.test(line)) inEnv = /^ {4}environment:/.test(line);
-    if (!inEnv) continue;
-    const kv = /^ {6}([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
-    if (kv) keys.push(kv[1]!);
-  }
-  return keys;
-}
-
 describe('the shipped configuration passes OTC desk flags into svc-trade', () => {
   const otcKeys = envTsTradeKeys(/\b(TRADE_OTC_DESK_LAW|TRADE_OTC_MIDS|TRADE_OTC_MID_FROM_VENUE|TRADE_OTC_VENUE_SYMBOLS)\s*:/g);
 
