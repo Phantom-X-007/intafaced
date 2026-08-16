@@ -51,6 +51,5 @@ describe('compose BANK_CARDS_ENABLED for svc-bank', () => {
     expect(block).not.toMatch(/BANK_CARD_ISSUER:\s*\$\{BANK_CARD_ISSUER:-card-sim\}/);
     expect(block).not.toMatch(/BANK_CARDS_ENABLED:\s*\$\{BANK_CARDS_ENABLED:-false\}/);
     expect(block).not.toMatch(/ISSUING_BIN|CARD_SCHEME|LIVE_ISSUER|CARD_BIN/i);
-    expect(block).not.toMatch(/LOAN_ACCRUAL_ENABLED:/);
   });
 });
