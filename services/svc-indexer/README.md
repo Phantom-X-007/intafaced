@@ -214,6 +214,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 | `chain/evm/source.live.test.ts`     | The adapter on a real chain: parent links, real logs, 18 decimals end to end, address filtering, and every refusal — including the by-block-hash fetch  |
 | `chain/evm/reorg.live.test.ts`      | **A real chain, really forked**, on both stores: orphaned rows gone, tip-replacement caught, idempotent restart, deep-fork halt, `behindBy` staleness   |
 | `router.mount.test.ts`              | The mount boundary over real `createEdgeContext` headers: anonymous reads succeed, a forged principal confers nothing, `status` surfaces a halt         |
+| `d26-p1-i3-done-bar.test.ts`        | **Fastify door** — `GET /ready` 503 with named halt/lastError reason; `GET /trpc/*` refuses dead-branch books (not helper-only)                         |
 | `indexer.parent-unlink.test.ts`     | Mid-read parent unlink throws once (`indexer.parent_unlink`) — never burns a green batch with a frozen cursor                                           |
 | `ready.test.ts`                     | `/ready` leaves rotation on halt **and** serving-refuse lastError; parent-unlink stays ready                                                            |
 | `sovereignty.test.ts`               | §22 for every region × tier with a custodial control, and the §16.10 custody assertions listed under **Ledger**                                         |
