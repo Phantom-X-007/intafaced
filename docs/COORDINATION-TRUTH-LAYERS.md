@@ -71,7 +71,8 @@ If a future change breaks a row above, **reject the change**.
 - Pure docs-only PRs that do not change product ownership
 - Path refactors that do not change feature meaning
 
-**Denon intent (plain):** main’s product map must not _lie_ about ownership and free work. That is **not** “maximize `features.mjs` diffs.”
+**Denon intent (plain):** main’s product map must not _lie_ about ownership and free work. That is **not** “maximize `features.mjs` diffs.”  
+**Denon 2026-08-16:** next work is a **user-visible mountain close or cut**, not leftover honesty rebases, i18n pin chains, or occupying N agent slots. `pnpm swarm:next` must not be read as permission to mint sand-castle PRs.
 
 ---
 
