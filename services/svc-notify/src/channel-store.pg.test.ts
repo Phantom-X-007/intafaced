@@ -271,6 +271,35 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
       });
     });
 
+    it('listRecent is newest-first and capped — operator outcomes view', async () => {
+      const s = store();
+      const first = await s.claim(NOTIFICATION, 'email', 3);
+      expect(first.claimed).toBe(true);
+      if (!first.claimed) return;
+      await s.settle({
+        id: first.id,
+        attempt: first.attempt,
+        status: 'refused',
+        refusalCode: 'channel.not_configured',
+        attempted: false,
+      });
+
+      const second = await s.claim(OTHER_NOTIFICATION, 'inapp', 3);
+      expect(second.claimed).toBe(true);
+      if (!second.claimed) return;
+      await s.settle({ id: second.id, attempt: second.attempt, status: 'accepted', attempted: true });
+
+      const recent = await s.listRecent(10);
+      const ours = recent.filter((r) => r.notificationId === NOTIFICATION || r.notificationId === OTHER_NOTIFICATION);
+      expect(ours.length).toBeGreaterThanOrEqual(2);
+      const inapp = ours.find((r) => r.channel === 'inapp');
+      const email = ours.find((r) => r.channel === 'email');
+      expect(inapp).toMatchObject({ status: 'accepted' });
+      expect(email).toMatchObject({ status: 'refused', refusalCode: 'channel.not_configured' });
+      expect(email?.acceptedAt).toBeNull();
+      expect(await s.listRecent(1)).toHaveLength(1);
+    });
+
     it('arm 2 on Postgres names delivery_stuck when attempts are still below max', async () => {
       // THE in_flight hole, executed against real SQL: one claim (attempts=1),
       // lease dies, stuckGrace short so we do not wait 150s. Must not stamp

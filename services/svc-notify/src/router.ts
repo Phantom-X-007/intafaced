@@ -62,12 +62,20 @@ const deliveryOutput = z.object({
   refusalCode: z.string().nullable(),
 });
 
-/** Operator view includes notification id so ops can correlate without user scope. */
+/**
+ * Operator view includes notification id so ops can correlate without user scope.
+ * No address / detail / userId — those are not on the delivery row we return.
+ * Status vocabulary is the store's (`pending`/`accepted`/`refused`/`failed`/`abandoned`).
+ * There is no `delivered` stamp: in-app `accepted` is inbox write; OOA `accepted` is gateway accept.
+ */
 const operatorDeliveryOutput = deliveryOutput.extend({
   id: z.string().uuid(),
   notificationId: z.string().uuid(),
+  createdAt: z.string(),
   updatedAt: z.string(),
 });
+
+const operatorDeliveriesInput = z.object({ limit: z.number().int().min(1).max(200).optional() }).optional();
 
 const targetOutput = z.object({
   channel: outOfAppChannelSchema,
@@ -138,8 +146,13 @@ function operatorDeliveryToWire(d: DeliveryRecord) {
     id: d.id,
     notificationId: d.notificationId,
     ...deliveryToWire(d),
+    createdAt: d.createdAt.toISOString(),
     updatedAt: d.updatedAt.toISOString(),
   };
+}
+
+async function loadOperatorDeliveries(notify: NotifyService, limit: number | undefined) {
+  return (await notify.operatorDeliveryOutcomes(limit ?? 50)).map(operatorDeliveryToWire);
 }
 
 const priceAlertOutput = z.object({
@@ -370,15 +383,23 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         .query(async ({ ctx, input }) => (await notify.deliveriesFor(ctx.principal.userId, input.notificationId)).map(deliveryToWire)),
 
       /**
-       * Operator delivery-outcomes view (D26-P1-O5 residual after #1701).
+       * Operator delivery-outcomes view (`ops.notifications` residual).
        *
        * Cross-user newest-first. `admin:read` only — never `notify:read`, which
        * is self-scoped. `accepted` ≠ end-device delivered (mountain honesty).
+       * Bound limit (max 200). Canonical door: `notify.ops.deliveries`.
        */
       operatorDeliveries: scopedProcedure('admin:read', { module: 'notify' })
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(operatorDeliveriesInput)
         .output(z.array(operatorDeliveryOutput))
-        .query(async ({ input }) => (await notify.operatorDeliveryOutcomes(input?.limit ?? 50)).map(operatorDeliveryToWire)),
+        .query(async ({ input }) => loadOperatorDeliveries(notify, input?.limit)),
+
+      ops: router({
+        deliveries: scopedProcedure('admin:read', { module: 'notify' })
+          .input(operatorDeliveriesInput)
+          .output(z.array(operatorDeliveryOutput))
+          .query(async ({ input }) => loadOperatorDeliveries(notify, input?.limit)),
+      }),
 
       /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */
       mutePrefs: scopedProcedure('notify:read', { module: 'notify' })
