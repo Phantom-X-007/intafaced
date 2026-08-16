@@ -503,6 +503,14 @@ services:
       # host `.env` never reaches the container.
       WS_MARKETS_REFRESH_MS: ${WS_MARKETS_REFRESH_MS:-30000}
       WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-5000}
+      # Host can pin ping cadence, outbound lag policy, and per-user private
+      # socket cap. Defaults match services/svc-ws/src/env.ts (30_000 /
+      # 1_048_576 / 20 / 16). Without these names, a host `.env` never reaches
+      # the container.
+      WS_HEARTBEAT_MS: ${WS_HEARTBEAT_MS:-30000}
+      WS_HIGH_WATER_BYTES: ${WS_HIGH_WATER_BYTES:-1048576}
+      WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
+      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
       # Private /private/stream (#119/#122) needs the SAME JWT material as
       # svc-identity / svc-edge. Without these, privateTokens stays null and
