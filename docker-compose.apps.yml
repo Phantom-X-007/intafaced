@@ -217,6 +217,7 @@ services:
       EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
       EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
+      EDGE_BODY_LIMIT_BYTES: ${EDGE_BODY_LIMIT_BYTES:-1048576}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
       IDENTITY_URL: http://svc-identity:4002
       TRADE_URL: http://svc-trade:4004
@@ -335,6 +336,13 @@ services:
       # because each was written without knowing the others' ports.
       HTTP_PORT: '4005'
       MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+      # Engine kill-switch (env.ts boolish default true). Host `.env` can halt
+      # submissions before the journal. `${VAR:-false}` here would refuse every
+      # order on a clean clone while env.ts still reads as on.
+      MATCHING_ENGINE_ENABLED: ${MATCHING_ENGINE_ENABLED:-true}
+      # Snapshot cadence (env.ts default 500). 0 disables. Host can pin; compose
+      # does not invent a different N.
+      MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-500}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4005']
     volumes:
@@ -467,6 +475,18 @@ services:
       TRADE_OTC_MIDS: ${TRADE_OTC_MIDS:-}
       TRADE_OTC_MID_FROM_VENUE: ${TRADE_OTC_MID_FROM_VENUE:-false}
       TRADE_OTC_VENUE_SYMBOLS: ${TRADE_OTC_VENUE_SYMBOLS:-}
+      # Spot candle materialization (A-TRADE-SPOT-1). Default OFF — same shape as
+      # TRADE_FUTURES_JOBS_ENABLED. `${VAR:-true}` here would copy buckets on a
+      # clean clone while env.ts still read as off. Empty market ids still skip
+      # (never invent a UUID list). Timeframes default 1m to match env.ts.
+      TRADE_CANDLE_JOBS_ENABLED: ${TRADE_CANDLE_JOBS_ENABLED:-false}
+      TRADE_CANDLE_JOBS_INTERVAL_MS: ${TRADE_CANDLE_JOBS_INTERVAL_MS:-60000}
+      TRADE_CANDLE_JOBS_MARKET_IDS: ${TRADE_CANDLE_JOBS_MARKET_IDS:-}
+      TRADE_CANDLE_JOBS_TIMEFRAMES: ${TRADE_CANDLE_JOBS_TIMEFRAMES:-1m}
+      # Engine ↔ ledger reconcile sweep. Default OFF. Does not turn jobs on.
+      # Host `.env` can pin cadence. No invented market list.
+      TRADE_RECONCILE_JOBS_ENABLED: ${TRADE_RECONCILE_JOBS_ENABLED:-false}
+      TRADE_RECONCILE_JOBS_INTERVAL_MS: ${TRADE_RECONCILE_JOBS_INTERVAL_MS:-60000}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4004']
     healthcheck: *healthcheck
@@ -528,6 +548,12 @@ services:
       WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
       WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
+      # Host can pin tape replay length and JetStream durable names. Defaults
+      # match services/svc-ws/src/env.ts (50 / ws-trade-tape / ws-private-orders).
+      # Without these names, a host `.env` never reaches the container.
+      WS_TRADE_RECENT_LIMIT: ${WS_TRADE_RECENT_LIMIT:-50}
+      WS_TRADES_DURABLE: ${WS_TRADES_DURABLE:-ws-trade-tape}
+      WS_PRIVATE_ORDERS_DURABLE: ${WS_PRIVATE_ORDERS_DURABLE:-ws-private-orders}
       # Private /private/stream (#119/#122) needs the SAME JWT material as
       # svc-identity / svc-edge. Without these, privateTokens stays null and
       # every private upgrade returns 403 (mega-audit L5-4 / WS-JWT).
@@ -662,6 +688,14 @@ services:
       # traffic at an engine that cannot answer.
       BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-mock}
       BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-http://host.docker.internal:4108}
+      # Host can pin engine call ceiling, default crew size, mentor shortlist,
+      # and season. Defaults match services/svc-blueprint/src/env.ts
+      # (20_000 / 6 / 3 / 1). Without these names, a host `.env` never
+      # reaches the container.
+      BLUEPRINT_ENGINE_TIMEOUT_MS: ${BLUEPRINT_ENGINE_TIMEOUT_MS:-20000}
+      BLUEPRINT_CREW_CAPACITY: ${BLUEPRINT_CREW_CAPACITY:-6}
+      BLUEPRINT_MENTOR_SHORTLIST_SIZE: ${BLUEPRINT_MENTOR_SHORTLIST_SIZE:-3}
+      BLUEPRINT_SEASON: ${BLUEPRINT_SEASON:-1}
       # The card rasterizer. DELIBERATELY has no default: unset means this
       # deployment has no renderer, and the service says so with a typed code
       # while still serving the full vector card. A default pointing at a host
