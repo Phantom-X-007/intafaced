@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { evaluateFraud, isAutoDecline, type FraudDecision } from './evaluate.js';
+import { evaluateFraud, FRAUD_THRESHOLD_UNPUBLISHED, isAutoDecline, type FraudDecision } from './evaluate.js';
 
 /**
  * Unit card — pay.fraud mechanism · wave 13 L02
@@ -26,11 +26,71 @@ const base = {
   assetId: 'USDT',
 };
 
+/** Kill-switch unused scoring rules so a focused assertion is not drowned in unpublished-threshold reviews. */
+const scoringOff = {
+  velocity_count: false,
+  velocity_volume: false,
+  amount_anomaly: false,
+} as const;
+
 describe('pay.fraud mechanism — evaluateFraud', () => {
-  it('allows a clean payment when no signal-dependent rule is configured', () => {
-    const d = evaluateFraud(base);
+  it('allows a clean payment when scoring rules are kill-switched and no blocklist is configured', () => {
+    const d = evaluateFraud({ ...base, enabled: scoringOff });
     expect(d.outcome).toBe('allow');
     expect(d.reasons).toEqual([]);
+    expect(d.skippedDisabled).toEqual(expect.arrayContaining(['velocity_count', 'velocity_volume', 'amount_anomaly']));
+  });
+
+  it('D26-P1-P5: enabled velocity_count with unpublished maxPaymentsInWindow is not silent allow', () => {
+    const d = evaluateFraud({
+      ...base,
+      enabled: { velocity_count: true, velocity_volume: false, amount_anomaly: false },
+    });
+    expect(d.outcome).not.toBe('allow');
+    expect(d.reasons.length).toBeGreaterThan(0);
+    expect(d.reasons).toEqual([
+      { ruleId: 'velocity_count', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: maxPaymentsInWindow` },
+    ]);
+    expect(d.outcome).toBe('review');
+  });
+
+  it('D26-P1-P5: enabled volume and amount_anomaly with unpublished thresholds are not silent allow', () => {
+    const volume = evaluateFraud({
+      ...base,
+      enabled: { velocity_count: false, velocity_volume: true, amount_anomaly: false },
+    });
+    expect(volume.outcome).toBe('review');
+    expect(volume.reasons).toEqual([
+      { ruleId: 'velocity_volume', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: maxVolumeInWindow` },
+    ]);
+
+    const amount = evaluateFraud({
+      ...base,
+      enabled: { velocity_count: false, velocity_volume: false, amount_anomaly: true },
+      thresholds: { amountAnomalyMultiplier: Number.NaN },
+    });
+    expect(amount.outcome).toBe('review');
+    expect(amount.reasons).toEqual([
+      { ruleId: 'amount_anomaly', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: amountAnomalyMultiplier` },
+    ]);
+  });
+
+  it('D26-P1-P5: default-enabled scoring (missing key) with unset thresholds is not silent allow', () => {
+    const d = evaluateFraud(base);
+    expect(d.outcome).toBe('review');
+    expect(d.reasons.length).toBeGreaterThan(0);
+    expect(d.reasons.map((r) => r.ruleId).sort()).toEqual(['amount_anomaly', 'velocity_count', 'velocity_volume']);
+    expect(d.reasons.every((r) => r.detail.startsWith(FRAUD_THRESHOLD_UNPUBLISHED))).toBe(true);
+  });
+
+  it('D26-P1-P5: kill-switched scoring may skip unpublished thresholds', () => {
+    const d = evaluateFraud({
+      ...base,
+      enabled: { ...scoringOff, velocity_count: false },
+    });
+    expect(d.outcome).toBe('allow');
+    expect(d.reasons).toEqual([]);
+    expect(d.skippedDisabled).toContain('velocity_count');
   });
 
   it('declines blocklisted IP with an explicit reason that does not disclose the IP', () => {
@@ -38,6 +98,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       ip: '203.0.113.9',
       blocklists: { ips: ['203.0.113.9'] },
+      enabled: scoringOff,
     });
     expect(d.outcome).toBe('decline');
     expect(d.reasons.length).toBeGreaterThan(0);
@@ -51,6 +112,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       deviceId: 'dev_bad',
       blocklists: { devices: new Set(['dev_bad']) },
+      enabled: scoringOff,
     });
     expect(d.outcome).toBe('decline');
     expect(d.reasons.some((r) => r.ruleId === 'blocklist_device')).toBe(true);
@@ -61,6 +123,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
     const noMeter = evaluateFraud({
       ...base,
       thresholds: { maxPaymentsInWindow: 3 },
+      enabled: { velocity_volume: false, amount_anomaly: false },
       // recentPaymentCount omitted — must not invent
     });
     expect(noMeter.outcome).toBe('review');
@@ -70,6 +133,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       recentPaymentCount: 10,
       thresholds: { maxPaymentsInWindow: 3 },
+      enabled: { velocity_volume: false, amount_anomaly: false },
     });
     expect(d.outcome).toBe('review');
     expect(d.reasons[0]?.ruleId).toBe('velocity_count');
@@ -80,6 +144,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       recentPaymentCount: -1,
       thresholds: { maxPaymentsInWindow: 3 },
+      enabled: { velocity_volume: false, amount_anomaly: false },
     });
     expect(badCount.outcome).toBe('review');
     expect(badCount.reasons[0]?.detail).toBe('recent payment count signal is unavailable');
@@ -88,6 +153,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       recentVolume: 'not-money',
       thresholds: { maxVolumeInWindow: '1000' },
+      enabled: { velocity_count: false, amount_anomaly: false },
     });
     expect(badVolume.outcome).toBe('review');
     expect(badVolume.reasons[0]?.detail).toBe('recent volume signal is unavailable');
@@ -98,6 +164,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       recentVolume: '5000',
       thresholds: { maxVolumeInWindow: '1000' },
+      enabled: { velocity_count: false, amount_anomaly: false },
     });
     expect(d.outcome).toBe('review');
     expect(d.reasons[0]?.ruleId).toBe('velocity_volume');
@@ -108,6 +175,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       amount: '99999',
       thresholds: { amountAnomalyMultiplier: 5 },
+      enabled: { velocity_count: false, velocity_volume: false },
     });
     expect(noBaseline.outcome).toBe('review');
     expect(noBaseline.reasons[0]?.detail).toBe('merchant amount baseline signal is unavailable');
@@ -117,6 +185,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       amount: '600',
       baselineAmount: '100',
       thresholds: { amountAnomalyMultiplier: 5 },
+      enabled: { velocity_count: false, velocity_volume: false },
     });
     expect(d.outcome).toBe('review');
     expect(d.reasons[0]?.ruleId).toBe('amount_anomaly');
@@ -126,6 +195,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
     const missingIp = evaluateFraud({
       ...base,
       blocklists: { ips: ['203.0.113.9'] },
+      enabled: scoringOff,
     });
     expect(missingIp.outcome).toBe('review');
     expect(missingIp.reasons).toEqual([{ ruleId: 'blocklist_ip', detail: 'IP risk signal is unavailable' }]);
@@ -133,6 +203,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
     const missingDevice = evaluateFraud({
       ...base,
       blocklists: { devices: ['dev_bad'] },
+      enabled: scoringOff,
     });
     expect(missingDevice.outcome).toBe('review');
     expect(missingDevice.reasons).toEqual([{ ruleId: 'blocklist_device', detail: 'device risk signal is unavailable' }]);
@@ -143,7 +214,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       ...base,
       ip: '203.0.113.9',
       blocklists: { ips: ['203.0.113.9'] },
-      enabled: { blocklist_ip: false },
+      enabled: { ...scoringOff, blocklist_ip: false },
     });
     expect(d.outcome).toBe('allow');
     expect(d.skippedDisabled).toContain('blocklist_ip');
@@ -157,6 +228,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       recentPaymentCount: 99,
       blocklists: { ips: ['203.0.113.9'] },
       thresholds: { maxPaymentsInWindow: 1, velocityCountAction: 'review' },
+      enabled: { velocity_volume: false, amount_anomaly: false },
     });
     expect(d.outcome).toBe('decline');
     expect(d.reasons.length).toBeGreaterThanOrEqual(2);
@@ -170,6 +242,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
         ...base,
         recentPaymentCount: 5,
         thresholds: { maxPaymentsInWindow: 1, velocityCountAction: 'decline' },
+        enabled: { velocity_volume: false, amount_anomaly: false },
       }),
     ];
     for (const d of samples) {

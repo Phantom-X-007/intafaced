@@ -13,6 +13,7 @@
  *   · sanctions screening (separate knobs — never shared with fraud)
  *   · inventing risk scores, approval rates, or protected-characteristic signals
  *   · silent allow when a configured rule is missing its required signal
+ *   · silent allow when an enabled scoring rule has an unpublished threshold
  *   · silent auto-decline with no reason
  *
  * Pure function of inputs. No DB, no balances, no ledger. Money never moves here.
@@ -76,7 +77,7 @@ export interface FraudEvaluationInput {
   readonly recentPaymentCount?: number;
   /** Gross volume in window as decimal string (caller-owned meter). */
   readonly recentVolume?: string;
-  /** Merchant typical amount as decimal string; absent → amount_anomaly skipped. */
+  /** Merchant typical amount as decimal string; absent → amount_anomaly reviews (signal unpublished). */
   readonly baselineAmount?: string | null;
   readonly thresholds?: FraudThresholds;
   readonly blocklists?: FraudBlocklists;
@@ -91,6 +92,8 @@ export interface FraudEvaluationInput {
    */
   readonly scoreSource?: string | null;
 }
+
+export const FRAUD_THRESHOLD_UNPUBLISHED = 'pay.fraud_threshold_unpublished' as const;
 
 export type FraudScoreErrorCode = 'pay.fraud_score_source_blank' | 'pay.fraud_score_invented';
 
@@ -219,7 +222,10 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('velocity_count', () => {
     const max = th.maxPaymentsInWindow;
-    if (max === undefined || max < 0) return;
+    if (max === undefined || !Number.isSafeInteger(max) || max < 0) {
+      flag('velocity_count', `${FRAUD_THRESHOLD_UNPUBLISHED}: maxPaymentsInWindow`, 'review');
+      return;
+    }
     const count = input.recentPaymentCount;
     if (count === undefined || !Number.isSafeInteger(count) || count < 0) {
       flag('velocity_count', 'recent payment count signal is unavailable', 'review');
@@ -233,7 +239,10 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('velocity_volume', () => {
     const maxVol = parseDecimal(th.maxVolumeInWindow);
-    if (maxVol === null) return;
+    if (maxVol === null) {
+      flag('velocity_volume', `${FRAUD_THRESHOLD_UNPUBLISHED}: maxVolumeInWindow`, 'review');
+      return;
+    }
     const recent = parseDecimal(input.recentVolume);
     if (recent === null) {
       flag('velocity_volume', 'recent volume signal is unavailable', 'review');
@@ -247,7 +256,10 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('amount_anomaly', () => {
     const mult = th.amountAnomalyMultiplier;
-    if (mult === undefined || !(mult > 1) || !Number.isFinite(mult)) return;
+    if (mult === undefined || !(mult > 1) || !Number.isFinite(mult)) {
+      flag('amount_anomaly', `${FRAUD_THRESHOLD_UNPUBLISHED}: amountAnomalyMultiplier`, 'review');
+      return;
+    }
     const baseline = parseDecimal(input.baselineAmount);
     if (baseline === null || baseline === 0) {
       flag('amount_anomaly', 'merchant amount baseline signal is unavailable', 'review');

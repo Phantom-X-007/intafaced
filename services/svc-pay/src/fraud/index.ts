@@ -3,6 +3,7 @@ export {
   assertNoInventedFraudScores,
   evaluateFraud,
   FORBIDDEN_FRAUD_SCORE_FIELDS,
+  FRAUD_THRESHOLD_UNPUBLISHED,
   FraudScoreError,
   isAutoDecline,
   type FraudBlocklists,

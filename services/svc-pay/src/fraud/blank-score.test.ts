@@ -28,9 +28,15 @@ const base = {
   assetId: 'USDT',
 };
 
+const scoringOff = {
+  velocity_count: false,
+  velocity_volume: false,
+  amount_anomaly: false,
+} as const;
+
 describe('pay.fraud — refuse blank score source and invented rates', () => {
   it('rule-only path (scoreSource omitted) does not invent a score', () => {
-    const d = evaluateFraud(base);
+    const d = evaluateFraud({ ...base, enabled: scoringOff });
     expect(d.outcome).toBe('allow');
     expect(d).not.toHaveProperty('approvalRate');
     expect(d).not.toHaveProperty('declineRate');
@@ -52,7 +58,7 @@ describe('pay.fraud — refuse blank score source and invented rates', () => {
   });
 
   it('accepts a named external source without synthesising rates', () => {
-    const d = evaluateFraud({ ...base, scoreSource: 'psp-adapter:fixture' });
+    const d = evaluateFraud({ ...base, scoreSource: 'psp-adapter:fixture', enabled: scoringOff });
     expect(d.outcome).toBe('allow');
     expect(d).not.toHaveProperty('approvalRate');
     expect(d).not.toHaveProperty('chargebackMagnitude');
