@@ -255,8 +255,7 @@ export function cardSimIsLivePosture(posture: CardIssuerPosture = {}): boolean {
   return (CARD_SIM_LIVE_APP_ENVS as readonly string[]).includes(posture.APP_ENV ?? '');
 }
 
-const CARD_SIM_NOT_LIVE_MESSAGE =
-  'card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists';
+const CARD_SIM_NOT_LIVE_MESSAGE = 'card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists';
 
 /**
  * `card-sim` under live posture: still named as the simulator on the programme

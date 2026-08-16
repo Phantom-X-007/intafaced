@@ -467,9 +467,9 @@ if (!available) {
       await fund(HOLDER, 'USDT', '500');
       const card = await issueCard();
       const liveAuth = new CardService(sql, ledger, { issuer: cardIssuerFor('card-sim', { APP_ENV: 'prod' }) });
-      await expect(
-        liveAuth.authorize({ cardId: card.id, authorizationRef: 'auth-live', amount: amt('50') }),
-      ).rejects.toMatchObject({ code: 'bank.card_sim_not_live' });
+      await expect(liveAuth.authorize({ cardId: card.id, authorizationRef: 'auth-live', amount: amt('50') })).rejects.toMatchObject({
+        code: 'bank.card_sim_not_live',
+      });
       expect(await availableOf(HOLDER, 'USDT')).toBe('500');
       const auths = await sql`SELECT id FROM bank.card_authorizations`;
       expect(auths).toHaveLength(0);

@@ -339,10 +339,7 @@ export class CardService {
   private assertIssuerMayMutate(): void {
     const code = this.issuer.mutationRefuse;
     if (!code) return;
-    throw new BankError(
-      'card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists',
-      code,
-    );
+    throw new BankError('card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists', code);
   }
 
   /** What this deployment's card programme is, and whether it is real. */
