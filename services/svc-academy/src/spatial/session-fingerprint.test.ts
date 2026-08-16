@@ -41,6 +41,7 @@ describe('session sceneFingerprint honesty (read token)', () => {
     expect(conflict.ok).toBe(false);
     if (conflict.ok) return;
     expect(conflict.reason).toBe('conflict');
+    if (conflict.reason === 'conflict') expect(conflict.name).toBe('fingerprint_mismatch');
     // Correct token from read path accepts
     const ok = decideHostSceneWrite({
       current: d.scene,
@@ -55,6 +56,9 @@ describe('session sceneFingerprint honesty (read token)', () => {
       next: { ...next, stage: { width: 40, height: 40 } },
     });
     expect(omit.ok).toBe(false);
-    if (!omit.ok) expect(omit.reason).toBe('conflict');
+    if (!omit.ok) {
+      expect(omit.reason).toBe('conflict');
+      expect(omit.name).toBe('fingerprint_required');
+    }
   });
 });
