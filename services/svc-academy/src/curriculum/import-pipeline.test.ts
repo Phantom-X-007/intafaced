@@ -4,6 +4,7 @@ import {
   CURRICULUM_CONTENT_SOURCE,
   CURRICULUM_TITLE_PLAYBOOKS,
   CURRICULUM_TITLE_WORKBOOKS,
+  CURRICULUM_IMPORT_REFUSE,
   curriculumInventory,
   curriculumImportStageStatus,
   curriculumImportStageStatusLine,
@@ -39,6 +40,7 @@ const good = {
   order: 40,
   summary: spinePlaybook.summary,
   body: spinePlaybook.body,
+  objectives: spinePlaybook.objectives,
 };
 
 /** Real spine workbook — outline drills without painted live quotes. */
@@ -51,6 +53,7 @@ const goodWorkbook = {
   order: 50,
   summary: spineWorkbook.summary,
   body: spineWorkbook.body,
+  objectives: spineWorkbook.objectives,
 };
 
 /** Clears the char floor by repeating one line — the theater D26-P1-C5 refuses. */
@@ -118,11 +121,16 @@ describe('validateImportRecord', () => {
 });
 
 describe('D26-P1-C5 lesson substance (not char-count theater)', () => {
-  it('refuses a body that only clears the depth floor by repeating filler', () => {
+  it('refuses empty, whitespace, and length-padded junk by name', () => {
+    expect(validateImportRecord({ ...good, body: '' }).issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.empty)).toBe(
+      true,
+    );
+    expect(
+      validateImportRecord({ ...good, body: '   \n\t  ' }).issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.whitespace),
+    ).toBe(true);
     expect(theaterBody.trim().length).toBeGreaterThanOrEqual(900);
-    const substanceIssues = lessonSubstanceChecklist(theaterBody);
-    expect(substanceIssues.length).toBeGreaterThan(0);
-    expect(substanceIssues.some((i) => /theater|filler|unique-word|lexicon/i.test(i.message))).toBe(true);
+    const substanceIssues = lessonSubstanceChecklist(theaterBody, { objectives: good.objectives });
+    expect(substanceIssues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.paddedJunk)).toBe(true);
     const result = validateImportRecord({
       slug: 'foundations-theater-pad',
       title: 'Theater pad',
@@ -131,15 +139,16 @@ describe('D26-P1-C5 lesson substance (not char-count theater)', () => {
       order: 99,
       summary: 'A summary that is long enough to pass the summary floor.',
       body: theaterBody,
+      objectives: good.objectives,
     });
     expect(result.ok).toBe(false);
-    expect(result.issues.some((i) => i.field === 'body')).toBe(true);
+    expect(result.issues.some((i) => i.code === CURRICULUM_IMPORT_REFUSE.paddedJunk)).toBe(true);
   });
 
-  it('accepts every spine body and reports substanceBarMet', () => {
+  it('accepts every spine item only when body + objectives are imported together', () => {
     for (const summary of listCurriculum()) {
       const item = getCurriculumItem(summary.slug)!;
-      expect(lessonSubstanceChecklist(item.body), summary.slug).toEqual([]);
+      expect(lessonSubstanceChecklist(item.body, { objectives: item.objectives }), summary.slug).toEqual([]);
       expect(
         validateImportRecord({
           slug: item.slug,
@@ -149,6 +158,7 @@ describe('D26-P1-C5 lesson substance (not char-count theater)', () => {
           order: item.order,
           summary: item.summary,
           body: item.body,
+          objectives: item.objectives,
         }).ok,
         item.slug,
       ).toBe(true);
@@ -275,6 +285,7 @@ describe('import body floor matches curriculum depth floor', () => {
       order: item.order,
       summary: item.summary,
       body: item.body,
+      objectives: item.objectives,
     });
     expect(result.ok).toBe(true);
   });
