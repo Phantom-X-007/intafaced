@@ -146,6 +146,31 @@ function composeEnvironmentFor(service: string, compose: string, envFile: Map<st
 }
 
 /**
+ * Own `environment:` keys on one service (not merged anchors), in file order.
+ * A Set of these names is smaller than the list when YAML repeats a key —
+ * compose last-wins, which would hide a second CONVERT/ALGO line.
+ */
+function composeServiceOwnEnvKeys(service: string, compose: string): string[] {
+  const keys: string[] = [];
+  let inService = false;
+  let inEnv = false;
+  for (const line of compose.split(/\r?\n/)) {
+    const svcDecl = /^ {2}([a-z][a-z0-9-]*):\s*$/.exec(line);
+    if (svcDecl) {
+      inService = svcDecl[1] === service;
+      inEnv = false;
+      continue;
+    }
+    if (!inService) continue;
+    if (/^ {4}\S/.test(line)) inEnv = /^ {4}environment:/.test(line);
+    if (!inEnv) continue;
+    const kv = /^ {6}([A-Za-z_][A-Za-z0-9_]*):\s*(.*)$/.exec(line);
+    if (kv) keys.push(kv[1]!);
+  }
+  return keys;
+}
+
+/**
  * Zod chains wrap. Prettier turns a long one into
  *
  *     JWT_ACCESS_SECRET: z
@@ -531,16 +556,23 @@ function envTsTradeKeys(pattern: RegExp): string[] {
 describe('the shipped configuration passes MM seed and algo job flags into svc-trade', () => {
   const mmSeedKeys = envTsTradeKeys(/\b(TRADE_MM_SEED_[A-Z0-9_]+)\s*:/g);
   const algoKeys = envTsTradeKeys(/\b(TRADE_ALGO_ENABLED|TRADE_ALGO_JOBS_ENABLED|TRADE_ALGO_JOBS_INTERVAL_MS)\s*:/g);
+  const convertKeys = envTsTradeKeys(/\b(TRADE_CONVERT_ENABLED|TRADE_CONVERT_SPREAD_BPS)\s*:/g);
 
   it('env.ts still declares the MM seed and algo job names this pin tracks', () => {
     expect(mmSeedKeys.length).toBeGreaterThanOrEqual(10);
     expect(algoKeys.sort()).toEqual(['TRADE_ALGO_ENABLED', 'TRADE_ALGO_JOBS_ENABLED', 'TRADE_ALGO_JOBS_INTERVAL_MS'].sort());
+    expect(convertKeys.sort()).toEqual(['TRADE_CONVERT_ENABLED', 'TRADE_CONVERT_SPREAD_BPS'].sort());
   });
 
   it('compose svc-trade block names every TRADE_MM_SEED_* and TRADE_ALGO_* job flag from env.ts', () => {
-    for (const name of [...mmSeedKeys, ...algoKeys]) {
+    for (const name of [...mmSeedKeys, ...algoKeys, ...convertKeys]) {
       expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
     }
+  });
+
+  it('lists each svc-trade compose environment key once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
   });
 
   it('hands the container seed OFF and empty markets/mids on a clean clone', () => {
@@ -566,5 +598,16 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
     const compose = read('docker-compose.apps.yml');
     expect(compose).toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-false\}/);
     expect(compose).not.toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-true\}/);
+  });
+
+  it('hands the container convert ON and 10 bps spread on a clean clone', () => {
+    expect(shipped.get('TRADE_CONVERT_ENABLED')).toBe('true');
+    expect(shipped.get('TRADE_CONVERT_SPREAD_BPS')).toBe('10');
+  });
+
+  it('compose defaults convert flags to env.ts (host can kill; no invented spread)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_CONVERT_ENABLED:\s*\$\{TRADE_CONVERT_ENABLED:-true\}/);
+    expect(compose).toMatch(/TRADE_CONVERT_SPREAD_BPS:\s*\$\{TRADE_CONVERT_SPREAD_BPS:-10\}/);
   });
 });
