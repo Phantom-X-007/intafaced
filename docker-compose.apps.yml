@@ -246,6 +246,10 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # WebAuthn kill-switch (env.ts boolish default true). Host `.env` can
+      # disable WebAuthn without a TOTP redeploy. RP id/name/origin stay schema
+      # defaults — do not invent a production registrable domain here.
+      WEBAUTHN_ENABLED: ${WEBAUTHN_ENABLED:-true}
       # D26-P0-02 owner-published accrual tiers — pass-through, no compose default.
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}
       # #1806 KYC document vault. Pass-through only — no compose default, no invented key.
