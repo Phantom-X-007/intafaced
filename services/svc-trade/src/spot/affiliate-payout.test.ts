@@ -89,6 +89,7 @@ describe('settleFill wires payout after accrue after ledger post', () => {
     expect(src).toMatch(/recipes\.tradeFill/);
     expect(src).toMatch(/recipes\.marketMakerMakerFill/);
     expect(src.indexOf('notifyAffiliateAccrue')).toBeLessThan(src.indexOf('notifyAffiliatePayout'));
+    expect((src.match(/notifyAffiliatePayout/g) ?? []).length).toBeGreaterThanOrEqual(3);
     const idx = readFileSync(join(here, '..', 'index.ts'), 'utf8');
     expect(idx).toMatch(/createAffiliatePayoutClient/);
   });
