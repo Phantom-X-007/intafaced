@@ -646,3 +646,31 @@ describe('the shipped configuration passes OTC desk flags into svc-trade', () =>
     expect(compose).not.toMatch(/TRADE_OTC_MID_FROM_VENUE:\s*\$\{TRADE_OTC_MID_FROM_VENUE:-true\}/);
   });
 });
+
+describe('the shipped configuration passes options settlement-asset-law into svc-trade', () => {
+  const optionsAssetLawKeys = envTsTradeKeys(/\b(TRADE_OPTIONS_SETTLEMENT_ASSET_LAW)\s*:/g);
+
+  it('env.ts still declares the options asset-law name this pin tracks', () => {
+    expect(optionsAssetLawKeys).toEqual(['TRADE_OPTIONS_SETTLEMENT_ASSET_LAW']);
+  });
+
+  it('compose svc-trade block names TRADE_OPTIONS_SETTLEMENT_ASSET_LAW', () => {
+    for (const name of optionsAssetLawKeys) {
+      expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
+    }
+  });
+
+  it('lists each svc-trade compose environment key once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container empty settlement-asset-law on a clean clone', () => {
+    expect(shipped.get('TRADE_OPTIONS_SETTLEMENT_ASSET_LAW')).toBe('');
+  });
+
+  it('compose pins empty asset-law (never invents live set / settlement asset / matrix)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:\s*\$\{TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:-\}/);
+  });
+});

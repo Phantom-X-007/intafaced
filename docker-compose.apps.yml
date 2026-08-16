@@ -429,6 +429,11 @@ services:
       # Published JSON lives in `.env.example`. Blank host still refuse-closed.
       TRADE_COPY_FEE_SHARE_LAW: ${TRADE_COPY_FEE_SHARE_LAW:-}
       TRADE_COPY_JURISDICTION_LAW: ${TRADE_COPY_JURISDICTION_LAW:-}
+      # Options settlement-asset law (trade.options / D26-P0-05). Empty =
+      # unpublished refuse (`trade.options_settlement_law_unset`). Host `.env`
+      # can stamp; compose never invents live set / settlement asset / matrix.
+      # Fixing below is a second gate — it alone must not unlock listing.
+      TRADE_OPTIONS_SETTLEMENT_ASSET_LAW: ${TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:-}
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
       # listing. Opaque stamp only — never invent fixing source/window/payor.
       TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}
