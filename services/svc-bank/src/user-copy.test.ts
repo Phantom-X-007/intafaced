@@ -35,6 +35,7 @@ describe('user-visible bank copy — @intafaced/i18n (TRK-infra.i18n slice)', ()
   it('ramp/card wire messages use the catalog path, not the operator sentence', () => {
     expect(userFacingBankMessage('bank.no_ramp_rail', 'No bank ramp programme is configured')).toBe('bank.no_ramp_rail');
     expect(userFacingBankMessage('bank.fiat_ramp_socket', 'Fiat on/off ramp is socket.psp-partners')).toBe('bank.fiat_ramp_socket');
+    expect(userFacingBankMessage('bank.no_fiat_rail', 'No live fiat rail on the pay adapter')).toBe('bank.no_fiat_rail');
     expect(userFacingBankMessage('bank.no_card_issuer', 'No card issuer is configured')).toBe('bank.no_card_issuer');
     // Spaces stay operator English — not a user-visible i18n slice in this PR.
     expect(userFacingBankMessage('bank.space_not_found', 'Space abc not found')).toBe('Space abc not found');

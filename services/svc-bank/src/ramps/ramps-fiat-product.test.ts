@@ -27,7 +27,7 @@ import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
 import { createBankRouter } from '../router.js';
 import { inRepoPayFiatRampPort, type PayFiatRampPort } from './pay-fiat-adapter.js';
-import { CRYPTO_LEDGER_PROGRAMME } from './rails.js';
+import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME } from './rails.js';
 
 const SECRET = 'bank-ramps-fiat-product-boundary-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
@@ -121,13 +121,89 @@ if (!available) {
       });
     });
 
+    it('public doors name-refuse no programme / no fiat rail / empty adapter — invent must not open a ramp', async () => {
+      const none = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: NO_RAMP_PROGRAMME },
+      });
+      const noneUser = signedCaller(none, principal(HOLDER, ['bank:read', 'bank:write']));
+      const noneOps = signedCaller(none, principal(OPERATOR, ['admin:treasury']));
+
+      await expect(
+        noneUser.ramps.offramp({
+          offrampId: randomUUID(),
+          assetId: 'USDT',
+          amount: '1',
+          kind: 'crypto',
+          destinationRef: '0x000000000000000000000000000000000000dEaD',
+          clientRef: `none-${randomUUID()}`,
+        }),
+      ).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.no_ramp_rail' },
+      });
+      await expect(
+        noneOps.ops.creditOnramp({
+          userId: HOLDER,
+          assetId: 'USDT',
+          amount: '1',
+          kind: 'fiat',
+          railRef: `none-fiat-${randomUUID()}`,
+        }),
+      ).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.fiat_ramp_socket' },
+      });
+
+      const empty = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+      });
+      const emptyOps = signedCaller(empty, principal(OPERATOR, ['admin:treasury']));
+      await expect(
+        emptyOps.ops.creditOnramp({
+          userId: HOLDER,
+          assetId: 'USDT',
+          amount: '1',
+          kind: 'fiat',
+          railRef: `empty-${randomUUID()}`,
+        }),
+      ).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+      });
+
+      const noRail = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: sandboxPay },
+      });
+      const noRailOps = signedCaller(noRail, principal(OPERATOR, ['admin:treasury']));
+      await expect(
+        noRailOps.ops.creditOnramp({
+          userId: HOLDER,
+          assetId: 'USDT',
+          amount: '1',
+          kind: 'fiat',
+          railRef: `norail-${randomUUID()}`,
+        }),
+      ).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        cause: { code: 'bank.no_fiat_rail' },
+      });
+
+      const counts = await sql<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM bank.ramp_onramps
+        UNION ALL
+        SELECT count(*)::int AS n FROM bank.ramp_offramps
+      `;
+      expect(counts.every((row) => row.n === 0)).toBe(true);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('ramps.fiatSettle refuses in-repo sandbox/absent pay adapters', async () => {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: inRepoPayFiatRampPort },
       });
       await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+        cause: { code: 'bank.no_fiat_rail' },
       });
     });
 
@@ -168,7 +244,7 @@ if (!available) {
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+        cause: { code: 'bank.no_fiat_rail' },
       });
       const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
       expect(count[0]!.n).toBe(0);

@@ -35,15 +35,16 @@ const LIVE_BOTH: PayFiatRailSnapshot = {
   capabilities: ['onramp', 'offramp'],
 };
 
-const REFUSE = 'bank.fiat_ramp_no_pay_adapter';
+const EMPTY = 'bank.fiat_ramp_no_pay_adapter';
+const NO_RAIL = 'bank.no_fiat_rail';
 
 describe('PayFiatRampPort — D26-P1-B4 fiat via pay adapters', () => {
   it('empty port is the boot default and never invents a rail', async () => {
     await expect(resolvePayFiatRailId(emptyPayFiatRampPort, 'onramp')).rejects.toMatchObject({
-      code: REFUSE,
+      code: EMPTY,
     });
     await expect(resolvePayFiatRailId(null, 'offramp')).rejects.toMatchObject({
-      code: REFUSE,
+      code: EMPTY,
     });
   });
 
@@ -51,17 +52,17 @@ describe('PayFiatRampPort — D26-P1-B4 fiat via pay adapters', () => {
     expect(selectLivePayFiatRail(IN_REPO_PAY_FIAT_RAILS, 'onramp')).toBeNull();
     expect(selectLivePayFiatRail(IN_REPO_PAY_FIAT_RAILS, 'offramp')).toBeNull();
     await expect(resolvePayFiatRailId(inRepoPayFiatRampPort, 'onramp')).rejects.toMatchObject({
-      code: REFUSE,
+      code: NO_RAIL,
     });
     await expect(resolvePayFiatRailId(inRepoPayFiatRampPort, 'offramp')).rejects.toMatchObject({
-      code: REFUSE,
+      code: NO_RAIL,
     });
   });
 
   it('sandbox and absent pay rails cannot host bank fiat (no PSP laundering)', async () => {
     const port: PayFiatRampPort = { listFiatRails: () => [SANDBOX, ABSENT] };
     await expect(resolvePayFiatRailId(port, 'onramp')).rejects.toMatchObject({
-      code: REFUSE,
+      code: NO_RAIL,
     });
     expect(selectLivePayFiatRail([SANDBOX, ABSENT], 'onramp')).toBeNull();
   });
@@ -70,7 +71,7 @@ describe('PayFiatRampPort — D26-P1-B4 fiat via pay adapters', () => {
     expect(selectLivePayFiatRail([LIVE_ON, LIVE_BOTH], 'offramp')?.railId).toBe('pay-fiat-ach');
     expect(selectLivePayFiatRail([LIVE_ON], 'offramp')).toBeNull();
     await expect(resolvePayFiatRailId({ listFiatRails: () => [LIVE_ON] }, 'offramp')).rejects.toMatchObject({
-      code: REFUSE,
+      code: NO_RAIL,
     });
     await expect(resolvePayFiatRailId({ listFiatRails: () => [LIVE_BOTH] }, 'offramp')).resolves.toBe('pay-fiat-ach');
   });
@@ -80,12 +81,11 @@ describe('PayFiatRampPort — D26-P1-B4 fiat via pay adapters', () => {
       await resolvePayFiatRailId({ listFiatRails: () => [SANDBOX] }, 'onramp');
       expect.fail('expected refuse');
     } catch (err) {
-      expect(err).toMatchObject({ code: REFUSE });
+      expect(err).toMatchObject({ code: NO_RAIL });
       const msg = String((err as Error).message);
       expect(msg).toContain('socket.psp-partners');
-      expect(msg).toContain('RailAdapter');
       expect(msg).toContain('card-sandbox:sandbox');
-      expect(msg).toMatch(/No invented FX rate/i);
+      expect(msg).toMatch(/invented FX/i);
       expect(msg).not.toMatch(/APY|BIN/i);
     }
   });
@@ -98,7 +98,7 @@ describe('PayFiatRampPort — D26-P1-B4 fiat via pay adapters', () => {
       assertEmptyRailsCannotLookLive([], { simulated: false });
       expect.fail('expected refuse');
     } catch (err) {
-      expect(err).toMatchObject({ code: REFUSE });
+      expect(err).toMatchObject({ code: EMPTY });
     }
     expect(() => assertEmptyRailsCannotLookLive([], { simulated: true })).not.toThrow();
     expect(() => assertEmptyRailsCannotLookLive([LIVE_BOTH], { simulated: false })).not.toThrow();

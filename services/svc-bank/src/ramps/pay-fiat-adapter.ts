@@ -115,10 +115,18 @@ export async function resolvePayFiatRailId(port: PayFiatRampPort | null | undefi
       ? 'no pay fiat rails registered (empty PayFiatRampPort / unset edge wire)'
       : rails.map((r) => `${r.railId}:${r.mode}[${r.capabilities.join('|') || '∅'}]`).join(', ');
 
+  if (rails.length === 0) {
+    throw new BankError(
+      `Fiat ${capability} is socket.psp-partners — a bank/PSP partner and money-transmission permission, not inventable code. ` +
+        `PayFiatRampPort is empty (unset edge wire / emptyPayFiatRampPort). No invented FX rate. Considered: ${summary}.`,
+      'bank.fiat_ramp_no_pay_adapter',
+    );
+  }
+
   throw new BankError(
-    `Fiat ${capability} is socket.psp-partners — a bank/PSP partner and money-transmission permission, not inventable code. ` +
-      `No svc-pay adapter can settle fiat. The only in-repo path is a live svc-pay RailAdapter (PayFiatRampPort); ` +
-      `sandbox/absent/empty rails cannot host bank fiat. No invented FX rate. Considered: ${summary}.`,
-    'bank.fiat_ramp_no_pay_adapter',
+    `Fiat ${capability} has no live fiat rail on the injected svc-pay adapter. ` +
+      `Sandbox/absent/capability-miss rails cannot host bank fiat; do not invent a PSP. ` +
+      `No invented FX rate. Socket remains socket.psp-partners. Considered: ${summary}.`,
+    'bank.no_fiat_rail',
   );
 }
