@@ -129,6 +129,12 @@ services:
       # `--force-recreate` of another service pulled the dependency chain with
       # it. workspace-sync check 3b now fails on this shape.
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
+      # Posting freeze + reconcile cadence. env.ts already names these (default
+      # true / 60). Without compose pass-through a host `.env` freeze after a
+      # reconcile mismatch never reaches the container. Do not default posting
+      # OFF — that would halt the money plane on a clean clone.
+      LEDGER_POSTING_ENABLED: ${LEDGER_POSTING_ENABLED:-true}
+      RECONCILE_CRON_MINUTES: ${RECONCILE_CRON_MINUTES:-60}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4001']
     healthcheck: *healthcheck
@@ -256,9 +262,13 @@ services:
       INTAFACED_FLAG_WAITLIST_ENABLED: ${INTAFACED_FLAG_WAITLIST_ENABLED:-}
       INTAFACED_FLAG_REFERRAL_QUEUE: ${INTAFACED_FLAG_REFERRAL_QUEUE:-}
       # WebAuthn kill-switch (env.ts boolish default true). Host `.env` can
-      # disable WebAuthn without a TOTP redeploy. RP id/name/origin stay schema
-      # defaults — do not invent a production registrable domain here.
+      # disable WebAuthn without a TOTP redeploy.
       WEBAUTHN_ENABLED: ${WEBAUTHN_ENABLED:-true}
+      # RP id/name/origin match env.ts localhost defaults so the host can pin a
+      # real domain. Do not invent a production registrable domain here.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-localhost}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-INTAFACED}
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-http://localhost:3000}
       # D26-P0-02 owner-published accrual tiers — pass-through, no compose default.
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}
       # #1806 KYC document vault. Pass-through only — no compose default, no invented key.
@@ -510,6 +520,14 @@ services:
       # host `.env` never reaches the container.
       WS_MARKETS_REFRESH_MS: ${WS_MARKETS_REFRESH_MS:-30000}
       WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-5000}
+      # Host can pin ping cadence, outbound lag policy, and per-user private
+      # socket cap. Defaults match services/svc-ws/src/env.ts (30_000 /
+      # 1_048_576 / 20 / 16). Without these names, a host `.env` never reaches
+      # the container.
+      WS_HEARTBEAT_MS: ${WS_HEARTBEAT_MS:-30000}
+      WS_HIGH_WATER_BYTES: ${WS_HIGH_WATER_BYTES:-1048576}
+      WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
+      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
       # Private /private/stream (#119/#122) needs the SAME JWT material as
       # svc-identity / svc-edge. Without these, privateTokens stays null and
@@ -977,6 +995,11 @@ services:
       # pass-through a host `.env` never reaches the container. No prize,
       # IFC, or programme JSON here.
       ACADEMY_TOURNAMENT_ENABLED: ${ACADEMY_TOURNAMENT_ENABLED:-true}
+      # Owner-published ambassador rate law. env.ts already names these
+      # (empty default = unpublished refuse). Never invent session credits
+      # or fee %. Class M settlement stays owner JSON + ledger recipes.
+      ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON: ${ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON:-}
+      ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON: ${ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4016']
     healthcheck: *healthcheck
