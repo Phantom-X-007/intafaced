@@ -17,8 +17,8 @@ import type { MerchantAreaFence } from './merchant-ownership.js';
  * which area, which areas move value, and which PayFac residuals are honest §13
  * (not inventable here).
  *
- * Path-disjoint from open pay PRs that own `router.ts` / `index.ts` / plugins —
- * callers import this; wiring stays in `public-rest.ts` and tests.
+ * REST and tRPC both read this map. Do not inline a second vocabulary in
+ * `router.ts` — a drifted string is a grant that does nothing.
  */
 
 /** Areas that move value or control money-out. Never in DEFAULT_GRANTED_AREAS. */
@@ -52,9 +52,9 @@ void _pinNoUnderwritingArea;
 /**
  * Gateway / public REST surface → required area.
  *
- * Kept here so REST and future routers cannot drift to a second vocabulary.
- * tRPC `router.ts` already inlines the same strings; do not dual-edit that file
- * while #1718 is open — this map is the seal for the REST half + honesty pins.
+ * Hosted `checkout.open` is a public payer door (no principal) and is not here.
+ * Webhook + permission REST stay REST-only; tRPC money/profile doors share the
+ * same eleven areas — never a twelfth.
  */
 export const PAYFAC_SURFACE_AREAS = {
   'rest.payments.read': 'payment',
@@ -73,7 +73,26 @@ export const PAYFAC_SURFACE_AREAS = {
   'rest.permissions.revoke': 'permission',
   'rest.permissions.list': 'permission',
   'rest.permissions.history': 'permission',
-  // Vocabulary list (`GET .../areas`) is pay:read only — no subject merchant.
+  'trpc.merchant.setPayoutDestination': 'settlement.payout',
+  'trpc.merchant.submitKyb': 'kyb',
+  'trpc.merchant.decideKybStub': 'kyb',
+  'trpc.merchant.profile': 'checkout.profile',
+  'trpc.merchant.createLink': 'payment.link',
+  'trpc.merchant.listLinks': 'payment.link',
+  'trpc.merchant.deactivateLink': 'payment.link',
+  'trpc.merchant.balances': 'merchant.profile',
+  'trpc.payment.create': 'payment',
+  'trpc.payment.authorize': 'payment',
+  'trpc.payment.capture': 'payment',
+  'trpc.payment.refund': 'payment.refund',
+  'trpc.payment.get': 'payment',
+  'trpc.payment.list': 'payment',
+  'trpc.payment.history': 'payment',
+  'trpc.settlement.run': 'settlement',
+  'trpc.settlement.payout': 'settlement.payout',
+  'trpc.settlement.get': 'settlement',
+  'trpc.settlement.list': 'settlement',
+  'trpc.settlement.release': 'settlement',
 } as const satisfies Record<string, PermissionArea>;
 
 export type PayfacSurface = keyof typeof PAYFAC_SURFACE_AREAS;

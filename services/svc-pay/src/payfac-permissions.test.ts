@@ -55,11 +55,22 @@ describe('D26-P1-P2 payfac permissions map', () => {
     expect(DEFAULT_GRANTED_AREAS).toEqual(['merchant.profile', 'submerchant']);
   });
 
-  it('every REST surface maps to a known PermissionArea', () => {
+  it('every mapped surface maps to a known PermissionArea', () => {
     for (const [surface, area] of Object.entries(PAYFAC_SURFACE_AREAS)) {
       expect(PERMISSION_AREAS, surface).toContain(area);
       expect(areaForSurface(surface as keyof typeof PAYFAC_SURFACE_AREAS)).toBe(area);
     }
+  });
+
+  it('tRPC money doors share the REST area vocabulary — not a second list', () => {
+    expect(areaForSurface('trpc.payment.create')).toBe(areaForSurface('rest.payments.create'));
+    expect(areaForSurface('trpc.payment.authorize')).toBe(areaForSurface('rest.payments.authorize'));
+    expect(areaForSurface('trpc.payment.capture')).toBe(areaForSurface('rest.payments.capture'));
+    expect(areaForSurface('trpc.payment.refund')).toBe(areaForSurface('rest.payments.refund'));
+    expect(areaForSurface('trpc.payment.get')).toBe(areaForSurface('rest.payments.read'));
+    expect(areaForSurface('trpc.payment.list')).toBe(areaForSurface('rest.payments.list'));
+    expect(areaForSurface('trpc.merchant.balances')).toBe(areaForSurface('rest.balances.read'));
+    expect(areaForSurface('trpc.merchant.createLink')).toBe(areaForSurface('rest.payment-links.create'));
   });
 
   it('refund surface is not the same area as capture — value-out is its own grant', () => {

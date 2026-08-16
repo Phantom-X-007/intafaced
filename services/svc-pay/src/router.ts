@@ -13,7 +13,7 @@ import type { RailRegistry } from './rails/registry.js';
 import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
 import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
-import type { PermissionArea } from './submerchants.js';
+import { areaForSurface, type PayfacSurface } from './payfac-permissions.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
 import {
   REFERENCE_RAIL_ROUTING_PROFILES,
@@ -152,8 +152,8 @@ export function createPayRouter(
     }
   };
 
-  const assertAccess = (principalUserId: string | undefined, merchantId: string, area: PermissionArea) =>
-    assertMerchantAreaAccess(pay, principalUserId, merchantId, area, trees);
+  const assertAccess = (principalUserId: string | undefined, merchantId: string, surface: PayfacSurface) =>
+    assertMerchantAreaAccess(pay, principalUserId, merchantId, areaForSurface(surface), trees);
 
   return router({
     health: publicProcedure
@@ -330,7 +330,7 @@ export function createPayRouter(
         .output(z.object({ kind: z.string(), ref: z.string(), railId: z.string() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement.payout');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.setPayoutDestination');
             const dest = await destinations.persist(input);
             return { ...dest, railId: input.railId };
           }),
@@ -384,7 +384,7 @@ export function createPayRouter(
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'kyb');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.submitKyb');
             const merchant = await pay.submitKyb(input);
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
           }),
@@ -405,7 +405,7 @@ export function createPayRouter(
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'kyb');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.decideKybStub');
             const merchant = await pay.decideKybStub(input);
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
           }),
@@ -423,7 +423,7 @@ export function createPayRouter(
         .output(z.object({ id: z.string().uuid(), merchantId: z.string().uuid() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'checkout.profile');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.profile');
             return pay.createProfile(input);
           }),
         ),
@@ -456,7 +456,7 @@ export function createPayRouter(
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.createLink');
             const link = await pay.createPaymentLink({
               merchantId: input.merchantId,
               label: input.label,
@@ -495,7 +495,7 @@ export function createPayRouter(
         )
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.listLinks');
             return pay.listPaymentLinks(input.merchantId);
           }),
         ),
@@ -505,7 +505,7 @@ export function createPayRouter(
         .output(z.object({ deactivated: z.boolean() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.deactivateLink');
             return pay.deactivatePaymentLink(input.merchantId, input.linkId);
           }),
         ),
@@ -521,7 +521,7 @@ export function createPayRouter(
         .output(z.object({ clearing: amountSchema, available: amountSchema }))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'merchant.profile');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.balances');
             return {
               clearing: formatAmount(await pay.clearingBalance(input.merchantId, input.assetId)),
               available: formatAmount(await pay.merchantBalance(input.merchantId, input.assetId)),
@@ -548,7 +548,7 @@ export function createPayRouter(
         .output(paymentView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.payment.create');
             return toPaymentOut(
               await pay.createPayment({
                 ...input,
@@ -565,7 +565,7 @@ export function createPayRouter(
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'trpc.payment.authorize');
             return toPaymentOut(await pay.authorize(input.paymentId));
           }),
         ),
@@ -576,7 +576,7 @@ export function createPayRouter(
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'trpc.payment.capture');
             return toPaymentOut(
               await pay.capture(input.paymentId, input.amount === undefined ? {} : { amount: parseAmount(input.amount) }),
             );
@@ -590,7 +590,7 @@ export function createPayRouter(
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment.refund');
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'trpc.payment.refund');
             return toPaymentOut(
               await pay.refund(input.paymentId, parseAmount(input.amount), input.refundId ? { refundId: input.refundId } : {}),
             );
@@ -607,7 +607,7 @@ export function createPayRouter(
             // is the RESPONSE, and it must come before the return, not after
             // the caller has the object.
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal.userId, payment.merchantId, 'trpc.payment.get');
             return toPaymentOut(payment);
           }),
         ),
@@ -624,7 +624,7 @@ export function createPayRouter(
         .output(z.array(paymentView))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal.userId, input.merchantId, 'payment');
+            await assertAccess(ctx.principal.userId, input.merchantId, 'trpc.payment.list');
             return (await pay.listPayments(input)).map(toPaymentOut);
           }),
         ),
@@ -650,7 +650,7 @@ export function createPayRouter(
             // `payment_events` carries instrument metadata, customer refs and
             // rail references, so this is the more sensitive of the two reads.
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal.userId, payment.merchantId, 'trpc.payment.history');
             return (await pay.history(input.paymentId)).map((e) => ({
               id: e.id,
               event: e.event,
@@ -668,7 +668,7 @@ export function createPayRouter(
         .output(settlementView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.settlement.run');
             return toSettlementOut(await pay.settleWindow(input));
           }),
         ),
@@ -686,7 +686,7 @@ export function createPayRouter(
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement.payout');
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'trpc.settlement.payout');
             const destination = input.destination
               ? await destinations.persist({
                   merchantId: settlement.merchantId,
@@ -707,7 +707,7 @@ export function createPayRouter(
             // A settlement names gross, fees and net for a window — another
             // merchant's revenue and the rate we charge them.
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertAccess(ctx.principal.userId, settlement.merchantId, 'settlement');
+            await assertAccess(ctx.principal.userId, settlement.merchantId, 'trpc.settlement.get');
             return toSettlementOut(settlement);
           }),
         ),
@@ -726,7 +726,7 @@ export function createPayRouter(
         .output(z.array(settlementView))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.settlement.list');
             return (await pay.listSettlements(input)).map(toSettlementOut);
           }),
         ),
@@ -741,7 +741,7 @@ export function createPayRouter(
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement');
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'trpc.settlement.release');
             return toSettlementOut(await pay.releasePendingSettlement(input));
           }),
         ),
