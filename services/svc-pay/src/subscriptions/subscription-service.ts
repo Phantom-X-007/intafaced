@@ -24,6 +24,7 @@ import {
 import {
   acknowledgePreChargeNotifyBeforeCharge,
   assertChargeTracesToMandate,
+  assertPrechargeNotifyUnpublished,
   mandateChargeDisposition,
   normaliseSubscriptionPath,
   SUBSCRIPTION_PATHS,
@@ -299,6 +300,11 @@ export interface RunReport {
     outcome: CycleOutcome;
     rejectionCode?: string;
     stallReason?: StallReason;
+    /**
+     * Named pre-charge notify gap when an invoice opened without a published
+     * notice. Never `notified: true`. Absent on card-mandate refuses.
+     */
+    noticeCode?: string;
     /** The business key the period was charged under. Never per-attempt. */
     idempotencyKey?: string;
     /** Whole intervals the period was late by. `>= 1` means the frame moved. */
@@ -847,6 +853,7 @@ export class SubscriptionService {
           occurrence: plan.occurrence,
           outcome: attempt.outcome,
           rejectionCode: attempt.rejectionCode,
+          noticeCode: attempt.noticeCode,
           idempotencyKey: attempt.idempotencyKey,
           lateIntervals: plan.kind === 'charge' ? plan.lateIntervals : undefined,
         });
@@ -896,7 +903,7 @@ export class SubscriptionService {
     occurrence: number;
     isRetry: boolean;
     now: Date;
-  }): Promise<{ outcome: CycleOutcome; rejectionCode?: string; idempotencyKey: string }> {
+  }): Promise<{ outcome: CycleOutcome; rejectionCode?: string; noticeCode?: string; idempotencyKey: string }> {
     const { sub, mandate, occurrence, now } = input;
     if (sub.status !== 'active')
       return { outcome: 'skipped', idempotencyKey: chargeIdempotencyKey({ subscriptionId: sub.id, occurrence }) };
@@ -1033,21 +1040,18 @@ export class SubscriptionService {
             `;
             paymentId = prior[0]?.payment_id ?? null;
           }
-          if (!paymentId) {
-            /*
-             * SPEC §4 pre-charge notify — acknowledge the §13 gap BEFORE money
-             * work. `notified` stays false; inventing delivery is forbidden.
-             * Ready/merchant posture reads the same socket.
-             */
-            const notify = acknowledgePreChargeNotifyBeforeCharge({
-              subscriptionId: sub.id,
-              occurrence,
-              path: sub.path,
-            });
-            if (notify.notified !== false || notify.status !== 'absent') {
-              throw new PayError('Pre-charge notify invent refused — socket.pay-precharge-notify is absent', 'pay.subscription_invalid');
-            }
+          /*
+           * SPEC §4 pre-charge notify — name the unpublished gap BEFORE money
+           * work, including invoice reuse. Never skip; never invent notified.
+           */
+          const notify = acknowledgePreChargeNotifyBeforeCharge({
+            subscriptionId: sub.id,
+            occurrence,
+            path: sub.path,
+          });
+          assertPrechargeNotifyUnpublished(notify);
 
+          if (!paymentId) {
             const opened = await this.openInvoice({
               merchantId: sub.merchantId,
               customerId: sub.customerId,
@@ -1064,7 +1068,11 @@ export class SubscriptionService {
                SET status = 'invoiced', payment_id = ${paymentId}
              WHERE id = ${executionId}
           `;
-          return { outcome: 'invoiced' as const, idempotencyKey };
+          return {
+            outcome: 'invoiced' as const,
+            idempotencyKey,
+            noticeCode: notify.code,
+          };
         } catch (err) {
           const code = err instanceof PayError ? err.code : err instanceof Error ? err.message.slice(0, 120) : 'invoice.failed';
           await this.rejectCycle(tx, executionId, code, attemptCount, now);

@@ -209,6 +209,7 @@ function toTrpcError(err: unknown): unknown {
        * their bad request. It is refuse-closed until an owner publishes a rate.
        */
       case 'pay.subscription_fee_unpublished':
+      case 'pay.precharge_notify_unpublished':
         return 'FORBIDDEN' as const;
       default:
         return 'BAD_REQUEST' as const;
@@ -381,6 +382,7 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             }),
             preChargeNotify: z.object({
               status: z.literal('absent'),
+              code: z.literal('pay.precharge_notify_unpublished'),
               socket: z.literal(PRECHARGE_NOTIFY_SOCKET),
               inventForbidden: z.literal(true),
               notified: z.literal(false),
@@ -404,6 +406,9 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           }
           if (preChargeNotifyGap().notified !== false) {
             throw new Error('pre-charge notify invent');
+          }
+          if (preChargeNotifyGap().code !== 'pay.precharge_notify_unpublished') {
+            throw new Error('pre-charge notify unnamed');
           }
           if (mandateDunningBound().maxAttemptsPerCycle < 1) {
             throw new Error('dunning bound missing');

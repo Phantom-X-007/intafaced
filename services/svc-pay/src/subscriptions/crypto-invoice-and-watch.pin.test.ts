@@ -73,6 +73,13 @@ describe('fire path never invents pull', () => {
     expect(fire).toMatch(/mandateChargeDisposition\s*\(\s*sub\.path\s*\)/);
     expect(fire).toMatch(/this\.openInvoice\s*\(/);
     expect(fire).toMatch(/acknowledgePreChargeNotifyBeforeCharge/);
+    expect(fire).toMatch(/assertPrechargeNotifyUnpublished/);
+    expect(fire).toMatch(/noticeCode:\s*notify\.code/);
+
+    const assertAt = fire.indexOf('assertPrechargeNotifyUnpublished');
+    const openCallAt = fire.indexOf('this.openInvoice({');
+    expect(assertAt).toBeGreaterThan(-1);
+    expect(openCallAt).toBeGreaterThan(assertAt);
 
     for (const src of [fire, product]) {
       expect(src).not.toMatch(/chargeAgainstMandate|chargeMandate|pullMandate|cryptoPull|onchainPull/);

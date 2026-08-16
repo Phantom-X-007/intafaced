@@ -6,8 +6,9 @@
  *
  *  - crypto_invoice → open an invoice (never invent an on-chain pull)
  *  - card / card_mandate → refuse `pay.mandate_rail_absent` (`socket.psp-partners`)
- *  - pre-charge notify → named §13 gap (`socket.pay-precharge-notify`); fire
- *    acknowledges the gap before openInvoice; `notified` is never true here
+ *  - pre-charge notify → named unpublished (`pay.precharge_notify_unpublished` /
+ *    `socket.pay-precharge-notify`); fire acknowledges before openInvoice;
+ *    `notified` is never true; invent delivery refuses by that code
  *  - dunning → MAX_ATTEMPTS_PER_CYCLE then named stall (`arrears`), reachable
  *    from the fire path (not a docs-only bound)
  *
@@ -40,6 +41,9 @@ export function normaliseSubscriptionPath(path: string | undefined): Subscriptio
 
 /** §13 — SPEC §4 "Every charge is notified before it lands, not after." */
 export const PRECHARGE_NOTIFY_SOCKET = 'socket.pay-precharge-notify' as const;
+
+/** Named refuse when notify is unpublished — never a silent skip or `notified: true`. */
+export const PRECHARGE_NOTIFY_UNPUBLISHED = 'pay.precharge_notify_unpublished' as const;
 
 /**
  * Card auto-pull rides the acquiring commercial socket. The rail port can store
@@ -82,6 +86,7 @@ export const MANDATE_PATH_MATRIX: readonly MandatePathRow[] = [
 
 export type PreChargeNotifyGap = {
   status: 'absent';
+  code: typeof PRECHARGE_NOTIFY_UNPUBLISHED;
   socket: typeof PRECHARGE_NOTIFY_SOCKET;
   inventForbidden: true;
   /** Merchants must never read this as a successful pre-charge delivery. */
@@ -93,6 +98,7 @@ export type PreChargeNotifyGap = {
 export function preChargeNotifyGap(): PreChargeNotifyGap {
   return {
     status: 'absent',
+    code: PRECHARGE_NOTIFY_UNPUBLISHED,
     socket: PRECHARGE_NOTIFY_SOCKET,
     inventForbidden: true,
     notified: false,
@@ -102,11 +108,29 @@ export function preChargeNotifyGap(): PreChargeNotifyGap {
 }
 
 /**
+ * Fire-path pin: unpublished notify must be named. Inventing `notified: true`
+ * or a published status refuses with `pay.precharge_notify_unpublished` and
+ * must not open a money move.
+ */
+export function assertPrechargeNotifyUnpublished(gap: {
+  notified: boolean;
+  status: string;
+  code?: string;
+}): void {
+  if (gap.notified !== false || gap.status !== 'absent' || gap.code !== PRECHARGE_NOTIFY_UNPUBLISHED) {
+    throw new PayError(
+      'Pre-charge notify is unpublished — refusing to pretend the payer was notified',
+      PRECHARGE_NOTIFY_UNPUBLISHED,
+    );
+  }
+}
+
+/**
  * Fire-path acknowledge — call BEFORE openInvoice.
  *
- * Returns the honest gap. Never invents `notified: true`. Does not call
- * merchant webhooks, svc-notify, or enqueue. Wiring a real delivery path later
- * replaces this body; inventing a silent success here is forbidden.
+ * Returns the honest gap (code `pay.precharge_notify_unpublished`). Never
+ * invents `notified: true`. Does not call merchant webhooks, svc-notify, or
+ * enqueue. Callers must `assertPrechargeNotifyUnpublished` before money work.
  */
 export function acknowledgePreChargeNotifyBeforeCharge(input: {
   subscriptionId: string;

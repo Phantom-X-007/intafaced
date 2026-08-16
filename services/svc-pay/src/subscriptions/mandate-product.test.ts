@@ -7,8 +7,10 @@ import {
   DUNNING_STALL_REASON,
   MANDATE_PATH_MATRIX,
   PRECHARGE_NOTIFY_SOCKET,
+  PRECHARGE_NOTIFY_UNPUBLISHED,
   acknowledgePreChargeNotifyBeforeCharge,
   assertChargeTracesToMandate,
+  assertPrechargeNotifyUnpublished,
   dunningAttemptsExhausted,
   mandateChargeDisposition,
   mandateDunningBound,
@@ -129,7 +131,9 @@ describe('pre-charge notify — refuse invent (§13 gap)', () => {
     expect(gap.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
     expect(gap.inventForbidden).toBe(true);
     expect(gap.notified).toBe(false);
+    expect(gap.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
     expect(PRECHARGE_NOTIFY_SOCKET).toBe('socket.pay-precharge-notify');
+    expect(PRECHARGE_NOTIFY_UNPUBLISHED).toBe('pay.precharge_notify_unpublished');
   });
 
   it('fire-path acknowledge never reports notified true', () => {
@@ -141,6 +145,23 @@ describe('pre-charge notify — refuse invent (§13 gap)', () => {
     expect(ack.notified).toBe(false);
     expect(ack.status).toBe('absent');
     expect(ack.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
+    expect(ack.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
+    expect(() => assertPrechargeNotifyUnpublished(ack)).not.toThrow();
+  });
+
+  it('invented notified:true refuses pay.precharge_notify_unpublished — no pretend', () => {
+    try {
+      assertPrechargeNotifyUnpublished({ notified: true, status: 'absent', code: PRECHARGE_NOTIFY_UNPUBLISHED });
+      throw new Error('should have refused');
+    } catch (e) {
+      expect((e as PayError).code).toBe('pay.precharge_notify_unpublished');
+    }
+    try {
+      assertPrechargeNotifyUnpublished({ notified: false, status: 'published', code: PRECHARGE_NOTIFY_UNPUBLISHED });
+      throw new Error('should have refused');
+    } catch (e) {
+      expect((e as PayError).code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
+    }
   });
 
   it('does not expose a notifyBeforeCharge or invoice_upcoming invent helper', async () => {
@@ -159,6 +180,7 @@ describe('subscriptionsProductPosture — Ready honesty', () => {
     expect(p.crypto.status).toBe('product_complete');
     expect(p.card.code).toBe('pay.mandate_rail_absent');
     expect(p.preChargeNotify.notified).toBe(false);
+    expect(p.preChargeNotify.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
     expect(p.preChargeNotify.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
     expect(p.cancel.immediacy).toBe('immediate');
     expect(p.reconsent.code).toBe('pay.subscription_reconsent_required');
