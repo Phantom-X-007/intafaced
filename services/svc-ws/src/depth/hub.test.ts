@@ -55,7 +55,9 @@ class FakeSink implements DepthSink {
   }
 
   messages(): DepthMessage[] {
-    return this.frames.map((f) => JSON.parse(f) as DepthMessage);
+    return this.frames
+      .map((f) => JSON.parse(f) as { type?: string })
+      .filter((m): m is DepthMessage => m.type === 'snapshot' || m.type === 'delta');
   }
 }
 
@@ -757,6 +759,9 @@ describe('DepthHub — the listing decides, not the engine', () => {
     expect(sink.closed).toBeNull();
     expect(sink.messages()).toEqual([]);
     expect(hub.bookFor(LISTED)).toBeUndefined();
+    expect(hub.matchingAvailable).toBe(true);
+    expect(hub.isEngineUnavailable(LISTED)).toBe(false);
+    expect(sink.frames).toEqual([]);
   });
 
   it('still refuses an id nobody lists', async () => {
@@ -804,8 +809,7 @@ describe('DepthHub — the listing decides, not the engine', () => {
   });
 
   it('does not fabricate an empty book when matching cannot serve depth', async () => {
-    // Engine down → listed market stays open with no frames. Raw upstream
-    // errors do not become the close reason (that would look like unknown).
+    // Engine down → listed market stays open. Disclose by name; never seq-0 empty.
     const source = new FakeSource([MARKET]);
     source.failSnapshot = new Error('svc-matching unreachable: connect ECONNREFUSED');
     const hub = hubFor(source);
@@ -817,12 +821,16 @@ describe('DepthHub — the listing decides, not the engine', () => {
     expect(sink.closed).toBeNull();
     expect(sink.messages()).toEqual([]);
     expect(hub.bookFor(MARKET)).toBeUndefined();
+    expect(hub.matchingAvailable).toBe(false);
+    expect(hub.engineCode).toBe('depth.engine_unavailable');
+    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([{ type: 'status', code: 'depth.engine_unavailable', marketId: MARKET }]);
 
     // Matching recovers; the first real book is a snapshot, not a delta off fake 0.
     source.failSnapshot = null;
     source.current.set(MARKET, snapshot(5, [['100', '2']]));
     hub.ingest(snapshot(5, [['100', '2']]));
 
+    expect(hub.matchingAvailable).toBe(true);
     expect(sink.messages()[0]).toMatchObject({ type: 'snapshot', sequence: 5 });
     expect(canonical(rebuild(sink))).toBe(canonical(hub.bookFor(MARKET) ?? null));
   });

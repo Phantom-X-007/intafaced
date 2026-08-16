@@ -1,7 +1,10 @@
+import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import type { DepthMessage, DepthSnapshot } from '@intafaced/market-data';
-import { CLOSE_POLICY, DepthHub, snapshotHasRestingDepth, type DepthSink } from './depth/hub.js';
-import type { DepthSource } from './depth/source.js';
+import { CLOSE_POLICY, DEPTH_ENGINE_UNAVAILABLE, DepthHub, snapshotHasRestingDepth, type DepthSink } from './depth/hub.js';
+import { DepthNoBookError, type DepthSource } from './depth/source.js';
+import { PrivateOrderHub } from './private/hub.js';
+import { registerRoutes } from './routes.js';
 import { TradeHub, type TradeSink } from './trade/hub.js';
 
 /**
@@ -92,6 +95,9 @@ describe('empty book is absent, not a zero book', () => {
     expect(sink.frames).toEqual([]);
     expectNoPricedEmptyBook(sink.frames);
     expect(hub.bookFor(LISTED)).toBeUndefined();
+    expect(hub.matchingAvailable).toBe(true);
+    expect(hub.engineCode).toBeNull();
+    expect(hub.isEngineUnavailable(LISTED)).toBe(false);
   });
 
   it('does not emit bids/asks [] when matching is down', async () => {
@@ -102,7 +108,9 @@ describe('empty book is absent, not a zero book', () => {
     await settle();
 
     expect(sink.closed).toBeNull();
-    expect(sink.frames).toEqual([]);
+    expect(hub.matchingAvailable).toBe(false);
+    expect(hub.engineCode).toBe(DEPTH_ENGINE_UNAVAILABLE);
+    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([{ type: 'status', code: DEPTH_ENGINE_UNAVAILABLE, marketId: MARKET }]);
     expectNoPricedEmptyBook(sink.frames);
   });
 
@@ -169,5 +177,72 @@ describe('empty book is absent, not a zero book', () => {
     expect(sink.closed?.code).toBe(CLOSE_POLICY);
     expect(sink.closed?.reason).toBe('ws.close.unknown_market');
     expect(sink.frames).toEqual([]);
+  });
+});
+
+describe('empty vs engine-down on public HTTP doors', () => {
+  async function appFor(source: FakeSource) {
+    const hub = depthHub(source, source.marketList.length ? source.marketList : [LISTED, MARKET]);
+    await hub.refreshMarkets();
+    const tradeHub = new TradeHub({
+      highWaterBytes: 1_000,
+      maxLagTicks: 3,
+      maxConnections: 100,
+      recentLimit: 10,
+      ensureKnownMarket: (id) => hub.ensureKnownMarket(id),
+    });
+    const privateHub = new PrivateOrderHub({
+      highWaterBytes: 1_000,
+      maxLagTicks: 3,
+      maxConnections: 100,
+    });
+    const app = Fastify({ logger: false });
+    registerRoutes(app, {
+      hub,
+      tradeHub,
+      privateHub,
+      source,
+      depthLimit: 50,
+      serviceName: 'svc-ws-test',
+      upstream: 'http://matching.test',
+      enabled: () => true,
+      tradesBus: () => false,
+      privateBus: () => false,
+    });
+    return { app, hub };
+  }
+
+  it('GET /markets/:id/depth is 404 NoBook for a listed never-traded market', async () => {
+    const source = new FakeSource([LISTED]);
+    source.snapshot = async (marketId: string) => {
+      throw new DepthNoBookError(marketId);
+    };
+    const { app, hub } = await appFor(source);
+    const res = await app.inject({ method: 'GET', url: `/markets/${LISTED}/depth` });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toMatchObject({ code: 'NoBook' });
+    expect(hub.matchingAvailable).toBe(true);
+    await app.close();
+  });
+
+  it('GET /markets/:id/depth names depth.engine_unavailable when matching is down', async () => {
+    const source = new FakeSource([MARKET], new Map(), new Error('svc-matching unreachable'));
+    const { app, hub } = await appFor(source);
+    const sink = new FakeSink();
+    hub.attach(MARKET, sink);
+    await settle();
+
+    const depth = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    expect(depth.statusCode).toBe(502);
+    expect(depth.json()).toMatchObject({ code: DEPTH_ENGINE_UNAVAILABLE });
+    expect(depth.json()).not.toMatchObject({ type: 'snapshot' });
+
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json().depth).toMatchObject({
+      matchingAvailable: false,
+      code: DEPTH_ENGINE_UNAVAILABLE,
+    });
+    await app.close();
   });
 });
