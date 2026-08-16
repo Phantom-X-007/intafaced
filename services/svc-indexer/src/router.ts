@@ -4,7 +4,13 @@ import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from 
 import { ChainDataError } from './chain/source.js';
 import type { FillRecord, PositionRecord, ProjectionStore } from './projection/store.js';
 import type { Indexer } from './indexer.js';
-import { haltServingReason, lastErrorRefusesServing, lastErrorServingReason } from './serving.js';
+import {
+  chainSourceRefusesServing,
+  haltServingReason,
+  lastErrorRefusesServing,
+  lastErrorServingReason,
+  nullChainServingReason,
+} from './serving.js';
 import { withReadSpan } from './tracing.js';
 
 /**
@@ -151,11 +157,12 @@ export interface IndexerRouterDeps {
  * A halted projection knows its book is wrong and cannot repair it.
  * A projection whose last sync hit a typed serving-refuse lastError (chain
  * door or startHeight — see `SERVING_REFUSE_CODES`) likewise must not serve
- * prices as current. `status` and `health` still answer so an operator can
- * see why; every data procedure refuses so a client that never checks
- * `status.halted` / `status.lastError` cannot render a fake book.
+ * prices as current. A `chainSource: 'null'` boot never sets lastError
+ * (`NullChainSource` cannot fail) — without this door an empty book / null
+ * position would look like a quiet market or a flat holding.
+ * `status` and `health` still answer so an operator can see why.
  */
-function assertServing(indexer: Indexer): void {
+function assertServing(indexer: Indexer, chainSource: string): void {
   const halt = indexer.halted;
   if (halt) {
     throw new TRPCError({
@@ -168,6 +175,12 @@ function assertServing(indexer: Indexer): void {
     throw new TRPCError({
       code: 'SERVICE_UNAVAILABLE',
       message: lastErrorServingReason(failure),
+    });
+  }
+  if (chainSourceRefusesServing(chainSource)) {
+    throw new TRPCError({
+      code: 'SERVICE_UNAVAILABLE',
+      message: nullChainServingReason(),
     });
   }
 }
@@ -261,7 +274,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
     markets: publicJurisdictionProcedure('indexer', 'protocol')
       .output(z.array(z.string()))
       .query(async () => {
-        assertServing(indexer);
+        assertServing(indexer, deps.chainSource);
         return [...(await store.markets())];
       }),
 
@@ -290,7 +303,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       )
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const view = await withReadSpan('indexer.book', input.market, () => store.book(input.market, input.depth));
           return {
             market: view.market,
@@ -310,7 +323,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.fills', input.market, () => store.recentFills(input.market, input.limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -324,7 +337,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.accountFills', null, () => store.fillsForAccount(input.account, input.limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -337,7 +350,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(positionSchema.nullable())
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const row = await withReadSpan('indexer.position', input.market, () => store.position(input.market, input.account));
           return row ? toWirePosition(row) : null;
         } catch (err) {
@@ -350,7 +363,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(positionSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account));
           return rows.map(toWirePosition);
         } catch (err) {

@@ -35,3 +35,20 @@ export function lastErrorServingReason(failure: SyncFailure & { code: string }):
 export function haltServingReason(halt: HaltState): string {
   return `Indexer halted — projection is known wrong and will not serve data until re-indexed. ${halt.reason}`;
 }
+
+/**
+ * Boot with no RPC (`NullChainSource`, `chainSource: 'null'`). Sync idles as
+ * `no-chain` and never writes lastError, so the serving-refuse set above
+ * cannot see it. An empty book / null position would read as "no orders" /
+ * "flat holding" — a silent zero. Name the absence instead.
+ */
+export function chainSourceRefusesServing(chainSource: string): boolean {
+  return chainSource === 'null';
+}
+
+export function nullChainServingReason(): string {
+  return (
+    `Indexer will not serve holdings or books as live (indexer.chain_not_configured). ` +
+    `No chain is wired — a holding we cannot currently read is absent, never zero.`
+  );
+}

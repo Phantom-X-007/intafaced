@@ -129,9 +129,10 @@ function hashBlock(
  *
  * Honest rather than convenient. With no EVM RPC and no deployed CLOB, the
  * truthful answer to "what is the head?" is "there is no chain to read", and
- * the ingest loop treats that as "nothing to do" rather than as an error. The
- * service still serves everything already in Postgres, and `status` reports
- * `chainSource: 'null'` so nobody can mistake an idle indexer for a current one.
+ * the ingest loop treats that as "nothing to do" rather than as an error.
+ * Data procedures refuse that boot (`indexer.chain_not_configured`): an empty
+ * book or a null position would look like a quiet market or a flat holding.
+ * `status` still reports `chainSource: 'null'` so the absence is named.
  */
 export class NullChainSource implements ChainSource {
   constructor(readonly chainId: number) {}
