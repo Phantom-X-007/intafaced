@@ -77,6 +77,22 @@ function opaqueFailure(err: unknown, context: string): TRPCError {
   });
 }
 
+/**
+ * HTTP /trpc serialises TRPCError.message, not BankError.cause.
+ * Earn/cards invent-refusals (pool_underfunded, mark_missing) are not
+ * i18n catalog keys; the stable code must ride in the message so a Fastify
+ * client can branch. Owner-facing sentences (archived space, asset mismatch)
+ * stay un-suffixed — stuffing every BankError code broke that door.
+ */
+function publicDoorWireMessage(err: BankError): string {
+  const facing = userFacingBankMessage(err.code, err.message);
+  if (facing.includes(err.code)) return facing;
+  if (err.code === 'bank.pool_underfunded' || err.code === 'bank.mark_missing') {
+    return facing + ' (' + err.code + ')';
+  }
+  return facing;
+}
+
 function toTrpcError(err: unknown): TRPCError {
   // An answer that has already been decided. Ownership refusals are thrown as
   // TRPCError from inside `guard`, and without this line every one of them was
@@ -89,7 +105,7 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   if (err instanceof BankError) {
-    const message = userFacingBankMessage(err.code, err.message);
+    const message = publicDoorWireMessage(err);
     switch (err.code) {
       case 'bank.space_not_found':
       case 'bank.schedule_not_found':
