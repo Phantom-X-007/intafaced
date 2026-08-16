@@ -531,15 +531,10 @@ export function unsetRatesPublicDoorHolds(quote: PublicAmbassadorPayQuote): bool
   if (ambassadorPayLooksPayable(quote)) return false;
   if (quote.ok !== false || quote.payable !== false || quote.inventedIfc !== false) return false;
   if (quote.reason === 'unset') {
-    return (
-      quote.code === 'academy.ambassador_pay.rates_unset' || quote.code === 'academy.ambassador_revenue_share.rates_unset'
-    );
+    return quote.code === 'academy.ambassador_pay.rates_unset' || quote.code === 'academy.ambassador_revenue_share.rates_unset';
   }
   if (quote.reason === 'invent') {
-    return (
-      quote.code === 'academy.ambassador_pay.invent_refused' ||
-      quote.code === 'academy.ambassador_revenue_share.invent_refused'
-    );
+    return quote.code === 'academy.ambassador_pay.invent_refused' || quote.code === 'academy.ambassador_revenue_share.invent_refused';
   }
   return quote.code === 'academy.ambassador_pay.recipe_unset' || quote.code === 'academy.ambassador_revenue_share.recipe_unset';
 }
