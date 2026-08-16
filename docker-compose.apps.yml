@@ -937,6 +937,13 @@ services:
       # mountain moves no value (§0.6) and a refund is a request it files, not a
       # transaction it posts.
       IDENTITY_URL: http://svc-identity:4002
+      # Access-token life + iss/aud (edge/identity defaults). Host `.env` can
+      # pin them; without these lines the desk keeps schema-only 900 /
+      # intafaced / intafaced.api. No JWT_ACCESS_SECRET here — the desk
+      # verifies the edge principal, it does not mint access tokens.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
     expose: ['4017']
     healthcheck: *healthcheck
     depends_on:
