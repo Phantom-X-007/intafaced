@@ -578,6 +578,11 @@ services:
       # match env.ts (7d / 1h). Escalation is a re-raise, not auto-settle.
       P2P_DISPUTE_SLA_SECONDS: ${P2P_DISPUTE_SLA_SECONDS:-604800}
       P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: ${P2P_DISPUTE_ESCALATION_RECHECK_SECONDS:-3600}
+      # Closed-trade instrument purge. env.ts already names this; without compose
+      # pass-through a host `.env` never reaches the container and the sweep
+      # always uses the schema default. Default 90d is longer than the 7-day
+      # dispute SLA (env.ts forbids retention shorter than SLA).
+      P2P_INSTRUMENT_RETENTION_DAYS: ${P2P_INSTRUMENT_RETENTION_DAYS:-90}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4007']
     healthcheck: *healthcheck
