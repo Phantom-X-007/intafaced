@@ -1,0 +1,66 @@
+/**
+ * Unit card — compose stack passes usage window + upstream timeout into svc-agents
+ *
+ * 1. Promise: AGENTS_USAGE_WINDOW_MINUTES and AGENTS_UPSTREAM_TIMEOUT_MS from
+ *    host `.env` reach the container (env.ts already declares them).
+ * 2. Break: compose booted agents with metering / provider / fee / UPSTREAM
+ *    urls but no window or timeout → operator pin of billing window (must
+ *    divide 1440) or upstream timeout is a no-op and the process keeps schema
+ *    defaults forever.
+ * 3. Done bar: docker-compose.apps.yml svc-agents has
+ *    AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
+ *    AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
+ * 4. Class N
+ * 5. Paths: docker-compose.apps.yml (svc-agents block only)
+ * 6. RED: pin fails if a unique key drops, defaults drift from 60 / 60000, or
+ *    metering / provider / fee / UPSTREAM urls are restamped
+ * 7. Collision: academy-url-compose-pin.test.ts — this pin does not restamp
+ *    ACADEMY_URL. Do not invent AGENTS_ROUTING_TABLE JSON.
+ */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+function agentsServiceBlock(source: string): string {
+  const match = source.match(/^  svc-agents:\n(?:.*\n)*?(?=^  [a-z]|\Z)/m);
+  if (!match) throw new Error('svc-agents service block missing from docker-compose.apps.yml');
+  return match[0];
+}
+
+const WINDOW = /^\s+AGENTS_USAGE_WINDOW_MINUTES:\s*\$\{AGENTS_USAGE_WINDOW_MINUTES:-60\}\s*$/gm;
+const TIMEOUT = /^\s+AGENTS_UPSTREAM_TIMEOUT_MS:\s*\$\{AGENTS_UPSTREAM_TIMEOUT_MS:-60000\}\s*$/gm;
+
+describe('compose usage window and upstream timeout for svc-agents', () => {
+  const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
+  const envTs = readFileSync(join(ROOT, 'services/svc-agents/src/env.ts'), 'utf8');
+  const block = agentsServiceBlock(compose);
+
+  it('env.ts still declares the flags this pin tracks, matching compose defaults', () => {
+    expect(envTs).toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)\.default\(60\)/);
+    expect(envTs).toMatch(/AGENTS_UPSTREAM_TIMEOUT_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1_000\)\.max\(600_000\)\.default\(60_000\)/);
+  });
+
+  it('compose svc-agents block passes unique keys once; defaults 60 / 60000', () => {
+    expect(block).toMatch(/SERVICE_NAME:\s*svc-agents/);
+    expect(block.match(WINDOW)).toHaveLength(1);
+    expect(block.match(TIMEOUT)).toHaveLength(1);
+
+    const windowHits = compose.match(/^\s+AGENTS_USAGE_WINDOW_MINUTES:/gm) ?? [];
+    const timeoutHits = compose.match(/^\s+AGENTS_UPSTREAM_TIMEOUT_MS:/gm) ?? [];
+    expect(windowHits, 'AGENTS_USAGE_WINDOW_MINUTES must appear once').toHaveLength(1);
+    expect(timeoutHits, 'AGENTS_UPSTREAM_TIMEOUT_MS must appear once').toHaveLength(1);
+  });
+
+  it('does not restamp metering / provider / fee / UPSTREAM urls or invent routing JSON', () => {
+    expect(block).toMatch(/AGENTS_PROVIDER:\s*\$\{AGENTS_PROVIDER:-mock\}/);
+    expect(block).toMatch(/AGENTS_FEE_ASSET_ID:\s*\$\{AGENTS_FEE_ASSET_ID:-IFC\}/);
+    expect(block).toMatch(/AGENTS_METERING_ENABLED:\s*\$\{AGENTS_METERING_ENABLED:-true\}/);
+    expect(block).toMatch(/^\s+AGENTS_UPSTREAM_BASE_URL:\s*$/m);
+    expect(block).toMatch(/^\s+AGENTS_UPSTREAM_API_KEY:\s*$/m);
+    expect(block).toMatch(/^\s+AGENTS_ROUTING_TABLE:\s*$/m);
+    expect(block).not.toMatch(/AGENTS_ROUTING_TABLE:\s*\$\{AGENTS_ROUTING_TABLE:-\{/);
+  });
+});
