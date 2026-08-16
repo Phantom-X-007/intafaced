@@ -120,6 +120,30 @@ describe('navigator.runSession route', () => {
     ).rejects.toThrow();
   });
 
+  it('refuses off-allowlist asks without touching the runtime, and says it billed nothing', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .navigator.runSession({
+        plane: 'live',
+        userTier: 'free',
+        law: { published: true, matrix: { free: ['trade.fills.history', 'ledger.post'] } },
+        asks: [{ tool: 'trade.fills.history' }, { tool: 'ledger.post' }],
+      });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'tool_not_declared',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+    expect(result.metering).toEqual({
+      sessionId: null,
+      billedAmount: '0',
+      assetId: 'IFC',
+      sessionClosed: false,
+      settlements: [],
+    });
+  });
+
   it('caps the ask list rather than letting a caller burn a session budget', async () => {
     const asks = Array.from({ length: 21 }, () => ask);
     await expect(

@@ -17,6 +17,7 @@ import {
   navigatorGuardrailExportText,
   navigatorDeclaredInRange,
   navigatorMoneyDenylistComplete,
+  isNavigatorAllowlistedTool,
 } from './guardrail.js';
 
 const state = (overrides: Partial<SessionState> = {}): SessionState => ({
@@ -96,5 +97,8 @@ describe('L3 wave50 navigator guardrail status/export', () => {
     expect(navigatorGuardrailExportLine(g)).toContain('navigator,');
     expect(navigatorDeclaredInRange(1, 10, g)).toBe(true);
     expect(navigatorDeclaredInRange(10, 1, g)).toBe(false);
+    expect(isNavigatorAllowlistedTool('trade.quote', g)).toBe(true);
+    expect(isNavigatorAllowlistedTool('trade.fills.history', g)).toBe(false);
+    expect(isNavigatorAllowlistedTool('ledger.post', g)).toBe(false);
   });
 });

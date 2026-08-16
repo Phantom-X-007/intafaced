@@ -407,6 +407,24 @@ describe('navigator.answer metered session run', () => {
     expect(fake.openCalls).toBe(0);
   });
 
+  it('refuses off-allowlist-only asks before opening a metered session, even when caller law names them', async () => {
+    const fake = new FakeRuntime();
+    const result = await runNavigatorAnswerSession({
+      ...baseInput(fake),
+      tierLaw: { published: true, matrix: { free: ['trade.fills.history', 'ledger.post'] } },
+      asks: [{ tool: 'trade.fills.history' }, { tool: 'ledger.post' }],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'tool_not_declared',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
   it('refuses when the tier grants none of the asked tools', async () => {
     const fake = new FakeRuntime();
     const result = await runNavigatorAnswerSession({

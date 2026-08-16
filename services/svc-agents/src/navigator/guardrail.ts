@@ -55,6 +55,11 @@ export function navigatorDeclaredTools(g = navigatorAgentGuardrail()): readonly 
   return g.tools.map((t) => t.name);
 }
 
+/** True when `tool` is on the Stage-1 product allowlist. Caller grants cannot widen this. */
+export function isNavigatorAllowlistedTool(tool: string, g = navigatorAgentGuardrail()): boolean {
+  return navigatorDeclaredTools(g).includes(tool.trim());
+}
+
 /** L3 — count of declared tools. */
 export function navigatorDeclaredToolCount(g = navigatorAgentGuardrail()): number {
   return g.tools.length;
