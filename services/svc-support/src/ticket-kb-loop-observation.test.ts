@@ -8,10 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE,
-  createTicketKbLoopObserver,
-} from './ticket-kb-loop-observation.js';
+import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE, createTicketKbLoopObserver } from './ticket-kb-loop-observation.js';
 
 const COMPOSE = resolve(import.meta.dirname, '../../../docker-compose.apps.yml');
 const HTTP_APP = resolve(import.meta.dirname, 'http-app.ts');

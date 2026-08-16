@@ -4,10 +4,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
 import { identityGroundingProof } from './identity-grounding-honesty.js';
 import type { SupportRouter } from './router.js';
-import {
-  TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE,
-  type TicketKbLoopSnapshot,
-} from './ticket-kb-loop-observation.js';
+import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE, type TicketKbLoopSnapshot } from './ticket-kb-loop-observation.js';
 
 export type SupportHttpAppDeps = {
   router: SupportRouter;
