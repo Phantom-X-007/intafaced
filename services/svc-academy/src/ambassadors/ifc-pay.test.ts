@@ -14,9 +14,11 @@ import {
   attemptAmbassadorPay,
   attemptResidencyIfcPay,
   ambassadorPayLooksPayable,
+  ambassadorPayRefuseCodeFromUnknown,
   ambassadorIfcDefaultsCarryNoRates,
   decidePublicAmbassadorPayQuote,
   decidePublicResidencyPayQuote,
+  unsetRatesPublicDoorHolds,
   refuseAmbassadorIfcPay,
   refuseAmbassadorPayAttempt,
   refuseAmbassadorRevenueShare,
@@ -238,6 +240,7 @@ describe('public IFC / residency doors — unset rates never look payable', () =
     expect(q.status).toBe('refuse');
     expect(q.code).toBe('academy.ambassador_pay.rates_unset');
     expect(q.reason).toBe('unset');
+    expect(unsetRatesPublicDoorHolds(q)).toBe(true);
     expect(ambassadorPayLooksPayable(q)).toBe(false);
     expect(JSON.stringify(q)).not.toMatch(/sessionCredit/);
   });
@@ -287,6 +290,9 @@ describe('pin: default IFC share cannot sneak in while rates unset', () => {
     expect(share.ok).toBe(false);
     expect(ifc.code).toBe('academy.ambassador_pay.rates_unset');
     expect(share.code).toBe('academy.ambassador_revenue_share.rates_unset');
+    expect(ambassadorPayRefuseCodeFromUnknown(new AmbassadorPayRefuseError(ifc.message, ifc.code, ifc.residual, 'ifc_pay'))).toBe(
+      'academy.ambassador_pay.rates_unset',
+    );
     expect(ambassadorPayLooksPayable(ifc)).toBe(false);
     expect(ambassadorPayLooksPayable(share)).toBe(false);
     expect(JSON.stringify(ifc)).not.toMatch(/shareOfFeeBps|sessionCredit/);
