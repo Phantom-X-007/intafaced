@@ -45,7 +45,6 @@ describe('compose TRANSFER_BATCH_SIZE for svc-bank', () => {
   });
 
   it('does not invent APY/LTV/mids or restamp sibling bank compose keys', () => {
-    expect(block).not.toMatch(/LOAN_SWEEP_BATCH_SIZE:/);
     expect(block).not.toMatch(/LOAN_RISK_SWEEP_ENABLED:\s*\$\{LOAN_RISK_SWEEP_ENABLED:-true\}/);
     expect(block).not.toMatch(/LOAN_LTV|MAX_LTV|USDT_MID|LOAN_APY/i);
   });

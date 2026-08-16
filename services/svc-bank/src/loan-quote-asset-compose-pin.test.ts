@@ -7,14 +7,16 @@
  *    the process keeps the schema-only default forever.
  * 3. Done bar: docker-compose.apps.yml svc-bank has
  *    LOAN_QUOTE_ASSET_ID: ${LOAN_QUOTE_ASSET_ID:-USDT}
+ *    LOAN_SWEEP_BATCH_SIZE: ${LOAN_SWEEP_BATCH_SIZE:-500}
+ *    and LOAN_RISK_SWEEP_ENABLED remains off/false
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-bank block only)
- * 6. RED: pin fails if the key drops off, appears twice, or default is not USDT
+ * 6. RED: pin fails if either key drops off, appears twice, quote default is
+ *    not USDT, sweep batch default is not 500, or sweep is flipped on
  * 7. Collision: jwt/cards/loans/ramp/jobs/earn/transfer-batch compose pins —
  *    this pin does not restamp JWT_*, TRANSFER_BATCH_SIZE, LOAN_ACCRUAL_ENABLED,
  *    BANK_LOANS_ENABLED, BANK_CARDS_ENABLED, BANK_RAMP_MODE, BANK_CARD_ISSUER,
- *    TRADE_URL, or INTEREST_ACCRUAL; does not add LOAN_SWEEP_BATCH_SIZE or
- *    turn LOAN_RISK_SWEEP on
+ *    TRADE_URL, or INTEREST_ACCRUAL; does not turn LOAN_RISK_SWEEP on
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -35,6 +37,7 @@ function countAssignments(source: string, name: string): number {
 }
 
 const LINE = /^\s+LOAN_QUOTE_ASSET_ID:\s*\$\{LOAN_QUOTE_ASSET_ID:-USDT\}\s*$/gm;
+const SWEEP_BATCH = /^\s+LOAN_SWEEP_BATCH_SIZE:\s*\$\{LOAN_SWEEP_BATCH_SIZE:-500\}\s*$/gm;
 const TTL = /^\s+JWT_ACCESS_TTL_SECONDS:\s*\$\{JWT_ACCESS_TTL_SECONDS:-900\}\s*$/gm;
 const ISSUER = /^\s+JWT_ISSUER:\s*\$\{JWT_ISSUER:-intafaced\}\s*$/gm;
 const AUDIENCE = /^\s+JWT_AUDIENCE:\s*\$\{JWT_AUDIENCE:-intafaced\.api\}\s*$/gm;
@@ -52,17 +55,22 @@ describe('compose LOAN_QUOTE_ASSET_ID for svc-bank', () => {
   const envTs = readFileSync(join(ROOT, 'services/svc-bank/src/env.ts'), 'utf8');
   const block = bankServiceBlock(compose);
 
-  it('env.ts still declares LOAN_QUOTE_ASSET_ID default USDT', () => {
+  it('env.ts still declares LOAN_QUOTE_ASSET_ID default USDT and sweep batch 500', () => {
     expect(envTs).toMatch(/LOAN_QUOTE_ASSET_ID:\s*z\.string\(\)\.default\('USDT'\)/);
+    expect(envTs).toMatch(/LOAN_SWEEP_BATCH_SIZE:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(10_000\)\.default\(500\)/);
   });
 
-  it('compose svc-bank block is the unique home of the key, default USDT', () => {
+  it('compose svc-bank block is the unique home of both keys', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-bank/);
     expect(block.match(LINE)).toHaveLength(1);
+    expect(block.match(SWEEP_BATCH)).toHaveLength(1);
     expect(countAssignments(block, 'LOAN_QUOTE_ASSET_ID')).toBe(1);
+    expect(countAssignments(block, 'LOAN_SWEEP_BATCH_SIZE')).toBe(1);
 
-    const hits = compose.match(/^\s+LOAN_QUOTE_ASSET_ID:/gm) ?? [];
-    expect(hits, 'LOAN_QUOTE_ASSET_ID must appear once (svc-bank only)').toHaveLength(1);
+    const quoteHits = compose.match(/^\s+LOAN_QUOTE_ASSET_ID:/gm) ?? [];
+    const sweepHits = compose.match(/^\s+LOAN_SWEEP_BATCH_SIZE:/gm) ?? [];
+    expect(quoteHits, 'LOAN_QUOTE_ASSET_ID must appear once (svc-bank only)').toHaveLength(1);
+    expect(sweepHits, 'LOAN_SWEEP_BATCH_SIZE must appear once (svc-bank only)').toHaveLength(1);
   });
 
   it('does not invent APY/LTV/mids, restamp sibling bank compose keys, or turn sweep on', () => {
@@ -77,7 +85,7 @@ describe('compose LOAN_QUOTE_ASSET_ID for svc-bank', () => {
     expect(block.match(CARD_ISSUER)).toHaveLength(1);
     expect(block.match(TRADE_URL)).toHaveLength(1);
     expect(block.match(INTEREST_ACCRUAL)).toHaveLength(1);
-    expect(block).not.toMatch(/LOAN_SWEEP_BATCH_SIZE:/);
+    expect(block).toMatch(/LOAN_RISK_SWEEP_ENABLED:\s*\$\{LOAN_RISK_SWEEP_ENABLED:-false\}/);
     expect(block).not.toMatch(/LOAN_RISK_SWEEP_ENABLED:\s*\$\{LOAN_RISK_SWEEP_ENABLED:-true\}/);
     expect(block).not.toMatch(/LOAN_LTV|MAX_LTV|USDT_MID|LOAN_APY/i);
   });
