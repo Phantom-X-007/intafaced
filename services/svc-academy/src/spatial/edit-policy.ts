@@ -125,15 +125,10 @@ function presenceCollision(scene: SceneV1): string | null {
  * Never invent a merge of two host drafts.
  */
 export function decideHostSceneWrite(input: HostSceneWriteInput): HostSceneWriteResult {
-  const token = hasExpectedFingerprint(input.expectedFingerprint)
-    ? input.expectedFingerprint.trim()
-    : undefined;
+  const token = hasExpectedFingerprint(input.expectedFingerprint) ? input.expectedFingerprint.trim() : undefined;
 
   if (sceneRequiresHostFingerprint(input.current) && token === undefined) {
-    return conflictRefuse(
-      HOST_SCENE_REFUSE.fingerprint_required,
-      'scene fingerprint required after non-empty scene — reload and retry',
-    );
+    return conflictRefuse(HOST_SCENE_REFUSE.fingerprint_required, 'scene fingerprint required after non-empty scene — reload and retry');
   }
 
   if (token !== undefined) {

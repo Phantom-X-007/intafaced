@@ -4,12 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { emptyScene, parseScene } from './scene.js';
-import {
-  HOST_SCENE_REFUSE,
-  decideHostSceneWrite,
-  hostSceneWriteRefuseName,
-  sceneFingerprint,
-} from './edit-policy.js';
+import { HOST_SCENE_REFUSE, decideHostSceneWrite, hostSceneWriteRefuseName, sceneFingerprint } from './edit-policy.js';
 
 describe('updateScene concurrent edit policy (wired residual)', () => {
   it('stale fingerprint refuses without inventing a merge', () => {
