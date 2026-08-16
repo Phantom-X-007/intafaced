@@ -246,6 +246,10 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # WebAuthn kill-switch (env.ts boolish default true). Host `.env` can
+      # disable WebAuthn without a TOTP redeploy. RP id/name/origin stay schema
+      # defaults — do not invent a production registrable domain here.
+      WEBAUTHN_ENABLED: ${WEBAUTHN_ENABLED:-true}
       # D26-P0-02 owner-published accrual tiers — pass-through, no compose default.
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: ${IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-}
       # #1806 KYC document vault. Pass-through only — no compose default, no invented key.
@@ -392,6 +396,10 @@ services:
       TRADE_ALGO_ENABLED: ${TRADE_ALGO_ENABLED:-true}
       TRADE_ALGO_JOBS_ENABLED: ${TRADE_ALGO_JOBS_ENABLED:-false}
       TRADE_ALGO_JOBS_INTERVAL_MS: ${TRADE_ALGO_JOBS_INTERVAL_MS:-1000}
+      # Convert RFQ kill + house spread (trade.convert). Defaults match env.ts
+      # so a live stack can kill or pin from host `.env`. No invented spread.
+      TRADE_CONVERT_ENABLED: ${TRADE_CONVERT_ENABLED:-true}
+      TRADE_CONVERT_SPREAD_BPS: ${TRADE_CONVERT_SPREAD_BPS:-10}
       # Absolute max |period funding rate| — empty refuses publish/settle.
       # Required when funding market ids are non-empty. No invented ceiling.
       TRADE_FUTURES_FUNDING_MAX_ABS_RATE: ${TRADE_FUTURES_FUNDING_MAX_ABS_RATE:-}
