@@ -3,6 +3,7 @@ import { router, publicProcedure, scopedProcedure, serviceProcedure, TRPCError }
 import {
   formatAmount,
   parseAmount,
+  accountPurpose,
   accountRefSchema,
   postRequestSchema,
   InsufficientFundsError,
@@ -125,7 +126,7 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountId: balance.accountId,
           assetId: input.assetId,
           kind: input.kind,
-          purpose: input.purpose ?? '',
+          purpose: accountPurpose(input),
           amount: formatAmount(balance.amount),
         };
       }),

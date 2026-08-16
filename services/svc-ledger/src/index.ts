@@ -8,6 +8,7 @@ import { createLedgerRouter } from './router.js';
 import { writeSnapshots } from './ledger/reconcile.js';
 import { registerS2sHttp } from './s2s-http.js';
 import { registerOperatorHttp } from './operator-http.js';
+import { registerLedgerStatusHttp } from './status-http.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -57,13 +58,7 @@ export type AppRouter = typeof appRouter;
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, ...(await ledger.status()) }));
-
-app.get('/ready', async (_req, reply) => {
-  const status = await ledger.status();
-  if (!status.postingEnabled) return reply.code(503).send({ ready: false, reason: status.frozenReason });
-  return { ready: true };
-});
+registerLedgerStatusHttp(app, ledger, env.SERVICE_NAME);
 
 registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
 
