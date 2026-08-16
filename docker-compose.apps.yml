@@ -903,6 +903,10 @@ services:
       # never reaches the container. Window must divide 1440 (env.ts).
       AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
       AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
+      # Upstream auth header name + prefix (env.ts defaults x-api-key / empty).
+      # Without compose pass-through a host `.env` pin never reaches the container.
+      AGENTS_UPSTREAM_AUTH_HEADER: ${AGENTS_UPSTREAM_AUTH_HEADER:-x-api-key}
+      AGENTS_UPSTREAM_AUTH_PREFIX: ${AGENTS_UPSTREAM_AUTH_PREFIX:-}
       # Access-token TTL / iss / aud (authEnvSchema defaults 900 / intafaced /
       # intafaced.api). Without compose pass-through a host `.env` pin never
       # reaches the container. Do not add JWT_ACCESS_SECRET here — agents
