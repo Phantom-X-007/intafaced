@@ -61,13 +61,7 @@ function completeTerms(over: Partial<SorCostTerms> = {}): SorCostTerms {
   };
 }
 
-function q(over: {
-  venueId: string;
-  kind: VenueKind;
-  price: string | null;
-  amount?: Amount;
-  asOfMs?: number | null;
-}): ArbVenueQuote {
+function q(over: { venueId: string; kind: VenueKind; price: string | null; amount?: Amount; asOfMs?: number | null }): ArbVenueQuote {
   return {
     venueId: over.venueId,
     kind: over.kind,
@@ -78,8 +72,7 @@ function q(over: {
 }
 
 function scanArb(
-  input: Omit<ScanExternalArbInput, 'nowMs' | 'maxQuoteAgeMs'> &
-    Partial<Pick<ScanExternalArbInput, 'nowMs' | 'maxQuoteAgeMs'>>,
+  input: Omit<ScanExternalArbInput, 'nowMs' | 'maxQuoteAgeMs'> & Partial<Pick<ScanExternalArbInput, 'nowMs' | 'maxQuoteAgeMs'>>,
 ): ScanExternalArbResult {
   return scanExternalCrossExchangeArb({
     nowMs: FRESH_NOW_MS,
@@ -351,9 +344,7 @@ describe('scanExternalCrossExchangeArb — D26-P1-X4', () => {
     });
 
     expect(result.opportunities).toHaveLength(0);
-    expect(result.refused.some((r) => r.reason === 'missing_quote' && r.detail.includes('mid/spread not invented'))).toBe(
-      true,
-    );
+    expect(result.refused.some((r) => r.reason === 'missing_quote' && r.detail.includes('mid/spread not invented'))).toBe(true);
   });
 
   it('missing asOf does not invent a live quote', () => {

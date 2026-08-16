@@ -261,13 +261,7 @@ export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanE
   const pairable: ArbVenueQuote[] = [];
   for (const quote of input.quotes) {
     if (isHouseBookKind(quote.kind) || !isExternalVenueKind(quote.kind)) {
-      refused.push(
-        skipRefusal(
-          quote.venueId,
-          'internal_venue',
-          'D26-P0-01 external-only — house/internal book skipped, not paired',
-        ),
-      );
+      refused.push(skipRefusal(quote.venueId, 'internal_venue', 'D26-P0-01 external-only — house/internal book skipped, not paired'));
       continue;
     }
     const usable = quoteUsable(quote, input.nowMs, input.maxQuoteAgeMs);
