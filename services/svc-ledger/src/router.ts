@@ -13,6 +13,7 @@ import {
 } from '@intafaced/ledger-client';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * svc-ledger's internal API.
@@ -26,30 +27,31 @@ import type { LedgerService } from './service.js';
 
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof InsufficientFundsError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
     // A malformed transaction is a bug in the calling service, not user error.
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy(err.code), cause: err });
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
-    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: userCopy(err.code), cause: err });
   }
   // Already frozen under another actor/reason — conflict, not internal error.
   // Mirrors operator HTTP 409 so both doors name the same refusal.
   if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
-    return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+    return new TRPCError({ code: 'CONFLICT', message: userCopy(err.code), cause: err });
   }
   // The window as asked cannot be answered, and retrying it unchanged never
   // will be. Same status as `s2s-http.httpError` gives these two, so the mounted
   // route and its twin cannot tell a caller different things about one refusal.
+  // Cap / range copy stays on the error — it is caller-actionable, not catalog.
   if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   if (err instanceof LedgerError) {
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy(err.code), cause: err });
   }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Ledger post failed', cause: err });
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('error.generic'), cause: err });
 }
 
 const balanceOutput = z.object({
@@ -134,7 +136,7 @@ export function createLedgerRouter(ledger: LedgerService) {
       .query(async ({ ctx, input }) => {
         // A principal may only read its own balances, whatever its scopes say.
         if (input.ownerType === 'user' && ctx.principal.userId !== input.ownerId) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'This account belongs to another user' });
+          throw new TRPCError({ code: 'FORBIDDEN', message: userCopy('error.forbidden') });
         }
 
         const balances = await ledger.balances(input.ownerType, input.ownerId);

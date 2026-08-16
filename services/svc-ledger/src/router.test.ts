@@ -12,6 +12,7 @@ import {
 } from '@intafaced/ledger-client';
 import { createLedgerRouter } from './router.js';
 import type { LedgerService } from './service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * The tRPC surface.
@@ -147,6 +148,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
+      message: userCopy('ledger.insufficient_funds'),
     });
   });
 
@@ -165,6 +167,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: userCopy('ledger.frozen'),
     });
   });
 
@@ -180,6 +183,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
+      message: userCopy('ledger.unbalanced'),
     });
   });
 
@@ -195,6 +199,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
+      message: userCopy('ledger.invalid_entry'),
     });
   });
 
@@ -304,6 +309,7 @@ describe('operator controls', () => {
     const caller = createLedgerRouter(conflicted).createCaller(await ctx(['admin:treasury'], true));
     await expect(caller.freeze({ reason: 'operator: suspected USDT drift' })).rejects.toMatchObject({
       code: 'CONFLICT',
+      message: userCopy('ledger.freeze_attributed'),
     });
   });
 
