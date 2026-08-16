@@ -1,48 +1,170 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import Fastify from 'fastify';
 import { createEdgeContext } from '@intafaced/contracts';
 import { ChainUnavailableError } from './chain/evm/availability.js';
+import { MemoryChainSource } from './chain/memory-source.js';
 import type { ChainSource } from './chain/source.js';
 import { Indexer } from './indexer.js';
 import { MemoryProjectionStore } from './projection/memory-store.js';
 import { createIndexerRouter } from './router.js';
-import { readinessOf } from './ready.js';
+import { registerIndexerPublicHttp } from './public-http.js';
 
 /**
- * D26-P1-I3 Done bar — Chain→Postgres honest halt/refuse; no fake books.
+ * D26-P1-I3 Done bar — Chain→Postgres honest halt/refuse; no fake live books.
  *
- * Pins public-door behaviour: status/health diagnose; /ready leaves rotation
- * and book/fills refuse when the projection is known wrong (deep halt) or the
- * chain door is known broken.
+ * Break class: helper-only `readinessOf` / `createCaller` asserts that never
+ * cross the mounted Fastify door (`GET /ready`, `GET /trpc/...`). A future
+ * edit that keeps the helper green but wires `/ready` to 200, or lets `/trpc/book`
+ * return the last ladder after a deep reorg, must fail here.
  */
 
 const CHAIN_ID = 31_337;
 const EDGE_SECRET = 'a-indexer-d26-p1-i3-edge-secret-long-enough';
+const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-indexer' });
+
+type TrpcWire = {
+  result?: { data?: { json?: unknown } | unknown };
+  error?: { message?: string; data?: { code?: string; httpStatus?: number } };
+};
 
 class UnreachableChainSource implements ChainSource {
   constructor(readonly chainId: number) {}
   async head(): Promise<never> {
-    throw new ChainUnavailableError('indexer.chain_unreachable', 'D26-P1-I3 hermetic refuse');
+    throw new ChainUnavailableError('indexer.chain_unreachable', 'D26-P1-I3 Fastify refuse');
   }
   async blockAt(_height: number): Promise<never> {
-    throw new ChainUnavailableError('indexer.chain_unreachable', 'D26-P1-I3 hermetic refuse');
+    throw new ChainUnavailableError('indexer.chain_unreachable', 'D26-P1-I3 Fastify refuse');
   }
 }
 
-function anonymous() {
-  return createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-indexer' })({
-    headers: { 'x-intafaced-region': 'DE' },
-    id: 'req-i3',
+const apps: Array<ReturnType<typeof Fastify>> = [];
+
+afterEach(async () => {
+  while (apps.length > 0) {
+    const app = apps.pop();
+    if (app) await app.close();
+  }
+});
+
+async function mountPublicDoor(indexer: Indexer, store: MemoryProjectionStore, chainSource: string) {
+  const appRouter = createIndexerRouter({
+    store,
+    indexer,
+    chainId: CHAIN_ID,
+    finalityDepth: 1,
+    ingestEnabled: () => true,
+    chainSource,
   });
+  const app = Fastify({ logger: false });
+  await registerIndexerPublicHttp(app, {
+    indexer,
+    appRouter,
+    serviceName: 'svc-indexer',
+    chainId: CHAIN_ID,
+    ingestEnabled: () => true,
+    dbPing: async () => {
+      /* Postgres is up — halt must still 503. */
+    },
+    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  });
+  await app.ready();
+  apps.push(app);
+  return app;
 }
 
-describe('D26-P1-I3 indexer readmodels Done bar', () => {
-  it('ready is 503 when halted even if the database is up', () => {
-    const answer = readinessOf({ reason: 'deep reorg — re-index', at: new Date('2026-08-12T00:00:00.000Z') }, true);
-    expect(answer.httpStatus).toBe(503);
-    expect(answer.body.ready).toBe(false);
+async function haltWithStaleBook() {
+  const store = new MemoryProjectionStore(CHAIN_ID);
+  const source = new MemoryChainSource(CHAIN_ID);
+  source.append([{ kind: 'book_level', logIndex: 0, market: 'IFC-USD', side: 'bid', price: '100', quantity: '5' }]);
+  for (let i = 0; i < 5; i++) source.append([]);
+
+  const indexer = new Indexer({ source, store, finalityDepth: 1, ingestEnabled: () => true, startHeight: 0 });
+  await indexer.sync();
+  expect((await store.book('IFC-USD', 10)).bids).toHaveLength(1);
+
+  source.reorg(0, [[], [], []]);
+  await expect(indexer.sync()).rejects.toThrow(/deeper than retained history/);
+  expect(indexer.halted).not.toBeNull();
+  // Trap: the store still holds the dead-branch ladder. HTTP must not serve it.
+  expect((await store.book('IFC-USD', 10)).bids).toHaveLength(1);
+  return { indexer, store };
+}
+
+function regionHeaders(): Record<string, string> {
+  return { 'x-intafaced-region': 'DE' };
+}
+
+async function getTrpc(app: ReturnType<typeof Fastify>, path: string, input: Record<string, unknown> = {}) {
+  const qs = encodeURIComponent(JSON.stringify(input));
+  const res = await app.inject({ method: 'GET', url: `/trpc/${path}?input=${qs}`, headers: regionHeaders() });
+  return { statusCode: res.statusCode, body: res.json() as TrpcWire };
+}
+
+function trpcErrorCode(body: TrpcWire): string | undefined {
+  return body.error?.data?.code;
+}
+
+function trpcResultJson(body: TrpcWire): unknown {
+  const data = body.result?.data;
+  if (data && typeof data === 'object' && data !== null && 'json' in data) {
+    return (data as { json: unknown }).json;
+  }
+  return data;
+}
+
+describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
+  it('GET /ready is 503 with the halt reason; GET /health stays liveness', async () => {
+    const { indexer, store } = await haltWithStaleBook();
+    const app = await mountPublicDoor(indexer, store, 'memory');
+
+    const health = await app.inject({ method: 'GET', url: '/health' });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({ ok: true, custodial: false, service: 'svc-indexer' });
+
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(503);
+    const body = ready.json() as { ready: boolean; reason: string; haltedAt?: string };
+    expect(body.ready).toBe(false);
+    expect(body.reason).toMatch(/re-index|retained history/);
+    expect(typeof body.haltedAt).toBe('string');
   });
 
-  it('refuses book/fills when chain door is unreachable — status still names lastError', async () => {
+  it('GET /trpc/book does not return the dead-branch ladder as a live book', async () => {
+    const { indexer, store } = await haltWithStaleBook();
+    const app = await mountPublicDoor(indexer, store, 'memory');
+
+    const book = await getTrpc(app, 'book', { market: 'IFC-USD' });
+    expect(book.statusCode).toBe(503);
+    expect(trpcErrorCode(book.body)).toBe('SERVICE_UNAVAILABLE');
+    expect(book.body.error?.message).toMatch(/halted/i);
+    const payload = JSON.stringify(trpcResultJson(book.body) ?? {});
+    expect(payload).not.toMatch(/"bids"/);
+
+    const status = await getTrpc(app, 'status');
+    expect(status.statusCode).toBe(200);
+    expect(JSON.stringify(trpcResultJson(status.body))).toMatch(/re-index|retained history/);
+  });
+
+  it('GET /trpc fills, markets, positions refuse — not empty arrays that look live', async () => {
+    const { indexer, store } = await haltWithStaleBook();
+    const app = await mountPublicDoor(indexer, store, 'memory');
+    const account = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    for (const [path, input] of [
+      ['fills', { market: 'IFC-USD' }],
+      ['markets', {}],
+      ['positions', { account }],
+      ['accountFills', { account }],
+      ['position', { market: 'IFC-USD', account }],
+    ] as const) {
+      const res = await getTrpc(app, path, input);
+      expect(res.statusCode, path).toBe(503);
+      expect(trpcErrorCode(res.body), path).toBe('SERVICE_UNAVAILABLE');
+      expect(res.body.result, path).toBeUndefined();
+    }
+  });
+
+  it('chain-door lastError: /ready 503 and /trpc/book refuses — status still names the code', async () => {
     const store = new MemoryProjectionStore(CHAIN_ID);
     const indexer = new Indexer({
       source: new UnreachableChainSource(CHAIN_ID),
@@ -52,28 +174,21 @@ describe('D26-P1-I3 indexer readmodels Done bar', () => {
     });
     await expect(indexer.sync()).rejects.toMatchObject({ code: 'indexer.chain_unreachable' });
 
-    const caller = createIndexerRouter({
-      store,
-      indexer,
-      chainId: CHAIN_ID,
-      finalityDepth: 64,
-      ingestEnabled: () => true,
-      chainSource: 'evm',
-    }).createCaller(anonymous());
+    const app = await mountPublicDoor(indexer, store, 'evm');
 
-    await expect(caller.status()).resolves.toMatchObject({
-      lastError: expect.objectContaining({ code: 'indexer.chain_unreachable' }),
-      halted: null,
-    });
-    await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
-    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
-    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
-    await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(503);
+    const readyBody = ready.json() as { ready: boolean; reason: string };
+    expect(readyBody.ready).toBe(false);
+    expect(readyBody.reason).toMatch(/indexer\.chain_unreachable/);
 
-    // /ready must leave rotation too — 200 here would keep a balancer sending
-    // traffic at procedures that all 503.
-    const ready = readinessOf(indexer.halted, true, undefined, indexer.lastError);
-    expect(ready.httpStatus).toBe(503);
-    expect(ready.body.ready).toBe(false);
+    const book = await getTrpc(app, 'book', { market: 'IFC-USD' });
+    expect(book.statusCode).toBe(503);
+    expect(trpcErrorCode(book.body)).toBe('SERVICE_UNAVAILABLE');
+    expect(book.body.error?.message).toMatch(/indexer\.chain_unreachable/);
+
+    const status = await getTrpc(app, 'status');
+    expect(status.statusCode).toBe(200);
+    expect(JSON.stringify(trpcResultJson(status.body))).toMatch(/indexer\.chain_unreachable/);
   });
 });
