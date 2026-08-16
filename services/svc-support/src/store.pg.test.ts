@@ -17,6 +17,7 @@ const MIGRATION = readFileSync(join(here, '..', 'drizzle', '0000_support_init.sq
 const MIGRATION_0001 = readFileSync(join(here, '..', 'drizzle', '0001_support_audit_and_case_file.sql'), 'utf8');
 const MIGRATION_0002 = readFileSync(join(here, '..', 'drizzle', '0002_support_lifecycle_full.sql'), 'utf8');
 const MIGRATION_0003 = readFileSync(join(here, '..', 'drizzle', '0003_kb_articles.sql'), 'utf8');
+const MIGRATION_0004 = readFileSync(join(here, '..', 'drizzle', '0004_kb_article_versions.sql'), 'utf8');
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OP_A = '33333333-3333-4333-8333-333333333333';
@@ -37,6 +38,7 @@ if (available && sql) {
   await sql.unsafe(MIGRATION_0001);
   await sql.unsafe(MIGRATION_0002);
   await sql.unsafe(MIGRATION_0003);
+  await sql.unsafe(MIGRATION_0004);
 }
 
 afterAll(async () => {
@@ -387,8 +389,10 @@ describe.skipIf(!available)('PostgresSupportStore — published KB', () => {
   const store = () => new PostgresSupportStore(sql!);
 
   async function restoreSeed() {
+    await sql!`DELETE FROM support.kb_article_versions`;
     await sql!`DELETE FROM support.kb_articles`;
     await sql!.unsafe(MIGRATION_0003);
+    await sql!.unsafe(MIGRATION_0004);
   }
 
   beforeEach(async () => {
@@ -428,7 +432,13 @@ describe.skipIf(!available)('PostgresSupportStore — published KB', () => {
       published: true,
     });
     expect(stale).toEqual({ status: 'refuse', reason: 'revision_stale' });
-    expect(await s.getPublishedKb('kb-account-access')).toMatchObject({ revision: 2 });
+    expect(await s.getPublishedKb('kb-account-access')).toMatchObject({ revision: 2, version: 2 });
+    expect(await s.listKbVersions('kb-account-access')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ version: 1, bodyKey: 'support.kb.account_access.body' }),
+        expect.objectContaining({ version: 2, bodyKey: 'support.kb.account_access.body' }),
+      ]),
+    );
   });
 
   it('kb_articles table has no amount/balance/currency column', async () => {

@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgSchema, primaryKey, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, pk } from '@intafaced/db';
 
 /**
@@ -112,3 +112,19 @@ export type CommentRow = typeof comments.$inferSelect;
 export type TicketEventRow = typeof ticketEvents.$inferSelect;
 export type CaseFileRow = typeof caseFiles.$inferSelect;
 export type KbArticleRow = typeof kbArticles.$inferSelect;
+
+/**
+ * Immutable published bodies. `id` is identity; `version` is the generation.
+ * Locale copy must not insert a row.
+ */
+export const kbArticleVersions = schema.table(
+  'kb_article_versions',
+  {
+    id: text('id').notNull(),
+    version: integer('version').notNull(),
+    titleKey: text('title_key').notNull(),
+    bodyKey: text('body_key').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.id, t.version] })],
+);
+export type KbArticleVersionRow = typeof kbArticleVersions.$inferSelect;

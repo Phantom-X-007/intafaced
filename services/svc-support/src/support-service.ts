@@ -15,7 +15,7 @@ import type {
 import { DarkAccountState, type AccountStateSource } from './account-state.js';
 import { IDENTITY_GROUNDING_UNWIRED, IdentityGroundingUnwiredError } from './identity-grounding-honesty.js';
 import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingFor } from './case-file.js';
-import { assertKbArticle, KbCatalogError, searchKb, toPublicKb } from './kb-catalog.js';
+import { assertKbArticle, getKb, KbCatalogError, searchKb, toPublicKb } from './kb-catalog.js';
 import { isTerminal } from './lifecycle.js';
 import { assignNext, buildOperatorQueue, type QueueEntry, type QueueResult } from './operator-queue.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
@@ -336,9 +336,20 @@ export class SupportService implements SupportContract {
     return [...searchKb(query, await this.store.listPublishedKb())].map(toPublicKb);
   }
 
-  async getKbArticle(id: string): Promise<SupportKbArticle | null> {
-    const article = await this.store.getPublishedKb(id);
-    return article ? toPublicKb(article) : null;
+  async getKbArticle(idOrQuery: string | { id: string; version?: number }): Promise<SupportKbArticle | null> {
+    const query = typeof idOrQuery === 'string' ? { id: idOrQuery } : idOrQuery;
+    if (query.version === undefined) {
+      const article = await this.store.getPublishedKb(query.id);
+      return article ? toPublicKb(article) : null;
+    }
+    try {
+      const history = await this.store.listKbVersions(query.id);
+      const article = getKb({ id: query.id, version: query.version }, history);
+      return article ? toPublicKb(article) : null;
+    } catch (err) {
+      if (err instanceof KbCatalogError) throw new SupportError(err.message, err.code);
+      throw err;
+    }
   }
 
   /**

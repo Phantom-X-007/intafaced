@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   createTicketInputSchema,
   escalateTicketInputSchema,
+  getKbArticleInputSchema,
   publicProcedure,
   router,
   scopedProcedure,
@@ -59,6 +60,7 @@ function mapError(err: unknown): never {
       err.code === 'support.escalation.terminal' ||
       err.code === 'support.comment.terminal' ||
       err.code === 'support.kb.not_published' ||
+      err.code === 'support.kb_version_unknown' ||
       err.code === 'support.identity_grounding_unwired'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message });
@@ -264,14 +266,18 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
         return found;
       }),
 
-    /** Single KB article by id — null when missing / unpublished (never invent). */
+    /** Single KB article by id — omitted version is latest published; unknown version refuses by name. */
     getKb: publicProcedure
-      .input(z.object({ id: z.string().min(1).max(200) }))
+      .input(getKbArticleInputSchema)
       .output(supportKbArticleSchema.nullable())
       .query(async ({ input }) => {
-        const article = await support.getKbArticle(input.id);
-        if (article) loop?.markKbGetSuccess();
-        return article;
+        try {
+          const article = await support.getKbArticle({ id: input.id, version: input.version });
+          if (article) loop?.markKbGetSuccess();
+          return article;
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /** Operator publish. Bumps revision. Stale baseRevision → CONFLICT. */

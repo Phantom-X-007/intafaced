@@ -68,6 +68,7 @@ describe('SupportService Stage-1', () => {
     expect(kb.length).toBeGreaterThanOrEqual(5);
     expect(kb.every((a) => a.titleKey.startsWith('support.kb.'))).toBe(true);
     expect(kb.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
+    expect(kb.every((a) => typeof a.version === 'number' && a.version >= 1)).toBe(true);
     expect(kb[0]).not.toHaveProperty('balance');
   });
 });

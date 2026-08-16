@@ -47,6 +47,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(vendor).toBe('support.kb_vendor_name');
     expect(vendor).not.toMatch(/ /);
     expect(vendor).not.toMatch(/vendor-clean|binance/i);
+
+    const unknownVersion = userCopy('support.kb_version_unknown');
+    expect(unknownVersion).toBe('support.kb_version_unknown');
+    expect(unknownVersion).not.toMatch(/ /);
+    expect(unknownVersion).not.toMatch(/older body|not published/i);
   });
 
   it('resolves existing KB spine catalog keys without expanding the catalog', () => {

@@ -276,6 +276,7 @@ describe('escalation carries its case file', () => {
       latestCaseFile: (id) => base.latestCaseFile(id),
       listPublishedKb: () => base.listPublishedKb(),
       getPublishedKb: (id) => base.getPublishedKb(id),
+      listKbVersions: (id) => base.listKbVersions(id),
       putKbRevision: (i) => base.putKbRevision(i),
     };
     const support = new SupportService(store, new FixedAccountState({ userId: USER, status: 'active', kycTier: 'basic' }));
