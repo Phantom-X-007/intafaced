@@ -584,6 +584,10 @@ services:
       PAY_LINK_DEFAULT_TTL_DAYS: ${PAY_LINK_DEFAULT_TTL_DAYS:-30}
       PAY_LINK_MAX_TTL_DAYS: ${PAY_LINK_MAX_TTL_DAYS:-365}
       PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:-300}
+      # Operator-credit allow-list. env.ts already names this (default
+      # card-sandbox — not the public checkout path). Without compose
+      # pass-through a host `.env` never reaches the container.
+      PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-card-sandbox}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
