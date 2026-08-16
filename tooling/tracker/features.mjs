@@ -820,16 +820,15 @@ export const FEATURES = [
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
     note:
-      'WIP 2026-08-15 Denon D26-P1-I2 merchant-ceiling honesty (feat/p2p-merchant-ceiling-honesty). ' +
-      'Stage 1 (#1108) membership + Stage 2 (#1152) offer ceilings + honest API (W10 L07 offerLimits/myOfferCeiling/health.offerLimitsConfigured). ' +
-      'Stage 3 second key plane CUT — identity.apikeys + edge throttle + merchants.apiAccess (#1697); API keys cannot moderate (D-S-08). ' +
-      'This deepen: clients learn posture unset vs owner-confirmed unlimited vs configured without refuse-first; createOffer re-reads standing; non-approved never inherits merchant ceiling; no invented P2P_OFFER_MAX_* numbers. ' +
-      'NOT done: owner must set ceiling env or confirm unlimited. Eligibility defaults remain conservative (spec §5). Residual Class X / owner: who moderates, apps/admin console, optional ceiling magnitudes.',
+      '**DONE 2026-08-16:** Denon accepts unset `P2P_OFFER_MAX_STANDARD`/`P2P_OFFER_MAX_MERCHANT` as unlimited (documented product, not a missing feature). ' +
+      'Stage 1 membership (apply/decide/withdraw) + Stage 2 ceiling mechanism + honest API (`merchants.offerLimits` / `merchants.myOfferCeiling` / health `offerLimitsConfigured`) on tip. ' +
+      'reputation.get exposes `merchant: boolean|null`. Stage 3 second key plane stays CUT — identity.apikeys + edge throttle + `merchants.apiAccess`; no invented ceiling magnitudes. ' +
+      'Pin: `merchants-tracker-pin.test.ts`. Residual not blocking: optional numeric ceilings (owner env), eligibility defaults (spec §5), apps/admin Vue.',
   }),
 
   f('api.gateway', 'Public API — ONE gateway in front of trade, pay and data (§9)', {
