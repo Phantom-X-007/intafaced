@@ -1,9 +1,10 @@
 # Claim agents.portfolio
 
-**status:** claimed
+**status:** pr-open
 **owner:** nitro-agent
 **slice:** plan-only (no placeOrder)
 **branch:** feat/agents-portfolio-plan
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2224
 **updated:** 2026-08-16
 
 v2 Portfolio Agent plan slice: compare holdings vs owner-supplied targets.
