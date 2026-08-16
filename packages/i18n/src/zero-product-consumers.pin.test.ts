@@ -18,7 +18,8 @@ import { describe, expect, it } from 'vitest';
  *   · `svc-market` — listing / vendor / commerce refuse copy
  *   · `svc-academy` — curriculum / cert / lobby refuse copy
  *   · `svc-identity` — auth / KYC / rank refuse copy
- *   · `svc-token` — stake / mint / distribute refuse copy (this slice)
+ *   · `svc-token` — stake / mint / distribute refuse copy
+ *   · `svc-ledger` — posting / freeze / recipe refuse copy (this slice)
  *
  * Other product apps and services must not depend on the package until they
  * key screens in the same PR. Do not loosen the scan to stay green. Do not
@@ -43,6 +44,7 @@ const ALLOWED_SERVICE_DIRS = new Set([
   'svc-academy',
   'svc-identity',
   'svc-token',
+  'svc-ledger',
 ]);
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', '.git']);
@@ -105,6 +107,7 @@ describe('@intafaced/i18n — zero product consumers until surfaces key it', () 
     expect(WORKSPACES.some((w) => w.name === 'services/svc-academy')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-identity')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-token')).toBe(false);
+    expect(WORKSPACES.some((w) => w.name === 'services/svc-ledger')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'apps/admin')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-bank')).toBe(false);
     expect(statSync(join(REPO_ROOT, 'apps', 'admin', 'package.json')).isFile()).toBe(true);

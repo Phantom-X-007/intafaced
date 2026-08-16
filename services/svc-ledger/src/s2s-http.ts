@@ -20,6 +20,7 @@ import {
 import { z } from 'zod';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * Plain S2S HTTP surface used by service ledger-clients.
@@ -35,7 +36,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     return {
       status: 400,
       body: {
-        message: err.message,
+        message: userCopy(err.code),
         code: err.code,
         accountId: err.accountId,
         assetId: err.assetId,
@@ -45,7 +46,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     };
   }
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
-    return { status: 500, body: { message: err.message, code: err.code } };
+    return { status: 500, body: { message: userCopy(err.code), code: err.code } };
   }
   // 400, not 500: the caller handed us an identifier from the wrong space. That
   // is a bad request with an actionable fix ("you passed the vendored member id
@@ -60,7 +61,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     return { status: 401, body: { message: err.message, code: err.code } };
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
-    return { status: 412, body: { message: err.message, code: err.code } };
+    return { status: 412, body: { message: userCopy(err.code), code: err.code } };
   }
   // 400 for both history refusals, same reasoning as `owner_identity_space`
   // above: the request as asked cannot be answered, retrying it unchanged is
@@ -71,7 +72,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
   if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
     return { status: 400, body: { message: err.message, code: err.code } };
   }
-  if (err instanceof LedgerError) return { status: 500, body: { message: err.message, code: err.code } };
+  if (err instanceof LedgerError) return { status: 500, body: { message: userCopy(err.code), code: err.code } };
   if (err instanceof z.ZodError) return { status: 400, body: { message: err.message } };
   return { status: 500, body: { message: 'Ledger request failed' } };
 }
