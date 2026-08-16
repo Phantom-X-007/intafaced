@@ -56,6 +56,8 @@ export {
   MANDATE_PATH_MATRIX,
   PRECHARGE_NOTIFY_SOCKET,
   PRECHARGE_NOTIFY_UNPUBLISHED,
+  SUBSCRIPTION_NOTIFY_UNWIRED,
+  SUBSCRIPTION_NOTIFY_FAILED,
   acknowledgePreChargeNotifyBeforeCharge,
   assertCardMandateCannotOpenMoney,
   assertChargeTracesToMandate,
@@ -65,9 +67,13 @@ export {
   mandateDunningBound,
   pathOpensMoney,
   preChargeNotifyGap,
+  recordPreChargeNotifyAttempt,
   subscriptionsProductPosture,
   type MandateChargeDisposition,
   type MandatePathRow,
   type PreChargeNotifyGap,
+  type PreChargeNotifyRecord,
+  type PreChargeNotifyStatus,
+  type SubscriptionPreChargeNotify,
 } from './mandate-product.js';
 export { registerSubscriptionCycleRoutes } from './internal-cycle-routes.js';

@@ -5,48 +5,43 @@ import { describe, expect, it } from 'vitest';
 import { PRECHARGE_NOTIFY_SOCKET, preChargeNotifyGap } from './subscriptions/mandate-product.js';
 
 /**
- * SPEC 4: "Every charge is notified before it lands, not after."
+ * SPEC §4: "Every charge is notified before it lands, not after."
  *
- * Honest residual: the due runner acknowledges `socket.pay-precharge-notify`
- * before openInvoice with `notified: false`. Merchant webhooks fire on payment
- * events *after* money-path work. Never invent a silent upcoming delivery.
+ * Unwired bus ? skipped_unwired on the execution. Merchant webhooks remain
+ * post-payment. Never invent notified:true.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** Drop block + line comments so residual docs in headers cannot trip the pin. */
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
-describe('pre-charge notify ? honest absent', () => {
-  it('names 13 socket.pay-precharge-notify and forbids invent', () => {
+describe('pre-charge notify — honest skip when unwired', () => {
+  it('names skipped_unwired and forbids invent notified', () => {
     expect(preChargeNotifyGap().socket).toBe(PRECHARGE_NOTIFY_SOCKET);
-    expect(preChargeNotifyGap().status).toBe('absent');
+    expect(preChargeNotifyGap().status).toBe('unwired');
+    expect(preChargeNotifyGap().notifyStatus).toBe('skipped_unwired');
     expect(preChargeNotifyGap().inventForbidden).toBe(true);
     expect(preChargeNotifyGap().notified).toBe(false);
-    expect(preChargeNotifyGap().code).toBe('pay.precharge_notify_unpublished');
+    expect(preChargeNotifyGap().code).toBe('pay.subscription_notify_unwired');
   });
 
-  it('subscription fire path acknowledges the gap then opens invoice ? no invent delivery', () => {
+  it('subscription fire path records notify then opens invoice', () => {
     const fire = stripComments(readFileSync(join(here, 'subscriptions/subscription-service.ts'), 'utf8'));
-    expect(fire).toMatch(/acknowledgePreChargeNotifyBeforeCharge/);
+    expect(fire).toMatch(/recordPreChargeNotifyAttempt/);
     expect(fire).toMatch(/assertPrechargeNotifyUnpublished/);
     expect(fire).toMatch(/mandateChargeDisposition/);
     expect(fire).toMatch(/openInvoice/);
-    // Invent-shaped call sites only. Do not match substrings inside
-    // acknowledgePreChargeNotifyBeforeCharge.
     expect(fire).not.toMatch(/merchantWebhook\s*\(/);
-    expect(fire).not.toMatch(/invoice_upcoming/i);
     expect(fire).not.toMatch(/(?<![A-Za-z])notifyBeforeCharge\s*\(/i);
     expect(fire).not.toMatch(/\.enqueue\s*\(/);
     expect(fire).not.toMatch(/notified:\s*true/);
   });
 
-  it('index openInvoice wiring has no pre-notify invent step', () => {
+  it('index does not invent a payment-shaped pre-notify enqueue', () => {
     const index = stripComments(readFileSync(join(here, 'index.ts'), 'utf8'));
-    // Capture watch is post-payment; must not be sold as pre-charge.
     expect(index).toMatch(/markExecutionSettledForPayment/);
-    expect(index).not.toMatch(/subscription\.invoice_upcoming|notifyBeforeCharge/i);
+    expect(index).not.toMatch(/notifyBeforeCharge/i);
   });
 });

@@ -5,15 +5,18 @@ import { describe, expect, it } from 'vitest';
 import { PayError } from '../payment-service.js';
 import {
   PRECHARGE_NOTIFY_UNPUBLISHED,
+  SUBSCRIPTION_NOTIFY_FAILED,
+  SUBSCRIPTION_NOTIFY_UNWIRED,
   assertPrechargeNotifyUnpublished,
   mandateChargeDisposition,
   pathOpensMoney,
   preChargeNotifyGap,
+  recordPreChargeNotifyAttempt,
 } from './mandate-product.js';
 
 /**
- * D26-P1-P6 — unpublished pre-charge notify is named. Invent that still
- * charges/pulls, or pretends the payer was notified, must fail this suite.
+ * Pre-charge notify: durable attempt or named skip. Invent notified:true
+ * or charge-against-mandate still fail this suite.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -22,27 +25,61 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
-describe('pre-charge notify unpublished — named, never pretend', () => {
-  it('gap code is pay.precharge_notify_unpublished and notified is false', () => {
+describe('pre-charge notify — attempt recorded, never pretend delivered', () => {
+  it('unwired gap is skipped_unwired and notified is false', () => {
     const gap = preChargeNotifyGap();
-    expect(gap.code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
+    expect(gap.code).toBe(SUBSCRIPTION_NOTIFY_UNWIRED);
+    expect(gap.notifyStatus).toBe('skipped_unwired');
     expect(gap.notified).toBe(false);
     expect(() => assertPrechargeNotifyUnpublished(gap)).not.toThrow();
   });
 
-  it('invented notified:true refuses the named code', () => {
+  it('invented notified:true refuses pay.precharge_notify_unpublished', () => {
     expect(() =>
       assertPrechargeNotifyUnpublished({
         notified: true,
-        status: 'absent',
-        code: PRECHARGE_NOTIFY_UNPUBLISHED,
+        status: 'unwired',
+        code: SUBSCRIPTION_NOTIFY_UNWIRED,
       }),
     ).toThrow(PayError);
     try {
-      assertPrechargeNotifyUnpublished({ notified: true, status: 'absent', code: PRECHARGE_NOTIFY_UNPUBLISHED });
+      assertPrechargeNotifyUnpublished({ notified: true, status: 'unwired', code: SUBSCRIPTION_NOTIFY_UNWIRED });
     } catch (e) {
-      expect((e as PayError).code).toBe('pay.precharge_notify_unpublished');
+      expect((e as PayError).code).toBe(PRECHARGE_NOTIFY_UNPUBLISHED);
     }
+  });
+
+  it('wired port → attempted; throwing port → failed; never notified true', async () => {
+    const wired = await recordPreChargeNotifyAttempt({
+      notify: () => undefined,
+      subscriptionId: 's',
+      occurrence: 0,
+      path: 'crypto_invoice',
+      merchantId: 'm',
+      customerId: 'c',
+      amount: '1',
+      assetId: 'USDT',
+      idempotencyKey: 'k',
+    });
+    expect(wired.notifyStatus).toBe('attempted');
+    expect(wired.notified).toBe(false);
+
+    const failed = await recordPreChargeNotifyAttempt({
+      notify: () => {
+        throw new Error('bus down');
+      },
+      subscriptionId: 's',
+      occurrence: 0,
+      path: 'crypto_invoice',
+      merchantId: 'm',
+      customerId: 'c',
+      amount: '1',
+      assetId: 'USDT',
+      idempotencyKey: 'k',
+    });
+    expect(failed.notifyStatus).toBe('failed');
+    expect(failed.code).toBe(SUBSCRIPTION_NOTIFY_FAILED);
+    expect(failed.notified).toBe(false);
   });
 
   it('card pull stays closed — invent charge-against-mandate cannot open money', () => {
@@ -54,13 +91,16 @@ describe('pre-charge notify unpublished — named, never pretend', () => {
     }
   });
 
-  it('fire names the gap before openInvoice and never writes notified:true', () => {
+  it('fire records notify then openInvoice and never writes notified:true', () => {
     const fire = stripComments(readFileSync(join(here, 'subscription-service.ts'), 'utf8'));
-    const assertAt = fire.indexOf('assertPrechargeNotifyUnpublished');
+    const recordAt = fire.indexOf('recordPreChargeNotifyAttempt({');
+    const assertAt = fire.indexOf('assertPrechargeNotifyUnpublished(notify)');
     const openCallAt = fire.indexOf('this.openInvoice({');
-    expect(assertAt).toBeGreaterThan(-1);
+    expect(recordAt).toBeGreaterThan(-1);
+    expect(assertAt).toBeGreaterThan(recordAt);
     expect(openCallAt).toBeGreaterThan(assertAt);
-    expect(fire).toMatch(/noticeCode:\s*notify\.code/);
+    expect(fire).toMatch(/notify_status/);
+    expect(fire).toMatch(/skipped_unwired|notifyPreCharge/);
     expect(fire).not.toMatch(/notified:\s*true/);
     expect(fire).not.toMatch(/chargeAgainstMandate|pullMandate/);
   });

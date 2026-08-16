@@ -236,6 +236,11 @@ const subscriptions = new SubscriptionService(
     defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
     resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
     valueMovement: railPosture.policy,
+    /*
+     * Pre-charge notify port omitted: merchant webhooks are payment-shaped and
+     * fire AFTER money. A no-op port would record `attempted` while messaging
+     * nobody. Unwired writes notifyStatus skipped_unwired on the execution.
+     */
   },
 );
 

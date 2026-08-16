@@ -229,6 +229,8 @@ export type PayErrorCode =
    * on the cycle report so the gap is never a silent skip.
    */
   | 'pay.precharge_notify_unpublished'
+  | 'pay.subscription_notify_unwired'
+  | 'pay.subscription_notify_failed'
   // ── Recurring charge cycle (`subscriptions/charge-cycle.ts`) ──
   /**
    * The charge is larger than the mandate authorises, or falls outside its

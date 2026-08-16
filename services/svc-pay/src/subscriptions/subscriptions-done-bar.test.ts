@@ -243,7 +243,8 @@ if (!available) {
         socket: CARD_MANDATE_CHARGE_SOCKET,
       });
       expect(data.preChargeNotify.notified).toBe(false);
-      expect(data.preChargeNotify.code).toBe('pay.precharge_notify_unpublished');
+      expect(data.preChargeNotify.code).toBe('pay.subscription_notify_unwired');
+      expect(data.preChargeNotify.notifyStatus).toBe('skipped_unwired');
       expect(data.preChargeNotify.socket).toBe(PRECHARGE_NOTIFY_SOCKET);
       expect(data.dunning.maxAttemptsPerCycle).toBe(MAX_ATTEMPTS_PER_CYCLE);
       expect(mandateChargeDisposition('card').kind).toBe('refuse');
@@ -291,7 +292,7 @@ if (!available) {
       };
       expect(fireBody.fired).toBe(1);
       expect(fireBody.outcomes[0]!.outcome).toBe('invoiced');
-      expect(fireBody.outcomes[0]!.noticeCode).toBe('pay.precharge_notify_unpublished');
+      expect(fireBody.outcomes[0]!.noticeCode).toBe('pay.subscription_notify_unwired');
       expect(fireBody.outcomes[0]!.rejectionCode).toBeUndefined();
       expect(opened).toHaveLength(1);
 

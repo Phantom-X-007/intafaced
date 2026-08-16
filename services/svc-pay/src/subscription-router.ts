@@ -93,6 +93,8 @@ const cycleView = z.object({
   paymentId: z.string().uuid().nullable(),
   exhausted: z.boolean(),
   settledAt: z.string().datetime({ offset: true }).nullable(),
+  notifyStatus: z.enum(['attempted', 'skipped_unwired', 'failed']).nullable(),
+  notifyCode: z.string().nullable(),
 });
 
 const executionView = z.object({
@@ -106,6 +108,8 @@ const executionView = z.object({
   attemptedAt: z.string().datetime({ offset: true }),
   settledAt: z.string().datetime({ offset: true }).nullable(),
   createdAt: z.string().datetime({ offset: true }),
+  notifyStatus: z.enum(['attempted', 'skipped_unwired', 'failed']).nullable(),
+  notifyCode: z.string().nullable(),
 });
 
 function toMandateOut(m: Awaited<ReturnType<SubscriptionService['getMandate']>>) {
@@ -160,6 +164,8 @@ function toCycleOut(c: Awaited<ReturnType<SubscriptionService['listCycles']>>[nu
     paymentId: c.paymentId,
     exhausted: c.exhaustedAt !== null,
     settledAt: c.settledAt === null ? null : c.settledAt.toISOString(),
+    notifyStatus: c.notifyStatus,
+    notifyCode: c.notifyCode,
   };
 }
 
@@ -175,6 +181,8 @@ function toExecutionOut(e: Awaited<ReturnType<SubscriptionService['listExecution
     attemptedAt: e.attemptedAt.toISOString(),
     settledAt: e.settledAt === null ? null : e.settledAt.toISOString(),
     createdAt: e.createdAt.toISOString(),
+    notifyStatus: e.notifyStatus,
+    notifyCode: e.notifyCode,
   };
 }
 
@@ -210,6 +218,7 @@ function toTrpcError(err: unknown): unknown {
        */
       case 'pay.subscription_fee_unpublished':
       case 'pay.precharge_notify_unpublished':
+      case 'pay.subscription_notify_unwired':
         return 'FORBIDDEN' as const;
       default:
         return 'BAD_REQUEST' as const;
@@ -381,8 +390,9 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
               stallReason: z.literal('arrears'),
             }),
             preChargeNotify: z.object({
-              status: z.literal('absent'),
-              code: z.literal('pay.precharge_notify_unpublished'),
+              status: z.literal('unwired'),
+              notifyStatus: z.literal('skipped_unwired'),
+              code: z.literal('pay.subscription_notify_unwired'),
               socket: z.literal(PRECHARGE_NOTIFY_SOCKET),
               inventForbidden: z.literal(true),
               notified: z.literal(false),
@@ -407,8 +417,11 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           if (preChargeNotifyGap().notified !== false) {
             throw new Error('pre-charge notify invent');
           }
-          if (preChargeNotifyGap().code !== 'pay.precharge_notify_unpublished') {
+          if (preChargeNotifyGap().code !== 'pay.subscription_notify_unwired') {
             throw new Error('pre-charge notify unnamed');
+          }
+          if (preChargeNotifyGap().notifyStatus !== 'skipped_unwired') {
+            throw new Error('pre-charge notify silent skip');
           }
           if (mandateDunningBound().maxAttemptsPerCycle < 1) {
             throw new Error('dunning bound missing');

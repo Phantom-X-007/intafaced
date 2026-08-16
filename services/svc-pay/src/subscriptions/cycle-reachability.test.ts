@@ -238,6 +238,8 @@ describe('the subscription cycle surface is mounted and reachable', () => {
         exhaustedAt: null,
         settledAt: new Date('2026-01-02T00:00:00.000Z'),
         lastAttemptAt: new Date('2026-01-02T00:00:00.000Z'),
+        notifyStatus: 'skipped_unwired' as const,
+        notifyCode: 'pay.subscription_notify_unwired',
       },
     ]);
     const app = await mountTrpc({ getSubscription: async () => subRecord(), listCycles });
@@ -426,6 +428,8 @@ describe('the cycle runner route is mounted and reachable', () => {
         exhaustedAt: new Date('2026-04-20T00:00:00.000Z'),
         settledAt: null,
         lastAttemptAt: new Date('2026-04-20T00:00:00.000Z'),
+        notifyStatus: null,
+        notifyCode: null,
       },
     ]);
     const app = await mountRunner({ listCycles });
