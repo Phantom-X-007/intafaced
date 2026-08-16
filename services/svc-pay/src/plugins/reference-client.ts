@@ -96,6 +96,11 @@ export function buildRefundRequest(
     throw new Error('pay.plugins: Idempotency-Key is required on money POSTs');
   }
   assertDecimalAmount(body.amount);
+  const raw = JSON.stringify(body);
+  const parsed = JSON.parse(raw) as { amount: unknown };
+  if (typeof parsed.amount !== 'string') {
+    throw new Error('pay.plugins: amount must serialise as a JSON string');
+  }
   return {
     method: 'POST',
     path: `${PAY_PUBLIC_API_BASE}/payments/${encodeURIComponent(paymentId)}/refund`,
@@ -104,7 +109,7 @@ export function buildRefundRequest(
       'content-type': 'application/json',
       'idempotency-key': idempotencyKey,
     },
-    body: JSON.stringify(body),
+    body: raw,
   };
 }
 

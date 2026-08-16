@@ -21,4 +21,14 @@ export {
   type PluginRequest,
   type RegisterWebhookEndpointBody,
 } from './reference-client.js';
+export {
+  CMS_PLUGIN_FAMILIES,
+  CMS_PLUGIN_SOCKET,
+  cmsPluginsShipped,
+  PAY_PLUGIN_CMS_UNWIRED,
+  refuseAllCmsPlugins,
+  refuseCmsPlugin,
+  type CmsPluginFamily,
+  type CmsPluginRefuse,
+} from './cms-unwired.js';
 export { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS, type FrozenWebhookVector } from './webhook-vectors.js';
