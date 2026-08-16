@@ -8,6 +8,7 @@ import { TradeService } from './spot/trade-service.js';
 import { createMatchingClient } from './spot/matching-client.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
 import { createAffiliateAccrueClient } from './spot/affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './spot/affiliate-payout.js';
 import { createSubAccountOwnershipClient } from './spot/sub-account-ownership.js';
 import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
@@ -95,6 +96,7 @@ const matching = createMatchingClient(env.MATCHING_URL, env.INTERNAL_SERVICE_SEC
 const perks = createRankPerksClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const affiliateAccrue = createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const affiliatePayout = createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
@@ -117,6 +119,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
   subAccounts,
   affiliateAccrue,
+  affiliatePayout,
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
