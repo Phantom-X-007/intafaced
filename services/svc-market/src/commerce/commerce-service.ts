@@ -1,5 +1,12 @@
 import type { Sql } from 'postgres';
-import { formatAmount, parseAmount, recipes, type LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  affiliateLegAfterMarketPurchase,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
 import { MarketError, type VendorService } from '../vendor-service.js';
 
 /**
@@ -131,15 +138,25 @@ export interface CommerceConfig {
    * Null is the refuse-closed default — never silently 0.
    */
   commissionBps: number | null;
+  /** Identity accrue after house commission posts. Default noop without IDENTITY_URL. */
+  affiliateAccrue?: AffiliateAccruePort;
+  /** Identity payout after accrue. Default noop without IDENTITY_URL. */
+  affiliatePayout?: AffiliatePayoutPort;
 }
 
 export class CommerceService {
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
+
   constructor(
     private readonly sql: Sql,
     private readonly vendors: VendorService,
     private readonly ledger: LedgerClient,
     private readonly config: CommerceConfig,
-  ) {}
+  ) {
+    this.affiliateAccrue = config.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = config.affiliatePayout ?? new NoopAffiliatePayout();
+  }
 
   /** What this deployment's commission rate is — including that it is not one. */
   programme(): { commissionBps: number | null; commissionConfigured: boolean } {
@@ -424,6 +441,9 @@ export class CommerceService {
         }),
       );
 
+      await this.notifyMarketAffiliateAccrue(claimed, snapshotPrice, snapshotBps);
+      await this.notifyMarketAffiliatePayout(claimed, snapshotPrice, snapshotBps);
+
       const settledRows = await this.sql<PurchaseRow[]>`
         UPDATE market.purchases
            SET status = 'settled',
@@ -464,6 +484,34 @@ export class CommerceService {
       }
       throw err;
     }
+  }
+
+  /** Best-effort; never throws. marketPurchase already posted. */
+  private async notifyMarketAffiliateAccrue(claimed: PurchaseRecord, snapshotPrice: Amount, snapshotBps: number): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterMarketPurchase({
+        purchaseId: claimed.id,
+        vendorUserId: claimed.vendorUserId,
+        snapshotPrice,
+        snapshotBps,
+        feeAsset: claimed.assetId,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. marketPurchase already posted. */
+  private async notifyMarketAffiliatePayout(claimed: PurchaseRecord, snapshotPrice: Amount, snapshotBps: number): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterMarketPurchase({
+        purchaseId: claimed.id,
+        vendorUserId: claimed.vendorUserId,
+        snapshotPrice,
+        snapshotBps,
+        feeAsset: claimed.assetId,
+      }),
+    );
   }
 
   async purchasesOf(buyerId: string): Promise<PurchaseRecord[]> {
