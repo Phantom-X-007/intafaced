@@ -452,10 +452,14 @@ export const FEATURES = [
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/mm'],
-    note: '2026-08-14 production mid: TRADE_MM_SEED_MID_FROM_VENUE + TRADE_VENUE_MARK_STREAM uses the same MaintainedBook port as futures marks (desynced → skip seed, never invent). orderFilled accountId recovery is already on tip (`settleFillEvent` + house-MM makerAccountId). Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). D26-P1-T10 backend honesty: seed-honesty contract (flagged / killable / no manufactured crosses); resting seeds recorded seeded=true; TRADE_MM_SEED_ENABLED kills placeOrder seeded path too. Not Done — ready with ops kill-switches.',
+    note:
+      '**DONE 2026-08-16:** Title is true on tip. seedMarket (#325) + job host default OFF (#326, #1962) + marketMakerMakerFill/settleFill house-MM (#328) + cancel/reseed (#340) + mid port (#356) + seed-honesty (#1710) + fill-account recovery on live orderFilled → settleFillEvent (#1852). ' +
+      'TRADE_MM_SEED_ENABLED kills jobs and the seeded placeOrder path. Production mid ops (TRADE_MM_SEED_MID_FROM_VENUE / venue map) is an operator enable, not missing seed machinery — never invents mids or manufactured crosses. ' +
+      'Pin: fill-account.test.ts fails if recoverMatchingAccountId leaves settleFillEvent. Did not mark trade.algo or venue.aggregation done.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
