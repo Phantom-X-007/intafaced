@@ -3,11 +3,11 @@
  *
  * Done bar: broken-promise vs socket inventory with **executed** tests.
  *
- * Not a docs tip-bump. These cases run the inventory builder, exercise
- * MemoryEventBus for Class A (publish without a subscriber) and Class B
- * (handler receives when mounted on the test bus — proving the defect is
- * service mount, not schema), and spawn `event-wiring` so the gate's live
- * Class A/B/C line matches the catalog inventory.
+ * Not a docs tip-bump. These cases run EVENT_BUS_MATRIX (every catalog key
+ * listed live | socket | broken_promise), exercise MemoryEventBus for Class A
+ * (publish without a subscriber) and Class B (handler receives when mounted
+ * on the test bus — proving the defect is service mount, not schema), and
+ * spawn `event-wiring` so the gate's Class A/B/C line matches the inventory.
  */
 
 import { createHash } from 'node:crypto';
@@ -18,7 +18,17 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { EVENT_CATALOG, WIRING_SOCKETS, wiringSocketReason, type EventName, type PayloadOf } from './catalog.js';
 import { MemoryEventBus } from './memory-bus.js';
-import { brokenPromiseKeys, buildBusCompletenessInventory, countByClass, dispositionOf, socketKeys } from './socket-inventory.js';
+import {
+  EVENT_BUS_MATRIX,
+  brokenPromiseKeys,
+  buildBusCompletenessInventory,
+  catalogDispositionOf,
+  countByCatalogKind,
+  countByClass,
+  dispositionOf,
+  liveEventKeys,
+  socketKeys,
+} from './socket-inventory.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..');
@@ -83,9 +93,9 @@ describe('D26-P2-05 bus completeness inventory (ADR D-S-13)', () => {
     }
   });
 
-  it('partitions every end into wired | socket (A|C) | broken_promise (B)', () => {
+  it('partitions every end into live | socket (A|C) | broken_promise (B)', () => {
     for (const row of inventory.ends) {
-      const kinds = ['wired', 'socket', 'broken_promise'] as const;
+      const kinds = ['live', 'socket', 'broken_promise'] as const;
       expect(kinds).toContain(row.disposition.kind);
       if (row.disposition.kind === 'broken_promise') {
         expect(row.disposition.socketClass).toBe('B');
@@ -148,16 +158,61 @@ describe('D26-P2-05 bus completeness inventory (ADR D-S-13)', () => {
       (r) =>
         r.event === 'xpEarned' || r.event === 'bankMarginCalled' || r.event === 'agentActionRejected' || r.event === 'agentActionCompleted',
     );
-    expect(closed.every((r) => r.disposition.kind === 'wired')).toBe(true);
+    expect(closed.every((r) => r.disposition.kind === 'live')).toBe(true);
   });
 
   it('every WIRING_SOCKETS entry appears exactly once on the inventory ends', () => {
     const socketEndKeys = inventory.ends
-      .filter((r) => r.disposition.kind !== 'wired')
+      .filter((r) => r.disposition.kind !== 'live')
       .map((r) => `${r.event}::${r.end}`)
       .sort();
     const declared = WIRING_SOCKETS.map((s) => `${s.event}::${s.missing}`).sort();
     expect(socketEndKeys).toEqual(declared);
+  });
+
+  it('lists every catalog key in EVENT_BUS_MATRIX — a new event cannot go unlisted', () => {
+    const catalogNames = Object.keys(EVENT_CATALOG).sort();
+    const matrixNames = Object.keys(EVENT_BUS_MATRIX).sort();
+    expect(matrixNames).toEqual(catalogNames);
+    expect(inventory.catalog.map((r) => r.event)).toEqual(Object.keys(EVENT_CATALOG));
+  });
+
+  it('classifies every catalog key live | socket | broken_promise and the three sets are a partition', () => {
+    const kinds = countByCatalogKind(inventory);
+    expect(kinds.live + kinds.socket + kinds.broken_promise).toBe(inventory.events.length);
+    expect(kinds.live).toBe(inventory.live.length);
+    expect(kinds.socket).toBe(inventory.socketEvents.length);
+    expect(kinds.broken_promise).toBe(inventory.brokenPromiseEvents.length);
+
+    const seen = new Set<string>();
+    for (const row of inventory.catalog) {
+      expect(['live', 'socket', 'broken_promise']).toContain(row.disposition.kind);
+      expect(seen.has(row.event), `duplicate matrix row ${row.event}`).toBe(false);
+      seen.add(row.event);
+      expect(catalogDispositionOf(row.event).kind).toBe(row.disposition.kind);
+    }
+    expect(seen.size).toBe(inventory.events.length);
+  });
+
+  it('does not treat a recorded socket (or Class B) as live', () => {
+    for (const socket of WIRING_SOCKETS) {
+      const kind = catalogDispositionOf(socket.event).kind;
+      expect(kind, `${socket.event} is on WIRING_SOCKETS but matrix says live`).not.toBe('live');
+      expect(liveEventKeys(inventory)).not.toContain(socket.event);
+      if (socket.class === 'B') {
+        expect(kind).toBe('broken_promise');
+        expect(inventory.brokenPromiseEvents).toContain(socket.event);
+      } else {
+        expect(kind).toBe('socket');
+        expect(inventory.socketEvents).toContain(socket.event);
+      }
+    }
+  });
+
+  it('keeps matrix live keys equal to catalog keys with no WIRING_SOCKETS row', () => {
+    const fromSockets = inventory.events.filter((event) => !WIRING_SOCKETS.some((s) => s.event === event));
+    expect([...inventory.live].sort()).toEqual([...fromSockets].sort());
+    expect(inventory.presumedFullyWired).toEqual(inventory.live);
   });
 });
 
