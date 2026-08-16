@@ -816,6 +816,9 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry

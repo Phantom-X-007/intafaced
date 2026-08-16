@@ -18,6 +18,7 @@ import {
   type ScreeningDeclaration,
   type ScreeningList,
 } from '@intafaced/config';
+import { userCopy } from './user-copy.js';
 
 export const GEO_BLOCK_UNSET_CODE = 'edge.screening_unset' as const;
 export const GEO_BLOCK_EMPTY_CODE = 'edge.screening_empty' as const;
@@ -279,7 +280,7 @@ export function geoBlockOpsHttpStatus(decision: GeoBlockDecision): number {
 
 export function geoBlockPublicBody(decision: GeoBlockDecision): Record<string, unknown> {
   return {
-    error: geoBlockErrorMessage(decision),
+    error: userCopy(decision.code),
     code: decision.code,
     reason: decision.reason,
     screeningDeclaration: decision.screeningDeclaration,

@@ -17,6 +17,7 @@
     "@intafaced/auth": "workspace:*",
     "@intafaced/config": "workspace:*",
     "@intafaced/contracts": "workspace:*",
+    "@intafaced/i18n": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "fastify": "^5.11.2",

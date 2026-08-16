@@ -11,6 +11,7 @@ import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOps
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
 import { isS2sPath, resolve } from './routes.js';
+import { userCopy } from './user-copy.js';
 
 const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
 
@@ -108,7 +109,7 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     if (pathname === null) {
       req.log.warn({ rawUrl: req.url }, 'edge: refused — the path cannot be resolved to one upstream');
       return reply.code(400).send({
-        error: 'the request path could not be resolved to a single upstream',
+        error: userCopy('edge.unresolvable_path'),
         code: 'edge.unresolvable_path',
       });
     }
@@ -125,7 +126,7 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     const routed = resolve(pathname);
     if (routed && isS2sPath(routed.path)) {
       req.log.warn({ path: pathname, module: routed.upstream.module }, 'edge: refused — S2S path is not a public door');
-      return reply.code(404).send({ error: 'no route', code: 'edge.s2s_not_proxied' });
+      return reply.code(404).send({ error: userCopy('edge.s2s_not_proxied'), code: 'edge.s2s_not_proxied' });
     }
 
     /**
@@ -156,10 +157,13 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     // completely different responses at 3am.
     if (decision.reason === 'undecidable') {
       req.log.error({ path: pathname }, 'edge: kill-switch check failed — refusing, failing closed');
-      return reply.code(503).header('retry-after', '30').send({
-        error: 'the operator kill-switch could not be evaluated; refusing',
-        code: 'edge.kill_switch_undecidable',
-      });
+      return reply
+        .code(503)
+        .header('retry-after', '30')
+        .send({
+          error: userCopy('edge.kill_switch_undecidable'),
+          code: 'edge.kill_switch_undecidable',
+        });
     }
 
     req.log.warn({ module: decision.module, path: pathname }, 'edge: refused — module killed by operator');
@@ -174,7 +178,7 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
       .code(503)
       .header('retry-after', '30')
       .send({
-        error: `module "${decision.module}" is switched off by the operator`,
+        error: userCopy('edge.module_killed'),
         code: 'edge.module_killed',
         module: decision.module,
         haltCode: decision.reason,
@@ -248,12 +252,15 @@ export function registerNetworkAccessGuard(app: FastifyInstance): void {
       { path: pathname, networkCode: access.code, declaration: access.signal.declaration },
       'edge: refused — network signal fail-closed',
     );
-    return reply.code(503).header('retry-after', '30').send({
-      error: access.reason,
-      code: edgeCode,
-      networkCode: access.code,
-      declaration: access.signal.declaration,
-    });
+    return reply
+      .code(503)
+      .header('retry-after', '30')
+      .send({
+        error: userCopy(edgeCode),
+        code: edgeCode,
+        networkCode: access.code,
+        declaration: access.signal.declaration,
+      });
   });
 }
 

@@ -1,6 +1,7 @@
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { userCopy } from './user-copy.js';
 
 /**
  * TRANSPORT HARDENING — the two controls the front door was missing.
@@ -218,7 +219,7 @@ export async function registerRateLimit(app: FastifyInstance, config: RateLimitC
     // every client and dashboard the edge crashed.
     errorResponseBuilder: (_req, context) => ({
       statusCode: 429,
-      error: 'too many requests',
+      error: userCopy('edge.rate_limited'),
       code: 'edge.rate_limited',
       retryAfterSeconds: Math.ceil(Number(context.ttl) / 1000),
     }),
