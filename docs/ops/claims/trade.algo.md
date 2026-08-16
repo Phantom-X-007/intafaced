@@ -1,6 +1,7 @@
 # Claim — trade.algo hydrate on mutate
 
-**status:** claimed
+**status:** pr-open
+**proof:** https://github.com/Phantom-X-007/intafaced/pull/2215
 **owner:** nitro-agent trade.algo hydrate-on-mutate
 **class:** M
 **branch:** feat/trade-algo-hydrate-on-mutate
