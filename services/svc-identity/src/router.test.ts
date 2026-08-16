@@ -436,6 +436,10 @@ describe('kyc.status', () => {
     expect(JSON.stringify(status)).not.toContain('provider-pointer-that-must-not-leak');
     expect(status.records[0]).not.toHaveProperty('providerRef');
     expect(status.records[0]).not.toHaveProperty('reviewedBy');
+    expect(status.records[0]).not.toHaveProperty('bytes');
+    expect(status.records[0]).not.toHaveProperty('bytesBase64');
+    expect(status.records[0]).not.toHaveProperty('ciphertext');
+    expect(JSON.stringify(status)).not.toMatch(/"bytes"|"ciphertext"|"provider_ref"/);
   });
 });
 
@@ -1386,20 +1390,18 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     expect(bound.document).not.toHaveProperty('bytes');
   });
 
-  it('storeDocument without vault refuses closed — never invents a key', async () => {
+  it('storeDocument without vault refuses closed with named kyc_doc.unwired — never invents a key', async () => {
     const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true });
     const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
-    expect(
-      codeOf(
-        await op.kyc
-          .storeDocument({
-            userId: DOC_USER,
-            contentType: 'image/jpeg',
-            bytesBase64: Buffer.from('x').toString('base64'),
-          })
-          .catch((e: unknown) => e),
-      ),
-    ).toBe('PRECONDITION_FAILED');
+    const err = await op.kyc
+      .storeDocument({
+        userId: DOC_USER,
+        contentType: 'image/jpeg',
+        bytesBase64: Buffer.from('x').toString('base64'),
+      })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect((err as { message?: string }).message).toContain('kyc_doc.unwired');
   });
 });
 

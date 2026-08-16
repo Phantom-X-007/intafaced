@@ -57,6 +57,19 @@ describe('PII isolation gate (kyc_records)', () => {
     expect(storeSrc).toMatch(/assertDocumentForUser/);
   });
 
+  it('kyc.status presentation never includes provider_ref or document bytes', () => {
+    const routerSrc = readFileSync(join(serviceRoot, 'src/router.ts'), 'utf8');
+    const schemaStart = routerSrc.indexOf('const kycRecordOutput = z.object({');
+    const schema = routerSrc.slice(schemaStart, routerSrc.indexOf('});', schemaStart));
+    expect(schema).not.toMatch(/providerRef|provider_ref|bytes|ciphertext/);
+    const fnStart = routerSrc.indexOf('function presentKyc');
+    const returned = routerSrc.slice(routerSrc.indexOf('return {', fnStart), routerSrc.indexOf('};', routerSrc.indexOf('return {', fnStart)));
+    expect(returned).not.toMatch(/providerRef|provider_ref|bytes|ciphertext/);
+    const statusBlock = routerSrc.slice(routerSrc.indexOf('status: scopedProcedure'), routerSrc.indexOf('approve: scopedProcedure'));
+    expect(statusBlock).toMatch(/presentKyc/);
+    expect(statusBlock).not.toMatch(/getFor|ciphertext|bytesBase64/);
+  });
+
   it('no other service under monorepo services/ reads kyc_documents', () => {
     const monorepo = join(serviceRoot, '../..');
     const servicesDir = join(monorepo, 'services');
