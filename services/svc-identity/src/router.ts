@@ -35,6 +35,7 @@ import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
 import { FlagDisabledError } from '@intafaced/config';
 import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -154,8 +155,10 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (!(err instanceof AuthError)) {
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
+    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('error.generic'), cause: err });
   }
+
+  const message = userCopy(err.code);
 
   switch (err.code) {
     case 'auth.invalid_credentials':
@@ -163,39 +166,40 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.domain_not_allowed':
       // Deliberately the same shape as a wrong password: never confirm which
       // half of the credential was right (including "key ok, origin wrong").
-      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.mfa_required':
-      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Two-factor code required', cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.mfa_not_enrolled':
     case 'auth.webauthn_not_enrolled':
       // FORBIDDEN, not UNAUTHORIZED: retrying with a code cannot help. The
       // client has to send the user through enrolment first, and the two
       // need different UI.
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     case 'auth.webauthn_invalid':
-      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.kyc_not_pending':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
     case 'auth.kyc_agent_refused':
+      // Operator/agent refuse — keep the reviewed_by sentence. Not user catalog copy.
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.session_invalid':
     case 'auth.session_reused':
-      return new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.handle_taken':
     case 'auth.email_taken':
     case 'auth.mfa_already_enrolled':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
     case 'auth.account_frozen':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     case 'auth.not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
     case 'auth.sub_account_required':
     case 'auth.sub_account_same':
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
     case 'auth.sub_account_limit':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     case 'auth.totp_key_missing':
       // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
       return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
