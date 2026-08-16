@@ -255,6 +255,9 @@ services:
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?missing — copy .env.example to .env}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      # Access-token lifetime (authEnvSchema default 900). Host `.env` can shorten
+      # it; do not raise the compose default above 900.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       # Waitlist / referral queue pins (env.ts optional). Empty default so
       # unset follows the drop clock — do not default these on. `off` in
@@ -335,7 +338,9 @@ services:
       # `http://localhost:4005`, and three services share 4004 as a default
       # because each was written without knowing the others' ports.
       HTTP_PORT: '4005'
-      MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+      # Journal lives on matchingjournal:/data/matching. Host `.env` can pin;
+      # default stays the volume path so replay still works after replace.
+      MATCHING_JOURNAL_PATH: ${MATCHING_JOURNAL_PATH:-/data/matching/engine_journal.ndjson}
       # Engine kill-switch (env.ts boolish default true). Host `.env` can halt
       # submissions before the journal. `${VAR:-false}` here would refuse every
       # order on a clean clone while env.ts still reads as on.
@@ -452,6 +457,9 @@ services:
       # D2: no product 8h. Pin empty so an omitted key cannot fall through to a
       # schema default if one is ever reintroduced.
       TRADE_FUTURES_FUNDING_INTERVAL_MS: ${TRADE_FUTURES_FUNDING_INTERVAL_MS:-}
+      # Funding market membership. Empty = no schedule even when jobs are on.
+      # Host `.env` pins ids; compose does not invent UUIDs.
+      TRADE_FUTURES_FUNDING_MARKET_IDS: ${TRADE_FUTURES_FUNDING_MARKET_IDS:-}
       # THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM — its balance is the
       # ceiling (docs/adr/2026-08-05-futures-risk-and-mark-law.md). PKT-B5
       # 2026-08-13 named `house:fees:trade:available` in `.env.example`. This
@@ -764,6 +772,10 @@ services:
       # Defaults match env.ts (`true`) — an operator stop is host `.env` plus
       # restart. No rate, APY, or schedule is named here (empty must not invent).
       SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
+      # How many due schedules one runner pass claims. env.ts already defaults
+      # 200; without compose pass-through a host `.env` cannot tighten blast
+      # radius. No APY, LTV, or schedule rate is named here.
+      TRANSFER_BATCH_SIZE: ${TRANSFER_BATCH_SIZE:-200}
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
       # Earn-pool interest accrual kill. env.ts already names this (default true);
       # without compose pass-through a host `.env` never reaches the container and
@@ -855,6 +867,11 @@ services:
       AGENTS_PROVIDER: ${AGENTS_PROVIDER:-mock}
       AGENTS_FEE_ASSET_ID: ${AGENTS_FEE_ASSET_ID:-IFC}
       AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:-true}
+      # Billing window + upstream HTTP timeout. env.ts already names these
+      # (default 60 / 60000). Without compose pass-through a host `.env` pin
+      # never reaches the container. Window must divide 1440 (env.ts).
+      AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
+      AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
       # Pass-through form (key, no value): compose forwards these ONLY if they
       # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
       # them to the empty string instead, and the schema types them as an
