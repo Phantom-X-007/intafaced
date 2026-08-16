@@ -34,7 +34,7 @@ export class SupportError extends Error {
 /**
  * The single refusal for "you may not see this ticket", whatever the reason.
  *
- * Carries NO ticket id. `mapError` puts `err.message` straight on the wire, so
+ * Carries NO ticket id. `mapError` puts i18n `userCopy(err.code)` on the wire, so
  * an id echoed back is an id confirmed to exist — and the point of answering a
  * foreign ticket with `not_found` rather than a forbidden is that the caller
  * cannot tell the two apart. One construction site, so they cannot drift again.
