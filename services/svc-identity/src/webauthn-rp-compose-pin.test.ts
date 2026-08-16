@@ -46,9 +46,7 @@ describe('compose WebAuthn RP id/name/origin for svc-identity', () => {
   it('env.ts still defaults RP id/name/origin to localhost / INTAFACED / http://localhost:3000', () => {
     expect(envTs).toMatch(/WEBAUTHN_RP_ID:\s*z\.string\(\)\.min\(1\)\.default\('localhost'\)/);
     expect(envTs).toMatch(/WEBAUTHN_RP_NAME:\s*z\.string\(\)\.min\(1\)\.default\('INTAFACED'\)/);
-    expect(envTs).toMatch(
-      /WEBAUTHN_ORIGIN:\s*z\.string\(\)\.min\(1\)\.default\('http:\/\/localhost:3000'\)/,
-    );
+    expect(envTs).toMatch(/WEBAUTHN_ORIGIN:\s*z\.string\(\)\.min\(1\)\.default\('http:\/\/localhost:3000'\)/);
   });
 
   it('wires svc-identity WEBAUTHN_RP_ID WEBAUTHN_RP_NAME WEBAUTHN_ORIGIN from the host, unique once, env.ts defaults', () => {
@@ -58,9 +56,7 @@ describe('compose WebAuthn RP id/name/origin for svc-identity', () => {
     expect(block).toMatch(/WEBAUTHN_ORIGIN:\s*\$\{WEBAUTHN_ORIGIN:-http:\/\/localhost:3000\}/);
     expect(block.match(/^\s+WEBAUTHN_RP_ID:\s*\$\{WEBAUTHN_RP_ID:-localhost\}\s*$/gm)).toHaveLength(1);
     expect(block.match(/^\s+WEBAUTHN_RP_NAME:\s*\$\{WEBAUTHN_RP_NAME:-INTAFACED\}\s*$/gm)).toHaveLength(1);
-    expect(
-      block.match(/^\s+WEBAUTHN_ORIGIN:\s*\$\{WEBAUTHN_ORIGIN:-http:\/\/localhost:3000\}\s*$/gm),
-    ).toHaveLength(1);
+    expect(block.match(/^\s+WEBAUTHN_ORIGIN:\s*\$\{WEBAUTHN_ORIGIN:-http:\/\/localhost:3000\}\s*$/gm)).toHaveLength(1);
     expect(countAssignments(compose, RP_ID)).toBe(1);
     expect(countAssignments(compose, RP_NAME)).toBe(1);
     expect(countAssignments(compose, ORIGIN)).toBe(1);
