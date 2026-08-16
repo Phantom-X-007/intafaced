@@ -410,10 +410,9 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
       /**
        * v22.alerts MVP — price watchlists.
        *
-       * The user surface is create / list / cancel. Evaluation is the mounted
-       * sweep (`AlertService.evaluateDueAlerts`, wired in `index.ts` — a pin test
-       * fails if that call disappears, because a watch nothing evaluates is a
-       * promise with no delivery).
+       * The user surface is create / list / cancel / evaluate. Sweep still
+       * runs (`AlertService.evaluateDueAlerts` in `index.ts`). `evaluateAlert`
+       * is the public door that must refuse dark/missing marks by name.
        *
        * `evaluation` rides with the list rather than sitting behind its own
        * procedure: a client cannot render somebody's watchlist without also
@@ -450,7 +449,10 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         .output(z.object({ alert: priceAlertOutput, evaluation: alertEvaluationOutput }))
         .mutation(async ({ ctx, input }) => {
           if (!alerts) {
-            throw new Error('price alerts are not configured on this deployment');
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'alert.price_unavailable',
+            });
           }
           if (input.kind === 'portfolio') {
             try {
@@ -489,6 +491,54 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
           const row = await alerts.cancel(ctx.principal.userId, input.id);
           if (!row) return { cancelled: false, alert: null };
           return { cancelled: row.status === 'cancelled', alert: priceAlertToWire(row) };
+        }),
+
+      /**
+       * Condition eval against the sourced mark. Dark / missing MarkSource
+       * refuses `alert.price_unavailable` and never returns fired as live.
+       */
+      evaluateAlert: scopedProcedure('notify:write', { module: 'notify' })
+        .input(z.object({ id: z.string().uuid() }))
+        .output(
+          z.object({
+            alert: priceAlertOutput.nullable(),
+            outcome: z.discriminatedUnion('kind', [
+              z.object({ kind: z.literal('hold'), markPrice: z.string() }),
+              z.object({ kind: z.literal('fire'), markPrice: z.string() }),
+              z.object({
+                kind: z.literal('refuse'),
+                code: z.enum([
+                  'alert.price_unavailable',
+                  'alert.not_active',
+                  'alert.invalid_price',
+                  'alert.portfolio_view_unpublished',
+                  'channel.not_configured',
+                  'channel.disabled',
+                ]),
+                detail: z.string(),
+              }),
+            ]),
+            evaluation: alertEvaluationOutput,
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          if (!alerts) {
+            return {
+              alert: null,
+              outcome: {
+                kind: 'refuse' as const,
+                code: 'alert.price_unavailable' as const,
+                detail: 'mark source missing',
+              },
+              evaluation: NO_ALERT_SERVICE,
+            };
+          }
+          const report = await alerts.evaluateAlert(ctx.principal.userId, input.id);
+          return {
+            alert: report.alert ? priceAlertToWire(report.alert) : null,
+            outcome: report.outcome,
+            evaluation: report.evaluation,
+          };
         }),
     }),
   });
