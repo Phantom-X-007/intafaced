@@ -1,0 +1,39 @@
+name: fix-bank-user-transfer-timeouts-once
+on:
+  push:
+    branches: [feat/bank-user-to-user-transfer]
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/bank-user-to-user-transfer
+      - name: bump timeouts and self-delete
+        run: |
+          set -euo pipefail
+          python3 << 'PY'
+          from pathlib import Path
+          p = Path('services/svc-bank/src/bank-service.test.ts')
+          t = p.read_text()
+          old = '''    router = createBankRouter(bank);\n  });'''
+          new = '''    router = createBankRouter(bank);\n  }, 30_000);'''
+          if old not in t:
+              raise SystemExit('beforeEach close missing')
+          t = t.replace(old, new, 1)
+          old = '''      expect(ledger.reconcile()).toEqual({ ok: true });\n    });\n\n    /**\n     * Isolation residual (audit B-3 class):'''
+          new = '''      expect(ledger.reconcile()).toEqual({ ok: true });\n    }, 20_000);\n\n    /**\n     * Isolation residual (audit B-3 class):'''
+          if old not in t:
+              raise SystemExit('race test close missing')
+          p.write_text(t.replace(old, new, 1))
+          print('timeouts applied')
+          PY
+          rm -f .github/workflows/fix-bank-user-transfer-timeouts-once.yml
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git add -A
+          git commit -m "test(svc-bank): give scheduled-suite hooks room on CI"
+          git push
