@@ -35,8 +35,7 @@ function payServiceBlock(source: string): string {
 
 const DEFAULT_TTL = /^\s+PAY_LINK_DEFAULT_TTL_DAYS:\s*\$\{PAY_LINK_DEFAULT_TTL_DAYS:-30\}\s*$/gm;
 const MAX_TTL = /^\s+PAY_LINK_MAX_TTL_DAYS:\s*\$\{PAY_LINK_MAX_TTL_DAYS:-365\}\s*$/gm;
-const WEBHOOK_TOLERANCE =
-  /^\s+PAY_WEBHOOK_TOLERANCE_SECONDS:\s*\$\{PAY_WEBHOOK_TOLERANCE_SECONDS:-300\}\s*$/gm;
+const WEBHOOK_TOLERANCE = /^\s+PAY_WEBHOOK_TOLERANCE_SECONDS:\s*\$\{PAY_WEBHOOK_TOLERANCE_SECONDS:-300\}\s*$/gm;
 
 describe('compose payment-link TTL and webhook tolerance for svc-pay', () => {
   const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
@@ -44,15 +43,9 @@ describe('compose payment-link TTL and webhook tolerance for svc-pay', () => {
   const block = payServiceBlock(compose);
 
   it('env.ts still declares the flags this pin tracks, matching compose defaults', () => {
-    expect(envTs).toMatch(
-      /PAY_LINK_DEFAULT_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\)\.default\(30\)/,
-    );
-    expect(envTs).toMatch(
-      /PAY_LINK_MAX_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\)\.default\(365\)/,
-    );
-    expect(envTs).toMatch(
-      /PAY_WEBHOOK_TOLERANCE_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(30\)\.default\(300\)/,
-    );
+    expect(envTs).toMatch(/PAY_LINK_DEFAULT_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\)\.default\(30\)/);
+    expect(envTs).toMatch(/PAY_LINK_MAX_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\)\.default\(365\)/);
+    expect(envTs).toMatch(/PAY_WEBHOOK_TOLERANCE_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(30\)\.default\(300\)/);
   });
 
   it('compose svc-pay block passes unique keys once; defaults 30 / 365 / 300', () => {
