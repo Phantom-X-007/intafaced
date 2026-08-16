@@ -191,6 +191,46 @@ describe('the journal comes first', () => {
     expect(journal.read().map((r) => r.kind)).toEqual(['submit']);
   });
 
+  it('IOC into a virgin market does not leave the market listed', async () => {
+    const { journal, engine } = build();
+    const ghost = 'NEVER-TRADED-IOC-MKT';
+
+    const result = await engine.submit(ghost, order({ side: 'buy', qty: '1', price: '100', tif: 'IOC' }));
+
+    expect(result.accepted).toBe(true);
+    expect(result.resting).toBeNull();
+    expect(result.fills).toEqual([]);
+    expect(result.cancellations).toHaveLength(1);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).not.toContain(ghost);
+    expect(engine.depth(ghost)).toBeNull();
+    expect(journal.read().map((r) => r.kind)).toEqual(['submit']);
+  });
+
+  it('replaying an IOC-only journal line does not invent a market', () => {
+    const ghost = 'LEGACY-IOC-PHANTOM';
+    const books = replay([
+      {
+        kind: 'submit',
+        marketId: ghost,
+        at: '2026-01-01T00:00:00.000Z',
+        seq: 1,
+        order: {
+          orderId: '00000000-0000-4000-8000-cafebabe0004',
+          accountId: 'a',
+          type: 'limit',
+          side: 'buy',
+          qty: '1',
+          price: '100',
+          stopPrice: null,
+          tif: 'IOC',
+        },
+      },
+    ]);
+
+    expect(books.has(ghost)).toBe(false);
+  });
+
   it('structural reject into a virgin market does not invent a market', async () => {
     const { engine } = build();
     const ghost = 'NEVER-TRADED-BAD-QTY';

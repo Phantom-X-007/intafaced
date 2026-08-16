@@ -186,6 +186,12 @@ describe('D26-P2-01d public doors — cancel integrity', () => {
       fills: [{ qty: '2', price: '100', makerOrderId: maker }],
     });
 
+    const listedBefore = (await app.inject({ method: 'GET', url: '/markets' })).json().markets;
+    const liveBefore = await orders(app, MARKET);
+    expect(liveBefore.json().orders).toEqual(
+      expect.arrayContaining([expect.objectContaining({ orderId: maker, remaining: '3' })]),
+    );
+
     const res = await cancel(app, MARKET, maker);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
@@ -193,10 +199,20 @@ describe('D26-P2-01d public doors — cancel integrity', () => {
       orderId: maker,
       cancellation: { orderId: maker, remainingQty: '3', reason: 'requested' },
     });
+    expect(res.json().cancellation.remainingQty).toBe(
+      liveBefore.json().orders.find((o: { orderId: string }) => o.orderId === maker).remaining,
+    );
     expect(res.json().cancellation.sequence).toBe(res.json().sequence);
+
+    const again = await cancel(app, MARKET, maker);
+    expect(again.statusCode).toBe(404);
+    expect(again.json().code).toBe('OrderNotFound');
 
     const live = await orders(app, MARKET);
     expect(live.json().orders.map((o: { orderId: string }) => o.orderId)).toEqual([sibling]);
+    const listedAfter = (await app.inject({ method: 'GET', url: '/markets' })).json().markets;
+    expect(listedAfter).toEqual(listedBefore);
+    expect(listedAfter).toEqual([MARKET]);
     await app.close();
   });
 
@@ -332,6 +348,45 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     expect(depth.statusCode).toBe(404);
     const listed = await app.inject({ method: 'GET', url: '/markets' });
     expect(listed.json().markets).not.toContain(ghost);
+    await app.close();
+  });
+
+  it('IOC into a virgin market through the submit door does not list the market', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+    const ghost = 'NEVER-TRADED-IOC-DOOR';
+
+    const body = {
+      orderId: '1b1b1b1b-1b1b-41b1-81b1-1b1b1b1b1b1b',
+      accountId: 'acct-ioc',
+      type: 'limit' as const,
+      side: 'buy' as const,
+      qty: '1',
+      price: '100',
+      tif: 'IOC' as const,
+    };
+    const payload = JSON.stringify(body);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/markets/${ghost}/orders`,
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, payload) },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted).toBe(true);
+    expect(res.json().resting).toBeNull();
+    expect(res.json().fills).toEqual([]);
+    expect(res.json().cancellations).toEqual([
+      expect.objectContaining({ remainingQty: '1', reason: 'ioc_remainder' }),
+    ]);
+    expect(engine.hasMarket(ghost)).toBe(false);
+
+    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+    expect(depth.statusCode).toBe(404);
+    const listed = await app.inject({ method: 'GET', url: '/markets' });
+    expect(listed.json().markets).not.toContain(ghost);
+    expect(listed.json().markets).toEqual([]);
     await app.close();
   });
 
@@ -539,6 +594,75 @@ describe('D26-P2-01d public doors — determinism edges', () => {
     expect(recoveredDepth).toEqual(liveDepth);
 
     await liveApp.close();
+    await recoveredApp.close();
+  });
+
+  it('boot recover of an IOC-only journal does not list a phantom on GET /markets', async () => {
+    const journal = new MemoryJournal();
+    const live = new MatchingEngine({
+      journal,
+      bus: new MemoryEventBus('svc-matching'),
+      clock: fixedClock(),
+      snapshotEvery: 0,
+    });
+    const app = await mount(live);
+    const ghost = 'NEVER-TRADED-IOC-REPLAY-DOOR';
+    const body = {
+      orderId: '1c1c1c1c-1c1c-41c1-81c1-1c1c1c1c1c1c',
+      accountId: 'acct-ioc-replay',
+      type: 'limit' as const,
+      side: 'buy' as const,
+      qty: '2',
+      price: '100',
+      tif: 'IOC' as const,
+    };
+    const payload = JSON.stringify(body);
+    const submitRes = await app.inject({
+      method: 'POST',
+      url: `/markets/${ghost}/orders`,
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, payload) },
+      payload,
+    });
+    expect(submitRes.json().accepted).toBe(true);
+    expect(journal.read()).toHaveLength(1);
+    await app.close();
+
+    const recovered = new MatchingEngine({
+      journal,
+      bus: new MemoryEventBus('svc-matching-recovery'),
+      clock: fixedClock(),
+      snapshotEvery: 0,
+    });
+    recovered.recover();
+    const recoveredApp = await mount(recovered);
+    const listed = await recoveredApp.inject({ method: 'GET', url: '/markets' });
+    expect(listed.json().markets).not.toContain(ghost);
+    expect(listed.json().markets).toEqual([]);
+    expect((await recoveredApp.inject({ method: 'GET', url: `/markets/${ghost}/depth` })).statusCode).toBe(404);
+    await recoveredApp.close();
+  });
+
+  it('boot recover of a cancel-only journal does not list a phantom on GET /markets', async () => {
+    const journal = new MemoryJournal();
+    journal.append({
+      kind: 'cancel',
+      marketId: 'LEGACY-CANCEL-PUBLIC-DOOR',
+      at: '2026-01-01T00:00:00.000Z',
+      orderId: '00000000-0000-4000-8000-cafebabe0099',
+    });
+    const recovered = new MatchingEngine({
+      journal,
+      bus: new MemoryEventBus('svc-matching-recovery'),
+      clock: fixedClock(),
+      snapshotEvery: 0,
+    });
+    recovered.recover();
+    const recoveredApp = await mount(recovered);
+    const listed = await recoveredApp.inject({ method: 'GET', url: '/markets' });
+    expect(listed.json().markets).toEqual([]);
+    expect((await recoveredApp.inject({ method: 'GET', url: '/markets/LEGACY-CANCEL-PUBLIC-DOOR/depth' })).statusCode).toBe(
+      404,
+    );
     await recoveredApp.close();
   });
 });
