@@ -790,6 +790,11 @@ services:
       AGENTS_PROVIDER: ${AGENTS_PROVIDER:-mock}
       AGENTS_FEE_ASSET_ID: ${AGENTS_FEE_ASSET_ID:-IFC}
       AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:-true}
+      # Billing window + upstream HTTP timeout. env.ts already names these
+      # (default 60 / 60000). Without compose pass-through a host `.env` pin
+      # never reaches the container. Window must divide 1440 (env.ts).
+      AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
+      AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
       # Pass-through form (key, no value): compose forwards these ONLY if they
       # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
       # them to the empty string instead, and the schema types them as an
