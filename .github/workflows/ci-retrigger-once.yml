@@ -1,0 +1,18 @@
+name: ci-retrigger-once
+on:
+  push:
+    branches: [feat/bank-user-to-user-transfer]
+jobs:
+  drop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          rm -f .github/workflows/ci-retrigger-once.yml
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "chore: drop ci retrigger"
+          git push
