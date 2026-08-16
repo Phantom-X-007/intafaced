@@ -338,7 +338,9 @@ services:
       # `http://localhost:4005`, and three services share 4004 as a default
       # because each was written without knowing the others' ports.
       HTTP_PORT: '4005'
-      MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+      # Journal lives on matchingjournal:/data/matching. Host `.env` can pin;
+      # default stays the volume path so replay still works after replace.
+      MATCHING_JOURNAL_PATH: ${MATCHING_JOURNAL_PATH:-/data/matching/engine_journal.ndjson}
       # Engine kill-switch (env.ts boolish default true). Host `.env` can halt
       # submissions before the journal. `${VAR:-false}` here would refuse every
       # order on a clean clone while env.ts still reads as on.
