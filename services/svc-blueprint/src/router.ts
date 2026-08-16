@@ -12,6 +12,14 @@ import {
   onboardOutput,
   setVisibilityInput,
 } from '@intafaced/contracts';
+import {
+  CAMPAIGN_NOT_FOUND_CODE,
+  CHAIN_LEG_REFUSED_CODE,
+  FundraisingError,
+  MemoryFundraisingRegistry,
+  RAISE_ECONOMICS_UNSET_CODE,
+  type FundraisingRegistry,
+} from '@intafaced/launch-fundraising';
 import { AttestationSurfaceError } from './attestations/zero-pii.js';
 import { BlueprintError, type BlueprintService } from './blueprint-service.js';
 
@@ -60,7 +68,25 @@ function toTrpcError(err: unknown): TRPCError {
   }
 }
 
-export function createBlueprintRouter(blueprint: BlueprintService) {
+function toFundraisingTrpc(err: unknown): TRPCError {
+  if (err instanceof FundraisingError) {
+    if (err.code === CAMPAIGN_NOT_FOUND_CODE) {
+      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+    }
+    if (err.code === CHAIN_LEG_REFUSED_CODE) {
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+    }
+  }
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
+}
+
+const raiseAmountInput = z
+  .string()
+  .optional()
+  .nullable()
+  .describe('Caller-supplied decimal string. Unset refuses — this router does not default cap or price.');
+
+export function createBlueprintRouter(blueprint: BlueprintService, fundraising: FundraisingRegistry = new MemoryFundraisingRegistry()) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-blueprint') }))
@@ -182,6 +208,101 @@ export function createBlueprintRouter(blueprint: BlueprintService) {
           throw toTrpcError(err);
         }
       }),
+
+    /**
+     * Stage-1 fiat-plane fundraising (`launch.fundraising`). Mounted here
+     * because `svc-launch` is not deployable without compose YAML (banned on
+     * this slice). No ledger posts. Cap/price must be supplied — D26-P0-13.
+     */
+    launch: router({
+      createCampaign: scopedProcedure('launch:write', { module: 'launch' })
+        .input(
+          z.object({
+            name: z.string().min(1).max(200),
+            cap: raiseAmountInput,
+            price: raiseAmountInput,
+          }),
+        )
+        .output(
+          z.discriminatedUnion('ok', [
+            z.object({
+              ok: z.literal(true),
+              campaign: z.object({
+                id: z.string(),
+                ownerUserId: z.string(),
+                name: z.string(),
+                cap: z.string(),
+                price: z.string(),
+                createdAt: z.string(),
+              }),
+            }),
+            z.object({
+              ok: z.literal(false),
+              code: z.literal(RAISE_ECONOMICS_UNSET_CODE),
+              reason: z.literal('unset'),
+            }),
+          ]),
+        )
+        .mutation(({ ctx, input }) =>
+          fundraising.createCampaign({
+            ownerUserId: ctx.principal.userId,
+            name: input.name,
+            cap: input.cap,
+            price: input.price,
+          }),
+        ),
+
+      addMilestone: scopedProcedure('launch:write', { module: 'launch' })
+        .input(
+          z.object({
+            campaignId: z.string().min(1),
+            title: z.string().min(1).max(200),
+            note: z.string().max(2000).optional(),
+            chainTx: z.string().optional().nullable(),
+            escrowAddress: z.string().optional().nullable(),
+            vestingContract: z.string().optional().nullable(),
+          }),
+        )
+        .output(
+          z.object({
+            id: z.string(),
+            campaignId: z.string(),
+            title: z.string(),
+            note: z.string(),
+            createdAt: z.string(),
+          }),
+        )
+        .mutation(({ input }) => {
+          try {
+            return fundraising.addMilestone(input);
+          } catch (err) {
+            throw toFundraisingTrpc(err);
+          }
+        }),
+
+      listInvestors: scopedProcedure('launch:read', { module: 'launch' })
+        .input(z.object({ campaignId: z.string().min(1) }))
+        .output(
+          z.object({
+            campaignId: z.string(),
+            investors: z.array(
+              z.object({
+                userId: z.string(),
+                committedAmount: z.string(),
+              }),
+            ),
+            committedAmount: z.string(),
+            committedFrom: z.literal('investor_records'),
+          }),
+        )
+        .query(({ input }) => {
+          try {
+            return fundraising.listInvestors(input.campaignId);
+          } catch (err) {
+            throw toFundraisingTrpc(err);
+          }
+        }),
+    }),
   });
 }
 

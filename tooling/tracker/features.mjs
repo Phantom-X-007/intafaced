@@ -1375,9 +1375,17 @@ export const FEATURES = [
   f('launch.fundraising', 'Fundraising module — milestones, investor management (§25:658)', {
     module: 'launch',
     phase: '5',
-    status: 'socket',
-    dependsOn: ['launch.token-factory'],
-    note: 'Gap-closed 2026-08-07, and DELIBERATELY UNOWNED. The law names it with a service and a phase and no row carried it. It is a product surface — milestones, investor records, reporting — not chain work, so putting it on the chain owner would widen him into the fiat plane against his own sole-mountain law. The ON-CHAIN legs it would need (milestone escrow, vesting release) are his, under launch.trust-layer and S-G2. Agents may claim the product half.',
+    status: 'wip',
+    owner: 'ZenYoda3',
+    dependsOn: [],
+    requires: ['packages/launch-fundraising', 'services/svc-blueprint/src/router.ts'],
+    note:
+      'Stage-1 WIP 2026-08-16: off-chain campaign + milestone registry + investor list. ' +
+      'createCampaign refuses unset cap/price (`launch.raise_economics_unset`, D26-P0-13 — no invent). ' +
+      'listInvestors empty → committedAmount summed from records (`"0"`), not a fake raised figure. ' +
+      'No ledger posts. No chain escrow/vesting (Shehzad). svc-launch not added: workspace-sync requires compose YAML, banned on this slice. ' +
+      'Consumer: svc-blueprint `launch.*` tRPC. Not blocked on launch.token-factory: Stage-1 is off-chain registry only. ' +
+      'Mountain not done until on-chain escrow/vesting (Shehzad) + raise-economics law (D26-P0-13).',
   }),
   f('launch.structured', 'Structured issuance — wrapped, synthetic, structured products (§25:661)', {
     module: 'launch',

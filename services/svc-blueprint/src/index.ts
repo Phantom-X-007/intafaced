@@ -10,6 +10,7 @@ import { MockNeuralEngine } from './engine/mock-engine.js';
 import { isUsable, type NeuralEngineClient } from './engine/neural-engine.js';
 import { UnconfiguredCardRenderer, type CardRenderer } from './card/card-renderer.js';
 import { HttpCardRenderer } from './card/http-renderer.js';
+import { MemoryFundraisingRegistry } from '@intafaced/launch-fundraising';
 import { createBlueprintRouter, type BlueprintRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -90,7 +91,8 @@ const blueprint = new BlueprintService(sql, engine, bus, cardRenderer, {
   season: env.BLUEPRINT_SEASON,
 });
 
-export const appRouter = createBlueprintRouter(blueprint);
+const fundraising = new MemoryFundraisingRegistry();
+export const appRouter = createBlueprintRouter(blueprint, fundraising);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

@@ -27,17 +27,20 @@ Two things enforce it:
 
 tRPC (`src/router.ts`). Owner procedures operate on `ctx.principal.userId` and never on an id from the input — there is no "export that account" path, by design. `cardOf` is the exception: its input names whose share card, and visibility decides.
 
-| Procedure       | Scope             | Purpose                                                                         |
-| --------------- | ----------------- | ------------------------------------------------------------------------------- |
-| `health`        | public            | Liveness                                                                        |
-| `onboard`       | `blueprint:write` | Session → engine → profile → crew placement → mentor shortlist                  |
-| `me`            | `blueprint:read`  | The caller's own Blueprint                                                      |
-| `card`          | `blueprint:read`  | **§7.2 share card** — the caller's own, at either share size                    |
-| `cardOf`        | `blueprint:read`  | Someone else's share card — gated by `blueprints.visibility` (not a public URL) |
-| `setVisibility` | `blueprint:write` | Change the caller's own `private` / `crew` / `public`                           |
-| `mentors`       | `blueprint:read`  | The caller's mentor shortlist — its own query, not `export()`                   |
-| `export`        | `blueprint:read`  | **§7.2 portable** — everything this service holds, as JSON                      |
-| `erase`         | `blueprint:write` | **§7.2 deletable** — hard delete that cascades                                  |
+| Procedure               | Scope             | Purpose                                                                          |
+| ----------------------- | ----------------- | -------------------------------------------------------------------------------- |
+| `health`                | public            | Liveness                                                                         |
+| `onboard`               | `blueprint:write` | Session → engine → profile → crew placement → mentor shortlist                   |
+| `me`                    | `blueprint:read`  | The caller's own Blueprint                                                       |
+| `card`                  | `blueprint:read`  | **§7.2 share card** — the caller's own, at either share size                     |
+| `cardOf`                | `blueprint:read`  | Someone else's share card — gated by `blueprints.visibility` (not a public URL)  |
+| `setVisibility`         | `blueprint:write` | Change the caller's own `private` / `crew` / `public`                            |
+| `mentors`               | `blueprint:read`  | The caller's mentor shortlist — its own query, not `export()`                    |
+| `export`                | `blueprint:read`  | **§7.2 portable** — everything this service holds, as JSON                       |
+| `erase`                 | `blueprint:write` | **§7.2 deletable** — hard delete that cascades                                   |
+| `launch.createCampaign` | `launch:write`    | Stage-1 fundraising — refuses unless cap **and** price are supplied (D26-P0-13)  |
+| `launch.addMilestone`   | `launch:write`    | Off-chain milestone only; chain escrow/vesting refused                           |
+| `launch.listInvestors`  | `launch:read`     | Honest empty investor list; committed amount summed from records (`"0"` if none) |
 
 HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Blueprint cannot be produced without it and reporting ready while it is down routes onboarding at a service that can only fail it. It reports the card renderer too, but does **not** gate on it: a card can be produced without a rasterizer, and refusing traffic because the PNG rail is absent would take onboarding down over a share image.
 
@@ -88,7 +91,7 @@ HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Bluep
 
 **This service holds no balances and posts no ledger transactions.**
 
-There is no `@intafaced/ledger-client` import in this package and there should never be one. `crews.xp` is a count of shared achievement — it is deliberately a `bigint` and not `numeric(38,18)` so it can never be mistaken for a balance, and a test asserts that no `numeric` column exists anywhere in the schema. Doctrine §0.6 is satisfied here by there being no value to hold.
+There is no `@intafaced/ledger-client` import in this package and there should never be one. Stage-1 fundraising (`launch.*` procedures) is a registry only — it does not post. `crews.xp` is a count of shared achievement — it is deliberately a `bigint` and not `numeric(38,18)` so it can never be mistaken for a balance, and a test asserts that no `numeric` column exists anywhere in the schema. Doctrine §0.6 is satisfied here by there being no value to hold.
 
 Crew treasuries are a real future feature (§33 Crew Vaults, Phase 5P) — and when they land, the money lives in the ledger and in `svc-protocol`, not here.
 
