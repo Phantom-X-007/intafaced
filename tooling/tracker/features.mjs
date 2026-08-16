@@ -533,8 +533,11 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'F',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['execution.sor'],
-    note: 'Law §28:777, gap-closed 2026-08-08. OWNER RULING SEALED 2026-08-12 (D26-P0-01) in `docs/adr/2026-08-08-house-desk-and-market-making-fairness.md` (+ owner packet §A1): Q1 v1 is EXTERNAL-ONLY — house desk may trade external venues; pointing this tenant at our own matching book stays BLOCKED until a later explicit ruling. Q2 existence-disclosure deferred (not decided; internal trading off for v1). Q3 hard mark exclusion binds when any internal quotes exist. Five mechanism rules still Accepted: no structural queue advantage, D-S-06 one book / no extra preference, sealed ≠ unaudited (ledger recipes), kill-switches apply first. Tenancy MECHANISM (separate keys, namespace, audit, no matching-path privilege) may be built; internal-venue half may not. §30:795 plane "—"; `F` here means house money is custodial platform value, not a plane decision. Still dependsOn `execution.sor`.',
+    requires: ['packages/execution-house-tenant', 'services/svc-execution'],
+    note: 'Law §28:777, gap-closed 2026-08-08. OWNER RULING SEALED 2026-08-12 (D26-P0-01) in `docs/adr/2026-08-08-house-desk-and-market-making-fairness.md` (+ owner packet §A1): Q1 v1 is EXTERNAL-ONLY — house desk may trade external venues; pointing this tenant at our own matching book stays BLOCKED until a later explicit ruling. Q2 existence-disclosure deferred (not decided; internal trading off for v1). Q3 hard mark exclusion binds when any internal quotes exist. Five mechanism rules still Accepted: no structural queue advantage, D-S-06 one book / no extra preference, sealed ≠ unaudited (ledger recipes), kill-switches apply first. STAGE-1 MECHANISM (2026-08-16): `@intafaced/execution-house-tenant` + thin `svc-execution` tRPC `execution.tenant.describe|kill`; `internal_venue` refuse for `kind:internal` / matching-book; adminKill first. Internal-venue half still blocked. §30:795 plane "—"; `F` here means house money is custodial platform value, not a plane decision. Still dependsOn `execution.sor`.',
   }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',

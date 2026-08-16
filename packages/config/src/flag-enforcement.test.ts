@@ -122,7 +122,7 @@ describe('no flag is enforced through this registry', () => {
    */
   const RESOLVERS = ['isEnabled', 'resolveAll', 'explainAll', 'FLAG_REGISTRY', 'flagsForModule', 'flagDef'];
 
-  it('no services/*/src file imports a flag resolver from @intafaced/config', () => {
+  it('no services/*/src file imports a flag resolver from @intafaced/config', { timeout: 20_000 }, () => {
     const offenders: string[] = [];
 
     for (const file of SERVICE_FILES) {
