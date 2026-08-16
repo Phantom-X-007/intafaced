@@ -59,6 +59,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
 COPY apps/admin/package.json                 apps/admin/
 
+COPY packages/academy-ambassadors-pay/package.json packages/academy-ambassadors-pay/
 COPY packages/auth/package.json              packages/auth/
 COPY packages/config/package.json            packages/config/
 COPY packages/contracts/package.json         packages/contracts/
