@@ -70,7 +70,7 @@ F-STANDBY is not "nothing to do." It is a claim that must be evidenced every cyc
 | **P2 partner**  | Which partner PRs changed state, or "matrix unchanged"                            |
 | **P3 TRK**      | How many specs remain under 100 lines                                             |
 
-**If P1 path-clear > 0, F-STANDBY is invalid. Land one, smallest first.**
+**If P1 path-clear > 0, F-STANDBY is invalid.** Land one **only if** it closes or unblocks a tracker mountain. Honesty restamps and pin-only PRs are not P1.
 
 "No board delta" justifies **not opening a stamp PR**. It never justifies not doing real P1–P3 work.
 
@@ -85,6 +85,7 @@ F-STANDBY is not "nothing to do." It is a claim that must be evidenced every cyc
 | **A plan or doc existing = the work is done**       | A map is not a runner                                       |
 | **A green test on a module nothing imports**        | The test asserts itself. Blocked by the `reachability` gate |
 | **Manufacturing work because the board is empty**   | `freeProduct=0` never authorises minting                    |
+| **Leftover honesty rebase / i18n pin-only / occupancy spawn as "progress"** | Sand-castle. Volume is not a mountain close (`AGENTS.md`) |
 | **Claiming a sibling's open multi-concern PR**      | Multi-dev violation                                         |
 | **Spec green = production money ready**             | Class M violation                                           |
 | **"No bugs left" without proof**                    | Over-claim — see §6                                         |
