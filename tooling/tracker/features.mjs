@@ -1746,8 +1746,11 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['agents.gateway', 'ops.portfolio'],
-    note: 'Law §8.2:388 ("v2: Portfolio (auto-rebalance in guardrails)") and §25:732, gap-closed 2026-08-08. §8.2 names TEN agents; the board carried five plus the gateway (audit §A1.a #12), and this is one of the five with no row. Blocked on ops.portfolio: rebalancing means comparing a held position against a target allocation, and the portfolio view that would supply "held" does not exist yet. agents.gateway is `done`, so the fleet runtime, guardrail schema and `agent_actions` audit log this rides are real rather than assumed. CLASS M THE MOMENT IT MOVES: an agent that rebalances is placing orders with user money, so §8.2\'s Agentic Law is not decoration — every action to `agent_actions` plus a user-visible log, execution strictly inside user guardrails, and a kill-switch the user can see. NOT DECIDED: whether rebalancing may cross the plane boundary. Selling a custodial holding to fund a sovereign one is a bridge movement, not a trade, and it follows `docs/adr/2026-08-04-cross-plane-bridge-accounting.md` — not this row\'s assumption.',
+    requires: ['services/svc-agents/src/portfolio-agent'],
+    note: 'PLAN-ONLY slice 2026-08-16 (feat/agents-portfolio-plan): compare holdings vs owner targets; never placeOrder. Injected PortfolioPort; unset → named dark refuse. Cross-plane → portfolio.cross_plane_blocked. CLASS M THE MOMENT IT PLACES. Law §8.2:388 ("v2: Portfolio (auto-rebalance in guardrails)") and §25:732, gap-closed 2026-08-08. Blocked on ops.portfolio for a live book: this slice does not dual-edit that view. agents.gateway is `done` (fleet audit). NOT DECIDED: execution. Cross-plane follows `docs/adr/2026-08-04-cross-plane-bridge-accounting.md` — refuse, do not invent a bridge.',
   }),
   f('agents.launch', 'Launch Agent — pre-listing risk pattern flags (§8.2)', {
     module: 'agents',
