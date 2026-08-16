@@ -39,9 +39,7 @@ describe('compose INTERNAL_SERVICE_BODY_BIND via *internal-secret', () => {
   const anchor = internalSecretAnchor(compose);
 
   it('internalServiceEnvSchema still defaults INTERNAL_SERVICE_BODY_BIND to accept-both', () => {
-    expect(envSrc).toMatch(
-      /INTERNAL_SERVICE_BODY_BIND:\s*z\.enum\(\['accept-both', 'require'\]\)\.default\('accept-both'\)/,
-    );
+    expect(envSrc).toMatch(/INTERNAL_SERVICE_BODY_BIND:\s*z\.enum\(\['accept-both', 'require'\]\)\.default\('accept-both'\)/);
   });
 
   it('wires the anchor from the host, unique once, default accept-both', () => {
