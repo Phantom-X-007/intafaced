@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader, BASE_PERKS } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 import { createAcademyRouter } from './router.js';
+import { userCopy } from './user-copy.js';
 import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
 import { certPerkPlaneStatus } from './certs/perk-plane.js';
 import type { AcademyService } from './academy-service.js';
@@ -217,7 +218,10 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     const item = await caller.curriculumItem({ slug: 'foundations-risk-first' });
     expect(item.body).toContain('# Risk first');
 
-    await expect(caller.curriculumItem({ slug: 'no-such-playbook' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(caller.curriculumItem({ slug: 'no-such-playbook' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: userCopy('academy.curriculum_not_found'),
+    });
   });
 
   it('refuses curriculum without academy:read', async () => {
