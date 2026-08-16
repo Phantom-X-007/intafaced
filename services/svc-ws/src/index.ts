@@ -13,6 +13,7 @@ import { PrivateOrderHub } from './private/hub.js';
 import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
 import { WS_COPY } from './copy.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
+import { HttpPrivateBookPort } from './private/book.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -269,6 +270,7 @@ const privateGateway = createPrivateWebSocketGateway({
   enabled: isEnabled,
   tokens: privateTokens,
   busAttached: busLifecycle.privateBus,
+  book: new HttpPrivateBookPort({ baseUrl: env.TRADE_URL }),
 });
 
 poller.start();

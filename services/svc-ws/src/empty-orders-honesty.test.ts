@@ -135,6 +135,7 @@ describe('isLiveZeroBlotterFrame', () => {
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', ...order() }))).toBe(false);
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'positions', ...position() }))).toBe(false);
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', type: 'ready', userId: 'user-a', bus: false }))).toBe(false);
+    expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', type: 'snapshot', userId: 'user-a', orders: [] }))).toBe(false);
   });
 });
 

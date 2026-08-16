@@ -15,7 +15,8 @@ import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js
  * client treat that as a live zero book of nothing. Listed seats stay
  * subscribed with no blotter frames until a real order or position exists.
  * Fills are never invented. Ready frames (`type: "ready"`) are honesty about
- * the bus, not a snapshot.
+ * the bus. A `type: "snapshot"` hydrate (including `orders: []`) is a reconnect
+ * book, not a live-zero delta — empty list is honest empty, not omitted.
  */
 
 export type PrivateSink = DepthSink;
@@ -107,7 +108,7 @@ export function isLiveZeroBlotterPayload(value: unknown): boolean {
   if (Array.isArray(value) && value.length === 0) return true;
   if (value === null || typeof value !== 'object') return false;
   const rec = value as Record<string, unknown>;
-  if (rec.type === 'ready') return false;
+  if (rec.type === 'ready' || rec.type === 'snapshot') return false;
   for (const key of ['orders', 'positions', 'fills'] as const) {
     if (key in rec && Array.isArray(rec[key]) && rec[key].length === 0) return true;
   }
@@ -129,6 +130,8 @@ interface Subscription {
   readonly channel: PrivateStreamChannel | null;
   lagTicks: number;
   closed: boolean;
+  hydrated: boolean;
+  pending: string[];
 }
 
 const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
@@ -180,7 +183,12 @@ export class PrivateOrderHub {
    * `channel` is an optional fan-out filter. Omitted / null still delivers all
    * three private channels; owner isolation is unchanged.
    */
-  attach(userId: string, sink: PrivateSink, channel: PrivateStreamChannel | null = null): (() => void) | null {
+  attach(
+    userId: string,
+    sink: PrivateSink,
+    channel: PrivateStreamChannel | null = null,
+    options: { holdUntilSnapshot?: boolean } = {},
+  ): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
       sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.privateAtCapacity));
       return null;
@@ -196,7 +204,15 @@ export class PrivateOrderHub {
       return null;
     }
 
-    const sub: Subscription = { userId, sink, channel, lagTicks: 0, closed: false };
+    const sub: Subscription = {
+      userId,
+      sink,
+      channel,
+      lagTicks: 0,
+      closed: false,
+      hydrated: options.holdUntilSnapshot !== true,
+      pending: [],
+    };
     this.#subscriptions.add(sub);
     if (this.#options.seedOrders || this.#options.seedPositions) {
       void this.#seed(sub);
@@ -205,6 +221,34 @@ export class PrivateOrderHub {
       sub.closed = true;
       this.#subscriptions.delete(sub);
     };
+  }
+
+  /** Flush live frames that arrived while the reconnect snapshot was in flight. */
+  releaseSnapshot(sink: PrivateSink): void {
+    for (const sub of this.#subscriptions) {
+      if (sub.closed || sub.sink !== sink) continue;
+      sub.hydrated = true;
+      const queued = sub.pending;
+      sub.pending = [];
+      for (const frame of queued) this.#write(sub, frame);
+      return;
+    }
+  }
+
+  sendOrdersSnapshot(sink: PrivateSink, userId: string, orders: readonly PrivateOrderUpdate[]): void {
+    this.#snapshot(sink, JSON.stringify({ channel: 'orders', type: 'snapshot', userId, orders }));
+  }
+
+  sendPositionsSnapshot(sink: PrivateSink, userId: string, positions: readonly PrivatePositionUpdate[]): void {
+    this.#snapshot(sink, JSON.stringify({ channel: 'positions', type: 'snapshot', userId, positions }));
+  }
+
+  #snapshot(sink: PrivateSink, frame: string): void {
+    for (const sub of this.#subscriptions) {
+      if (sub.closed || sub.sink !== sink) continue;
+      this.#write(sub, frame);
+      return;
+    }
   }
 
   /**
@@ -290,6 +334,10 @@ export class PrivateOrderHub {
     for (const sub of this.#subscriptions) {
       if (sub.closed || sub.userId !== userId) continue;
       if (sub.channel !== null && sub.channel !== channel) continue;
+      if (!sub.hydrated) {
+        sub.pending.push(frame);
+        continue;
+      }
 
       if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         this.#noteLag(sub);

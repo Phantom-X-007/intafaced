@@ -223,13 +223,13 @@ describe('public + private WS co-mount (production shape)', () => {
     const base = `127.0.0.1:${addr.port}`;
 
     const { token } = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'] }, tokens);
-    const frames: unknown[] = [];
+    const frames: Array<Record<string, unknown>> = [];
     const ws = new WebSocket(`ws://${base}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error('timeout waiting for private ready')), 5_000);
       ws.on('message', (data) => {
-        frames.push(JSON.parse(data.toString()));
-        if (frames.length >= 3) {
+        frames.push(JSON.parse(data.toString()) as Record<string, unknown>);
+        if (frames.some((f) => f.channel === 'orders' && f.type === 'snapshot')) {
           clearTimeout(t);
           resolve();
         }
@@ -238,13 +238,18 @@ describe('public + private WS co-mount (production shape)', () => {
     });
     ws.terminate();
 
-    // Three ready frames only — no depth snapshot/delta shape.
-    expect(frames).toHaveLength(3);
+    // Private catalog + orders snapshot — never public depth bids/asks.
+    expect(
+      frames
+        .filter((f) => f.type === 'ready')
+        .map((f) => f.channel)
+        .sort(),
+    ).toEqual(['fills', 'orders', 'positions']);
+    expect(frames.find((f) => f.channel === 'orders' && f.type === 'snapshot')).toMatchObject({ orders: [] });
     for (const f of frames) {
-      expect(f).toMatchObject({ type: 'ready' });
-      expect(f).not.toMatchObject({ type: 'snapshot' });
       expect(f).not.toHaveProperty('bids');
       expect(f).not.toHaveProperty('asks');
+      expect(f).not.toHaveProperty('sequence');
     }
   });
 
