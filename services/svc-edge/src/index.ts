@@ -12,6 +12,7 @@ import { exchangePrincipal } from './principal-exchange.js';
 import { upstreamBody } from './proxy-body.js';
 import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
+import { userCopy } from './user-copy.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -274,13 +275,13 @@ await app.register(async (api) => {
     if (!target) {
       // An unlisted prefix is not forwarded anywhere. An edge that proxies what
       // it does not recognise is a proxy for the entire internal network.
-      return reply.code(404).send({ error: 'no route', code: 'edge.no_route' });
+      return reply.code(404).send({ error: userCopy('edge.no_route'), code: 'edge.no_route' });
     }
 
     if (isS2sPath(target.path)) {
       // Belt: the onRequest hook already refuses this. Kept so a future route
       // that skips the hook cannot open the S2S plane.
-      return reply.code(404).send({ error: 'no route', code: 'edge.s2s_not_proxied' });
+      return reply.code(404).send({ error: userCopy('edge.s2s_not_proxied'), code: 'edge.s2s_not_proxied' });
     }
 
     const resolved = resolveUpstreamBase(target.upstream, envLookup, env.APP_ENV);
@@ -289,7 +290,7 @@ await app.register(async (api) => {
       // 503 + named code, not a 200/502 that looks like the service is down.
       req.log.error({ prefix: target.upstream.prefix, envVar: target.upstream.envVar }, 'edge: upstream env unset');
       return reply.code(503).send({
-        error: 'upstream not configured',
+        error: userCopy('edge.upstream_unwired'),
         code: 'edge.upstream_unwired',
         module: target.upstream.module,
       });
@@ -354,7 +355,7 @@ await app.register(async (api) => {
           // 502, not 500: the edge is fine, the upstream is not, and a caller
           // needs to tell those apart before deciding whether to retry.
           req.log.error({ err, upstream: target.upstream.prefix }, 'edge: upstream unreachable');
-          return reply.code(502).send({ error: 'upstream unavailable', code: 'edge.upstream_unavailable' });
+          return reply.code(502).send({ error: userCopy('edge.upstream_unavailable'), code: 'edge.upstream_unavailable' });
         }
 
         const text = await response.text();

@@ -79,6 +79,7 @@ describe('public geo-block door — empty screening is unknown', () => {
     expect(res.statusCode).toBe(503);
     const body = res.json() as Record<string, unknown>;
     expect(body.code).toBe(GEO_BLOCK_UNSET_CODE);
+    expect(body.error).toBe(GEO_BLOCK_UNSET_CODE);
     expect(body.reason).toBe('screening_unset');
     expect(body.screeningConfigured).toBe(false);
     expect(body.inventedBlockedList).toBe(false);
@@ -113,7 +114,12 @@ describe('public geo-block door — empty screening is unknown', () => {
     const { app } = await buildEdge();
     const res = await app.inject({ method: 'GET', url: '/api/trade/health' });
     expect(res.statusCode).toBe(403);
-    expect(res.json()).toMatchObject({ code: GEO_BLOCK_HIT_CODE, reason: 'region_listed', inventedBlockedList: false });
+    expect(res.json()).toMatchObject({
+      code: GEO_BLOCK_HIT_CODE,
+      error: 'This is not available in your region.',
+      reason: 'region_listed',
+      inventedBlockedList: false,
+    });
   });
 
   it('refuses /api as region-unknown when XX is stamped and fail-closed is armed', async () => {
