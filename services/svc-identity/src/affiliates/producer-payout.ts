@@ -28,6 +28,14 @@ export type AffiliateProducerPayoutDeps = {
   readonly accruals: AccrualStore;
   readonly accrualTierLaw: AccrualTierLaw | undefined;
   readonly ledger: Pick<LedgerClient, 'post'> | undefined;
+  /**
+   * Isolated tests need this (same reason accrue installs it). Production
+   * `index.ts` already called `retainRawBody` from accrue — a second install
+   * throws `Content type parser 'application/json' already present` and the
+   * process never listens (CX-8). Default true so this door stays testable
+   * without booting index.ts.
+   */
+  readonly installRawBody?: boolean;
 };
 
 function httpStatus(code: AffiliatePayoutRefuseError['code']): number {
@@ -37,7 +45,9 @@ function httpStatus(code: AffiliatePayoutRefuseError['code']): number {
 }
 
 export function registerAffiliateProducerPayout(app: FastifyInstance, deps: AffiliateProducerPayoutDeps): void {
-  retainRawBody(app);
+  if (deps.installRawBody !== false) {
+    retainRawBody(app);
+  }
 
   app.post(AFFILIATE_PRODUCER_PAYOUT_PATH, async (req, reply) => {
     const { service, rejected } = verifyServiceHeaders(req.headers, deps.internalSecret, {

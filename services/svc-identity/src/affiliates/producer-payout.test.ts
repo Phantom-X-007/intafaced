@@ -8,6 +8,7 @@ import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, userAvaila
 import { MemoryAccrualStore } from './accrual-store.js';
 import type { AccrualTierLaw } from './commission-rate-law.js';
 import type { CommissionRow } from './commission.js';
+import { registerAffiliateProducerAccrue } from './producer-accrue.js';
 import { AFFILIATE_PRODUCER_PAYOUT_PATH, registerAffiliateProducerPayout } from './producer-payout.js';
 
 const SECRET = 'test-internal-service-secret-32ch!!';
@@ -39,7 +40,13 @@ function row(over: Partial<CommissionRow> = {}): CommissionRow {
 async function fundedLedger(): Promise<MemoryLedger> {
   const ledger = new MemoryLedger();
   await ledger.post(
-    recipes.deposit({ userId: PAYER, assetId: ASSET, amount: parseAmount('1000'), rail: 'crypto-native', railRef: 'seed-payout' }),
+    recipes.deposit({
+      userId: PAYER,
+      assetId: ASSET,
+      amount: parseAmount('1000'),
+      rail: 'crypto-native',
+      railRef: 'seed-payout',
+    }),
   );
   await ledger.post(
     recipes.feeCharge({
@@ -58,12 +65,14 @@ async function bal(ledger: MemoryLedger, ref: Parameters<MemoryLedger['balance']
   return formatAmount((await ledger.balance(ref)).amount);
 }
 
-async function app(opts: {
-  law?: AccrualTierLaw;
-  ledger?: MemoryLedger | undefined;
-  frozen?: ReadonlySet<string>;
-  seed?: boolean;
-} = {}) {
+async function app(
+  opts: {
+    law?: AccrualTierLaw;
+    ledger?: MemoryLedger | undefined;
+    frozen?: ReadonlySet<string>;
+    seed?: boolean;
+  } = {},
+) {
   const store = new MemoryAccrualStore();
   if (opts.seed !== false) await store.saveRows([row()]);
   const ledger = 'ledger' in opts ? opts.ledger : await fundedLedger();
@@ -94,6 +103,29 @@ describe('S2S producer payout — accrued commission through ledger-client', () 
     const src = readFileSync(join(here, '..', 'index.ts'), 'utf8');
     expect(src).toMatch(/registerAffiliateProducerPayout/);
     expect(src).toMatch(/producer-payout/);
+    expect(src).toMatch(/installRawBody:\s*false/);
+  });
+
+  it('co-mounts with accrue without a second JSON parser (identity boot)', async () => {
+    const store = new MemoryAccrualStore();
+    const f = Fastify({ logger: false });
+    registerAffiliateProducerAccrue(f, {
+      internalSecret: SECRET,
+      referral: { loadParentMap: async () => new Map() },
+      freeze: { frozenIds: async () => new Set<string>() },
+      accruals: store,
+      accrualTierLaw: PUBLISHED,
+    });
+    registerAffiliateProducerPayout(f, {
+      internalSecret: SECRET,
+      freeze: { frozenIds: async () => new Set<string>() },
+      accruals: store,
+      accrualTierLaw: PUBLISHED,
+      ledger: undefined,
+      installRawBody: false,
+    });
+    await f.ready();
+    await f.close();
   });
 
   it('401 without service credentials — nothing posted', async () => {

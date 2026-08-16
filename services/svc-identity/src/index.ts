@@ -183,6 +183,8 @@ registerAffiliateProducerPayout(app, {
   accruals,
   accrualTierLaw,
   ledger,
+  // Accrue already installed retainRawBody on this instance.
+  installRawBody: false,
 });
 
 /**
