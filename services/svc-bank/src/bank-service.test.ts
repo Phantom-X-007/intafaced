@@ -146,7 +146,7 @@ if (!available) {
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
     router = createBankRouter(bank);
-  });
+  }, 30_000);
 
   /**
    * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
@@ -323,6 +323,40 @@ if (!available) {
       expect(await availableOf(USER_B, 'USDT')).toBe('80');
       expect(ledger.totalsByAsset().USDT).toBe('0');
     });
+
+    it('refuses user-to-user transfer when dest user is missing — nothing posted', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_A, 'USDT', '50');
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+      await expect(
+        bank.transfers.transferToUser({
+          transferId: 'user-transfer-missing',
+          fromSpaceId: a.id,
+          toUserId: USER_C,
+          amount: amt('10'),
+        }),
+      ).rejects.toMatchObject({ code: 'bank.dest_user_missing' });
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(await availableOf(USER_A, 'USDT')).toBe('50');
+    });
+
+    it('transfers to the dest user through ledger-client', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      await fund(USER_A, 'USDT', '25');
+      const moved = await bank.transfers.transferToUser({
+        transferId: 'user-transfer-stored',
+        fromSpaceId: a.id,
+        toUserId: USER_B,
+        amount: amt('25'),
+      });
+      expect(moved.amount).toBe('25');
+      expect(moved.ledgerTxId).toBeTruthy();
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.includes('user-transfer-stored'))).toBe(true);
+      expect(await availableOf(USER_A, 'USDT')).toBe('0');
+      expect(await availableOf(USER_B, 'USDT')).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
   });
 
   // ══ Scheduled transfers ═══════════════════════════════════════════════════
@@ -374,7 +408,7 @@ if (!available) {
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
-    });
+    }, 20_000);
 
     /**
      * Isolation residual (audit B-3 class): a mid-drive throw (frozen ledger,
