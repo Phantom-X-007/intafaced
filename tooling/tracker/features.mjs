@@ -1451,8 +1451,10 @@ export const FEATURES = [
       'slots (claimSlot FOR UPDATE + orphan rollback). Catalogue registration order (ASC) — ranking DIRECTION §8 owner. ' +
       'D26-P1-M1 Class M residual SEALED 2026-08-12: compose LEDGER_URL→svc-ledger (no localhost invent); ' +
       'public-door PRECONDITION_FAILED + empty catalogue proofs; ledger listing/premium recipes coord #1761. ' +
-      'RESIDUAL / PARK: C3 subscriptions (period/past-due/cancel/access law — Nitro); ' +
-      'ranking/featured. Purchase of subscription refuse market.subscription_not_built; public catalogue hides them.',
+      'ranking/featured. C3 listing subscriptions: periodSeconds on the listing (no default month); ' +
+      'purchase posts recipes.marketPurchase; access is time-bounded; cancel stops new access without a reverse recipe; ' +
+      'past-due refuses market.subscription_past_due. Leftover rows without a period stay unsellable ' +
+      '(market.subscription_period_unset) and off the public catalogue.',
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',

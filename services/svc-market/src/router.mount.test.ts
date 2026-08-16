@@ -412,6 +412,7 @@ describe('svc-market mount — commerce scopes', () => {
     offerType: 'one_time' as const,
     assetId: 'USDT',
     price: '10',
+    periodSeconds: null,
     status: 'active' as const,
     createdAt: '2026-08-09T00:00:00.000Z',
     updatedAt: '2026-08-09T00:00:00.000Z',
@@ -442,8 +443,11 @@ describe('svc-market mount — commerce scopes', () => {
         rejectionCode: null,
         createdAt: '2026-08-09T00:00:00.000Z',
         settledAt: '2026-08-09T00:00:00.000Z',
+        accessUntil: null,
       })),
       purchasesOf: vi.fn(async () => []),
+      cancelSubscription: vi.fn(),
+      subscriptionAccess: vi.fn(),
     };
   }
 
@@ -502,12 +506,12 @@ describe('svc-market mount — commerce scopes', () => {
    * Blank commission must surface as PRECONDITION_FAILED on create + purchase
    * and empty catalogue; never invent success / free rate at the mount.
    */
-  it('maps unbuilt-subscription createListing refuse to PRECONDITION_FAILED', async () => {
+  it('maps unset-period createListing refuse to PRECONDITION_FAILED', async () => {
     const commerce = stubCommerce();
     commerce.createListing = vi.fn(async () => {
       throw new MarketError(
-        'Subscription listings are not built yet — creating one would take a listing slot for inventory that cannot be sold',
-        'market.subscription_not_built',
+        'Subscription listings need a period in whole seconds — no default cadence is invented',
+        'market.subscription_period_unset',
       );
     });
     await expect(
@@ -516,7 +520,7 @@ describe('svc-market mount — commerce scopes', () => {
         .createListing({ title: 'Sub', description: 'monthly', offerType: 'subscription', assetId: 'USDT', price: '10' }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
-      message: 'market.subscription_not_built',
+      message: 'market.subscription_period_unset',
     });
   });
 
@@ -572,8 +576,8 @@ describe('svc-market mount — commerce scopes', () => {
         .subscribe({ listingId }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
-      message: 'market.subscription_not_built',
-      cause: { code: 'market.subscription_not_built' },
+      message: 'market.subscription_recurring_not_built',
+      cause: { code: 'market.subscription_recurring_not_built' },
     });
     expect(commerce.purchase).not.toHaveBeenCalled();
     expect(commerce.createListing).not.toHaveBeenCalled();
@@ -587,7 +591,7 @@ describe('svc-market mount — commerce scopes', () => {
         .subscribe(),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
-      message: 'market.subscription_not_built',
+      message: 'market.subscription_recurring_not_built',
     });
     expect(commerce.purchase).not.toHaveBeenCalled();
   });
@@ -595,7 +599,9 @@ describe('svc-market mount — commerce scopes', () => {
   it('maps commerce refuse codes to stable tRPC classes', async () => {
     const cases: Array<{ code: string; trpc: string }> = [
       { code: 'market.commission_not_configured', trpc: 'PRECONDITION_FAILED' },
-      { code: 'market.subscription_not_built', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_period_unset', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_past_due', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_cancelled', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.listing_slot_missing', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.listing_over_capacity', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.insufficient_funds', trpc: 'PRECONDITION_FAILED' },

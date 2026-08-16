@@ -131,7 +131,16 @@ function mapError(err: unknown): never {
       // and the same reasoning, as `academy.stake_unavailable`.
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
     }
-    if (err.code === 'market.commission_not_configured' || err.code === 'market.subscription_not_built') {
+    if (
+      err.code === 'market.commission_not_configured' ||
+      err.code === 'market.subscription_not_built' ||
+      err.code === 'market.subscription_recurring_not_built' ||
+      err.code === 'market.subscription_period_unset' ||
+      err.code === 'market.subscription_past_due' ||
+      err.code === 'market.subscription_cancelled' ||
+      err.code === 'market.subscription_no_access' ||
+      err.code === 'market.period_not_applicable'
+    ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
     }
     // Orphan listing / missing slot / over-quota after unstake — preconditions, not bad payloads.
@@ -160,6 +169,7 @@ const listingOut = z.object({
   offerType: z.enum(['one_time', 'subscription']),
   assetId: z.string(),
   price: z.string(),
+  periodSeconds: z.number().int().positive().nullable(),
   status: z.enum(['active', 'archived']),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
@@ -179,6 +189,7 @@ const purchaseOut = z.object({
   rejectionCode: z.string().nullable(),
   createdAt: z.string().datetime(),
   settledAt: z.string().datetime().nullable(),
+  accessUntil: z.string().datetime().nullable(),
 });
 
 export function createMarketRouter(vendors: VendorService, commerce?: CommerceService) {
@@ -382,6 +393,8 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
           assetId: z.string().min(1).max(32),
           /** Decimal string — never a number. */
           price: z.string().min(1).max(64),
+          /** Whole seconds. Required when offerType is subscription. No default month. */
+          periodSeconds: z.number().int().positive().optional(),
         }),
       )
       .output(listingOut)
@@ -428,13 +441,15 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       }),
 
     /**
-     * Recurring marketplace subscribe. Always named-refuses — C3 is not built.
-     * Public so a missing procedure cannot be mistaken for a 404 bug.
-     * Does not call purchase / ledger; does not invent commission.
+     * Automatic recurring charge is not built (no second recipe / scheduler).
+     * One period is `purchase`. Public so a missing procedure cannot look like 404.
      */
     subscribe: publicProcedure.input(z.object({ listingId: z.string().uuid().optional() }).optional()).mutation(async () => {
       try {
-        throw new MarketError('Subscription purchase is not built yet (market.commerce Stage 3 residual)', 'market.subscription_not_built');
+        throw new MarketError(
+          'Automatic recurring subscribe is not built — buy one period with purchase',
+          'market.subscription_recurring_not_built',
+        );
       } catch (err) {
         mapError(err);
       }
@@ -465,6 +480,43 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       .query(async ({ ctx }) => {
         requireCommerce(commerce);
         return commerce.purchasesOf(ctx.principal!.userId);
+      }),
+
+    cancelSubscription: scopedProcedure('market:write', { module: 'market' })
+      .input(z.object({ listingId: z.string().uuid() }))
+      .output(
+        z.object({
+          listingId: z.string().uuid(),
+          buyerId: z.string().uuid(),
+          cancelledAt: z.string().datetime(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.cancelSubscription({ buyerId: ctx.principal!.userId, listingId: input.listingId });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    subscriptionAccess: scopedProcedure('market:read', { module: 'market' })
+      .input(z.object({ listingId: z.string().uuid() }))
+      .output(
+        z.object({
+          granted: z.literal(true),
+          listingId: z.string().uuid(),
+          buyerId: z.string().uuid(),
+          accessUntil: z.string().datetime(),
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.subscriptionAccess({ buyerId: ctx.principal!.userId, listingId: input.listingId });
+        } catch (err) {
+          mapError(err);
+        }
       }),
   });
 }
