@@ -74,7 +74,9 @@ tRPC under `/trpc` (edge mounts `/api/support`). Principal via edge HMAC
 | `support.claim`        | `support:ops`         | Exclusive claim (atomic)                                                                           |
 
 HTTP: `GET /health`, `GET /ready` (`stage: 4-audited-grounded-desk`,
-`store: postgres`, `accountStateSource: svc-identity`).
+`store: postgres`, `accountStateSource: svc-identity`, desk vs
+`agents.support` split fields, `identityGroundingRefuse` named
+`support.identity_grounding_unwired` when the S2S secret is blank).
 
 **Env:** `INTERNAL_SERVICE_SECRET` is REQUIRED — the grounding read is an S2S
 call and `/internal/account/:userId` hard-401s an unauthenticated caller.

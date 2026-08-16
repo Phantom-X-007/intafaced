@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SERVICE_HEADER, SERVICE_SIGNATURE_HEADER } from '@intafaced/contracts';
 import { DarkAccountState, createAccountStateClient, type AccountStateSource } from './account-state.js';
+import { IDENTITY_GROUNDING_UNWIRED, IdentityGroundingUnwiredError } from './identity-grounding-honesty.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const SECRET = 'an-internal-service-secret-long-enough';
@@ -26,6 +27,12 @@ describe('account state read port', () => {
     // account look usable, which is why the null source must not guess it.
     const dark: AccountStateSource = new DarkAccountState();
     expect(await dark.stateOf(USER)).toBeNull();
+  });
+
+  it('an empty S2S secret is a named refuse, not silent dark', async () => {
+    const client = createAccountStateClient('http://identity:4002', '');
+    await expect(client.stateOf(USER)).rejects.toBeInstanceOf(IdentityGroundingUnwiredError);
+    await expect(client.stateOf(USER)).rejects.toMatchObject({ code: IDENTITY_GROUNDING_UNWIRED });
   });
 
   it('reads the published projection over S2S credentials', async () => {

@@ -1146,14 +1146,16 @@ export const FEATURES = [
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
     requires: ['services/svc-agents/src/support-agent', 'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts'],
     note:
-      '**D26-P1-A2 Done-bar sealed 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
+      '**D26-P1-O3 2026-08-15 (desk vs agent split):** this row is the assist surface, not the desk and not a production KB plane. ' +
+      'Unstamp `done` — Stage-1/A2 code on tip is not live ops.support KB grounding in a production env. Residual: live KB+account-state env (Class X credentials). Do not edit svc-agents on this mountain (open agents PRs). ' +
+      '**D26-P1-A2 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
       'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
-      'Live ops.support production credentials remain Class X residual (not agent-done). No packages/i18n.',
+      'No packages/i18n.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
@@ -1466,11 +1468,13 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-support', 'docker-compose.apps.yml'],
     note:
+      '**D26-P1-O3 2026-08-15 (desk vs agents.support split):** unstamp `done`. Desk code + compose pin on tip is not a live-env ticket+KB loop; `/health` liveness ≠ served loop (`ticketKbLoopObservedInLiveCompose: false`). ' +
+      '`agents.support` is assist, not this mountain. Named refuse `support.identity_grounding_unwired` when INTERNAL_SERVICE_SECRET is blank — not silent `plane_dark`. Vue/admin HUMAN; no invented SLA. ' +
       'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +
       'atomic claim UPDATE (two operators racing cannot both win), `searchKb`/`getKb` on the router, TEST_DATABASE_URL_SUPPORT + turbo pass-through. ' +
       '**Stage-4 #1494 (2026-08-09): the desk can now say what it read.** Closes the two Stage-2 boxes docs/ops/trk/ops.support.md left unchecked. ' +
@@ -1482,13 +1486,8 @@ export const FEATURES = [
       'user from a stale copy of a freeze. Takes no userId argument — the id comes off the ticket, so `support:ops` is not a platform-wide account lookup. ' +
       '(c) ESCALATION CASE FILE — `support.case_files`, immutable once written, `citations` refused empty at three layers (builder, zod, CHECK). Citations ' +
       'are ref + sha256 digest, never content, so the record proves what was read without becoming a PII archive. ' +
-      'PROVEN: 103 svc-support tests + 6 new svc-identity ones; all Postgres triggers asserted by SQLSTATE against a real database (23514/23505), not by ' +
-      'message text; route reachability via `createCaller` through the real edge context and scope middleware. 32/32 gates green. ' +
-      '**DONE 2026-08-13:** named leftover (1) was stale — `docker-compose.apps.yml` already runs `svc-support` on 4017 with ' +
-      '`*internal-secret`, `IDENTITY_URL` → svc-identity, `svc_support` role, edge `SUPPORT_URL` → `/api/support`. Pin: ' +
-      '`fleet-compose-pin.test.ts` (red if the desk or secret drops). Ticket/KB/operator queue reachable via edge tRPC (same ' +
-      'bar as bank.accounts: UX shell may expand). Residual not blocking: (2) Vue desk / apps/admin list (`nitro-frontend-all`); ' +
-      '(3) SLA wording (DIRECTION §8 item 9 owner). ' +
+      'Fleet compose pin #1796: `docker-compose.apps.yml` runs `svc-support` on 4017 with `*internal-secret`, `IDENTITY_URL` → svc-identity; edge `SUPPORT_URL`. ' +
+      'Residual: Vue desk / apps/admin (`nitro-frontend-all`); SLA wording (DIRECTION §8 item 9 owner); live-env ticket+KB observation. ' +
       'No money on this service ever: no ledger client, and the case file has no amount/currency/instruction field — `money_request` is a reason NAME that ' +
       'files a request for the pay/ledger recipe that owns the value (§0.6).',
   }),

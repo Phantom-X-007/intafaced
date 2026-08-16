@@ -34,6 +34,8 @@ describe('D26-P1-O3 desk vs agent surface split', () => {
     expect(src).toMatch(/accountStateSource:\s*split\.accountStateSource/);
     expect(src).toMatch(/deskMountain:\s*split\.deskMountain/);
     expect(src).toMatch(/agentAssist:\s*split\.agentAssist/);
+    expect(src).toMatch(/identityGroundingProof/);
+    expect(src).toMatch(/identityGroundingRefuse/);
   });
 
   it('desk service never imports ledger-client (no invent balances)', () => {

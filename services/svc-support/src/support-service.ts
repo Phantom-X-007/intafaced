@@ -13,6 +13,7 @@ import type {
   SupportTicketStatus,
 } from '@intafaced/contracts';
 import { DarkAccountState, type AccountStateSource } from './account-state.js';
+import { IDENTITY_GROUNDING_UNWIRED, IdentityGroundingUnwiredError } from './identity-grounding-honesty.js';
 import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingFor } from './case-file.js';
 import { assertKbArticle, KbCatalogError, searchKb, toPublicKb } from './kb-catalog.js';
 import { isTerminal } from './lifecycle.js';
@@ -202,7 +203,16 @@ export class SupportService implements SupportContract {
       const ticket = await this.store.findById(input.ticketId);
       if (!ticket) throw ticketNotFound();
 
-      const state = await this.accounts.stateOf(ticket.userId);
+      let state;
+      try {
+        state = await this.accounts.stateOf(ticket.userId);
+      } catch (err) {
+        // Unwired secret is not plane_dark — name the refuse, do not record unread.
+        if (err instanceof IdentityGroundingUnwiredError) {
+          throw new SupportError(err.message, IDENTITY_GROUNDING_UNWIRED);
+        }
+        throw err;
+      }
       const grounding = groundingFor(state, new Date().toISOString());
 
       span.setAttribute('intafaced.support.ticket_id', ticket.id);
@@ -253,7 +263,15 @@ export class SupportService implements SupportContract {
       const readAt = new Date().toISOString();
       const citations: SupportCitation[] = [];
 
-      const state = await this.accounts.stateOf(ticket.userId);
+      let state;
+      try {
+        state = await this.accounts.stateOf(ticket.userId);
+      } catch (err) {
+        if (err instanceof IdentityGroundingUnwiredError) {
+          throw new SupportError(err.message, IDENTITY_GROUNDING_UNWIRED);
+        }
+        throw err;
+      }
       const grounding = groundingFor(state, readAt);
       if (grounding.status === 'read') citations.push(citeAccountState(grounding.state, readAt));
 
