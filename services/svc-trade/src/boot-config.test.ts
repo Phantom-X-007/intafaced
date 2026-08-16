@@ -533,9 +533,7 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
 
   it('env.ts still declares the MM seed and algo job names this pin tracks', () => {
     expect(mmSeedKeys.length).toBeGreaterThanOrEqual(10);
-    expect(algoKeys.sort()).toEqual(
-      ['TRADE_ALGO_ENABLED', 'TRADE_ALGO_JOBS_ENABLED', 'TRADE_ALGO_JOBS_INTERVAL_MS'].sort(),
-    );
+    expect(algoKeys.sort()).toEqual(['TRADE_ALGO_ENABLED', 'TRADE_ALGO_JOBS_ENABLED', 'TRADE_ALGO_JOBS_INTERVAL_MS'].sort());
   });
 
   it('compose svc-trade block names every TRADE_MM_SEED_* and TRADE_ALGO_* job flag from env.ts', () => {
