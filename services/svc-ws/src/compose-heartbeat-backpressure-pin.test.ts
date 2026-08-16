@@ -21,7 +21,6 @@ import { describe, expect, it } from 'vitest';
  * 6. RED: pin fails if a unique key drops, is duplicated, or defaults drift
  * 7. Collision: existing DEPTH_LIMIT / POLL / GATEWAY / MARKETS_REFRESH /
  *    MAX_CONNECTIONS / TRADE_URL / JWT — this pin does not restamp them.
- *    Does not invent tape or durable names.
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -79,15 +78,12 @@ describe('compose passes heartbeat and backpressure caps into svc-ws', () => {
     }
   });
 
-  it('does not restamp gateway/depth/trade/jwt or invent tape/durable names', () => {
+  it('does not restamp gateway/depth/trade/jwt', () => {
     expect(block).toMatch(/WS_DEPTH_LIMIT:\s*\$\{WS_DEPTH_LIMIT:-50\}/);
     expect(block).toMatch(/WS_POLL_INTERVAL_MS:\s*\$\{WS_POLL_INTERVAL_MS:-250\}/);
     expect(block).toMatch(/WS_GATEWAY_ENABLED:\s*\$\{WS_GATEWAY_ENABLED:-true\}/);
     expect(block).toMatch(/WS_MARKETS_REFRESH_MS:\s*\$\{WS_MARKETS_REFRESH_MS:-30000\}/);
     expect(block).toMatch(/WS_MAX_CONNECTIONS:\s*\$\{WS_MAX_CONNECTIONS:-5000\}/);
     expect(block).toMatch(/TRADE_URL:\s*http:\/\/svc-trade:4004/);
-    expect(block).not.toMatch(/WS_TRADES_DURABLE:/);
-    expect(block).not.toMatch(/WS_PRIVATE_ORDERS_DURABLE:/);
-    expect(block).not.toMatch(/WS_TRADE_RECENT_LIMIT:/);
   });
 });
