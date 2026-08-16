@@ -30,6 +30,35 @@ export const METERING_OFF_PRODUCT_LAW = {
 
 export type MeteringOffProductLaw = typeof METERING_OFF_PRODUCT_LAW;
 
+/** Operator-facing `/ready` mode. Kill-switch off is audit-only, never billed. */
+export type MeteringPublicMode = typeof METERING_OFF_PRODUCT_LAW.mode | 'billed';
+
+/**
+ * Public-door card for `/ready` and honesty tests.
+ *
+ * When metering is off, `meteringAllowsFeeCharge` is forever false — the same
+ * product law `settleWindow` uses. Operators must not read process-ready as
+ * "feeCharge still posts".
+ */
+export function meteringPublicCard(meteringEnabled: boolean): {
+  readonly meteringEnabled: boolean;
+  readonly meteringMode: MeteringPublicMode;
+  readonly meteringAllowsFeeCharge: boolean;
+} {
+  if (!meteringEnabled) {
+    return {
+      meteringEnabled: false,
+      meteringMode: METERING_OFF_PRODUCT_LAW.mode,
+      meteringAllowsFeeCharge: METERING_OFF_PRODUCT_LAW.allowsFeeCharge,
+    };
+  }
+  return {
+    meteringEnabled: true,
+    meteringMode: 'billed',
+    meteringAllowsFeeCharge: true,
+  };
+}
+
 /** Same key shape as `chargeKeyFor` in meter.ts — kept local to avoid meter import. */
 function chargeKeyFor(sessionId: string, windowId: string): string {
   return `agent.usage:${sessionId}:${windowId}`;

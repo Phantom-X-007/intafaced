@@ -145,6 +145,8 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  *   · `usefulPath.available` is whether a completion can leave the process now
  *   · productAgentsRegistered is the boot upsert count (not live inference)
  *   · fleet is the Stage-1 matrix card (mounts + boot flags), not live inference
+ *   · meteringEnabled=false is D26-P1-A6 audit-only (`meteringMode: audit_only`,
+ *     meteringAllowsFeeCharge=false) — process-ready is not a silent feeCharge
  * Never a vendor name (Doctrine §0.7).
  */
 app.get('/ready', async () =>

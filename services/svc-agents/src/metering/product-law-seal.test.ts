@@ -17,7 +17,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { METERING_OFF_PRODUCT_LAW, meteringOffSettlementStub, shouldMeterUsage } from './product-law.js';
+import { METERING_OFF_PRODUCT_LAW, meteringOffSettlementStub, meteringPublicCard, shouldMeterUsage } from './product-law.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC_ROOT = join(HERE, '..');
@@ -48,6 +48,16 @@ describe('D26-P1-A6 metering-off product law seal', () => {
     expect(stub.amount).toBe(0n);
     expect(stub.chargeTxId).toBeNull();
     expect(stub.chargeKey).toBe('agent.usage:sess:2026-08-12T00');
+  });
+
+  it('meteringPublicCard never allows feeCharge while metering is off', () => {
+    const off = meteringPublicCard(false);
+    expect(off.meteringEnabled).toBe(false);
+    expect(off.meteringMode).toBe('audit_only');
+    expect(off.meteringAllowsFeeCharge).toBe(false);
+    const on = meteringPublicCard(true);
+    expect(on.meteringMode).toBe('billed');
+    expect(on.meteringAllowsFeeCharge).toBe(true);
   });
 
   it('shouldMeterUsage requires both session.metered and process kill-switch', () => {
@@ -109,5 +119,13 @@ describe('D26-P1-A6 metering-off product law seal', () => {
     expect(testSrc).toMatch(/keeps the audit when billing is off|records usage even when billing is switched off/);
     // settleSession inherits the gate — leftover windows must stay unbilled via both APIs.
     expect(testSrc).toContain('metering-off settleSession also refuses feeCharge for leftover windows');
+    expect(testSrc).toContain('run.complete same requestId twice through createCaller never invents a charge or request_id_replay');
+  });
+
+  it('index /ready and runtime share the AGENTS_METERING_ENABLED kill-switch', () => {
+    const src = readFileSync(join(SRC_ROOT, 'index.ts'), 'utf8');
+    expect(src).toMatch(/meteringEnabled: env\.AGENTS_METERING_ENABLED/);
+    expect(src).toMatch(/app\.get\('\/ready'/);
+    expect(src).not.toMatch(/recipes\.feeCharge/);
   });
 });

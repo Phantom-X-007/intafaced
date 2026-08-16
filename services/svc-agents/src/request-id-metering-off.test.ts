@@ -57,9 +57,24 @@ describe('request-id replay gate is metering-gated', () => {
     expect(doors).toContain('D26-P2-01h public doors — metering-off never feeCharges');
     expect(doors).toContain('usage.settle returns settled:false amount 0 and never calls meter.settle');
     expect(doors).toContain('run.complete reports cost 0 / metered false and never calls meter.settle');
+    expect(doors).toContain('run.complete same requestId twice never calls meter.settle');
     expect(doors).toContain('D26-P2-01h public doors — dark refuse bills zero');
     const runtimeSrc = readFileSync(join(HERE, 'runtime.test.ts'), 'utf8');
     expect(runtimeSrc).toContain('D26-P2-01h public doors — real AgentRuntime metering-off');
     expect(runtimeSrc).toContain('run.complete through createCaller never bills / never feeCharges');
+    expect(runtimeSrc).toContain('run.complete same requestId twice through createCaller never invents a charge or request_id_replay');
+  });
+
+  it('GET /ready public door pins audit-only when metering is off', () => {
+    const indexSrc = readFileSync(join(HERE, 'index.ts'), 'utf8');
+    expect(indexSrc).toMatch(/app\.get\('\/ready'/);
+    expect(indexSrc).toMatch(/meteringEnabled: env\.AGENTS_METERING_ENABLED/);
+    expect(indexSrc).toMatch(/meteringMode: audit_only/);
+    const readySrc = readFileSync(join(HERE, 'readiness.ts'), 'utf8');
+    expect(readySrc).toMatch(/from '\.\/metering\/product-law\.js'/);
+    expect(readySrc).toMatch(/meteringPublicCard\(input\.meteringEnabled\)/);
+    const readyTest = readFileSync(join(HERE, 'readiness.test.ts'), 'utf8');
+    expect(readyTest).toContain('D26-P1-A6 public /ready door — metering-off never advertises feeCharge');
+    expect(readyTest).toContain('would fail if metering-off still claimed a feeCharge door');
   });
 });
