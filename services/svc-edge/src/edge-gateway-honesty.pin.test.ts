@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { enforcementOf } from '@intafaced/config';
@@ -39,7 +39,7 @@ describe('edge.gateway honesty pin', () => {
 
   it('only admin-api may read enforcementOf for status honesty (not a gate)', () => {
     for (const file of productionSources()) {
-      const base = file.split('/').pop()!;
+      const base = basename(file);
       const src = readFileSync(file, 'utf8');
       if (base === 'admin-api.ts') {
         expect(src).toMatch(/enforcementOf\s*\(\s*['"]edge\.gateway['"]\s*\)/);
