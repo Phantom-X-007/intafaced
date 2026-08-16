@@ -747,21 +747,22 @@ export const FEATURES = [
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
     phase: '3',
-    status: 'done',
-    owner: null,
+    status: 'wip',
+    owner: 'nitro-agents',
     dependsOn: ['pay.gateway'],
     requires: [
       'services/svc-pay/src/plugins/reference-client.ts',
       'services/svc-pay/src/plugins/webhook-vectors.ts',
       'services/svc-pay/src/plugins/plugins-done-bar.test.ts',
+      'services/svc-pay/src/plugins/woocommerce-contract.test.ts',
+      'plugins/woocommerce-intafaced-pay/intafaced-pay.php',
       'docs/pay/PLUGINS-REFERENCE-PATH-2026-08-10.md',
     ],
     note:
-      '**D26-P1-P8 2026-08-12:** Done bar = one real plugin path (TS reference client) + §13 PHP CMS socket. ' +
-      'Client pins create/get/authorize/capture/refund + webhook-endpoints/deliveries; https-only register; ' +
-      'frozen HMAC vectors; public-door lifecycle Done-bar (`plugins-done-bar.test.ts`) + sendPluginRequest E2E; ' +
-      'no Woo/Magento/OpenCart PHP in monorepo CI. Law §13 socket opened. ' +
-      'Was reclaimed 2026-08-04 M1; wave-13 #1633 banked install/auth; this closes the mountain.',
+      '**Woo CMS adapter 2026-08-16 (wip):** first real store plugin — `plugins/woocommerce-intafaced-pay/` consumes ' +
+      'pay.public-api + TS reference client pins (Bearer, Idempotency-Key, decimal-string amounts, frozen HMAC). ' +
+      'Magento/OpenCart remain §13 `pay.plugin_cms_unwired`. Not three CMS plugins in this PR. ' +
+      'Prior D26-P1-P8 (2026-08-12) banked the TS reference path + socket; this slice is the Woo product tree.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
     module: 'pay',
