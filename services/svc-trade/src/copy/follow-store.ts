@@ -105,6 +105,22 @@ export type RunFeeShareSettleOnceResult =
   | { readonly status: 'duplicate'; readonly record: StoredSettledFeeShare }
   | { readonly status: 'claimed'; readonly record: StoredSettledFeeShare };
 
+/** Prior follower place under a claimed (follow, leader fill). */
+export interface StoredPlacedMirror {
+  readonly followId: string;
+  readonly fillId: string;
+  readonly orderId: string;
+  readonly clientOrderId: string;
+  readonly price: Amount;
+}
+
+export type RunPlaceMirrorOnceResult =
+  | { readonly status: 'duplicate'; readonly record: StoredPlacedMirror }
+  | { readonly status: 'claimed'; readonly record: StoredPlacedMirror };
+
+/** Process-local place claims for Sql clones (spot clientOrderId is the durable retry key). */
+const sqlPlacedMirrors = new Map<string, StoredPlacedMirror>();
+
 export interface CopyFollowStore {
   /**
    * Linearize every action for one follow across processes.
@@ -171,6 +187,11 @@ export interface CopyFollowStore {
    * `run` (so reserveEarnings does not fire again).
    */
   runFeeShareSettleOnce(followId: string, fillId: string, run: () => Promise<StoredSettledFeeShare>): Promise<RunFeeShareSettleOnceResult>;
+  /**
+   * Run follower place at most once per (followId, fillId).
+   * Redelivery returns the prior order and does not call placeOrder again.
+   */
+  runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult>;
 }
 
 /**
@@ -218,6 +239,8 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   private readonly mirrored = new Map<string, StoredMirrorPlan>();
   /** Keyed `${followId}\0${fillId}` — one fee-share settle per follower fill. */
   private readonly settled = new Map<string, StoredSettledFeeShare>();
+  /** Keyed `${followId}\0${fillId}` — one follower place per leader fill. */
+  private readonly placed = new Map<string, StoredPlacedMirror>();
   private readonly exclusive = createExclusiveQueue();
 
   async runFollowExclusive<T>(followId: string, run: (lockedStore: CopyFollowStore) => Promise<T>): Promise<T> {
@@ -253,6 +276,11 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     for (const key of [...this.settled.keys()]) {
       if (key.startsWith(`${followId}\0`)) {
         this.settled.delete(key);
+      }
+    }
+    for (const key of [...this.placed.keys()]) {
+      if (key.startsWith(`${followId}\0`)) {
+        this.placed.delete(key);
       }
     }
   }
@@ -375,6 +403,19 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
       }
       const record = await run();
       this.settled.set(key, record);
+      return { status: 'claimed' as const, record };
+    });
+  }
+
+  async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
+    return this.exclusive(`place:${mirrorKey(followId, fillId)}`, async () => {
+      const key = mirrorKey(followId, fillId);
+      const existing = this.placed.get(key);
+      if (existing) {
+        return { status: 'duplicate' as const, record: existing };
+      }
+      const record = await run();
+      this.placed.set(key, record);
       return { status: 'claimed' as const, record };
     });
   }
@@ -551,6 +592,11 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     await this.sql`DELETE FROM copy_settled_fee_shares WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_mirrored_fills WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_follows WHERE follow_id = ${followId}`;
+    for (const key of [...sqlPlacedMirrors.keys()]) {
+      if (key.startsWith(`${followId}\0`)) {
+        sqlPlacedMirrors.delete(key);
+      }
+    }
   }
 
   async listFollows(): Promise<CopyFollow[]> {
@@ -829,6 +875,17 @@ export class SqlCopyFollowStore implements CopyFollowStore {
       return settleOnce();
     }
     return this.withAdvisoryLock(`copy-settle:${followId}:${fillId}`, settleOnce);
+  }
+
+  async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
+    const key = mirrorKey(followId, fillId);
+    const existing = sqlPlacedMirrors.get(key);
+    if (existing) {
+      return { status: 'duplicate' as const, record: existing };
+    }
+    const record = await run();
+    sqlPlacedMirrors.set(key, record);
+    return { status: 'claimed' as const, record };
   }
 }
 

@@ -17,15 +17,21 @@ import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-
 import type { Principal } from '@intafaced/auth';
 import {
   autoMirrorPlaceStatus,
+  copyLimitPriceFromPlan,
   copyMirrorClientOrderId,
+  parseCopyPlaceMirrorFlag,
   COPY_AUTO_MIRROR_PLACE_RESIDUAL,
   COPY_AUTO_MIRROR_PLACE_SOCKET,
+  COPY_PAPER_LIVE_RESIDUAL,
+  COPY_PLACE_DISABLED_RESIDUAL,
+  type InspectCopyMarket,
   type PlaceFollowerOrderPort,
 } from './auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
 import {
   copyLawResidual,
   copyLawStatusLine,
+  requirePublishedCopyFeeShareLaw,
   requirePublishedCopyJurisdictionLaw,
   UNPUBLISHED_COPY_FEE_SHARE_LAW,
   UNPUBLISHED_COPY_JURISDICTION_LAW,
@@ -50,10 +56,17 @@ export interface CopyServiceOptions {
   /** Defaults to in-memory. Production wires SqlCopyFollowStore. */
   store?: CopyFollowStore;
   /**
-   * Follower spot place. Production wires TradeService.placeOrder.
-   * Absent → placeMirror still refuse-closed (never invent a fill).
+   * Follower spot place. Production wires TradeService.placeOrder as a limit
+   * at the planned envelope. Absent → placeMirror refuse-closed.
    */
   placeFollowerOrder?: PlaceFollowerOrderPort;
+  /**
+   * Explicit operator flag. Default reads TRADE_COPY_PLACE_MIRROR (off).
+   * Port wired + flag off still refuses by name.
+   */
+  placeMirrorEnabled?: boolean;
+  /** Paper vs live honesty — never place live from a paper leader fill. */
+  inspectMarket?: InspectCopyMarket;
 }
 
 type FollowRef = { followId: string };
@@ -84,6 +97,8 @@ export class CopyService {
   private readonly jurisdictionLaw: CopyJurisdictionLaw;
   private readonly now: () => Date;
   private readonly placeFollowerOrder: PlaceFollowerOrderPort | null;
+  private readonly placeMirrorEnabled: boolean;
+  private readonly inspectMarket: InspectCopyMarket | null;
 
   constructor(
     private readonly ledger: LedgerClient,
@@ -94,6 +109,8 @@ export class CopyService {
     this.now = options.now ?? (() => new Date());
     this.store = options.store ?? new MemoryCopyFollowStore();
     this.placeFollowerOrder = options.placeFollowerOrder ?? null;
+    this.placeMirrorEnabled = options.placeMirrorEnabled ?? parseCopyPlaceMirrorFlag(process.env.TRADE_COPY_PLACE_MIRROR);
+    this.inspectMarket = options.inspectMarket ?? null;
   }
 
   /**
@@ -120,18 +137,28 @@ export class CopyService {
       residuals: {
         rates: feeSharePublished ? null : COPY_FEE_SHARE_RESIDUAL,
         jurisdiction: jurisdictionPublished ? null : COPY_JURISDICTION_RESIDUAL,
-        autoMirrorPlace: this.placeFollowerOrder ? null : COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+        autoMirrorPlace: this.placeMirrorEnabled && this.placeFollowerOrder ? null : COPY_PLACE_DISABLED_RESIDUAL,
       },
-      autoMirrorPlace: autoMirrorPlaceStatus(this.placeFollowerOrder !== null),
+      autoMirrorPlace: autoMirrorPlaceStatus(this.placeMirrorEnabled && this.placeFollowerOrder !== null),
     };
   }
 
   /**
-   * Place a planned mirror as a real follower spot order.
-   * Never invents a fill — qty/side/market come from the durable plan.
+   * Place a planned mirror as a real follower spot limit at the plan envelope.
+   * Flag off / blank §8 / paper→live refuse by name. Idempotent on fillId.
    */
-  async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string }) {
+  async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string; leaderPaper: boolean }) {
     return this.store.runFollowExclusive(input.followId, async (store) => {
+      if (!this.placeMirrorEnabled) {
+        throw new CopyError(
+          'copy.placeMirror is refuse-closed until TRADE_COPY_PLACE_MIRROR is on',
+          'trade.copy_place_disabled',
+          COPY_PLACE_DISABLED_RESIDUAL,
+        );
+      }
+      requirePublishedCopyFeeShareLaw(this.feeShareLaw);
+      requirePublishedCopyJurisdictionLaw(this.jurisdictionLaw);
+
       const follow = await store.getFollow(input.followId);
       if (!follow) {
         throw new CopyError('Follow not found', 'trade.copy_not_following');
@@ -139,7 +166,6 @@ export class CopyService {
       if (follow.followerId !== principal.userId) {
         throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
       }
-      requirePublishedCopyJurisdictionLaw(this.jurisdictionLaw);
       assertCopyRegionAllowed(this.jurisdictionLaw, follow.region);
       if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
         throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
@@ -159,20 +185,53 @@ export class CopyService {
           COPY_AUTO_MIRROR_PLACE_RESIDUAL,
         );
       }
-      const placed = await this.placeFollowerOrder(principal, {
-        symbol: prior.marketId,
-        marketId: prior.marketId,
-        side: prior.side,
-        qty: prior.qty,
-        clientOrderId: copyMirrorClientOrderId(follow.followId, prior.fillId),
+
+      const market = this.inspectMarket ? await this.inspectMarket(prior.marketId) : null;
+      if (input.leaderPaper) {
+        if (!market || market.paper !== true) {
+          throw new CopyError(
+            'Paper leader fill cannot place a live follower order',
+            'trade.copy_paper_live_forbidden',
+            COPY_PAPER_LIVE_RESIDUAL,
+          );
+        }
+      } else if (market?.paper === true) {
+        throw new CopyError(
+          'Live leader fill cannot place onto a paper market',
+          'trade.copy_paper_live_forbidden',
+          COPY_PAPER_LIVE_RESIDUAL,
+        );
+      }
+
+      const price = copyLimitPriceFromPlan(prior.qty, prior.notional);
+      const once = await store.runPlaceMirrorOnce(follow.followId, prior.fillId, async () => {
+        const clientOrderId = copyMirrorClientOrderId(follow.followId, prior.fillId);
+        const placed = await this.placeFollowerOrder!(principal, {
+          symbol: prior.marketId,
+          marketId: prior.marketId,
+          side: prior.side,
+          qty: prior.qty,
+          price,
+          clientOrderId,
+        });
+        return {
+          followId: follow.followId,
+          fillId: prior.fillId,
+          orderId: placed.orderId,
+          clientOrderId,
+          price,
+        };
       });
+
       return {
         followId: follow.followId,
         fillId: prior.fillId,
-        orderId: placed.orderId,
+        orderId: once.record.orderId,
         marketId: prior.marketId,
         side: prior.side,
         qty: formatAmount(prior.qty),
+        price: formatAmount(price),
+        duplicate: once.status === 'duplicate',
       };
     });
   }

@@ -21,7 +21,9 @@ export type CopyErrorCode =
   | 'trade.copy_pnl_fee_forbidden'
   | 'trade.copy_ranking_forbidden'
   | 'trade.copy_settle_refused'
-  | 'trade.copy_auto_mirror_place_socket';
+  | 'trade.copy_auto_mirror_place_socket'
+  | 'trade.copy_place_disabled'
+  | 'trade.copy_paper_live_forbidden';
 
 export class CopyError extends Error {
   constructor(
