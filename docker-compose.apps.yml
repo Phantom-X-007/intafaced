@@ -457,6 +457,9 @@ services:
       # D2: no product 8h. Pin empty so an omitted key cannot fall through to a
       # schema default if one is ever reintroduced.
       TRADE_FUTURES_FUNDING_INTERVAL_MS: ${TRADE_FUTURES_FUNDING_INTERVAL_MS:-}
+      # Funding market membership. Empty = no schedule even when jobs are on.
+      # Host `.env` pins ids; compose does not invent UUIDs.
+      TRADE_FUTURES_FUNDING_MARKET_IDS: ${TRADE_FUTURES_FUNDING_MARKET_IDS:-}
       # THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM — its balance is the
       # ceiling (docs/adr/2026-08-05-futures-risk-and-mark-law.md). PKT-B5
       # 2026-08-13 named `house:fees:trade:available` in `.env.example`. This
