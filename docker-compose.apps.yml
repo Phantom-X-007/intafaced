@@ -217,6 +217,7 @@ services:
       EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
       EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
+      EDGE_BODY_LIMIT_BYTES: ${EDGE_BODY_LIMIT_BYTES:-1048576}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
       IDENTITY_URL: http://svc-identity:4002
       TRADE_URL: http://svc-trade:4004
@@ -335,6 +336,13 @@ services:
       # because each was written without knowing the others' ports.
       HTTP_PORT: '4005'
       MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+      # Engine kill-switch (env.ts boolish default true). Host `.env` can halt
+      # submissions before the journal. `${VAR:-false}` here would refuse every
+      # order on a clean clone while env.ts still reads as on.
+      MATCHING_ENGINE_ENABLED: ${MATCHING_ENGINE_ENABLED:-true}
+      # Snapshot cadence (env.ts default 500). 0 disables. Host can pin; compose
+      # does not invent a different N.
+      MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-500}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4005']
     volumes:
@@ -467,6 +475,18 @@ services:
       TRADE_OTC_MIDS: ${TRADE_OTC_MIDS:-}
       TRADE_OTC_MID_FROM_VENUE: ${TRADE_OTC_MID_FROM_VENUE:-false}
       TRADE_OTC_VENUE_SYMBOLS: ${TRADE_OTC_VENUE_SYMBOLS:-}
+      # Spot candle materialization (A-TRADE-SPOT-1). Default OFF — same shape as
+      # TRADE_FUTURES_JOBS_ENABLED. `${VAR:-true}` here would copy buckets on a
+      # clean clone while env.ts still read as off. Empty market ids still skip
+      # (never invent a UUID list). Timeframes default 1m to match env.ts.
+      TRADE_CANDLE_JOBS_ENABLED: ${TRADE_CANDLE_JOBS_ENABLED:-false}
+      TRADE_CANDLE_JOBS_INTERVAL_MS: ${TRADE_CANDLE_JOBS_INTERVAL_MS:-60000}
+      TRADE_CANDLE_JOBS_MARKET_IDS: ${TRADE_CANDLE_JOBS_MARKET_IDS:-}
+      TRADE_CANDLE_JOBS_TIMEFRAMES: ${TRADE_CANDLE_JOBS_TIMEFRAMES:-1m}
+      # Engine ↔ ledger reconcile sweep. Default OFF. Does not turn jobs on.
+      # Host `.env` can pin cadence. No invented market list.
+      TRADE_RECONCILE_JOBS_ENABLED: ${TRADE_RECONCILE_JOBS_ENABLED:-false}
+      TRADE_RECONCILE_JOBS_INTERVAL_MS: ${TRADE_RECONCILE_JOBS_INTERVAL_MS:-60000}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4004']
     healthcheck: *healthcheck
