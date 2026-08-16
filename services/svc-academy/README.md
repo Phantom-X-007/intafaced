@@ -236,7 +236,7 @@ Workbook paper drills consume trade's `paper` market flag. **No prices invented 
 
 `paper/ledger-isolation.test.ts` reads every module under `src/paper/` and fails the build on any import of the ledger's write surface (client, recipes, `orderHold`, `tradeFill`, `.post(`). The decimal **math** from `@intafaced/ledger-client` is allowed and required — a simulated figure uses the one money implementation, or it is a float pretending.
 
-**Known gap — the flag is taken on trust.** `market.paper` arrives in the input. Academy has no way to ask trade whether a market really is paper: no `packages/contracts` surface publishes trade markets. Until one exists, a caller that lies about the flag gets a drill against a market that is not paper — and academy still posts nothing, so the blast radius is a wrong label rather than a wrong ledger entry. Closing it needs a contracts PR first (see `docs/ops/trk/academy.paper-trading.md`).
+**D26-P1-C4 — paper flag is not taken on trust.** `paperDrill` / `paperDrillResult` call `assertCallerPaperFlagVerified` before the workbook loop. Trade's public `GET /api/v1/markets` `paper` field is the source of truth (env `TRADE_URL`). A caller that sends `paper: true` for a live listing is refused `academy.paper_flag_mismatch`. If `TRADE_URL` is unset, the drill refuses `academy.paper_flag_unverified` rather than trusting the wire. Listing unreachable → `academy.paper_flag_unavailable`. Missing/false paper on the body still refuses `not_paper` / `no_market` (never a silent live drill). Simulated results stay sealed; this service still posts nothing to the ledger.
 
 ## Curriculum import pipeline (Stage-1)
 

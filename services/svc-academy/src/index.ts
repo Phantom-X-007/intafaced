@@ -11,6 +11,7 @@ import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
 import { isUsable, NullStreamProvider, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
+import { createTradePublicPaperFlagPort } from './paper/market-flag-verify.js';
 import { parseAmbassadorIfcPayLawJson, parseAmbassadorRevenueShareLawJson } from './ambassadors/ifc-pay-rate-law.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -115,6 +116,7 @@ const academy = new AcademyService(
     maxRoomCapacity: env.ACADEMY_MAX_ROOM_CAPACITY,
     tournamentEnabled: env.ACADEMY_TOURNAMENT_ENABLED,
     paperTradingEnabled: env.ACADEMY_PAPER_TRADING_ENABLED,
+    paperMarketFlagPort: env.TRADE_URL ? createTradePublicPaperFlagPort({ baseUrl: env.TRADE_URL }) : undefined,
   },
   certXp,
 );

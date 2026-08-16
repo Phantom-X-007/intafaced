@@ -4,6 +4,8 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
 import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
+import { assertCallerCannotLiePaperFlag, type PaperMarketFlagPort } from './paper/market-flag-verify.js';
+import type { PaperMarketRef } from './paper/workbook-loop.js';
 import { emptyScene, parseScene } from './spatial/scene.js';
 import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
@@ -198,6 +200,12 @@ export interface AcademyServiceOptions {
   tournamentEnabled?: boolean;
   /** Stage-3 paper-trading ops kill-switch (`ACADEMY_PAPER_TRADING_ENABLED`). */
   paperTradingEnabled?: boolean;
+  /**
+   * Trade public-markets paper flag port. Undefined when TRADE_URL is unset —
+   * paper drills then refuse `academy.paper_flag_unverified` rather than
+   * trusting `paper: true` on the wire.
+   */
+  paperMarketFlagPort?: PaperMarketFlagPort;
 }
 
 export class AcademyService {
@@ -559,6 +567,14 @@ export class AcademyService {
     if (!isPaperOpsEnabled(this.options.paperTradingEnabled)) {
       throw new AcademyError(paperOpsDisabledMessage(), 'academy.paper_trading_disabled');
     }
+  }
+
+  /**
+   * D26-P1-C4 — claimed `paper: true` must match trade's public listing.
+   * Unset port (no TRADE_URL) refuses by name rather than trusting the caller.
+   */
+  async assertCallerPaperFlagVerified(market: PaperMarketRef | null): Promise<void> {
+    await assertCallerCannotLiePaperFlag(this.options.paperMarketFlagPort, market);
   }
 
   /** Stage-3 — ops status snapshot (live trade always unaffected). */

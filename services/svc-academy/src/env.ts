@@ -94,6 +94,14 @@ const schema = serviceEnvSchema
        * Shape: {"published":true,"shareOfFeeBps":500,"feeBasis":"lobby_host_fees"}
        */
       ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON: z.string().optional().default(''),
+
+      /**
+       * svc-trade public REST (`GET /api/v1/markets` paper flag).
+       * Blank / unset → paper drills refuse `academy.paper_flag_unverified`
+       * rather than trusting `paper: true` from the caller. No default URL:
+       * a localhost fallback would look verified while trade is absent.
+       */
+      TRADE_URL: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().url().optional()),
     }),
   );
 
