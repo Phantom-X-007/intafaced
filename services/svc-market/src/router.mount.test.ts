@@ -555,6 +555,43 @@ describe('svc-market mount — commerce scopes', () => {
     ).resolves.toEqual([]);
   });
 
+  /**
+   * D26-P1-M1 — recurring subscribe is a mounted public door, not a missing
+   * route. Always named-refuses; never invents a charge or a second book.
+   */
+  it('exposes subscribe as a callable public procedure', () => {
+    const caller = createMarketRouter(stubVendors(), stubCommerce() as never).createCaller(anonymous());
+    expect(typeof caller.subscribe).toBe('function');
+  });
+
+  it('maps public subscribe refuse to PRECONDITION_FAILED without calling purchase', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .subscribe({ listingId }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.subscription_not_built',
+      cause: { code: 'market.subscription_not_built' },
+    });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+    expect(commerce.createListing).not.toHaveBeenCalled();
+  });
+
+  it('subscribe still named-refuses for a signed writer (not a one-time purchase)', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .subscribe(),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.subscription_not_built',
+    });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+  });
+
   it('maps commerce refuse codes to stable tRPC classes', async () => {
     const cases: Array<{ code: string; trpc: string }> = [
       { code: 'market.commission_not_configured', trpc: 'PRECONDITION_FAILED' },

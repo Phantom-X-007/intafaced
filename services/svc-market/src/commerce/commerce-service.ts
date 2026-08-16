@@ -338,6 +338,17 @@ export class CommerceService {
   }
 
   /**
+   * Recurring subscribe is not built (C3). Named refuse so a caller that
+   * skips the router still cannot invent a charge or a second book.
+   */
+  async subscribe(_input?: { listingId?: string }): Promise<never> {
+    throw new MarketError(
+      'Subscription purchase is not built yet (market.commerce Stage 3 residual)',
+      'market.subscription_not_built',
+    );
+  }
+
+  /**
    * One-time purchase. Subscription listings refuse by name until Stage 3.
    *
    * Order: commission configured → eligibility → claim row → re-check sell
