@@ -113,8 +113,7 @@ async function mount(options: { marks?: MarkSource; withAlerts?: boolean } = {})
   const channels = channelsFromEnv({ NOTIFY_GATEWAY_TIMEOUT_MS: 5_000 });
   const dispatcher = new NotificationDispatcher(channels, targets, deliveries, { maxAttempts: 3, outOfAppEnabled: true });
   const notify = new NotifyService(notifyStore, { fanoutEnabled: true }, { targets, deliveries, channels, dispatcher });
-  const alerts =
-    options.withAlerts === false ? null : new AlertService(new MemoryAlertStore(), options.marks ?? darkMarks, notify);
+  const alerts = options.withAlerts === false ? null : new AlertService(new MemoryAlertStore(), options.marks ?? darkMarks, notify);
   const appRouter = createNotifyRouter(notify, alerts ?? undefined);
   const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-notify' });
 
