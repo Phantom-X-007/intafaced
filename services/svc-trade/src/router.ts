@@ -10,7 +10,7 @@ import { OtcError } from './otc/errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
 import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
 import type { OtcDeskService } from './otc/otc-service.js';
-import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL, COPY_AUTO_MIRROR_PLACE_SOCKET } from './copy/auto-mirror-place.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
 
@@ -215,7 +215,10 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_law_blank':
       case 'trade.copy_settle_refused':
       case 'trade.copy_auto_mirror_place_socket':
+      case 'trade.copy_place_disabled':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      case 'trade.copy_paper_live_forbidden':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     }
@@ -779,24 +782,21 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         ),
 
       /**
-       * Place a planned mirror into spot via follower placeOrder.
-       * planMirror is real; inventing a fill is not. Unwired port still refuses.
+       * Place a planned mirror into spot via follower placeOrder (limit at plan envelope).
+       * TRADE_COPY_PLACE_MIRROR off / blank §8 / paper→live refuse by name.
        */
       placeMirror: scopedProcedure('trade:write', { module: 'trade' })
         .input(
           z.object({
             followId: z.string().min(1).max(64),
             fillId: z.string().min(1).max(120),
+            leaderPaper: z.boolean(),
           }),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
             if (!copy) {
-              throw new CopyError(
-                `Auto-mirror place into spot is refuse-closed (${COPY_AUTO_MIRROR_PLACE_SOCKET})`,
-                'trade.copy_auto_mirror_place_socket',
-                COPY_AUTO_MIRROR_PLACE_RESIDUAL,
-              );
+              throw new CopyError('copy.placeMirror is refuse-closed until TRADE_COPY_PLACE_MIRROR is on', 'trade.copy_place_disabled');
             }
             return copy.placeMirrorForFollow(ctx.principal, input);
           }),

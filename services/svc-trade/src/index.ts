@@ -182,12 +182,17 @@ const copy = new CopyService(ledger, {
       symbol: input.symbol,
       marketId: input.marketId,
       side: input.side,
-      type: 'market',
+      type: 'limit',
       qty: input.qty,
-      tif: 'IOC',
+      price: input.price,
+      tif: 'GTC',
       clientOrderId: input.clientOrderId,
     });
     return { orderId: order.id };
+  },
+  inspectMarket: async (symbol) => {
+    const market = await trade.marketBySymbol(symbol);
+    return market ? { paper: market.paper } : null;
   },
 });
 
