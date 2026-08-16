@@ -47,9 +47,10 @@ describe('pre-charge notify unpublished — named, never pretend', () => {
 
   it('card pull stays closed — invent charge-against-mandate cannot open money', () => {
     expect(pathOpensMoney('card')).toBe(false);
-    expect(mandateChargeDisposition('card').kind).toBe('refuse');
-    if (mandateChargeDisposition('card').kind === 'refuse') {
-      expect(mandateChargeDisposition('card').code).toBe('pay.mandate_rail_absent');
+    const card = mandateChargeDisposition('card');
+    expect(card.kind).toBe('refuse');
+    if (card.kind === 'refuse') {
+      expect(card.code).toBe('pay.mandate_rail_absent');
     }
   });
 
