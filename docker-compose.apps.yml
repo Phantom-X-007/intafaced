@@ -1247,6 +1247,9 @@ services:
       INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-2000}
       INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-200}
       INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4013']
     healthcheck: *healthcheck
