@@ -9,6 +9,8 @@ import { createStakeSource } from './stake-source.js';
 import { createMarketRouter, type MarketRouter } from './router.js';
 import { CommerceService } from './commerce/commerce-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 
 // §9 — register the TracerProvider before the first span is created.
 registerProcessHooks(
@@ -55,6 +57,8 @@ const vendors = new VendorService(sql, createStakeSource(env.TOKEN_URL, env.INTE
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const commerce = new CommerceService(sql, vendors, ledger, {
   commissionBps: env.MARKET_HOUSE_COMMISSION_BPS ?? null,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
 });
 const appRouter = createMarketRouter(vendors, commerce);
 

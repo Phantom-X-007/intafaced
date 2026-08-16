@@ -40,6 +40,12 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
+       * svc-identity base for affiliate accrue + payout after marketPurchase.
+       * Blank → noop ports (purchase still posts). Never invent rates. No localhost default.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * House commission in basis points (0..9999). Optional on purpose:
        * missing → refuse every purchase. Do not invent a platform rate.
        */
