@@ -778,6 +778,12 @@ services:
       # Host can shorten a hung rasterizer. Default 10000 matches env.ts.
       # URL stays empty — this does not invent a renderer.
       BLUEPRINT_CARD_RENDERER_TIMEOUT_MS: ${BLUEPRINT_CARD_RENDERER_TIMEOUT_MS:-10000}
+      # Pass-through form (key, no value): compose forwards these ONLY if they
+      # are set in .env, and omits them entirely otherwise. `${VAR:-}` would set
+      # them to the empty string instead, and env.ts types them as optional
+      # min(1) strings — an empty string is a present, invalid value.
+      BLUEPRINT_ENGINE_API_KEY:
+      BLUEPRINT_CARD_RENDERER_API_KEY:
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4011']
     healthcheck: *healthcheck
