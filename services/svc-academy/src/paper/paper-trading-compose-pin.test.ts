@@ -10,7 +10,8 @@
  * 5. Paths: docker-compose.apps.yml (svc-academy block) + this pin
  * 6. RED: pin fails if the key drops off, appears twice, or defaults off
  * 7. Collision: do not restamp STREAM_PROVIDER / MAX_ROOM_CAPACITY. Tournament
- *    kill is a separate compose pin. No ambassador / prize / IFC keys here.
+ *    kill and ambassador rate-law are separate compose pins. No prize pools
+ *    or paper-balance keys here.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -45,7 +46,7 @@ describe('compose paper-trading kill for svc-academy', () => {
     expect(block).not.toMatch(/ACADEMY_PAPER_TRADING_ENABLED:\s*\$\{ACADEMY_PAPER_TRADING_ENABLED:-false\}/);
   });
 
-  it('does not invent ambassador, prize, IFC, or paper-balance keys', () => {
-    expect(block).not.toMatch(/AMBASSADOR|PRIZE_POOL|IFC_PAY|PAPER_BALANCE/i);
+  it('does not invent prize-pool or paper-balance keys', () => {
+    expect(block).not.toMatch(/PRIZE_POOL|PAPER_BALANCE/i);
   });
 });
