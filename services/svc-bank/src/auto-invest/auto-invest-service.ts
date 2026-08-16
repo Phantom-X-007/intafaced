@@ -37,9 +37,9 @@ import type { Cadence } from '../transfers/schedule.js';
  */
 
 /**
- * Future convert counterparty. Not implemented here — when a deployment has a
- * real convert (trade.convert over HTTP or an injected test double), DCA can
- * fire. Until then every DCA path refuses by name rather than inventing a price.
+ * Convert counterparty. Production wires `tradeConvertPort` (trade.convert
+ * quote+execute over HTTP). Tests inject a double. Absent the port, every DCA
+ * path refuses by name rather than inventing a price.
  */
 export interface ConvertPort {
   /**

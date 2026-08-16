@@ -1,0 +1,241 @@
+import { createHash } from 'node:crypto';
+import type { Principal } from '@intafaced/auth';
+import { EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { div, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { BankError } from '../errors.js';
+import type { ConvertPort } from './auto-invest-service.js';
+
+/**
+ * HTTP ConvertPort — svc-trade `convert.quote` + `convert.execute`.
+ *
+ * Bank never invents a mid. Pairing comes from the public markets listing
+ * (not a price). Size and fill amounts come from convert itself. If trade
+ * cannot quote or execute, this port refuses `bank.auto_invest_rate_unset`.
+ */
+
+export interface TradeConvertPortOptions {
+  baseUrl: string;
+  /** Shared edge HMAC — the same secret svc-trade verifies on /trpc. */
+  edgeSecret: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  region?: string;
+}
+
+interface ListedMarket {
+  symbol: string;
+  base: string;
+  quote: string;
+  spot?: boolean;
+  active?: boolean;
+  limits?: { amount?: { min?: string | null } };
+}
+
+interface ConvertQuoteWire {
+  symbol: string;
+  side: 'buy' | 'sell';
+  requestedQty: string;
+  filledQty: string;
+  userNotional: string;
+  avgPrice: string;
+  fullyFilled: boolean;
+}
+
+interface ConvertExecuteWire {
+  id: string;
+  filled: string;
+  remaining: string;
+  status: string;
+}
+
+const RATE_UNSET = 'bank.auto_invest_rate_unset' as const;
+
+function rateUnset(detail: string): never {
+  throw new BankError(`Auto-invest DCA convert refused — trade did not supply a rate (${detail})`, RATE_UNSET);
+}
+
+/** TRADE_URL is usable when it is an http(s) URL with a host. */
+export function usableTradeConvertUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function convertClientId(raw: string): string {
+  if (raw.length >= 1 && raw.length <= 48) return raw;
+  return createHash('sha256').update(raw).digest('hex').slice(0, 48);
+}
+
+function floorToStep(qty: Amount, step: Amount): Amount {
+  if (step <= 0n) return qty;
+  return qty - (qty % step);
+}
+
+function unwrapTrpc<T>(body: unknown): T {
+  if (body !== null && typeof body === 'object') {
+    const rec = body as { error?: { message?: string; data?: { intafacedCode?: string } }; result?: { data?: T } | T };
+    if (rec.error) {
+      const code = rec.error.data?.intafacedCode ?? rec.error.message ?? 'trade.convert_refused';
+      rateUnset(code);
+    }
+    if (rec.result && typeof rec.result === 'object' && rec.result !== null && 'data' in rec.result) {
+      return rec.result.data as T;
+    }
+    if (rec.result !== undefined) return rec.result as T;
+  }
+  return body as T;
+}
+
+export function tradeConvertPort(options: TradeConvertPortOptions): ConvertPort {
+  const doFetch = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const region = options.region ?? 'XX';
+  const baseUrl = options.baseUrl.replace(/\/$/, '');
+
+  const principalHeaders = (userId: string): Record<string, string> => {
+    const principal = {
+      sub: userId,
+      userId,
+      sid: '00000000-0000-4000-8000-0000000000d1',
+      scopes: ['trade:read', 'trade:write'],
+      tier: 'full',
+      mfa: true,
+      expiresAt: new Date(Date.now() + 60_000),
+    } as Principal;
+    const raw = encodePrincipal(principal);
+    return {
+      [EDGE_PRINCIPAL_HEADER]: raw,
+      [EDGE_SIGNATURE_HEADER]: signPrincipalHeader(raw, options.edgeSecret, region),
+      'x-intafaced-region': region,
+    };
+  };
+
+  async function call<T>(input: { method: 'GET' | 'POST'; path: string; body?: unknown; headers?: Record<string, string> }): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const url =
+        input.method === 'GET' && input.body !== undefined
+          ? `${baseUrl}${input.path}?input=${encodeURIComponent(JSON.stringify(input.body))}`
+          : `${baseUrl}${input.path}`;
+      const payload = input.method === 'POST' ? JSON.stringify(input.body ?? {}) : undefined;
+      const res = await doFetch(url, {
+        method: input.method,
+        headers: {
+          accept: 'application/json',
+          ...(payload ? { 'content-type': 'application/json' } : {}),
+          ...(input.headers ?? {}),
+        },
+        body: payload,
+        signal: controller.signal,
+      });
+      const text = await res.text().catch(() => '');
+      let parsed: unknown = text;
+      try {
+        parsed = text ? JSON.parse(text) : null;
+      } catch {
+        parsed = { error: { message: text || `http ${res.status}` } };
+      }
+      if (!res.ok) {
+        const rec = parsed as { error?: { message?: string; data?: { intafacedCode?: string } }; intafacedCode?: string };
+        rateUnset(rec.error?.data?.intafacedCode ?? rec.intafacedCode ?? rec.error?.message ?? `http ${res.status}`);
+      }
+      return unwrapTrpc<T>(parsed);
+    } catch (err) {
+      if (err instanceof BankError) throw err;
+      rateUnset(err instanceof Error ? err.message : 'convert unreachable');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function listedSpot(fromAsset: string, toAsset: string): Promise<{ symbol: string; base: string; quote: string; minQty: Amount }> {
+    const markets = await call<ListedMarket[]>({ method: 'GET', path: '/api/v1/markets' });
+    if (!Array.isArray(markets)) rateUnset('markets listing unreadable');
+    const match = markets.find((m) => {
+      if (m.spot === false) return false;
+      if (m.active === false) return false;
+      const pair = (m.base === fromAsset && m.quote === toAsset) || (m.base === toAsset && m.quote === fromAsset);
+      return pair && typeof m.symbol === 'string';
+    });
+    if (!match) rateUnset(`no listed spot market for ${fromAsset}/${toAsset}`);
+    const minRaw = match.limits?.amount?.min;
+    const minQty = minRaw ? parseAmount(minRaw) : parseAmount('0');
+    return { symbol: match.symbol, base: match.base, quote: match.quote, minQty };
+  }
+
+  async function quote(userId: string, symbol: string, side: 'buy' | 'sell', qty: Amount): Promise<ConvertQuoteWire> {
+    const q = await call<ConvertQuoteWire>({
+      method: 'GET',
+      path: '/trpc/convert.quote',
+      body: { symbol, side, qty: formatAmount(qty) },
+      headers: principalHeaders(userId),
+    });
+    if (!q || typeof q.avgPrice !== 'string' || typeof q.userNotional !== 'string' || typeof q.filledQty !== 'string') {
+      rateUnset('convert quote missing amounts');
+    }
+    if (q.fullyFilled === false) rateUnset('trade.convert_insufficient_depth');
+    const avg = parseAmount(q.avgPrice);
+    if (avg <= 0n) rateUnset('convert quote avgPrice is not a positive rate');
+    return q;
+  }
+
+  async function execute(
+    userId: string,
+    symbol: string,
+    side: 'buy' | 'sell',
+    qty: Amount,
+    clientConvertId: string,
+    maxAvgPrice: Amount,
+  ): Promise<ConvertExecuteWire> {
+    const order = await call<ConvertExecuteWire>({
+      method: 'POST',
+      path: '/trpc/convert.execute',
+      body: {
+        symbol,
+        side,
+        qty: formatAmount(qty),
+        clientConvertId: convertClientId(clientConvertId),
+        maxAvgPrice: formatAmount(maxAvgPrice),
+      },
+      headers: principalHeaders(userId),
+    });
+    if (!order || typeof order.filled !== 'string' || typeof order.id !== 'string') {
+      rateUnset('convert execute missing fill');
+    }
+    const filled = parseAmount(order.filled);
+    if (filled <= 0n) rateUnset('convert execute filled nothing');
+    return order;
+  }
+
+  return {
+    async convert(input) {
+      const market = await listedSpot(input.fromAsset, input.toAsset);
+      const sellingBase = input.fromAsset === market.base && input.toAsset === market.quote;
+      const buyingBase = input.fromAsset === market.quote && input.toAsset === market.base;
+      if (!sellingBase && !buyingBase) rateUnset('assets do not match listed market');
+
+      if (sellingBase) {
+        const q = await quote(input.userId, market.symbol, 'sell', input.fromAmount);
+        const order = await execute(input.userId, market.symbol, 'sell', input.fromAmount, input.clientConvertId, parseAmount(q.avgPrice));
+        // Quote asset received is trade's convert userNotional, not a bank mid.
+        if (parseAmount(order.filled) <= 0n) rateUnset('sell convert filled nothing');
+        return { toAmount: parseAmount(q.userNotional), ledgerTxId: order.id };
+      }
+
+      // Spend quote, receive base: size the base qty from convert's own avg.
+      const probeQty = market.minQty > 0n ? market.minQty : parseAmount('0.00000001');
+      const probe = await quote(input.userId, market.symbol, 'buy', probeQty);
+      const avg = parseAmount(probe.avgPrice);
+      const sized = floorToStep(div(input.fromAmount, avg, 'floor'), market.minQty > 0n ? market.minQty : 1n);
+      if (sized <= 0n) rateUnset('spend amount below convert min qty at trade rate');
+      const live = await quote(input.userId, market.symbol, 'buy', sized);
+      const order = await execute(input.userId, market.symbol, 'buy', sized, input.clientConvertId, parseAmount(live.avgPrice));
+      return { toAmount: parseAmount(order.filled), ledgerTxId: order.id };
+    },
+  };
+}
