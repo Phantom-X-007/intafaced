@@ -5,7 +5,8 @@ import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
 import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { assertCallerCannotLiePaperFlag, type PaperMarketFlagPort } from './paper/market-flag-verify.js';
-import type { PaperMarketRef } from './paper/workbook-loop.js';
+import { recordPaperCertItemProgress, type PaperCertProgressView } from './paper/cert-progress-hook.js';
+import { isDrillComplete, type DrillRun, type PaperMarketRef } from './paper/workbook-loop.js';
 import { emptyScene, parseScene } from './spatial/scene.js';
 import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
@@ -582,6 +583,57 @@ export class AcademyService {
     const status = paperOpsStatus(this.options.paperTradingEnabled);
     assertPaperNeverReadableAsRealMoney(status);
     return status;
+  }
+
+  /**
+   * After a sealed paper drill: record cert *item* completion when the workbook
+   * is bound to a catalog cert. Unbound → `progress: 'unbound'`. Never grantCert,
+   * never invent XP, never perk-map, never ledger.
+   */
+  async recordPaperDrillCertProgress(input: { userId: string; run: DrillRun }): Promise<PaperCertProgressView> {
+    this.assertPaperTradingEnabled();
+    const certs = listCertCatalog();
+    const drillComplete = isDrillComplete(input.run);
+    let existing: ItemCompletionRecord | null = null;
+    if (drillComplete) {
+      const slug = input.run.workbookSlug.trim();
+      const existingRows = await this.sql<Array<{ user_id: string; item_slug: string; completed_at: Date }>>`
+        SELECT user_id, item_slug, completed_at FROM academy.cert_item_completions
+         WHERE user_id = ${input.userId} AND item_slug = ${slug}
+      `;
+      existing = existingRows[0]
+        ? {
+            userId: existingRows[0].user_id,
+            itemSlug: existingRows[0].item_slug,
+            completedAt: existingRows[0].completed_at,
+          }
+        : null;
+    }
+
+    const pending: { record: ItemCompletionRecord | null } = { record: null };
+    const view = recordPaperCertItemProgress({
+      userId: input.userId,
+      run: input.run,
+      certs,
+      existing,
+      persist: (record) => {
+        pending.record = record;
+      },
+    });
+    if (view.progress === 'recorded' && pending.record) {
+      const row = await this.markCurriculumComplete({
+        userId: input.userId,
+        itemSlug: view.itemSlug,
+      });
+      const recorded: PaperCertProgressView = {
+        ...view,
+        completedAt: row.completedAt,
+      };
+      assertPaperNeverReadableAsRealMoney(recorded);
+      return recorded;
+    }
+    assertPaperNeverReadableAsRealMoney(view);
+    return view;
   }
 
   private mapTournamentErr(err: unknown): never {

@@ -5,6 +5,7 @@ import {
   MemoryCertStore,
   decideGrant,
   isComplete,
+  workbookCertBinding,
   isGrantReady,
   isAlreadyGranted,
   missingItemCount,
@@ -245,5 +246,21 @@ describe('L3 wave48 progress status/export', () => {
     expect(completedCountInRange(report, 2, 0)).toBe(false);
     expect(missingCountAtMost(report, 1)).toBe(true);
     expect(missingCountAtMost(report, Number.NaN)).toBe(false);
+  });
+
+  it('workbookCertBinding is bound when the slug is a required cert item', () => {
+    expect(workbookCertBinding('foundations-intro', [FOUNDATIONS])).toEqual({
+      progress: 'bound',
+      certId: 'foundations-v1',
+      itemSlug: 'foundations-intro',
+    });
+  });
+
+  it('workbookCertBinding is named unbound — never a fake grant', () => {
+    expect(workbookCertBinding('unbound-paper-workbook', [FOUNDATIONS])).toEqual({
+      progress: 'unbound',
+      itemSlug: 'unbound-paper-workbook',
+      reason: 'academy.paper_cert_unbound',
+    });
   });
 });
