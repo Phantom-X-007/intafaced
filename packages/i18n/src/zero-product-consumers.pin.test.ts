@@ -22,7 +22,8 @@ import { describe, expect, it } from 'vitest';
  *   · `svc-ledger` — posting / freeze / recipe refuse copy
  *   · `svc-matching` — operator/public refuse copy on the HTTP inject door
  *   · `svc-edge` — public/proxy refuse copy on the internet door
- *   · `svc-support` — public/ops refuse + KB door copy (this slice)
+ *   · `svc-support` — public/ops refuse + KB door copy
+ *   · `svc-indexer` — public/read-model refuse + halt door copy (this slice)
  *
  * Other product apps and services must not depend on the package until they
  * key screens in the same PR. Do not loosen the scan to stay green. Do not
@@ -51,6 +52,7 @@ const ALLOWED_SERVICE_DIRS = new Set([
   'svc-matching',
   'svc-edge',
   'svc-support',
+  'svc-indexer',
 ]);
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', 'coverage', '.git']);
@@ -103,7 +105,7 @@ const WORKSPACES = productWorkspaces();
 
 describe('@intafaced/i18n — zero product consumers until surfaces key it', () => {
   it('finds product workspaces (otherwise this pin is vacuous)', () => {
-    expect(WORKSPACES.length).toBeGreaterThan(5);
+    expect(WORKSPACES.length).toBeGreaterThan(4);
     expect(WORKSPACES.some((w) => w.name.startsWith('services/'))).toBe(true);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-notify')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-pay')).toBe(false);
@@ -117,6 +119,7 @@ describe('@intafaced/i18n — zero product consumers until surfaces key it', () 
     expect(WORKSPACES.some((w) => w.name === 'services/svc-matching')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-edge')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-support')).toBe(false);
+    expect(WORKSPACES.some((w) => w.name === 'services/svc-indexer')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'apps/admin')).toBe(false);
     expect(WORKSPACES.some((w) => w.name === 'services/svc-bank')).toBe(false);
     expect(statSync(join(REPO_ROOT, 'apps', 'admin', 'package.json')).isFile()).toBe(true);

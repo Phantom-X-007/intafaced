@@ -32,8 +32,8 @@ describe('null chainSource refuses serving', () => {
     expect(chainSourceRefusesServing('null')).toBe(true);
     expect(chainSourceRefusesServing('evm')).toBe(false);
     expect(chainSourceRefusesServing('memory')).toBe(false);
-    expect(nullChainServingReason()).toMatch(/indexer\.chain_not_configured/);
-    expect(nullChainServingReason()).toMatch(/absent, never zero/);
+    expect(nullChainServingReason()).toBe('indexer.chain_not_configured');
+    expect(nullChainServingReason()).not.toMatch(/will not serve|absent, never zero|empty book/i);
   });
 });
 
@@ -70,7 +70,7 @@ describe('unread holding is absent and named', () => {
     });
     await expect(caller.position({ market: 'IFC-USD', account: ACCOUNT })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
-      message: expect.stringMatching(/absent, never zero/),
+      message: 'indexer.chain_not_configured',
     });
     await expect(caller.positions({ account: ACCOUNT })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
