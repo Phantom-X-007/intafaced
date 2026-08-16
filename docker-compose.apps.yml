@@ -63,6 +63,9 @@ x-edge-secret: &edge-secret
 
 x-internal-secret: &internal-secret
   INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or service-to-service calls return 401.}
+  # Host pin for S2S body-bind (internalServiceEnvSchema default accept-both).
+  # Do not default require — v1 callers 401 until the fleet finishes v2.
+  INTERNAL_SERVICE_BODY_BIND: ${INTERNAL_SERVICE_BODY_BIND:-accept-both}
 
 # `/health`, never `/ready` — the script explains why at length.
 x-healthcheck: &healthcheck
