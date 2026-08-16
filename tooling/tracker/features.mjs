@@ -1168,8 +1168,12 @@ export const FEATURES = [
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'pay.routing'],
-    note: '**W6 honesty 2026-08-09:** Stage-1 on tip — metered merchant.runSession (#1284), dark pay refuse invent rates, boot-register. STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
+    note:
+      '**D26-P1-A4 2026-08-16:** missing/dark pay metrics named refuse (`no_metrics` / `pay_plane_dark` / `stale`); never invent numeric rate. ' +
+      'STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
   }),
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',

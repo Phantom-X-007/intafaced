@@ -6,6 +6,7 @@ import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { merchantAgentGuardrail } from './guardrail.js';
 import { MERCHANT_AGENT_ID, MERCHANT_METRICS_TOOL, runMerchantWatchSession } from './session-run.js';
+import { merchantWatchInventedNumericRate } from './watch.js';
 
 /**
  * The metered `merchant.watch` run.
@@ -218,6 +219,7 @@ describe('merchant.watch metered session run', () => {
     expect(fake.openCalls).toBe(0);
     expect(result.metering.sessionId).toBeNull();
     expect(result.metering.billedAmount).toBe('0');
+    expect(merchantWatchInventedNumericRate(result)).toBeNull();
   });
 
   it('D26-P1-A4: mixed missing metrics refuse after session — no invent partial alerts', async () => {
@@ -236,6 +238,7 @@ describe('merchant.watch metered session run', () => {
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
     expect(result.metering.billedAmount).toBe('0');
+    expect(merchantWatchInventedNumericRate(result)).toBeNull();
   });
 
   it('is empty — not a session — when nothing was asked for', async () => {

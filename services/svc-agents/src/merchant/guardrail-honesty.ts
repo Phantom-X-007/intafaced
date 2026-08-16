@@ -6,6 +6,7 @@
  */
 
 import { MERCHANT_MONEY_WRITE_TOOLS, merchantAgentGuardrail } from './guardrail.js';
+import { MERCHANT_WATCH_REFUSE, merchantWatchInventedNumericRate, type WatchRefuseReason } from './watch.js';
 
 /** L3 — money refuse catalog board. */
 export function merchantMoneyDenyBoardCard(tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS): {
@@ -126,4 +127,28 @@ export function merchantGuardrailExportText(): string {
 /** L3 — tool money-denied. */
 export function isMerchantMoneyDenied(tool: string, tools: readonly string[] = MERCHANT_MONEY_WRITE_TOOLS): boolean {
   return tools.includes(tool);
+}
+
+/** L3 — watch refuse catalog (named codes only; never a numeric rate). */
+export function merchantWatchRefuseBoardCard(): {
+  readonly codes: number;
+  readonly hasNoMetrics: number;
+  readonly hasPayPlaneDark: number;
+  readonly hasStale: number;
+} {
+  return {
+    codes: Object.keys(MERCHANT_WATCH_REFUSE).length,
+    hasNoMetrics: MERCHANT_WATCH_REFUSE.no_metrics === 'no_metrics' ? 1 : 0,
+    hasPayPlaneDark: MERCHANT_WATCH_REFUSE.pay_plane_dark === 'pay_plane_dark' ? 1 : 0,
+    hasStale: MERCHANT_WATCH_REFUSE.stale === 'stale' ? 1 : 0,
+  };
+}
+
+/** L3 — true when a named watch refuse carries no invented numeric rate. */
+export function merchantWatchRefuseHonest(result: unknown, reason: WatchRefuseReason): boolean {
+  if (result === null || typeof result !== 'object') return false;
+  const o = result as { status?: unknown; reason?: unknown };
+  if (o.status !== 'unavailable' && o.status !== 'refuse') return false;
+  if (o.reason !== reason) return false;
+  return merchantWatchInventedNumericRate(result) === null;
 }

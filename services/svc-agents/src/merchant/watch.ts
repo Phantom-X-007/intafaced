@@ -54,13 +54,50 @@ export type WatchEmpty = {
   readonly userMessageKey: 'agents.merchant.empty';
 };
 
+export type WatchRefuseReason = 'stale' | 'no_metrics' | 'pay_plane_dark';
+
 export type WatchUnavailable = {
   readonly status: 'unavailable';
   readonly userMessageKey: 'agents.merchant.unavailable';
-  readonly reason: 'stale' | 'no_metrics' | 'pay_plane_dark';
+  readonly reason: WatchRefuseReason;
 };
 
 export type WatchResult = WatchOk | WatchEmpty | WatchUnavailable;
+
+/** Named refuses — never a numeric approval-rate board. */
+export const MERCHANT_WATCH_REFUSE = {
+  no_metrics: 'no_metrics',
+  stale: 'stale',
+  pay_plane_dark: 'pay_plane_dark',
+} as const satisfies Record<string, WatchRefuseReason>;
+
+/**
+ * D26-P1-A4: missing/dark watch must not leak a JS number (or a refuse-board
+ * of string rates). Counts like `considered` are not rates.
+ */
+export function merchantWatchInventedNumericRate(result: unknown): number | null {
+  if (result === null || typeof result !== 'object') return null;
+  const o = result as Record<string, unknown>;
+  if (typeof o.approvalRate === 'number' && Number.isFinite(o.approvalRate)) return o.approvalRate;
+  if (Array.isArray(o.alerts)) {
+    for (const raw of o.alerts) {
+      if (raw === null || typeof raw !== 'object') continue;
+      const rate = (raw as { approvalRate?: unknown }).approvalRate;
+      if (typeof rate === 'number' && Number.isFinite(rate)) return rate;
+    }
+    if (o.status !== 'ok' && o.alerts.length > 0) {
+      const first = o.alerts[0];
+      if (first !== null && typeof first === 'object') {
+        const rate = (first as { approvalRate?: unknown }).approvalRate;
+        if (typeof rate === 'string') {
+          const n = Number(rate);
+          if (Number.isFinite(n)) return n;
+        }
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Stage-2: when the pay plane is dark (no metrics API / routing residual),

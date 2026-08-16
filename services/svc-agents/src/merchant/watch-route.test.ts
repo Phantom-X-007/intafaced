@@ -73,6 +73,8 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
       .createCaller(signed())
       .merchant.watch({ points: [point], payPlane: 'dark' });
     expect(result).toMatchObject({ status: 'unavailable', reason: 'pay_plane_dark' });
+    expect(result).not.toHaveProperty('approvalRate');
+    expect(result).not.toHaveProperty('alerts');
   });
 
   it('empty points → empty (never invent rails)', async () => {
@@ -102,6 +104,8 @@ describe('merchant.watch route (Stage-1 fixtures)', () => {
       userMessageKey: 'agents.merchant.unavailable',
       reason: 'no_metrics',
     });
+    expect(result).not.toHaveProperty('approvalRate');
+    expect(result).not.toHaveProperty('alerts');
   });
 
   it('D26-P1-A4 deepen: mixed stale on wire refuses — no partial alerts', async () => {
