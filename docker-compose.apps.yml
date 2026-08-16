@@ -429,6 +429,11 @@ services:
       # Published JSON lives in `.env.example`. Blank host still refuse-closed.
       TRADE_COPY_FEE_SHARE_LAW: ${TRADE_COPY_FEE_SHARE_LAW:-}
       TRADE_COPY_JURISDICTION_LAW: ${TRADE_COPY_JURISDICTION_LAW:-}
+      # Options settlement-asset law (trade.options / D26-P0-05). Empty =
+      # unpublished refuse (`trade.options_settlement_law_unset`). Host `.env`
+      # can stamp; compose never invents live set / settlement asset / matrix.
+      # Fixing below is a second gate — it alone must not unlock listing.
+      TRADE_OPTIONS_SETTLEMENT_ASSET_LAW: ${TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:-}
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
       # listing. Opaque stamp only — never invent fixing source/window/payor.
       TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}
@@ -524,6 +529,14 @@ services:
       # env.ts (`true` / `2000`). No RPC, mnemonic, hot wallet, or card rail.
       PAY_CRYPTO_WATCHER_ENABLED: ${PAY_CRYPTO_WATCHER_ENABLED:-true}
       PAY_CRYPTO_WATCHER_INTERVAL_MS: ${PAY_CRYPTO_WATCHER_INTERVAL_MS:-2000}
+      # Hosted checkout + confirmation depth. env.ts already names these;
+      # without compose pass-through a host `.env` never reaches the container.
+      # Defaults match env.ts. Sandbox rails stay OFF. No owner fee bps, RPC,
+      # mnemonic, hot wallet, or card rail.
+      PAY_MIN_CONFIRMATIONS: ${PAY_MIN_CONFIRMATIONS:-6}
+      PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:-900}
+      PAY_PUBLIC_BASE_PATH: ${PAY_PUBLIC_BASE_PATH:-/api/pay}
+      PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
@@ -785,6 +798,7 @@ services:
       NOTIFY_MAX_DELIVERY_ATTEMPTS: ${NOTIFY_MAX_DELIVERY_ATTEMPTS:-3}
       NOTIFY_GATEWAY_TIMEOUT_MS: ${NOTIFY_GATEWAY_TIMEOUT_MS:-5000}
       NOTIFY_SMS_MAX_CHARS: ${NOTIFY_SMS_MAX_CHARS:-480}
+      NOTIFY_VERIFY_TTL_MINUTES: ${NOTIFY_VERIFY_TTL_MINUTES:-15}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4015']
     healthcheck: *healthcheck
