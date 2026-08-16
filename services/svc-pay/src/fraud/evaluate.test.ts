@@ -48,9 +48,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
     });
     expect(d.outcome).not.toBe('allow');
     expect(d.reasons.length).toBeGreaterThan(0);
-    expect(d.reasons).toEqual([
-      { ruleId: 'velocity_count', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: maxPaymentsInWindow` },
-    ]);
+    expect(d.reasons).toEqual([{ ruleId: 'velocity_count', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: maxPaymentsInWindow` }]);
     expect(d.outcome).toBe('review');
   });
 
@@ -60,9 +58,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       enabled: { velocity_count: false, velocity_volume: true, amount_anomaly: false },
     });
     expect(volume.outcome).toBe('review');
-    expect(volume.reasons).toEqual([
-      { ruleId: 'velocity_volume', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: maxVolumeInWindow` },
-    ]);
+    expect(volume.reasons).toEqual([{ ruleId: 'velocity_volume', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: maxVolumeInWindow` }]);
 
     const amount = evaluateFraud({
       ...base,
@@ -70,9 +66,7 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
       thresholds: { amountAnomalyMultiplier: Number.NaN },
     });
     expect(amount.outcome).toBe('review');
-    expect(amount.reasons).toEqual([
-      { ruleId: 'amount_anomaly', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: amountAnomalyMultiplier` },
-    ]);
+    expect(amount.reasons).toEqual([{ ruleId: 'amount_anomaly', detail: `${FRAUD_THRESHOLD_UNPUBLISHED}: amountAnomalyMultiplier` }]);
   });
 
   it('D26-P1-P5: default-enabled scoring (missing key) with unset thresholds is not silent allow', () => {
