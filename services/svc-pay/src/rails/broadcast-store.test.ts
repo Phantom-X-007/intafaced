@@ -38,6 +38,11 @@ function fakePgSql(): BroadcastSql & {
       }
       return [];
     }
+    if (text.includes('select signed_raw') && !text.includes('tx_hash')) {
+      const key = String(values[0]);
+      const v = rows.get(key);
+      return v === undefined ? [] : [{ signed_raw: v.signed_raw }];
+    }
     if (text.includes('select tx_hash, signed_raw')) {
       const key = String(values[0]);
       const v = rows.get(key);
@@ -197,5 +202,6 @@ describe('PostgresBroadcastStore — Class M claim/put (fake SQL)', () => {
     const b = new PostgresBroadcastStore(sql, { pollMs: 5, maxWaits: 40 });
     const again = await b.claim('payout:w4:1');
     expect(again).toEqual({ kind: 'resume', signedRaw: '0xsigned-resume' });
+    expect(await b.hasSigned('payout:w4:1')).toBe(true);
   });
 });
