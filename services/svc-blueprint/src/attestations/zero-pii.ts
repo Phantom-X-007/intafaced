@@ -26,10 +26,7 @@ export type AttestationPiiRefuseCode =
   | typeof ATTESTATION_PII_CUSTODIAL_USER_ID
   | typeof ATTESTATION_PII_CROSS_PLANE_ADDRESS;
 
-export type AttestationRefuseCode =
-  | typeof ATTESTATION_THREAT_MODEL_UNMET
-  | AttestationPiiRefuseCode
-  | typeof ATTESTATION_ON_CHAIN_UNBUILT;
+export type AttestationRefuseCode = typeof ATTESTATION_THREAT_MODEL_UNMET | AttestationPiiRefuseCode | typeof ATTESTATION_ON_CHAIN_UNBUILT;
 
 export const THREAT_MODEL_REQUIRED_HEADINGS = [
   '## Assets',
@@ -251,10 +248,7 @@ export type RankAttestationIssue =
  * Fiat-plane issuer door. Never succeeds: P0-12 unmet → refuse; PII → named
  * refuse; otherwise on-chain unbuilt (Shehzad). No Solidity, no svc-protocol.
  */
-export function issueRankAttestation(input: {
-  readonly threatModelMarkdown: string;
-  readonly payload: unknown;
-}): RankAttestationIssue {
+export function issueRankAttestation(input: { readonly threatModelMarkdown: string; readonly payload: unknown }): RankAttestationIssue {
   const done = decideAttestationProductDone(input.threatModelMarkdown);
   if (done.status === 'refuse') {
     return {
