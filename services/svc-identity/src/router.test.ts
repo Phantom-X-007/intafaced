@@ -7,6 +7,7 @@ import { SESSION_SCOPES, issueAccessToken, verifyAccessToken } from '@intafaced/
 import type { Context } from '@intafaced/contracts';
 import { createIdentityRouter } from './router.js';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
+import { userCopy } from './user-copy.js';
 import type { RankService } from './rank/rank-service.js';
 import { MemoryAccrualStore } from './affiliates/accrual-store.js';
 import type { CommissionRow } from './affiliates/commission.js';
@@ -661,6 +662,7 @@ describe('apiKeys.exchange turns a key into an edge-usable access token', () => 
     const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
     const err = await api.apiKeys.exchange({ key: 'ifc_wrong' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect((err as { message?: string }).message).toBe(userCopy('auth.invalid_credentials'));
   });
 });
 
