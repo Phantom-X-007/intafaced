@@ -7,19 +7,19 @@ const here = dirname(fileURLToPath(import.meta.url));
 const indexSrc = readFileSync(join(here, '../index.ts'), 'utf8');
 
 describe('production index boots KYC vault from IDENTITY_KYC_DOC_KEY only', () => {
-  it('imports kycRouterBootOptions and calls it with the env key — never invents one', () => {
-    expect(indexSrc).toMatch(/import\s*\{\s*kycRouterBootOptions\s*\}\s*from\s*['"]\.\/kyc\/boot-vault\.js['"]/);
-    expect(indexSrc).toMatch(/kycRouterBootOptions\(\s*sql\s*,\s*env\.IDENTITY_KYC_DOC_KEY\s*\)/);
+  it('imports bootKycVault and calls it with the env key — never invents one', () => {
+    expect(indexSrc).toMatch(/import\s*\{\s*bootKycVault\s*\}\s*from\s*['"]\.\/kyc\/boot-vault\.js['"]/);
+    expect(indexSrc).toMatch(/bootKycVault\(\s*sql\s*,\s*env\.IDENTITY_KYC_DOC_KEY\s*\)/);
     expect(indexSrc).not.toMatch(/new KycDocumentStore\(/);
     expect(indexSrc).not.toMatch(/IDENTITY_KYC_DOC_KEY\s*\|\|/);
     expect(indexSrc).not.toMatch(/randomBytes\(32\)/);
   });
 
-  it('spreads boot options into createIdentityRouter — omitting this while the key is set leaves a silent missing store', () => {
-    expect(indexSrc).toMatch(/\.\.\.kycBoot/);
+  it('spreads vault into createIdentityRouter — omitting this while the key is set leaves a silent missing store', () => {
+    expect(indexSrc).toMatch(/\.\.\.\s*\(vault\s*\?\?\s*\{\}\)/);
     const routerCall = indexSrc.slice(indexSrc.indexOf('createIdentityRouter('));
     const optsBlock = routerCall.slice(0, routerCall.indexOf('});') + 2);
-    expect(optsBlock).toMatch(/\.\.\.kycBoot/);
+    expect(optsBlock).toMatch(/\.\.\.\s*\(vault\s*\?\?\s*\{\}\)/);
     expect(optsBlock).not.toMatch(/kycDocs:\s*undefined/);
   });
 

@@ -23,8 +23,8 @@ function keyMaterialPresent(keyMaterial: string | undefined): boolean {
  * - valid 32-byte key → vault + bind
  *
  * Production index.ts:
- *   const kycBoot = kycRouterBootOptions(sql, env.IDENTITY_KYC_DOC_KEY);
- *   createIdentityRouter(auth, rank, { …, ...kycBoot })
+ *   const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
+ *   createIdentityRouter(auth, rank, { …, ...(vault ?? {}) })
  */
 export function bootKycVault(sql: Sql, keyMaterial: string | undefined): KycVaultBoot | null {
   const parsed = parseKycDocKey(keyMaterial);
