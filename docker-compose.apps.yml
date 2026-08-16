@@ -589,6 +589,12 @@ services:
       # rather than left unset, so the choice is visible in the file an operator
       # actually reads instead of living only in a zod schema.
       BANK_CARD_ISSUER: ${BANK_CARD_ISSUER:-none}
+      # Standing-order + auto-invest runners. env.ts already names these;
+      # without compose pass-through a host `.env` never reaches the container.
+      # Defaults match env.ts (`true`) — an operator stop is host `.env` plus
+      # restart. No rate, APY, or schedule is named here (empty must not invent).
+      SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
+      AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4009']
     healthcheck: *healthcheck
