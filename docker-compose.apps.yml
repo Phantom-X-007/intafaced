@@ -322,6 +322,13 @@ services:
       # because each was written without knowing the others' ports.
       HTTP_PORT: '4005'
       MATCHING_JOURNAL_PATH: /data/matching/engine_journal.ndjson
+      # Engine kill-switch (env.ts boolish default true). Host `.env` can halt
+      # submissions before the journal. `${VAR:-false}` here would refuse every
+      # order on a clean clone while env.ts still reads as on.
+      MATCHING_ENGINE_ENABLED: ${MATCHING_ENGINE_ENABLED:-true}
+      # Snapshot cadence (env.ts default 500). 0 disables. Host can pin; compose
+      # does not invent a different N.
+      MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-500}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4005']
     volumes:
