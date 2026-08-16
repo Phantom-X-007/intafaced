@@ -19,6 +19,15 @@ import {
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import {
+  affiliateLegAfterLoanLiquidate,
+  affiliateLegAfterLoanRepay,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+  type AffiliateBankFeeLeg,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
+import {
   DEFAULT_MARK_POLICY,
   assertAcceptableForLiquidation,
   acceptableForMarking,
@@ -276,6 +285,16 @@ export interface LoanServiceOptions {
    * When false, `open` refuses `bank.loans_disabled`.
    */
   readonly moduleEnabled?: boolean;
+  /**
+   * Identity affiliate accrue after house bank fees post. Default noop.
+   * Failures must not unwind loanRepay / loanLiquidate.
+   */
+  readonly affiliateAccrue?: AffiliateAccruePort;
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind the ledger post. Body is `{ feeEventId }` only.
+   */
+  readonly affiliatePayout?: AffiliatePayoutPort;
 }
 
 const ONE = parseAmount('1');
@@ -291,6 +310,8 @@ export class LoanService {
   private readonly venue: LiquidationVenue;
   private readonly marginCalls: MarginCallSink;
   private readonly markPolicy: MarkPolicy;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
 
   constructor(
     private readonly sql: Sql,
@@ -300,6 +321,8 @@ export class LoanService {
     this.venue = options.venue ?? marketMakerVenue();
     this.marginCalls = options.marginCalls ?? recordOnlyMarginCallSink;
     this.markPolicy = options.markPolicy ?? DEFAULT_MARK_POLICY;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   // ── Products ───────────────────────────────────────────────────────────────
@@ -993,8 +1016,27 @@ export class LoanService {
             sequence,
           }),
         ),
-      table: 'loan_repayments',
+        table: 'loan_repayments',
     });
+
+    await this.notifyBankAffiliateAccrue(
+      affiliateLegAfterLoanRepay({
+        loanId: loan.id,
+        borrowerId: loan.userId,
+        sequence,
+        interest: interestPaid,
+        debtAssetId: loan.debtAssetId,
+      }),
+    );
+    await this.notifyBankAffiliatePayout(
+      affiliateLegAfterLoanRepay({
+        loanId: loan.id,
+        borrowerId: loan.userId,
+        sequence,
+        interest: interestPaid,
+        debtAssetId: loan.debtAssetId,
+      }),
+    );
 
     const remaining = await this.outstanding(loan.id);
 
@@ -1422,10 +1464,31 @@ export class LoanService {
               markPrice: collateralMark.price,
             }),
           ),
-        table: 'loan_liquidations',
-      });
+          table: 'loan_liquidations',
+        });
 
       void ledgerTxId;
+
+      await this.notifyBankAffiliateAccrue(
+        affiliateLegAfterLoanLiquidate({
+          loanId: loan.id,
+          borrowerId: loan.userId,
+          tranche,
+          interestRepaid: split.interestRepaid,
+          penalty: split.penalty,
+          debtAssetId: loan.debtAssetId,
+        }),
+      );
+      await this.notifyBankAffiliatePayout(
+        affiliateLegAfterLoanLiquidate({
+          loanId: loan.id,
+          borrowerId: loan.userId,
+          tranche,
+          interestRepaid: split.interestRepaid,
+          penalty: split.penalty,
+          debtAssetId: loan.debtAssetId,
+        }),
+      );
     });
 
     // ── The shortfall, named ────────────────────────────────────────────────
@@ -1489,6 +1552,16 @@ export class LoanService {
          AND bad_debt_ledger_tx_id IS NULL
     `;
     return Number(rows[0]?.n ?? 0) > 0;
+  }
+
+  /** Best-effort; never throws. loanRepay / loanLiquidate already posted. */
+  private async notifyBankAffiliateAccrue(legs: readonly AffiliateBankFeeLeg[]): Promise<void> {
+    await fireAffiliateAccrue(this.affiliateAccrue, legs);
+  }
+
+  /** Best-effort payout after accrue; never throws. House fee already posted. */
+  private async notifyBankAffiliatePayout(legs: readonly AffiliateBankFeeLeg[]): Promise<void> {
+    await fireAffiliatePayout(this.affiliatePayout, legs);
   }
 
   /** Retry any settled liquidations whose shortfall never made it onto the insurance fund (B-01). */

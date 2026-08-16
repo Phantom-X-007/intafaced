@@ -10,6 +10,8 @@ import { rampProgrammeFor } from './ramps/rails.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { withSpan } from './tracing.js';
 import { verifyServiceHeaders } from '@intafaced/contracts';
@@ -84,6 +86,12 @@ const bank = createBankServices(sql, ledger, history, {
     // a database column and svc-notify's finished consumer never sees one.
     marginCalls: eventMarginCallSink(bus),
     moduleEnabled: env.BANK_LOANS_ENABLED,
+    affiliateAccrue: env.IDENTITY_URL
+      ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+      : undefined,
+    affiliatePayout: env.IDENTITY_URL
+      ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+      : undefined,
   },
   /**
    * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
