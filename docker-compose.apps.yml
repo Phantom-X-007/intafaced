@@ -540,6 +540,11 @@ services:
       P2P_PAYMENT_DEADLINE_SECONDS: ${P2P_PAYMENT_DEADLINE_SECONDS:-900}
       P2P_RELEASE_DEADLINE_SECONDS: ${P2P_RELEASE_DEADLINE_SECONDS:-1800}
       P2P_SWEEP_INTERVAL_SECONDS: ${P2P_SWEEP_INTERVAL_SECONDS:-30}
+      # Dispute SLA + escalation re-check. env.ts already names these; without
+      # compose pass-through a host `.env` never reaches the container. Defaults
+      # match env.ts (7d / 1h). Escalation is a re-raise, not auto-settle.
+      P2P_DISPUTE_SLA_SECONDS: ${P2P_DISPUTE_SLA_SECONDS:-604800}
+      P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: ${P2P_DISPUTE_ESCALATION_RECHECK_SECONDS:-3600}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4007']
     healthcheck: *healthcheck
