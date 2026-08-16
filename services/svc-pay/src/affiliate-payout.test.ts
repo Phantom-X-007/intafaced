@@ -74,6 +74,7 @@ describe('createAffiliatePayoutClient', () => {
   });
 });
 
+/** Pin: settlement posts first, accrue second, payout third. */
 describe('postPendingSettlement wires payout after accrue after ledger post', () => {
   it('fires payout after accrue, after merchantSettlement', () => {
     const here = dirname(fileURLToPath(import.meta.url));
