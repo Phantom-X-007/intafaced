@@ -331,6 +331,20 @@ export class CardService {
     }
   }
 
+  /**
+   * Live `card-sim` must refuse BEFORE a row or a hold. `tellIssuer` swallows
+   * adapter errors after the ledger has already moved, so throwing from
+   * `respondToAuthorization` is not enough.
+   */
+  private assertIssuerMayMutate(): void {
+    const code = this.issuer.mutationRefuse;
+    if (!code) return;
+    throw new BankError(
+      'card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists',
+      code,
+    );
+  }
+
   /** What this deployment's card programme is, and whether it is real. */
   programme(): CardIssuerAdapter['programme'] {
     return cardProgrammeOutput(this.issuer.programme);
@@ -364,6 +378,7 @@ export class CardService {
     perAuthorizationLimit: Amount;
   }): Promise<CardRecord> {
     this.assertModuleEnabled();
+    this.assertIssuerMayMutate();
     if (input.perAuthorizationLimit <= 0n) {
       throw new BankError('A card needs a positive per-authorisation limit', 'bank.card_limit_exceeded');
     }
@@ -444,6 +459,7 @@ export class CardService {
     merchantCategory?: string;
   }): Promise<AuthorizationRecord> {
     this.assertModuleEnabled();
+    this.assertIssuerMayMutate();
     const card = await this.card(input.cardId);
 
     // Idempotency, before anything else. An issuer redelivering an

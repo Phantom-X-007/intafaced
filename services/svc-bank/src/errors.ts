@@ -140,6 +140,15 @@ export type BankErrorCode =
    * honest thing an unconfigured deployment can do.
    */
   | 'bank.no_card_issuer'
+  /**
+   * `BANK_CARD_ISSUER=card-sim` under live/production posture.
+   *
+   * The simulator is not an issuing BIN. A deployment that looks live must not
+   * issue or authorise as if a scheme counterparty exists. Distinct from
+   * `bank.no_card_issuer` (nobody chose an issuer) so an operator is not sent
+   * looking for a missing setting when the setting they chose is the simulator.
+   */
+  | 'bank.card_sim_not_live'
   | 'bank.card_not_found'
   /** Frozen or closed. An authorisation on it is declined, never approved. */
   | 'bank.card_not_active'

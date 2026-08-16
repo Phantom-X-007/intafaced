@@ -226,6 +226,7 @@ function toTrpcError(err: unknown): TRPCError {
       // Named refusals where the platform, not the caller, is missing something.
       // Same shape and the same reason as `bank.no_liquidation_counterparty`.
       case 'bank.no_card_issuer':
+      case 'bank.card_sim_not_live':
       case 'bank.cashback_pot_unfunded':
       case 'bank.no_ramp_rail':
       case 'bank.fiat_ramp_no_pay_adapter':
