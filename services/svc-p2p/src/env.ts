@@ -53,20 +53,14 @@ const schema = serviceEnvSchema
         (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
         z
           .string()
-          .regex(
-            /^(unlimited|\d+(\.\d+)?)$/i,
-            'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string or the literal unlimited',
-          )
+          .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string or the literal unlimited')
           .optional(),
       ),
       P2P_OFFER_MAX_MERCHANT: z.preprocess(
         (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
         z
           .string()
-          .regex(
-            /^(unlimited|\d+(\.\d+)?)$/i,
-            'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string or the literal unlimited',
-          )
+          .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string or the literal unlimited')
           .optional(),
       ),
 
