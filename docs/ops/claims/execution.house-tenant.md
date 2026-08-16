@@ -1,6 +1,7 @@
 # Claim execution.house-tenant
 
-**status:** claimed
+**status:** pr-open
+**pr:** https://github.com/Phantom-X-007/intafaced/pull/2227
 **owner:** Nitro agent
 **class:** N
 **tracker:** execution.house-tenant
