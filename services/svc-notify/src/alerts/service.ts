@@ -19,6 +19,7 @@ import {
   type AlertRefuseCode,
   type CreatePortfolioAlertInput,
   type CreatePriceAlertInput,
+  type MarkQuote,
   type MarkSource,
   type PriceAlert,
 } from './types.js';
@@ -76,6 +77,14 @@ export type EvaluateMarketReport = {
     readonly outcome: AlertEvalOutcome;
     readonly notificationId: string | null;
   }[];
+};
+
+/** Public-door evaluate — one watch, named refuse, never a fake last. */
+export type EvaluateAlertReport = {
+  readonly alert: PriceAlert | null;
+  readonly outcome: AlertEvalOutcome;
+  readonly evaluation: AlertEvaluationStatus;
+  readonly notificationId: string | null;
 };
 
 export class AlertService {
@@ -205,36 +214,17 @@ export class AlertService {
    * for a later pass.
    */
   async evaluateMarket(marketId: string, at: Date = new Date()): Promise<EvaluateMarketReport> {
-    const raw = await this.marks.quote(marketId, at);
-    const quote = acceptAlertMark(this.marks, raw, at);
-    const ooa = this.namedOutOfAppRefusal();
+    const quote = await this.sourcedQuote(marketId, at);
     const actives = await this.store.listActiveByMarket(marketId);
     const results: EvaluateMarketReport['results'][number][] = [];
 
     for (const alert of actives) {
-      let outcome = evaluatePriceAlert(alert, quote);
-      if (outcome.kind === 'fire' && ooa) {
-        outcome = { kind: 'refuse', code: ooa.code, detail: ooa.detail };
-      }
-      let notificationId: string | null = null;
-
-      if (outcome.kind === 'fire') {
-        // Create first — never retire the watch on a pure no-op or a throw.
-        const created = await this.fireNotification(alert, outcome.markPrice);
-        // Fan-out off: both null. Redelivery recovery: notification may be null
-        // on the insert conflict path, but dispatch is set after findBySource.
-        const reachedInbox = created.notification !== null || created.dispatch !== null;
-        if (reachedInbox) {
-          await this.store.markFired(alert.userId, alert.id, at);
-          notificationId = created.notification?.id ?? null;
-        }
-      }
-
+      const applied = await this.applyEvaluation(alert, quote, at);
       results.push({
         alertId: alert.id,
         userId: alert.userId,
-        outcome,
-        notificationId,
+        outcome: applied.outcome,
+        notificationId: applied.notificationId,
       });
     }
 
@@ -243,6 +233,61 @@ export class AlertService {
       mark: quote.kind === 'ok' ? quote.price : null,
       results,
     };
+  }
+
+  /**
+   * Public evaluate door. Dark / missing marks refuse by name and never mark
+   * the watch fired — even when the port quotes a last (invented live).
+   */
+  async evaluateAlert(userId: string, alertId: string, at: Date = new Date()): Promise<EvaluateAlertReport> {
+    const evaluation = this.evaluationStatus();
+    const alert = await this.store.get(userId, alertId);
+    if (!alert) {
+      return {
+        alert: null,
+        outcome: { kind: 'refuse', code: 'alert.not_active', detail: 'alert.not_found' },
+        evaluation,
+        notificationId: null,
+      };
+    }
+    const quote = await this.sourcedQuote(alert.marketId, at);
+    const applied = await this.applyEvaluation(alert, quote, at);
+    const refreshed = (await this.store.get(userId, alertId)) ?? alert;
+    return {
+      alert: refreshed,
+      outcome: applied.outcome,
+      evaluation,
+      notificationId: applied.notificationId,
+    };
+  }
+
+  private async sourcedQuote(marketId: string, at: Date): Promise<MarkQuote> {
+    const raw = await this.marks.quote(marketId, at);
+    return acceptAlertMark(this.marks, raw, at);
+  }
+
+  private async applyEvaluation(
+    alert: PriceAlert,
+    quote: MarkQuote,
+    at: Date,
+  ): Promise<{ outcome: AlertEvalOutcome; notificationId: string | null }> {
+    const ooa = this.namedOutOfAppRefusal();
+    let outcome = evaluatePriceAlert(alert, quote);
+    if (outcome.kind === 'fire' && ooa) {
+      outcome = { kind: 'refuse', code: ooa.code, detail: ooa.detail };
+    }
+    let notificationId: string | null = null;
+
+    if (outcome.kind === 'fire') {
+      const created = await this.fireNotification(alert, outcome.markPrice);
+      const reachedInbox = created.notification !== null || created.dispatch !== null;
+      if (reachedInbox) {
+        await this.store.markFired(alert.userId, alert.id, at);
+        notificationId = created.notification?.id ?? null;
+      }
+    }
+
+    return { outcome, notificationId };
   }
 
   private async fireNotification(alert: PriceAlert, markPrice: string): Promise<CreateResult> {

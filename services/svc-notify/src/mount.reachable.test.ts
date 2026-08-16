@@ -93,7 +93,7 @@ interface Mounted {
   readonly app: FastifyInstance;
   readonly base: string;
   readonly notifyStore: MemoryNotifyStore;
-  readonly alerts: AlertService;
+  readonly alerts: AlertService | null;
 }
 
 const running: FastifyInstance[] = [];
@@ -104,7 +104,7 @@ const running: FastifyInstance[] = [];
  * Same plugin, same prefix, same context factory. Real services (memory-backed
  * stores), not stubs — a stub could satisfy a route that serves nothing useful.
  */
-async function mount(): Promise<Mounted> {
+async function mount(options: { marks?: MarkSource; withAlerts?: boolean } = {}): Promise<Mounted> {
   const notifyStore = new MemoryNotifyStore();
   const targets = new MemoryTargetStore();
   const deliveries = new MemoryDeliveryStore();
@@ -113,8 +113,9 @@ async function mount(): Promise<Mounted> {
   const channels = channelsFromEnv({ NOTIFY_GATEWAY_TIMEOUT_MS: 5_000 });
   const dispatcher = new NotificationDispatcher(channels, targets, deliveries, { maxAttempts: 3, outOfAppEnabled: true });
   const notify = new NotifyService(notifyStore, { fanoutEnabled: true }, { targets, deliveries, channels, dispatcher });
-  const alerts = new AlertService(new MemoryAlertStore(), darkMarks, notify);
-  const appRouter = createNotifyRouter(notify, alerts);
+  const alerts =
+    options.withAlerts === false ? null : new AlertService(new MemoryAlertStore(), options.marks ?? darkMarks, notify);
+  const appRouter = createNotifyRouter(notify, alerts ?? undefined);
   const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-notify' });
 
   const app = Fastify({ logger: false, maxParamLength: 5_000 });
@@ -299,7 +300,7 @@ describe('the alert surface tells the truth over the wire', () => {
     // The sweep that `index.ts` drives, run once by hand against the same
     // service instance the route wrote into. Dark source: refused, not fired,
     // and nothing lands in the inbox.
-    const report = await alerts.evaluateDueAlerts();
+    const report = await alerts!.evaluateDueAlerts();
     expect(report).toMatchObject({ markets: 1, fired: 0, refused: 1, refusals: { 'alert.price_unavailable': 1 } });
     expect(await notifyStore.unreadCount(USER)).toBe(0);
 
@@ -324,5 +325,76 @@ describe('the alert surface tells the truth over the wire', () => {
 
     const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
     expect(data(listed.body)).toMatchObject({ items: [] });
+  });
+
+  it('evaluateAlert over HTTP refuses a dark port that quotes a fake last — never fired as live', async () => {
+    const lyingDark: MarkSource = {
+      kind: 'dark',
+      async quote() {
+        return { kind: 'ok', price: '999', at: new Date() };
+      },
+    };
+    const { base, notifyStore } = await mount({ marks: lyingDark });
+    const created = await call(base, 'notify.createAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { marketId: 'BTC-USD', direction: 'above', targetPrice: '100' },
+    });
+    expect(created.status).toBe(200);
+    const createdBody = data(created.body) as {
+      alert: { id: string; status: string };
+      evaluation: { markSource: string; canFire: boolean; code: string | null };
+    };
+    expect(createdBody.evaluation).toEqual({
+      markSource: 'dark',
+      canFire: false,
+      code: 'alert.price_unavailable',
+    });
+    expect(createdBody.alert.status).toBe('active');
+
+    const evaluated = await call(base, 'notify.evaluateAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { id: createdBody.alert.id },
+    });
+    expect(evaluated.status).toBe(200);
+    const body = data(evaluated.body) as {
+      alert: { status: string } | null;
+      outcome: { kind: string; code?: string };
+      evaluation: { markSource: string; canFire: boolean; code: string | null };
+    };
+    expect(body.evaluation).toEqual({ markSource: 'dark', canFire: false, code: 'alert.price_unavailable' });
+    expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.price_unavailable' });
+    expect(body.alert?.status).toBe('active');
+    expect(body.alert?.status).not.toBe('fired');
+    expect(body.evaluation.markSource).not.toBe('live');
+    expect(body.evaluation.canFire).toBe(false);
+    expect(await notifyStore.unreadCount(USER)).toBe(0);
+  });
+
+  it('create/evaluate with no alert service refuse cannot-fire by name', async () => {
+    const { base } = await mount({ withAlerts: false });
+    const created = await call(base, 'notify.createAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { marketId: 'BTC-USD', direction: 'above', targetPrice: '100' },
+    });
+    expect(created.status).not.toBe(200);
+    expect(JSON.stringify(created.body)).toContain('alert.price_unavailable');
+
+    const evaluated = await call(base, 'notify.evaluateAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { id: '11111111-1111-4111-8111-111111111111' },
+    });
+    expect(evaluated.status).toBe(200);
+    const body = data(evaluated.body) as {
+      alert: unknown;
+      outcome: { kind: string; code?: string };
+      evaluation: { markSource: string; canFire: boolean; code: string | null };
+    };
+    expect(body.alert).toBeNull();
+    expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.price_unavailable' });
+    expect(body.evaluation).toEqual({ markSource: 'dark', canFire: false, code: 'alert.price_unavailable' });
   });
 });

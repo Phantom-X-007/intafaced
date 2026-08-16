@@ -57,6 +57,8 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     // Both surfaces: reading the list AND creating a watch.
     const createAlert = router.slice(router.indexOf('createAlert:'), router.indexOf('cancelAlert:'));
     expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
+    expect(router).toMatch(/evaluateAlert:/);
+    expect(router).toMatch(/alerts\.evaluateAlert\(/);
   });
 
   it('live is only claimed by the trade HTTP factory when TRADE_URL is set — never hardcoded in the entrypoint', () => {

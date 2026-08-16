@@ -242,4 +242,32 @@ describe('AlertService — fire only when the inbox can receive it', () => {
     expect(again.results).toHaveLength(0);
     expect(await notifyStore.unreadCount('u1')).toBe(1);
   });
+
+  it('evaluateAlert refuses a dark port that still quotes a last — never fired as live', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const lyingDark: MarkSource = {
+      kind: 'dark',
+      async quote() {
+        return { kind: 'ok', price: '999', at: new Date() };
+      },
+    };
+    const alerts = new AlertService(new MemoryAlertStore(), lyingDark, new NotifyService(notifyStore, { fanoutEnabled: true }));
+    const row = await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+    const report = await alerts.evaluateAlert('u1', row.id);
+    expect(report.evaluation).toEqual({
+      markSource: 'dark',
+      canFire: false,
+      code: 'alert.price_unavailable',
+    });
+    expect(report.outcome).toMatchObject({ kind: 'refuse', code: 'alert.price_unavailable' });
+    expect(report.alert?.status).toBe('active');
+    expect(report.alert?.status).not.toBe('fired');
+    expect(report.notificationId).toBeNull();
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
 });
