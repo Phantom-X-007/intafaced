@@ -537,6 +537,10 @@ services:
       PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:-900}
       PAY_PUBLIC_BASE_PATH: ${PAY_PUBLIC_BASE_PATH:-/api/pay}
       PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
+      # Open-session cap + operator risk band. env.ts already names these;
+      # blank risk band refuses — never invent `low`. Defaults match env.ts.
+      PAY_CHECKOUT_MAX_OPEN_SESSIONS: ${PAY_CHECKOUT_MAX_OPEN_SESSIONS:-25}
+      PAY_CHECKOUT_RISK_BAND: ${PAY_CHECKOUT_RISK_BAND:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4006']
     healthcheck: *healthcheck
@@ -651,6 +655,12 @@ services:
       # rather than left unset, so the choice is visible in the file an operator
       # actually reads instead of living only in a zod schema.
       BANK_CARD_ISSUER: ${BANK_CARD_ISSUER:-none}
+      # WHICH BANK RAMP PROGRAMME THIS DEPLOYMENT HAS. env.ts already names
+      # BANK_RAMP_MODE (none | crypto-ledger, default none). Without compose
+      # pass-through a host `.env` never reaches the container. Default stays
+      # `none` — `crypto-ledger` is an operator act, not a stack default. Fiat
+      # PSP, chain broadcast, and APY are not named here.
+      BANK_RAMP_MODE: ${BANK_RAMP_MODE:-none}
       # Standing-order + auto-invest runners. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # Defaults match env.ts (`true`) — an operator stop is host `.env` plus
