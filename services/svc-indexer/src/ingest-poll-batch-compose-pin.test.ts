@@ -44,12 +44,8 @@ describe('compose ingest poll interval and batch size for svc-indexer', () => {
   const block = indexerServiceBlock(compose);
 
   it('env.ts still defaults INDEXER_POLL_INTERVAL_MS 2000 and INDEXER_BATCH_SIZE 200', () => {
-    expect(envTs).toMatch(
-      /INDEXER_POLL_INTERVAL_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(100\)\.max\(600_000\)\.default\(2_000\)/,
-    );
-    expect(envTs).toMatch(
-      /INDEXER_BATCH_SIZE:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(10_000\)\.default\(200\)/,
-    );
+    expect(envTs).toMatch(/INDEXER_POLL_INTERVAL_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(100\)\.max\(600_000\)\.default\(2_000\)/);
+    expect(envTs).toMatch(/INDEXER_BATCH_SIZE:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(10_000\)\.default\(200\)/);
   });
 
   it('wires unique host pass-through keys once; defaults 2000 and 200', () => {
@@ -63,9 +59,7 @@ describe('compose ingest poll interval and batch size for svc-indexer', () => {
   it('does not restamp chain/rpc/venue/start/finality/ingest or invent ledger/signing', () => {
     expect(block).toMatch(/INDEXER_CHAIN_ID:\s*\$\{PROTOCOL_CHAIN_ID:-31337\}/);
     expect(block).toMatch(/INDEXER_RPC_URL:\s*\$\{INDEXER_RPC_URL:-\}/);
-    expect(block).toMatch(
-      /INDEXER_VENUE_ADDRESS:\s*\$\{INDEXER_VENUE_ADDRESS:-0x0000000000000000000000000000000000000000\}/,
-    );
+    expect(block).toMatch(/INDEXER_VENUE_ADDRESS:\s*\$\{INDEXER_VENUE_ADDRESS:-0x0000000000000000000000000000000000000000\}/);
     expect(block).toMatch(/INDEXER_START_HEIGHT:\s*\$\{INDEXER_START_HEIGHT:-0\}/);
     expect(block).toMatch(/INDEXER_FINALITY_DEPTH:\s*\$\{INDEXER_FINALITY_DEPTH:-64\}/);
     expect(block).toMatch(/INDEXER_INGEST_ENABLED:\s*\$\{INDEXER_INGEST_ENABLED:-true\}/);
