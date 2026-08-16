@@ -1,0 +1,29 @@
+name: wire-bank-user-transfer-once
+on:
+  push:
+    branches: [feat/bank-user-to-user-transfer]
+  workflow_dispatch:
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/bank-user-to-user-transfer
+      - name: apply patch and self-delete
+        run: |
+          set -euo pipefail
+          if [ ! -f services/svc-bank/scripts/user-transfer.patch ]; then
+            echo already applied
+            exit 0
+          fi
+          git apply services/svc-bank/scripts/user-transfer.patch
+          rm -f services/svc-bank/scripts/user-transfer.patch
+          rm -f .github/workflows/wire-bank-user-transfer-once.yml
+          git config user.name "Sovereign Builder"
+          git config user.email "intafaced@gmail.com"
+          git add -A
+          git commit -m "feat(svc-bank): user-to-user transfer through ledger-client"
+          git push
