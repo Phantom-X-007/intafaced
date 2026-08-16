@@ -78,17 +78,17 @@ F-STANDBY is not "nothing to do." It is a claim that must be evidenced every cyc
 
 ## 4 · Noise bans — never evidence of success
 
-| Ban                                                 | Why it is a defect                                          |
-| --------------------------------------------------- | ----------------------------------------------------------- |
-| **PR / commit / subagent counts as "we did a lot"** | Volume is not value. A status built on counts is defective  |
-| **"You can leave" while the freeze is non-empty**   | Fake AFK. The forbidden stop                                |
-| **A plan or doc existing = the work is done**       | A map is not a runner                                       |
-| **A green test on a module nothing imports**        | The test asserts itself. Blocked by the `reachability` gate |
-| **Manufacturing work because the board is empty**   | `freeProduct=0` never authorises minting                    |
-| **Leftover honesty rebase / i18n pin-only / occupancy spawn as "progress"** | Sand-castle. Volume is not a mountain close (`AGENTS.md`) |
-| **Claiming a sibling's open multi-concern PR**      | Multi-dev violation                                         |
-| **Spec green = production money ready**             | Class M violation                                           |
-| **"No bugs left" without proof**                    | Over-claim — see §6                                         |
+| Ban                                                                         | Why it is a defect                                          |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **PR / commit / subagent counts as "we did a lot"**                         | Volume is not value. A status built on counts is defective  |
+| **"You can leave" while the freeze is non-empty**                           | Fake AFK. The forbidden stop                                |
+| **A plan or doc existing = the work is done**                               | A map is not a runner                                       |
+| **A green test on a module nothing imports**                                | The test asserts itself. Blocked by the `reachability` gate |
+| **Manufacturing work because the board is empty**                           | `freeProduct=0` never authorises minting                    |
+| **Leftover honesty rebase / i18n pin-only / occupancy spawn as "progress"** | Sand-castle. Volume is not a mountain close (`AGENTS.md`)   |
+| **Claiming a sibling's open multi-concern PR**                              | Multi-dev violation                                         |
+| **Spec green = production money ready**                                     | Class M violation                                           |
+| **"No bugs left" without proof**                                            | Over-claim — see §6                                         |
 
 ---
 

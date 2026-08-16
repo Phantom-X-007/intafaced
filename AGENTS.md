@@ -4,11 +4,11 @@ You are in the INTAFACED monorepo. **Denon owns direction.** Close product mount
 
 ## Who is driving
 
-| Human | Role | GitHub |
-| ----- | ---- | ------ |
-| **Denon** (`@Phantom-X-007`) | Builder. Spine law + what “done” means. His agents **complete** features. | admin |
-| **Nitro** (`@ZenYoda3`) | Non-technical operator. Class X (secrets, prod go-live, licences). Do not hand him git. | write |
-| **Shehzad** (`@shehzad002`) | Protocol Plane + INTACHAIN only. Agents **babysit** chain mountains — never implement them. | write |
+| Human                        | Role                                                                                        | GitHub |
+| ---------------------------- | ------------------------------------------------------------------------------------------- | ------ |
+| **Denon** (`@Phantom-X-007`) | Builder. Spine law + what “done” means. His agents **complete** features.                   | admin  |
+| **Nitro** (`@ZenYoda3`)      | Non-technical operator. Class X (secrets, prod go-live, licences). Do not hand him git.     | write  |
+| **Shehzad** (`@shehzad002`)  | Protocol Plane + INTACHAIN only. Agents **babysit** chain mountains — never implement them. | write  |
 
 Denon does **not** wait for Nitro Approve. Merge when CI + self-audit pass. Class **X** is never agent-done.
 
