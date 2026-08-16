@@ -31,6 +31,7 @@ import {
 } from './affiliates/commission-rate-law.js';
 import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
+import { KYC_VAULT_UNWIRED } from './kyc/boot-vault.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
 import { FlagDisabledError } from '@intafaced/config';
@@ -346,7 +347,7 @@ export function createIdentityRouter(
     if (!kycDocs) {
       throw new TRPCError({
         code: 'PRECONDITION_FAILED',
-        message: 'KYC document vault is not configured (set IDENTITY_KYC_DOC_KEY and wire kycDocs)',
+        message: `KYC document vault is not configured [${KYC_VAULT_UNWIRED}]`,
       });
     }
     return kycDocs;
