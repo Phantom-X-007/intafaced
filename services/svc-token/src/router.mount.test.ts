@@ -5,6 +5,7 @@ import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { ACCESS_TIERS } from './economics/staking.js';
 import { createTokenRouter } from './router.js';
 import { TokenError, type StakeRecord, type TokenService } from './token-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * Mount boundary for svc-token — stake/unstake/mintEpoch/yield/buyback must
@@ -223,14 +224,14 @@ describe('svc-token mount — authorisation', () => {
     });
     await expect(
       createTokenRouter(locked).createCaller(signed()).unstake({ stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: userCopy('token.stake_locked') });
 
     const missing = stubToken({
       getStake: vi.fn(async () => null),
     });
     await expect(
       createTokenRouter(missing).createCaller(signed()).unstake({ stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    ).rejects.toMatchObject({ code: 'NOT_FOUND', message: userCopy('token.stake_not_found') });
   });
 });
 
