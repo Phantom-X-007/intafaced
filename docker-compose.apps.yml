@@ -1033,6 +1033,12 @@ services:
       DATABASE_URL: postgres://svc_academy:svc_academy@postgres:5432/intafaced
       TOKEN_URL: http://svc-token:4003
       IDENTITY_URL: http://svc-identity:4002
+      # Access-token lifetime / iss / aud (authEnvSchema + identity compose defaults).
+      # Host `.env` can pin token life and audience; schema-only defaults never
+      # reach the container without these names. Do not raise TTL above 900.
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      JWT_ISSUER: ${JWT_ISSUER:-intafaced}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
       ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
       # Paper-drill ops kill. env.ts already names this (default true); without
