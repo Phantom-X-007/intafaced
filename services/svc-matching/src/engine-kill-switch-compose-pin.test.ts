@@ -66,9 +66,7 @@ describe('compose passes matching engine kill-switch into svc-matching', () => {
   });
 
   it('does not restamp journal path or INTERNAL_SERVICE_SECRET', () => {
-    expect(block).toMatch(
-      /MATCHING_JOURNAL_PATH:\s*\$\{MATCHING_JOURNAL_PATH:-\/data\/matching\/engine_journal\.ndjson\}/,
-    );
+    expect(block).toMatch(/MATCHING_JOURNAL_PATH:\s*\$\{MATCHING_JOURNAL_PATH:-\/data\/matching\/engine_journal\.ndjson\}/);
     expect(block).not.toMatch(/INTERNAL_SERVICE_SECRET:\s*\$\{INTERNAL_SERVICE_SECRET/);
     expect(countAssignments(block, 'INTERNAL_SERVICE_SECRET')).toBe(0);
   });
