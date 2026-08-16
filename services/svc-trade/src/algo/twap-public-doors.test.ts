@@ -161,18 +161,7 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
       return parent;
     },
     async getAlgo(p: Principal, parentId: string): Promise<TwapParent> {
-      let parent = engine.get(parentId);
-      if (!parent) {
-        const loaded = await store.load(parentId);
-        if (loaded && loaded.parent.userId === p.userId) {
-          engine.hydrate(loaded.parent, loaded.plan);
-          parent = loaded.parent;
-        }
-      }
-      if (!parent || parent.userId !== p.userId) {
-        throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
-      }
-      return parent;
+      return hydrateAlgoIfMissing(engine, store, p.userId, parentId);
     },
     async algoProgress(p: Principal, parentId: string) {
       const parent = await trade.getAlgo(p, parentId);

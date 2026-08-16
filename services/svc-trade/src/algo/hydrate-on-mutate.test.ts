@@ -3,7 +3,7 @@ import { parseAmount } from '@intafaced/ledger-client';
 import { TradeError } from '../spot/types.js';
 import { MemoryTwapParentStore } from './parent-store.js';
 import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from './hydrate-on-mutate.js';
-import { TwapEngine, type TwapEnginePorts } from './twap-engine.js';
+import { CANCEL_INCOMPLETE_HALT, TwapEngine, type TwapEnginePorts } from './twap-engine.js';
 import type { AlgoQuotedMark, CreateTwapInput } from './types.js';
 
 const LOT = parseAmount('0.001');
@@ -56,6 +56,71 @@ describe('trade.algo — hydrate on mutate after restart', () => {
 
     const loaded = await store.load(parent.id);
     expect(loaded?.parent.status).toBe('paused');
+  });
+
+  it('resume after cold engine loads paused parent and persists active', async () => {
+    const store = new MemoryTwapParentStore();
+    const live = new TwapEngine(ports());
+    const parent = live.create(USER, baseInput(), LOT);
+    const paused = live.pause(USER, parent.id);
+    await persistAlgoMutation(live, store, paused);
+
+    const cold = new TwapEngine(ports());
+    expect(cold.get(parent.id)).toBeUndefined();
+    await hydrateAlgoIfMissing(cold, store, USER, parent.id);
+    const resumed = await persistAlgoMutation(cold, store, cold.resume(USER, parent.id));
+    expect(resumed.status).toBe('active');
+    expect(resumed.haltReason).toBeNull();
+
+    const loaded = await store.load(parent.id);
+    expect(loaded?.parent.status).toBe('active');
+  });
+
+  it('cancel after cold engine loads store and persists cancelled', async () => {
+    const store = new MemoryTwapParentStore();
+    const live = new TwapEngine(ports());
+    const parent = live.create(USER, baseInput(), LOT);
+    await persistAlgoMutation(live, store, parent);
+
+    const cold = new TwapEngine(ports());
+    expect(cold.get(parent.id)).toBeUndefined();
+    await hydrateAlgoIfMissing(cold, store, USER, parent.id);
+    const cancelled = await persistAlgoCancelAttempt(cold, store, USER, parent.id);
+    expect(cancelled.status).toBe('cancelled');
+
+    const loaded = await store.load(parent.id);
+    expect(loaded?.parent.status).toBe('cancelled');
+  });
+
+  it('cancel_incomplete after restart still refuses resume', async () => {
+    const store = new MemoryTwapParentStore();
+    const p: TwapEnginePorts = {
+      ...ports(),
+      cancelChild: async () => {
+        throw new TradeError('matching down mid-cancel', 'trade.algo_child_cancel_failed');
+      },
+    };
+    const live = new TwapEngine(p);
+    const parent = live.create(USER, baseInput(), LOT);
+    await live.tick(parent.id);
+    await persistAlgoMutation(live, store, live.get(parent.id)!);
+
+    await expect(persistAlgoCancelAttempt(live, store, USER, parent.id)).rejects.toMatchObject({
+      code: 'trade.algo_child_cancel_failed',
+    });
+    expect((await store.load(parent.id))?.parent.haltReason).toBe(CANCEL_INCOMPLETE_HALT);
+
+    const cold = new TwapEngine(p);
+    await hydrateAlgoIfMissing(cold, store, USER, parent.id);
+    expect(() => cold.resume(USER, parent.id)).toThrow(TradeError);
+    try {
+      cold.resume(USER, parent.id);
+      throw new Error('expected resume refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TradeError);
+      expect((e as TradeError).code).toBe('trade.algo_cancel_incomplete');
+    }
+    expect((await store.load(parent.id))?.parent.status).toBe('paused');
   });
 
   it('wrong owner after restart still 404s (does not hydrate stranger)', async () => {

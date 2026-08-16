@@ -12,21 +12,28 @@ export interface AlgoHydrateTarget {
 
 /**
  * Load a durable algo parent into the engine if this process does not already
- * hold it. Pause/resume/cancel after restart must not 404 a schedule that
- * Postgres still has.
+ * hold it. Same owner check as `getAlgo`: missing or wrong user → not_found
+ * (never hydrate a stranger). Pause/resume/cancel after restart must not 404
+ * a schedule that Postgres still has for this caller.
  */
 export async function hydrateAlgoIfMissing(
   engine: AlgoHydrateTarget,
   store: TwapParentStore,
   userId: string,
   parentId: string,
-): Promise<void> {
-  if (engine.get(parentId)) return;
-  const loaded = await store.load(parentId);
-  if (!loaded || loaded.parent.userId !== userId) {
+): Promise<TwapParent> {
+  let parent = engine.get(parentId);
+  if (!parent) {
+    const loaded = await store.load(parentId);
+    if (loaded && loaded.parent.userId === userId) {
+      engine.hydrate(loaded.parent, loaded.plan);
+      parent = loaded.parent;
+    }
+  }
+  if (!parent || parent.userId !== userId) {
     throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
   }
-  engine.hydrate(loaded.parent, loaded.plan);
+  return parent;
 }
 
 /**
