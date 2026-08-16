@@ -823,9 +823,7 @@ describe('DepthHub — the listing decides, not the engine', () => {
     expect(hub.bookFor(MARKET)).toBeUndefined();
     expect(hub.matchingAvailable).toBe(false);
     expect(hub.engineCode).toBe('depth.engine_unavailable');
-    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([
-      { type: 'status', code: 'depth.engine_unavailable', marketId: MARKET },
-    ]);
+    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([{ type: 'status', code: 'depth.engine_unavailable', marketId: MARKET }]);
 
     // Matching recovers; the first real book is a snapshot, not a delta off fake 0.
     source.failSnapshot = null;

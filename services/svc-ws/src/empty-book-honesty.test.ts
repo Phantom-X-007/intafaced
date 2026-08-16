@@ -110,9 +110,7 @@ describe('empty book is absent, not a zero book', () => {
     expect(sink.closed).toBeNull();
     expect(hub.matchingAvailable).toBe(false);
     expect(hub.engineCode).toBe(DEPTH_ENGINE_UNAVAILABLE);
-    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([
-      { type: 'status', code: DEPTH_ENGINE_UNAVAILABLE, marketId: MARKET },
-    ]);
+    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([{ type: 'status', code: DEPTH_ENGINE_UNAVAILABLE, marketId: MARKET }]);
     expectNoPricedEmptyBook(sink.frames);
   });
 
