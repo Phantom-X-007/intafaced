@@ -1434,7 +1434,8 @@ export class TradeService {
         takerFee,
         makerFeeAsset,
         takerFeeAsset,
-      });      await this.notifyAffiliatePayout({
+      });
+      await this.notifyAffiliatePayout({
         fillId: fillIdFor(market.id, fill.sequence),
         makerUserId: HOUSE_MM_USER_UUID,
         takerUserId: taker.userId,
@@ -1572,7 +1573,8 @@ export class TradeService {
       takerFee,
       makerFeeAsset: takerBuys ? market.quoteAsset : market.baseAsset,
       takerFeeAsset: takerBuys ? market.baseAsset : market.quoteAsset,
-    });    await this.notifyAffiliatePayout({
+    });
+    await this.notifyAffiliatePayout({
       fillId: fillIdFor(market.id, fill.sequence),
       makerUserId: maker.userId,
       takerUserId: taker.userId,
