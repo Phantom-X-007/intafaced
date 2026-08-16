@@ -516,3 +516,56 @@ describe('the shipped configuration does not inject an 8h funding interval', () 
     expect(shipped.get('TRADE_FUTURES_FUNDING_INTERVAL_MS')).toBe('');
   });
 });
+
+/**
+ * MM seed + algo jobs only reach the container if compose names them.
+ * env.ts already defines the flags; without this block a host `.env` is
+ * invisible to `platform:up`. Pin fails if a name disappears from svc-trade.
+ */
+function envTsTradeKeys(pattern: RegExp): string[] {
+  const src = joinChains(read('services/svc-trade/src/env.ts'));
+  return [...src.matchAll(pattern)].map((m) => m[1]!);
+}
+
+describe('the shipped configuration passes MM seed and algo job flags into svc-trade', () => {
+  const mmSeedKeys = envTsTradeKeys(/\b(TRADE_MM_SEED_[A-Z0-9_]+)\s*:/g);
+  const algoKeys = envTsTradeKeys(/\b(TRADE_ALGO_ENABLED|TRADE_ALGO_JOBS_ENABLED|TRADE_ALGO_JOBS_INTERVAL_MS)\s*:/g);
+
+  it('env.ts still declares the MM seed and algo job names this pin tracks', () => {
+    expect(mmSeedKeys.length).toBeGreaterThanOrEqual(10);
+    expect(algoKeys.sort()).toEqual(
+      ['TRADE_ALGO_ENABLED', 'TRADE_ALGO_JOBS_ENABLED', 'TRADE_ALGO_JOBS_INTERVAL_MS'].sort(),
+    );
+  });
+
+  it('compose svc-trade block names every TRADE_MM_SEED_* and TRADE_ALGO_* job flag from env.ts', () => {
+    for (const name of [...mmSeedKeys, ...algoKeys]) {
+      expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
+    }
+  });
+
+  it('hands the container seed OFF and empty markets/mids on a clean clone', () => {
+    expect(shipped.get('TRADE_MM_SEED_ENABLED')).toBe('false');
+    expect(shipped.get('TRADE_MM_SEED_MID_FROM_VENUE')).toBe('false');
+    expect(shipped.get('TRADE_MM_SEED_MARKETS')).toBe('');
+    expect(shipped.get('TRADE_MM_SEED_MIDS')).toBe('');
+  });
+
+  it('compose defaults seed enable flags to false, never ${VAR:-true}', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_MM_SEED_ENABLED:\s*\$\{TRADE_MM_SEED_ENABLED:-false\}/);
+    expect(compose).toMatch(/TRADE_MM_SEED_MID_FROM_VENUE:\s*\$\{TRADE_MM_SEED_MID_FROM_VENUE:-false\}/);
+    expect(compose).not.toMatch(/TRADE_MM_SEED_ENABLED:\s*\$\{TRADE_MM_SEED_ENABLED:-true\}/);
+    expect(compose).not.toMatch(/TRADE_MM_SEED_MID_FROM_VENUE:\s*\$\{TRADE_MM_SEED_MID_FROM_VENUE:-true\}/);
+  });
+
+  it('hands the container algo jobs OFF on a clean clone', () => {
+    expect(shipped.get('TRADE_ALGO_JOBS_ENABLED')).toBe('false');
+  });
+
+  it('compose defaults TRADE_ALGO_JOBS_ENABLED to false, never ${VAR:-true}', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-false\}/);
+    expect(compose).not.toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-true\}/);
+  });
+});

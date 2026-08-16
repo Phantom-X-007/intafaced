@@ -368,6 +368,30 @@ services:
       # a map into a clean clone because compose names the empty default.
       TRADE_VENUE_MARK_VENUE: ${TRADE_VENUE_MARK_VENUE:-}
       TRADE_VENUE_MARK_SYMBOLS: ${TRADE_VENUE_MARK_SYMBOLS:-}
+      # Market-maker book seed (trade.mm-bot). Default `false`, and the default is
+      # the decision this line exists to make explicit rather than leave to a zod
+      # schema nobody reads at deploy time.
+      #
+      # OFF is a product state, not an outage: the container starts, spot trades,
+      # and no house seed rests. Turning it on is host `.env` plus a restart.
+      # `${VAR:-true}` here would seed books on a clean clone. Empty markets/mids
+      # still skip (never invent a list or a mid).
+      TRADE_MM_SEED_ENABLED: ${TRADE_MM_SEED_ENABLED:-false}
+      TRADE_MM_SEED_INTERVAL_MS: ${TRADE_MM_SEED_INTERVAL_MS:-60000}
+      TRADE_MM_SEED_MARKETS: ${TRADE_MM_SEED_MARKETS:-}
+      TRADE_MM_SEED_MIDS: ${TRADE_MM_SEED_MIDS:-}
+      TRADE_MM_SEED_MID_FROM_VENUE: ${TRADE_MM_SEED_MID_FROM_VENUE:-false}
+      TRADE_MM_SEED_HALF_SPREAD_BPS: ${TRADE_MM_SEED_HALF_SPREAD_BPS:-10}
+      TRADE_MM_SEED_STEP_BPS: ${TRADE_MM_SEED_STEP_BPS:-10}
+      TRADE_MM_SEED_LEVELS: ${TRADE_MM_SEED_LEVELS:-3}
+      TRADE_MM_SEED_QTY: ${TRADE_MM_SEED_QTY:-1}
+      TRADE_MM_SEED_STATE_PATH: ${TRADE_MM_SEED_STATE_PATH:-.data/mm-seed-last-run.json}
+      # TWAP create vs scheduler (trade.algo). Same process as MM seed — splitting
+      # PRs collides on this block. Create defaults ON (matches env.ts); JOBS stay
+      # OFF until an operator opts in. Never `${VAR:-true}` on jobs.
+      TRADE_ALGO_ENABLED: ${TRADE_ALGO_ENABLED:-true}
+      TRADE_ALGO_JOBS_ENABLED: ${TRADE_ALGO_JOBS_ENABLED:-false}
+      TRADE_ALGO_JOBS_INTERVAL_MS: ${TRADE_ALGO_JOBS_INTERVAL_MS:-1000}
       # Absolute max |period funding rate| — empty refuses publish/settle.
       # Required when funding market ids are non-empty. No invented ceiling.
       TRADE_FUTURES_FUNDING_MAX_ABS_RATE: ${TRADE_FUTURES_FUNDING_MAX_ABS_RATE:-}

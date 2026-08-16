@@ -448,10 +448,11 @@ export const FEATURES = [
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/mm'],
-    note: '2026-08-14 production mid: TRADE_MM_SEED_MID_FROM_VENUE + TRADE_VENUE_MARK_STREAM uses the same MaintainedBook port as futures marks (desynced → skip seed, never invent). orderFilled accountId recovery is already on tip (`settleFillEvent` + house-MM makerAccountId). Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). D26-P1-T10 backend honesty: seed-honesty contract (flagged / killable / no manufactured crosses); resting seeds recorded seeded=true; TRADE_MM_SEED_ENABLED kills placeOrder seeded path too. Not Done — ready with ops kill-switches.',
+    note: 'WIP 2026-08-16 Denon compose pass-through (feat/trade-mm-seed-compose-passthrough): docker-compose.apps.yml svc-trade now forwards TRADE_MM_SEED_* + TRADE_ALGO_* from host .env; seed/jobs stay OFF/empty on a clean clone. Still not Done — owner must publish mids/markets before enable. 2026-08-14 production mid: TRADE_MM_SEED_MID_FROM_VENUE + TRADE_VENUE_MARK_STREAM uses the same MaintainedBook port as futures marks (desynced → skip seed, never invent). orderFilled accountId recovery is already on tip (`settleFillEvent` + house-MM makerAccountId). Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). D26-P1-T10 backend honesty: seed-honesty contract (flagged / killable / no manufactured crosses); resting seeds recorded seeded=true; TRADE_MM_SEED_ENABLED kills placeOrder seeded path too. Not Done — ready with ops kill-switches.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
