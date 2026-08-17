@@ -52,7 +52,10 @@ describe('marketDataAdapterSnapshot', () => {
     );
     await observe('ETH/USDT', 10);
     await observe('ETH/USDT');
-    expect(seen).toEqual([{ symbol: 'ETH/USDT', limit: 10 }, { symbol: 'ETH/USDT', limit: undefined }]);
+    expect(seen).toEqual([
+      { symbol: 'ETH/USDT', limit: 10 },
+      { symbol: 'ETH/USDT', limit: undefined },
+    ]);
   });
 
   it('propagates venue not_ready — does not invent a book', async () => {
