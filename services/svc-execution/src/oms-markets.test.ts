@@ -58,13 +58,15 @@ class FakeMarkets {
   readonly quotes: (string | undefined)[] = [];
   readonly bases: (string | undefined)[] = [];
   readonly actives: (boolean | undefined)[] = [];
+  readonly settles: (string | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type, quote, base, active) => {
+  fn: OmsMarketsFn = async (type, quote, base, active, settle) => {
     this.calls += 1;
     this.types.push(type);
     this.quotes.push(quote);
     this.bases.push(base);
     this.actives.push(active);
+    this.settles.push(settle);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -149,6 +151,19 @@ describe('observeOmsMarkets', () => {
     expect(result.markets[0]?.active).toBe(false);
   });
 
+  it('passes an optional settle through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ type: 'perpetual', symbol: 'BTC/USDT:USDT', venueSymbol: 'BTCUSDT', settle: 'USDT' })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      settle: 'USDT',
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.settles).toEqual(['USDT']);
+    if (!result.ok) return;
+    expect(result.markets[0]?.settle).toBe('USDT');
+  });
+
   it('refuses internal venues and does not observe', async () => {
     const book = new FakeMarkets([listed()]);
     const result = await observeOmsMarkets({
@@ -213,6 +228,7 @@ describe('execution.oms.markets tRPC', () => {
       quote: 'USDT',
       base: 'ETH',
       active: false,
+      settle: 'USDT',
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -221,5 +237,6 @@ describe('execution.oms.markets tRPC', () => {
     expect(street.quotes).toEqual(['USDT']);
     expect(street.bases).toEqual(['ETH']);
     expect(street.actives).toEqual([false]);
+    expect(street.settles).toEqual(['USDT']);
   });
 });

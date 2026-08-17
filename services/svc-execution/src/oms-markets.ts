@@ -9,12 +9,19 @@
  * type. Optional quote forwards USDT/…; omitted still observes every quote.
  * Optional base forwards BTC/…; omitted still observes every base.
  * Optional active forwards true/false; omitted still observes inactive listings.
- * Inactive listings stay inactive.
+ * Optional settle forwards USDT/…; omitted still observes null settle (spot).
+ * Inactive listings stay inactive. Null settle stays null.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueInstrumentType, VenueMarket } from '@intafaced/venue-contracts';
 
-export type OmsMarketsFn = (type?: VenueInstrumentType, quote?: string, base?: string, active?: boolean) => Promise<readonly VenueMarket[]>;
+export type OmsMarketsFn = (
+  type?: VenueInstrumentType,
+  quote?: string,
+  base?: string,
+  active?: boolean,
+  settle?: string,
+) => Promise<readonly VenueMarket[]>;
 
 export type OmsMarketsInput = {
   readonly venueId: string;
@@ -22,6 +29,7 @@ export type OmsMarketsInput = {
   readonly quote?: string;
   readonly base?: string;
   readonly active?: boolean;
+  readonly settle?: string;
   readonly kind?: VenueKind;
   readonly marketsByVenue?: Readonly<Record<string, OmsMarketsFn>>;
 };
@@ -59,7 +67,13 @@ export async function observeOmsMarkets(input: OmsMarketsInput): Promise<OmsMark
   try {
     return {
       ok: true,
-      markets: await markets(input.type, input.quote?.trim() || undefined, input.base?.trim() || undefined, input.active),
+      markets: await markets(
+        input.type,
+        input.quote?.trim() || undefined,
+        input.base?.trim() || undefined,
+        input.active,
+        input.settle?.trim() || undefined,
+      ),
     };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
