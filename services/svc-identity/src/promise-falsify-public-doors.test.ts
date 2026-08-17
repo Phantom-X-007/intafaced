@@ -22,13 +22,16 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader, verifyServiceHeaders } from '@intafaced/contracts';
 import { AuthError, type AuthService } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
+import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
+import { MemoryAccrualStore } from './affiliates/accrual-store.js';
+import type { CommissionRow } from './affiliates/commission.js';
 import { createIdentityRouter } from './router.js';
 import { userCopy } from './user-copy.js';
 
@@ -37,6 +40,16 @@ const INTERNAL_SECRET = 'identity-promise-falsify-public-doors-internal';
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const STRANGER = '22222222-2222-4222-8222-222222222222';
 const GHOST = '00000000-0000-4000-8000-000000000099';
+const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const PAYER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const BENE = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const FEE_EVT = 'fee-evt-promise-falsify-door';
+const ASSET = 'USDT';
+
+const publishedLaw = {
+  published: true as const,
+  tiers: [{ hop: 0, rate: '0.10' }],
+};
 
 const here = dirname(fileURLToPath(import.meta.url));
 const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-identity' });
@@ -154,6 +167,57 @@ function signedHeaders(p: Principal = principal()): Record<string, string> {
   };
 }
 
+function adminHeaders(): Record<string, string> {
+  return signedHeaders(
+    principal({
+      sub: OPERATOR,
+      userId: OPERATOR,
+      scopes: ['admin:write'],
+    }),
+  );
+}
+
+function accrualRow(): CommissionRow {
+  return {
+    feeEventId: FEE_EVT,
+    beneficiaryId: BENE,
+    payerId: PAYER,
+    hop: 0,
+    rate: '0.10',
+    feeAmount: '100',
+    commissionAmount: '10',
+    asset: ASSET,
+    accruedAt: new Date('2026-08-12T00:00:00.000Z'),
+    sourceModule: 'identity',
+  };
+}
+
+async function fundedPayoutLedger(): Promise<MemoryLedger> {
+  const ledger = new MemoryLedger();
+  await ledger.post(
+    recipes.deposit({
+      userId: PAYER,
+      assetId: ASSET,
+      amount: parseAmount('1000'),
+      rail: 'crypto-native',
+      railRef: 'promise-falsify-payout-seed',
+    }),
+  );
+  await ledger.post(
+    recipes.feeCharge({
+      mode: 'asset',
+      chargeId: FEE_EVT,
+      userId: PAYER,
+      module: 'identity',
+      assetId: ASSET,
+      amount: parseAmount('100'),
+    }),
+  );
+  return ledger;
+}
+
+const bal = async (l: MemoryLedger, ref: Parameters<MemoryLedger['balance']>[0]) => formatAmount((await l.balance(ref)).amount);
+
 function unwrapData(body: WireBody): unknown {
   const data = body.result?.data;
   if (data && typeof data === 'object' && 'json' in (data as Record<string, unknown>)) {
@@ -177,8 +241,17 @@ function assertNoInventedBalance(payload: unknown, path = '$'): void {
   }
 }
 
-async function mountDoors(auth: MemorySubAccountAuth): Promise<FastifyInstance> {
-  const router = createIdentityRouter(auth as unknown as AuthService, {} as RankService, { registrationOpen: true });
+type MoneyMountOpts = {
+  accruals?: MemoryAccrualStore;
+  accrualTierLaw?: typeof publishedLaw | undefined;
+  ledger?: MemoryLedger;
+};
+
+async function mountDoors(auth: MemorySubAccountAuth, money: MoneyMountOpts = {}): Promise<FastifyInstance> {
+  const router = createIdentityRouter(auth as unknown as AuthService, {} as RankService, {
+    registrationOpen: true,
+    ...money,
+  });
   const app = Fastify({ logger: false });
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
@@ -409,5 +482,168 @@ describe('D26-P2-12 public doors — S2S ownership HTTP snapshot', () => {
     expect(retired.statusCode).toBe(200);
     expect(retired.json()).toEqual({ id: mine.id, parentUserId: OWNER, revoked: true });
     assertNoInventedBalance(retired.json());
+  });
+});
+
+describe('D26-P2-12 spine reprove — transfer door unset / malformed over wire', () => {
+  it('assertTransferDoor refuses a missing to-leg — never invents primary', async () => {
+    const mine = await books.createSubAccount(OWNER, 'from-only');
+    const { statusCode, body } = await post(app, 'subAccounts.assertTransferDoor', {
+      fromSubAccountId: mine.id,
+      toSubAccountId: null,
+    });
+    expect(statusCode).toBe(400);
+    expect(body.error?.data?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_required'));
+  });
+
+  it('assertTransferDoor refuses a missing from-leg — never invents primary', async () => {
+    const mine = await books.createSubAccount(OWNER, 'to-only');
+    const { statusCode, body } = await post(app, 'subAccounts.assertTransferDoor', {
+      fromSubAccountId: null,
+      toSubAccountId: mine.id,
+    });
+    expect(statusCode).toBe(400);
+    expect(body.error?.data?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_required'));
+  });
+
+  it('assertTransferDoor refuses the same partition twice', async () => {
+    const mine = await books.createSubAccount(OWNER, 'solo');
+    const { statusCode, body } = await post(app, 'subAccounts.assertTransferDoor', {
+      fromSubAccountId: mine.id,
+      toSubAccountId: mine.id,
+    });
+    expect(statusCode).toBe(400);
+    expect(body.error?.data?.code).toBe('BAD_REQUEST');
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_same'));
+  });
+
+  it('assertTransferDoor refuses a foreign from-leg (cross-parent leak)', async () => {
+    const theirs = await books.createSubAccount(STRANGER, 'from');
+    const mine = await books.createSubAccount(OWNER, 'to');
+    const { statusCode, body } = await post(app, 'subAccounts.assertTransferDoor', {
+      fromSubAccountId: theirs.id,
+      toSubAccountId: mine.id,
+    });
+    expect(statusCode).toBe(403);
+    expect(body.error?.data?.code).toBe('FORBIDDEN');
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_denied'));
+  });
+
+  it('assertTransferDoor refuses when either side is revoked', async () => {
+    const live = await books.createSubAccount(OWNER, 'live');
+    const dead = await books.createSubAccount(OWNER, 'dead');
+    await books.revokeSubAccount(OWNER, dead.id);
+
+    const fromRevoked = await post(app, 'subAccounts.assertTransferDoor', {
+      fromSubAccountId: dead.id,
+      toSubAccountId: live.id,
+    });
+    expect(fromRevoked.statusCode).toBe(403);
+    expect(fromRevoked.body.error?.data?.code).toBe('FORBIDDEN');
+
+    const toRevoked = await post(app, 'subAccounts.assertTransferDoor', {
+      fromSubAccountId: live.id,
+      toSubAccountId: dead.id,
+    });
+    expect(toRevoked.statusCode).toBe(403);
+    expect(toRevoked.body.error?.data?.code).toBe('FORBIDDEN');
+  });
+});
+
+describe('D26-P2-12 spine reprove — affiliates.payout money routing over wire', () => {
+  let moneyApp: FastifyInstance;
+  let ledger: MemoryLedger;
+  let store: MemoryAccrualStore;
+
+  beforeEach(async () => {
+    ledger = await fundedPayoutLedger();
+    store = new MemoryAccrualStore();
+    await store.saveRows([accrualRow()]);
+    moneyApp = await mountDoors(books, { accruals: store, accrualTierLaw: publishedLaw, ledger });
+  });
+
+  afterEach(async () => {
+    await moneyApp.close();
+  });
+
+  it('refuses without admin:write over the wire — ledger untouched', async () => {
+    const { statusCode, body } = await post(
+      moneyApp,
+      'affiliates.payout',
+      { feeEventId: FEE_EVT },
+      signedHeaders(principal({ scopes: ['identity:read'] })),
+    );
+    expect(statusCode).toBe(403);
+    expect(body.error?.data?.code).toBe('FORBIDDEN');
+    expect(await bal(ledger, userAvailable(BENE, ASSET))).toBe('0');
+    expect(await bal(ledger, houseFees('identity', ASSET))).toBe('100');
+  });
+
+  it('refuses unpublished rate law over the wire — rates_unset, ledger untouched', async () => {
+    const unwired = await mountDoors(books, { accruals: store, ledger });
+    try {
+      const { statusCode, body } = await post(unwired, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
+      expect(statusCode).toBe(412);
+      expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
+      expect(body.error?.message).toContain('DIRECTION §8');
+      expect(await bal(ledger, userAvailable(BENE, ASSET))).toBe('0');
+      expect(await bal(ledger, houseFees('identity', ASSET))).toBe('100');
+    } finally {
+      await unwired.close();
+    }
+  });
+
+  it('rate refusal wins over a missing feeEventId on the wire', async () => {
+    const unwired = await mountDoors(books, { accruals: store });
+    try {
+      const { statusCode, body } = await post(unwired, 'affiliates.payout', {}, adminHeaders());
+      expect(statusCode).toBe(412);
+      expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
+      expect(body.error?.message).toContain('DIRECTION §8');
+      expect(body.error?.message).not.toContain('feeEventId is required');
+    } finally {
+      await unwired.close();
+    }
+  });
+
+  it('refuses ledger_unwired over the wire when rates are published — no silent payment', async () => {
+    const noLedger = await mountDoors(books, { accruals: store, accrualTierLaw: publishedLaw });
+    try {
+      const { statusCode, body } = await post(noLedger, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
+      expect(statusCode).toBe(412);
+      expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
+      expect(body.error?.message).toContain('no ledger client');
+    } finally {
+      await noLedger.close();
+    }
+  });
+
+  it('dryRun over the wire plans without posting and invents no balance fields', async () => {
+    const { statusCode, body } = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT, dryRun: true }, adminHeaders());
+    expect(statusCode).toBe(200);
+    const data = unwrapData(body) as Record<string, unknown>;
+    expect(data.posted).toBe(false);
+    expect(data.totalCommission).toBe('10');
+    assertNoInventedBalance(data);
+    expect(await bal(ledger, userAvailable(BENE, ASSET))).toBe('0');
+    expect(await bal(ledger, houseFees('identity', ASSET))).toBe('100');
+    expect(await bal(ledger, rewardsEngine(ASSET))).toBe('0');
+  });
+
+  it('payout over the wire posts once; retry leaves balances unchanged', async () => {
+    const first = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
+    const second = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    const firstData = unwrapData(first.body) as { posted: boolean; idempotencyKeys: string[] };
+    const secondData = unwrapData(second.body) as { idempotencyKeys: string[] };
+    expect(firstData.posted).toBe(true);
+    expect(secondData.idempotencyKeys).toEqual(firstData.idempotencyKeys);
+    assertNoInventedBalance(firstData);
+    expect(await bal(ledger, userAvailable(BENE, ASSET))).toBe('10');
+    expect(await bal(ledger, houseFees('identity', ASSET))).toBe('90');
+    expect(await bal(ledger, rewardsEngine(ASSET))).toBe('0');
   });
 });
