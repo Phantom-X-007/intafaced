@@ -88,4 +88,13 @@ describe('accountAdapterRails', () => {
     expect(await observe('USDT', undefined, undefined, 'vault')).toEqual([]);
     expect(await observe('USDT')).toHaveLength(2);
   });
+
+  it('filters by fromVenueId without hiding other sources when omitted', async () => {
+    const observe = accountAdapterRails(
+      adapter([usdtRail({ fromVenueId: 'street' }), usdtRail({ fromVenueId: 'yard', network: 'erc20', enabled: true })]),
+    );
+    expect((await observe('USDT', undefined, undefined, undefined, 'yard')).map((row) => row.fromVenueId)).toEqual(['yard']);
+    expect(await observe('USDT', undefined, undefined, undefined, 'vault')).toEqual([]);
+    expect(await observe('USDT')).toHaveLength(2);
+  });
 });

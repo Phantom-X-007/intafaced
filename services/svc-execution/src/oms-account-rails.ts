@@ -6,20 +6,28 @@
  * Optional enabled narrows open/suspended without inventing the other.
  * Optional network narrows trc20/… without inventing a rail.
  * Optional toVenueId narrows harbour/… without inventing a rail.
+ * Optional fromVenueId narrows street/… without inventing a rail.
  * Does not invent a transfer.
  */
 import type { AccountAdapter, TransferRail } from '@intafaced/venue-contracts';
 
-export type OmsRailsFn = (asset: string, enabled?: boolean, network?: string, toVenueId?: string) => Promise<TransferRail[]>;
+export type OmsRailsFn = (
+  asset: string,
+  enabled?: boolean,
+  network?: string,
+  toVenueId?: string,
+  fromVenueId?: string,
+) => Promise<TransferRail[]>;
 
 export function accountAdapterRails(adapter: AccountAdapter): OmsRailsFn {
-  return async (asset, enabled, network, toVenueId) => {
+  return async (asset, enabled, network, toVenueId, fromVenueId) => {
     const rows = await adapter.transferRails(asset);
     return rows.filter(
       (row) =>
         (enabled === undefined || row.enabled === enabled) &&
         (!network || row.network === network) &&
-        (!toVenueId || row.toVenueId === toVenueId),
+        (!toVenueId || row.toVenueId === toVenueId) &&
+        (!fromVenueId || row.fromVenueId === fromVenueId),
     );
   };
 }
