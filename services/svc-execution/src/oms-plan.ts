@@ -82,10 +82,7 @@ function quotedSource(venue: OmsPlanVenue, now: Date): LiquiditySource {
   };
 }
 
-export async function planOmsRoute(
-  input: OmsPlanInput,
-  registry?: SealedHouseTenantRegistry,
-): Promise<OmsPlanResult> {
+export async function planOmsRoute(input: OmsPlanInput, registry?: SealedHouseTenantRegistry): Promise<OmsPlanResult> {
   if (input.venues.length === 0) {
     return { ok: false, reason: 'empty_venues', detail: 'OMS plan requires at least one venue quote' };
   }
@@ -127,11 +124,7 @@ export async function planOmsRoute(
     sources.push(quotedSource(venue, now));
   }
 
-  const plan = await planRoute(
-    { symbol: input.symbol, side: input.side, amount: requested },
-    sources,
-    { now, costTermsByVenue },
-  );
+  const plan = await planRoute({ symbol: input.symbol, side: input.side, amount: requested }, sources, { now, costTermsByVenue });
 
   return { ok: true, report: buildExecutionReport(plan) };
 }
