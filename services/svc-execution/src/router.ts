@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { router, scopedProcedure } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
+import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
@@ -65,8 +66,13 @@ const omsPlanInput = z.object({
 });
 
 export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
+export type ExecutionCancelMap = Readonly<Record<string, OmsCancelFn>>;
 
-export function createExecutionRouter(registry: SealedHouseTenantRegistry, submitByVenue: ExecutionSubmitMap = {}) {
+export function createExecutionRouter(
+  registry: SealedHouseTenantRegistry,
+  submitByVenue: ExecutionSubmitMap = {},
+  cancelByVenue: ExecutionCancelMap = {},
+) {
   return router({
     execution: router({
       tenant: router({
@@ -136,6 +142,27 @@ export function createExecutionRouter(registry: SealedHouseTenantRegistry, submi
                 },
                 registry,
               );
+            });
+          }),
+
+        cancel: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              symbol: z.string().min(1).max(64),
+              clientOrderId: z.string().min(1).max(128),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.cancel', input.venueId, async () => {
+              return cancelOmsOrder({
+                venueId: input.venueId,
+                symbol: input.symbol,
+                clientOrderId: input.clientOrderId,
+                kind: input.kind,
+                cancelByVenue,
+              });
             });
           }),
       }),

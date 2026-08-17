@@ -950,6 +950,9 @@ importers:
       '@intafaced/venue-adapter':
         specifier: workspace:*
         version: link:../../packages/venue-adapter
+      '@intafaced/venue-contracts':
+        specifier: workspace:*
+        version: link:../../packages/venue-contracts
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
