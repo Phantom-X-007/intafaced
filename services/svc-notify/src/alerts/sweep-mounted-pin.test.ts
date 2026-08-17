@@ -59,6 +59,9 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
     expect(router).toMatch(/evaluateAlert:/);
     expect(router).toMatch(/alerts\.evaluateAlert\(/);
+    expect(router).toMatch(/alert\.kind_unpublished/);
+    expect(router).toMatch(/createUnpublishedKind/);
+    expect(router).toMatch(/evaluateUnpublishedKind/);
   });
 
   it('live is only claimed by the trade HTTP factory when TRADE_URL is set — never hardcoded in the entrypoint', () => {
@@ -92,5 +95,11 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(accepted).toMatch(/refuseIfMarkAged\(/);
     expect(src('alerts/service.ts')).toMatch(/acceptAlertMark\(this\.marks, raw, at\)/);
     expect(src('alerts/trade-http-mark.ts')).toMatch(/refuseIfMarkAged\(/);
+  });
+
+  it('Fastify /ready names unpublished kinds and the refuse code', () => {
+    const index = src('index.ts');
+    expect(index).toMatch(/unpublishedKinds: UNPUBLISHED_ALERT_KINDS/);
+    expect(index).toMatch(/unpublishedCode: ALERT_KIND_UNPUBLISHED/);
   });
 });

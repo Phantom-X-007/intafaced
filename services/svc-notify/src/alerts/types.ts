@@ -14,11 +14,45 @@
  * The portfolio refuse arm carries zero money fields.
  */
 
-/** Price watches are live. Portfolio is named so the door can refuse it. */
-export type AlertKind = 'price' | 'portfolio';
+/**
+ * Price watches are live. Portfolio and the Phase-5 / futures-tied kinds are
+ * named so the door can refuse them — never an invented series.
+ */
+export type UnpublishedAlertKind = 'funding' | 'whale' | 'liquidation_proximity' | 'intelligence';
+
+export const UNPUBLISHED_ALERT_KINDS = [
+  'funding',
+  'whale',
+  'liquidation_proximity',
+  'intelligence',
+] as const satisfies readonly UnpublishedAlertKind[];
+
+export type AlertKind = 'price' | 'portfolio' | UnpublishedAlertKind;
 
 /** Stable refuse until a ledger portfolio view exists. Never invent a balance. */
 export const ALERT_PORTFOLIO_VIEW_UNPUBLISHED = 'alert.portfolio_view_unpublished' as const;
+
+/** Stable refuse for kinds with no sourced series. Never fire, never store. */
+export const ALERT_KIND_UNPUBLISHED = 'alert.kind_unpublished' as const;
+
+export class AlertKindUnpublishedError extends Error {
+  readonly code: typeof ALERT_KIND_UNPUBLISHED = ALERT_KIND_UNPUBLISHED;
+  readonly alertKind: UnpublishedAlertKind;
+  constructor(alertKind: UnpublishedAlertKind) {
+    super(`${ALERT_KIND_UNPUBLISHED}: ${alertKind} has no sourced series`);
+    this.name = 'AlertKindUnpublishedError';
+    this.alertKind = alertKind;
+  }
+}
+
+export function isUnpublishedAlertKind(kind: string | undefined): kind is UnpublishedAlertKind {
+  return (UNPUBLISHED_ALERT_KINDS as readonly string[]).includes(kind ?? '');
+}
+
+export type CreateUnpublishedAlertInput = {
+  readonly kind: UnpublishedAlertKind;
+  readonly userId: string;
+};
 
 export class AlertPortfolioUnpublishedError extends Error {
   readonly code: typeof ALERT_PORTFOLIO_VIEW_UNPUBLISHED = ALERT_PORTFOLIO_VIEW_UNPUBLISHED;
@@ -99,6 +133,7 @@ export type AlertRefuseCode =
   | 'alert.not_active'
   | 'alert.invalid_price'
   | 'alert.portfolio_view_unpublished'
+  | 'alert.kind_unpublished'
   | 'channel.not_configured'
   | 'channel.disabled';
 

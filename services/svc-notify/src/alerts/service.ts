@@ -11,17 +11,20 @@
 
 import type { CreateResult, NotifyService } from '../notify-service.js';
 import { acceptAlertMark, outOfAppRequiredRefusal } from './accepted-mark.js';
-import { evaluatePortfolioAlert, evaluatePriceAlert } from './evaluate.js';
+import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind as unpublishedKindOutcome } from './evaluate.js';
 import type { AlertStore } from './store.js';
 import {
+  AlertKindUnpublishedError,
   AlertPortfolioUnpublishedError,
   type AlertEvalOutcome,
   type AlertRefuseCode,
   type CreatePortfolioAlertInput,
   type CreatePriceAlertInput,
+  type CreateUnpublishedAlertInput,
   type MarkQuote,
   type MarkSource,
   type PriceAlert,
+  type UnpublishedAlertKind,
 } from './types.js';
 
 /**
@@ -107,11 +110,25 @@ export class AlertService {
   }
 
   /**
+   * Unpublished kinds never become an active watch. No store write, no fire.
+   */
+  createUnpublishedKind(input: CreateUnpublishedAlertInput): never {
+    throw new AlertKindUnpublishedError(input.kind);
+  }
+
+  /**
    * Same refuse as create — evaluate never fires a portfolio watch and never
    * carries a money field. The sweep does not call this; there is no stored row.
    */
   evaluatePortfolio(): AlertEvalOutcome {
     return evaluatePortfolioAlert();
+  }
+
+  /**
+   * Same refuse as create — no invented funding/whale/liq/intel series.
+   */
+  evaluateUnpublishedKind(kind: UnpublishedAlertKind): AlertEvalOutcome {
+    return unpublishedKindOutcome(kind);
   }
 
   list(userId: string): Promise<readonly PriceAlert[]> {

@@ -7,7 +7,15 @@ import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
 import { AlertService } from './service.js';
 import { MemoryAlertStore } from './store.js';
-import { ALERT_PORTFOLIO_VIEW_UNPUBLISHED, AlertPortfolioUnpublishedError, type MarkQuote, type MarkSource } from './types.js';
+import {
+  ALERT_KIND_UNPUBLISHED,
+  ALERT_PORTFOLIO_VIEW_UNPUBLISHED,
+  AlertKindUnpublishedError,
+  AlertPortfolioUnpublishedError,
+  UNPUBLISHED_ALERT_KINDS,
+  type MarkQuote,
+  type MarkSource,
+} from './types.js';
 
 function harness(mark: MarkQuote) {
   const notifyStore = new MemoryNotifyStore();
@@ -138,6 +146,46 @@ describe('AlertService — portfolio watch is refuse-closed', () => {
     expect(out).not.toHaveProperty('pnl');
     expect(await notifyStore.unreadCount('u1')).toBe(0);
     expect(await alerts.list('u1')).toHaveLength(0);
+  });
+});
+
+describe('AlertService — unpublished kinds named-refuse, never an active live watch', () => {
+  it.each([...UNPUBLISHED_ALERT_KINDS])('createUnpublishedKind(%s) throws and stores nothing', async (kind) => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    expect(() => alerts.createUnpublishedKind({ kind, userId: 'u1' })).toThrow(AlertKindUnpublishedError);
+    try {
+      alerts.createUnpublishedKind({ kind, userId: 'u1' });
+    } catch (err) {
+      expect(err).toBeInstanceOf(AlertKindUnpublishedError);
+      expect((err as AlertKindUnpublishedError).code).toBe(ALERT_KIND_UNPUBLISHED);
+      expect((err as AlertKindUnpublishedError).alertKind).toBe(kind);
+      expect(String(err)).toContain(ALERT_KIND_UNPUBLISHED);
+    }
+    expect(await alerts.list('u1')).toHaveLength(0);
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it.each([...UNPUBLISHED_ALERT_KINDS])('evaluateUnpublishedKind(%s) refuses and never fires', async (kind) => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    const out = alerts.evaluateUnpublishedKind(kind);
+    expect(out).toMatchObject({ kind: 'refuse', code: ALERT_KIND_UNPUBLISHED });
+    expect(out.kind).not.toBe('fire');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+    expect(await alerts.list('u1')).toHaveLength(0);
+  });
+
+  it('price above/below against a sourced mark still fires', async () => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+    const report = await alerts.evaluateMarket('BTC-USD');
+    expect(report.results[0]!.outcome.kind).toBe('fire');
+    expect((await alerts.list('u1'))[0]!.status).toBe('fired');
+    expect(await notifyStore.unreadCount('u1')).toBe(1);
   });
 });
 

@@ -11,8 +11,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { compareDecimalStrings, isValidPositivePrice } from './decimal.js';
-import { evaluatePortfolioAlert, evaluatePriceAlert } from './evaluate.js';
-import { ALERT_PORTFOLIO_VIEW_UNPUBLISHED, type PriceAlert } from './types.js';
+import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind } from './evaluate.js';
+import { ALERT_KIND_UNPUBLISHED, ALERT_PORTFOLIO_VIEW_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type PriceAlert } from './types.js';
 
 const base: PriceAlert = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -132,5 +132,19 @@ describe('evaluatePortfolioAlert — refuse-closed, no invented book', () => {
       expect(out.code).toBe('alert.portfolio_view_unpublished');
     }
     assertNoNumberMoney(out);
+  });
+});
+
+describe('evaluateUnpublishedKind — never fire on an invented series', () => {
+  it.each([...UNPUBLISHED_ALERT_KINDS])('%s refuses alert.kind_unpublished and never fires', (kind) => {
+    const out = evaluateUnpublishedKind(kind);
+    expect(out).toEqual({
+      kind: 'refuse',
+      code: ALERT_KIND_UNPUBLISHED,
+      detail: `${kind} has no sourced series`,
+    });
+    expect(out.kind).not.toBe('fire');
+    expect(out.kind).not.toBe('hold');
+    expect('markPrice' in out).toBe(false);
   });
 });
