@@ -16,6 +16,7 @@
  * 6. RED: pin fails if releaseExcess posts before this.loan() / marksFor
  * 7. Collision: #2194 compose quote-asset pin — this file does not touch
  *    compose, env.ts, or LOAN_QUOTE_ASSET_ID
+ * 8. Re-attach CI after prettier wrap of the LTV refuse.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
