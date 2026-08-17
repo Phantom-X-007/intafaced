@@ -10,12 +10,7 @@
  */
 import type { AccountAdapter, TransferRail } from '@intafaced/venue-contracts';
 
-export type OmsRailsFn = (
-  asset: string,
-  enabled?: boolean,
-  network?: string,
-  toVenueId?: string,
-) => Promise<TransferRail[]>;
+export type OmsRailsFn = (asset: string, enabled?: boolean, network?: string, toVenueId?: string) => Promise<TransferRail[]>;
 
 export function accountAdapterRails(adapter: AccountAdapter): OmsRailsFn {
   return async (asset, enabled, network, toVenueId) => {
