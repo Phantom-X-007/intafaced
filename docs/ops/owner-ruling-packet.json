@@ -229,7 +229,7 @@
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-17--insurance-fund-funding-policy",
       "answerShape": "fund_exists_funded_recipe_empty_means_no_list",
       "priority": 2,
-      "notes": "2026-08-13 seal: empty pot → no live perps. Recipe futuresInsuranceTopup. No invented target size/schedule."
+      "notes": "2026-08-13 seal: empty pot → no live perps. Recipe futuresInsuranceTopup. No invented target size/schedule. 2026-08-15 addendum: list gate requires a funded insurance path via existing ledger recipes only; empty/unset pot → trade.insurance_fund_empty; houseFees is not a substitute. Magnitudes remain owner."
     },
     {
       "id": "D26-P0-18",
