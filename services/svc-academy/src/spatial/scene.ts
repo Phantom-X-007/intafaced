@@ -15,12 +15,16 @@ import { z } from 'zod';
 import { AcademyError } from '../errors.js';
 
 export {
+  HOST_SCENE_REFUSE,
   decideHostSceneWrite,
+  hasExpectedFingerprint,
+  hostSceneWriteRefuseName,
   isHostSceneWriteConflict,
   isHostSceneWriteOk,
   sceneFingerprint,
   sceneRequiresHostFingerprint,
   type HostSceneWriteInput,
+  type HostSceneWriteRefuseName,
   type HostSceneWriteResult,
 } from './edit-policy.js';
 

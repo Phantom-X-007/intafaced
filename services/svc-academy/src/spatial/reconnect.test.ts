@@ -33,6 +33,7 @@ describe('spatial L3 reconnect restore', () => {
     if (r.status !== 'ok') return;
     expect(r.source).toBe('server');
     expect(r.scene.avatars![0]!.id).toBe('a1');
+    expect(r.fingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('uses local draft only when server missing', () => {
