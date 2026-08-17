@@ -4,14 +4,17 @@
  * A VenueBalance is a rumour with a timestamp — never a ledger input
  * (Doctrine §0.6). Missing credentials / throw is observe_failed, not [].
  * Empty [] is honest: the venue reported no assets. Internal venues refused.
+ * Optional asset forwards a single-currency observation; omitted still
+ * observes every asset the street returned. Never invents a 0 row.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueBalance } from '@intafaced/venue-contracts';
 
-export type OmsBalancesFn = () => Promise<VenueBalance[]>;
+export type OmsBalancesFn = (asset?: string) => Promise<VenueBalance[]>;
 
 export type OmsBalancesInput = {
   readonly venueId: string;
+  readonly asset?: string;
   readonly kind?: VenueKind;
   readonly balancesByVenue?: Readonly<Record<string, OmsBalancesFn>>;
 };
@@ -37,6 +40,7 @@ export async function observeOmsBalances(input: OmsBalancesInput): Promise<OmsBa
   }
 
   const venueId = input.venueId.trim();
+  const asset = input.asset?.trim() || undefined;
   if (!venueId) {
     return { ok: false, reason: 'observe_failed', detail: 'venueId is required' };
   }
@@ -47,7 +51,7 @@ export async function observeOmsBalances(input: OmsBalancesInput): Promise<OmsBa
   }
 
   try {
-    return { ok: true, balances: await balances() };
+    return { ok: true, balances: await balances(asset) };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
   }

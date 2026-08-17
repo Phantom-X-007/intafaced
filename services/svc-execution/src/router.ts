@@ -240,6 +240,7 @@ export function createExecutionRouter(
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
+              asset: z.string().min(1).max(32).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -247,6 +248,7 @@ export function createExecutionRouter(
             return withExecutionSpan('execution.oms.balances', input.venueId, async () => {
               return observeOmsBalances({
                 venueId: input.venueId,
+                asset: input.asset,
                 kind: input.kind,
                 balancesByVenue,
               });

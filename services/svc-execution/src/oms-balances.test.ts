@@ -50,10 +50,10 @@ function usdt(over: Partial<VenueBalance> = {}): VenueBalance {
 }
 
 class FakeBalances {
-  readonly calls: number[] = [];
+  readonly assets: Array<string | undefined> = [];
   constructor(private readonly next: VenueBalance[] | Error) {}
-  fn: OmsBalancesFn = async () => {
-    this.calls.push(1);
+  fn: OmsBalancesFn = async (asset) => {
+    this.assets.push(asset);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -70,7 +70,20 @@ describe('observeOmsBalances', () => {
     if (!result.ok) return;
     expect(result.balances).toHaveLength(1);
     expect(result.balances[0]!.asset).toBe('USDT');
-    expect(street.calls).toHaveLength(1);
+    expect(street.assets).toEqual([undefined]);
+  });
+
+  it('passes an optional asset through and does not invent a missing row', async () => {
+    const street = new FakeBalances([usdt({ asset: 'BTC', free: parseAmount('1'), total: parseAmount('1') })]);
+    const result = await observeOmsBalances({
+      venueId: 'street',
+      asset: 'BTC',
+      balancesByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.assets).toEqual(['BTC']);
+    if (!result.ok) return;
+    expect(result.balances[0]?.asset).toBe('BTC');
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -81,7 +94,7 @@ describe('observeOmsBalances', () => {
       balancesByVenue: { book: book.fn },
     });
     expect(result).toMatchObject({ ok: false, reason: 'internal_venue' });
-    expect(book.calls).toHaveLength(0);
+    expect(book.assets).toHaveLength(0);
   });
 
   it('surfaces a missing key as observe_failed, never an invented empty wallet', async () => {
@@ -127,10 +140,10 @@ describe('execution.oms.balances tRPC', () => {
   it('observes through the injected map', async () => {
     const street = new FakeBalances([usdt()]);
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, { street: street.fn }).createCaller(signed());
-    const out = await caller.execution.oms.balances({ venueId: 'street' });
+    const out = await caller.execution.oms.balances({ venueId: 'street', asset: 'USDT' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.balances).toHaveLength(1);
-    expect(street.calls).toHaveLength(1);
+    expect(street.assets).toEqual(['USDT']);
   });
 });
