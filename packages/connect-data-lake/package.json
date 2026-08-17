@@ -1,5 +1,5 @@
 {
-  "name": "@intafaced/market-data",
+  "name": "@intafaced/connect-data-lake",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,10 +17,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "rimraf dist .turbo"
-  },
-  "dependencies": {
-    "@intafaced/connect-data-lake": "workspace:*",
-    "@intafaced/ledger-client": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
