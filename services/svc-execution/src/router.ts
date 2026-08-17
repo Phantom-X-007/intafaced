@@ -223,6 +223,7 @@ export function createExecutionRouter(
               venueId: z.string().min(1).max(128),
               symbol: z.string().min(1).max(64).optional(),
               side: z.enum(['buy', 'sell']).optional(),
+              type: z.enum(['limit', 'market']).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -232,6 +233,7 @@ export function createExecutionRouter(
                 venueId: input.venueId,
                 symbol: input.symbol,
                 side: input.side,
+                type: input.type,
                 kind: input.kind,
                 openOrdersByVenue,
               });
