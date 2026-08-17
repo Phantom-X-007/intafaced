@@ -66,10 +66,11 @@ class FakeList {
     type?: 'limit' | 'market';
     clientOrderId?: string;
     venueOrderId?: string;
+    feeAsset?: string;
   }> = [];
   constructor(private readonly next: VenueOrder[] | Error) {}
-  fn: OmsOpenOrdersFn = async (symbol, side, type, clientOrderId, venueOrderId) => {
-    this.calls.push({ symbol, side, type, clientOrderId, venueOrderId });
+  fn: OmsOpenOrdersFn = async (symbol, side, type, clientOrderId, venueOrderId, feeAsset) => {
+    this.calls.push({ symbol, side, type, clientOrderId, venueOrderId, feeAsset });
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -88,7 +89,7 @@ describe('listOmsOpenOrders', () => {
     expect(result.orders).toHaveLength(1);
     expect(result.orders[0]!.status).toBe('open');
     expect(street.calls).toEqual([
-      { symbol: 'BTC/USDT', side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: undefined },
+      { symbol: 'BTC/USDT', side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: undefined, feeAsset: undefined },
     ]);
   });
 
@@ -100,7 +101,9 @@ describe('listOmsOpenOrders', () => {
       openOrdersByVenue: { street: street.fn },
     });
     expect(result.ok).toBe(true);
-    expect(street.calls).toEqual([{ symbol: undefined, side: 'sell', type: undefined, clientOrderId: undefined, venueOrderId: undefined }]);
+    expect(street.calls).toEqual([
+      { symbol: undefined, side: 'sell', type: undefined, clientOrderId: undefined, venueOrderId: undefined, feeAsset: undefined },
+    ]);
     if (!result.ok) return;
     expect(result.orders[0]?.side).toBe('sell');
   });
@@ -114,7 +117,7 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: undefined, type: 'market', clientOrderId: undefined, venueOrderId: undefined },
+      { symbol: undefined, side: undefined, type: 'market', clientOrderId: undefined, venueOrderId: undefined, feeAsset: undefined },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.type).toBe('market');
@@ -129,7 +132,7 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: undefined, type: undefined, clientOrderId: 'oms-street', venueOrderId: undefined },
+      { symbol: undefined, side: undefined, type: undefined, clientOrderId: 'oms-street', venueOrderId: undefined, feeAsset: undefined },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.clientOrderId).toBe('oms-street');
@@ -143,9 +146,26 @@ describe('listOmsOpenOrders', () => {
       openOrdersByVenue: { street: street.fn },
     });
     expect(result.ok).toBe(true);
-    expect(street.calls).toEqual([{ symbol: undefined, side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: 'v-1' }]);
+    expect(street.calls).toEqual([
+      { symbol: undefined, side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: 'v-1', feeAsset: undefined },
+    ]);
     if (!result.ok) return;
     expect(result.orders[0]?.venueOrderId).toBe('v-1');
+  });
+
+  it('passes an optional feeAsset through and still drops pending', async () => {
+    const street = new FakeList([openOrder({ feeAsset: 'USDT' })]);
+    const result = await listOmsOpenOrders({
+      venueId: 'street',
+      feeAsset: 'USDT',
+      openOrdersByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.calls).toEqual([
+      { symbol: undefined, side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: undefined, feeAsset: 'USDT' },
+    ]);
+    if (!result.ok) return;
+    expect(result.orders[0]?.feeAsset).toBe('USDT');
   });
 
   it('refuses internal venues and does not call the list', async () => {
@@ -211,10 +231,13 @@ describe('execution.oms.openOrders tRPC', () => {
       type: 'limit',
       clientOrderId: 'oms-street',
       venueOrderId: 'v-1',
+      feeAsset: 'USDT',
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.orders).toHaveLength(1);
-    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: 'buy', type: 'limit', clientOrderId: 'oms-street', venueOrderId: 'v-1' }]);
+    expect(street.calls).toEqual([
+      { symbol: 'BTC/USDT', side: 'buy', type: 'limit', clientOrderId: 'oms-street', venueOrderId: 'v-1', feeAsset: 'USDT' },
+    ]);
   });
 });
