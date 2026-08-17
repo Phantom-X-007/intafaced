@@ -277,6 +277,13 @@ if (!available) {
       expect((await trade.myFills(principalFor(ALICE), 100, undefined, undefined, 'buy')).map((row) => row.side)).toEqual(['buy']);
       expect(await trade.myFills(principalFor(ALICE), 100, undefined, undefined, 'sell')).toEqual([]);
       expect((await trade.myFills(principalFor(BOB), 100, undefined, undefined, 'sell')).map((row) => row.side)).toEqual(['sell']);
+      expect((await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, 'taker')).map((row) => row.liquidity)).toEqual(
+        ['taker'],
+      );
+      expect(await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, 'maker')).toEqual([]);
+      expect((await trade.myFills(principalFor(BOB), 100, undefined, undefined, undefined, 'maker')).map((row) => row.liquidity)).toEqual([
+        'maker',
+      ]);
     });
 
     it('emits XP per filled order (§5.2 step 4)', async () => {

@@ -1038,6 +1038,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades?liquidity=taker: passes liquidity into myFills', async () => {
+    let seenLiq: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, _side, liquidity) => {
+          seenLiq = liquidity;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?liquidity=taker',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenLiq).toBe('taker');
+    await app.close();
+  });
+
+  it('GET /account/trades?liquidity=: invalid → 400 without myFills', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?liquidity=both',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /account/trades?side=: invalid → 400 without myFills', async () => {
     let listed = false;
     const app = await build(

@@ -45,7 +45,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
- *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=)
+ *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=&liquidity=)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=)
@@ -96,8 +96,16 @@ export interface PrivateRestDeps {
    * Optional marketId filters fills in SQL (WHERE market_id = …).
    * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
    * Optional side filters fills.side in SQL.
+   * Optional liquidity filters fills.liquidity in SQL.
    */
-  myFills(principal: Principal, limit: number, marketId?: string, sinceMs?: number, side?: 'buy' | 'sell'): Promise<FillRecord[]>;
+  myFills(
+    principal: Principal,
+    limit: number,
+    marketId?: string,
+    sinceMs?: number,
+    side?: 'buy' | 'sell',
+    liquidity?: 'maker' | 'taker',
+  ): Promise<FillRecord[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
   marketById(marketId: string): Promise<Market | null>;
@@ -459,6 +467,13 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
   return { ok: true, sinceMs: Math.floor(n) };
 }
 
+/** Optional fill-liquidity filter. Absent → both maker and taker. */
+export function parseFillLiquidity(raw: unknown): { ok: true; liquidity?: 'maker' | 'taker' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, liquidity: undefined };
+  if (raw === 'maker' || raw === 'taker') return { ok: true, liquidity: raw };
+  return { ok: false, message: 'liquidity must be maker or taker' };
+}
+
 /** Optional fill-side filter. Absent → both buy and sell. */
 export function parseFillSide(raw: unknown): { ok: true; side?: 'buy' | 'sell' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, side: undefined };
@@ -709,7 +724,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     },
   );
 
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; side?: string } }>(
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; side?: string; liquidity?: string } }>(
     '/api/v1/account/trades',
     async (req, reply) => {
       const principal = requirePrincipal(req, reply);
@@ -723,6 +738,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const sideParsed = parseFillSide(req.query.side);
       if (!sideParsed.ok) {
         return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_fill_side'));
+      }
+      const liquidityParsed = parseFillLiquidity(req.query.liquidity);
+      if (!liquidityParsed.ok) {
+        return sendCcxt(reply, badRequest(liquidityParsed.message, 'trade.invalid_fill_liquidity'));
       }
       let filterMarketId: string | undefined;
       const symbolRaw = req.query.symbol;
@@ -738,7 +757,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       try {
         // Symbol + since resolve in SQL via myFills (fills.market_id, fills.ts),
         // not a post-filter of a user-wide page.
-        const fills = await deps.myFills(principal, limit, filterMarketId, sinceParsed.sinceMs, sideParsed.side);
+        const fills = await deps.myFills(principal, limit, filterMarketId, sinceParsed.sinceMs, sideParsed.side, liquidityParsed.liquidity);
         const symbolByMarket = new Map<string, string>();
         const wire = [];
         for (const fill of fills) {
