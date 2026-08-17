@@ -60,12 +60,12 @@
       "kind": "product_ruling",
       "title": "Token emission / buyback authority live",
       "blocks": ["svc-token authority drift", "burn-before-guard"],
-      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
+      "primaryDoc": "docs/adr/2026-08-15-token-authority-store-live.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-04--token-emission--buyback-authority-live",
       "satelliteDocs": ["docs/adr/2026-08-04-token-economics-outcomes.md"],
       "answerShape": "authority_store_live_plus_drift_guards",
       "priority": 3,
-      "notes": "2026-08-14 seal: token_params is live authority; seeds ≠ DB refuse; claim-before-burn already on tip. Magnitudes stay PKT-C9 / Nitro."
+      "notes": "2026-08-15 dedicated seal: token_params is the only live source once populated; seed-only burn refused; named drift guards (runtime store read, fee-ladder agreement, pinned initialEpochReward/maxSupply/buybackBps/burnSplitBps, new-drift fail, claim-before-burn overlap). Magnitudes stay PKT-C9 / Nitro. svc-token implement stays P2-01g."
     },
     {
       "id": "D26-P0-05",
