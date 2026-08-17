@@ -30,6 +30,7 @@ import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHe
 import { AuthError, type AuthService } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import { createIdentityRouter } from './router.js';
+import { userCopy } from './user-copy.js';
 
 const EDGE_SECRET = 'identity-promise-falsify-public-doors-edge-secret-32';
 const INTERNAL_SECRET = 'identity-promise-falsify-public-doors-internal';
@@ -279,7 +280,8 @@ describe('D26-P2-12 public doors — ownership gate over mounted tRPC', () => {
     const { statusCode, body } = await post(app, 'subAccounts.assertOwned', { subAccountId: null });
     expect(statusCode).toBe(400);
     expect(body.error?.data?.code).toBe('BAD_REQUEST');
-    expect(body.error?.message).toMatch(/never a default to primary/i);
+    // Wire copy is the code key (no catalog sentence) — never a 200 default-to-primary.
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_required'));
   });
 
   it('assertOwned refuses foreign and ghost with the same denied shape (no existence oracle)', async () => {
@@ -292,7 +294,7 @@ describe('D26-P2-12 public doors — ownership gate over mounted tRPC', () => {
     expect(foreign.body.error?.data?.code).toBe('FORBIDDEN');
     expect(ghost.body.error?.data?.code).toBe('FORBIDDEN');
     expect(foreign.body.error?.message).toBe(ghost.body.error?.message);
-    expect(foreign.body.error?.message).toMatch(/not found or not owned/i);
+    expect(foreign.body.error?.message).toBe(userCopy('auth.sub_account_denied'));
   });
 
   it('assertOwned refuses a revoked partition over the wire', async () => {
@@ -301,7 +303,8 @@ describe('D26-P2-12 public doors — ownership gate over mounted tRPC', () => {
     const { statusCode, body } = await post(app, 'subAccounts.assertOwned', { subAccountId: dead.id });
     expect(statusCode).toBe(403);
     expect(body.error?.data?.code).toBe('FORBIDDEN');
-    expect(body.error?.message).toMatch(/revoked/i);
+    // Same catalog alias as denied — public wire is not a revocation oracle.
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_revoked'));
   });
 });
 
@@ -315,7 +318,7 @@ describe('D26-P2-12 public doors — cross-sub-account leak refuse', () => {
     });
     expect(statusCode).toBe(403);
     expect(body.error?.data?.code).toBe('FORBIDDEN');
-    expect(body.error?.message).toMatch(/not found or not owned/i);
+    expect(body.error?.message).toBe(userCopy('auth.sub_account_denied'));
   });
 
   it('assertTransferDoor happy path returns ids and still invents no balance', async () => {
