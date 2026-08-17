@@ -26,10 +26,10 @@ Until the D-S-12 reconciler exists **and** Shehzad's on-chain figure exists, **n
 
 A crossing is two legs on two systems (D-S-12). Each leg speaks a different language.
 
-| Plane                         | What moves value                                                                                          | What must never be treated as the other                          |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **Fiat / custodial**          | `packages/ledger-client` **recipes** posted through `LedgerClient.post`                                   | A chain log, a bus event, or adapter memory                      |
-| **Protocol / self-custody**   | **Protocol / chain events** that are **final** (reorg-safe source), plus attestation when that design lands | A ledger posting, `totalsByAsset`, or `svc-protocol` first-seen observation |
+| Plane                       | What moves value                                                                                            | What must never be treated as the other                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Fiat / custodial**        | `packages/ledger-client` **recipes** posted through `LedgerClient.post`                                     | A chain log, a bus event, or adapter memory                                 |
+| **Protocol / self-custody** | **Protocol / chain events** that are **final** (reorg-safe source), plus attestation when that design lands | A ledger posting, `totalsByAsset`, or `svc-protocol` first-seen observation |
 
 **Custodial recipes (named, not written).** D-S-12 keys: `bridge.<direction>.hold:<crossingId>` then `bridge.<direction>.settle:<crossingId>` **or** `bridge.<direction>.reverse:<crossingId>`. Precedent is `withdrawHold` / `withdrawSettle` / `withdrawReverse` in `packages/ledger-client/src/recipes/index.ts`. The seam account is already `bridgeBoundary(chain, asset)` → `treasury` / `bridge:<chain>`. **No `bridge.*` recipe exists on this tip.** Agents do not invent one in this handshake.
 
@@ -54,15 +54,15 @@ A crossing is two legs on two systems (D-S-12). Each leg speaks a different lang
 
 These stay open. This handshake does not pick them.
 
-| ID | Question                                                                                         | Who answers                                      | Status on tip                                                                                          |
-| -- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Q1 | Mint vs lock for IFC on the rail (how the chain figure is defined)                               | Shehzad S-B3                                     | Unanswered. Spec ADR first if ambiguous.                                                               |
-| Q2 | Attestation design, signer set, quorum                                                           | Shehzad S-B5                                     | **Zero of the keys a crossing needs exist today** (D-S-12). Verb `'attested'` is reserved, unpublished. |
-| Q3 | Confirmation depth / finality number for a bridge                                                | Shehzad + D-S-12 implementers                    | Neither number exists in-repo for a bridge. Name it with a written reason before settle.               |
-| Q4 | Which EVM rail carries Protocol P0                                                               | Nitro (§0.5) via S-D1                            | Proposed in the P0 handshake ADR; not a Denon pick here.                                               |
-| Q5 | `jurisdiction.ts` `bridge: OPEN_FULL` — confirm KYC tier for a crossing                          | Owner (D-S-12 "what still needs the owner")      | Silent today; restated here as still needing a deliberate confirm.                                     |
-| Q6 | Register the bridge as a human / Class X blocker                                                 | Nitro human                                      | Class X1 (plausibly X3) go-live. Not agent-done.                                                       |
-| Q7 | Cross-plane reconciler (first deliverable before any crossing)                                   | Ledger plane (D-S-12 agents may implement)       | Not built. Halt-on-divergence is the gate.                                                             |
+| ID  | Question                                                                | Who answers                                 | Status on tip                                                                                           |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Q1  | Mint vs lock for IFC on the rail (how the chain figure is defined)      | Shehzad S-B3                                | Unanswered. Spec ADR first if ambiguous.                                                                |
+| Q2  | Attestation design, signer set, quorum                                  | Shehzad S-B5                                | **Zero of the keys a crossing needs exist today** (D-S-12). Verb `'attested'` is reserved, unpublished. |
+| Q3  | Confirmation depth / finality number for a bridge                       | Shehzad + D-S-12 implementers               | Neither number exists in-repo for a bridge. Name it with a written reason before settle.                |
+| Q4  | Which EVM rail carries Protocol P0                                      | Nitro (§0.5) via S-D1                       | Proposed in the P0 handshake ADR; not a Denon pick here.                                                |
+| Q5  | `jurisdiction.ts` `bridge: OPEN_FULL` — confirm KYC tier for a crossing | Owner (D-S-12 "what still needs the owner") | Silent today; restated here as still needing a deliberate confirm.                                      |
+| Q6  | Register the bridge as a human / Class X blocker                        | Nitro human                                 | Class X1 (plausibly X3) go-live. Not agent-done.                                                        |
+| Q7  | Cross-plane reconciler (first deliverable before any crossing)          | Ledger plane (D-S-12 agents may implement)  | Not built. Halt-on-divergence is the gate.                                                              |
 
 Until Q2 lands, D-S-12 stands: **a crossing is operator-gated or it does not run.** Operator-gated is not "platform as guardian." It is refuse-closed until attestation or an explicit operator gate exists. Agents do not invent multisig / optimistic / light-client theatre (S-B5).
 
@@ -70,12 +70,12 @@ Until Q2 lands, D-S-12 stands: **a crossing is operator-gated or it does not run
 
 ## 5 · Split of work (handshake, not fight)
 
-| Owner            | May do                                                                                          | Must not                                      |
-| ---------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| **Denon / ledger** | Recipes + reversal in `ledger-client`; reconciler vs `bridgeBoundary`; posture halt             | Solidity, `svc-protocol`, `svc-bridge` chain  |
-| **Shehzad**        | S-B5 threat model + attestation; S-D7 `svc-bridge`; on-chain IFC (S-B3); finality source        | Custodial second book; platform guardian keys |
-| **Nitro human**    | Class X: secrets, go-live yes, rail name if still gated                                         | —                                             |
-| **Agents**         | Babysit Shehzad PRs; implement D-S-12 ledger half when claimed                                  | Implement protocol/chain/bridge mountains     |
+| Owner              | May do                                                                                   | Must not                                      |
+| ------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **Denon / ledger** | Recipes + reversal in `ledger-client`; reconciler vs `bridgeBoundary`; posture halt      | Solidity, `svc-protocol`, `svc-bridge` chain  |
+| **Shehzad**        | S-B5 threat model + attestation; S-D7 `svc-bridge`; on-chain IFC (S-B3); finality source | Custodial second book; platform guardian keys |
+| **Nitro human**    | Class X: secrets, go-live yes, rail name if still gated                                  | —                                             |
+| **Agents**         | Babysit Shehzad PRs; implement D-S-12 ledger half when claimed                           | Implement protocol/chain/bridge mountains     |
 
 `bridge.canonical` stays `owner: shehzad002`. This docs handshake does **not** claim that mountain.
 
