@@ -26,6 +26,7 @@ import { RateLimitGovernor } from '../rate-limit.js';
 
 class FakeHttp implements HttpPort {
   readonly requests: string[] = [];
+  readonly posts: { url: string; jsonBody?: unknown; headers?: Readonly<Record<string, string>> }[] = [];
   #responses: HttpResponse[] = [];
 
   queue(body: unknown, status = 200, headers: Record<string, string> = {}): this {
@@ -39,6 +40,16 @@ class FakeHttp implements HttpPort {
 
   async get(url: string): Promise<HttpResponse> {
     this.requests.push(url);
+    return this.#next(url);
+  }
+
+  async post(url: string, init?: { jsonBody?: unknown; headers?: Readonly<Record<string, string>> }): Promise<HttpResponse> {
+    this.requests.push(`POST ${url}`);
+    this.posts.push({ url, jsonBody: init?.jsonBody, headers: init?.headers });
+    return this.#next(url);
+  }
+
+  async #next(url: string): Promise<HttpResponse> {
     const next = this.#responses.shift();
     if (!next) throw new Error(`FakeHttp had no queued response for ${url}`);
     return next;
@@ -892,7 +903,7 @@ describe('MaintainedBook on bybit-spot — subscribe, buffer, snapshot, join', (
 // THE TRADING HALF — loud not_ready, never silent success
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('BybitSpotTrade / BybitSpotAccount — typed not_ready', () => {
+describe('BybitSpotTrade / BybitSpotAccount — signed trade, account still not_ready', () => {
   const order = {
     symbol: 'BTC/USDT',
     side: 'buy' as const,
@@ -902,31 +913,68 @@ describe('BybitSpotTrade / BybitSpotAccount — typed not_ready', () => {
     clientOrderId: 'abc',
   };
   const keys = { venueId: 'bybit-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+  const openRow = {
+    orderId: '9',
+    orderLinkId: 'abc',
+    symbol: 'BTCUSDT',
+    side: 'Buy',
+    orderType: 'Limit',
+    price: '1',
+    qty: '1',
+    cumExecQty: '0',
+    avgPrice: '0',
+    orderStatus: 'New',
+    createdTime: '1',
+  };
+  const envelope = (list: unknown[]) => ({ retCode: 0, retMsg: 'OK', result: { list } });
 
-  async function expectNotReady(run: () => Promise<unknown>, op: string) {
+  it('placeOrder signs POST and maps the realtime row', async () => {
+    const http = new FakeHttp()
+      .queue({ retCode: 0, retMsg: 'OK', result: { orderId: '9', orderLinkId: 'abc' } })
+      .queue(envelope([openRow]));
+    const trade = new BybitSpotTrade(keys, { http, clock: () => 1_700_000_000_000 });
+    const placed = await trade.placeOrder(order);
+    expect(placed.status).toBe('open');
+    expect(placed.filled).toBe(0n);
+    expect(placed.clientOrderId).toBe('abc');
+    expect(http.posts[0]!.headers?.['X-BAPI-SIGN']).toMatch(/^[a-f0-9]{64}$/);
+    expect(http.requests[0]).toContain('POST https://api.bybit.com/v5/order/create');
+  });
+
+  it('retCode 10001 throws and does not return a rejected order', async () => {
+    const http = new FakeHttp().queue({ retCode: 10001, retMsg: 'Qty invalid', result: {} });
+    const trade = new BybitSpotTrade(keys, { http, clock: () => 1 });
     try {
-      await run();
-      expect.unreachable(`${op} should have thrown`);
+      await trade.placeOrder(order);
+      expect.unreachable('placeOrder should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).not.toBe('not_ready');
+    }
+  });
+
+  it('openOrders without symbol throws — empty list is not a stand-in', async () => {
+    const trade = new BybitSpotTrade(keys, { http: new FakeHttp(), clock: () => 1 });
+    await expect(trade.openOrders()).rejects.toThrow(VenueUnavailableError);
+  });
+
+  it('openOrders with symbol maps the list', async () => {
+    const http = new FakeHttp().queue(envelope([openRow]));
+    const trade = new BybitSpotTrade(keys, { http, clock: () => 1 });
+    const open = await trade.openOrders('BTC/USDT');
+    expect(open).toHaveLength(1);
+    expect(open[0]!.status).toBe('open');
+  });
+
+  it('account balances stay not_ready WITH a trade-only key', async () => {
+    const account = new BybitSpotAccount(keys);
+    try {
+      await account.balances();
+      expect.unreachable('balances should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
       expect((error as VenueUnavailableError).reason).toBe('not_ready');
-      expect((error as VenueUnavailableError).venueId).toBe('bybit-spot');
     }
-  }
-
-  it('place/cancel/fetch/openOrders/balances throw not_ready WITH a trade-only key', async () => {
-    const trade = new BybitSpotTrade(keys);
-    const account = new BybitSpotAccount(keys);
-
-    await expectNotReady(() => trade.placeOrder(order), 'placeOrder');
-    await expectNotReady(() => trade.cancelOrder('BTC/USDT', 'abc'), 'cancelOrder');
-    await expectNotReady(() => trade.fetchOrder('BTC/USDT', 'abc'), 'fetchOrder');
-    await expectNotReady(() => trade.openOrders(), 'openOrders');
-    await expectNotReady(() => account.balances(), 'balances');
-  });
-
-  it('openOrders does not return [] — empty is indistinguishable from flat', async () => {
-    await expect(new BybitSpotTrade(keys).openOrders()).rejects.toThrow(VenueUnavailableError);
   });
 
   it('without credentials, throws missing-key rather than a fabricated order', async () => {
