@@ -130,9 +130,7 @@ if (!existsSync(MONEY_SCAN)) {
   if (!band) {
     failures.push('vendor-java-money-scan.mjs Grade D allowlist band unparseable');
   } else {
-    const sites = [...band[1].matchAll(/\{\s*\n\s*module:\s*'([^']+)'\s*,\s*\n\s*file:\s*'([^']+)'/g)].map(
-      (m) => `${m[1]}:${m[2]}`,
-    );
+    const sites = [...band[1].matchAll(/\{\s*\n\s*module:\s*'([^']+)'\s*,\s*\n\s*file:\s*'([^']+)'/g)].map((m) => `${m[1]}:${m[2]}`);
     if (sites.length > 0) {
       failures.push(`Grade D allowlist is not empty (${sites.length}): ${sites.join(', ')}`);
     } else {
@@ -145,9 +143,7 @@ if (!existsSync(MONEY_SCAN)) {
     for (const m of gradeDRows) failures.push(`money-scan allowlist still carries Grade D row: ${m[1].slice(0, 120)}`);
   }
   if (!/if \(name === 'node_modules' \|\| name === 'target'/.test(moneySrc) || !/name\.endsWith\('\.java'\)/.test(moneySrc)) {
-    failures.push(
-      'vendor-java-money-scan walk must skip target/ and only open .java — otherwise gitignored jars could be the scan object',
-    );
+    failures.push('vendor-java-money-scan walk must skip target/ and only open .java — otherwise gitignored jars could be the scan object');
   }
   // Forbidden overclaim — source scan must not market itself as runtime closure.
   const forbiddenClaims = [
@@ -191,17 +187,13 @@ if (!existsSync(HONESTY)) {
 
 let trackedJars = [];
 try {
-  trackedJars = execFileSync('git', ['ls-files', 'vendor/**/*.jar'], { cwd: ROOT, encoding: 'utf8' })
-    .split(/\r?\n/)
-    .filter(Boolean);
+  trackedJars = execFileSync('git', ['ls-files', 'vendor/**/*.jar'], { cwd: ROOT, encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
 } catch (err) {
   failures.push(`git ls-files vendor/**/*.jar failed: ${err.message}`);
 }
 const trackedTarget = trackedJars.filter((p) => /\/target\/[^/]+\.jar$/i.test(p.replace(/\\/g, '/')));
 if (trackedTarget.length > 0) {
-  failures.push(
-    `compose-style target jars are tracked (must be gitignored, not scan objects): ${trackedTarget.slice(0, 8).join(', ')}`,
-  );
+  failures.push(`compose-style target jars are tracked (must be gitignored, not scan objects): ${trackedTarget.slice(0, 8).join(', ')}`);
 }
 if (trackedJars.length !== TRACKED_JAR_RESIDUAL) {
   failures.push(

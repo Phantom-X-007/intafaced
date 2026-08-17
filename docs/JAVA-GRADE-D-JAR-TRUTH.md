@@ -21,11 +21,11 @@ Compose launches `<module>/target/<module>.jar` under `vendor/upstream-exchange/
 
 `vendor-java-money-scan` walks **`.java` files** and **skips `target/`**. Gitignored compose jars are **not the scan object**. A green source scan is therefore a statement about committed source, not about the binary compose would run.
 
-| Object                         | Tracked? | What the money scan sees                                      |
-| ------------------------------ | -------- | ------------------------------------------------------------- |
-| `**/src/main/java/**/*.java`   | yes      | Yes — this is the scan object                                 |
-| Compose `*/target/*.jar`       | **no**   | **No** — gitignored; skipped as `target/`                     |
-| Committed classpath `.jar`     | yes      | **No** — not `.java`; residual inventory, not Grade D source  |
+| Object                       | Tracked? | What the money scan sees                                     |
+| ---------------------------- | -------- | ------------------------------------------------------------ |
+| `**/src/main/java/**/*.java` | yes      | Yes — this is the scan object                                |
+| Compose `*/target/*.jar`     | **no**   | **No** — gitignored; skipped as `target/`                    |
+| Committed classpath `.jar`   | yes      | **No** — not `.java`; residual inventory, not Grade D source |
 
 **Rule:** no Java runtime-safety claim may cite the source scan as evidence.
 
