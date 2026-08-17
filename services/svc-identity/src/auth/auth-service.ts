@@ -553,6 +553,14 @@ export class AuthService {
   }
 
   async startTotpEnrolment(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
+    // Refuse before inventing a secret the confirm path cannot seal.
+    if (!this.totpSecretKey) {
+      throw new AuthError(
+        'IDENTITY_TOTP_SECRET_KEY is not set to a 32-byte key (base64 or hex) — cannot enrol TOTP',
+        'auth.totp_key_missing',
+      );
+    }
+
     const rows = await this.sql<Array<{ email: string; totp_secret: string | null }>>`
       SELECT email, totp_secret FROM users WHERE id = ${userId}
     `;
