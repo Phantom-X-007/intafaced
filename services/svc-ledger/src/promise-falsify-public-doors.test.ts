@@ -348,3 +348,97 @@ describe('promise-falsify public doors — svc-ledger + ledger-client (D26-P2-01
     expect(borrowerDebtAsset.json()).toMatchObject({ amount: '1000' });
   });
 });
+
+describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malformed)', () => {
+  let app: FastifyInstance;
+  let ledger: PublicDoorLedger;
+
+  beforeEach(async () => {
+    ledger = new PublicDoorLedger();
+    app = Fastify({ logger: false });
+    registerS2sHttp(app, ledger as unknown as LedgerService, SERVICE_SECRET, { bodyBind: 'require' });
+    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS);
+    await app.ready();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  async function servicePost(request: PostRequest) {
+    const payload = wirePost(request);
+    return app.inject({
+      method: 'POST',
+      url: '/trpc/post',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-bank', SERVICE_SECRET, payload),
+      },
+      payload,
+    });
+  }
+
+  it('refuses loan draw at the public post door when principal is zero', async () => {
+    const response = await servicePost(
+      recipes.loanDraw({ loanId: 'loan-door-zero', userId: USER, debtAssetId: 'USDT', principal: amt('0') }),
+    );
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.statusCode).toBeLessThan(500);
+  });
+
+  it('refuses order hold at the public post door when ownerId is not a user uuid', async () => {
+    const response = await servicePost(
+      recipes.orderHold({ orderId: 'order-door-bad-owner', userId: 'not-a-uuid', assetId: 'USDT', amount: amt('1') }),
+    );
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ code: 'ledger.owner_identity_space' });
+  });
+
+  it('refuses an empty-entry post at the public door instead of posting nothing', async () => {
+    const payload = JSON.stringify({ reason: 'no-entries', module: 'bank', entries: [] });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/trpc/post',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-bank', SERVICE_SECRET, payload),
+      },
+      payload,
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.statusCode).toBeLessThan(500);
+  });
+
+  it('refuses new recipes at the public post door while operator freeze is active', async () => {
+    const bearer = await issueAccessToken(
+      {
+        userId: OPERATOR,
+        sessionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        scopes: ['admin:treasury'],
+        tier: 'basic',
+        mfa: true,
+      },
+      TOKENS,
+    ).then((t) => `Bearer ${t.token}`);
+
+    const frozen = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: bearer },
+      payload: { reason: 'p2-12 spine reprove freeze' },
+    });
+    expect(frozen.statusCode).toBe(200);
+
+    const blocked = await servicePost(
+      recipes.deposit({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('1'),
+        rail: 'test',
+        railRef: 'after-freeze',
+      }),
+    );
+    expect(blocked.statusCode).toBe(412);
+    expect(blocked.json()).toMatchObject({ code: 'ledger.frozen' });
+  });
+});
