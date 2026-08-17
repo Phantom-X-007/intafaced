@@ -172,9 +172,9 @@
       "kind": "product_ruling",
       "title": "Launchpad raise economics (law only)",
       "blocks": ["launch economics invent"],
-      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
+      "primaryDoc": "docs/adr/2026-08-15-launchpad-raise-economics-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-13--launchpad-raise-economics-law-only",
-      "notes": "2026-08-14 seal: raise math refuse-closed until Nitro publishes named params. On-chain implement stays Shehzad.",
+      "notes": "2026-08-15 dedicated catalog: named params unset (caps, tier allocation, vest, house_fee_bps, settlement asset, mode); sockets = contracts/recipes/svc-launch/Class X offer. Agents and Shehzad must not ship invented raise %. 2026-08-14 empty-store refuse still binds. On-chain implement stays Shehzad.",
       "answerShape": "law_doc_numbers_or_refuse",
       "priority": 4
     },
