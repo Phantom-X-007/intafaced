@@ -8,6 +8,7 @@ import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
 import { observeOmsBalances, type OmsBalancesFn } from './oms-balances.js';
 import { observeOmsPositions, type OmsPositionsFn } from './oms-positions.js';
+import { observeOmsBorrow, type OmsBorrowFn } from './oms-borrow.js';
 import { observeOmsFunding, type OmsFundingFn } from './oms-funding.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { planOmsRoute } from './oms-plan.js';
@@ -79,6 +80,7 @@ export type ExecutionBalancesMap = Readonly<Record<string, OmsBalancesFn>>;
 export type ExecutionPositionsMap = Readonly<Record<string, OmsPositionsFn>>;
 export type ExecutionRailsMap = Readonly<Record<string, OmsRailsFn>>;
 export type ExecutionFundingMap = Readonly<Record<string, OmsFundingFn>>;
+export type ExecutionBorrowMap = Readonly<Record<string, OmsBorrowFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -90,6 +92,7 @@ export function createExecutionRouter(
   positionsByVenue: ExecutionPositionsMap = {},
   railsByVenue: ExecutionRailsMap = {},
   fundingByVenue: ExecutionFundingMap = {},
+  borrowByVenue: ExecutionBorrowMap = {},
 ) {
   return router({
     execution: router({
@@ -294,6 +297,25 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 kind: input.kind,
                 fundingByVenue,
+              });
+            });
+          }),
+
+        borrow: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              asset: z.string().min(1).max(32),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.borrow', input.venueId, async () => {
+              return observeOmsBorrow({
+                venueId: input.venueId,
+                asset: input.asset,
+                kind: input.kind,
+                borrowByVenue,
               });
             });
           }),
