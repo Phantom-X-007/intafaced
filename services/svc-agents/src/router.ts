@@ -291,16 +291,7 @@ export interface AgentsRouterDeps {
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const {
-    runtime,
-    gateway,
-    meter,
-    feeAssetId,
-    loadCoachGrounding,
-    supportDesk,
-    edgePrincipalSecret,
-    payMetricsPort,
-  } = deps;
+  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret, payMetricsPort } = deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
