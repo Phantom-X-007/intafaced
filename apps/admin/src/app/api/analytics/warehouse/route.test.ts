@@ -16,6 +16,7 @@ afterEach(() => {
   delete process.env.ANALYTICS_REPLICA_LEDGER_URL;
   delete process.env.ANALYTICS_REPLICA_TRADE_URL;
   delete process.env.ANALYTICS_REPLICA_IDENTITY_URL;
+  delete process.env.ANALYTICS_ETL_WATERMARK_AT;
   setWarehouseLagProbeForTests(null);
 });
 
@@ -86,8 +87,9 @@ describe('POST /api/analytics/warehouse', () => {
     expect(body.lagSource).toBe('configured');
   });
 
-  it('probe + readonly URL + fixtures → mayLabelLive true with lagMeasuredAt', async () => {
+  it('probe + readonly URL + watermark + fixtures → mayLabelLive true with lagMeasuredAt', async () => {
     process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://analytics_ro:x@replica:5432/ledger';
+    process.env.ANALYTICS_ETL_WATERMARK_AT = '2026-08-12T10:00:00.000Z';
     setWarehouseLagProbeForTests(({ nowMs }) => ({
       lagSeconds: 6,
       measuredAt: nowMs,

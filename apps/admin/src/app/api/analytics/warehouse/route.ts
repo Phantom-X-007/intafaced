@@ -1,5 +1,6 @@
 import {
   queryWarehouseSurface,
+  resolveEtlWatermark,
   resolveWarehouseReplicaConfig,
   type CubeFactRow,
   type WarehouseLagProbe,
@@ -49,6 +50,7 @@ function surfaceResponse(result: WarehouseSurfaceResult): Response {
 }
 
 async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
+  const etl = resolveEtlWatermark(process.env);
   const resolved = await resolveWarehouseReplicaConfig({
     env: process.env,
     probe: lagProbe,
@@ -62,6 +64,9 @@ async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
         mayLabelLive: false as const,
         lagSource: 'unknown' as const,
         lagMeasuredAt: null,
+        etlWatermark: etl.state,
+        etlWatermarkAt: etl.at,
+        etlNote: etl.note,
       },
       { status: 400 },
     );
@@ -73,6 +78,8 @@ async function runSurface(facts: readonly CubeFactRow[]): Promise<Response> {
     lagMeasuredAt: resolved.lagMeasuredAt,
     lagSource: resolved.lagSource,
     facts,
+    etlWatermark: etl.state,
+    etlWatermarkAt: etl.at,
   });
   return surfaceResponse(result);
 }
