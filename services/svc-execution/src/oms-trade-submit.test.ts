@@ -89,15 +89,15 @@ describe('venueOrderToExecution', () => {
   });
 
   it('throws on pending instead of fabricating an execution', () => {
-    expect(() => venueOrderToExecution(order({ status: 'pending', venueOrderId: null, filled: ZERO, averagePrice: null }), request())).toThrow(
-      /pending/,
-    );
+    expect(() =>
+      venueOrderToExecution(order({ status: 'pending', venueOrderId: null, filled: ZERO, averagePrice: null }), request()),
+    ).toThrow(/pending/);
   });
 
   it('throws when a fill has null averagePrice — does not invent', () => {
-    expect(() =>
-      venueOrderToExecution(order({ filled: parseAmount('1'), remaining: ZERO, averagePrice: null }), request()),
-    ).toThrow(/averagePrice/);
+    expect(() => venueOrderToExecution(order({ filled: parseAmount('1'), remaining: ZERO, averagePrice: null }), request())).toThrow(
+      /averagePrice/,
+    );
   });
 });
 
