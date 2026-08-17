@@ -54,15 +54,20 @@ const ROOTS = ['services', 'packages', 'apps', 'tooling'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.git', 'vendor']);
 const TEST_FILE = /\.(test|spec)\.(ts|tsx|mts|js|mjs)$/;
 
-/** The file decides, at suite level, whether to execute. */
+/** The file decides, at suite or case level, whether to execute. Hard `it.skip` / `xit` stay out — those are pending, not a probe. */
 const CONDITIONAL_SKIP = [
   /describe\.skipIf\s*\(/,
   /describe\.runIf\s*\(/,
   /\bit\.runIf\s*\(/,
   /\btest\.runIf\s*\(/,
+  /\bit\.skipIf\s*\(/,
+  /\btest\.skipIf\s*\(/,
   /describe\.skip\s*\(/,
+  /\b(it|test|describe)\.concurrent\.skip(?:If)?\s*\(/,
   /=\s*[a-zA-Z]+\s*\?\s*describe\s*:\s*describe\.skip/,
   /=\s*[^;\n]*\?\s*describe\.skip\s*:\s*describe/,
+  /=\s*[a-zA-Z_][\w.]*\s*\?\s*(?:it|test)\s*:\s*(?:it|test)\.skip/,
+  /=\s*[^;\n]*\?\s*(?:it|test)\.skip\s*:\s*(?:it|test)\b/,
 ];
 
 /** The file opens its own connection to the thing it is deciding about. */

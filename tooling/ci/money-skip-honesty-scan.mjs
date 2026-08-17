@@ -38,8 +38,15 @@ const SKIP_SHAPES = [
   /\btest\.skip\s*\(/,
   /\bxit\s*\(/,
   /\bxdescribe\s*\(/,
+  /\bxtest\s*\(/,
+  /\b(it|test|describe)\.concurrent\.skip(?:If)?\s*\(/,
+  /\b(it|test|describe)\.skip\.each\s*\(/,
+  /\b(it|test)\.todo\s*\(/,
+  /\bthis\.skip\s*\(/,
   /=\s*[a-zA-Z_][\w.]*\s*\?\s*describe\s*:\s*describe\.skip/,
   /=\s*[^;\n]*\?\s*describe\.skip\s*:\s*describe/,
+  /=\s*[a-zA-Z_][\w.]*\s*\?\s*(?:it|test)\s*:\s*(?:it|test)\.skip/,
+  /=\s*[^;\n]*\?\s*(?:it|test)\.skip\s*:\s*(?:it|test)\b/,
 ];
 
 const SANCTIONED = [/\bpostgresAvailable\b/, /\bdevChainReachable\b/, /\brecordInfraProbe\b/];
