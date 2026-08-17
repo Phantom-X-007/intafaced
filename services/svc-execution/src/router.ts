@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { router, scopedProcedure } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
+import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -63,7 +64,9 @@ const omsPlanInput = z.object({
   tenantId: z.string().min(1).max(128).optional(),
 });
 
-export function createExecutionRouter(registry: SealedHouseTenantRegistry) {
+export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
+
+export function createExecutionRouter(registry: SealedHouseTenantRegistry, submitByVenue: ExecutionSubmitMap = {}) {
   return router({
     execution: router({
       tenant: router({
@@ -111,6 +114,25 @@ export function createExecutionRouter(registry: SealedHouseTenantRegistry) {
                   venues: input.venues,
                   tenantId: input.tenantId,
                   actor: ctx.principal!.userId,
+                },
+                registry,
+              );
+            });
+          }),
+
+        execute: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsPlanInput)
+          .mutation(async ({ ctx, input }) => {
+            return withExecutionSpan('execution.oms.execute', input.tenantId ?? 'none', async () => {
+              return executeOmsRoute(
+                {
+                  symbol: input.symbol,
+                  side: input.side,
+                  amount: input.amount,
+                  venues: input.venues,
+                  tenantId: input.tenantId,
+                  actor: ctx.principal!.userId,
+                  submitByVenue,
                 },
                 registry,
               );
