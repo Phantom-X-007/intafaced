@@ -409,6 +409,8 @@ if (!available) {
       expect(await trade.orderHistory(principalFor(ALICE), { side: 'sell' })).toEqual([]);
       expect((await trade.orderHistory(principalFor(ALICE), { type: 'limit' })).map((row) => row.id)).toEqual([order.id]);
       expect(await trade.orderHistory(principalFor(ALICE), { type: 'market' })).toEqual([]);
+      expect((await trade.orderHistory(principalFor(ALICE), { tif: 'GTC' })).map((row) => row.id)).toEqual([order.id]);
+      expect(await trade.orderHistory(principalFor(ALICE), { tif: 'IOC' })).toEqual([]);
     });
 
     it('openOrders default still lists pending; status=open hides it', async () => {

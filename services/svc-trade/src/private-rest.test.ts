@@ -1299,6 +1299,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/closed?tif=GTC: passes tif into orderHistory', async () => {
+    let seen: { tif?: string } | null = null;
+    const app = await build(
+      deps({
+        orderHistory: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?tif=GTC',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.tif).toBe('GTC');
+    await app.close();
+  });
+
+  it('GET /orders/closed?tif=: invalid → 400 without orderHistory', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?tif=DAY',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/closed?type=: invalid → 400 without orderHistory', async () => {
     let listed = false;
     const app = await build(

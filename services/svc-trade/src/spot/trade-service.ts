@@ -2014,6 +2014,7 @@ export class TradeService {
    * invents a status, and unknown values are the caller's to refuse before this.
    * Optional side narrows buy/sell in SQL — never invents a side.
    * Optional type narrows limit/market in SQL — never invents a type.
+   * Optional tif narrows GTC/IOC/FOK/PO in SQL — never invents a tif.
    */
   async orderHistory(
     principal: Principal,
@@ -2024,6 +2025,7 @@ export class TradeService {
       status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
       side?: 'buy' | 'sell';
       type?: 'limit' | 'market';
+      tif?: TimeInForce;
     } = {},
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
@@ -2043,6 +2045,16 @@ export class TradeService {
     const sideFilter = input.side === 'buy' ? this.sql`side = 'buy'` : input.side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
     const typeFilter =
       input.type === 'limit' ? this.sql`type = 'limit'` : input.type === 'market' ? this.sql`type = 'market'` : this.sql`TRUE`;
+    const tifFilter =
+      input.tif === 'GTC'
+        ? this.sql`tif = 'GTC'`
+        : input.tif === 'IOC'
+          ? this.sql`tif = 'IOC'`
+          : input.tif === 'FOK'
+            ? this.sql`tif = 'FOK'`
+            : input.tif === 'PO'
+              ? this.sql`tif = 'PO'`
+              : this.sql`TRUE`;
     const rows =
       input.marketId && sinceDate
         ? await this.sql<OrderRow[]>`
@@ -2052,6 +2064,7 @@ export class TradeService {
                AND ${statusFilter}
                AND ${sideFilter}
                AND ${typeFilter}
+               AND ${tifFilter}
                AND created_at >= ${sinceDate}
              ORDER BY created_at DESC
              LIMIT ${limit}
@@ -2064,6 +2077,7 @@ export class TradeService {
                  AND ${statusFilter}
                  AND ${sideFilter}
                  AND ${typeFilter}
+                 AND ${tifFilter}
                ORDER BY created_at DESC
                  LIMIT ${limit}
             `
@@ -2074,6 +2088,7 @@ export class TradeService {
                    AND ${statusFilter}
                    AND ${sideFilter}
                    AND ${typeFilter}
+                   AND ${tifFilter}
                    AND created_at >= ${sinceDate}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
@@ -2084,6 +2099,7 @@ export class TradeService {
                    AND ${statusFilter}
                    AND ${sideFilter}
                    AND ${typeFilter}
+                   AND ${tifFilter}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
               `;

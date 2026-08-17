@@ -40,7 +40,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=)
- *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=)
+ *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=&tif=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
@@ -99,6 +99,7 @@ export interface PrivateRestDeps {
       status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
       side?: 'buy' | 'sell';
       type?: 'limit' | 'market';
+      tif?: TimeInForce;
     },
   ): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
@@ -725,64 +726,68 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     },
   );
 
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string; type?: string } }>(
-    '/api/v1/orders/closed',
-    async (req, reply) => {
-      const principal = requirePrincipal(req, reply);
-      if (!principal) return;
+  app.get<{
+    Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string; type?: string; tif?: string };
+  }>('/api/v1/orders/closed', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
 
-      let marketId: string | undefined;
-      const symbolRaw = req.query.symbol;
-      if (symbolRaw !== undefined && symbolRaw !== '') {
-        const symbol = decodeURIComponent(symbolRaw);
-        const market = await deps.marketBySymbol(symbol);
-        if (!market) {
-          return sendCcxt(reply, badSymbol(symbol));
-        }
-        marketId = market.id;
+    let marketId: string | undefined;
+    const symbolRaw = req.query.symbol;
+    if (symbolRaw !== undefined && symbolRaw !== '') {
+      const symbol = decodeURIComponent(symbolRaw);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) {
+        return sendCcxt(reply, badSymbol(symbol));
       }
-      const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
-      const sinceParsed = parseSince(req.query.since);
-      if (!sinceParsed.ok) {
-        return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
-      }
-      const statusParsed = parseClosedOrderStatus(req.query.status);
-      if (!statusParsed.ok) {
-        return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_closed_order_status'));
-      }
-      const sideParsed = parseFillSide(req.query.side);
-      if (!sideParsed.ok) {
-        return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_closed_order_side'));
-      }
-      const typeParsed = parseOpenOrderType(req.query.type);
-      if (!typeParsed.ok) {
-        return sendCcxt(reply, badRequest(typeParsed.message, 'trade.invalid_closed_order_type'));
-      }
+      marketId = market.id;
+    }
+    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+    const sinceParsed = parseSince(req.query.since);
+    if (!sinceParsed.ok) {
+      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+    }
+    const statusParsed = parseClosedOrderStatus(req.query.status);
+    if (!statusParsed.ok) {
+      return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_closed_order_status'));
+    }
+    const sideParsed = parseFillSide(req.query.side);
+    if (!sideParsed.ok) {
+      return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_closed_order_side'));
+    }
+    const typeParsed = parseOpenOrderType(req.query.type);
+    if (!typeParsed.ok) {
+      return sendCcxt(reply, badRequest(typeParsed.message, 'trade.invalid_closed_order_type'));
+    }
+    const tifParsed = parseOpenOrderTif(req.query.tif);
+    if (!tifParsed.ok) {
+      return sendCcxt(reply, badRequest(tifParsed.message, 'trade.invalid_closed_order_tif'));
+    }
 
-      try {
-        // since / side / type → SQL via orderHistory — not a post-filter of a mixed page.
-        const orders = await deps.orderHistory(principal, {
-          marketId,
-          limit,
-          sinceMs: sinceParsed.sinceMs,
-          ...(statusParsed.status ? { status: statusParsed.status } : {}),
-          ...(sideParsed.side ? { side: sideParsed.side } : {}),
-          ...(typeParsed.type ? { type: typeParsed.type } : {}),
-        });
-        const symbolByMarket = new Map<string, string>();
-        const wire = [];
-        for (const order of orders) {
-          const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
-          wire.push(presentCcxtOrder(order, symbol));
-        }
-        return reply.code(200).send(wire);
-      } catch (err) {
-        const sent = sendDomainError(reply, err);
-        if (sent) return sent;
-        throw err;
+    try {
+      // since / side / type / tif → SQL via orderHistory — not a post-filter of a mixed page.
+      const orders = await deps.orderHistory(principal, {
+        marketId,
+        limit,
+        sinceMs: sinceParsed.sinceMs,
+        ...(statusParsed.status ? { status: statusParsed.status } : {}),
+        ...(sideParsed.side ? { side: sideParsed.side } : {}),
+        ...(typeParsed.type ? { type: typeParsed.type } : {}),
+        ...(tifParsed.tif ? { tif: tifParsed.tif } : {}),
+      });
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const order of orders) {
+        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+        wire.push(presentCcxtOrder(order, symbol));
       }
-    },
-  );
+      return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
 
   app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; side?: string; liquidity?: string } }>(
     '/api/v1/account/trades',
