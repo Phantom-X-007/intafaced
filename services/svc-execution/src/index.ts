@@ -20,7 +20,8 @@ registerProcessHooks(
  *
  * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
  * (SOR `planRoute`, does not submit), and `execution.oms.execute` (same plan,
- * then injected `LiquiditySource.submit`). No live CEX keys. Internal venues
+ * then injected `LiquiditySource.submit` — `tradeAdapterSubmit` maps TradeAdapter
+ * placeOrder onto that door). No live CEX keys. Internal venues
  * refused. No matching-path privilege. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
