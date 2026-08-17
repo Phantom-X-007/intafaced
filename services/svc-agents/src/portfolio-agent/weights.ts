@@ -8,6 +8,7 @@ const UNIT = 10n ** SCALE;
 export function parseWeight(raw: string): bigint | null {
   if (typeof raw !== 'string' || !/^(0|[1-9]\d*)(\.\d+)?$/.test(raw)) return null;
   const [whole, frac = ''] = raw.split('.');
+  if (whole === undefined) return null;
   if (frac.length > Number(SCALE)) return null;
   const n = BigInt(whole) * UNIT + BigInt(frac.padEnd(Number(SCALE), '0') || '0');
   if (n < 0n || n > UNIT) return null;

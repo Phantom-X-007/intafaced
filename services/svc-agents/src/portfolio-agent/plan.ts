@@ -173,7 +173,10 @@ export function planRebalance(input: PlanRebalanceInput, deps: PlanRebalanceDeps
   const keys = new Set([...current.keys(), ...targets.keys()]);
   const legs: RebalanceLeg[] = [];
   for (const key of [...keys].sort()) {
-    const [plane, asset] = key.split(':') as [AssetPlane, string];
+    const sep = key.indexOf(':');
+    const plane = key.slice(0, sep) as AssetPlane;
+    const asset = key.slice(sep + 1);
+    if (!asset) continue;
     const cur = current.get(key)?.weight ?? 0n;
     const tgt = targets.get(key)?.weight ?? 0n;
     if (cur === tgt) continue;

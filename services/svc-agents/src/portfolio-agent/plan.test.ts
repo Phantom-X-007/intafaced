@@ -101,6 +101,17 @@ describe('planRebalance', () => {
     );
     expect(result).toMatchObject({ status: 'refused', code: 'portfolio.killed' });
     expect(audit.entries).toHaveLength(1);
+    expect(JSON.stringify(result)).not.toMatch(/"status":"(placed|held)"/);
+  });
+
+  it('unset / empty kill-switch is killed (default off)', () => {
+    expect(isPortfolioAgentKilled({})).toBe(true);
+    expect(isPortfolioAgentKilled({ AGENTS_PORTFOLIO_ENABLED: '' })).toBe(true);
+    const { result } = planRebalance(
+      { userId: 'user-1', targets: SAME_PLANE_TARGETS },
+      { env: {}, portfolio: livePort([{ asset: 'IFC', plane: 'custodial', weight: '1' }]), now: () => AT },
+    );
+    expect(result).toMatchObject({ status: 'refused', code: 'portfolio.killed' });
   });
 });
 
@@ -144,13 +155,17 @@ describe('honesty: dark port, unread ≠ zero, no placeOrder, cross-plane', () =
     expect(audit.entries[0]?.refusalCode).toBe('portfolio.cross_plane_blocked');
   });
 
-  it('plan tree has no placeOrder and no ledger-client calls', () => {
+  it('plan tree has no placeOrder, no hold, and no ledger-client calls', () => {
     const files = readdirSync(HERE).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
     const src = files.map((f) => readFileSync(join(HERE, f), 'utf8')).join('\n');
     expect(src).not.toMatch(/\bplaceOrder\s*\(/);
+    expect(src).not.toMatch(/\bholdOrder\s*\(/);
+    expect(src).not.toMatch(/\bholdFunds\s*\(/);
+    expect(src).not.toMatch(/\bholdBalance\b/);
     expect(src).not.toMatch(/ledger-client/);
     expect(src).not.toMatch(/createLedgerClient/);
     expect(src).not.toMatch(/LedgerClient/);
     expect(src).not.toMatch(/trade\.order/);
+    expect(src).not.toMatch(/export (async )?function (place|hold)\b/);
   });
 });
