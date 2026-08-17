@@ -65,4 +65,11 @@ describe('accountAdapterRails', () => {
     const observe = accountAdapterRails(adapter([]));
     await expect(observe('USDT')).resolves.toEqual([]);
   });
+
+  it('filters by enabled without hiding a suspended rail when omitted', async () => {
+    const observe = accountAdapterRails(adapter([usdtRail({ enabled: false }), usdtRail({ enabled: true, network: 'erc20' })]));
+    expect((await observe('USDT', true)).map((row) => row.network)).toEqual(['erc20']);
+    expect((await observe('USDT', false)).map((row) => row.enabled)).toEqual([false]);
+    expect(await observe('USDT')).toHaveLength(2);
+  });
 });
