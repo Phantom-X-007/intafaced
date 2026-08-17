@@ -84,6 +84,17 @@ describe('marketDataAdapterMarkets', () => {
     expect(await observe()).toHaveLength(2);
   });
 
+  it('filters by active without hiding halted when omitted', async () => {
+    const observe = marketDataAdapterMarkets(
+      adapter({
+        markets: async () => [listed({ active: false }), listed({ active: true, symbol: 'ETH/USDT', venueSymbol: 'ETHUSDT', base: 'ETH' })],
+      }),
+    );
+    expect((await observe(undefined, undefined, undefined, true)).map((row) => row.symbol)).toEqual(['ETH/USDT']);
+    expect((await observe(undefined, undefined, undefined, false)).map((row) => row.active)).toEqual([false]);
+    expect(await observe()).toHaveLength(2);
+  });
+
   it('propagates venue not_ready — does not invent a catalog', async () => {
     const observe = marketDataAdapterMarkets(
       adapter({
