@@ -10,6 +10,7 @@ import { observeOmsBalances, type OmsBalancesFn } from './oms-balances.js';
 import { observeOmsPositions, type OmsPositionsFn } from './oms-positions.js';
 import { observeOmsBorrow, type OmsBorrowFn } from './oms-borrow.js';
 import { observeOmsFunding, type OmsFundingFn } from './oms-funding.js';
+import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
@@ -81,6 +82,7 @@ export type ExecutionPositionsMap = Readonly<Record<string, OmsPositionsFn>>;
 export type ExecutionRailsMap = Readonly<Record<string, OmsRailsFn>>;
 export type ExecutionFundingMap = Readonly<Record<string, OmsFundingFn>>;
 export type ExecutionBorrowMap = Readonly<Record<string, OmsBorrowFn>>;
+export type ExecutionLatencyMap = Readonly<Record<string, OmsLatencyFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -93,6 +95,7 @@ export function createExecutionRouter(
   railsByVenue: ExecutionRailsMap = {},
   fundingByVenue: ExecutionFundingMap = {},
   borrowByVenue: ExecutionBorrowMap = {},
+  latencyByVenue: ExecutionLatencyMap = {},
 ) {
   return router({
     execution: router({
@@ -316,6 +319,23 @@ export function createExecutionRouter(
                 asset: input.asset,
                 kind: input.kind,
                 borrowByVenue,
+              });
+            });
+          }),
+
+        latency: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.latency', input.venueId, async () => {
+              return observeOmsLatency({
+                venueId: input.venueId,
+                kind: input.kind,
+                latencyByVenue,
               });
             });
           }),
