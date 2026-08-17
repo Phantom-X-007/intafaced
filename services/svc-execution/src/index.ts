@@ -16,10 +16,13 @@ registerProcessHooks(
 );
 
 /**
- * svc-execution — Stage-1 house tenancy mechanism (D26-P0-01).
+ * svc-execution — house tenancy (D26-P0-01) + OMS plan/execute (D26-P1-X3).
  *
- * Health + tRPC `execution.tenant.*` (describe / kill). No SOR, OMS, EMS, or
- * arbitrage. No matching-path privilege. In-memory sealed registry.
+ * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
+ * (SOR `planRoute`, does not submit), and `execution.oms.execute` (same plan,
+ * then injected `LiquiditySource.submit` — `tradeAdapterSubmit` maps TradeAdapter
+ * placeOrder onto that door). No live CEX keys. Internal venues
+ * refused. No matching-path privilege. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
 const appRouter = createExecutionRouter(registry);
@@ -33,7 +36,7 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'house-tenant-mechanism',
+  stage: 'oms-execute',
   store: 'memory',
   internalVenue: 'blocked',
 }));
