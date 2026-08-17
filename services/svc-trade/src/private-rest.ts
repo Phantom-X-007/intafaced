@@ -45,7 +45,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
- *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=&liquidity=)
+ *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=&liquidity=&orderId=)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=&side=)
@@ -114,6 +114,7 @@ export interface PrivateRestDeps {
    * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
    * Optional side filters fills.side in SQL.
    * Optional liquidity filters fills.liquidity in SQL.
+   * Optional orderId filters fills.order_id in SQL.
    */
   myFills(
     principal: Principal,
@@ -122,6 +123,7 @@ export interface PrivateRestDeps {
     sinceMs?: number,
     side?: 'buy' | 'sell',
     liquidity?: 'maker' | 'taker',
+    orderId?: string,
   ): Promise<FillRecord[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
@@ -484,6 +486,17 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
   return { ok: true, sinceMs: Math.floor(n) };
 }
 
+/** Optional fill orderId filter. Absent → every order's fills. */
+const FILL_ORDER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseFillOrderId(raw: unknown): { ok: true; orderId?: string } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, orderId: undefined };
+  if (typeof raw !== 'string' || !FILL_ORDER_ID.test(raw.trim())) {
+    return { ok: false, message: 'orderId must be a uuid' };
+  }
+  return { ok: true, orderId: raw.trim() };
+}
+
 /** Optional fill-liquidity filter. Absent → both maker and taker. */
 export function parseFillLiquidity(raw: unknown): { ok: true; liquidity?: 'maker' | 'taker' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, liquidity: undefined };
@@ -828,59 +841,69 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; side?: string; liquidity?: string } }>(
-    '/api/v1/account/trades',
-    async (req, reply) => {
-      const principal = requirePrincipal(req, reply);
-      if (!principal) return;
+  app.get<{
+    Querystring: { symbol?: string; limit?: string; since?: string; side?: string; liquidity?: string; orderId?: string };
+  }>('/api/v1/account/trades', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
 
-      const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
-      const sinceParsed = parseSince(req.query.since);
-      if (!sinceParsed.ok) {
-        return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+    const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
+    const sinceParsed = parseSince(req.query.since);
+    if (!sinceParsed.ok) {
+      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+    }
+    const sideParsed = parseFillSide(req.query.side);
+    if (!sideParsed.ok) {
+      return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_fill_side'));
+    }
+    const liquidityParsed = parseFillLiquidity(req.query.liquidity);
+    if (!liquidityParsed.ok) {
+      return sendCcxt(reply, badRequest(liquidityParsed.message, 'trade.invalid_fill_liquidity'));
+    }
+    const orderIdParsed = parseFillOrderId(req.query.orderId);
+    if (!orderIdParsed.ok) {
+      return sendCcxt(reply, badRequest(orderIdParsed.message, 'trade.invalid_fill_order_id'));
+    }
+    let filterMarketId: string | undefined;
+    const symbolRaw = req.query.symbol;
+    if (symbolRaw !== undefined && symbolRaw !== '') {
+      const symbol = decodeURIComponent(symbolRaw);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) {
+        return sendCcxt(reply, badSymbol(symbol));
       }
-      const sideParsed = parseFillSide(req.query.side);
-      if (!sideParsed.ok) {
-        return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_fill_side'));
-      }
-      const liquidityParsed = parseFillLiquidity(req.query.liquidity);
-      if (!liquidityParsed.ok) {
-        return sendCcxt(reply, badRequest(liquidityParsed.message, 'trade.invalid_fill_liquidity'));
-      }
-      let filterMarketId: string | undefined;
-      const symbolRaw = req.query.symbol;
-      if (symbolRaw !== undefined && symbolRaw !== '') {
-        const symbol = decodeURIComponent(symbolRaw);
-        const market = await deps.marketBySymbol(symbol);
-        if (!market) {
-          return sendCcxt(reply, badSymbol(symbol));
-        }
-        filterMarketId = market.id;
-      }
+      filterMarketId = market.id;
+    }
 
-      try {
-        // Symbol + since resolve in SQL via myFills (fills.market_id, fills.ts),
-        // not a post-filter of a user-wide page.
-        const fills = await deps.myFills(principal, limit, filterMarketId, sinceParsed.sinceMs, sideParsed.side, liquidityParsed.liquidity);
-        const symbolByMarket = new Map<string, string>();
-        const wire = [];
-        for (const fill of fills) {
-          let symbol = symbolByMarket.get(fill.marketId);
-          if (symbol === undefined) {
-            const market = await deps.marketById(fill.marketId);
-            symbol = market?.symbol ?? fill.marketId;
-            symbolByMarket.set(fill.marketId, symbol);
-          }
-          wire.push(presentCcxtMyTrade(fill, symbol));
+    try {
+      // Symbol + since + orderId resolve in SQL via myFills — not a post-filter of a mixed page.
+      const fills = await deps.myFills(
+        principal,
+        limit,
+        filterMarketId,
+        sinceParsed.sinceMs,
+        sideParsed.side,
+        liquidityParsed.liquidity,
+        orderIdParsed.orderId,
+      );
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const fill of fills) {
+        let symbol = symbolByMarket.get(fill.marketId);
+        if (symbol === undefined) {
+          const market = await deps.marketById(fill.marketId);
+          symbol = market?.symbol ?? fill.marketId;
+          symbolByMarket.set(fill.marketId, symbol);
         }
-        return reply.code(200).send(wire);
-      } catch (err) {
-        const sent = sendDomainError(reply, err);
-        if (sent) return sent;
-        throw err;
+        wire.push(presentCcxtMyTrade(fill, symbol));
       }
-    },
-  );
+      return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
 
   /**
    * Published maker/taker from `trade.markets`. No ledger, no rank perk

@@ -262,7 +262,7 @@ if (!available) {
 
       const maker = await rest(BOB, btcusdt, 'sell', '2', '100', 'bob-1');
       matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price: '100', qty: '2' }]);
-      await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-1');
+      const taker = await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-1');
 
       const legs = await sql<Array<{ liquidity: string; fee_asset: string; fee_amount: string; fee_bps: string; quote_amount: string }>>`
         SELECT liquidity, fee_asset, fee_amount, fee_bps, quote_amount FROM trade.fills ORDER BY liquidity ASC
@@ -284,6 +284,10 @@ if (!available) {
       expect((await trade.myFills(principalFor(BOB), 100, undefined, undefined, undefined, 'maker')).map((row) => row.liquidity)).toEqual([
         'maker',
       ]);
+      expect(
+        (await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, undefined, taker.id)).map((row) => row.orderId),
+      ).toEqual([taker.id]);
+      expect(await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, undefined, maker.id)).toEqual([]);
       expect((await trade.publicTape(btcusdt.id)).map((row) => row.side)).toEqual(['buy']);
       expect((await trade.publicTape(btcusdt.id, 100, undefined, 'buy')).map((row) => row.side)).toEqual(['buy']);
       expect(await trade.publicTape(btcusdt.id, 100, undefined, 'sell')).toEqual([]);

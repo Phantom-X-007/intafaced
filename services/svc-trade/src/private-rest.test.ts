@@ -1238,6 +1238,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades?orderId=: passes orderId into myFills', async () => {
+    let seenOrderId: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, _side, _liquidity, orderId) => {
+          seenOrderId = orderId;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?orderId=11111111-1111-4111-8111-111111111111',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenOrderId).toBe('11111111-1111-4111-8111-111111111111');
+    await app.close();
+  });
+
+  it('GET /account/trades?orderId=: invalid → 400 without myFills', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?orderId=not-a-uuid',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /account/trades?side=: invalid → 400 without myFills', async () => {
     let listed = false;
     const app = await build(

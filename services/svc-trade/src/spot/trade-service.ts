@@ -2124,6 +2124,7 @@ export class TradeService {
    * `ts` is timestamptz — convert ms via `Date`, never raw int compare.
    * Optional `side` narrows buy/sell in SQL — never invents a side.
    * Optional `liquidity` narrows maker/taker in SQL — never invents a role.
+   * Optional `orderId` narrows fills.order_id in SQL — never invents a fill.
    */
   async myFills(
     principal: Principal,
@@ -2132,6 +2133,7 @@ export class TradeService {
     sinceMs?: number,
     side?: 'buy' | 'sell',
     liquidity?: 'maker' | 'taker',
+    orderId?: string,
   ): Promise<FillRecord[]> {
     requireScope(principal, 'trade:read');
     const capped = Math.min(Math.max(limit, 1), 500);
@@ -2139,6 +2141,7 @@ export class TradeService {
     const sideFilter = side === 'buy' ? this.sql`side = 'buy'` : side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
     const liquidityFilter =
       liquidity === 'maker' ? this.sql`liquidity = 'maker'` : liquidity === 'taker' ? this.sql`liquidity = 'taker'` : this.sql`TRUE`;
+    const orderIdFilter = orderId ? this.sql`order_id = ${orderId}` : this.sql`TRUE`;
     const rows =
       marketId && sinceDate
         ? await this.sql<FillRow[]>`
@@ -2148,6 +2151,7 @@ export class TradeService {
                AND ts >= ${sinceDate}
                AND ${sideFilter}
                AND ${liquidityFilter}
+               AND ${orderIdFilter}
              ORDER BY ts DESC LIMIT ${capped}
           `
         : marketId
@@ -2156,6 +2160,7 @@ export class TradeService {
                WHERE user_id = ${principal.userId} AND market_id = ${marketId}
                  AND ${sideFilter}
                  AND ${liquidityFilter}
+                 AND ${orderIdFilter}
                ORDER BY ts DESC LIMIT ${capped}
             `
           : sinceDate
@@ -2165,6 +2170,7 @@ export class TradeService {
                    AND ts >= ${sinceDate}
                    AND ${sideFilter}
                    AND ${liquidityFilter}
+                   AND ${orderIdFilter}
                  ORDER BY ts DESC LIMIT ${capped}
               `
             : await this.sql<FillRow[]>`
@@ -2172,6 +2178,7 @@ export class TradeService {
                  WHERE user_id = ${principal.userId}
                    AND ${sideFilter}
                    AND ${liquidityFilter}
+                   AND ${orderIdFilter}
                  ORDER BY ts DESC LIMIT ${capped}
               `;
     return rows.map(toFill);
