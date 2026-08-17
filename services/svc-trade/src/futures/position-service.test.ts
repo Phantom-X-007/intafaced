@@ -1468,4 +1468,84 @@ if (!available) {
     ).rejects.toMatchObject({ code: 'trade.bad_request', status: 400 });
     expect((await positions.listOpen(ALICE))[0]!.collateral).toBe('5000');
   });
+
+  it('isolated margin reduce posts futuresMarginRelease and leaves leverage unchanged', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-reduce-isolated-margin',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.addIsolatedMargin({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('2500'),
+    });
+    const next = await positions.reduceIsolatedMargin({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('2500'),
+    });
+    expect(next.leverage).toBe('10');
+    expect(next.initialMargin).toBe('5000');
+    expect(next.collateral).toBe('5000');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('95000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('isolated margin reduce below initial is 400 and does not write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-reduce-isolated-below-im',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await expect(
+      positions.reduceIsolatedMargin({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        amount: amt('1'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.margin_below_initial', status: 400 });
+    expect((await positions.listOpen(ALICE))[0]!.collateral).toBe('5000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('would-be liquidation refuses isolated margin reduce with no ledger or row write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-reduce-isolated-would-liq',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('2'),
+    });
+    await positions.addIsolatedMargin({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('1000'),
+    });
+    feed('24500');
+    await expect(
+      positions.reduceIsolatedMargin({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        amount: amt('1000'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.margin_would_liquidate', status: 400 });
+    expect((await positions.listOpen(ALICE))[0]!.collateral).toBe('26000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('26000');
+  });
 }

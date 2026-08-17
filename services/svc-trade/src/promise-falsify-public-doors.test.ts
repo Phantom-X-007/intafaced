@@ -209,6 +209,9 @@ function privateDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps 
     addIsolatedMargin: async () => {
       throw new Error('unused');
     },
+    reduceIsolatedMargin: async () => {
+      throw new Error('unused');
+    },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async () => ({
       version: 'DIRECTION-2026-07-31:34',
