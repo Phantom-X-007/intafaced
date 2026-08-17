@@ -60,23 +60,21 @@ Shell freeProduct=0 does **not** mean the product is distributed. Most tracker r
 
 ## 4 · Denon — true human hard (mega board)
 
-**Live full inventory (2026-08-09):** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 hard IDs · SAFE START vs HOT HOLD · substance audit).  
+**Live remaining (2026-08-17):** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) — NOW section first. P0/P3/P4 docs mill **closed**. HOT HOLD **over**.  
 **Historical shape / factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).  
 **D-S-01…18:** **done on tip** — [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md). Agents implement from law; they must not invent §8 numbers.
 
-| Layer                   | What (live)                                                                                                                                   |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **P0 rulings**          | House desk fairness · DIRECTION §8 rates · venue set · token authority · listing/leverage/KYB grant · fee recipes · … (see parallel board §4) |
-| **P1 product-complete** | Trade/pay/bank/ops/market/agents/academy economics · Connect/Execution under law                                                              |
-| **P2 integrity**        | Promise-falsify · Java dual-book/jar · kill-switch · recipe matrix                                                                            |
-| **P3 run/security**     | Staging workflow · threat model · load test · licence NOTICE                                                                                  |
-| **P4 arch**             | Spine disposition · bridge handshake with Shehzad · tracker honesty                                                                           |
+| Layer            | What (live 2026-08-17)                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **P0 rulings**   | **Sealed / refuse-closed.** Magnitudes are owner click, not another ADR.                                                  |
+| **P1 remaining** | `pay.gateway` KYB consumer · `trade.futures` umbrella · `execution.sor` OMS · venue trading half · durable BroadcastStore |
+| **P2 / P3 / P4** | **Landed.** Do not recook maps, runbooks, or tracker-protocol docs.                                                       |
 
 Re-derive live PRs: `gh pr list --author Phantom-X-007 --state open`.
 
-**Not Denon:** shell craft, wave residual micro, Shehzad chain, Class X content, dual-edit Nitro open residual PRs.
+**Not Denon:** shell craft, wave residual micro, Shehzad chain, Class X content, dual-edit Nitro open residual PRs, P0/P3/P4 recook.
 
-**Spec mandate:** D-S-\* is written. Remaining invent risk is **numbers + product-complete Done bars + new greenfield rooms** — that is the parallel board.
+**Spec mandate:** D-S-\* is written. Remaining invent risk is **the five NOW engines + owner numbers** — that is the parallel board.
 
 ---
 
