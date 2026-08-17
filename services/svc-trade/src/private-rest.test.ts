@@ -1605,6 +1605,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /positions?side=long: passes side into listPositions', async () => {
+    let seen: { side?: 'long' | 'short' } | null = null;
+    const app = await build(
+      deps({
+        listPositions: async (_p, _symbol, _status, side) => {
+          seen = { side };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions?side=long',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.side).toBe('long');
+    await app.close();
+  });
+
+  it('GET /positions?side=: invalid → 400 without listPositions', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        listPositions: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions?side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /positions?status=: invalid → 400 without listPositions', async () => {
     let listed = false;
     const app = await build(

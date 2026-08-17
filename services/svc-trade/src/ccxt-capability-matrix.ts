@@ -328,7 +328,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
   ),
   route('fetchClosedOrders', 'supported', [], 'Closed orders; optional symbol/since/limit/status/side'),
   route('fetchMyTrades', 'supported', [], 'Account fills; optional symbol/since/limit/side/liquidity'),
-  route('fetchPositions', 'supported', [], 'Open/closing futures rows; [] when none; optional symbol/status — no invent'),
+  route('fetchPositions', 'supported', [], 'Open/closing futures rows; [] when none; optional symbol/status/side — no invent'),
   route(
     'setLeverage',
     'supported',

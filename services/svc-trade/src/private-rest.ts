@@ -48,7 +48,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=&liquidity=)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
- *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=)
+ *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=&side=)
  *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since=&status=)
  *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
@@ -127,7 +127,7 @@ export interface PrivateRestDeps {
    */
   userBalances(userId: string): Promise<readonly Balance[]>;
   /** Open/closing futures positions for the principal (empty [] when none). */
-  listPositions(principal: Principal, symbol?: string, status?: 'open' | 'closing'): Promise<Position[]>;
+  listPositions(principal: Principal, symbol?: string, status?: 'open' | 'closing', side?: 'long' | 'short'): Promise<Position[]>;
   /** Closed/liquidated rows for the principal (empty [] when none). */
   listClosedPositions(
     principal: Principal,
@@ -501,6 +501,13 @@ export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'ope
   return { ok: false, message: 'status must be open or closing' };
 }
 
+/** Optional live-position side filter. Absent → both long and short. */
+export function parseOpenPositionSide(raw: unknown): { ok: true; side?: 'long' | 'short' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, side: undefined };
+  if (raw === 'long' || raw === 'short') return { ok: true, side: raw };
+  return { ok: false, message: 'side must be long or short' };
+}
+
 /** Optional closed-order status filter. Absent → filled/cancelled/rejected/expired. */
 export function parseClosedOrderStatus(
   raw: unknown,
@@ -843,9 +850,9 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
    * Lists open and closing rows from trade.positions (F2/F3). Empty [] when none —
    * never invents leverage/mark. `closing` is a voluntary exit waiting on a mark
    * (ADR 2026-08-07) and must not look like a normal open. Optional ?symbol= and
-   * ?status=open|closing filter in SQL.
+   * ?status=open|closing and ?side=long|short filter in SQL.
    */
-  app.get<{ Querystring: { symbol?: string; status?: string } }>('/api/v1/positions', async (req, reply) => {
+  app.get<{ Querystring: { symbol?: string; status?: string; side?: string } }>('/api/v1/positions', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
@@ -853,10 +860,14 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     if (!statusParsed.ok) {
       return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_open_status'));
     }
+    const sideParsed = parseOpenPositionSide(req.query.side);
+    if (!sideParsed.ok) {
+      return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_open_position_side'));
+    }
 
     try {
       requireScope(principal, 'trade:read');
-      const rows = await deps.listPositions(principal, req.query.symbol, statusParsed.status);
+      const rows = await deps.listPositions(principal, req.query.symbol, statusParsed.status, sideParsed.side);
       return reply.code(200).send(rows);
     } catch (err) {
       const sent = sendDomainError(reply, err);

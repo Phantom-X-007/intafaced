@@ -379,8 +379,10 @@ export class PositionService {
    * and must never render as a normal open (ADR 2026-08-07 done bar 7).
    * Optional status='open'|'closing' narrows the IN-list — never invents a
    * status, and unknown values are the caller's to refuse before this.
+   * Optional side='long'|'short' narrows in SQL — never invents a side.
+   * Unfiltered still includes closing.
    */
-  async listOpen(userId: string, symbol?: string, status?: 'open' | 'closing'): Promise<Position[]> {
+  async listOpen(userId: string, symbol?: string, status?: 'open' | 'closing', side?: 'long' | 'short'): Promise<Position[]> {
     const market = symbol?.trim() || undefined;
     const statusFilter =
       status === 'open'
@@ -388,6 +390,7 @@ export class PositionService {
         : status === 'closing'
           ? this.sql`p.status = 'closing'`
           : this.sql`p.status IN ('open', 'closing')`;
+    const sideFilter = side === 'long' ? this.sql`p.side = 'long'` : side === 'short' ? this.sql`p.side = 'short'` : this.sql`TRUE`;
     const rows = market
       ? await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
@@ -395,6 +398,7 @@ export class PositionService {
           JOIN trade.markets m ON m.id = p.market_id
           WHERE p.user_id = ${userId}
             AND ${statusFilter}
+            AND ${sideFilter}
             AND m.symbol = ${market}
           ORDER BY p.opened_at DESC
         `
@@ -404,6 +408,7 @@ export class PositionService {
           JOIN trade.markets m ON m.id = p.market_id
           WHERE p.user_id = ${userId}
             AND ${statusFilter}
+            AND ${sideFilter}
           ORDER BY p.opened_at DESC
         `;
     // List is not a valuation: no mark source, no invented 0. Close attaches extras.

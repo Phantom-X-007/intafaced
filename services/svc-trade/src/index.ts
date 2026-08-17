@@ -592,7 +592,7 @@ registerPrivateRest(app, {
   markets: () => trade.markets(),
   // Self-only: route always passes principal.userId — never client ownerId.
   userBalances: (userId) => ledger.balances('user', userId),
-  listPositions: (principal, symbol, status) => positions.listOpen(principal.userId, symbol, status),
+  listPositions: (principal, symbol, status, side) => positions.listOpen(principal.userId, symbol, status, side),
   listClosedPositions: (principal, input) => positions.listClosed(principal.userId, input),
   getPosition: (principal, positionId) => positions.get(principal.userId, positionId),
   openPosition: (principal, input) =>

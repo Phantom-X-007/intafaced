@@ -200,6 +200,8 @@ if (!available) {
     expect(listed[0]!.id).toBe(pos.id);
     expect((await positions.listOpen(ALICE, undefined, 'open')).map((row) => row.id)).toEqual([pos.id]);
     expect(await positions.listOpen(ALICE, undefined, 'closing')).toEqual([]);
+    expect((await positions.listOpen(ALICE, undefined, undefined, 'long')).map((row) => row.id)).toEqual([pos.id]);
+    expect(await positions.listOpen(ALICE, undefined, undefined, 'short')).toEqual([]);
 
     const got = await positions.get(ALICE, pos.id!);
     expect(got.id).toBe(pos.id);
