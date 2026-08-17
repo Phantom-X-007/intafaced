@@ -98,10 +98,10 @@
       "status": "sealed",
       "kind": "product_ruling",
       "title": "Leverage / margin / liq params beyond §1 defaults",
-      "blocks": ["silent raise of DEFAULT_MAX_LEVERAGE"],
-      "primaryDoc": "docs/adr/2026-08-13-leverage-defaults-frozen.md",
+      "blocks": ["silent raise of DEFAULT_MAX_LEVERAGE", "new margin/liq constants without owner table"],
+      "primaryDoc": "docs/adr/2026-08-15-leverage-beyond-10x-freeze.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-07--leverage--margin--liq-params-beyond-1-defaults",
-      "notes": "2026-08-13 seal: §1 defaults frozen. DEFAULT_MAX_LEVERAGE=10. No invented 20× / D3 rungs / market overrides.",
+      "notes": "2026-08-15 freeze: 10× remains the ceiling until §1 liquidation proof exists. No silent raise above 10×. No new margin/liq constants without owner table. DEFAULT_MAX_LEVERAGE=10 is DIRECTION §1 — not open. svc-trade #1946 publishes 10×; this row does not edit trade. 2026-08-13 table (#1787) still stands.",
       "answerShape": "owner_table_or_defaults_frozen_until_ruled",
       "priority": 3
     },
