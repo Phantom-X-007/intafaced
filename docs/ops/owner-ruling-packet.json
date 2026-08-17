@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "boardId": "D26-P0-18",
   "title": "Owner ruling packet — tip index of every open owner decision",
-  "updated": "2026-08-14",
+  "updated": "2026-08-15",
   "tipAtWrite": "a8e3effe",
   "purpose": "Single machine-readable index so open owner decisions are not scattered across packets, Class X checklists, and lane-stop parks. Completeness for D26-P0-18 is this file + the human packets it points at — not a tip-bump.",
   "humanPacket": "docs/OWNER-DECISION-PACKET-2026-08-09.md",
@@ -152,7 +152,7 @@
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-11--scanner-signal-inputs-law",
       "answerShape": "what_may_rank_plus_refuse_when_missing",
       "priority": 4,
-      "notes": "2026-08-12 seal: v1 abs_change_x_log_volume on last/volume24h/change24hBps. Index was stale open."
+      "notes": "2026-08-15 correction: published allow-list is empty = refuse all ranks. Missing/untrusted → named refuse. No returns-ranked board. #1733 v1 recipe withdrawn as production law (invent). Kinds/recipe still owner to populate later."
     },
     {
       "id": "D26-P0-12",
