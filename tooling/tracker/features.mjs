@@ -354,12 +354,12 @@ export const FEATURES = [
     dependsOn: ['trade.futures'],
     requires: ['services/svc-trade/src/spot/options-listing.ts'],
     note:
-      'D26-P0-05 SEALED 2026-08-13 (adr/2026-08-13-options-forex-settlement-asset-law.md): European cash full-collateral; ' +
-      'opaque TRADE_OPTIONS_SETTLEMENT_ASSET_LAW = ADR-in-force, never a parsed coin table; live set stays P0-06. ' +
+      'D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; ' +
+      'empty/unset → named refuse; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty (never parsed as a coin table; ADR landing does not authorize stamp). ' +
       'D26-P1-T6: listMarket throws trade.options_settlement_law_unset while stamp empty (SOCKET §13 socket.options-settlement-asset-law). ' +
-      'Fixing alone must not unlock. After operator stamp: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; ' +
+      'Fixing alone must not unlock. After a later owner names set + asset: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; ' +
       'DB CHECK markets_options_terms_ck. No IV surface, no invent live set / settlement asset / D7 source. Orders still refused by ' +
-      'assertTradable (trade.market_kind_unsupported). Product-complete only after stamp + D7 + engine — ADR landing is not Done.',
+      'assertTradable (trade.market_kind_unsupported). Product-complete only after later stamp + D7 + engine — freeze ADR is not Done.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
@@ -410,7 +410,7 @@ export const FEATURES = [
     dependsOn: ['trade.spot', 'pay.rails'],
     requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'packages/contracts/src/instruments.ts'],
     note:
-      'D26-P0-05 SEALED 2026-08-13 (adr/2026-08-13-options-forex-settlement-asset-law.md): shape-law only — euro-stable ≠ fiat rails. ' +
+      'D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; euro-stable ≠ fiat rails. ' +
       'D26-P1-T7: explicit §13 socket.forex-settlement refuse-closed until P0-05 (now sealed) AND fiat settle rails — ' +
       'forex.settlementStatus + list/place/setMarketStatus(active) share trade.unsettled_asset_class_listing; never invent settlement asset. ' +
       'On OPEN_MONEY allowlist 2026-08-08. **Not "unlisted"** — migration `0001_multi_asset_instruments.sql` seeds six majors active ' +
@@ -2005,10 +2005,10 @@ export const FEATURES = [
     dependsOn: ['trade.options'],
     requires: ['services/svc-trade/src/spot/options-listing.ts'],
     note:
-      '§13 — D26-P0-05 ADR sealed 2026-08-13 (docs/adr/2026-08-13-options-forex-settlement-asset-law.md). Socket stays until operator ' +
-      'sets opaque TRADE_OPTIONS_SETTLEMENT_ASSET_LAW on a deploy (ADR-in-force, never parsed for assets/matrix). Named 2026-08-12 (D26-P1-T6): ' +
+      '§13 — D26-P0-05 freeze sealed 2026-08-15 (docs/adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty, settlement asset unset. ' +
+      'Socket stays until a later owner names a live set + asset; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty and is never parsed. Named 2026-08-12 (D26-P1-T6): ' +
       'svc-trade listMarket(kind=options) refuses with trade.options_settlement_law_unset while the stamp is empty. Inventing a coin here would ' +
-      'close a ready row with a lie. Forex share is sibling socket.forex-settlement. Closing this socket requires the operator stamp, not craft.',
+      'close a ready row with a lie. Forex share is sibling socket.forex-settlement. Closing this socket requires a later owner stamp, not this freeze.',
   }),
 
   // ── §13 · DELIBERATELY NOT IN v1 ─────────────────────────────────────────
@@ -2072,7 +2072,7 @@ export const FEATURES = [
     dependsOn: ['pay.rails'],
     requires: ['services/svc-trade/src/spot/forex-settlement.ts'],
     note:
-      '§13 — D26-P1-T7 explicit socket (2026-08-12). D26-P0-05 ADR sealed 2026-08-13 (shape only). trade.forex product-complete only after ' +
+      '§13 — D26-P1-T7 explicit socket (2026-08-12). D26-P0-05 freeze sealed 2026-08-15 (live set empty; settlement asset unset). trade.forex product-complete only after ' +
       'fiat settle rails posture. Until then: forex.settlementStatus published=false; production active listMarket / setMarketStatus(active) / ' +
       'place refuse trade.unsettled_asset_class_listing naming this socket. Paper + non-active listing allowed (model). Do NOT invent settlement ' +
       'asset (stablecoin-margined vs true fiat omnibus — D8; PAY_CRYPTO_ASSETS must not accidentally map EUR→euro stablecoin). No code closes this.',

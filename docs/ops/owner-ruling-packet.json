@@ -77,7 +77,7 @@
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-05--options--forex-settlement-asset-law",
       "answerShape": "adr_live_set_settlement_asset_refuse_matrix",
       "priority": 4,
-      "notes": "2026-08-13 seal: shape + refuse matrix only. No invented live set / coin / rails. Listing still needs opaque stamp + D7; FX still needs fiat rails. trade.options / trade.forex stay not Done."
+      "notes": "2026-08-15 freeze: (1) live set empty (2) settlement asset unset (3) refuse by named codes. Opaque TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty — never parsed as an asset list; this ADR landing does not authorize a host stamp. T6 already refuse-closes options listing. trade.options / trade.forex stay not Done."
     },
     {
       "id": "D26-P0-06",
