@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { VenueCapabilityError } from '@intafaced/venue-contracts';
+import { VenueCapabilityError, VenueUnavailableError } from '@intafaced/venue-contracts';
 import { SequencedBookTracker } from '../sequenced-book.js';
 import { RateLimitGovernor } from '../rate-limit.js';
 import type { HttpPort, HttpResponse, StreamHandle, StreamPort } from '../transport.js';
 import {
   capDepth,
   OKX_SPOT_RATE_LIMIT,
+  OkxSpotAccount,
   OkxSpotMarketData,
+  OkxSpotTrade,
   okxSymbolOf,
   retryAfterFrom,
   subscribeRefusal,
@@ -411,10 +413,41 @@ describe('okx-spot — public market data (third venue)', () => {
     expect(retryAfterFrom(null)).toBe(60_000);
   });
 
-  it('does not implement trading or account — those halves are not built', () => {
+  it('does not implement trading or account on the public MD adapter', () => {
     const md = adapter(new FakeHttp(() => json(200, thickBook())));
     expect('placeOrder' in md).toBe(false);
     expect('cancelOrder' in md).toBe(false);
     expect('balances' in md).toBe(false);
+  });
+
+  it('OkxSpotTrade / OkxSpotAccount throw not_ready, never silent success', async () => {
+    const keys = { venueId: 'okx-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const order = {
+      symbol: 'BTC/USDT',
+      side: 'buy' as const,
+      type: 'limit' as const,
+      amount: 1n,
+      price: 1n,
+      clientOrderId: 'abc',
+    };
+    const trade = new OkxSpotTrade(keys);
+    const account = new OkxSpotAccount(keys);
+
+    const expectNotReady = async (run: () => Promise<unknown>) => {
+      try {
+        await run();
+        expect.unreachable('should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(VenueUnavailableError);
+        expect((error as VenueUnavailableError).reason).toBe('not_ready');
+        expect((error as VenueUnavailableError).venueId).toBe('okx-spot');
+      }
+    };
+
+    await expectNotReady(() => trade.placeOrder(order));
+    await expectNotReady(() => trade.cancelOrder('BTC/USDT', 'abc'));
+    await expectNotReady(() => trade.fetchOrder('BTC/USDT', 'abc'));
+    await expectNotReady(() => trade.openOrders());
+    await expectNotReady(() => account.balances());
   });
 });
