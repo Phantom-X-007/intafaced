@@ -555,8 +555,9 @@ export class TradeService {
    * risky set by inventing a default of active.
    * Optional kind narrows spot/futures/options in SQL — omitted still
    * returns futures and options (not-orderable is still listed).
+   * Optional quote narrows quote_asset in SQL — omitted still returns every quote.
    */
-  async markets(status?: MarketStatus, kind?: MarketKind): Promise<Market[]> {
+  async markets(status?: MarketStatus, kind?: MarketKind, quote?: string): Promise<Market[]> {
     const statusFilter =
       status === 'pending'
         ? this.sql`status = 'pending'`
@@ -575,6 +576,7 @@ export class TradeService {
           : kind === 'options'
             ? this.sql`kind = 'options'`
             : this.sql`TRUE`;
+    const quoteFilter = quote ? this.sql`quote_asset = ${quote}` : this.sql`TRUE`;
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
@@ -582,6 +584,7 @@ export class TradeService {
         FROM trade.markets
        WHERE ${statusFilter}
          AND ${kindFilter}
+         AND ${quoteFilter}
        ORDER BY symbol ASC
     `;
     return rows.map(toMarket);

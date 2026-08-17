@@ -391,6 +391,38 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/markets?quote=USDT: passes quote into markets', async () => {
+    let seen: { quote?: string } = {};
+    const app = await build(
+      deps({
+        markets: async (_status, _kind, quote) => {
+          seen = { quote };
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?quote=USDT' });
+    expect(res.statusCode).toBe(200);
+    expect(seen.quote).toBe('USDT');
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?quote=: invalid → 400 without markets', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: `/api/v1/markets?quote=${'U'.repeat(33)}` });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /api/v1/markets lists futures as active but not orderable unless the host enables them', async () => {
     const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
     const app = await build(
