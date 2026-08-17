@@ -6,7 +6,8 @@
  * omitted still lists both (after dropping pending). Optional type forwards
  * limit/market; omitted still lists both. Optional clientOrderId forwards an
  * exact idempotency key; omitted still lists every acknowledged open.
- * Pending rows stay dropped — never rewritten to open.
+ * Optional venueOrderId forwards the venue's id; omitted still lists every
+ * acknowledged open. Pending rows stay dropped — never rewritten to open.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueOrder, VenueOrderType } from '@intafaced/venue-contracts';
@@ -16,6 +17,7 @@ export type OmsOpenOrdersFn = (
   side?: 'buy' | 'sell',
   type?: VenueOrderType,
   clientOrderId?: string,
+  venueOrderId?: string,
 ) => Promise<VenueOrder[]>;
 
 export type OmsOpenOrdersInput = {
@@ -24,6 +26,7 @@ export type OmsOpenOrdersInput = {
   readonly side?: 'buy' | 'sell';
   readonly type?: VenueOrderType;
   readonly clientOrderId?: string;
+  readonly venueOrderId?: string;
   readonly kind?: VenueKind;
   readonly openOrdersByVenue?: Readonly<Record<string, OmsOpenOrdersFn>>;
 };
@@ -61,7 +64,7 @@ export async function listOmsOpenOrders(input: OmsOpenOrdersInput): Promise<OmsO
 
   let orders: VenueOrder[];
   try {
-    orders = await list(symbol, input.side, input.type, input.clientOrderId?.trim() || undefined);
+    orders = await list(symbol, input.side, input.type, input.clientOrderId?.trim() || undefined, input.venueOrderId?.trim() || undefined);
   } catch (err) {
     return { ok: false, reason: 'list_failed', detail: listErrorMessage(err) };
   }
