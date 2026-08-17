@@ -1942,20 +1942,34 @@ export class TradeService {
   /**
    * Terminal orders for the principal (filled / cancelled / rejected / expired).
    * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
-   * (CCXT convention). `created_at` is timestamptz — convert ms via `Date`.
+   * (CCXT convention). Optional status narrows the terminal IN-list — never
+   * invents a status, and unknown values are the caller's to refuse before this.
    */
-  async orderHistory(principal: Principal, input: { marketId?: string; limit?: number; sinceMs?: number } = {}): Promise<OrderRecord[]> {
+  async orderHistory(
+    principal: Principal,
+    input: { marketId?: string; limit?: number; sinceMs?: number; status?: 'filled' | 'cancelled' | 'rejected' | 'expired' } = {},
+  ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     // timestamptz compare: Date carries ms precision into postgres.js.
     const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
+    const statusFilter =
+      input.status === 'filled'
+        ? this.sql`status = 'filled'`
+        : input.status === 'cancelled'
+          ? this.sql`status = 'cancelled'`
+          : input.status === 'rejected'
+            ? this.sql`status = 'rejected'`
+            : input.status === 'expired'
+              ? this.sql`status = 'expired'`
+              : this.sql`status IN ('filled', 'cancelled', 'rejected', 'expired')`;
     const rows =
       input.marketId && sinceDate
         ? await this.sql<OrderRow[]>`
             SELECT * FROM trade.orders
              WHERE user_id = ${principal.userId}
                AND market_id = ${input.marketId}
-               AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+               AND ${statusFilter}
                AND created_at >= ${sinceDate}
              ORDER BY created_at DESC
              LIMIT ${limit}
@@ -1965,7 +1979,7 @@ export class TradeService {
               SELECT * FROM trade.orders
                WHERE user_id = ${principal.userId}
                  AND market_id = ${input.marketId}
-                 AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+                 AND ${statusFilter}
                ORDER BY created_at DESC
                LIMIT ${limit}
             `
@@ -1973,7 +1987,7 @@ export class TradeService {
             ? await this.sql<OrderRow[]>`
                 SELECT * FROM trade.orders
                  WHERE user_id = ${principal.userId}
-                   AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+                   AND ${statusFilter}
                    AND created_at >= ${sinceDate}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
@@ -1981,7 +1995,7 @@ export class TradeService {
             : await this.sql<OrderRow[]>`
                 SELECT * FROM trade.orders
                  WHERE user_id = ${principal.userId}
-                   AND status IN ('filled', 'cancelled', 'rejected', 'expired')
+                   AND ${statusFilter}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
               `;

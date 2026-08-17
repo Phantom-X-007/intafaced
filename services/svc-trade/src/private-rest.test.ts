@@ -999,6 +999,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/closed?status=cancelled: passes status into orderHistory', async () => {
+    let seen: { marketId?: string; limit?: number; sinceMs?: number; status?: string } | null = null;
+    const app = await build(
+      deps({
+        orderHistory: async (_p, input) => {
+          seen = input;
+          return [closed];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?status=cancelled',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.status).toBe('cancelled');
+    await app.close();
+  });
+
+  it('GET /orders/closed?status=: invalid → 400 without orderHistory', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?status=open',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/closed?since=: invalid (NaN / negative) → 400 without orderHistory', async () => {
     let listed = false;
     const app = await build(

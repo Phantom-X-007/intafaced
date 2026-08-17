@@ -40,7 +40,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read
- *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
+ *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
@@ -83,7 +83,10 @@ export interface PrivateRestDeps {
   edgeSecret: string;
   serviceName: string;
   openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
-  orderHistory(principal: Principal, input: { marketId?: string; limit?: number; sinceMs?: number }): Promise<OrderRecord[]>;
+  orderHistory(
+    principal: Principal,
+    input: { marketId?: string; limit?: number; sinceMs?: number; status?: 'filled' | 'cancelled' | 'rejected' | 'expired' },
+  ): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
   cancelOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
@@ -462,6 +465,15 @@ export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'ope
   return { ok: false, message: 'status must be open or closing' };
 }
 
+/** Optional closed-order status filter. Absent → filled/cancelled/rejected/expired. */
+export function parseClosedOrderStatus(
+  raw: unknown,
+): { ok: true; status?: 'filled' | 'cancelled' | 'rejected' | 'expired' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
+  if (raw === 'filled' || raw === 'cancelled' || raw === 'rejected' || raw === 'expired') return { ok: true, status: raw };
+  return { ok: false, message: 'status must be filled, cancelled, rejected, or expired' };
+}
+
 /** Optional settled-status filter. Absent → both closed and liquidated. */
 export function parseClosedPositionStatus(raw: unknown): { ok: true; status?: 'closed' | 'liquidated' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
@@ -629,46 +641,54 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>('/api/v1/orders/closed', async (req, reply) => {
-    const principal = requirePrincipal(req, reply);
-    if (!principal) return;
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string } }>(
+    '/api/v1/orders/closed',
+    async (req, reply) => {
+      const principal = requirePrincipal(req, reply);
+      if (!principal) return;
 
-    let marketId: string | undefined;
-    const symbolRaw = req.query.symbol;
-    if (symbolRaw !== undefined && symbolRaw !== '') {
-      const symbol = decodeURIComponent(symbolRaw);
-      const market = await deps.marketBySymbol(symbol);
-      if (!market) {
-        return sendCcxt(reply, badSymbol(symbol));
+      let marketId: string | undefined;
+      const symbolRaw = req.query.symbol;
+      if (symbolRaw !== undefined && symbolRaw !== '') {
+        const symbol = decodeURIComponent(symbolRaw);
+        const market = await deps.marketBySymbol(symbol);
+        if (!market) {
+          return sendCcxt(reply, badSymbol(symbol));
+        }
+        marketId = market.id;
       }
-      marketId = market.id;
-    }
-    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
-    const sinceParsed = parseSince(req.query.since);
-    if (!sinceParsed.ok) {
-      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
-    }
+      const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+      const sinceParsed = parseSince(req.query.since);
+      if (!sinceParsed.ok) {
+        return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+      }
+      const statusParsed = parseClosedOrderStatus(req.query.status);
+      if (!statusParsed.ok) {
+        return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_closed_order_status'));
+      }
 
-    try {
-      // since → SQL on orders.created_at (timestamptz) via orderHistory.sinceMs.
-      const orders = await deps.orderHistory(principal, {
-        marketId,
-        limit,
-        sinceMs: sinceParsed.sinceMs,
-      });
-      const symbolByMarket = new Map<string, string>();
-      const wire = [];
-      for (const order of orders) {
-        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
-        wire.push(presentCcxtOrder(order, symbol));
+      try {
+        // since → SQL on orders.created_at (timestamptz) via orderHistory.sinceMs.
+        const orders = await deps.orderHistory(principal, {
+          marketId,
+          limit,
+          sinceMs: sinceParsed.sinceMs,
+          ...(statusParsed.status ? { status: statusParsed.status } : {}),
+        });
+        const symbolByMarket = new Map<string, string>();
+        const wire = [];
+        for (const order of orders) {
+          const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+          wire.push(presentCcxtOrder(order, symbol));
+        }
+        return reply.code(200).send(wire);
+      } catch (err) {
+        const sent = sendDomainError(reply, err);
+        if (sent) return sent;
+        throw err;
       }
-      return reply.code(200).send(wire);
-    } catch (err) {
-      const sent = sendDomainError(reply, err);
-      if (sent) return sent;
-      throw err;
-    }
-  });
+    },
+  );
 
   app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>('/api/v1/account/trades', async (req, reply) => {
     const principal = requirePrincipal(req, reply);

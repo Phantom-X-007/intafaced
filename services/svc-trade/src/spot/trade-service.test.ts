@@ -388,6 +388,9 @@ if (!available) {
       expect(await held(ALICE, 'USDT')).toBe('0');
       expect(postsWithReason('order.hold.released')).toHaveLength(1);
       expect(ledger.totalsByAsset().USDT).toBe('0');
+      expect((await trade.orderHistory(principalFor(ALICE))).map((row) => row.id)).toEqual([order.id]);
+      expect((await trade.orderHistory(principalFor(ALICE), { status: 'cancelled' })).map((row) => row.id)).toEqual([order.id]);
+      expect(await trade.orderHistory(principalFor(ALICE), { status: 'filled' })).toEqual([]);
     });
 
     it('releases a sell hold in the base asset', async () => {
