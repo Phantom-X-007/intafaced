@@ -7,10 +7,12 @@
  *
  * Three properties this file exists to hold:
  *
- * **Nothing is invented.** Caller supplies fixture rows — the same honesty class
- * as `scanner.rankFixtures` and `navigator.invokeDataTool`. A dark desk plane, an
- * empty KB, a missing row or a blank field refuses with a reason. The support
- * agent never answers "your account is fine" from a gap in its inputs.
+ * **Nothing is invented.** Live reads go through `SupportDeskPort` (HTTP/tRPC to
+ * svc-support KB + ticket get, identity account projection). A live plane with
+ * no port refuses `no_live_kb`. Fixture rows stay test-only via
+ * `createFixtureSupportDesk`. A dark desk, empty KB, missing row or blank field
+ * refuses with a reason. The support agent never answers "your account is fine"
+ * from a gap in its inputs.
  *
  * **The account projection carries no money.** Doctrine §0.6 — balances live in
  * `packages/ledger-client` and nowhere else, and the tracker's PII line says to
@@ -29,6 +31,7 @@
  * audit trail rather than only in the guardrail's silence.
  */
 
+import type { SupportDeskPort } from './desk-port.js';
 import { isSupportMoneyTool, supportAgentGuardrail } from './guardrail.js';
 import { supportGrounded, type SupportDeskPlane } from './grounded.js';
 import { supportTierGate, type SupportTierLaw, type SupportTierGateRefuse } from './tier-gate.js';
@@ -82,6 +85,7 @@ export type SupportDataToolOk =
 
 export type SupportDataToolRefuseReason =
   | 'desk_plane_dark'
+  | 'no_live_kb'
   | 'kb_empty'
   | 'tier_law_blank'
   | 'tier_not_granted'
@@ -143,11 +147,93 @@ function isKeyLike(value: string): boolean {
   return /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/i.test(value.trim());
 }
 
+function articlesOrRefuse(
+  tool: string,
+  articles: readonly KbArticleFixture[],
+  emptyReason: SupportDataToolRefuseReason,
+): SupportDataToolResult {
+  if (articles.length === 0) {
+    return unavailable(tool, emptyReason);
+  }
+  for (const a of articles) {
+    if (!isKeyLike(a.articleKey) || !isKeyLike(a.titleKey) || !isKeyLike(a.bodyKey)) {
+      return unavailable(tool, 'incomplete_article');
+    }
+  }
+  return {
+    status: 'ok',
+    tool: 'support.kb.search',
+    articles: articles.map((a) => ({ articleKey: a.articleKey, titleKey: a.titleKey, bodyKey: a.bodyKey })),
+  };
+}
+
+async function invokeViaDesk(
+  tool: SupportDataToolName,
+  requester: string,
+  desk: SupportDeskPort,
+  input: {
+    kbQuery?: string | null;
+    ticket?: TicketFixture | null;
+    deskHeaders?: Readonly<Record<string, string>>;
+  },
+): Promise<SupportDataToolResult> {
+  if (tool === 'support.kb.search') {
+    const found = await desk.searchKb(input.kbQuery ?? '');
+    if (found.status === 'unreachable') return unavailable(tool, 'no_live_kb');
+    return articlesOrRefuse(tool, found.articles, 'kb_empty');
+  }
+
+  if (tool === 'support.ticket.read') {
+    const ticketId = input.ticket?.ticketId?.trim() ?? '';
+    if (!ticketId) return unavailable(tool, 'missing_fixture');
+    const read = await desk.readTicket(ticketId, input.deskHeaders);
+    if (read.status === 'unreachable') return unavailable(tool, 'no_live_kb');
+    if (read.status === 'missing') return unavailable(tool, 'missing_fixture');
+    const ticket = read.ticket;
+    if (!ticket.category.trim() || !ticket.ownerUserId.trim()) {
+      return unavailable(tool, 'incomplete_ticket');
+    }
+    if (ticket.ownerUserId !== requester) {
+      return unavailable(tool, 'not_ticket_owner');
+    }
+    return {
+      status: 'ok',
+      tool: 'support.ticket.read',
+      ticket: {
+        ticketId: ticket.ticketId,
+        ownerUserId: ticket.ownerUserId,
+        status: ticket.status,
+        category: ticket.category,
+      },
+    };
+  }
+
+  const read = await desk.readAccount(requester);
+  if (read.status === 'unreachable') return unavailable(tool, 'no_live_kb');
+  if (read.status === 'unread') return unavailable(tool, 'account_plane_dark');
+  const account = read.account;
+  if (accountProjectionHasInventMoney(account)) {
+    return unavailable(tool, 'balance_field_forbidden');
+  }
+  if (!account.userId.trim() || !account.kycTier.trim()) {
+    return unavailable(tool, 'incomplete_account');
+  }
+  if (account.userId !== requester) {
+    return unavailable(tool, 'account_owner_mismatch');
+  }
+  return {
+    status: 'ok',
+    tool: 'identity.account.read',
+    account: { userId: account.userId, status: account.status, kycTier: account.kycTier },
+  };
+}
+
 /**
- * Invoke one Stage-1-declared read tool against caller fixtures.
- * Composes money denial + desk plane gate + tier gate + declaration + ownership.
+ * Invoke one Stage-1-declared read tool.
+ * Live + port → desk only. Live unwired → `no_live_kb`. Fixtures are test-only
+ * (passed as a fixture port, never as a live stand-in).
  */
-export function invokeSupportDataTool(input: {
+export async function invokeSupportDataTool(input: {
   tool: string;
   plane: SupportDeskPlane;
   /** The user asking. Row-scoped tools refuse when the row is not theirs. */
@@ -155,10 +241,15 @@ export function invokeSupportDataTool(input: {
   /** Product-law tier matrix. Blank → refuse-closed (no invent). */
   tierLaw?: SupportTierLaw | null;
   userTier?: string;
+  /** Live ops.support / identity port. Absent on live → `no_live_kb`. */
+  desk?: SupportDeskPort | null;
+  /** Forwarded edge headers for ticket `get` (scopedProcedure). */
+  deskHeaders?: Readonly<Record<string, string>>;
+  kbQuery?: string | null;
   articles?: readonly KbArticleFixture[] | null;
   ticket?: TicketFixture | null;
   account?: AccountProjectionFixture | null;
-}): SupportDataToolResult {
+}): Promise<SupportDataToolResult> {
   const tool = input.tool.trim();
 
   if (isSupportMoneyTool(tool)) {
@@ -189,6 +280,14 @@ export function invokeSupportDataTool(input: {
   const requester = input.requesterUserId.trim();
   if (!requester) {
     return unavailable(tool, 'missing_requester');
+  }
+
+  if (input.plane === 'live' && !input.desk) {
+    return unavailable(tool, 'no_live_kb');
+  }
+
+  if (input.desk) {
+    return invokeViaDesk(tool, requester, input.desk, input);
   }
 
   if (tool === 'support.kb.search') {
@@ -291,7 +390,7 @@ export function supportAnswerOrEscalate(input: { kbResult: SupportDataToolResult
     return { status: 'escalate', reason: 'money_request', userMessageKey: 'agents.support.escalated' };
   }
   if (input.kbResult.status === 'refuse') {
-    const reason = input.kbResult.reason === 'empty_results' ? 'kb_no_hit' : 'desk_refused';
+    const reason = input.kbResult.reason === 'empty_results' || input.kbResult.reason === 'kb_empty' ? 'kb_no_hit' : 'desk_refused';
     return { status: 'escalate', reason, userMessageKey: 'agents.support.escalated' };
   }
   if (input.kbResult.tool !== 'support.kb.search') {

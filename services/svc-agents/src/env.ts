@@ -85,6 +85,13 @@ const schema = serviceEnvSchema
        */
       ACADEMY_URL: blankAsAbsent(z.string().url().optional()),
 
+      /**
+       * svc-support base for live KB/ticket reads (`/trpc/searchKb`, `/trpc/getKb`,
+       * `/trpc/get`). Unset / blank → support live tools refuse `no_live_kb`.
+       * No localhost default — unset is honest dark, not a guessed desk.
+       */
+      SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
+
       /** Asset premium agent tiers are billed in (§8.2). */
       AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
 

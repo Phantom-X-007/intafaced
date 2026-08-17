@@ -4,6 +4,7 @@ import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } fro
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { SUPPORT_DATA_TOOLS } from './data-tools.js';
+import { createFixtureSupportDesk } from './desk-port.js';
 import { supportAgentGuardrail } from './guardrail.js';
 import { runSupportReplySession, SUPPORT_AGENT_ID, SUPPORT_KB_TOOL } from './session-run.js';
 
@@ -133,6 +134,10 @@ function baseInput(fake: FakeRuntime) {
     plane: 'live' as const,
     tierLaw: law,
     userTier: 'free',
+    desk: createFixtureSupportDesk({
+      articles: [ARTICLE],
+      accounts: [{ userId: USER, status: 'active', kycTier: 'tier2' }],
+    }),
   };
 }
 
@@ -159,6 +164,10 @@ describe('D26-P1-A2 agents.support Done bar', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk: createFixtureSupportDesk({
+        articles: [ARTICLE],
+        unreadAccounts: true,
+      }),
       asks: [
         { tool: SUPPORT_KB_TOOL, articles: [ARTICLE] },
         { tool: 'identity.account.read', account: null },

@@ -127,6 +127,25 @@ describe('support.runSession route', () => {
     expect(result.metering.billedAmount).toBe('0');
   });
 
+  it('live without a desk port refuses no_live_kb and bills nothing', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .support.runSession({ plane: 'live', userTier: 'free', law, asks: [ask] });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_kb',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(result.metering).toEqual({
+      sessionId: null,
+      billedAmount: '0',
+      assetId: 'IFC',
+      sessionClosed: false,
+      settlements: [],
+    });
+  });
+
   it('requires agents:execute — a read-only principal cannot run a metered reply', async () => {
     const readOnly = signed(principal({ scopes: ['agents:read'] }));
     await expect(

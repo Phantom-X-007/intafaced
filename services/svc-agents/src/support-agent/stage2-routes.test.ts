@@ -4,6 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
 import { SUPPORT_DATA_TOOLS } from './data-tools.js';
+import { createFixtureSupportDesk } from './desk-port.js';
 
 const SECRET = 'an-agents-support-stage2-mount-test-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -35,24 +36,34 @@ function signed(p: Principal = principal()) {
   });
 }
 
-function stubDeps(): AgentsRouterDeps {
-  return {
-    runtime: {} as AgentsRouterDeps['runtime'],
-    gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
-    meter: {} as AgentsRouterDeps['meter'],
-    feeAssetId: 'IFC',
-  };
-}
-
-const caller = () => createAgentsRouter(stubDeps()).createCaller(signed());
-
-const law = { published: true as const, matrix: { free: [...SUPPORT_DATA_TOOLS] } };
-
 const articles = [
   { articleKey: 'kb.withdrawals.delayed', titleKey: 'kb.withdrawals.delayed.title', bodyKey: 'kb.withdrawals.delayed.body' },
 ];
 
 const AT = '2026-08-07T22:00:00.000Z';
+
+function stubDeps(
+  desk = createFixtureSupportDesk({
+    articles,
+    tickets: [{ ticketId: 'tkt-9', ownerUserId: OTHER, status: 'open', category: 'withdrawals' }],
+    accounts: [
+      { userId: USER, status: 'frozen', kycTier: 'tier-2' },
+      { userId: OTHER, status: 'frozen', kycTier: 'tier-2' },
+    ],
+  }),
+): AgentsRouterDeps {
+  return {
+    runtime: {} as AgentsRouterDeps['runtime'],
+    gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
+    meter: {} as AgentsRouterDeps['meter'],
+    feeAssetId: 'IFC',
+    supportDesk: desk,
+  };
+}
+
+const law = { published: true as const, matrix: { free: [...SUPPORT_DATA_TOOLS] } };
+
+const caller = (deps: AgentsRouterDeps = stubDeps()) => createAgentsRouter(deps).createCaller(signed());
 
 describe('support Stage-2 routes', () => {
   it('tierGate refuses closed when law is blank', async () => {
@@ -106,7 +117,15 @@ describe('support Stage-2 routes', () => {
   });
 
   it('invokeDataTool refuses another user’s account projection', async () => {
-    const result = await caller().support.invokeDataTool({
+    const desk = createFixtureSupportDesk({
+      articles,
+      accounts: [{ userId: USER, status: 'frozen', kycTier: 'tier-2' }],
+    });
+    desk.readAccount = async () => ({
+      status: 'ok',
+      account: { userId: OTHER, status: 'frozen', kycTier: 'tier-2' },
+    });
+    const result = await caller(stubDeps(desk)).support.invokeDataTool({
       tool: 'identity.account.read',
       plane: 'live',
       userTier: 'free',
@@ -159,7 +178,11 @@ describe('support Stage-2 routes', () => {
 
   it('answerOrEscalate sends an empty KB, a dark desk and a money ask to a person', async () => {
     const base = { tool: 'support.kb.search' as const, plane: 'live' as const, userTier: 'free', law };
-    expect(await caller().support.answerOrEscalate({ ...base, articles: [] })).toMatchObject({ reason: 'kb_no_hit' });
+    expect(
+      await caller(stubDeps(createFixtureSupportDesk({ articles: [] }))).support.answerOrEscalate({ ...base, articles: [] }),
+    ).toMatchObject({
+      reason: 'kb_no_hit',
+    });
     expect(await caller().support.answerOrEscalate({ ...base, plane: 'dark', articles })).toMatchObject({
       reason: 'desk_refused',
     });

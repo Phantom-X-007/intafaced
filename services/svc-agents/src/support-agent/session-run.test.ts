@@ -5,6 +5,7 @@ import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } fro
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { SUPPORT_DATA_TOOLS } from './data-tools.js';
+import { createFixtureSupportDesk } from './desk-port.js';
 import { supportAgentGuardrail, SUPPORT_MONEY_TOOLS } from './guardrail.js';
 import { runSupportReplySession, SUPPORT_AGENT_ID, SUPPORT_KB_TOOL } from './session-run.js';
 
@@ -170,6 +171,15 @@ function runtimeOf(fake: FakeRuntime): AgentRuntime {
   return fake as unknown as AgentRuntime;
 }
 
+function testDesk(overrides: Parameters<typeof createFixtureSupportDesk>[0] = {}) {
+  return createFixtureSupportDesk({
+    articles: [ARTICLE],
+    tickets: [{ ticketId: 'tkt-1', ownerUserId: USER, status: 'open', category: 'withdrawals' }],
+    accounts: [{ userId: USER, status: 'active', kycTier: 'tier2' }],
+    ...overrides,
+  });
+}
+
 function baseInput(fake: FakeRuntime) {
   return {
     runtime: runtimeOf(fake),
@@ -178,6 +188,7 @@ function baseInput(fake: FakeRuntime) {
     plane: 'live' as const,
     tierLaw: law,
     userTier: 'free',
+    desk: testDesk(),
   };
 }
 
@@ -365,8 +376,14 @@ describe('support.reply metered session run', () => {
 
   it('refuses when account-state was asked and missing — no invent from KB alone', async () => {
     const fake = new FakeRuntime();
+    const desk = testDesk({ tickets: [] });
+    desk.readAccount = async () => ({
+      status: 'ok',
+      account: { userId: OTHER_USER, status: 'active', kycTier: 'tier2' },
+    });
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk,
       asks: [
         kbAsk(),
         { tool: 'support.ticket.read', ticket: null }, // no row — refused, never stubbed
@@ -445,13 +462,16 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
-      kbCatalog: [
-        {
-          id: 'kb-account-access',
-          titleKey: 'support.kb.account_access.title',
-          bodyKey: 'support.kb.account_access.body',
-        },
-      ],
+      desk: testDesk({
+        articles: [
+          {
+            articleKey: 'kb-account-access',
+            titleKey: 'support.kb.account_access.title',
+            bodyKey: 'support.kb.account_access.body',
+          },
+        ],
+        accounts: [{ userId: USER, status: 'active', kycTier: 'basic' }],
+      }),
       asks: [
         { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
         {
@@ -483,13 +503,16 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
-      kbCatalog: [
-        {
-          id: 'kb-account-access',
-          titleKey: 'support.kb.account_access.title',
-          bodyKey: 'support.kb.account_access.body',
-        },
-      ],
+      desk: testDesk({
+        articles: [
+          {
+            articleKey: 'kb-account-access',
+            titleKey: 'support.kb.account_access.title',
+            bodyKey: 'support.kb.account_access.body',
+          },
+        ],
+        unreadAccounts: true,
+      }),
       asks: [
         { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
         {
@@ -515,13 +538,15 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
-      kbCatalog: [
-        {
-          id: 'kb-orders-status',
-          titleKey: 'support.kb.orders_status.title',
-          bodyKey: 'support.kb.orders_status.body',
-        },
-      ],
+      desk: testDesk({
+        articles: [
+          {
+            articleKey: 'kb-orders-status',
+            titleKey: 'support.kb.orders_status.title',
+            bodyKey: 'support.kb.orders_status.body',
+          },
+        ],
+      }),
       // Account is readable; KB miss must not invent an article to answer with.
       asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'definitely-not-an-article-xyz' }, accountAsk()],
     });
@@ -540,6 +565,7 @@ describe('support.reply metered session run', () => {
     // reply could have been grounded in is dark.
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk: testDesk({ articles: [], accounts: [], unreadAccounts: true }),
       asks: [kbAsk(null), { tool: 'identity.account.read', account: null }],
     });
 
@@ -562,6 +588,7 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk: testDesk({ articles: [] }),
       // The account state is readable; the knowledge base is not. A reply here
       // would have to come from somewhere other than the KB — so there is none.
       asks: [kbAsk(null), accountAsk()],
@@ -644,14 +671,14 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
-      plane: 'live',
+      desk: null,
       kbCatalog: null,
       asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'withdrawal-hold' }, accountAsk()],
     });
 
     expect(result).toMatchObject({
       status: 'refuse',
-      reason: 'kb_plane_ungrounded',
+      reason: 'no_live_kb',
       userMessageKey: 'agents.support.unavailable',
     });
     // Not a live KB plane: no session, no articles composed, no silent fee.
@@ -667,14 +694,14 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
-      plane: 'live',
+      desk: null,
       kbCatalog: [],
       asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'account' }],
     });
 
     expect(result).toMatchObject({
       status: 'refuse',
-      reason: 'kb_plane_ungrounded',
+      reason: 'no_live_kb',
       userMessageKey: 'agents.support.unavailable',
     });
     expect(fake.openCalls).toBe(0);
