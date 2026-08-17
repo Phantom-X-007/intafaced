@@ -244,6 +244,7 @@ services:
       ACADEMY_URL: http://svc-academy:4016
       SUPPORT_URL: http://svc-support:4017
       MARKET_URL: http://svc-market:4018
+      EXECUTION_URL: http://svc-execution:4019
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are
@@ -1095,6 +1096,20 @@ services:
       # settle after `up` does not race a cold ledger boot (D26-P1-M1).
       svc-ledger:
         condition: service_healthy
+
+  # House-desk tenancy mechanism (D26-P0-01 Stage-1). In-memory sealed registry.
+  # No Postgres, no ledger, no SOR/OMS. Internal venue stays refused in the package.
+  svc-execution:
+    <<: *app
+    container_name: intafaced-svc-execution
+    command: ['node', 'services/svc-execution/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-execution
+      HTTP_PORT: '4019'
+    expose: ['4019']
+    healthcheck: *healthcheck
+    depends_on: {}
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
   # LEDGER_URL, and nothing in this process could reach anything that moves

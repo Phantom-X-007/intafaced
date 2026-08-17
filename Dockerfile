@@ -65,6 +65,7 @@ COPY packages/contracts/package.json         packages/contracts/
 COPY packages/db/package.json                packages/db/
 COPY packages/events/package.json            packages/events/
 COPY packages/execution-arb/package.json     packages/execution-arb/
+COPY packages/execution-house-tenant/package.json packages/execution-house-tenant/
 COPY packages/execution-mm/package.json      packages/execution-mm/
 COPY packages/exchange-contract/package.json packages/exchange-contract/
 COPY packages/i18n/package.json              packages/i18n/
@@ -95,6 +96,7 @@ COPY services/svc-token/package.json         services/svc-token/
 COPY services/svc-trade/package.json         services/svc-trade/
 COPY services/svc-dex/package.json           services/svc-dex/
 COPY services/svc-edge/package.json          services/svc-edge/
+COPY services/svc-execution/package.json     services/svc-execution/
 COPY services/svc-indexer/package.json       services/svc-indexer/
 COPY services/svc-ws/package.json            services/svc-ws/
 

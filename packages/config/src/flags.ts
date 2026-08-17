@@ -259,6 +259,9 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   // Support desk Stage-1. NOT_ENFORCED: edge kill-switch is the live control;
   // flag is rollout plan only (same honesty pattern as other surfaces).
   def('support.desk', 'support', 'V', 'Support tickets + KB desk', NOT_ENFORCED),
+  // House tenant mechanism. Live control is edge kill of module `execution` plus
+  // tRPC `execution.tenant.kill` (in-process). Flag is rollout plan only.
+  def('execution.houseTenant', 'execution', 'II', 'Sealed house-desk tenancy mechanism (external venues only)', NOT_ENFORCED),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);

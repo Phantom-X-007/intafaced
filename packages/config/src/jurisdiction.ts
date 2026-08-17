@@ -153,6 +153,8 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   token: OPEN_BASIC,
   matching: { status: 'open', minTier: 'none' },
   trade: OPEN_BASIC,
+  // Operator tenancy mechanism. No user custody; minTier none. Internal venue stays refused in product code.
+  execution: { status: 'open', minTier: 'none' },
   // Public market data. There is no user, no account and no asset behind a
   // depth frame, so there is nobody for a tier to be about — the same reasoning
   // that leaves `matching` at `none`. The jurisdiction STATUS still applies: a
