@@ -261,15 +261,18 @@ export class EvmChainSource implements ChainSource {
     return code !== undefined && code !== '0x';
   }
 
+  #venueMissingReason(): string {
+    return (
+      `No contract code at ${this.venue} on chain ${this.chainId} (${this.rpcUrl}). ` +
+      `Refusing to index: eth_getLogs against an empty address returns [] rather than failing, so projecting ` +
+      `it would publish an empty book as though the market were quiet. Deploy the venue, or point ` +
+      `INDEXER_VENUE_ADDRESS at one.`
+    );
+  }
+
   async #verifyVenue(): Promise<void> {
     if (!(await this.venueDeployed())) {
-      throw new ChainUnavailableError(
-        'indexer.venue_not_deployed',
-        `No contract code at ${this.venue} on chain ${this.chainId} (${this.rpcUrl}). ` +
-          `Refusing to index: eth_getLogs against an empty address returns [] rather than failing, so projecting ` +
-          `it would publish an empty book as though the market were quiet. Deploy the venue, or point ` +
-          `INDEXER_VENUE_ADDRESS at one.`,
-      );
+      throw new ChainUnavailableError('indexer.venue_not_deployed', this.#venueMissingReason());
     }
   }
 
@@ -384,12 +387,26 @@ export class EvmChainSource implements ChainSource {
       const chainHeight = await this.#read('blockNumber', 'indexer.chain.blockNumber', async () =>
         this.client.getBlockNumber({ cacheTime: 0 }),
       );
+      const venueDeployed = await this.venueDeployed();
+      if (!venueDeployed) {
+        // Reachable is true — the node answered. The book is still a lie if we
+        // projected getLogs [] from an empty address, so name the refuse.
+        return {
+          ...base,
+          reachable: true,
+          observedChainId,
+          chainHeight: heightOf(chainHeight, this.rpcUrl),
+          venueDeployed: false,
+          refusalCode: 'indexer.venue_not_deployed',
+          reason: this.#venueMissingReason(),
+        };
+      }
       return {
         ...base,
         reachable: true,
         observedChainId,
         chainHeight: heightOf(chainHeight, this.rpcUrl),
-        venueDeployed: await this.venueDeployed(),
+        venueDeployed: true,
         refusalCode: null,
         reason: null,
       };

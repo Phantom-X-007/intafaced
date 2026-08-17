@@ -1,4 +1,6 @@
+import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import type { Address, Hex } from 'viem';
 import { EvmChainSource, assertLogsBoundToBlock } from './source.js';
@@ -142,6 +144,153 @@ describe('EvmChainSource · dead endpoint throws, never null', () => {
       resolved = 'threw';
     }
     expect(resolved).toBe('threw');
+  }, 30_000);
+});
+
+/**
+ * A node that answers, with no code at the venue, and getLogs [] forever.
+ *
+ * This is the suiteDeployed-worse shape: eth_getLogs succeeds with an empty
+ * array. Without #verifyVenue the adapter would return a block with events: []
+ * and the projection would paint a confident empty book. Always-on — no anvil.
+ */
+function missingVenueBlock() {
+  return {
+    number: '0x1',
+    hash: HASH,
+    parentHash: OTHER,
+    timestamp: '0x64',
+    transactions: [],
+    miner: ZERO,
+    nonce: '0x0000000000000000',
+    sha3Uncles: HASH,
+    logsBloom: `0x${'0'.repeat(512)}`,
+    stateRoot: HASH,
+    receiptsRoot: HASH,
+    transactionsRoot: HASH,
+    difficulty: '0x0',
+    gasLimit: '0x1c9c380',
+    gasUsed: '0x0',
+    extraData: '0x',
+    mixHash: HASH,
+    size: '0x200',
+    totalDifficulty: '0x0',
+    uncles: [],
+    baseFeePerGas: '0x1',
+  };
+}
+
+function rpcResultFor(method: string): unknown {
+  if (method === 'eth_chainId') return '0x7a69';
+  if (method === 'eth_blockNumber') return '0x1';
+  if (method === 'eth_getCode') return '0x';
+  if (method === 'eth_getLogs') return [];
+  if (method === 'eth_getBlockByNumber' || method === 'eth_getBlockByHash') return missingVenueBlock();
+  return null;
+}
+
+async function missingVenueRpc(): Promise<{ url: string; methods: string[]; close: () => Promise<void> }> {
+  const methods: string[] = [];
+  const server = createHttpServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      const raw = chunks.length > 0 ? Buffer.concat(chunks).toString('utf8') : '';
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        res.writeHead(400);
+        res.end();
+        return;
+      }
+      const batch = Array.isArray(parsed);
+      const entries = batch ? parsed : [parsed];
+      const replies = (entries as Array<{ id?: unknown; method?: unknown }>).map((entry) => {
+        const method = typeof entry.method === 'string' ? entry.method : 'unknown';
+        methods.push(method);
+        return { jsonrpc: '2.0', id: entry.id ?? 1, result: rpcResultFor(method) };
+      });
+      res.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
+      res.end(JSON.stringify(batch ? replies : replies[0]));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const address = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    methods,
+    close: () =>
+      new Promise((resolve, reject) => {
+        // viem's HTTP agent keep-alives; without this, vitest waits on open
+        // sockets and CI Tests never finish (observed on #2232).
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections();
+        }
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
+}
+
+describe('EvmChainSource · missing venue code never paints an empty book', () => {
+  it('refuses head() with indexer.venue_not_deployed even though getLogs would return []', async () => {
+    const rpc = await missingVenueRpc();
+    try {
+      const source = new EvmChainSource({ chainId: 31337, rpcUrl: rpc.url, venue: VENUE, requestTimeoutMs: 5_000 });
+      let settled: unknown = 'did-not-settle';
+      try {
+        settled = await source.head();
+      } catch (err) {
+        expect(err).toBeInstanceOf(ChainUnavailableError);
+        expect(err).toMatchObject({ code: 'indexer.venue_not_deployed' });
+        expect((err as Error).message).toMatch(/empty book|no contract code/i);
+        settled = 'threw';
+      }
+      expect(settled).toBe('threw');
+      expect(rpc.methods).toContain('eth_getCode');
+      expect(rpc.methods).not.toContain('eth_getLogs');
+    } finally {
+      await rpc.close();
+    }
+  }, 30_000);
+
+  it('refuses blockAt() — never a ChainBlock with events: [] from an empty address', async () => {
+    const rpc = await missingVenueRpc();
+    try {
+      const source = new EvmChainSource({ chainId: 31337, rpcUrl: rpc.url, venue: VENUE, requestTimeoutMs: 5_000 });
+      let painted: unknown = 'did-not-settle';
+      try {
+        painted = await source.blockAt(1);
+      } catch (err) {
+        expect(err).toBeInstanceOf(ChainUnavailableError);
+        expect(err).toMatchObject({ code: 'indexer.venue_not_deployed' });
+        painted = 'threw';
+      }
+      // If #verifyVenue is deleted, this resolves to { events: [] } and fails here.
+      expect(painted).toBe('threw');
+      expect(painted).not.toMatchObject({ events: [] });
+      expect(rpc.methods).toContain('eth_getCode');
+      expect(rpc.methods).not.toContain('eth_getLogs');
+    } finally {
+      await rpc.close();
+    }
+  }, 30_000);
+
+  it('probe names venue_not_deployed — reachable node, not a quiet healthy book', async () => {
+    const rpc = await missingVenueRpc();
+    try {
+      const source = new EvmChainSource({ chainId: 31337, rpcUrl: rpc.url, venue: VENUE, requestTimeoutMs: 5_000 });
+      const probe = await source.probe();
+      expect(probe).toMatchObject({
+        kind: 'evm',
+        reachable: true,
+        venueDeployed: false,
+        refusalCode: 'indexer.venue_not_deployed',
+      });
+      expect(probe.reason).toMatch(/empty book|no contract code/i);
+    } finally {
+      await rpc.close();
+    }
   }, 30_000);
 });
 
