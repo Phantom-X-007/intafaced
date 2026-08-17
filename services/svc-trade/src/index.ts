@@ -611,6 +611,13 @@ registerPrivateRest(app, {
       leverage: parseAmount(input.leverage),
       positionId: input.positionId,
     }),
+  addIsolatedMargin: (principal, input) =>
+    positions.addIsolatedMargin({
+      userId: principal.userId,
+      symbol: input.symbol,
+      amount: parseAmount(input.amount),
+      positionId: input.positionId,
+    }),
   getOpenMarginCall: async (principal, positionId) => {
     const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);
     if (!row || row.userId !== principal.userId) return null;
@@ -684,6 +691,7 @@ app.log.info(
       'POST /api/v1/positions',
       'DELETE /api/v1/positions/:id',
       'POST /api/v1/positions/leverage',
+      'POST /api/v1/positions/margin',
       'POST /api/v1/positions/margin-mode',
     ],
   },

@@ -113,6 +113,9 @@ function baseDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     setLeverage: async () => {
       throw new Error('unused');
     },
+    addIsolatedMargin: async () => {
+      throw new Error('unused');
+    },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async () => ({
       version: 'DIRECTION-2026-07-31:34',

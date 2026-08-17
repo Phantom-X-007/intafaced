@@ -130,6 +130,16 @@ export interface SetLeverageInput {
   positionId?: string;
 }
 
+export interface AddIsolatedMarginInput {
+  userId: string;
+  /** Market symbol — must match the open isolated position. */
+  symbol: string;
+  /** Extra isolated collateral. Decimal string on the wire; scaled bigint here. */
+  amount: Amount;
+  /** When omitted, the unique open position on `symbol` is used. */
+  positionId?: string;
+}
+
 /** New isolated IM would leave equity ≤ 0 at the current mark. */
 export const LEVERAGE_WOULD_LIQUIDATE = 'trade.leverage_would_liquidate';
 /** Decreasing leverage needs a lock the available balance cannot fund. */
@@ -747,6 +757,118 @@ export class PositionService {
         `;
         if (!updated) {
           throw new FuturesError('position changed underneath this leverage update', 'trade.position_not_open', 409);
+        }
+        return updated;
+      });
+
+      await this.publishPositionUpdated(row);
+      return presentPosition(row);
+    } catch (err) {
+      if (isLockTimeout(err)) {
+        throw new FuturesError(
+          'another mutation of this position is already in flight — retry in a moment',
+          'trade.close_in_progress',
+          409,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Isolated extra collateral — `futuresMarginAdd` only. Does not change
+   * leverage or IM, and does not flip margin mode. Add-only: amount must be > 0.
+   */
+  async addIsolatedMargin(input: AddIsolatedMarginInput): Promise<Position> {
+    if (input.amount <= 0n) {
+      throw new FuturesError('isolated margin add must be a positive decimal amount', 'trade.bad_request', 400);
+    }
+
+    const symbol = input.symbol.trim();
+    if (!symbol) {
+      throw new FuturesError('symbol is required', 'trade.bad_request', 400);
+    }
+
+    try {
+      const row = await this.sql.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
+
+        const locked = input.positionId
+          ? await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.id = ${input.positionId} AND p.user_id = ${input.userId}
+              LIMIT 1
+              FOR UPDATE OF p
+            `
+          : await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.user_id = ${input.userId}
+                AND m.symbol = ${symbol}
+                AND p.status = 'open'
+              FOR UPDATE OF p
+            `;
+
+        if (input.positionId) {
+          if (!locked[0]) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        } else if (locked.length === 0) {
+          throw new FuturesError(`no open position on ${symbol}`, 'trade.position_not_found', 404);
+        } else if (locked.length > 1) {
+          throw new FuturesError(`more than one open position on ${symbol} — pass position id`, 'trade.position_ambiguous', 400);
+        }
+
+        const row = locked[0]!;
+        if (row.symbol !== symbol) {
+          throw new FuturesError(`position is on ${row.symbol}, not ${symbol}`, 'trade.symbol_mismatch', 400);
+        }
+        if (row.status !== 'open') {
+          throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+        }
+        if (row.margin_mode !== 'isolated') {
+          throw new FuturesError('live margin add is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
+        }
+
+        const currentMargin = parseAmount(row.margin_current ?? row.margin_initial);
+        const nextMargin = currentMargin + input.amount;
+        const prevSeq = Number(row.margin_adjust_seq);
+        const seq = (Number.isFinite(prevSeq) && prevSeq >= 1 ? prevSeq : 1) + 1;
+
+        const available = await this.ledger.balance(userAvailable(input.userId, row.margin_asset));
+        if (available.amount < input.amount) {
+          throw new FuturesError(
+            `need ${formatAmount(input.amount)} ${row.margin_asset} extra isolated margin, have ${formatAmount(available.amount)}`,
+            LEVERAGE_INSUFFICIENT_MARGIN,
+            400,
+          );
+        }
+
+        await this.ledger.post(
+          recipes.futuresMarginAdd({
+            positionId: row.id,
+            userId: input.userId,
+            assetId: row.margin_asset,
+            amount: input.amount,
+            sequence: seq,
+          }),
+        );
+
+        const [updated] = await tx<PositionRow[]>`
+          UPDATE trade.positions p
+          SET margin_current = ${formatAmount(nextMargin)},
+              margin_adjust_seq = ${seq},
+              updated_at = now()
+          FROM trade.markets m
+          WHERE p.id = ${row.id}
+            AND p.user_id = ${input.userId}
+            AND p.status = 'open'
+            AND m.id = p.market_id
+          RETURNING p.*, m.symbol
+        `;
+        if (!updated) {
+          throw new FuturesError('position changed underneath this margin add', 'trade.position_not_open', 409);
         }
         return updated;
       });

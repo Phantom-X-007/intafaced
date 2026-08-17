@@ -1378,4 +1378,94 @@ if (!available) {
     expect((await positions.listOpen(ALICE))[0]!.leverage).toBe('2');
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('25000');
   });
+
+  it('isolated margin add posts futuresMarginAdd and leaves leverage unchanged', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-add-isolated-margin',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    expect(pos.collateral).toBe('5000');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('95000');
+
+    const next = await positions.addIsolatedMargin({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('2500'),
+    });
+    expect(next.leverage).toBe('10');
+    expect(next.initialMargin).toBe('5000');
+    expect(next.collateral).toBe('7500');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('92500');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('7500');
+  });
+
+  it('isolated margin add of a missing position is 404', async () => {
+    await expect(
+      positions.addIsolatedMargin({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: '00000000-0000-4000-8000-000000000099',
+        amount: amt('1'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.position_not_found', status: 404 });
+  });
+
+  it('insufficient available refuses isolated margin add with no ledger or row write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-add-isolated-broke',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await ledger.post(
+      recipes.futuresMarginLock({
+        positionId: `drain-${randomUUID()}`,
+        userId: ALICE,
+        assetId: 'USDT',
+        amount: amt('94900'),
+      }),
+    );
+    await expect(
+      positions.addIsolatedMargin({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        amount: amt('200'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.insufficient_margin', status: 400 });
+    const listed = await positions.listOpen(ALICE);
+    expect(listed[0]!.leverage).toBe('10');
+    expect(listed[0]!.collateral).toBe('5000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('zero isolated margin add is 400 and does not write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-add-isolated-zero',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await expect(
+      positions.addIsolatedMargin({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        amount: amt('0'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.bad_request', status: 400 });
+    expect((await positions.listOpen(ALICE))[0]!.collateral).toBe('5000');
+  });
 }
