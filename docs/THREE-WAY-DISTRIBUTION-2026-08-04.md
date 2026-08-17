@@ -64,17 +64,17 @@ Shell freeProduct=0 does **not** mean the product is distributed. Most tracker r
 **Historical shape / factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).  
 **D-S-01…18:** **done on tip** — [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md). Agents implement from law; they must not invent §8 numbers.
 
-| Layer            | What (live 2026-08-17)                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **P0 rulings**   | **Sealed / refuse-closed.** Magnitudes are owner click, not another ADR.                                                  |
-| **P1 remaining** | `pay.gateway` KYB consumer · `trade.futures` umbrella · `execution.sor` OMS · venue trading half · durable BroadcastStore |
-| **P2 / P3 / P4** | **Landed.** Do not recook maps, runbooks, or tracker-protocol docs.                                                       |
+| Layer            | What (live 2026-08-17)                                                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0 rulings**   | **Sealed / refuse-closed.** Magnitudes are owner click, not another ADR.                                                                                        |
+| **P1 remaining** | `execution.sor` OMS/EMS · `venue.aggregation` trading half. KYB / PostgresBroadcastStore / named-1× / empty-book **shipped**. Futures magnitudes = owner click. |
+| **P2 / P3 / P4** | **Landed.** Do not recook maps, runbooks, or tracker-protocol docs.                                                                                             |
 
 Re-derive live PRs: `gh pr list --author Phantom-X-007 --state open`.
 
 **Not Denon:** shell craft, wave residual micro, Shehzad chain, Class X content, dual-edit Nitro open residual PRs, P0/P3/P4 recook.
 
-**Spec mandate:** D-S-\* is written. Remaining invent risk is **the five NOW engines + owner numbers** — that is the parallel board.
+**Spec mandate:** D-S-\* is written. Remaining invent risk is **OMS + venue trading half + owner numbers** — that is the parallel board.
 
 ---
 

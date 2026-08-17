@@ -340,8 +340,9 @@ export const FEATURES = [
       'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
       '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), ' +
       '#1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c, #1684 T1d, #1685 T1g. ' +
-      'Still not umbrella-done: leveraged entry requires named leverage on POST /positions (no silent 1x; live re-leverage still 501); funding jobs OFF default + owner §8 rates/ceilings, ' +
-      'Denon ladder numbers (D3), N1 profit-source capitalisation. ' +
+      'D26-P4-09 2026-08-17 code-audit: POST /positions already refuses omitted leverage (no silent 1×; private-rest.test.ts). ' +
+      'Still not umbrella-done: live re-leverage stays 501 (POST /positions/leverage notSupported); funding jobs OFF default + owner §8 rates/ceilings; ' +
+      'Denon ladder numbers (D3); N1 profit-source capitalisation. Those are owner clicks or a later re-leverage engine — not a named-leverage recook. ' +
       'D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list ' +
       '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. ' +
       'D26-P0-07 SEALED 2026-08-13 (adr/2026-08-13-leverage-defaults-frozen.md): 10× isolated frozen; no silent raise. ' +
@@ -580,10 +581,10 @@ export const FEATURES = [
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
     note:
-      'WIP 2026-08-16 Denon (feat/ws-empty-book-engine-unavailable): public depth must disclose matching-down vs honest empty; not done. ' +
+      'D26-P4-09 2026-08-17: empty-book vs matching-down is on tip (`depth.engine_unavailable`, empty-book-honesty.test.ts) — do not recook feat/ws-empty-book-*. ' +
       'Owner released 2026-08-08 (axis C1 / Nitro green light). Positions channel receives positionUpdated from trade.futures open/close (#281). ' +
       '2026-08-14: boot bus retry + private-half retry without tearing the tape + mid-session `closed()` re-attach (flags drop, depth keeps serving). ' +
-      'Still not product-done — residual streams/ops + empty-book honesty.',
+      'Still not product-done — residual streams/ops, not a second empty-book PR.',
   }),
 
   f('web.mobile-apps', 'Native mobile apps — iOS and Android, own name, zero attribution (§25:727)', {
@@ -624,10 +625,9 @@ export const FEATURES = [
       '`docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (Accepted) rules is a sponsor bank and an acquiring BIN — a commercial ' +
       'relationship no code closes. The tracker permits a rail that is *sandbox* under `done`; it does not cover one that is absent, ' +
       'and #800 widened `RailMode` with `absent` precisely so the two stop reporting the same thing. ' +
-      '(2) `kybStatus` HAS NO CONSUMER. `submitKyb`/`decideKybStub` move it and the read surfaces echo it, but nothing else reads it — ' +
-      '`payment.create`, `checkout.open`, `settlement.run` and the withdrawal path all gate on `merchants.status`, never on KYB. ' +
-      'A merchant sitting at `kybStatus: rejected` transacts exactly like an approved one, so merchant onboarding is not KYB-gated at all ' +
-      'yet. Digital KYB is `pay.psp`; wiring the existing flag into the money gates is this row. ' +
+      '(2) CARD is still the `done` blocker — not KYB. D26-P1-P10 shipped `merchantKybMoneyGateRefusal` on `assertMerchantActive`: ' +
+      '`createPayment` / `openCheckoutSession` / `createPaymentLink` / settlement post / new payout holds. `rejected` never pays; `live-only` requires `approved`. ' +
+      'Do not recook a KYB-consumer ticket. Digital KYB transitions stay on `pay.psp`. ' +
       'Neither residual is a defect in #346 — its code is reachable, tested and unpropped on its own terms. They are what stands between ' +
       'this row and `done`, and naming them is cheaper than a `done` the board would have to walk back. ' +
       '**Reclaimed 2026-08-04** from Shehzad M1 — Nitro agents after the #346 handoff. Class M. Not go-live.',
@@ -648,7 +648,7 @@ export const FEATURES = [
       '**DONE 2026-08-12 (D26-P1-P1):** PSP path without third-party money library (D-S-10 boot seal) + merchant ' +
       'durability — digital KYB live operator path (`kyb.submit`/`kyb.decide`) + append-only KYB/pricing histories; ' +
       'PSP mode enable refuses missing feeBps (no invent fees). Public-door proof: `psp-done-bar.test.ts` (#1720 tip + Done-bar closeout). ' +
-      'Residual: kybStatus money-gate is pay.gateway; card acquiring stays socket.psp-partners.',
+      'Residual: card acquiring stays socket.psp-partners. KYB money-gate is on pay.gateway doors (D26-P1-P10) — not a second ticket.',
   }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
@@ -675,7 +675,7 @@ export const FEATURES = [
     // the live EvmLiveChain path is independent of payment links.
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay/src/rails'],
-    note: 'Updated 2026-07-31: LIVE-capable crypto rail exists — NOT "go-live complete". `EvmLiveChain` implements CryptoChainPort with posture:live (viem Public+Wallet client, HD acceptance addresses from PAY_CRYPTO_DEPOSIT_MNEMONIC, hot-wallet outbound via PAY_CRYPTO_HOT_WALLET_KEY, asset map PAY_CRYPTO_ASSETS). BroadcastStore claim→send→put-before-receipt ordering (single-process MemoryBroadcastStore wired today). defaultChainFor builds it when PAY_CRYPTO_RPC_URL(+keys) are set; otherwise UnconfiguredChain in staging/prod and MemoryChain in dev/test. In-process CryptoChainWatcher POSTs signed webhooks. staging/prod omit card-sandbox by default so boot posture can pass with only live crypto. Proven: unit + broadcast claim suite + optional anvil. Residuals that BLOCK production go-live (named, not waved): durable multi-replica BroadcastStore still required; address book + watcher are in-process; production RPC/custody are owner-supplied (anvil ≠ chain decision); card acquiring remains a §13 commercial socket. `done` means the adapter + live path exist under env — not that ops may turn on mainnet without those residuals.',
+    note: 'Updated 2026-07-31: LIVE-capable crypto rail exists — NOT "go-live complete". `EvmLiveChain` implements CryptoChainPort with posture:live (viem Public+Wallet client, HD acceptance addresses from PAY_CRYPTO_DEPOSIT_MNEMONIC, hot-wallet outbound via PAY_CRYPTO_HOT_WALLET_KEY, asset map PAY_CRYPTO_ASSETS). D26-P4-09 2026-08-17: live boot (`svc-pay` index.ts) wires PostgresBroadcastStore into defaultChainFor — do not recook M226-01 / P9 as Memory-only. MemoryBroadcastStore remains the unit/local default when no store is passed. Crash-resume journals signed raw before sendRaw. defaultChainFor builds live chain when PAY_CRYPTO_RPC_URL(+keys) are set; otherwise UnconfiguredChain in staging/prod and MemoryChain in dev/test. In-process CryptoChainWatcher POSTs signed webhooks. staging/prod omit card-sandbox by default so boot posture can pass with only live crypto. Proven: unit + broadcast claim suite + optional anvil. Residuals that BLOCK production go-live (named, not waved): address book + watcher are in-process; production RPC/custody are owner-supplied (anvil ≠ chain decision); card acquiring remains a §13 commercial socket. `done` means the adapter + live path exist under env — not that ops may turn on mainnet without those residuals.',
   }),
   f('pay.user-money', 'User deposit + withdrawal — the two paths off the merchant path', {
     module: 'pay',
