@@ -635,6 +635,38 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/trades/:symbol?side=buy: passes side into publicTape', async () => {
+    let seenSide: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        publicTape: async (_id, _limit, _sinceMs, side) => {
+          seenSide = side;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?side=buy' });
+    expect(res.statusCode).toBe(200);
+    expect(seenSide).toBe('buy');
+    await app.close();
+  });
+
+  it('GET /api/v1/trades/:symbol?side=: invalid → 400 without publicTape', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        publicTape: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?side=both' });
+    expect(res.statusCode).toBe(400);
+    expect(called).toBe(false);
+    await app.close();
+  });
+
   it('GET /api/v1/trades/:symbol?since=: invalid (NaN / negative) → 400 without publicTape', async () => {
     let called = false;
     const app = await build(

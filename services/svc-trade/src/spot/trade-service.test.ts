@@ -284,6 +284,9 @@ if (!available) {
       expect((await trade.myFills(principalFor(BOB), 100, undefined, undefined, undefined, 'maker')).map((row) => row.liquidity)).toEqual([
         'maker',
       ]);
+      expect((await trade.publicTape(btcusdt.id)).map((row) => row.side)).toEqual(['buy']);
+      expect((await trade.publicTape(btcusdt.id, 100, undefined, 'buy')).map((row) => row.side)).toEqual(['buy']);
+      expect(await trade.publicTape(btcusdt.id, 100, undefined, 'sell')).toEqual([]);
     });
 
     it('emits XP per filled order (§5.2 step 4)', async () => {

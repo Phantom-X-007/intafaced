@@ -2221,10 +2221,12 @@ export class TradeService {
    * User ids and order ids are intentionally omitted; this is the public print,
    * not `myFills`. Empty market → empty array (honest 200, not an error).
    * Optional `sinceMs` filters `fills.ts >= since` in SQL (timestamptz via Date).
+   * Optional `side` narrows buy/sell in SQL — never invents a print.
    */
-  async publicTape(marketId: string, limit = 100, sinceMs?: number): Promise<PublicTapePrint[]> {
+  async publicTape(marketId: string, limit = 100, sinceMs?: number, side?: 'buy' | 'sell'): Promise<PublicTapePrint[]> {
     const capped = Math.min(Math.max(Math.floor(limit), 1), 500);
     const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
+    const sideFilter = side === 'buy' ? this.sql`f.side = 'buy'` : side === 'sell' ? this.sql`f.side = 'sell'` : this.sql`TRUE`;
     type TapeRow = {
       id: string;
       side: OrderSide;
@@ -2244,6 +2246,7 @@ export class TradeService {
            WHERE f.market_id = ${marketId}
              AND f.liquidity = 'taker'
              AND f.ts >= ${sinceDate}
+             AND ${sideFilter}
              AND o.seeded = false
              AND c.seeded = false
            ORDER BY f.sequence DESC
@@ -2256,6 +2259,7 @@ export class TradeService {
             INNER JOIN trade.orders c ON c.id = f.counter_order_id
            WHERE f.market_id = ${marketId}
              AND f.liquidity = 'taker'
+             AND ${sideFilter}
              AND o.seeded = false
              AND c.seeded = false
            ORDER BY f.sequence DESC

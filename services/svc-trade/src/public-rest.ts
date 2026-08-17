@@ -18,7 +18,7 @@ import type { Candle, Market, PublicTapePrint } from './spot/types.js';
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
- *   GET /api/v1/trades/:symbol?limit=&since=
+ *   GET /api/v1/trades/:symbol?limit=&since=&side=
  *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&limit=
  *   GET /api/v1/funding-rate/:symbol
  *
@@ -46,8 +46,9 @@ export interface PublicRestDeps {
    * Recent public prints for a market (no user/order ids). Empty when nothing
    * has traded — callers return honest 200 + [].
    * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
+   * Optional side filters fills.side in SQL (taker prints only).
    */
-  publicTape(marketId: string, limit: number, sinceMs?: number): Promise<PublicTapePrint[]>;
+  publicTape(marketId: string, limit: number, sinceMs?: number, side?: 'buy' | 'sell'): Promise<PublicTapePrint[]>;
   /**
    * Candles aggregated from the real taker fill tape. Empty when the market has
    * never traded — an honest empty chart, not a fabricated one.
@@ -495,6 +496,13 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
   return { ok: true, sinceMs: Math.floor(n) };
 }
 
+/** Optional public-tape side filter. Absent → both buy and sell taker prints. */
+export function parseTapeSide(raw: unknown): { ok: true; side?: 'buy' | 'sell' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, side: undefined };
+  if (raw === 'buy' || raw === 'sell') return { ok: true, side: raw };
+  return { ok: false, message: 'side must be buy or sell' };
+}
+
 /**
  * Register the public REST routes on a Fastify instance.
  * Mount alongside `/trpc` — no auth middleware.
@@ -597,18 +605,23 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     return reply.code(200).send(out);
   });
 
-  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string } }>('/api/v1/trades/:symbol', async (req, reply) => {
-    const symbol = decodeURIComponent(req.params.symbol);
-    const market = await deps.marketBySymbol(symbol);
-    if (!market) return sendCcxt(reply, badSymbol(symbol));
+  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string; side?: string } }>(
+    '/api/v1/trades/:symbol',
+    async (req, reply) => {
+      const symbol = decodeURIComponent(req.params.symbol);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) return sendCcxt(reply, badSymbol(symbol));
 
-    const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
-    const sinceParsed = parseSince(req.query.since);
-    if (!sinceParsed.ok) return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
-    // since → SQL on fills.ts (timestamptz) via publicTape.sinceMs.
-    const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs);
-    return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
-  });
+      const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
+      const sinceParsed = parseSince(req.query.since);
+      if (!sinceParsed.ok) return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+      const sideParsed = parseTapeSide(req.query.side);
+      if (!sideParsed.ok) return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_tape_side'));
+      // since / side → SQL on fills via publicTape — not a post-filter of a mixed page.
+      const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs, sideParsed.side);
+      return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
+    },
+  );
 
   /**
    * GET /api/v1/ohlcv/:symbol — REST_ROUTES.fetchOHLCV.
