@@ -14,6 +14,7 @@ import {
   parseWarehouseLagSqlResult,
   queryWarehouseSurface,
   resolveEffectiveWarehouseLag,
+  mayPaintLiveCubes,
   resolveEtlWatermark,
   resolveWarehouseReplicaConfig,
   validateAnalyticsReplicaEndpoint,
@@ -67,6 +68,8 @@ describe('analytics Stage-1 — warehouse replica + empty surface', () => {
       mayLabelLive: false,
       lagSource: 'unknown',
       lagMeasuredAt: null,
+      etlWatermark: 'absent',
+      etlWatermarkAt: null,
     });
     expect(warehouseSurfaceStatusLine(r)).toContain('live=0');
   });
@@ -94,6 +97,8 @@ describe('analytics Stage-1 — warehouse replica + empty surface', () => {
       mayLabelLive: false,
       lagSource: 'configured',
       lagMeasuredAt: null,
+      etlWatermark: 'absent',
+      etlWatermarkAt: null,
     });
   });
 
@@ -116,7 +121,7 @@ describe('analytics Stage-1 — warehouse replica + empty surface', () => {
     expect(warehouseSurfaceStatusLine(r)).toContain('live=0');
   });
 
-  it('probed lag with measurement stamp + facts → mayLabelLive true', () => {
+  it('probed lag with measurement stamp + facts but no watermark → mayLabelLive false', () => {
     const now = 1_700_000_000_000;
     const r = queryWarehouseSurface({
       replicaConfigured: true,
@@ -131,10 +136,34 @@ describe('analytics Stage-1 — warehouse replica + empty surface', () => {
     });
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
+    expect(r.mayLabelLive).toBe(false);
+    expect(r.etlWatermark).toBe('absent');
+    expect(r.freshness).toBe('live');
+  });
+
+  it('probed lag + watermark present + facts → mayLabelLive true', () => {
+    const now = 1_700_000_000_000;
+    const r = queryWarehouseSurface({
+      replicaConfigured: true,
+      lagSeconds: 10,
+      lagSource: 'probed',
+      lagMeasuredAt: now,
+      nowMs: now,
+      etlWatermark: 'present',
+      etlWatermarkAt: '2026-08-12T10:00:00.000Z',
+      facts: [
+        { metricId: 'ledger.postings.count', value: '4' },
+        { metricId: 'ledger.volume.notional', value: '250.25' },
+      ],
+    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
     expect(r.mayLabelLive).toBe(true);
     expect(r.lagSource).toBe('probed');
     expect(r.lagMeasuredAt).toBe(now);
     expect(r.freshness).toBe('live');
+    expect(r.etlWatermark).toBe('present');
+    expect(r.etlWatermarkAt).toBe('2026-08-12T10:00:00.000Z');
   });
 
   it('stale lag measurement → unknown (never live forever from an old reading)', () => {
@@ -289,6 +318,8 @@ describe('resolveWarehouseReplicaConfig — URLs + role + probe', () => {
       lagMeasuredAt: r.lagMeasuredAt,
       lagSource: r.lagSource,
       nowMs: now,
+      etlWatermark: 'present',
+      etlWatermarkAt: '2026-08-12T10:00:00.000Z',
       facts: [{ metricId: 'trade.fills.count', value: '2' }],
     });
     expect(surface.status).toBe('ok');
@@ -412,7 +443,22 @@ describe('createSqlWarehouseLagProbe — production SQL adapter', () => {
     });
     expect(surface.status).toBe('ok');
     if (surface.status !== 'ok') return;
-    expect(surface.mayLabelLive).toBe(true);
+    expect(surface.mayLabelLive).toBe(false);
+    expect(surface.etlWatermark).toBe('absent');
+
+    const live = queryWarehouseSurface({
+      replicaConfigured: r.replicaConfigured,
+      lagSeconds: r.lagSeconds,
+      lagMeasuredAt: r.lagMeasuredAt,
+      lagSource: r.lagSource,
+      nowMs: now,
+      etlWatermark: 'present',
+      etlWatermarkAt: '2026-08-15T00:00:00.000Z',
+      facts: [{ metricId: 'trade.fills.count', value: '1' }],
+    });
+    expect(live.status).toBe('ok');
+    if (live.status !== 'ok') return;
+    expect(live.mayLabelLive).toBe(true);
   });
 });
 
@@ -426,6 +472,39 @@ describe('resolveEtlWatermark — D26-P1-O4 honesty', () => {
   it('valid ISO → present with normalised at', () => {
     const r = resolveEtlWatermark({ [ANALYTICS_ETL_WATERMARK_AT_ENV]: '2026-08-12T10:00:00.000Z' });
     expect(r).toMatchObject({ state: 'present', at: '2026-08-12T10:00:00.000Z' });
+  });
+
+  it('watermark present + dark replica cannot paint live cubes', () => {
+    const r = queryWarehouseSurface({
+      replicaConfigured: false,
+      lagSeconds: 5,
+      etlWatermark: 'present',
+      etlWatermarkAt: '2026-08-12T10:00:00.000Z',
+      facts: [{ metricId: 'trade.fills.count', value: '9' }],
+    });
+    expect(r.status).toBe('unavailable');
+    expect(r.mayLabelLive).toBe(false);
+    expect(r.etlWatermark).toBe('present');
+  });
+});
+
+describe('mayPaintLiveCubes — D26-P1-O4 live-cube gate', () => {
+  const live = {
+    replicaConfigured: true,
+    lagMayLabelLive: true,
+    etlWatermark: 'present' as const,
+    hasFacts: true,
+  };
+
+  it('true only when replica + probed live lag + watermark + facts', () => {
+    expect(mayPaintLiveCubes(live)).toBe(true);
+  });
+
+  it('false when replica dark, watermark absent, lag not live, or no facts', () => {
+    expect(mayPaintLiveCubes({ ...live, replicaConfigured: false })).toBe(false);
+    expect(mayPaintLiveCubes({ ...live, etlWatermark: 'absent' })).toBe(false);
+    expect(mayPaintLiveCubes({ ...live, lagMayLabelLive: false })).toBe(false);
+    expect(mayPaintLiveCubes({ ...live, hasFacts: false })).toBe(false);
   });
 });
 
