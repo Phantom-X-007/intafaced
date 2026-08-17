@@ -283,17 +283,17 @@ Backend product-complete only — **not** shell craft.
 
 ## 8 · P4 — Architecture cleanup
 
-| ID            | Task                                           | Done bar                                              |
-| ------------- | ---------------------------------------------- | ----------------------------------------------------- |
-| **D26-P4-01** | Spine branch disposition (~17 `feat/spine-*`)  | Each: abandon / resume / greenfield — table on tip    |
-| **D26-P4-02** | Cross-plane bridge handshake with Shehzad      | One supply ledger↔chain; who signs                    |
-| **D26-P4-03** | GitHub admin rails (optional)                  | Branch protection / CODEOWNERS only if you want rails |
-| **D26-P4-04** | Issue board reconcile                          | Close shipped stubs; link issue→ADR→tracker           |
-| **D26-P4-05** | **Private positions stream payload freeze**    | Event payloads frozen → agents wire WS                |
-| **D26-P4-06** | **Depth/tape product SLO** (honest empty book) | Spec for shell client; no fake depth                  |
-| **D26-P4-07** | **Vendor Upstream money map seal**             | What stays Java vs TS forever                         |
-| **D26-P4-08** | **features.mjs thrash protocol**               | Batch rule agents must follow                         |
-| **D26-P4-09** | **Tracker honesty pass on trade/pay/bank**     | Notes match tip; no ghost Done                        |
+| ID            | Task                                           | Done bar                                                                                                                                                     |
+| ------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **D26-P4-01** | Spine branch disposition (~17 `feat/spine-*`)  | Each: abandon / resume / greenfield — table on tip                                                                                                           |
+| **D26-P4-02** | Cross-plane bridge handshake with Shehzad      | One supply ledger↔chain; who signs                                                                                                                           |
+| **D26-P4-03** | GitHub admin rails (optional)                  | Branch protection / CODEOWNERS only if you want rails                                                                                                        |
+| **D26-P4-04** | Issue board reconcile                          | Close shipped stubs; link issue→ADR→tracker                                                                                                                  |
+| **D26-P4-05** | **Private positions stream payload freeze**    | Event payloads frozen → agents wire WS                                                                                                                       |
+| **D26-P4-06** | **Depth/tape product SLO** (honest empty book) | Spec on tip: [`ops/DEPTH-TAPE-PRODUCT-SLO.md`](ops/DEPTH-TAPE-PRODUCT-SLO.md) — empty stays empty; no invent mid / seed-as-live; **no measured latency SLO** |
+| **D26-P4-07** | **Vendor Upstream money map seal**             | What stays Java vs TS forever                                                                                                                                |
+| **D26-P4-08** | **features.mjs thrash protocol**               | Batch rule agents must follow                                                                                                                                |
+| **D26-P4-09** | **Tracker honesty pass on trade/pay/bank**     | Notes match tip; no ghost Done                                                                                                                               |
 
 ---
 
