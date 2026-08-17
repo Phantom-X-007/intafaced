@@ -201,6 +201,6 @@ describe('support Stage-2 routes', () => {
       articles,
     });
     expect(result.status).not.toBe('answer');
-    expect(result).toMatchObject({ status: 'escalate', reason: 'desk_refused' });
+    expect(result).toMatchObject({ status: 'escalate', reason: 'kb_no_hit' });
   });
 });
