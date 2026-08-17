@@ -175,11 +175,7 @@ async function fundMm(ledger: MemoryLedger) {
   });
 }
 
-async function seedOpenLoan(
-  bank: ReturnType<typeof createBankServices>,
-  ledger: MemoryLedger,
-  now: Date = NOW,
-) {
+async function seedOpenLoan(bank: ReturnType<typeof createBankServices>, ledger: MemoryLedger, now: Date = NOW) {
   await fund(ledger, PAYER, 'USDT', '100000');
   await bank.loans.fundReserve({
     debtAssetId: 'USDT',
@@ -222,7 +218,10 @@ describe('LoanService.seize refuses a missing mark before any post', () => {
 
   it('bank.mark_missing — no loan.liquidated', async () => {
     const openBank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW), venue: marketMakerVenue() },
+      loans: {
+        priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW),
+        venue: marketMakerVenue(),
+      },
     });
     const opened = await seedOpenLoan(openBank, ledger);
     const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
@@ -253,7 +252,10 @@ describe('HTTP /trpc/ops.seizeLoan — seize through ledger-client', () => {
 
   it('refuses bank.mark_missing on the operator door and posts nothing', async () => {
     const openBank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW), venue: marketMakerVenue() },
+      loans: {
+        priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW),
+        venue: marketMakerVenue(),
+      },
     });
     const opened = await seedOpenLoan(openBank, ledger);
     const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
