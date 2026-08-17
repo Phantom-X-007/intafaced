@@ -1929,11 +1929,7 @@ export class TradeService {
    * (hiding a hold that has not reached the book is the risk this list exists
    * to show).
    */
-  async openOrders(
-    principal: Principal,
-    marketId?: string,
-    status?: 'pending' | 'open',
-  ): Promise<OrderRecord[]> {
+  async openOrders(principal: Principal, marketId?: string, status?: 'pending' | 'open'): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const statusFilter =
       status === 'pending'
