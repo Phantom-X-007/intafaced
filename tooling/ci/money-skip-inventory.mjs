@@ -19,6 +19,10 @@
  *     to `unreported-suites.mjs` PRIVATE_PROBE until fixed
  *   · pending          — hard `it.skip` / `test.skip` for unfinished work
  *   · opaque           — skips by some other shape; must name what lifts it
+ *
+ * 2026-08-15 hunt (D26-P2-13): money roots had 0 hard `it.skip` / `xit` /
+ * `test.todo` / `this.skip`. Every current skip is journalled Postgres or the
+ * one private-probe rail. Do not invent pending rows to look busy.
  */
 
 /** Money roots from D26-P2-01 promise-falsify surface (plus ledger-client). */
