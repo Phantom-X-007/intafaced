@@ -19,7 +19,7 @@ import {
   userAvailable,
 } from '@intafaced/ledger-client';
 import { MemoryEventBus } from '@intafaced/events';
-import { LEVERAGE_INSUFFICIENT_MARGIN, LEVERAGE_WOULD_LIQUIDATE, PositionService } from './position-service.js';
+import { PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
 import { markSourceFromDepth } from './mark-from-depth.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
