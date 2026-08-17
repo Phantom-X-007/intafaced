@@ -60,10 +60,10 @@ function openOrder(over: Partial<VenueOrder> = {}): VenueOrder {
 }
 
 class FakeList {
-  readonly calls: Array<{ symbol?: string; side?: 'buy' | 'sell' }> = [];
+  readonly calls: Array<{ symbol?: string; side?: 'buy' | 'sell'; type?: 'limit' | 'market' }> = [];
   constructor(private readonly next: VenueOrder[] | Error) {}
-  fn: OmsOpenOrdersFn = async (symbol, side) => {
-    this.calls.push({ symbol, side });
+  fn: OmsOpenOrdersFn = async (symbol, side, type) => {
+    this.calls.push({ symbol, side, type });
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -81,7 +81,7 @@ describe('listOmsOpenOrders', () => {
     if (!result.ok) return;
     expect(result.orders).toHaveLength(1);
     expect(result.orders[0]!.status).toBe('open');
-    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: undefined }]);
+    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: undefined, type: undefined }]);
   });
 
   it('passes an optional side through and does not invent the other', async () => {
@@ -92,9 +92,22 @@ describe('listOmsOpenOrders', () => {
       openOrdersByVenue: { street: street.fn },
     });
     expect(result.ok).toBe(true);
-    expect(street.calls).toEqual([{ symbol: undefined, side: 'sell' }]);
+    expect(street.calls).toEqual([{ symbol: undefined, side: 'sell', type: undefined }]);
     if (!result.ok) return;
     expect(result.orders[0]?.side).toBe('sell');
+  });
+
+  it('passes an optional type through and does not invent the other', async () => {
+    const street = new FakeList([openOrder({ type: 'market', price: null })]);
+    const result = await listOmsOpenOrders({
+      venueId: 'street',
+      type: 'market',
+      openOrdersByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.calls).toEqual([{ symbol: undefined, side: undefined, type: 'market' }]);
+    if (!result.ok) return;
+    expect(result.orders[0]?.type).toBe('market');
   });
 
   it('refuses internal venues and does not call the list', async () => {
@@ -153,10 +166,10 @@ describe('execution.oms.openOrders tRPC', () => {
   it('lists through the injected map', async () => {
     const street = new FakeList([openOrder()]);
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(signed());
-    const out = await caller.execution.oms.openOrders({ venueId: 'street', symbol: 'BTC/USDT', side: 'buy' });
+    const out = await caller.execution.oms.openOrders({ venueId: 'street', symbol: 'BTC/USDT', side: 'buy', type: 'limit' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.orders).toHaveLength(1);
-    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: 'buy' }]);
+    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: 'buy', type: 'limit' }]);
   });
 });
