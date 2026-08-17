@@ -1,8 +1,14 @@
 import type { Amount } from '@intafaced/ledger-client/money';
-import { midFromSnapshot, parseUnifiedSymbol, type MarketDataAdapter, type VenueBookSnapshot } from '@intafaced/venue-contracts';
-import { BinanceSpotMarketData } from './binance-spot.js';
-import { BybitSpotMarketData } from './bybit-spot.js';
-import { OkxSpotMarketData } from './okx-spot.js';
+import {
+  midFromSnapshot,
+  parseUnifiedSymbol,
+  type MarketDataAdapter,
+  type VenueBookSnapshot,
+  type VenueCredentials,
+} from '@intafaced/venue-contracts';
+import { BinanceSpotMarketData, BinanceSpotTrade } from './binance-spot.js';
+import { BybitSpotMarketData, BybitSpotTrade } from './bybit-spot.js';
+import { OkxSpotMarketData, OkxSpotTrade, type OkxSpotTradeOptions } from './okx-spot.js';
 
 /**
  * PUBLIC MARKET-DATA VENUE IDS — the factory that makes an adapter a venue.
@@ -12,7 +18,8 @@ import { OkxSpotMarketData } from './okx-spot.js';
  * venues the check is `inconclusive` by construction. This list is that third
  * id, plus the two already on tip.
  *
- * Trading / account halves stay unbuilt. No credentials are accepted here.
+ * Public market-data factory invents no credentials. Signed trade is
+ * `createVenueTradeAdapter` (keys passed in, never invented).
  *
  * svc-trade still has a local copy of this factory (mark-from-venue.ts) that
  * only knows binance-spot / bybit-spot. That file is under an open trade PR
@@ -44,6 +51,27 @@ export function createVenueMarketDataAdapter(venueId: string, options?: VenueMar
   if (id === 'binance-spot') return new BinanceSpotMarketData(options);
   if (id === 'bybit-spot') return new BybitSpotMarketData(options);
   if (id === 'okx-spot') return new OkxSpotMarketData(options);
+  return null;
+}
+
+export type VenueTradeAdapter = BinanceSpotTrade | BybitSpotTrade | OkxSpotTrade;
+export type VenueTradeAdapterOptions = OkxSpotTradeOptions;
+
+/**
+ * Signed spot trade adapters by venue id.
+ * Unknown / off id → null. Credentials are passed through, never invented.
+ * Withdrawal-capable keys are still refused inside each constructor.
+ */
+export function createVenueTradeAdapter(
+  venueId: string,
+  credentials: VenueCredentials | null = null,
+  options?: VenueTradeAdapterOptions,
+): VenueTradeAdapter | null {
+  const id = venueId.trim().toLowerCase();
+  if (!id || id === 'off' || id === 'none' || id === 'false') return null;
+  if (id === 'binance-spot') return new BinanceSpotTrade(credentials);
+  if (id === 'bybit-spot') return new BybitSpotTrade(credentials);
+  if (id === 'okx-spot') return new OkxSpotTrade(credentials, options);
   return null;
 }
 
