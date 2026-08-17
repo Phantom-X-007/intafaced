@@ -273,6 +273,10 @@ if (!available) {
       expect(legs[1]).toMatchObject({ liquidity: 'taker', fee_asset: 'BTC' });
       expect(amt(legs[0]!.fee_amount)).toBe(amt('0.2'));
       expect(amt(legs[1]!.fee_amount)).toBe(amt('0.004'));
+      expect((await trade.myFills(principalFor(ALICE))).map((row) => row.side)).toEqual(['buy']);
+      expect((await trade.myFills(principalFor(ALICE), 100, undefined, undefined, 'buy')).map((row) => row.side)).toEqual(['buy']);
+      expect(await trade.myFills(principalFor(ALICE), 100, undefined, undefined, 'sell')).toEqual([]);
+      expect((await trade.myFills(principalFor(BOB), 100, undefined, undefined, 'sell')).map((row) => row.side)).toEqual(['sell']);
     });
 
     it('emits XP per filled order (§5.2 step 4)', async () => {

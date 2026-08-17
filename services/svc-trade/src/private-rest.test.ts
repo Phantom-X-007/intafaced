@@ -1018,6 +1018,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades?side=buy: passes side into myFills', async () => {
+    let seenSide: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, side) => {
+          seenSide = side;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenSide).toBe('buy');
+    await app.close();
+  });
+
+  it('GET /account/trades?side=: invalid → 400 without myFills', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?side=both',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/closed?since=: passes sinceMs into orderHistory', async () => {
     let seen: { marketId?: string; limit?: number; sinceMs?: number } | null = null;
     const app = await build(
