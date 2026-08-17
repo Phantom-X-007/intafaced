@@ -5,7 +5,6 @@ import {
   readLevels,
   unifiedSymbol,
   VenueUnavailableError,
-  type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
   type VenueBookDelta,
@@ -14,13 +13,13 @@ import {
   type VenueMarket,
   type VenueTrade,
 } from '@intafaced/venue-contracts';
-import { requireCredentials, type VenueCredentials } from '@intafaced/venue-contracts';
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
 import { assertPayoutGradeBook } from '../payout-grade.js';
 import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
 export { BinanceSpotTrade, mapBinanceSpotOrder, signBinanceQuery } from './binance-spot-trade.js';
+export { BinanceSpotAccount, mapBinanceSpotBalances } from './binance-spot-account.js';
 
 /**
  * BINANCE SPOT — the first venue in the fabric, done properly.
@@ -56,10 +55,9 @@ export { BinanceSpotTrade, mapBinanceSpotOrder, signBinanceQuery } from './binan
  * what the owner has to do. They do not return an empty array, they do not
  * return a plausible `rejected` order, and they do not route.
  *
- * Even WITH a key they throw: the signed REST path is not built (see
- * `NOT_BUILT`). That is stated here rather than hidden behind an adapter that
- * looks complete, because "the trading half exists" is exactly the claim this
- * package must not make falsely.
+ * With a trade-only key, signed REST is real (`binance-spot-trade.ts`,
+ * `binance-spot-account.ts`). `transferRails` stays `not_ready` — wallet
+ * permission is refused, not faked. `positions` on spot is `[]`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * FEES ARE INDICATIVE AND SAY SO
@@ -365,35 +363,6 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
       fees: { makerBps: DEFAULT_FEE_BPS.maker, takerBps: DEFAULT_FEE_BPS.taker, indicative: true },
       observedAt,
     };
-  }
-}
-
-const ACCOUNT_NOT_BUILT =
-  'account / listen-key user-data stream for this venue is NOT BUILT. ' +
-  'Order place/cancel/fetch/openOrders use signed REST. This call is refused rather than simulated (§27).';
-
-export class BinanceSpotAccount implements AccountAdapter {
-  readonly venue = VENUE;
-  readonly #credentials: VenueCredentials | null;
-
-  constructor(credentials: VenueCredentials | null = null) {
-    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
-    this.#credentials = credentials;
-  }
-
-  async balances(): Promise<never> {
-    requireCredentials(VENUE.id, 'balances', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${ACCOUNT_NOT_BUILT}`);
-  }
-
-  async positions(): Promise<never> {
-    requireCredentials(VENUE.id, 'positions', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${ACCOUNT_NOT_BUILT}`);
-  }
-
-  async transferRails(): Promise<never> {
-    requireCredentials(VENUE.id, 'transferRails', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${ACCOUNT_NOT_BUILT}`);
   }
 }
 
