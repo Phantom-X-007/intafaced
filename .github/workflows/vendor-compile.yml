@@ -4,6 +4,12 @@
 #   mvn -q -DskipTests compile over the vendored framework, on PRs that touch
 #   vendor/**, continue-on-error: true. Reporting only — never a required check.
 #
+# D26-P3-11: this job is the compile probe of vendor/upstream-exchange Java.
+# Required "Java is in scan scope" lives in tooling/ci/vendor-java-money-scan.mjs
+# (production-Java + pom floors + NOTICE pin; planted skip of this directory
+# fails). Do not retarget working-directory off vendor/upstream-exchange — the
+# money scan greps this file for that path. Do not drop `mvn` / `compile`.
+#
 # Why path-filtered is safe here: this is NOT a required status. Supply-chain
 # must run on every PR because a required check that path-filters itself leaves
 # PRs pending forever. This job is advisory; path filter = no wasted minutes.

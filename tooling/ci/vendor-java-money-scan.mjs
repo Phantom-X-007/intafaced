@@ -103,13 +103,39 @@
  * Compose may still launch gitignored, pre-neutering jars. Do not claim Java
  * runtime safety from this scan alone — see `vendor-java-jar-truth.mjs` and
  * `pnpm vendor-java:rebuild`.
+ *
+ * ── D26-P3-11 · SCAN OBJECT = THE JAVA TREE (not a missing walk) ──────────
+ *
+ * Empty-denominator already refuses a missing `vendor/`. That is not enough:
+ * `vendor/` can exist while `vendor/upstream-exchange` is skipped and this gate
+ * would print clean over zero production Java. Before money rules run we assert
+ * the walk covered that tree: production-Java floor, Maven pom floor, NOTICE
+ * pin, vendor-compile.yml / Dependabot maven-directory pins. `--self-test`
+ * plants `VENDOR_JAVA_EXTRA_SKIP=upstream-exchange` and requires a non-zero exit.
  */
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = process.cwd();
 const VENDOR = join(ROOT, 'vendor');
+const UPSTREAM_REL = 'vendor/upstream-exchange';
+const UPSTREAM = join(ROOT, 'vendor', 'upstream-exchange');
+const NOTICE = join(UPSTREAM, 'NOTICE');
+const COMPILE_WORKFLOW = join(ROOT, '.github', 'workflows', 'vendor-compile.yml');
+const DEPENDABOT = join(ROOT, '.github', 'dependabot.yml');
+const THIS_FILE = fileURLToPath(import.meta.url);
+
+/**
+ * Measured 2026-08-15 on origin/main: 871 production Java, 30 pom.xml under
+ * vendor/upstream-exchange. Floors sit below those counts so honest deletes of
+ * a few files do not trip the gate; skipping the directory cannot clear either
+ * floor (zero files). Raise, do not lower, if the tree grows a lot.
+ */
+const MIN_PRODUCTION_JAVA = 800;
+const MIN_MAVEN_POMS = 20;
 
 /** Repo-relative path with forward slashes — CI is Linux, half of us are on Windows. */
 const relPath = (file, root = ROOT) => relative(root, file).replace(/\\/g, '/');
@@ -530,10 +556,19 @@ function lineAt(text, index) {
   return line;
 }
 
+function extraSkipDirs() {
+  const extra = (process.env.VENDOR_JAVA_EXTRA_SKIP ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return new Set(extra);
+}
+
 function walk(dir, out = []) {
   if (!existsSync(dir)) return out;
+  const extra = extraSkipDirs();
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'target' || name === '.git') continue;
+    if (name === 'node_modules' || name === 'target' || name === '.git' || extra.has(name)) continue;
     const p = join(dir, name);
     let st;
     try {
@@ -545,6 +580,148 @@ function walk(dir, out = []) {
     else if (name.endsWith('.java')) out.push(p);
   }
   return out;
+}
+
+function walkNamed(dir, predicate, out = []) {
+  if (!existsSync(dir)) return out;
+  const extra = extraSkipDirs();
+  for (const name of readdirSync(dir)) {
+    if (name === 'node_modules' || name === 'target' || name === '.git' || extra.has(name)) continue;
+    const p = join(dir, name);
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) walkNamed(p, predicate, out);
+    else if (predicate(name)) out.push(p);
+  }
+  return out;
+}
+
+function isTestJava(path) {
+  return /\/src\/test\//.test(path);
+}
+
+function isUpstreamPath(path) {
+  return path === UPSTREAM_REL || path.startsWith(`${UPSTREAM_REL}/`);
+}
+
+/**
+ * Failures that mean the walk did not cover Maven/vendor Java.
+ * @param {{ java: string[], poms: string[] }} counts
+ */
+function scopeFailures(counts) {
+  /** @type {string[]} */
+  const failures = [];
+  const production = counts.java.filter((p) => !isTestJava(p));
+  const inTree = production.filter(isUpstreamPath);
+  const orphans = production.filter((p) => !isUpstreamPath(p));
+  const pomsInTree = counts.poms.filter(isUpstreamPath);
+
+  if (inTree.length < MIN_PRODUCTION_JAVA) {
+    failures.push(
+      `vendor/upstream-exchange production Java below floor (${inTree.length} file(s), need >= ${MIN_PRODUCTION_JAVA}) — planted skip or empty walk, not coverage`,
+    );
+  }
+  if (pomsInTree.length < MIN_MAVEN_POMS) {
+    failures.push(
+      `vendor/upstream-exchange Maven pom.xml below floor (${pomsInTree.length} file(s), need >= ${MIN_MAVEN_POMS}) — Maven is a blind spot if the walk skipped the tree`,
+    );
+  }
+  for (const p of orphans) {
+    failures.push(`${p} is production Java outside ${UPSTREAM_REL} — Maven/NOTICE/compile pin does not cover it`);
+  }
+  return failures;
+}
+
+function pinFailures() {
+  /** @type {string[]} */
+  const failures = [];
+  if (!statSync(UPSTREAM, { throwIfNoEntry: false })?.isDirectory()) {
+    failures.push('vendor/upstream-exchange missing — cannot prove vendor Java is in scan scope');
+  }
+  if (!existsSync(NOTICE) || readFileSync(NOTICE, 'utf8').trim().length < 200) {
+    failures.push('vendor/upstream-exchange/NOTICE missing or empty — Apache pin is not in scope');
+  }
+  if (!existsSync(COMPILE_WORKFLOW)) {
+    failures.push('.github/workflows/vendor-compile.yml missing — compile probe of vendor Java is gone');
+  } else {
+    const wf = readFileSync(COMPILE_WORKFLOW, 'utf8');
+    if (!wf.includes('vendor/upstream-exchange')) {
+      failures.push('vendor-compile.yml no longer names vendor/upstream-exchange — compile probe walked off the Java tree');
+    }
+    if (!/\bmvn\b/.test(wf) || !/\bcompile\b/.test(wf)) {
+      failures.push('vendor-compile.yml lost `mvn` compile — the probe no longer compiles vendor Java');
+    }
+  }
+  if (!existsSync(DEPENDABOT)) {
+    failures.push('.github/dependabot.yml missing — Maven ecosystem pin unreadable');
+  } else {
+    const dep = readFileSync(DEPENDABOT, 'utf8');
+    for (const dir of ['/vendor/upstream-exchange/00_framework', '/vendor/upstream-exchange/01_wallet_rpc']) {
+      if (!dep.includes(dir)) {
+        failures.push(`dependabot.yml lost maven directory ${dir} — vendor jars would not be advisory-scanned`);
+      }
+    }
+  }
+  return failures;
+}
+
+function assertProductionScanScope() {
+  const files = walk(VENDOR);
+  const poms = walkNamed(VENDOR, (name) => name === 'pom.xml');
+  const scopeHits = [...scopeFailures({ java: files.map((f) => relPath(f)), poms: poms.map((f) => relPath(f)) }), ...pinFailures()];
+  if (scopeHits.length) {
+    console.error('✖ vendor-java-money-scan failed — vendor Java is out of scan scope:\n');
+    for (const s of scopeHits) console.error(`  · ${s}`);
+    console.error('');
+    process.exit(1);
+  }
+  return { files, poms };
+}
+
+function provePlantedSkip() {
+  /** @type {string[]} */
+  const fails = [];
+  const empty = scopeFailures({ java: [], poms: [] });
+  if (empty.length < 2) {
+    fails.push(`empty walk must fail both Java and pom floors, got ${empty.length} failure(s)`);
+  }
+  if (!empty.some((f) => /planted skip or empty walk/.test(f))) {
+    fails.push('empty Java walk did not phrase the skip refusal');
+  }
+
+  let code = 0;
+  let out = '';
+  try {
+    out = execFileSync(process.execPath, [THIS_FILE], {
+      encoding: 'utf8',
+      cwd: ROOT,
+      env: { ...process.env, VENDOR_JAVA_EXTRA_SKIP: 'upstream-exchange' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 180000,
+    });
+  } catch (err) {
+    code = err.status ?? 1;
+    out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
+  }
+  if (code === 0) {
+    fails.push('planted skip of upstream-exchange exited 0 — Maven/vendor Java is still a blind spot');
+  }
+  if (!/planted skip or empty walk/.test(out)) {
+    fails.push(`planted skip did not print the floor refusal (exit ${code}): ${out.slice(0, 400)}`);
+  }
+
+  if (fails.length) {
+    console.error('✖ vendor-java-money-scan planted-skip FAIL:');
+    for (const f of fails) console.error(`  · ${f}`);
+    process.exit(1);
+  }
+  console.log(
+    `✓ vendor-java-money-scan planted-skip OK — skip of upstream-exchange refused (floors Java >= ${MIN_PRODUCTION_JAVA}, poms >= ${MIN_MAVEN_POMS})`,
+  );
 }
 
 function isAllowlisted(relPath) {
@@ -808,12 +985,15 @@ function runProductionScan() {
     process.exit(1);
   }
 
+  const scope = assertProductionScanScope();
   const result = scanVendorTree({ root: ROOT, vendorDir: VENDOR });
   if (result.failed) reportProductionFailure(result);
 
   const allowedTotal = VENDOR_JAVA_ALLOWLIST.reduce((sum, e) => sum + Object.values(e.rules).reduce((a, b) => a + b, 0), 0);
+  const pomCount = scope.poms.filter((f) => isUpstreamPath(relPath(f))).length;
   console.log(
-    `✓ vendor-java-money-scan clean — ${result.javaScanned} Java file(s), ${FORBIDDEN.length} live-write pattern(s) + ` +
+    `✓ vendor-java-money-scan clean — ${result.javaScanned} Java file(s) in ${UPSTREAM_REL} (floor ${MIN_PRODUCTION_JAVA}), ` +
+      `${pomCount} pom.xml (floor ${MIN_MAVEN_POMS}), ${FORBIDDEN.length} live-write pattern(s) + ` +
       `${CODE_RULES.length} second-book shape(s), ${result.daoDeclarationsVerified} DAO mutator declaration(s) proved no-op` +
       `${allowedTotal > 0 ? `, ${allowedTotal} known write(s) held by the ratchet across ${VENDOR_JAVA_ALLOWLIST.length} file(s)` : ''}` +
       `${result.javaSkippedTests > 0 ? ` (${result.javaSkippedTests} vendor test source(s) skipped)` : ''}` +
@@ -822,5 +1002,8 @@ function runProductionScan() {
 }
 
 proveFailClosedFixture();
-if (process.argv.includes('--self-test')) process.exit(0);
+if (process.argv.includes('--self-test')) {
+  provePlantedSkip();
+  process.exit(0);
+}
 runProductionScan();
