@@ -16,13 +16,13 @@ Illustrative field names below are schema tokens (`rank_band`, `epoch_id`, `subj
 
 ## Assets
 
-| #   | Asset                                         | Why it ranks here                                                                                          |
-| --- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 1   | **Fiat identity / KYC store**                 | Name, documents, custodial `userId`. Putting any of it on a public attestation is irreversible disclosure. |
-| 2   | **Share card (SVG / raster DTO)**             | Acquisition artifact meant to leave the service. Must stay zero-PII or it becomes a dox vector.            |
-| 3   | **Rank / Blueprint standing**                 | The only thing §19 wants to prove. Safe as a commitment or coarse rank token — not as a person.            |
-| 4   | **Cross-plane chain address / smart account** | Linking a custodial user to a public address is the other half of a deanonymization pair.                  |
-| 5   | **On-chain attestation contract (unbuilt)**   | Shehzad leftover. An agent-invented verifier is security theater.                                          |
+| #   | Asset                                         | Why it ranks here                                                                                           |
+| --- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 1   | **Fiat identity / KYC store**                 | Name, documents, custodial `userId`. Putting any of it on a public attestation is irreversible disclosure.  |
+| 2   | **Share card (SVG / raster DTO)**             | Acquisition artifact meant to leave the service. Must stay zero-PII or it becomes a dox vector.             |
+| 3   | **Rank / Blueprint standing**                 | The only thing §19 wants to prove. Safe as a commitment or coarse rank token — not as a person.             |
+| 4   | **Cross-plane chain address / smart account** | Linking a custodial user to a public address is the other half of a deanonymization pair.                   |
+| 5   | **On-chain attestation contract (unbuilt)**   | Shehzad leftover. An agent-invented verifier is security theater.                                           |
 | 6   | **Issuer mapping**                            | The off-chain map from subject-commitment → custodial principal must never be published or copied on-chain. |
 
 ---
@@ -40,12 +40,12 @@ Illustrative field names below are schema tokens (`rank_band`, `epoch_id`, `subj
 
 ## Trust boundaries
 
-| Boundary                        | Trusted side                          | Untrusted side                                 | What must not cross                        |
-| ------------------------------- | ------------------------------------- | ---------------------------------------------- | ------------------------------------------ |
-| Fiat profile store → share card | Derived axes, crew public name        | Session answers, birth data, `userId`, KYC     | Identity / KYC / custodial id              |
-| Fiat issuer → attestation DTO   | Rank / crewRole / season / commitment | Email, handle, KYC status, wallet / SA address | Same plus cross-plane address              |
-| Fiat → Protocol Plane           | Commitment only (when Shehzad builds) | Encrypted PII store, identity APIs             | Any field that identifies a natural person |
-| Card rasterizer                 | SVG we composed                       | Hosted PNG URL consumer                        | SVG must already be zero-PII               |
+| Boundary                        | Trusted side                          | Untrusted side                                 | What must not cross                             |
+| ------------------------------- | ------------------------------------- | ---------------------------------------------- | ----------------------------------------------- |
+| Fiat profile store → share card | Derived axes, crew public name        | Session answers, birth data, `userId`, KYC     | Identity / KYC / custodial id                   |
+| Fiat issuer → attestation DTO   | Rank / crewRole / season / commitment | Email, handle, KYC status, wallet / SA address | Same plus cross-plane address                   |
+| Fiat → Protocol Plane           | Commitment only (when Shehzad builds) | Encrypted PII store, identity APIs             | Any field that identifies a natural person      |
+| Card rasterizer                 | SVG we composed                       | Hosted PNG URL consumer                        | SVG must already be zero-PII                    |
 | Verifier → KYC APIs             | —                                     | —                                              | **No call.** Third-party verify without our KYC |
 
 ---
@@ -78,7 +78,7 @@ KYC status flags that identify a person, document hashes, vendor case ids, juris
 
 ### Addresses that link planes (never)
 
-Custodial deposit/withdraw addresses, Fiat Plane account ids encoded as “wallets”, the same smart-account address used as the KYC-bound withdrawal target, emails-as-handles, or any address that lets an observer join Protocol Plane standing to a Fiat Plane person. §26 stealth receive is the unlinkable *receive* half; this bar forbids using attestation fields to do the join anyway.
+Custodial deposit/withdraw addresses, Fiat Plane account ids encoded as “wallets”, the same smart-account address used as the KYC-bound withdrawal target, emails-as-handles, or any address that lets an observer join Protocol Plane standing to a Fiat Plane person. §26 stealth receive is the unlinkable _receive_ half; this bar forbids using attestation fields to do the join anyway.
 
 ### Quasi-identifiers we refuse rather than “hash and hope”
 
@@ -100,14 +100,14 @@ When (later) the bar is sealed, product Done still requires live issuance on a r
 
 Allowed in the signed payload, and in any public projection of it:
 
-| Field kind | Meaning | Constraint |
-| ---------- | ------- | ---------- |
-| `schema_id` / `issuer_key_id` | Which law and which issuer key signed this | Platform identifiers, not a person |
-| `epoch_id` | Named standing window | Verifier refuses stale epochs |
-| `rank_band` | Discrete standing already computed off-chain | Band / tier token only — not a score history, not a balance, not a fill list |
-| `expires_at` | Attestation lifetime | Required; replay of an old band fails |
-| `subject_commitment` or nullifier / one-time serial | Binds the proof to a subject without naming them | Must not be joinable to the custodial principal without the issuer’s **private** mapping, which must not live on-chain |
-| Optional: crew / perk **commitment** or entitlement bitmask | Standing-derived perks that do not encode a person | No crew display name, no member list, no perk that is unique to one human |
+| Field kind                                                  | Meaning                                            | Constraint                                                                                                             |
+| ----------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `schema_id` / `issuer_key_id`                               | Which law and which issuer key signed this         | Platform identifiers, not a person                                                                                     |
+| `epoch_id`                                                  | Named standing window                              | Verifier refuses stale epochs                                                                                          |
+| `rank_band`                                                 | Discrete standing already computed off-chain       | Band / tier token only — not a score history, not a balance, not a fill list                                           |
+| `expires_at`                                                | Attestation lifetime                               | Required; replay of an old band fails                                                                                  |
+| `subject_commitment` or nullifier / one-time serial         | Binds the proof to a subject without naming them   | Must not be joinable to the custodial principal without the issuer’s **private** mapping, which must not live on-chain |
+| Optional: crew / perk **commitment** or entitlement bitmask | Standing-derived perks that do not encode a person | No crew display name, no member list, no perk that is unique to one human                                              |
 
 **That is the prove-set.** Rank and Blueprint standing. Not identity. Not KYC. Not money.
 
@@ -117,17 +117,17 @@ Crew names, mentor identity, curriculum, and share-card art stay Fiat / shell. T
 
 ## Threats and required answers
 
-| Threat | Required answer |
-| ------ | ---------------- |
-| Payload or projection deanonymises a user | Schema reject. Zero-PII bar. |
-| Cross-plane join via an address or id | Forbidden field class. Stealth receive is not this row. |
-| Replay of an old rank | `epoch_id` + `expires_at`; verifier refuses stale. |
-| Caller inflates rank | Issuer signs; caller cannot choose `rank_band`. |
-| Issuer key compromise | Rotation + expiry; old `issuer_key_id` stops verifying. |
-| Fiat erase vs chain permanence | Never put §10 store contents on-chain; erase cannot unsay a public payload. |
-| Fake product Done / UI badge | Until a deployed verifier meets this bar, surfaces stay a **socket**. No invented JSON badge in `svc-blueprint`. |
-| WebAuthn conflation | Forbidden. Passkey attestation is a different product. |
-| Unique serial that is the person | Nullifier / one-time serial must not be the custodial id or a public hash of one. |
+| Threat                                    | Required answer                                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Payload or projection deanonymises a user | Schema reject. Zero-PII bar.                                                                                     |
+| Cross-plane join via an address or id     | Forbidden field class. Stealth receive is not this row.                                                          |
+| Replay of an old rank                     | `epoch_id` + `expires_at`; verifier refuses stale.                                                               |
+| Caller inflates rank                      | Issuer signs; caller cannot choose `rank_band`.                                                                  |
+| Issuer key compromise                     | Rotation + expiry; old `issuer_key_id` stops verifying.                                                          |
+| Fiat erase vs chain permanence            | Never put §10 store contents on-chain; erase cannot unsay a public payload.                                      |
+| Fake product Done / UI badge              | Until a deployed verifier meets this bar, surfaces stay a **socket**. No invented JSON badge in `svc-blueprint`. |
+| WebAuthn conflation                       | Forbidden. Passkey attestation is a different product.                                                           |
+| Unique serial that is the person          | Nullifier / one-time serial must not be the custodial id or a public hash of one.                                |
 
 ---
 
