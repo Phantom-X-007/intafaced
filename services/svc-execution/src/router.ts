@@ -285,6 +285,7 @@ export function createExecutionRouter(
             z.object({
               venueId: z.string().min(1).max(128),
               asset: z.string().min(1).max(32),
+              enabled: z.boolean().optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -293,6 +294,7 @@ export function createExecutionRouter(
               return observeOmsRails({
                 venueId: input.venueId,
                 asset: input.asset,
+                enabled: input.enabled,
                 kind: input.kind,
                 railsByVenue,
               });
