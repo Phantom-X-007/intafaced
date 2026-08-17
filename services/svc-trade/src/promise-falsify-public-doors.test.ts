@@ -203,6 +203,9 @@ function privateDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps 
     closePosition: async () => {
       throw new Error('unused');
     },
+    setLeverage: async () => {
+      throw new Error('unused');
+    },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async () => ({
       version: 'DIRECTION-2026-07-31:34',

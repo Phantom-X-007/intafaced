@@ -15,7 +15,8 @@
  * ADL disclosure doors) are inventoried here so post-MVP futures doors stay
  * discoverable — not "route exists only in private-rest comments".
  *
- * Never invents mids/rates. Futures leverage / live re-margin stay refuse.
+ * Never invents mids/rates. Live margin-mode stays refuse; isolated re-leverage
+ * is supported within the sealed 10× cap.
  */
 
 import { REST_ROUTES, type RestRouteName } from '@intafaced/exchange-contract';
@@ -82,21 +83,43 @@ export type CcxtCapabilityRow = {
 export const CALLER_REFUSED_PRICE_FIELDS = ['entryPrice', 'exitPrice', 'price', 'markPrice'] as const;
 
 /**
- * Explicit refuse arms (done bar: setLeverage, setMarginMode, funding-rate
- * when unsupported, caller price on close). open also refuses caller price
- * with the same code — listed so the matrix is complete.
+ * Explicit refuse arms (done bar: setMarginMode, funding-rate when unsupported,
+ * caller price on close). setLeverage is supported; 400 arms below are the
+ * live-path refuses, not a blanket 501.
  */
 export const CCXT_REFUSE_ARMS: readonly CcxtRefuseArm[] = [
   {
-    id: 'setLeverage',
+    id: 'setLeverageTooHigh',
     routeName: 'setLeverage',
     method: 'POST',
     path: '/api/v1/positions/leverage',
-    httpStatus: 501,
-    ccxtCode: 'NotSupported',
-    intafacedCode: 'trade.leverage_unsupported',
-    wireShape: 'ccxt',
-    when: 'always — live re-leverage is not built; margin mode is set at open only',
+    httpStatus: 400,
+    ccxtCode: 'BadRequest',
+    intafacedCode: 'trade.leverage_too_high',
+    wireShape: 'domain',
+    when: 'requested leverage is above the sealed 10× cap (DIRECTION §1) — refused, never clamped',
+  },
+  {
+    id: 'setLeverageWouldLiquidate',
+    routeName: 'setLeverage',
+    method: 'POST',
+    path: '/api/v1/positions/leverage',
+    httpStatus: 400,
+    ccxtCode: 'BadRequest',
+    intafacedCode: 'trade.leverage_would_liquidate',
+    wireShape: 'domain',
+    when: 'new isolated IM would leave equity ≤ 0 at the current mark — no ledger write',
+  },
+  {
+    id: 'setLeverageInsufficientMargin',
+    routeName: 'setLeverage',
+    method: 'POST',
+    path: '/api/v1/positions/leverage',
+    httpStatus: 400,
+    ccxtCode: 'InsufficientFunds',
+    intafacedCode: 'trade.insufficient_margin',
+    wireShape: 'domain',
+    when: 'decreasing leverage needs extra futuresMarginAdd the available balance cannot fund — no write',
   },
   {
     id: 'setMarginMode',
@@ -268,8 +291,13 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
   route('fetchClosedOrders', 'supported', [], 'Closed orders; optional symbol/since/limit'),
   route('fetchMyTrades', 'supported', [], 'Account fills; optional symbol/since/limit'),
   route('fetchPositions', 'supported', [], 'Open/closing futures rows; [] when none — no invent'),
-  route('setLeverage', 'refuse', refuseIds('setLeverage'), 'Mounted 501 NotSupported — never silent success'),
-  route('setMarginMode', 'refuse', refuseIds('setMarginMode'), 'Mounted 501 NotSupported — never silent success'),
+  route(
+    'setLeverage',
+    'supported',
+    refuseIds('setLeverageTooHigh', 'setLeverageWouldLiquidate', 'setLeverageInsufficientMargin'),
+    'Isolated live re-leverage within 10×; ledger add/release; >10× 400; missing 404; would-be liq / insufficient margin refuse without write',
+  ),
+  route('setMarginMode', 'refuse', refuseIds('setMarginMode'), 'Mounted 501 NotSupported — isolated-at-open only'),
 
   // ── Extensions beyond REST_ROUTES (positions + ADL disclosure doors)
   {
@@ -374,15 +402,14 @@ export function orphanRefuseArmIds(): readonly string[] {
 }
 
 /**
- * Live re-leverage / live margin-mode change — always refuse.
- * A 200 on these paths would let a bot size against invented margin.
+ * Live margin-mode change — always refuse. Isolated re-leverage is supported.
  */
-export const CCXT_LEVERAGE_REFUSE_IDS = ['setLeverage', 'setMarginMode'] as const;
+export const CCXT_LEVERAGE_REFUSE_IDS = ['setMarginMode'] as const;
 
 export type CcxtLeverageRefuseId = (typeof CCXT_LEVERAGE_REFUSE_IDS)[number];
 
 /**
- * Drift strings if setLeverage / setMarginMode are claimed as a happy path
+ * Drift strings if setMarginMode is claimed as a happy path
  * (supported/conditional) or anything other than 501 NotSupported.
  * Empty = pin holds.
  */

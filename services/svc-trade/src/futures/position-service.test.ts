@@ -19,7 +19,7 @@ import {
   userAvailable,
 } from '@intafaced/ledger-client';
 import { MemoryEventBus } from '@intafaced/events';
-import { PositionService } from './position-service.js';
+import { LEVERAGE_INSUFFICIENT_MARGIN, LEVERAGE_WOULD_LIQUIDATE, PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
 import { markSourceFromDepth } from './mark-from-depth.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
@@ -1262,5 +1262,120 @@ if (!available) {
     // Collateral untouched — no funding recipe posted against this position.
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
     expect((await positions.listOpen(ALICE))[0]!.status).toBe('closing');
+  });
+
+  it('in-cap re-leverage posts ledger for the isolated margin delta', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-in-cap',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    expect(pos.initialMargin).toBe('5000');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('95000');
+
+    const next = await positions.setLeverage({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      leverage: amt('5'),
+    });
+    expect(next.leverage).toBe('5');
+    expect(next.initialMargin).toBe('10000');
+    expect(next.collateral).toBe('10000');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('90000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
+  });
+
+  it('re-leverage above the sealed 10× cap is 400 and does not write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-cap',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await expect(
+      positions.setLeverage({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        leverage: amt('20'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.leverage_too_high', status: 400 });
+    expect((await positions.listOpen(ALICE))[0]!.leverage).toBe('10');
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('95000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('re-leverage of a missing position is 404', async () => {
+    await expect(
+      positions.setLeverage({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: '00000000-0000-4000-8000-000000000099',
+        leverage: amt('5'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.position_not_found', status: 404 });
+  });
+
+  it('insufficient margin refuses re-leverage with no ledger or row write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-broke',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await ledger.post(
+      recipes.futuresMarginLock({
+        positionId: `drain-${randomUUID()}`,
+        userId: ALICE,
+        assetId: 'USDT',
+        amount: amt('94900'),
+      }),
+    );
+    await expect(
+      positions.setLeverage({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        leverage: amt('1'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.insufficient_margin', status: 400 });
+    const listed = await positions.listOpen(ALICE);
+    expect(listed[0]!.leverage).toBe('10');
+    expect(listed[0]!.initialMargin).toBe('5000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('would-be liquidation refuses re-leverage with no ledger or row write', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-would-liq',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('2'),
+    });
+    feed('30000');
+    await expect(
+      positions.setLeverage({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        leverage: amt('10'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.leverage_would_liquidate', status: 400 });
+    expect((await positions.listOpen(ALICE))[0]!.leverage).toBe('2');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('25000');
   });
 }

@@ -67,7 +67,6 @@ function scanProductionRecipeCallers(): Map<string, string[]> {
 
 const PINNED_SOCKETS: readonly { name: RecipeName; fingerprint: string }[] = [
   { name: 'marketMakerSeedFund', fingerprint: reasonFingerprint(RECIPE_MATRIX.marketMakerSeedFund.reason) },
-  { name: 'futuresMarginAdd', fingerprint: reasonFingerprint(RECIPE_MATRIX.futuresMarginAdd.reason) },
   { name: 'futuresInsuranceTopup', fingerprint: reasonFingerprint(RECIPE_MATRIX.futuresInsuranceTopup.reason) },
   { name: 'chargebackOpen', fingerprint: reasonFingerprint(RECIPE_MATRIX.chargebackOpen.reason) },
   { name: 'chargebackShortfall', fingerprint: reasonFingerprint(RECIPE_MATRIX.chargebackShortfall.reason) },
@@ -90,11 +89,11 @@ describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
     expect(inventory.live.length + inventory.sockets.length).toBe(inventory.recipes.length);
   });
 
-  it('pins live vs §13 socket counts on tip (55 = 46 live + 9 socket)', () => {
+  it('pins live vs §13 socket counts on tip (55 = 47 live + 8 socket)', () => {
     const counts = countByKind(inventory);
-    expect(counts).toEqual({ live: 46, socket: 9 });
+    expect(counts).toEqual({ live: 47, socket: 8 });
     expect(inventory.recipes).toHaveLength(55);
-    expect(liveRecipeKeys(inventory)).toHaveLength(46);
+    expect(liveRecipeKeys(inventory)).toHaveLength(47);
     expect(socketRecipeKeys(inventory)).toEqual(PINNED_SOCKETS.map((s) => s.name).sort());
   });
 
@@ -153,7 +152,7 @@ describe('D26-P2-11 executed MemoryLedger for §13 socket recipes', () => {
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
-  it('futuresMarginAdd conserves (socket — no top-up door)', async () => {
+  it('futuresMarginAdd conserves (live — isolated re-leverage extra lock)', async () => {
     await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('200'), rail: 'test', railRef: 'd26-add' }));
     await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('100') }));
     await ledger.post(recipes.futuresMarginAdd({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('50'), sequence: 1 }));

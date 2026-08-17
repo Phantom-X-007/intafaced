@@ -1,12 +1,11 @@
 /**
- * Unit card — live re-leverage is NotSupported, not a retryable throttle
- * 1. Promise: POST /positions/leverage and /margin-mode use notSupported
- * 2. Break: those doors call rateLimited so bots retry with backoff
- * 3. Done bar: derivativesNotSupported helper sends notSupported; no rateLimited
+ * Unit card — live re-leverage is isolated+capped; margin-mode stays NotSupported
+ * 1. Promise: POST /positions/leverage is a real door; /margin-mode uses notSupported
+ * 2. Break: margin-mode calls rateLimited so bots retry with backoff
+ * 3. Done bar: leverage handler is not derivativesNotSupported; margin-mode still is
  * 4. Class N
  * 5. Paths: svc-trade/src/private-rest.ts
- * 6. RED: rateLimited( inside derivativesNotSupported
- * 7. Collision: none — #1929 pins grace on GET margin-call; this pins 501 leverage
+ * 6. RED: rateLimited( inside derivativesNotSupported, or leverage still 501-mounted
  */
 
 import { readFileSync } from 'node:fs';
@@ -17,9 +16,14 @@ import { describe, expect, it } from 'vitest';
 const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(here, '..', 'private-rest.ts'), 'utf8');
 
-describe('live re-leverage is NotSupported, not retryable', () => {
-  it('POST leverage and margin-mode use the derivativesNotSupported helper', () => {
-    expect(src).toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/);
+describe('live re-leverage is mounted; margin-mode stays NotSupported', () => {
+  it('POST leverage is a real handler, not the 501 helper', () => {
+    expect(src).toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*async/);
+    expect(src).not.toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/);
+    expect(src).toMatch(/deps\.setLeverage\(/);
+  });
+
+  it('POST margin-mode still uses the derivativesNotSupported helper', () => {
     expect(src).toMatch(/app\.post\('\/api\/v1\/positions\/margin-mode',\s*derivativesNotSupported\('setMarginMode'/);
   });
 

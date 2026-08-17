@@ -96,6 +96,9 @@ function baseDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     closePosition: async () => {
       throw new Error('unused');
     },
+    setLeverage: async () => {
+      throw new Error('unused');
+    },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async (p) => presentAdlDisclosureWire(await acks.getAck(p.userId)),
     ackAdlDisclosure: async (p) => {

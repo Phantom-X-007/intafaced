@@ -344,6 +344,9 @@ describe('private REST — mount boundary + order write path', () => {
       closePosition: async () => {
         throw new Error('closePosition not stubbed');
       },
+      setLeverage: async () => {
+        throw new Error('setLeverage not stubbed');
+      },
       getOpenMarginCall: async () => null,
       getAdlDisclosure: async () => ({
         version: 'DIRECTION-2026-07-31:34',
@@ -1812,35 +1815,147 @@ describe('private REST — mount boundary + order write path', () => {
 
   // ── setLeverage / setMarginMode ───────────────────────────────────────────
 
-  /**
-   * Both are declared in REST_ROUTES and were not mounted at all, so a CCXT
-   * client got Fastify's generic 404 — which reads as a bad URL or a broken
-   * deploy rather than an unsupported capability.
-   *
-   * Accepting them with a 200 would be far worse than either: a bot would
-   * believe it had set 10x leverage and size its next order against margin
-   * that does not exist.
-   */
-  for (const [path, intafacedCode] of [
-    ['/api/v1/positions/leverage', 'trade.leverage_unsupported'],
-    ['/api/v1/positions/margin-mode', 'trade.margin_mode_unsupported'],
-  ] as const) {
-    it(`POST ${path}: signed → 501 NotSupported, never a silent success`, async () => {
-      const app = await build();
-      const res = await app.inject({
-        method: 'POST',
-        url: path,
-        headers: { ...signedHeaders(), 'content-type': 'application/json' },
-        payload: { symbol: 'BTC/USDT', leverage: '10', marginMode: 'cross' },
-      });
-      expect(res.statusCode).not.toBe(200);
-      expect(res.statusCode).toBe(501);
-      expect(res.json().code).toBe('NotSupported');
-      expect(res.json().intafacedCode).toBe(intafacedCode);
-      expect(res.json().retryAfter).toBeUndefined();
-      await app.close();
-    });
+  const fakeLeveredPosition = {
+    id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    symbol: 'BTC/USDT-PERP',
+    timestamp: Date.parse('2026-08-06T12:00:00.000Z'),
+    datetime: '2026-08-06T12:00:00.000Z',
+    side: 'long' as const,
+    status: 'open' as const,
+    closingReason: null,
+    contracts: '1',
+    contractSize: null,
+    entryPrice: '50000',
+    markPrice: null,
+    notional: '50000',
+    leverage: '5',
+    collateral: '10000',
+    initialMargin: '10000',
+    maintenanceMargin: null,
+    unrealizedPnl: null,
+    realizedPnl: null,
+    liquidationPrice: null,
+    marginMode: 'isolated' as const,
+    percentage: null,
+  };
 
+  it('POST /positions/leverage: signed in-cap change → 200 (never a blanket 501)', async () => {
+    let called: { symbol: string; leverage: string } | undefined;
+    const app = await build(
+      deps({
+        setLeverage: async (_p, input) => {
+          called = input;
+          return { ...fakeLeveredPosition, leverage: input.leverage };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', leverage: '5' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', leverage: '5', positionId: undefined });
+    expect(res.json().leverage).toBe('5');
+    await app.close();
+  });
+
+  it('POST /positions/leverage: missing position → 404 and is the only write path (dep threw)', async () => {
+    const app = await build(
+      deps({
+        setLeverage: async () => {
+          throw new FuturesError('no open position on BTC/USDT-PERP', 'trade.position_not_found', 404);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', leverage: '5' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('trade.position_not_found');
+    await app.close();
+  });
+
+  it('POST /positions/leverage: >10× → 400 trade.leverage_too_high', async () => {
+    const app = await build(
+      deps({
+        setLeverage: async () => {
+          throw new FuturesError('leverage 11x exceeds the maximum of 10x on this deployment', 'trade.leverage_too_high', 400);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', leverage: '11' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('trade.leverage_too_high');
+    await app.close();
+  });
+
+  it('POST /positions/leverage: would-be liquidation → 400 without treating it as success', async () => {
+    const app = await build(
+      deps({
+        setLeverage: async () => {
+          throw new FuturesError('refusing leverage 10x', 'trade.leverage_would_liquidate', 400);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', leverage: '10' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).not.toBe(200);
+    expect(res.json().error).toBe('trade.leverage_would_liquidate');
+    await app.close();
+  });
+
+  it('POST /positions/leverage: insufficient margin → 400 without treating it as success', async () => {
+    const app = await build(
+      deps({
+        setLeverage: async () => {
+          throw new FuturesError('need extra isolated margin', 'trade.insufficient_margin', 400);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', leverage: '1' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).not.toBe(200);
+    expect(res.json().error).toBe('trade.insufficient_margin');
+    await app.close();
+  });
+
+  it('POST /positions/margin-mode: signed → 501 NotSupported (isolated-at-open only)', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin-mode',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', marginMode: 'cross' },
+    });
+    expect(res.statusCode).not.toBe(200);
+    expect(res.statusCode).toBe(501);
+    expect(res.json().code).toBe('NotSupported');
+    expect(res.json().intafacedCode).toBe('trade.margin_mode_unsupported');
+    expect(res.json().retryAfter).toBeUndefined();
+    await app.close();
+  });
+
+  for (const path of ['/api/v1/positions/leverage', '/api/v1/positions/margin-mode'] as const) {
     it(`POST ${path}: anonymous → 401 (capabilities are not enumerable unauthenticated)`, async () => {
       const app = await build();
       const res = await app.inject({

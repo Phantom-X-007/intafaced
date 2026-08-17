@@ -122,6 +122,12 @@ export interface PrivateRestDeps {
   /** Close at the current mark. No price parameter, for the same reason. */
   closePosition(principal: Principal, positionId: string): Promise<Position>;
   /**
+   * Isolated live re-leverage within the sealed 10× cap. Extra IM via ledger
+   * recipes; missing position 404; >10× / would-be liquidation / insufficient
+   * margin refuse without writing.
+   */
+  setLeverage(principal: Principal, input: { symbol: string; leverage: string; positionId?: string }): Promise<Position>;
+  /**
    * Open delivered margin call for a position owned by the principal.
    * Null → 404 (no call, or not theirs). Never invents a call.
    */
@@ -923,8 +929,8 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
-   * POST leverage / margin-mode still 501: open path sets mode at open time;
-   * in-place leverage change is not built (would re-margin live risk).
+   * POST leverage: isolated live re-leverage within the 10× cap (ledger delta).
+   * POST margin-mode stays 501: isolated-at-open only — never a live mode flip.
    */
   const derivativesNotSupported = (what: string, intafacedCode: string) =>
     async function handler(req: FastifyRequest, reply: FastifyReply) {
@@ -939,22 +945,54 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         throw err;
       }
 
-      return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open; live re-leverage not built`, intafacedCode));
+      return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open`, intafacedCode));
     };
 
-  const setLeverageArm = refuseArmById('setLeverage');
   const setMarginModeArm = refuseArmById('setMarginMode');
-  if (
-    !setLeverageArm ||
-    !setMarginModeArm ||
-    setLeverageArm.httpStatus !== 501 ||
-    setMarginModeArm.httpStatus !== 501 ||
-    setLeverageArm.ccxtCode !== 'NotSupported' ||
-    setMarginModeArm.ccxtCode !== 'NotSupported'
-  ) {
-    throw new Error('ccxt matrix setLeverage/setMarginMode must stay 501 NotSupported — never invent leverage');
+  if (!setMarginModeArm || setMarginModeArm.httpStatus !== 501 || setMarginModeArm.ccxtCode !== 'NotSupported') {
+    throw new Error('ccxt matrix setMarginMode must stay 501 NotSupported — isolated-at-open only');
   }
-  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', setLeverageArm.intafacedCode));
+
+  app.post('/api/v1/positions/leverage', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const supplied = suppliedPriceFields(body);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
+      }
+
+      const symbol = typeof body.symbol === 'string' ? body.symbol : '';
+      const leverageRaw = typeof body.leverage === 'string' ? body.leverage.trim() : '';
+      if (!leverageRaw) {
+        return reply.code(400).send({
+          ...badRequest('leverage is required — isolated re-leverage does not default', 'trade.leverage_required').body,
+        });
+      }
+      if (!symbol) {
+        return reply.code(400).send({
+          ...badRequest('symbol is required', 'trade.bad_request').body,
+        });
+      }
+      const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
+      const positionId = positionIdRaw.trim() || undefined;
+
+      const pos = await deps.setLeverage(principal, { symbol, leverage: leverageRaw, positionId });
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
   app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', setMarginModeArm.intafacedCode));
 
   // ── Create (money path) ───────────────────────────────────────────────────

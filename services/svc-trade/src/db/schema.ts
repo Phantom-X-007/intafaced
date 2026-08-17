@@ -386,6 +386,8 @@ export const positions = trade.table(
     marginCurrent: amount('margin_current').notNull(),
     marginAsset: text('margin_asset').notNull(),
     fundingPaid: amount('funding_paid').notNull().default('0'),
+    /** Last posted futuresMarginAdd/Release sequence; close residual uses 1. */
+    marginAdjustSeq: integer('margin_adjust_seq').notNull().default(1),
     liqPrice: amount('liq_price'),
     openedAt: tstz('opened_at').notNull().defaultNow(),
     closedAt: tstz('closed_at'),
