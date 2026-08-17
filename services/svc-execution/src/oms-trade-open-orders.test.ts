@@ -63,4 +63,11 @@ describe('tradeAdapterOpenOrders', () => {
     const list = tradeAdapterOpenOrders(adapter([order({ status: 'pending', venueOrderId: null })]));
     await expect(list()).resolves.toEqual([]);
   });
+
+  it('filters by side without inventing the other', async () => {
+    const list = tradeAdapterOpenOrders(adapter([order(), order({ clientOrderId: 'sell-1', venueOrderId: 'v-2', side: 'sell' })]));
+    expect((await list(undefined, 'sell')).map((o) => o.clientOrderId)).toEqual(['sell-1']);
+    expect(await list(undefined, 'buy')).toHaveLength(1);
+    expect(await list()).toHaveLength(2);
+  });
 });
