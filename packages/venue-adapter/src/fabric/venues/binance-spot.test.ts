@@ -29,6 +29,20 @@ class FakeHttp implements HttpPort {
 
   async get(url: string): Promise<HttpResponse> {
     this.requests.push(url);
+    return this.#next(url);
+  }
+
+  async post(url: string): Promise<HttpResponse> {
+    this.requests.push(`POST ${url}`);
+    return this.#next(url);
+  }
+
+  async delete(url: string): Promise<HttpResponse> {
+    this.requests.push(`DELETE ${url}`);
+    return this.#next(url);
+  }
+
+  async #next(url: string): Promise<HttpResponse> {
     const next = this.#responses.shift();
     if (!next) throw new Error(`FakeHttp had no queued response for ${url}`);
     return next;
@@ -393,10 +407,52 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
     );
   });
 
-  it('is honest WITH a trade-only key too: the signed path is not built', async () => {
-    const trade = new BinanceSpotTrade({ venueId: 'binance-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] });
-    await expect(trade.placeOrder(order)).rejects.toThrow(/NOT BUILT/);
-    await expect(trade.placeOrder(order)).rejects.toThrow(VenueUnavailableError);
+  it('places a signed LIMIT order against the injected HTTP port — never a fabricated fill', async () => {
+    const http = new FakeHttp().queue({
+      symbol: 'BTCUSDT',
+      orderId: 42,
+      clientOrderId: 'abc',
+      transactTime: 1_500_000_000_000,
+      price: '100.00',
+      origQty: '1',
+      executedQty: '0',
+      cummulativeQuoteQty: '0',
+      status: 'NEW',
+      type: 'LIMIT',
+      side: 'BUY',
+    });
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const trade = new BinanceSpotTrade(keys, { http, restBase: 'https://rest.test', clock: () => 1_700_000_000_000 });
+    const placed = await trade.placeOrder({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      type: 'limit',
+      amount: 1n * 10n ** 18n,
+      price: 100n * 10n ** 18n,
+      clientOrderId: 'abc',
+    });
+    expect(placed.status).toBe('open');
+    expect(placed.filled).toBe(0n);
+    expect(placed.venueOrderId).toBe('42');
+    expect(http.requests[0]).toMatch(/^POST https:\/\/rest\.test\/api\/v3\/order\?/);
+    expect(http.requests[0]).toContain('signature=');
+    expect(http.requests[0]).toContain('newClientOrderId=abc');
+  });
+
+  it('throws the venue error body instead of returning a fake rejected order', async () => {
+    const http = new FakeHttp().queue({ code: -2010, msg: 'insufficient balance' }, 400);
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const trade = new BinanceSpotTrade(keys, { http, restBase: 'https://rest.test', clock: () => 1 });
+    await expect(
+      trade.placeOrder({
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        type: 'limit',
+        amount: 1n * 10n ** 18n,
+        price: 100n * 10n ** 18n,
+        clientOrderId: 'abc',
+      }),
+    ).rejects.toMatchObject({ reason: 'unreachable' });
   });
 });
 
