@@ -8,13 +8,13 @@ import { DEFAULT_MAX_LEVERAGE } from './futures/initial-margin.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
-import type { Candle, Market, PublicTapePrint } from './spot/types.js';
+import type { Candle, Market, MarketStatus, PublicTapePrint } from './spot/types.js';
 
 /**
  * Public CCXT-style REST slice (trade.ccxt-api — market data).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET /api/v1/markets
+ *   GET /api/v1/markets?status=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
@@ -39,7 +39,8 @@ const MAX_CANDLES = 1000;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
-  markets(): Promise<Market[]>;
+  /** Optional status is SQL in the service. Omitted still includes halted. */
+  markets(status?: MarketStatus): Promise<Market[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   depth(marketId: string, limit: number): Promise<EngineDepth>;
   /**
@@ -334,8 +335,8 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), fl
      * ledger, and the position a fill implies does not exist.
      *
      * This is not a CCXT field, and it is emitted anyway because the honest
-     * alternatives were worse. `trade.markets()` returns every row with no
-     * filter, so a paper market already appears in `fetchMarkets` as an
+     * alternatives were worse. Unfiltered `trade.markets()` returns every row
+     * (including halted), so a paper market already appears in `fetchMarkets` as an
      * ordinary `active: true` spot market; `placeOrder` then routes it to
      * `placePaperOrderIsolated` and returns a 201 that looks like any other
      * order. A bot books a position it does not have, and nothing in the
@@ -503,6 +504,13 @@ export function parseTapeSide(raw: unknown): { ok: true; side?: 'buy' | 'sell' }
   return { ok: false, message: 'side must be buy or sell' };
 }
 
+/** Optional listing-status filter. Absent → pending, active, halted, and delisted. */
+export function parseMarketStatus(raw: unknown): { ok: true; status?: MarketStatus } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
+  if (raw === 'pending' || raw === 'active' || raw === 'halted' || raw === 'delisted') return { ok: true, status: raw };
+  return { ok: false, message: 'status must be pending, active, halted, or delisted' };
+}
+
 /**
  * Register the public REST routes on a Fastify instance.
  * Mount alongside `/trpc` — no auth middleware.
@@ -537,8 +545,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     });
   });
 
-  app.get('/api/v1/markets', async (_req, reply) => {
-    const markets = await deps.markets();
+  app.get<{ Querystring: { status?: string } }>('/api/v1/markets', async (req, reply) => {
+    const statusParsed = parseMarketStatus(req.query.status);
+    if (!statusParsed.ok) {
+      return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_market_status'));
+    }
+    const markets = await deps.markets(statusParsed.status);
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
     return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));

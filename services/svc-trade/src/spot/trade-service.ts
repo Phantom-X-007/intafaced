@@ -548,12 +548,29 @@ export class TradeService {
     return toMarket(row);
   }
 
-  async markets(): Promise<Market[]> {
+  /**
+   * Optional status narrows pending/active/halted/delisted in SQL.
+   * Omitted still returns halted (and pending/delisted) — never hide the
+   * risky set by inventing a default of active.
+   */
+  async markets(status?: MarketStatus): Promise<Market[]> {
+    const statusFilter =
+      status === 'pending'
+        ? this.sql`status = 'pending'`
+        : status === 'active'
+          ? this.sql`status = 'active'`
+          : status === 'halted'
+            ? this.sql`status = 'halted'`
+            : status === 'delisted'
+              ? this.sql`status = 'delisted'`
+              : this.sql`TRUE`;
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule, paper
-        FROM trade.markets ORDER BY symbol ASC
+        FROM trade.markets
+       WHERE ${statusFilter}
+       ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
   }
