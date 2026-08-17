@@ -15,6 +15,8 @@
  *    on the operator door
  * 7. Collision: #2194 compose quote-asset pin — this file does not touch
  *    compose, env.ts, or LOAN_QUOTE_ASSET_ID
+ *
+ * Rerun after unrelated protocol/academy flakes. Do not edit those suites.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
