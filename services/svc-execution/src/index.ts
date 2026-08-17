@@ -20,7 +20,8 @@ registerProcessHooks(
  *
  * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
  * (SOR `planRoute`, does not submit), `execution.oms.execute` (same plan,
- * then injected submit), `execution.oms.cancel` (client order id),
+ * then injected submit; `tradeAdapterSubmit` maps `TradeAdapter.placeOrder`),
+ * `execution.oms.cancel` (client order id),
  * `execution.oms.fetch` (client order id), `execution.oms.openOrders`,
  * `execution.oms.balances`, `execution.oms.positions`,
  * `execution.oms.rails` (not a transfer), `execution.oms.funding`
@@ -28,7 +29,8 @@ registerProcessHooks(
  * `execution.oms.latency` (venue observation — not a routing weight),
  * `execution.oms.markets` (instrument catalog — not a route), and
  * `execution.oms.snapshot` (seed book — not a mark).
- * No live CEX keys. Internal venues refused. In-memory sealed registry.
+ * No live CEX keys. Internal venues refused. No matching-path privilege.
+ * In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
 const appRouter = createExecutionRouter(registry);
