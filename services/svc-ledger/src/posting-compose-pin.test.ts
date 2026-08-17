@@ -54,4 +54,9 @@ describe('compose posting freeze and reconcile cadence for svc-ledger', () => {
     expect(block.match(JWT)).toHaveLength(1);
     expect(block).not.toMatch(/INTERNAL_SERVICE_SECRET:/);
   });
+
+  it('JWT_ACCESS_SECRET refuses boot when unset — no silent allow via empty default', () => {
+    expect(block).toMatch(/JWT_ACCESS_SECRET:\s*\$\{JWT_ACCESS_SECRET:\?/);
+    expect(block).not.toMatch(/JWT_ACCESS_SECRET:\s*\$\{JWT_ACCESS_SECRET:-/);
+  });
 });
