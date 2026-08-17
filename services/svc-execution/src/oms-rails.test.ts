@@ -57,12 +57,14 @@ class FakeRails {
   readonly enableds: (boolean | undefined)[] = [];
   readonly networks: (string | undefined)[] = [];
   readonly toVenueIds: (string | undefined)[] = [];
+  readonly fromVenueIds: (string | undefined)[] = [];
   constructor(private readonly next: TransferRail[] | Error) {}
-  fn: OmsRailsFn = async (asset, enabled, network, toVenueId) => {
+  fn: OmsRailsFn = async (asset, enabled, network, toVenueId, fromVenueId) => {
     this.assets.push(asset);
     this.enableds.push(enabled);
     this.networks.push(network);
     this.toVenueIds.push(toVenueId);
+    this.fromVenueIds.push(fromVenueId);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -124,6 +126,20 @@ describe('observeOmsRails', () => {
     expect(street.toVenueIds).toEqual(['harbour']);
     if (!result.ok) return;
     expect(result.rails[0]!.toVenueId).toBe('harbour');
+  });
+
+  it('passes an optional fromVenueId through and does not invent a missing rail', async () => {
+    const street = new FakeRails([usdtRail({ fromVenueId: 'street' })]);
+    const result = await observeOmsRails({
+      venueId: 'street',
+      asset: 'USDT',
+      fromVenueId: 'street',
+      railsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.fromVenueIds).toEqual(['street']);
+    if (!result.ok) return;
+    expect(result.rails[0]!.fromVenueId).toBe('street');
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -202,6 +218,7 @@ describe('execution.oms.rails tRPC', () => {
       enabled: false,
       network: 'trc20',
       toVenueId: 'harbour',
+      fromVenueId: 'street',
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -210,5 +227,6 @@ describe('execution.oms.rails tRPC', () => {
     expect(street.enableds).toEqual([false]);
     expect(street.networks).toEqual(['trc20']);
     expect(street.toVenueIds).toEqual(['harbour']);
+    expect(street.fromVenueIds).toEqual(['street']);
   });
 });

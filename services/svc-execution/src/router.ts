@@ -288,6 +288,7 @@ export function createExecutionRouter(
               enabled: z.boolean().optional(),
               network: z.string().min(1).max(32).optional(),
               toVenueId: z.string().min(1).max(128).optional(),
+              fromVenueId: z.string().min(1).max(128).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -299,6 +300,7 @@ export function createExecutionRouter(
                 enabled: input.enabled,
                 network: input.network,
                 toVenueId: input.toVenueId,
+                fromVenueId: input.fromVenueId,
                 kind: input.kind,
                 railsByVenue,
               });
