@@ -183,9 +183,9 @@ export const GATES = [
     script: 'tooling/ci/custody-scan.mjs',
     doctrine: '§16.10',
     why:
-      'a Protocol Plane service importing a ledger write recipe, plus D26-P2-08: vendor Java runtime risk surface ' +
-      '(money-plane src/main + committed classpath jars). Dual-book call-site ratchet stays in vendor-java-money-scan — ' +
-      'see the header of custody-scan.mjs',
+      'a Protocol Plane service importing a ledger write recipe, plus D26-P2-08: Java money/custody surface is in ' +
+      'the scan object via vendor-java-money-scan successor (fail closed if unscanned). Dual-book rules stay in that ' +
+      'file — custody-scan composes it, it does not fork a third scanner. See the header of custody-scan.mjs',
   },
   {
     id: 'secrets',
