@@ -1966,6 +1966,7 @@ export class TradeService {
    * (CCXT convention). Optional status narrows the terminal IN-list — never
    * invents a status, and unknown values are the caller's to refuse before this.
    * Optional side narrows buy/sell in SQL — never invents a side.
+   * Optional type narrows limit/market in SQL — never invents a type.
    */
   async orderHistory(
     principal: Principal,
@@ -1975,6 +1976,7 @@ export class TradeService {
       sinceMs?: number;
       status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
       side?: 'buy' | 'sell';
+      type?: 'limit' | 'market';
     } = {},
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
@@ -1992,6 +1994,8 @@ export class TradeService {
               ? this.sql`status = 'expired'`
               : this.sql`status IN ('filled', 'cancelled', 'rejected', 'expired')`;
     const sideFilter = input.side === 'buy' ? this.sql`side = 'buy'` : input.side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
+    const typeFilter =
+      input.type === 'limit' ? this.sql`type = 'limit'` : input.type === 'market' ? this.sql`type = 'market'` : this.sql`TRUE`;
     const rows =
       input.marketId && sinceDate
         ? await this.sql<OrderRow[]>`
@@ -2000,6 +2004,7 @@ export class TradeService {
                AND market_id = ${input.marketId}
                AND ${statusFilter}
                AND ${sideFilter}
+               AND ${typeFilter}
                AND created_at >= ${sinceDate}
              ORDER BY created_at DESC
              LIMIT ${limit}
@@ -2011,6 +2016,7 @@ export class TradeService {
                  AND market_id = ${input.marketId}
                  AND ${statusFilter}
                  AND ${sideFilter}
+                 AND ${typeFilter}
                ORDER BY created_at DESC
                  LIMIT ${limit}
             `
@@ -2020,6 +2026,7 @@ export class TradeService {
                  WHERE user_id = ${principal.userId}
                    AND ${statusFilter}
                    AND ${sideFilter}
+                   AND ${typeFilter}
                    AND created_at >= ${sinceDate}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
@@ -2029,6 +2036,7 @@ export class TradeService {
                  WHERE user_id = ${principal.userId}
                    AND ${statusFilter}
                    AND ${sideFilter}
+                   AND ${typeFilter}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
               `;

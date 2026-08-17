@@ -326,7 +326,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     [],
     'Open orders; optional symbol/status (pending|open)/side (buy|sell)/type (limit|market) — unfiltered still shows pending',
   ),
-  route('fetchClosedOrders', 'supported', [], 'Closed orders; optional symbol/since/limit/status/side'),
+  route('fetchClosedOrders', 'supported', [], 'Closed orders; optional symbol/since/limit/status/side/type'),
   route('fetchMyTrades', 'supported', [], 'Account fills; optional symbol/since/limit/side/liquidity'),
   route('fetchPositions', 'supported', [], 'Open/closing futures rows; [] when none; optional symbol/status/side — no invent'),
   route(

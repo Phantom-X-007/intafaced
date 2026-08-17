@@ -40,7 +40,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=)
- *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=)
+ *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
@@ -97,6 +97,7 @@ export interface PrivateRestDeps {
       sinceMs?: number;
       status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
       side?: 'buy' | 'sell';
+      type?: 'limit' | 'market';
     },
   ): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
@@ -712,7 +713,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     },
   );
 
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string } }>(
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string; type?: string } }>(
     '/api/v1/orders/closed',
     async (req, reply) => {
       const principal = requirePrincipal(req, reply);
@@ -741,15 +742,20 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       if (!sideParsed.ok) {
         return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_closed_order_side'));
       }
+      const typeParsed = parseOpenOrderType(req.query.type);
+      if (!typeParsed.ok) {
+        return sendCcxt(reply, badRequest(typeParsed.message, 'trade.invalid_closed_order_type'));
+      }
 
       try {
-        // since / side → SQL via orderHistory — not a post-filter of a mixed page.
+        // since / side / type → SQL via orderHistory — not a post-filter of a mixed page.
         const orders = await deps.orderHistory(principal, {
           marketId,
           limit,
           sinceMs: sinceParsed.sinceMs,
           ...(statusParsed.status ? { status: statusParsed.status } : {}),
           ...(sideParsed.side ? { side: sideParsed.side } : {}),
+          ...(typeParsed.type ? { type: typeParsed.type } : {}),
         });
         const symbolByMarket = new Map<string, string>();
         const wire = [];
