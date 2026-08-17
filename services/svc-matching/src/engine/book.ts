@@ -140,6 +140,15 @@ export class OrderBook {
     return this.lastTradePrice;
   }
 
+  /**
+   * Never printed and holding nothing. Sequence can still be > 0: an IOC or
+   * market remainder on a virgin book consumes a sequence without a print or a
+   * rest. That must not list as a market — same honesty as a FOK reject.
+   */
+  get isNeverPrintedEmpty(): boolean {
+    return this.lastTradePrice === null && this.index.size === 0 && this.stops.length === 0;
+  }
+
   bestBid(): Amount | null {
     return this.bids[0]?.price ?? null;
   }
