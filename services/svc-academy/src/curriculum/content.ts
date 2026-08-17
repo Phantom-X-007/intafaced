@@ -978,6 +978,11 @@ move opposite each other" is an observation about the past. Without a mechanism
 you do not have a hedge; you have two positions and a hope, and you are paying
 costs on both.
 
+## Common mistakes
+
+- Counting each instrument as independent risk when they share one driver.
+- Treating a historical co-move as a hedge without a stated failure mechanism.
+
 ## Before you move on
 
 List your open positions and group them by shared driver. Sum the account risk
@@ -1395,6 +1400,11 @@ Same order, every time: destination verified independently, network matched, tes
 send, confirmation, then the remainder. A routine you always follow is what
 protects you on the day you are tired, distracted, or being deliberately rushed —
 which is the day it will matter.
+
+## Common mistakes
+
+- Matching only the first and last characters of a destination instead of the whole string.
+- Treating imposed urgency as a reason to skip the independent check.
 
 ## Before you move on
 

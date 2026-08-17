@@ -15,14 +15,23 @@
  *   6. Operator stage status (pipeline / catalog / polish) for honest residual
  *
  * D26-P1-C5 (substance):
- *   7. Lesson-substance checklist — refuse char-count theater that clears the
- *      depth floor by repeating filler. Spine report names theater slugs.
+ *   7. Named import refuses for empty / whitespace / length-padded junk, plus
+ *      structured substance (sections / steps / objectives) — not char-count theater.
  */
 
 import type { CurriculumItem, CurriculumKind, CurriculumPath } from './catalog.js';
 import { CURRICULUM_MIN_BODY_CHARS, CURRICULUM_PATHS, getCurriculumItem, listCurriculum } from './catalog.js';
 import { curriculumDeepLinksVerified } from './deep-links.js';
 import { curriculumI18nStrategyHonest } from './i18n-strategy.js';
+import {
+  CURRICULUM_IMPORT_REFUSE,
+  classifyEmptyBody,
+  lessonSubstanceChecklist,
+  type CurriculumImportRefuseCode,
+} from './lesson-substance.js';
+
+export { CURRICULUM_IMPORT_REFUSE, classifyEmptyBody, lessonSubstanceChecklist, lessonSubstanceOk } from './lesson-substance.js';
+export type { CurriculumImportRefuseCode, LessonSubstanceIssue } from './lesson-substance.js';
 
 /** Tracker title promise (academy.curriculum). */
 export const CURRICULUM_TITLE_PLAYBOOKS = 20;
@@ -45,9 +54,15 @@ export interface CurriculumImportRecord {
   order: number;
   summary: string;
   body: string;
+  /** Checkable teaching objectives — required for an accepted import (D26-P1-C5). */
+  objectives?: readonly string[];
 }
 
-export type ImportValidationIssue = { field: string; code: 'missing' | 'invalid' | 'brand' | 'path'; message: string };
+export type ImportValidationIssue = {
+  field: string;
+  code: 'missing' | 'invalid' | 'brand' | 'path' | CurriculumImportRefuseCode;
+  message: string;
+};
 
 export interface ImportValidationResult {
   ok: boolean;
@@ -94,86 +109,6 @@ export function workbookLiveQuoteChecklist(
 }
 
 /**
- * Lesson-substance checklist (D26-P1-C5).
- *
- * The depth floor (`CURRICULUM_MIN_BODY_CHARS`) stops three-bullet stubs. It does
- * not stop a body that repeats one sentence until the character count clears —
- * that is char-count theater, and it used to pass `brandChecklist`. This gate
- * refuses padding and requires a teachable shape: sectioned markdown, lexical
- * variety, and at least one pedagogical signal (worked example, mistakes,
- * drill, self-check, etc.).
- *
- * Passing proves an import is not theater. It does not grade writing quality.
- */
-export function lessonSubstanceChecklist(body: string): ImportValidationIssue[] {
-  const issues: ImportValidationIssue[] = [];
-  const trimmed = body.trim();
-  if (!trimmed) {
-    return [{ field: 'body', code: 'invalid', message: 'Body required for substance check' }];
-  }
-
-  const h2 = trimmed.match(/^## .+$/gm) ?? [];
-  if (h2.length < 2) {
-    issues.push({
-      field: 'body',
-      code: 'invalid',
-      message: 'Body needs ≥2 ## sections (mechanics / mistakes / drills) — a padded wall is not a lesson',
-    });
-  }
-
-  const words = trimmed
-    .toLowerCase()
-    .split(/[^a-z0-9']+/)
-    .filter((w) => w.length > 0);
-  const unique = new Set(words);
-  const uniqueRatio = words.length === 0 ? 0 : unique.size / words.length;
-  // Real spine lessons sit well above these floors; repeated filler collapses both.
-  if (unique.size < 90) {
-    issues.push({
-      field: 'body',
-      code: 'invalid',
-      message: `Body lexicon too thin (${unique.size} unique words < 90) — char-count padding is not lesson substance`,
-    });
-  } else if (uniqueRatio < 0.28) {
-    issues.push({
-      field: 'body',
-      code: 'invalid',
-      message: `Body unique-word ratio ${uniqueRatio.toFixed(2)} < 0.28 — refuses repeated filler theater`,
-    });
-  }
-
-  const longLines = trimmed
-    .split(/\n+/)
-    .map((line) => line.trim().toLowerCase())
-    .filter((line) => line.length >= 48 && !line.startsWith('#'));
-  const lineCounts = new Map<string, number>();
-  for (const line of longLines) {
-    lineCounts.set(line, (lineCounts.get(line) ?? 0) + 1);
-  }
-  let maxLineRep = 0;
-  for (const n of lineCounts.values()) maxLineRep = Math.max(maxLineRep, n);
-  if (maxLineRep >= 4) {
-    issues.push({
-      field: 'body',
-      code: 'invalid',
-      message: 'Body repeats the same long line ≥4 times — char-count theater refused',
-    });
-  }
-
-  const teachingSignal =
-    /\b(worked example|illustrative arithmetic|common mistakes|before you move on|check yourself|what this is not|drill\s+\d|paper only|invalidation|position size)\b/i;
-  if (!teachingSignal.test(trimmed)) {
-    issues.push({
-      field: 'body',
-      code: 'invalid',
-      message: 'Body lacks a teaching signal (worked example / mistakes / drill / self-check) — length alone is not substance',
-    });
-  }
-
-  return issues;
-}
-
-/**
  * Brand-scan checklist for import bodies (§0.7).
  *
  * Does NOT list forbidden vendor strings in source (brand scanner would trip on
@@ -182,7 +117,7 @@ export function lessonSubstanceChecklist(body: string): ImportValidationIssue[] 
  * so a padded 900-character wall cannot re-enter.
  */
 export function brandChecklist(
-  record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body'> & { kind?: CurriculumKind },
+  record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body' | 'objectives'> & { kind?: CurriculumKind },
 ): ImportValidationIssue[] {
   const issues: ImportValidationIssue[] = [];
   const blob = `${record.title}\n${record.summary}\n${record.body}`;
@@ -209,7 +144,20 @@ export function brandChecklist(
       message: 'Title required; summary min 12 characters (no empty stubs painted complete)',
     });
   }
-  if (!record.body.trimStart().startsWith('#')) {
+  const emptyCode = classifyEmptyBody(record.body);
+  if (emptyCode === CURRICULUM_IMPORT_REFUSE.empty) {
+    issues.push({
+      field: 'body',
+      code: emptyCode,
+      message: 'Import body is empty — refuse academy.curriculum_empty',
+    });
+  } else if (emptyCode === CURRICULUM_IMPORT_REFUSE.whitespace) {
+    issues.push({
+      field: 'body',
+      code: emptyCode,
+      message: 'Import body is whitespace-only — refuse academy.curriculum_whitespace',
+    });
+  } else if (!record.body.trimStart().startsWith('#')) {
     issues.push({
       field: 'body',
       code: 'invalid',
@@ -222,8 +170,7 @@ export function brandChecklist(
       message: `Body must clear depth floor (≥${CURRICULUM_MIN_BODY_CHARS} chars) — the old 40-char import bar let stubs re-enter`,
     });
   } else {
-    // Depth cleared — now refuse char-count theater that only looked deep.
-    issues.push(...lessonSubstanceChecklist(record.body));
+    issues.push(...lessonSubstanceChecklist(record.body, { objectives: record.objectives }));
   }
   if (record.kind === 'workbook') {
     issues.push(...workbookLiveQuoteChecklist({ kind: 'workbook', title: record.title, summary: record.summary, body: record.body }));
@@ -268,6 +215,7 @@ export function validateImportRecord(raw: unknown): ImportValidationResult {
         title: r.title as string,
         summary: r.summary as string,
         body: r.body as string,
+        objectives: Array.isArray(r.objectives) ? (r.objectives as string[]) : undefined,
       }),
     );
   }
@@ -474,7 +422,7 @@ export function curriculumSubstanceReport(): CurriculumSubstanceReport {
   const failing: string[] = [];
   for (const summary of all) {
     const item = getCurriculumItem(summary.slug);
-    if (!item || lessonSubstanceChecklist(item.body).length > 0) {
+    if (!item || lessonSubstanceChecklist(item.body, { objectives: item.objectives }).length > 0) {
       failing.push(summary.slug);
     }
   }
