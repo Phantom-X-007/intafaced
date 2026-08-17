@@ -11,6 +11,7 @@
  * Optional active forwards true/false; omitted still observes inactive listings.
  * Optional settle forwards USDT/…; omitted still observes null settle (spot).
  * Optional symbol forwards the unified BASE/QUOTE; omitted still observes every listing.
+ * Optional venueSymbol forwards the venue's own spelling; omitted still observes every listing.
  * Inactive listings stay inactive. Null settle stays null.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
@@ -23,6 +24,7 @@ export type OmsMarketsFn = (
   active?: boolean,
   settle?: string,
   symbol?: string,
+  venueSymbol?: string,
 ) => Promise<readonly VenueMarket[]>;
 
 export type OmsMarketsInput = {
@@ -33,6 +35,7 @@ export type OmsMarketsInput = {
   readonly active?: boolean;
   readonly settle?: string;
   readonly symbol?: string;
+  readonly venueSymbol?: string;
   readonly kind?: VenueKind;
   readonly marketsByVenue?: Readonly<Record<string, OmsMarketsFn>>;
 };
@@ -77,6 +80,7 @@ export async function observeOmsMarkets(input: OmsMarketsInput): Promise<OmsMark
         input.active,
         input.settle?.trim() || undefined,
         input.symbol?.trim() || undefined,
+        input.venueSymbol?.trim() || undefined,
       ),
     };
   } catch (err) {
