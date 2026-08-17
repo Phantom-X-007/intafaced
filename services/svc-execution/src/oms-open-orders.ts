@@ -4,18 +4,26 @@
  * Pending rows are dropped, not rewritten to open. Missing injection or throw
  * is list_failed. Internal venues refused. Optional side forwards buy/sell;
  * omitted still lists both (after dropping pending). Optional type forwards
- * limit/market; omitted still lists both.
+ * limit/market; omitted still lists both. Optional clientOrderId forwards an
+ * exact idempotency key; omitted still lists every acknowledged open.
+ * Pending rows stay dropped — never rewritten to open.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueOrder, VenueOrderType } from '@intafaced/venue-contracts';
 
-export type OmsOpenOrdersFn = (symbol?: string, side?: 'buy' | 'sell', type?: VenueOrderType) => Promise<VenueOrder[]>;
+export type OmsOpenOrdersFn = (
+  symbol?: string,
+  side?: 'buy' | 'sell',
+  type?: VenueOrderType,
+  clientOrderId?: string,
+) => Promise<VenueOrder[]>;
 
 export type OmsOpenOrdersInput = {
   readonly venueId: string;
   readonly symbol?: string;
   readonly side?: 'buy' | 'sell';
   readonly type?: VenueOrderType;
+  readonly clientOrderId?: string;
   readonly kind?: VenueKind;
   readonly openOrdersByVenue?: Readonly<Record<string, OmsOpenOrdersFn>>;
 };
@@ -53,7 +61,7 @@ export async function listOmsOpenOrders(input: OmsOpenOrdersInput): Promise<OmsO
 
   let orders: VenueOrder[];
   try {
-    orders = await list(symbol, input.side, input.type);
+    orders = await list(symbol, input.side, input.type, input.clientOrderId?.trim() || undefined);
   } catch (err) {
     return { ok: false, reason: 'list_failed', detail: listErrorMessage(err) };
   }
