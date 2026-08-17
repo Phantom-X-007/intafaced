@@ -55,9 +55,11 @@ function perp(over: Partial<VenuePosition> = {}): VenuePosition {
 
 class FakePositions {
   readonly symbols: Array<string | undefined> = [];
+  readonly sides: Array<'long' | 'short' | undefined> = [];
   constructor(private readonly next: VenuePosition[] | Error) {}
-  fn: OmsPositionsFn = async (symbol) => {
+  fn: OmsPositionsFn = async (symbol, side) => {
     this.symbols.push(symbol);
+    this.sides.push(side);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -86,6 +88,19 @@ describe('observeOmsPositions', () => {
       positionsByVenue: { street: street.fn },
     });
     expect(street.symbols).toEqual(['BTC/USDT']);
+  });
+
+  it('passes an optional side through and does not invent the other side', async () => {
+    const street = new FakePositions([perp({ side: 'short' })]);
+    const result = await observeOmsPositions({
+      venueId: 'street',
+      side: 'short',
+      positionsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.sides).toEqual(['short']);
+    if (!result.ok) return;
+    expect(result.positions[0]?.side).toBe('short');
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -142,10 +157,11 @@ describe('execution.oms.positions tRPC', () => {
   it('observes through the injected map', async () => {
     const street = new FakePositions([perp()]);
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, { street: street.fn }).createCaller(signed());
-    const out = await caller.execution.oms.positions({ venueId: 'street' });
+    const out = await caller.execution.oms.positions({ venueId: 'street', side: 'long' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.positions).toHaveLength(1);
     expect(street.symbols).toHaveLength(1);
+    expect(street.sides).toEqual(['long']);
   });
 });

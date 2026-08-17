@@ -4,16 +4,18 @@
  * A VenuePosition is a rumour with a timestamp — never a ledger input
  * (Doctrine §0.6). Missing credentials / throw is observe_failed, not [].
  * Empty [] is honest: the venue reported no positions. Internal venues refused.
- * Null mark / PnL / liq stay null — never rewritten to 0.
+ * Null mark / PnL / liq stay null — never rewritten to 0. Optional side
+ * forwards long/short; omitted still observes both.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenuePosition } from '@intafaced/venue-contracts';
 
-export type OmsPositionsFn = (symbol?: string) => Promise<VenuePosition[]>;
+export type OmsPositionsFn = (symbol?: string, side?: 'long' | 'short') => Promise<VenuePosition[]>;
 
 export type OmsPositionsInput = {
   readonly venueId: string;
   readonly symbol?: string;
+  readonly side?: 'long' | 'short';
   readonly kind?: VenueKind;
   readonly positionsByVenue?: Readonly<Record<string, OmsPositionsFn>>;
 };
@@ -50,7 +52,7 @@ export async function observeOmsPositions(input: OmsPositionsInput): Promise<Oms
   }
 
   try {
-    return { ok: true, positions: await positions(symbol) };
+    return { ok: true, positions: await positions(symbol, input.side) };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
   }

@@ -258,6 +258,7 @@ export function createExecutionRouter(
             z.object({
               venueId: z.string().min(1).max(128),
               symbol: z.string().min(1).max(64).optional(),
+              side: z.enum(['long', 'short']).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -266,6 +267,7 @@ export function createExecutionRouter(
               return observeOmsPositions({
                 venueId: input.venueId,
                 symbol: input.symbol,
+                side: input.side,
                 kind: input.kind,
                 positionsByVenue,
               });
