@@ -1425,7 +1425,47 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen).toEqual({ symbol: 'BTC/USDT', limit: 2, sinceMs: 1_700_000_000_000 });
+    expect(seen).toEqual({ symbol: 'BTC/USDT', limit: 2, sinceMs: 1_700_000_000_000, status: undefined });
+    await app.close();
+  });
+
+  it('GET /positions/closed?status=liquidated: passes status into listClosedPositions', async () => {
+    let seen: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated' } | null = null;
+    const app = await build(
+      deps({
+        listClosedPositions: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?status=liquidated',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.status).toBe('liquidated');
+    await app.close();
+  });
+
+  it('GET /positions/closed?status=: invalid → 400 without listClosedPositions', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        listClosedPositions: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?status=open',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
     await app.close();
   });
 

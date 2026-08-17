@@ -285,6 +285,36 @@ if (!available) {
     expect(await positions.listClosed(ALICE, { sinceMs: 0 })).toHaveLength(2);
   });
 
+  it('listClosed status=closed excludes a liquidated row', async () => {
+    feed('50000');
+    const closed = await positions.open({
+      clientOpenId: 't-list-closed-status-closed',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, closed.id!);
+    const liq = await positions.open({
+      clientOpenId: 't-list-closed-status-liq',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, liq.id!);
+    await sql`UPDATE trade.positions SET status = 'liquidated' WHERE id = ${liq.id!}`;
+    const all = await positions.listClosed(ALICE);
+    expect(all.map((row) => row.status).sort()).toEqual(['closed', 'liquidated']);
+    expect(await positions.listClosed(ALICE, { status: 'closed' })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: closed.id, status: 'closed' })]),
+    );
+    expect((await positions.listClosed(ALICE, { status: 'closed' })).map((row) => row.id)).toEqual([closed.id]);
+    expect((await positions.listClosed(ALICE, { status: 'liquidated' })).map((row) => row.id)).toEqual([liq.id]);
+  });
+
   it('get missing or not-theirs is the same 404', async () => {
     feed('50000');
     const pos = await positions.open({

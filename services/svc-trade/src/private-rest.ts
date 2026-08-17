@@ -49,7 +49,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
- *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since= ms)
+ *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since=&status=)
  *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
  *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
@@ -111,7 +111,10 @@ export interface PrivateRestDeps {
   /** Open futures positions for the principal (empty [] when none). */
   listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
   /** Closed/liquidated rows for the principal (empty [] when none). */
-  listClosedPositions(principal: Principal, input: { symbol?: string; limit?: number; sinceMs?: number }): Promise<Position[]>;
+  listClosedPositions(
+    principal: Principal,
+    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated' },
+  ): Promise<Position[]>;
   /** One owned futures row. Missing / not theirs → 404, never another user's row. */
   getPosition(principal: Principal, positionId: string): Promise<Position>;
   /**
@@ -452,6 +455,13 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
   return { ok: true, sinceMs: Math.floor(n) };
 }
 
+/** Optional settled-status filter. Absent → both closed and liquidated. */
+export function parseClosedPositionStatus(raw: unknown): { ok: true; status?: 'closed' | 'liquidated' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
+  if (raw === 'closed' || raw === 'liquidated') return { ok: true, status: raw };
+  return { ok: false, message: 'status must be closed or liquidated' };
+}
+
 /**
  * Map CCXT create body → PlaceOrderInput (decimal strings → Amount).
  * Only market/limit; postOnly becomes tif PO when no other tif is set.
@@ -766,30 +776,38 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
    * Settled futures history. Mounted as `/closed` (not `:id`) so it cannot be
    * swallowed by GET /positions/:id. Empty [] when none — no invented mark.
    */
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>('/api/v1/positions/closed', async (req, reply) => {
-    const principal = requirePrincipal(req, reply);
-    if (!principal) return;
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string } }>(
+    '/api/v1/positions/closed',
+    async (req, reply) => {
+      const principal = requirePrincipal(req, reply);
+      if (!principal) return;
 
-    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
-    const sinceParsed = parseSince(req.query.since);
-    if (!sinceParsed.ok) {
-      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
-    }
+      const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+      const sinceParsed = parseSince(req.query.since);
+      if (!sinceParsed.ok) {
+        return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+      }
+      const statusParsed = parseClosedPositionStatus(req.query.status);
+      if (!statusParsed.ok) {
+        return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_closed_status'));
+      }
 
-    try {
-      requireScope(principal, 'trade:read');
-      const rows = await deps.listClosedPositions(principal, {
-        symbol: req.query.symbol,
-        limit,
-        sinceMs: sinceParsed.sinceMs,
-      });
-      return reply.code(200).send(rows);
-    } catch (err) {
-      const sent = sendDomainError(reply, err);
-      if (sent) return sent;
-      throw err;
-    }
-  });
+      try {
+        requireScope(principal, 'trade:read');
+        const rows = await deps.listClosedPositions(principal, {
+          symbol: req.query.symbol,
+          limit,
+          sinceMs: sinceParsed.sinceMs,
+          status: statusParsed.status,
+        });
+        return reply.code(200).send(rows);
+      } catch (err) {
+        const sent = sendDomainError(reply, err);
+        if (sent) return sent;
+        throw err;
+      }
+    },
+  );
 
   /**
    * Open a funded futures position (margin via ledger recipes).

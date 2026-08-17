@@ -387,7 +387,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     scope: 'trade:read',
     kind: 'supported',
     refuseArmIds: [],
-    notes: 'Closed/liquidated futures rows; [] when none; optional symbol/limit/since in SQL — no invented mark',
+    notes: 'Closed/liquidated futures rows; [] when none; optional symbol/limit/since/status in SQL — no invented mark',
   },
   {
     name: 'fetchPosition',
