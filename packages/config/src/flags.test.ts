@@ -239,11 +239,11 @@ describe('assertEnabled — waitlist / referral refuse wrong phase', () => {
  * Enforced flags waiting on the drop clock read drop-pending (built control).
  */
 describe('offReadiness — OFF-and-unbuilt vs OFF-and-ready', () => {
-  it('marks waitlist / referral as unbuilt when off (plan rows, no live service gate)', () => {
-    expect(isCapabilityBuilt('waitlist.enabled')).toBe(false);
-    expect(isCapabilityBuilt('referral.queue')).toBe(false);
-    expect(offReadiness('waitlist.enabled', { drop: '0', overrides: { 'waitlist.enabled': false } })).toBe('unbuilt');
-    expect(offReadiness('referral.queue', { drop: '0', overrides: { 'referral.queue': false } })).toBe('unbuilt');
+  it('marks waitlist and referral as built request-path gates when off via override', () => {
+    expect(isCapabilityBuilt('waitlist.enabled')).toBe(true);
+    expect(isCapabilityBuilt('referral.queue')).toBe(true);
+    expect(offReadiness('waitlist.enabled', { drop: '0', overrides: { 'waitlist.enabled': false } })).toBe('overridden');
+    expect(offReadiness('referral.queue', { drop: '0', overrides: { 'referral.queue': false } })).toBe('overridden');
   });
 
   it('marks a built control waiting on the clock as drop-pending, not unbuilt', () => {

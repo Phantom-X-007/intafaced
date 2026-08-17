@@ -5,8 +5,8 @@
  * Flag OFF → named FlagDisabledError, no silent enroll.
  * Store missing is the request-path "unbuilt" refuse (wired in index.ts).
  *
- * Does not consult `isCapabilityBuilt`: that stays false until FLAG_REGISTRY
- * enforcement is flipped, which this residual does not edit.
+ * FLAG_REGISTRY marks both keys `request-path` on this service so OFF reads
+ * as a built control (`overridden` / `killed`), not unbuilt plan.
  *
  * No IFC, no token rewards, no ledger. Position is FIFO join order;
  * a referral records attribution + referred_count only.

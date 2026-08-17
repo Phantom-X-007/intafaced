@@ -52,11 +52,9 @@ export const DROP_NAMES: Readonly<Record<Drop, string>> = {
  * `isEnabled()` answers a question about the REGISTRY. For most of this file's
  * life the admin console read that answer and rendered it as a question about
  * the PLATFORM — "protocol.amm: Dark" — and those are not the same question.
- * No file under `services/*` imports `isEnabled`, `resolveAll` or
- * `FLAG_REGISTRY`. Nothing resolves a flag on a request path. So at
- * `LAUNCH_DROP=0` (the default in `env.ts`) the console reported
- * `academy.inviteLobbies`, `protocol.amm` and `edge.gateway` as off while every
- * one of those procedures answered normally.
+ * Most services still do not import `isEnabled` / `resolveAll` / `FLAG_REGISTRY`.
+ * The exception is waitlist capture on svc-identity: `WaitlistService` calls
+ * `assertEnabled` so off / wrong drop / kill is a named refuse, not a silent open.
  *
  * That is the mirror image of the bug `svc-edge/src/routes.ts` was written to
  * prevent. There, a service was reachable that the route table did not know
@@ -96,7 +94,14 @@ export type FlagEnforcement =
    * plus a durable `posting_freeze` row an operator can set through
    * `/admin/ledger/*` without a deploy.
    */
-  | { readonly kind: 'operator-api'; readonly service: string; readonly envVar: string; readonly surface: string };
+  | { readonly kind: 'operator-api'; readonly service: string; readonly envVar: string; readonly surface: string }
+  /**
+   * Enforced on the request path via `assertEnabled(key)` in `service`.
+   * Follows this registry + `LAUNCH_DROP` + `INTAFACED_FLAG_*` + module kill.
+   * `envVar` is the pin name the resolver already honours (not a boot-time
+   * default-on mirror). `surface` is the HTTP path that refuses.
+   */
+  | { readonly kind: 'request-path'; readonly service: string; readonly envVar: string; readonly surface: string };
 
 /** Nothing enforces this flag. Its state is a plan, not a control. */
 export const NOT_ENFORCED: FlagEnforcement = { kind: 'none' };
@@ -109,6 +114,11 @@ function serviceEnv(service: string, envVar: string): FlagEnforcement {
 /** Boot-time env var AND a live operator endpoint. */
 function operatorApi(service: string, envVar: string, surface: string): FlagEnforcement {
   return { kind: 'operator-api', service, envVar, surface };
+}
+
+/** Request-path `assertEnabled` gate — follows the drop clock. */
+function requestPath(service: string, envVar: string, surface: string): FlagEnforcement {
+  return { kind: 'request-path', service, envVar, surface };
 }
 
 export interface FlagDef {
@@ -139,8 +149,20 @@ function def(key: string, module: ModuleId, drop: Drop | null, description: stri
  */
 export const FLAG_REGISTRY: readonly FlagDef[] = [
   // Drop 0 · Tease
-  def('waitlist.enabled', 'core-ops', '0', 'Waitlist capture + referral queue', NOT_ENFORCED),
-  def('referral.queue', 'core-ops', '0', 'Referral position mechanics', NOT_ENFORCED),
+  def(
+    'waitlist.enabled',
+    'core-ops',
+    '0',
+    'Waitlist capture + referral queue',
+    requestPath('svc-identity', 'INTAFACED_FLAG_WAITLIST_ENABLED', 'requireWaitlist().enroll'),
+  ),
+  def(
+    'referral.queue',
+    'core-ops',
+    '0',
+    'Referral position mechanics',
+    requestPath('svc-identity', 'INTAFACED_FLAG_REFERRAL_QUEUE', 'requireWaitlist().position'),
+  ),
   def('mining.testnet', 'mining-pool', '0', 'PoW pool in testnet mode', NOT_ENFORCED),
 
   // Drop I · Blueprint
@@ -323,6 +345,8 @@ export function enforcementNote(key: string): string {
       return `Enforced by ${e.envVar} on ${e.service}, read once at boot and defaulting to on. It does not follow LAUNCH_DROP or this registry — changing it needs a restart of ${e.service}.`;
     case 'operator-api':
       return `Enforced by ${e.envVar} on ${e.service} at boot, and reachable while running through ${e.surface}. This is the only flag whose capability an operator can stop without a deploy.`;
+    case 'request-path':
+      return `Enforced on the request path: ${e.service} ${e.surface} calls assertEnabled. Follows LAUNCH_DROP, ${e.envVar}, and the module kill-switch. Off is a named refuse, not a silent open.`;
   }
 }
 
@@ -407,8 +431,9 @@ export function isEnabled(key: string, ctx: FlagContext): boolean {
  * Waitlist capture + referral queue — the switch mountain (`infra.drop-flags`).
  *
  * Callers must `assertEnabled` these keys. When OFF they are refuse-closed
- * (`FlagDisabledError`) and `offReadiness` is `unbuilt`, never "ready".
- * Founding-badge mint is `launch.nft` (chain), not this list.
+ * (`FlagDisabledError`) and `offReadiness` is `overridden` / `killed` (built
+ * request-path control), never a silent open. Founding-badge mint is
+ * `launch.nft` (chain), not this list.
  */
 export const WAITLIST_REFERRAL_FLAGS = ['waitlist.enabled', 'referral.queue'] as const;
 
@@ -540,8 +565,8 @@ export function flagDef(key: string): FlagDef | undefined {
  *
  * Tracker Done bar for `infra.drop-flags` (coverage core.drop-flags): a flag
  * whose feature does not exist must read as OFF-and-unbuilt, not OFF-and-ready.
- * Enforced flags (service-env / operator-api) have a live refuse path → built
- * control. `NOT_ENFORCED` is a launch-plan row → unbuilt / plan-only.
+ * Enforced flags (service-env / operator-api / request-path) have a live refuse
+ * path → built control. `NOT_ENFORCED` is a launch-plan row → unbuilt / plan-only.
  */
 export function isCapabilityBuilt(key: string): boolean {
   return isEnforced(key);
