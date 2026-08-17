@@ -11,6 +11,7 @@ import { observeOmsPositions, type OmsPositionsFn } from './oms-positions.js';
 import { observeOmsBorrow, type OmsBorrowFn } from './oms-borrow.js';
 import { observeOmsFunding, type OmsFundingFn } from './oms-funding.js';
 import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
+import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
@@ -83,6 +84,7 @@ export type ExecutionRailsMap = Readonly<Record<string, OmsRailsFn>>;
 export type ExecutionFundingMap = Readonly<Record<string, OmsFundingFn>>;
 export type ExecutionBorrowMap = Readonly<Record<string, OmsBorrowFn>>;
 export type ExecutionLatencyMap = Readonly<Record<string, OmsLatencyFn>>;
+export type ExecutionMarketsMap = Readonly<Record<string, OmsMarketsFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -96,6 +98,7 @@ export function createExecutionRouter(
   fundingByVenue: ExecutionFundingMap = {},
   borrowByVenue: ExecutionBorrowMap = {},
   latencyByVenue: ExecutionLatencyMap = {},
+  marketsByVenue: ExecutionMarketsMap = {},
 ) {
   return router({
     execution: router({
@@ -336,6 +339,23 @@ export function createExecutionRouter(
                 venueId: input.venueId,
                 kind: input.kind,
                 latencyByVenue,
+              });
+            });
+          }),
+
+        markets: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.markets', input.venueId, async () => {
+              return observeOmsMarkets({
+                venueId: input.venueId,
+                kind: input.kind,
+                marketsByVenue,
               });
             });
           }),
