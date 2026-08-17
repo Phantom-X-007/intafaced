@@ -3,8 +3,8 @@
  *
  * Empty catalog passes through — "the venue listed nothing" must not look
  * like "we invented BTC/USDT". Venue errors propagate. Does not invent
- * a book or a route. Optional type / quote / base / active / settle filter
- * the observation; omitted still returns every instrument, including
+ * a book or a route. Optional type / quote / base / active / settle / symbol
+ * filter the observation; omitted still returns every instrument, including
  * inactive listings and null-settle spot. Inactive listings stay inactive.
  * Null settle stays null.
  */
@@ -16,10 +16,11 @@ export type OmsMarketsFn = (
   base?: string,
   active?: boolean,
   settle?: string,
+  symbol?: string,
 ) => Promise<readonly VenueMarket[]>;
 
 export function marketDataAdapterMarkets(adapter: MarketDataAdapter): OmsMarketsFn {
-  return async (type, quote, base, active, settle) => {
+  return async (type, quote, base, active, settle, symbol) => {
     const rows = await adapter.markets();
     return rows.filter(
       (row) =>
@@ -27,7 +28,8 @@ export function marketDataAdapterMarkets(adapter: MarketDataAdapter): OmsMarkets
         (!quote || row.quote === quote) &&
         (!base || row.base === base) &&
         (active === undefined || row.active === active) &&
-        (!settle || row.settle === settle),
+        (!settle || row.settle === settle) &&
+        (!symbol || row.symbol === symbol),
     );
   };
 }
