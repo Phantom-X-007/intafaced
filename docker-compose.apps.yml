@@ -802,6 +802,10 @@ services:
       # http://localhost:4004, which is unreachable inside compose and leaves
       # every mark as bank.mark_missing. Same surface notify already uses.
       TRADE_URL: http://svc-trade:4004
+      # Mark asset for loan LTV. env.ts already defaults USDT. Without compose
+      # pass-through a host `.env` pin never reaches the container. A wrong id
+      # refuses `bank.mark_missing` — it does not invent a price. No APY/LTV/mids.
+      LOAN_QUOTE_ASSET_ID: ${LOAN_QUOTE_ASSET_ID:-USDT}
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
       # `none` means this deployment has NO CARD PROGRAMME, and every card
       # procedure refuses `bank.no_card_issuer` by name. The only other value is
@@ -850,6 +854,10 @@ services:
       # collateral. No LTV, price source, or liquidation venue is named here.
       BANK_LOANS_ENABLED: ${BANK_LOANS_ENABLED:-true}
       LOAN_RISK_SWEEP_ENABLED: ${LOAN_RISK_SWEEP_ENABLED:-false}
+      # How many loans one sweep pass marks. env.ts already defaults 500;
+      # without compose pass-through a host `.env` cannot tighten blast
+      # radius. Sweep stays OFF above — this is not turning it on. No APY/LTV/mids.
+      LOAN_SWEEP_BATCH_SIZE: ${LOAN_SWEEP_BATCH_SIZE:-500}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4009']
     healthcheck: *healthcheck
