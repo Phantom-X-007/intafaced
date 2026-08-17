@@ -24,18 +24,22 @@
  * A dark pay plane is known before any tool is touched. Opening a metered
  * session to discover it would bill a user for the platform's own unreadiness.
  *
- * ── Why a run that watches fixtures bills zero, honestly ─────────────────────
+ * ── Why a live run without a metrics port never opens a session ──────────────
  *
- * The metered thing in this service is the ENGINE (`runtime.think`), and the
- * merchant does not call it: watching is arithmetic over rates the caller
- * supplied, not a completion. So a merchant run opens no usage window and
- * settles to `0`. That zero is reported as what it is.
+ * `plane: 'live'` means the caller claimed the live pay plane. Caller body
+ * points are fixture/dark only — using them as live truth invents approval
+ * rates. Live samples come from `PayMetricsPort`. Unset / empty / throwing
+ * port refuses `no_live_metrics` unbilled. Production leaves the port unset
+ * (Class X allowlist) rather than scraping a fake metrics API.
  */
 
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
+import { readLivePayMetrics, type PayMetricsPort } from './pay-metrics-port.js';
 import { resolveMerchantPayPlane, watchApprovalFixtures, type ApprovalRatePoint, type MerchantAlert, type PayPlaneState } from './watch.js';
+
+export type { PayMetricsPort } from './pay-metrics-port.js';
 
 /** The agent id the merchant guardrail is registered under. */
 export const MERCHANT_AGENT_ID = 'merchant';
@@ -144,7 +148,13 @@ export type MerchantRunInput = {
   /** Asset the fleet meters in. Supplied by the caller; this module holds no rate. */
   readonly feeAssetId: string;
   readonly plane: PayPlaneState;
+  /**
+   * Fixture/dark body series. Ignored when `plane === 'live'` — live truth is
+   * `payMetricsPort` only.
+   */
   readonly points: readonly ApprovalRatePoint[];
+  /** Required for live. Unset in production until Class X metrics exist. */
+  readonly payMetricsPort?: PayMetricsPort;
   readonly threshold?: string;
   readonly railAllowlist?: ReadonlySet<string> | readonly string[];
   /** Minimum attempts before a point can alert. Default 1 (zero-sample never alerts). */
@@ -155,10 +165,12 @@ export type MerchantRunInput = {
 /**
  * Run `merchant.watch` as a metered, guardrailed session over the pure watcher.
  *
- * Each point is fetched through `runtime.act`, so the runtime — not this
- * module — decides whether `pay.metrics.read` is allowed, counts it against the
- * session's action budget, and writes the audit row. A guardrail refusal is
- * counted rather than thrown: one refused rail is not a failed watch.
+ * Live points are sampled from `PayMetricsPort`, then each sample is fetched
+ * through `runtime.act` so the runtime — not this module — decides whether
+ * `pay.metrics.read` is allowed, counts it against the session's action budget,
+ * and writes the audit row. A guardrail refusal is counted rather than thrown:
+ * one refused rail is not a failed watch. Request-body points are never live
+ * truth.
  */
 export async function runMerchantWatchSession(input: MerchantRunInput): Promise<MerchantRunResult> {
   const now = input.now ?? new Date();
@@ -175,13 +187,18 @@ export async function runMerchantWatchSession(input: MerchantRunInput): Promise<
     };
   }
 
-  if (input.points.length === 0) {
+  const live = await readLivePayMetrics(input.payMetricsPort);
+  if (!live.ok) {
     return {
-      status: 'empty',
-      userMessageKey: 'agents.merchant.empty',
+      status: 'refuse',
+      reason: 'no_live_metrics',
+      userMessageKey: 'agents.merchant.unavailable',
+      pointsRefusedByGuardrail: 0,
       metering: unmetered(input.feeAssetId),
     };
   }
+
+  const series = live.points;
 
   // ── The metered run ───────────────────────────────────────────────────────
   const session = await input.runtime.openSession({ userId: input.userId, agentId: MERCHANT_AGENT_ID });
@@ -191,7 +208,7 @@ export async function runMerchantWatchSession(input: MerchantRunInput): Promise<
     const accepted: ApprovalRatePoint[] = [];
     let pointsRefusedByGuardrail = 0;
 
-    for (const point of input.points) {
+    for (const point of series) {
       try {
         const act = await input.runtime.act({
           sessionId: session.id,
