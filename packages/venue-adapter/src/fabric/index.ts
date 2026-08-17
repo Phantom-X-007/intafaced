@@ -55,3 +55,4 @@ export {
   type OkxSpotTradeOptions,
 } from './venues/okx-spot.js';
 export * from './venues/factory.js';
+export { createVenueAccountAdapter, type VenueAccountAdapterOptions } from './venues/factory-account.js';
