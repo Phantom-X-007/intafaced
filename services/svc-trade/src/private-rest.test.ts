@@ -1179,6 +1179,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/closed?side=buy: passes side into orderHistory', async () => {
+    let seen: { side?: string } | null = null;
+    const app = await build(
+      deps({
+        orderHistory: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.side).toBe('buy');
+    await app.close();
+  });
+
+  it('GET /orders/closed?side=: invalid → 400 without orderHistory', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?side=both',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/closed?status=: invalid → 400 without orderHistory', async () => {
     let listed = false;
     const app = await build(

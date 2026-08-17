@@ -405,6 +405,8 @@ if (!available) {
       expect((await trade.orderHistory(principalFor(ALICE))).map((row) => row.id)).toEqual([order.id]);
       expect((await trade.orderHistory(principalFor(ALICE), { status: 'cancelled' })).map((row) => row.id)).toEqual([order.id]);
       expect(await trade.orderHistory(principalFor(ALICE), { status: 'filled' })).toEqual([]);
+      expect((await trade.orderHistory(principalFor(ALICE), { side: 'buy' })).map((row) => row.id)).toEqual([order.id]);
+      expect(await trade.orderHistory(principalFor(ALICE), { side: 'sell' })).toEqual([]);
     });
 
     it('openOrders default still lists pending; status=open hides it', async () => {

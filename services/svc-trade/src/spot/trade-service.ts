@@ -1957,10 +1957,17 @@ export class TradeService {
    * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
    * (CCXT convention). Optional status narrows the terminal IN-list — never
    * invents a status, and unknown values are the caller's to refuse before this.
+   * Optional side narrows buy/sell in SQL — never invents a side.
    */
   async orderHistory(
     principal: Principal,
-    input: { marketId?: string; limit?: number; sinceMs?: number; status?: 'filled' | 'cancelled' | 'rejected' | 'expired' } = {},
+    input: {
+      marketId?: string;
+      limit?: number;
+      sinceMs?: number;
+      status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
+      side?: 'buy' | 'sell';
+    } = {},
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
@@ -1976,6 +1983,7 @@ export class TradeService {
             : input.status === 'expired'
               ? this.sql`status = 'expired'`
               : this.sql`status IN ('filled', 'cancelled', 'rejected', 'expired')`;
+    const sideFilter = input.side === 'buy' ? this.sql`side = 'buy'` : input.side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
     const rows =
       input.marketId && sinceDate
         ? await this.sql<OrderRow[]>`
@@ -1983,6 +1991,7 @@ export class TradeService {
              WHERE user_id = ${principal.userId}
                AND market_id = ${input.marketId}
                AND ${statusFilter}
+               AND ${sideFilter}
                AND created_at >= ${sinceDate}
              ORDER BY created_at DESC
              LIMIT ${limit}
@@ -1993,14 +2002,16 @@ export class TradeService {
                WHERE user_id = ${principal.userId}
                  AND market_id = ${input.marketId}
                  AND ${statusFilter}
+                 AND ${sideFilter}
                ORDER BY created_at DESC
-               LIMIT ${limit}
+                 LIMIT ${limit}
             `
           : sinceDate
             ? await this.sql<OrderRow[]>`
                 SELECT * FROM trade.orders
                  WHERE user_id = ${principal.userId}
                    AND ${statusFilter}
+                   AND ${sideFilter}
                    AND created_at >= ${sinceDate}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
@@ -2009,6 +2020,7 @@ export class TradeService {
                 SELECT * FROM trade.orders
                  WHERE user_id = ${principal.userId}
                    AND ${statusFilter}
+                   AND ${sideFilter}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
               `;
