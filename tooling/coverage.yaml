@@ -686,8 +686,11 @@ capabilities:
     law: '25:633'
     plane: F
     phase: 2
-    tracker: [trade.algo]
-    note: §30:795 moves this row to svc-execution and generalises it cross-venue. That service has no row.
+    tracker: [trade.algo, socket.trade-vwap-pov]
+    note: >-
+      trade.algo is TWAP shipped. socket.trade-vwap-pov is the §13 half (owner market maturity —
+      not missing candles). Never invent VWAP/POV fills or participation defaults. §30:795 moves
+      the suite to svc-execution and generalises it cross-venue; that service has no row.
   - id: m.trade.subaccounts
     capability: Sub-accounts plus consolidated reporting
     law: '25:634'
