@@ -11,6 +11,7 @@
 
 import type { RankPerks } from '@intafaced/contracts';
 import type { HostRightsSource } from '../host-rights.js';
+import { assertCertGrantPathHonest } from './grant-ledger.js';
 import type { CertXpEmitResult } from './xp-publish.js';
 
 export const CERT_PERK_REFUSE_CODE = 'academy.cert_perk_refuse_closed' as const;
@@ -111,6 +112,7 @@ export function isCertPerkInventRefuseClosed(decision: CertPerkRefuse): boolean 
  * Rank-only / XP-only fields are fine.
  */
 export function assertNoCertPerkMoneyAttachment(payload: unknown): void {
+  assertCertGrantPathHonest(payload);
   if (payload == null || typeof payload !== 'object') return;
   const o = payload as Record<string, unknown>;
   const banned = [

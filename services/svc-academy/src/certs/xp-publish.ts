@@ -32,6 +32,12 @@ import type { EventBus } from '@intafaced/events';
 import type { CertGrantRecord } from './progress.js';
 import { CERT_XP_V0, xpIntentFromGrant } from './xp-policy.js';
 import { mayPublishXp, toXpEarnedPublish } from './xp-emit.js';
+import {
+  CERT_XP_IDENTITY_GRAPH_EVENT,
+  assertCertGrantPathHonest,
+  assertMayPublishCertXpOnIdentityGraph,
+  decideCertGrantLedgerPost,
+} from './grant-ledger.js';
 
 /**
  * The module identity records against the award. `academy`, never `identity` —
@@ -164,6 +170,8 @@ export class NullCertXpPublisher implements CertXpPublisher {
   readonly usable = false;
 
   async publishCertXp(grant: CertGrantRecord): Promise<CertXpEmitResult> {
+    assertCertGrantPathHonest(grant);
+    decideCertGrantLedgerPost(grant);
     const decided = certXpIntentFor(grant);
     if (!decided.ok) return { emitted: false, reason: decided.reason };
     return { emitted: false, reason: 'publisher_unavailable' };
@@ -188,11 +196,16 @@ export class BusCertXpPublisher implements CertXpPublisher {
   ) {}
 
   async publishCertXp(grant: CertGrantRecord): Promise<CertXpEmitResult> {
+    assertCertGrantPathHonest(grant);
+    decideCertGrantLedgerPost(grant);
     const decided = certXpIntentFor(grant);
     if (!decided.ok) return { emitted: false, reason: decided.reason };
 
     try {
-      await this.bus.publish('xpEarned', decided.intent.payload, { idempotencyKey: decided.intent.idempotencyKey });
+      assertMayPublishCertXpOnIdentityGraph(CERT_XP_IDENTITY_GRAPH_EVENT);
+      await this.bus.publish(CERT_XP_IDENTITY_GRAPH_EVENT, decided.intent.payload, {
+        idempotencyKey: decided.intent.idempotencyKey,
+      });
     } catch (err) {
       this.onError(err, grant);
       return { emitted: false, reason: 'publish_failed' };

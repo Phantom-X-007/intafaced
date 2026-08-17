@@ -10,6 +10,8 @@
  * · Perks remain svc-identity rank SoT — academy never maps cert → perk.
  */
 
+import { assertCertGrantPathHonest } from './grant-ledger.js';
+
 export type EnrollmentRecord = {
   userId: string;
   pathSlug: string;
@@ -78,20 +80,23 @@ export function decideGrant(input: {
     throw new CertError('Cert definition has no required items', 'academy.cert_invalid');
   }
   if (existing) {
+    assertCertGrantPathHonest(existing);
     return { grant: existing, alreadyGranted: true };
   }
   if (!isComplete(cert.requiredItemSlugs, completedSlugs)) {
     throw new CertError('Required curriculum items incomplete', 'academy.cert_incomplete');
   }
   const now = input.now ?? new Date();
+  const grant: CertGrantRecord = {
+    userId,
+    certId: cert.id,
+    grantedAt: now,
+    idempotencyKey: certIdempotencyKey(userId, cert.id),
+  };
+  assertCertGrantPathHonest(grant);
   return {
     alreadyGranted: false,
-    grant: {
-      userId,
-      certId: cert.id,
-      grantedAt: now,
-      idempotencyKey: certIdempotencyKey(userId, cert.id),
-    },
+    grant,
   };
 }
 
