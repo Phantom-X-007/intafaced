@@ -54,9 +54,11 @@ function usdtRail(over: Partial<TransferRail> = {}): TransferRail {
 
 class FakeRails {
   readonly assets: string[] = [];
+  readonly enableds: (boolean | undefined)[] = [];
   constructor(private readonly next: TransferRail[] | Error) {}
-  fn: OmsRailsFn = async (asset) => {
+  fn: OmsRailsFn = async (asset, enabled) => {
     this.assets.push(asset);
+    this.enableds.push(enabled);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -75,6 +77,21 @@ describe('observeOmsRails', () => {
     expect(result.rails).toHaveLength(1);
     expect(result.rails[0]!.enabled).toBe(false);
     expect(street.assets).toEqual(['USDT']);
+    expect(street.enableds).toEqual([undefined]);
+  });
+
+  it('passes an optional enabled through and does not invent a missing rail', async () => {
+    const street = new FakeRails([usdtRail({ enabled: false })]);
+    const result = await observeOmsRails({
+      venueId: 'street',
+      asset: 'USDT',
+      enabled: false,
+      railsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.enableds).toEqual([false]);
+    if (!result.ok) return;
+    expect(result.rails[0]!.enabled).toBe(false);
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -147,10 +164,11 @@ describe('execution.oms.rails tRPC', () => {
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, { street: street.fn }).createCaller(
       signed(),
     );
-    const out = await caller.execution.oms.rails({ venueId: 'street', asset: 'USDT' });
+    const out = await caller.execution.oms.rails({ venueId: 'street', asset: 'USDT', enabled: false });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.rails).toHaveLength(1);
     expect(street.assets).toEqual(['USDT']);
+    expect(street.enableds).toEqual([false]);
   });
 });
