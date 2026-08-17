@@ -269,13 +269,13 @@
       "status": "sealed",
       "kind": "product_ruling",
       "title": "Dark-feed horizon + operator adjudicated settlement",
-      "blocks": ["frozen futures positions"],
-      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
+      "blocks": ["frozen futures positions auto-settle by job"],
+      "primaryDoc": "docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#7--the-dark-feed-horizon-and-operator-settlement-of-a-frozen-position",
-      "satelliteDocs": ["docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md"],
+      "satelliteDocs": ["docs/adr/2026-08-07-futures-exit-when-the-feed-is-dark.md", "docs/adr/2026-08-14-remaining-p0-money-law.md"],
       "answerShape": "horizon_plus_human_adjudication_rules",
       "priority": 3,
-      "notes": "2026-08-14 seal: human adjudication only after liquidationMaxAgeSeconds of continuous dark; record price/author/reason. No job auto-settle."
+      "notes": "2026-08-15 Denon addendum: (1) jobs must not settle frozen/closing positions — human adjudicates, never a job. (2) operator settle allowed only with recorded adjudicated price + author on the row. (3) horizon hours remain unset — unset means no auto-alert timing invent; do not reuse liquidationMaxAgeSeconds as that horizon. Supersedes the 2026-08-14 PKT-C7 paragraph on horizon reuse."
     },
     {
       "id": "PKT-C8",
