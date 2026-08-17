@@ -924,11 +924,10 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
    * The whole point of the deviation breaker and the staleness window in
    * `prices.ts` is that the mark is not the caller's to pick.
    *
-   * There is also no `releaseCollateral` that takes an amount. Release is
-   * all-or-nothing on a settled loan (`close`), because a partial release is
-   * indistinguishable in its effect from an unsecured top-up of leverage, and it
-   * would need its own LTV check to be safe. `addCollateral` covers the direction
-   * a borrower actually needs in a hurry.
+   * Settled release stays all-or-nothing on `close`. Partial release of excess
+   * (`releaseExcess`) is the exception: it asks for a mark and refuses
+   * `bank.ltv_exceeded` if the remainder would sit above the product cap. A
+   * missing mark refuses before any post. No invented rate.
    */
   const loans = router({
     products: scopedProcedure('bank:read', { module: 'bank' })
@@ -1096,6 +1095,18 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           const loan = await bank.loans.loan(input.loanId);
           assertSelf(ctx.principal.userId, loan.userId);
           return bank.loans.addCollateral({ loanId: input.loanId, amount: parseAmount(input.amount) });
+        }),
+      ),
+
+    /** Peel surplus collateral. Marks first; refuses if the remainder would exceed the product cap. */
+    releaseExcess: scopedProcedure('bank:write', { module: 'bank' })
+      .input(z.object({ loanId: z.string().uuid(), amount: amountString }))
+      .output(z.object({ ledgerTxId: z.string(), sequence: z.number().int() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const loan = await bank.loans.loan(input.loanId);
+          assertSelf(ctx.principal.userId, loan.userId);
+          return bank.loans.releaseExcess({ loanId: input.loanId, amount: parseAmount(input.amount) });
         }),
       ),
 

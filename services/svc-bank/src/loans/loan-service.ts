@@ -763,6 +763,57 @@ export class LoanService {
     return { ledgerTxId: txId, sequence };
   }
 
+  /**
+   * Release excess collateral from a live loan through ledger-client.
+   *
+   * Marks first. A missing mark refuses `bank.mark_missing` before any release —
+   * withdrawing against a book nobody priced is the same lie as originating on a
+   * default. After-release LTV is computed from those marks and the product cap;
+   * this method does not invent a rate. Curing is still the next mark's job.
+   */
+  async releaseExcess(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+    const now = input.now ?? new Date();
+    const loan = await this.loan(input.loanId);
+    if (loan.status === 'repaid' || loan.status === 'liquidated') {
+      throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
+    }
+    if (loan.status === 'pending') {
+      throw new BankError(
+        `Loan ${loan.id} is pending — abandon it rather than peeling collateral off an undrawn row`,
+        'bank.loan_not_drawable',
+      );
+    }
+    if (input.amount <= 0n) throw new BankError('Collateral release must be positive', 'bank.below_minimum');
+
+    const marks = await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+    const product = await this.product(loan.productId);
+    const debt = await this.outstanding(loan.id);
+    const held = await this.collateralOf(loan);
+    if (input.amount > held) {
+      throw new BankError(
+        `Loan ${loan.id} holds ${formatAmount(held)} ${loan.collateralAssetId}, not ${formatAmount(input.amount)}`,
+        'bank.loan_collateral_short',
+      );
+    }
+
+    const remaining = held - input.amount;
+    const collateralMark = marks.get(loan.collateralAssetId)!;
+    const debtMark = marks.get(loan.debtAssetId)!;
+    const debtValue = quoteValue(debt.total, debtMark.price, 'ceil');
+    const collateralValue = quoteValue(remaining, collateralMark.price, 'floor');
+    const afterLtv = ltvBps(debtValue, collateralValue);
+    if (afterLtv > product.maxLtvBps) {
+      throw new BankError(
+        `Release would put loan ${loan.id} at LTV ${describeLtv(afterLtv)} above the ${describeLtv(product.maxLtvBps)} limit for "${product.name}"`,
+        'bank.ltv_exceeded',
+      );
+    }
+
+    const sequence = await this.nextCollateralSequence(loan.id);
+    const txId = await this.releaseCollateral(loan, input.amount, sequence);
+    return { ledgerTxId: txId, sequence };
+  }
+
   private async lockCollateral(loan: LoanRecord, amount: Amount, sequence: number): Promise<string> {
     return this.drivenPost({
       claim: async (tx) => {
@@ -792,19 +843,19 @@ export class LoanService {
     });
   }
 
-  private async releaseCollateral(loan: LoanRecord, amount: Amount): Promise<string> {
-    const sequence = await this.nextCollateralSequence(loan.id);
+  private async releaseCollateral(loan: LoanRecord, amount: Amount, sequence?: number): Promise<string> {
+    const seq = sequence ?? (await this.nextCollateralSequence(loan.id));
     return this.drivenPost({
       claim: async (tx) => {
         const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
           INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
-          VALUES (${loan.id}, ${sequence}, 'release', ${formatAmount(amount)}::numeric)
+          VALUES (${loan.id}, ${seq}, 'release', ${formatAmount(amount)}::numeric)
           ON CONFLICT (loan_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
         const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${seq}
         `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
@@ -815,7 +866,7 @@ export class LoanService {
             userId: loan.userId,
             collateralAssetId: loan.collateralAssetId,
             amount,
-            sequence,
+            sequence: seq,
           }),
         ),
       table: 'loan_collateral_events',
