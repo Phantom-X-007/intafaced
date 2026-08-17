@@ -4,6 +4,7 @@ import { router, scopedProcedure } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
+import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -67,11 +68,13 @@ const omsPlanInput = z.object({
 
 export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
 export type ExecutionCancelMap = Readonly<Record<string, OmsCancelFn>>;
+export type ExecutionFetchMap = Readonly<Record<string, OmsFetchFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
   submitByVenue: ExecutionSubmitMap = {},
   cancelByVenue: ExecutionCancelMap = {},
+  fetchByVenue: ExecutionFetchMap = {},
 ) {
   return router({
     execution: router({
@@ -162,6 +165,27 @@ export function createExecutionRouter(
                 clientOrderId: input.clientOrderId,
                 kind: input.kind,
                 cancelByVenue,
+              });
+            });
+          }),
+
+        fetch: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              symbol: z.string().min(1).max(64),
+              clientOrderId: z.string().min(1).max(128),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.fetch', input.venueId, async () => {
+              return fetchOmsOrder({
+                venueId: input.venueId,
+                symbol: input.symbol,
+                clientOrderId: input.clientOrderId,
+                kind: input.kind,
+                fetchByVenue,
               });
             });
           }),
