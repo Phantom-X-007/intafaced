@@ -17,14 +17,20 @@ import {
 } from './jurisdiction.js';
 import {
   OWNER_LIST_REQUIRED_ENVS,
+  SCREENING_REFUSE_FIXTURE,
+  SCREENING_REFUSE_UNCONFIGURED,
   SCREENING_REVIEWED_EMPTY,
   SHIPPED_SCREENING_REGIONS,
   ScreeningListError,
+  ScreeningMoneyPostureError,
   UNSET_SCREENING_LIST,
   consultScreeningList,
   envScreeningList,
+  evaluateScreeningMoneyPosture,
   ownerListSatisfiesBoot,
+  ownerListSatisfiesMoneyPosture,
   parseScreeningList,
+  screeningMoneyGrade,
 } from './screening.js';
 
 /**
@@ -109,6 +115,8 @@ describe('the state is observable — "screened and clear" vs "screened nothing"
     expect(status.configured).toBe(true);
     expect(status.blockedRegions).toEqual(['AA', 'ZY']);
     expect(status.summary).toContain('test-fixture-not-a-real-list');
+    expect(status.summary).toContain('FIXTURE');
+    expect(status.readsAsScreenedClean).toBe(false);
   });
 
   /**
@@ -132,6 +140,9 @@ describe('the state is observable — "screened and clear" vs "screened nothing"
     expect(screened.screening.listConfigured).toBe(true);
     expect(screened.screening.blockedRegionCount).toBe(2);
     expect(screened.screening.source).toBe('test-fixture-not-a-real-list');
+    expect(unscreened.screening.readsAsScreenedClean).toBe(false);
+    expect(screened.screening.readsAsScreenedClean).toBe(false);
+    expect(screened.screening.moneyGrade).toBe('fixture');
   });
 
   it('carries provenance on denials too, including the plane-unsupported early return', () => {
@@ -202,8 +213,8 @@ describe('screening fail-closed — refuse when list unset (D26-P1-O1)', () => {
     expect(d.code).toBe('denied.screening_unconfigured');
   });
 
-  it('does not refuse reviewed-empty or listed (configured answers)', () => {
-    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-test-not-a-real-list');
+  it('does not refuse counsel-grade reviewed-empty or listed', () => {
+    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-ref');
     const cleared = checkAccess({
       module: 'dex',
       plane: 'protocol',
@@ -214,8 +225,24 @@ describe('screening fail-closed — refuse when list unset (D26-P1-O1)', () => {
     });
     expect(cleared.allowed).toBe(true);
     expect(cleared.screening.declaration).toBe('reviewed-empty');
+    expect(cleared.screening.readsAsScreenedClean).toBe(true);
 
+    const counselListed = parseScreeningList('AA:programme-ref', 'counsel-memo-ref');
     const listed = checkAccess({
+      module: 'dex',
+      plane: 'protocol',
+      region: 'QQ',
+      kycTier: 'none',
+      screening: counselListed,
+      screeningFailClosed: true,
+    });
+    expect(listed.allowed).toBe(true);
+    expect(listed.screening.listConfigured).toBe(true);
+    expect(listed.screening.readsAsScreenedClean).toBe(true);
+  });
+
+  it('refuses a placeholder/test list in a money posture — not screened clean', () => {
+    const d = checkAccess({
       module: 'dex',
       plane: 'protocol',
       region: 'QQ',
@@ -223,8 +250,10 @@ describe('screening fail-closed — refuse when list unset (D26-P1-O1)', () => {
       screening: POPULATED,
       screeningFailClosed: true,
     });
-    expect(listed.allowed).toBe(true);
-    expect(listed.screening.listConfigured).toBe(true);
+    expect(d.allowed).toBe(false);
+    expect(d.code).toBe(SCREENING_REFUSE_FIXTURE);
+    expect(d.screening.readsAsScreenedClean).toBe(false);
+    expect(d.screening.moneyGrade).toBe('fixture');
   });
 
   it('query flag wins over a false env', () => {
@@ -309,23 +338,61 @@ describe('boot guard — production-like postures refuse to start unscreened', (
     expect(() => assertScreeningConfigured({ APP_ENV: appEnv })).toThrow(UnscreenedJurisdictionError);
   });
 
-  it('names the env and points at the fix rather than just failing', () => {
+  it('names the env and the refuse code rather than just failing', () => {
     try {
       assertScreeningConfigured({ APP_ENV: 'prod' });
       expect.unreachable('should have thrown');
     } catch (e) {
       expect(e).toBeInstanceOf(UnscreenedJurisdictionError);
-      const message = (e as Error).message;
-      expect(message).toContain('INTAFACED_SANCTIONS_REGIONS');
-      // It must send the reader to counsel, not invite them to invent a list.
-      expect(message).toContain('COMPLIANCE DECISION');
+      const error = e as UnscreenedJurisdictionError;
+      expect(error.code).toBe(SCREENING_REFUSE_UNCONFIGURED);
+      expect(error.message).toContain('APP_ENV=prod');
+      expect(error.message).toContain(SCREENING_REFUSE_UNCONFIGURED);
+      expect(error.message).toContain('INTAFACED_SANCTIONS_REGIONS');
+      expect(error.message).toContain('COMPLIANCE DECISION');
     }
   });
 
-  it('boots in prod once a list is supplied', () => {
-    const status = assertScreeningConfigured({ APP_ENV: 'prod', INTAFACED_SANCTIONS_REGIONS: 'AA:placeholder' });
+  it.each(SCREENING_ENFORCED_ENVS)('empty and whitespace refuse by name for APP_ENV=%s', (appEnv) => {
+    for (const raw of [undefined, '', '   ', ' , , ']) {
+      try {
+        assertScreeningConfigured({ APP_ENV: appEnv, INTAFACED_SANCTIONS_REGIONS: raw });
+        expect.unreachable(`should have thrown for ${JSON.stringify(raw)}`);
+      } catch (e) {
+        expect(e).toBeInstanceOf(UnscreenedJurisdictionError);
+        const error = e as UnscreenedJurisdictionError;
+        expect(error.code).toBe(SCREENING_REFUSE_UNCONFIGURED);
+        expect(error.message).toContain(`APP_ENV=${appEnv}`);
+        expect(error.message).toContain(SCREENING_REFUSE_UNCONFIGURED);
+      }
+    }
+  });
+
+  it('refuses a placeholder list in prod/staging — fixture is not counsel', () => {
+    for (const appEnv of SCREENING_ENFORCED_ENVS) {
+      try {
+        assertScreeningConfigured({ APP_ENV: appEnv, INTAFACED_SANCTIONS_REGIONS: 'AA:placeholder' });
+        expect.unreachable(`fixture must not boot ${appEnv}`);
+      } catch (e) {
+        expect(e).toBeInstanceOf(ScreeningMoneyPostureError);
+        const error = e as ScreeningMoneyPostureError;
+        expect(error.code).toBe(SCREENING_REFUSE_FIXTURE);
+        expect(error.message).toContain(`APP_ENV=${appEnv}`);
+        expect(error.message).toMatch(/must not invent country codes/i);
+      }
+    }
+  });
+
+  it('boots in prod once a counsel-grade list is supplied', () => {
+    const status = assertScreeningConfigured({
+      APP_ENV: 'prod',
+      INTAFACED_SANCTIONS_REGIONS: 'AA:programme-ref',
+      INTAFACED_SANCTIONS_LIST_SOURCE: 'counsel-memo-ref',
+    });
     expect(status.configured).toBe(true);
     expect(status.blockedRegions).toEqual(['AA']);
+    expect(status.readsAsScreenedClean).toBe(true);
+    expect(status.moneyGrade).toBe('counsel');
   });
 
   it('keeps development frictionless — dev and test boot empty and report the gap', () => {
@@ -507,7 +574,10 @@ describe('a business block cannot satisfy the screening guard', () => {
    * region sets stay under two names and are never summed.
    */
   it('and the guard IS satisfied by the screening authority with the same block still staged', () => {
-    const status = assertScreeningConfigured({ APP_ENV: 'prod', INTAFACED_SANCTIONS_REGIONS: 'AA:placeholder' }, COMMERCIAL_BLOCKS);
+    const status = assertScreeningConfigured(
+      { APP_ENV: 'prod', INTAFACED_SANCTIONS_REGIONS: 'AA:programme-ref', INTAFACED_SANCTIONS_LIST_SOURCE: 'counsel-memo-ref' },
+      COMMERCIAL_BLOCKS,
+    );
     expect(status.configured).toBe(true);
     expect(status.declaration).toBe('listed');
     expect(status.blockedRegions).toEqual(['AA']); // counsel's
@@ -695,7 +765,7 @@ describe('the deliberately-empty list is a distinct, attributable state', () => 
   const ATTESTED = {
     APP_ENV: 'prod',
     INTAFACED_SANCTIONS_REGIONS: SCREENING_REVIEWED_EMPTY,
-    INTAFACED_SANCTIONS_LIST_SOURCE: 'counsel-memo-placeholder-ref',
+    INTAFACED_SANCTIONS_LIST_SOURCE: 'counsel-memo-ref',
   };
 
   it('satisfies the boot guard when it is attributed', () => {
@@ -722,7 +792,7 @@ describe('the deliberately-empty list is a distinct, attributable state', () => 
   });
 
   it('is a DIFFERENT state from unset, not merely a different summary', () => {
-    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-placeholder-ref');
+    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-ref');
     expect(reviewed.declaration).toBe('reviewed-empty');
     expect(UNSET_SCREENING_LIST.declaration).toBe('unset');
 
@@ -732,9 +802,9 @@ describe('the deliberately-empty list is a distinct, attributable state', () => 
   });
 
   it('names the authority in the summary rather than reading as a clean tick', () => {
-    const status = screeningStatus(parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-placeholder-ref'), []);
+    const status = screeningStatus(parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-ref'), []);
     expect(status.summary).toContain('DELIBERATELY EMPTY');
-    expect(status.summary).toContain('counsel-memo-placeholder-ref');
+    expect(status.summary).toContain('counsel-memo-ref');
     // It must not read as "we screened everyone and everyone is fine".
     expect(status.summary).toContain('recorded decision');
   });
@@ -746,13 +816,14 @@ describe('the deliberately-empty list is a distinct, attributable state', () => 
    * from a short list.
    */
   it('rides on every decision, so a zero count is legible', () => {
-    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-placeholder-ref');
+    const reviewed = parseScreeningList(SCREENING_REVIEWED_EMPTY, 'counsel-memo-ref');
     const d = checkAccess({ module: 'dex', plane: 'protocol', region: 'QQ', kycTier: 'none', screening: reviewed });
 
     expect(d.allowed).toBe(true);
     expect(d.screening.listConfigured).toBe(true);
     expect(d.screening.blockedRegionCount).toBe(0);
     expect(d.screening.declaration).toBe('reviewed-empty');
+    expect(d.screening.readsAsScreenedClean).toBe(true);
   });
 
   it('an unset list still says unset on the decision', () => {
@@ -771,6 +842,43 @@ describe('the deliberately-empty list is a distinct, attributable state', () => 
   });
 });
 
+describe('money posture — empty and fixtures never read as screened clean (D26-P1-O1)', () => {
+  const COUNSEL = parseScreeningList('AA:programme-ref', 'counsel-memo-ref');
+
+  it.each(OWNER_LIST_REQUIRED_ENVS)('evaluateScreeningMoneyPosture refuses unset by name in %s', (appEnv) => {
+    const posture = evaluateScreeningMoneyPosture(UNSET_SCREENING_LIST, appEnv);
+    expect(posture.allowed).toBe(false);
+    expect(posture.code).toBe(SCREENING_REFUSE_UNCONFIGURED);
+    expect(posture.readsAsScreenedClean).toBe(false);
+    expect(posture.grade).toBe('unconfigured');
+  });
+
+  it.each(OWNER_LIST_REQUIRED_ENVS)('evaluateScreeningMoneyPosture refuses fixture by name in %s', (appEnv) => {
+    const posture = evaluateScreeningMoneyPosture(POPULATED, appEnv);
+    expect(posture.allowed).toBe(false);
+    expect(posture.code).toBe(SCREENING_REFUSE_FIXTURE);
+    expect(posture.readsAsScreenedClean).toBe(false);
+    expect(ownerListSatisfiesMoneyPosture(POPULATED)).toBe(false);
+  });
+
+  it('dev may boot on a fixture gap but still does not read as clean', () => {
+    const posture = evaluateScreeningMoneyPosture(POPULATED, 'dev');
+    expect(posture.allowed).toBe(true);
+    expect(posture.code).toBe('allowed.screening_dev_gap');
+    expect(posture.readsAsScreenedClean).toBe(false);
+  });
+
+  it('counsel-grade listed is the only clean money posture', () => {
+    expect(screeningMoneyGrade(COUNSEL)).toBe('counsel');
+    expect(ownerListSatisfiesMoneyPosture(COUNSEL)).toBe(true);
+    const posture = evaluateScreeningMoneyPosture(COUNSEL, 'prod');
+    expect(posture.allowed).toBe(true);
+    expect(posture.code).toBe('allowed.screening_counsel');
+    expect(posture.readsAsScreenedClean).toBe(true);
+    expect(consultScreeningList(COUNSEL, 'QQ').outcome).toBe('clear');
+  });
+});
+
 /**
  * The list SHIPS EMPTY, deliberately. Asserted so that nobody can merge a
  * guessed sanctions list into the repo without this failing and a human having
@@ -785,6 +893,7 @@ describe('what ships', () => {
     expect(SHIPPED_SCREENING_REGIONS).toEqual([]);
     expect(envScreeningList({})).toBe(UNSET_SCREENING_LIST);
     expect(ownerListSatisfiesBoot(UNSET_SCREENING_LIST)).toBe(false);
+    expect(ownerListSatisfiesMoneyPosture(UNSET_SCREENING_LIST)).toBe(false);
   });
 
   /**
@@ -799,7 +908,8 @@ describe('what ships', () => {
 
     const listed = parseScreeningList('AA:placeholder programme', 'test-fixture-not-a-real-list');
     expect(consultScreeningList(listed, 'AA').outcome).toBe('hit');
-    expect(consultScreeningList(listed, 'QQ').outcome).toBe('clear');
+    expect(consultScreeningList(listed, 'QQ').outcome).toBe('fixture');
+    expect(consultScreeningList(listed, 'QQ').outcome).not.toBe('clear');
   });
 
   it('prod and staging still refuse to boot without an owner list', () => {

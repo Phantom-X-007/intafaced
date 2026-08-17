@@ -201,9 +201,106 @@ export const UNSET_SCREENING_LIST: ScreeningList = {
  */
 export const OWNER_LIST_REQUIRED_ENVS = ['staging', 'prod'] as const;
 
+/**
+ * Substrings that mark a list as a test/fixture, not counsel.
+ *
+ * Matching is case-insensitive on provenance and reasons. Unassigned ISO codes
+ * (AA, ZY, QQ) are allowed in tests; these markers are what stop a fixture
+ * reading as a clean money-posture screen. Do not add country names here.
+ */
+export const SCREENING_FIXTURE_MARKERS = ['placeholder', 'test-fixture', 'not-a-real-list'] as const;
+
+/** Public-door refuse: nobody supplied a list. */
+export const SCREENING_REFUSE_UNCONFIGURED = 'denied.screening_unconfigured' as const;
+
+/** Public-door refuse: a test/placeholder list was offered as if it were counsel. */
+export const SCREENING_REFUSE_FIXTURE = 'denied.screening_fixture' as const;
+
+export type ScreeningMoneyRefuseCode = typeof SCREENING_REFUSE_UNCONFIGURED | typeof SCREENING_REFUSE_FIXTURE;
+
+export type ScreeningMoneyGrade = 'unconfigured' | 'fixture' | 'counsel';
+
+export function screeningLooksLikeFixture(...texts: readonly string[]): boolean {
+  return texts.some((text) => {
+    const lower = text.toLowerCase();
+    return SCREENING_FIXTURE_MARKERS.some((marker) => lower.includes(marker));
+  });
+}
+
+/**
+ * Grade for money-posture honesty. `listed` with a placeholder reason is NOT
+ * counsel — `configured: true` must not be rendered as screened-clean.
+ */
+export function screeningMoneyGrade(list: ScreeningList): ScreeningMoneyGrade {
+  if (list.declaration === 'unset') return 'unconfigured';
+  if (screeningLooksLikeFixture(list.source, ...list.regions.map((r) => r.reason))) return 'fixture';
+  return 'counsel';
+}
+
+export type ScreeningMoneyPosture =
+  | {
+      readonly allowed: true;
+      readonly code: 'allowed.screening_counsel' | 'allowed.screening_dev_gap';
+      readonly grade: ScreeningMoneyGrade;
+      /** True only for counsel-grade lists. Fixtures and unset never read as clean. */
+      readonly readsAsScreenedClean: boolean;
+    }
+  | {
+      readonly allowed: false;
+      readonly code: ScreeningMoneyRefuseCode;
+      readonly grade: ScreeningMoneyGrade;
+      readonly readsAsScreenedClean: false;
+    };
+
+/**
+ * Prod/staging fail closed without counsel. Dev/test may boot on a gap, but
+ * the gap still does not read as screened-clean.
+ */
+export function evaluateScreeningMoneyPosture(list: ScreeningList, appEnv: string): ScreeningMoneyPosture {
+  const grade = screeningMoneyGrade(list);
+  const enforced = (OWNER_LIST_REQUIRED_ENVS as readonly string[]).includes(appEnv);
+  if (grade === 'counsel') {
+    return { allowed: true, code: 'allowed.screening_counsel', grade, readsAsScreenedClean: true };
+  }
+  if (enforced && grade === 'unconfigured') {
+    return { allowed: false, code: SCREENING_REFUSE_UNCONFIGURED, grade, readsAsScreenedClean: false };
+  }
+  if (enforced && grade === 'fixture') {
+    return { allowed: false, code: SCREENING_REFUSE_FIXTURE, grade, readsAsScreenedClean: false };
+  }
+  return { allowed: true, code: 'allowed.screening_dev_gap', grade, readsAsScreenedClean: false };
+}
+
+export class ScreeningMoneyPostureError extends Error {
+  constructor(
+    readonly appEnv: string,
+    readonly code: ScreeningMoneyRefuseCode,
+    readonly grade: ScreeningMoneyGrade,
+  ) {
+    const named = `APP_ENV=${appEnv}`;
+    super(
+      code === SCREENING_REFUSE_UNCONFIGURED
+        ? `SANCTIONS SCREENING MONEY POSTURE REFUSED (${named}, ${code}). ` +
+            `Empty or whitespace ${SANCTIONS_REGIONS_ENV} is unset — not clean. ` +
+            `Counsel/Nitro must supply a list (or attributed "${SCREENING_REVIEWED_EMPTY}"). ` +
+            `Agents must not invent country codes.`
+        : `SANCTIONS SCREENING MONEY POSTURE REFUSED (${named}, ${code}). ` +
+            `A placeholder/test list cannot be read as screened clean. ` +
+            `Replace fixture provenance/reasons with a counsel governance record. ` +
+            `Agents must not invent country codes.`,
+    );
+    this.name = 'ScreeningMoneyPostureError';
+  }
+}
+
 /** `unset` does not satisfy the boot guard. `listed` and `reviewed-empty` do. */
 export function ownerListSatisfiesBoot(list: ScreeningList): boolean {
   return list.declaration !== 'unset';
+}
+
+/** Money posture: only counsel-grade lists satisfy prod/staging. */
+export function ownerListSatisfiesMoneyPosture(list: ScreeningList): boolean {
+  return screeningMoneyGrade(list) === 'counsel';
 }
 
 /**
@@ -222,6 +319,12 @@ export type ScreeningConsult =
       readonly declaration: 'listed';
     }
   | {
+      readonly outcome: 'fixture';
+      readonly region: string;
+      readonly declaration: 'listed' | 'reviewed-empty';
+      readonly source: string;
+    }
+  | {
       readonly outcome: 'clear';
       readonly region: string;
       readonly declaration: 'listed' | 'reviewed-empty';
@@ -230,6 +333,7 @@ export type ScreeningConsult =
 
 /**
  * Look up one region against a list. Unset never returns `clear`.
+ * Fixture/test lists never return `clear` either — a miss is `fixture`, not screened-clean.
  *
  * Placeholder codes only at call sites. This function does not invent jurisdictions.
  */
@@ -238,12 +342,19 @@ export function consultScreeningList(list: ScreeningList, region: string): Scree
   if (list.declaration === 'unset') {
     return { outcome: 'unconsulted', region: code, declaration: 'unset' };
   }
+  const grade = screeningMoneyGrade(list);
   if (list.declaration === 'reviewed-empty') {
+    if (grade === 'fixture') {
+      return { outcome: 'fixture', region: code, declaration: 'reviewed-empty', source: list.source };
+    }
     return { outcome: 'clear', region: code, declaration: 'reviewed-empty', source: list.source };
   }
   const hit = list.regions.find((entry) => entry.region === code);
   if (hit) {
     return { outcome: 'hit', region: code, reason: hit.reason, source: hit.source, declaration: 'listed' };
+  }
+  if (grade === 'fixture') {
+    return { outcome: 'fixture', region: code, declaration: 'listed', source: list.source };
   }
   return { outcome: 'clear', region: code, declaration: 'listed', source: list.source };
 }

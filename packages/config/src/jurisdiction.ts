@@ -2,12 +2,18 @@ import { MODULES, type ModuleId, type Plane } from './modules.js';
 import {
   SANCTIONS_REGIONS_ENV,
   SANCTIONS_SOURCE_ENV,
+  SCREENING_REFUSE_FIXTURE,
+  SCREENING_REFUSE_UNCONFIGURED,
   SCREENING_REVIEWED_EMPTY,
+  ScreeningMoneyPostureError,
   envScreeningList,
+  evaluateScreeningMoneyPosture,
+  screeningMoneyGrade,
   type BlockAuthority,
   type ScreenedRegion,
   type ScreeningDeclaration,
   type ScreeningList,
+  type ScreeningMoneyGrade,
 } from './screening.js';
 
 /**
@@ -368,14 +374,21 @@ export interface ScreeningProvenance {
   readonly blockedRegionCount: number;
   /** Where the list came from — governance record, env var name, or `unconfigured`. */
   readonly source: string;
+  /** Counsel vs fixture vs unset. Fixtures are configured and still not clean. */
+  readonly moneyGrade: ScreeningMoneyGrade;
+  /** True only when counsel-grade. Never true for unset or placeholder/test lists. */
+  readonly readsAsScreenedClean: boolean;
 }
 
 function provenanceOf(list: ScreeningList): ScreeningProvenance {
+  const moneyGrade = screeningMoneyGrade(list);
   return {
     listConfigured: list.configured,
     declaration: list.declaration,
     blockedRegionCount: list.regions.length,
     source: list.source,
+    moneyGrade,
+    readsAsScreenedClean: moneyGrade === 'counsel',
   };
 }
 
@@ -501,6 +514,7 @@ export interface AccessDecision {
     | 'denied.region_blocked'
     | 'denied.region_unknown'
     | 'denied.screening_unconfigured'
+    | 'denied.screening_fixture'
     | 'denied.module_blocked'
     | 'denied.kyc_required'
     | 'denied.plane_unsupported';
@@ -608,8 +622,9 @@ export function unreviewedRegions(): RegionCode[] {
  *
  * Screening list honesty: every decision carries `screening.listConfigured`.
  * Flip `INTAFACED_SCREENING_FAIL_CLOSED` (or pass `screeningFailClosed: true`)
- * to refuse with `denied.screening_unconfigured` when the list is `unset`.
- * `reviewed-empty` and `listed` are configured answers and do not refuse here.
+ * to refuse with `denied.screening_unconfigured` when the list is `unset`,
+ * or `denied.screening_fixture` when the list is a placeholder/test fixture.
+ * Counsel-grade `reviewed-empty` and `listed` do not refuse here.
  */
 export function checkAccess(q: AccessQuery): AccessDecision {
   const mod = MODULES[q.module];
@@ -636,10 +651,10 @@ export function checkAccess(q: AccessQuery): AccessDecision {
   // before region/permissionless so "nobody supplied a list" cannot ride as a
   // clean bill of health. Does not invent Class X list content — operators set
   // INTAFACED_SANCTIONS_REGIONS (counsel) or attributed `none`.
-  if (screening.declaration === 'unset' && screeningFailClosed) {
+  if (screeningFailClosed && provenance.moneyGrade === 'unconfigured') {
     return {
       allowed: false,
-      code: 'denied.screening_unconfigured',
+      code: SCREENING_REFUSE_UNCONFIGURED,
       status: 'blocked',
       limitMultiplier: 0,
       reason:
@@ -647,6 +662,21 @@ export function checkAccess(q: AccessQuery): AccessDecision {
         `Hosted access refuses under ${SCREENING_FAIL_CLOSED_ENV}. ` +
         `Counsel/Nitro must supply ${SANCTIONS_REGIONS_ENV} (or attributed ` +
         `"${SCREENING_REVIEWED_EMPTY}"); agents must not invent list content.`,
+      screening: provenance,
+      regionResolved,
+    };
+  }
+
+  if (screeningFailClosed && provenance.moneyGrade === 'fixture') {
+    return {
+      allowed: false,
+      code: SCREENING_REFUSE_FIXTURE,
+      status: 'blocked',
+      limitMultiplier: 0,
+      reason:
+        `Sanctions screening list is a placeholder/test fixture — not counsel. ` +
+        `Must not be read as screened clean. Hosted access refuses under ${SCREENING_FAIL_CLOSED_ENV}. ` +
+        `Replace fixture provenance with a governance record; agents must not invent country codes.`,
       screening: provenance,
       regionResolved,
     };
@@ -824,6 +854,9 @@ export interface ScreeningStatus {
    */
   readonly businessBlockedRegions: readonly RegionCode[];
   readonly source: string;
+  /** Counsel vs fixture vs unset — fixtures must not render as a clean tick. */
+  readonly moneyGrade: ScreeningMoneyGrade;
+  readonly readsAsScreenedClean: boolean;
   /** One line an operator can read in a log or on a dashboard. */
   readonly summary: string;
 }
@@ -854,17 +887,21 @@ export function screeningStatus(
       : ` (${businessBlockedRegions.length} region(s) [${businessBlockedRegions.join(', ')}] are blocked by ` +
         `${BUSINESS_BLOCK_SOURCE} for commercial/licensing reasons — that is business configuration, not screening.)`;
 
+  const moneyGrade = screeningMoneyGrade(screening);
   const summary =
-    screening.declaration === 'listed'
-      ? `sanctions screening: ${blockedRegions.length} region(s) blocked [${blockedRegions.join(', ')}] from ${screening.source}` +
+    moneyGrade === 'fixture'
+      ? `sanctions screening: FIXTURE / TEST LIST — not counsel. Must not be read as screened clean. Source ${screening.source}.` +
         businessNote
-      : screening.declaration === 'reviewed-empty'
-        ? `sanctions screening: REVIEWED, DELIBERATELY EMPTY — 0 regions screened out, on the authority of ` +
-          `${screening.source}. This is a recorded decision, not an unset default.` +
+      : screening.declaration === 'listed'
+        ? `sanctions screening: ${blockedRegions.length} region(s) blocked [${blockedRegions.join(', ')}] from ${screening.source}` +
           businessNote
-        : `sanctions screening: NOT CONFIGURED — 0 regions blocked because no list was consulted. ` +
-          `This is not "everywhere is clear"; nothing has been screened. Supply ${SANCTIONS_REGIONS_ENV}.` +
-          businessNote;
+        : screening.declaration === 'reviewed-empty'
+          ? `sanctions screening: REVIEWED, DELIBERATELY EMPTY — 0 regions screened out, on the authority of ` +
+            `${screening.source}. This is a recorded decision, not an unset default.` +
+            businessNote
+          : `sanctions screening: NOT CONFIGURED — 0 regions blocked because no list was consulted. ` +
+            `This is not "everywhere is clear"; nothing has been screened. Supply ${SANCTIONS_REGIONS_ENV}.` +
+            businessNote;
 
   return {
     configured: screening.configured,
@@ -872,17 +909,20 @@ export function screeningStatus(
     blockedRegions,
     businessBlockedRegions,
     source: screening.source,
+    moneyGrade,
+    readsAsScreenedClean: moneyGrade === 'counsel',
     summary,
   };
 }
 
 export class UnscreenedJurisdictionError extends Error {
+  readonly code = SCREENING_REFUSE_UNCONFIGURED;
   constructor(
     readonly appEnv: string,
     readonly businessBlockedRegions: readonly RegionCode[] = [],
   ) {
     super(
-      `SANCTIONS SCREENING IS NOT CONFIGURED (§24 Lane A) and APP_ENV=${appEnv}. Refusing to start.\n\n` +
+      `SANCTIONS SCREENING IS NOT CONFIGURED (§24 Lane A) and APP_ENV=${appEnv} (${SCREENING_REFUSE_UNCONFIGURED}). Refusing to start.\n\n` +
         `The screening MECHANISM works; it has no list to screen against, so every region resolves to ` +
         `allowed and no call site, log line or dashboard can tell that apart from a region that was ` +
         `checked and cleared. Serving traffic in that state means telling users they were screened when ` +
@@ -974,6 +1014,10 @@ export function assertScreeningConfigured(
   const enforced = (SCREENING_ENFORCED_ENVS as readonly string[]).includes(appEnv);
   if (enforced && list.declaration === 'unset') {
     throw new UnscreenedJurisdictionError(appEnv, status.businessBlockedRegions);
+  }
+  const posture = evaluateScreeningMoneyPosture(list, appEnv);
+  if (!posture.allowed) {
+    throw new ScreeningMoneyPostureError(appEnv, posture.code, posture.grade);
   }
   return status;
 }
