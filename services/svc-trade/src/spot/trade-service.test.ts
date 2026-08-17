@@ -288,6 +288,12 @@ if (!available) {
         (await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, undefined, taker.id)).map((row) => row.orderId),
       ).toEqual([taker.id]);
       expect(await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, undefined, maker.id)).toEqual([]);
+      expect(
+        (await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, undefined, undefined, maker.id)).map(
+          (row) => row.counterOrderId,
+        ),
+      ).toEqual([maker.id]);
+      expect(await trade.myFills(principalFor(ALICE), 100, undefined, undefined, undefined, undefined, undefined, taker.id)).toEqual([]);
       expect((await trade.publicTape(btcusdt.id)).map((row) => row.side)).toEqual(['buy']);
       expect((await trade.publicTape(btcusdt.id, 100, undefined, 'buy')).map((row) => row.side)).toEqual(['buy']);
       expect(await trade.publicTape(btcusdt.id, 100, undefined, 'sell')).toEqual([]);

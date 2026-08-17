@@ -1258,6 +1258,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades?counterOrderId=: passes counterOrderId into myFills', async () => {
+    let seenCounter: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, _side, _liquidity, _orderId, counterOrderId) => {
+          seenCounter = counterOrderId;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?counterOrderId=22222222-2222-4222-8222-222222222222',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenCounter).toBe('22222222-2222-4222-8222-222222222222');
+    await app.close();
+  });
+
+  it('GET /account/trades?counterOrderId=: invalid → 400 without myFills', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        myFills: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?counterOrderId=not-a-uuid',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /account/trades?orderId=: invalid → 400 without myFills', async () => {
     let listed = false;
     const app = await build(

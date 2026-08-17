@@ -341,7 +341,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     'fetchMyTrades',
     'supported',
     [],
-    'Account fills; optional symbol/since/limit/side/liquidity/orderId — unfiltered still shows every fill',
+    'Account fills; optional symbol/since/limit/side/liquidity/orderId/counterOrderId — unfiltered still shows every fill',
   ),
   route('fetchPositions', 'supported', [], 'Open/closing futures rows; [] when none; optional symbol/status/side — no invent'),
   route(

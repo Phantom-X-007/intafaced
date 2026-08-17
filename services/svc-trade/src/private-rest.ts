@@ -45,7 +45,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
- *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=&liquidity=&orderId=)
+ *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since=&side=&liquidity=&orderId=&counterOrderId=)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=&side=)
@@ -115,6 +115,7 @@ export interface PrivateRestDeps {
    * Optional side filters fills.side in SQL.
    * Optional liquidity filters fills.liquidity in SQL.
    * Optional orderId filters fills.order_id in SQL.
+   * Optional counterOrderId filters fills.counter_order_id in SQL.
    */
   myFills(
     principal: Principal,
@@ -124,6 +125,7 @@ export interface PrivateRestDeps {
     side?: 'buy' | 'sell',
     liquidity?: 'maker' | 'taker',
     orderId?: string,
+    counterOrderId?: string,
   ): Promise<FillRecord[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
@@ -497,6 +499,15 @@ export function parseFillOrderId(raw: unknown): { ok: true; orderId?: string } |
   return { ok: true, orderId: raw.trim() };
 }
 
+/** Optional fill counterOrderId filter. Absent → every counterparty. */
+export function parseFillCounterOrderId(raw: unknown): { ok: true; counterOrderId?: string } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, counterOrderId: undefined };
+  if (typeof raw !== 'string' || !FILL_ORDER_ID.test(raw.trim())) {
+    return { ok: false, message: 'counterOrderId must be a uuid' };
+  }
+  return { ok: true, counterOrderId: raw.trim() };
+}
+
 /** Optional fill-liquidity filter. Absent → both maker and taker. */
 export function parseFillLiquidity(raw: unknown): { ok: true; liquidity?: 'maker' | 'taker' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, liquidity: undefined };
@@ -842,7 +853,15 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   app.get<{
-    Querystring: { symbol?: string; limit?: string; since?: string; side?: string; liquidity?: string; orderId?: string };
+    Querystring: {
+      symbol?: string;
+      limit?: string;
+      since?: string;
+      side?: string;
+      liquidity?: string;
+      orderId?: string;
+      counterOrderId?: string;
+    };
   }>('/api/v1/account/trades', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
@@ -864,6 +883,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     if (!orderIdParsed.ok) {
       return sendCcxt(reply, badRequest(orderIdParsed.message, 'trade.invalid_fill_order_id'));
     }
+    const counterOrderIdParsed = parseFillCounterOrderId(req.query.counterOrderId);
+    if (!counterOrderIdParsed.ok) {
+      return sendCcxt(reply, badRequest(counterOrderIdParsed.message, 'trade.invalid_fill_counter_order_id'));
+    }
     let filterMarketId: string | undefined;
     const symbolRaw = req.query.symbol;
     if (symbolRaw !== undefined && symbolRaw !== '') {
@@ -876,7 +899,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
 
     try {
-      // Symbol + since + orderId resolve in SQL via myFills — not a post-filter of a mixed page.
+      // Symbol + since + orderId + counterOrderId resolve in SQL via myFills — not a post-filter of a mixed page.
       const fills = await deps.myFills(
         principal,
         limit,
@@ -885,6 +908,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         sideParsed.side,
         liquidityParsed.liquidity,
         orderIdParsed.orderId,
+        counterOrderIdParsed.counterOrderId,
       );
       const symbolByMarket = new Map<string, string>();
       const wire = [];
