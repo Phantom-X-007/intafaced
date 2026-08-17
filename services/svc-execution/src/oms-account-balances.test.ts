@@ -36,6 +36,15 @@ describe('accountAdapterBalances', () => {
     expect(result[0]!.total).toBe(parseAmount('100'));
   });
 
+  it('filters by asset without inventing a missing row', async () => {
+    const observe = accountAdapterBalances(adapter([usdt(), usdt({ asset: 'BTC', free: parseAmount('1'), total: parseAmount('1') })]));
+    const btc = await observe('BTC');
+    expect(btc).toHaveLength(1);
+    expect(btc[0]!.asset).toBe('BTC');
+    expect(btc[0]!.free).toBe(parseAmount('1'));
+    expect(await observe('ETH')).toEqual([]);
+  });
+
   it('propagates a missing key — does not invent an empty wallet', async () => {
     const observe = accountAdapterBalances(
       adapter(async () => {
