@@ -1113,10 +1113,7 @@ export class LoanService {
     });
 
     if (rung.action !== 'liquidate') {
-      throw new BankError(
-        `Loan ${loan.id} is not seizable at this mark (LTV ${rung.ltvBps} bps)`,
-        'bank.margin_call_required',
-      );
+      throw new BankError(`Loan ${loan.id} is not seizable at this mark (LTV ${rung.ltvBps} bps)`, 'bank.margin_call_required');
     }
 
     assertAcceptableForLiquidation(collateralMark, loan.lastMarkPrice, now, this.markPolicy);
