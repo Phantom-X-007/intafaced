@@ -112,6 +112,9 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     addIsolatedMargin: async () => {
       throw new Error('addIsolatedMargin should not run in this matrix test');
     },
+    reduceIsolatedMargin: async () => {
+      throw new Error('reduceIsolatedMargin should not run in this matrix test');
+    },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async () => ({
       version: 'DIRECTION-2026-07-31:34',
@@ -173,6 +176,8 @@ describe('ccxt capability matrix — inventory integrity', () => {
         'futuresUnconfiguredOnOpen',
         'leverageRequiredOnOpen',
         'profitSourceUnconfiguredOnClose',
+        'reduceIsolatedMarginBelowInitial',
+        'reduceIsolatedMarginWouldLiquidate',
         'setLeverageInsufficientMargin',
         'setLeverageTooHigh',
         'setLeverageWouldLiquidate',
@@ -313,6 +318,26 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().collateral).toBe('7500');
+    await app.close();
+  });
+
+  it('reduceIsolatedMargin supported: signed → 200 from the injected service', async () => {
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        reduceIsolatedMargin: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', collateral: '5000' }) as never,
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin/reduce',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', amount: '2500' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().collateral).toBe('5000');
     await app.close();
   });
 

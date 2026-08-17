@@ -350,6 +350,9 @@ describe('private REST — mount boundary + order write path', () => {
       addIsolatedMargin: async () => {
         throw new Error('addIsolatedMargin not stubbed');
       },
+      reduceIsolatedMargin: async () => {
+        throw new Error('reduceIsolatedMargin not stubbed');
+      },
       getOpenMarginCall: async () => null,
       getAdlDisclosure: async () => ({
         version: 'DIRECTION-2026-07-31:34',
@@ -1926,6 +1929,47 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('POST /positions/margin/reduce: signed reduce → 200', async () => {
+    let called: { symbol: string; amount: string } | undefined;
+    const app = await build(
+      deps({
+        reduceIsolatedMargin: async (_p, input) => {
+          called = input;
+          return { ...fakeLeveredPosition, collateral: '5000' };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin/reduce',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', amount: '2500' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', amount: '2500', positionId: undefined });
+    expect(res.json().collateral).toBe('5000');
+    await app.close();
+  });
+
+  it('POST /positions/margin/reduce: below initial → 400 without treating it as success', async () => {
+    const app = await build(
+      deps({
+        reduceIsolatedMargin: async () => {
+          throw new FuturesError('below initial', 'trade.margin_below_initial', 400);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin/reduce',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', amount: '2500' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('trade.margin_below_initial');
+    await app.close();
+  });
+
   it('POST /positions/leverage: missing position → 404 and is the only write path (dep threw)', async () => {
     const app = await build(
       deps({
@@ -2020,7 +2064,12 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
-  for (const path of ['/api/v1/positions/leverage', '/api/v1/positions/margin', '/api/v1/positions/margin-mode'] as const) {
+  for (const path of [
+    '/api/v1/positions/leverage',
+    '/api/v1/positions/margin',
+    '/api/v1/positions/margin/reduce',
+    '/api/v1/positions/margin-mode',
+  ] as const) {
     it(`POST ${path}: anonymous → 401 (capabilities are not enumerable unauthenticated)`, async () => {
       const app = await build();
       const res = await app.inject({
