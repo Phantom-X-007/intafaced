@@ -105,4 +105,18 @@ describe('tradeAdapterOpenOrders', () => {
     expect(await list(undefined, undefined, undefined, undefined, 'missing')).toEqual([]);
     expect(await list()).toHaveLength(2);
   });
+
+  it('filters by feeAsset without inventing a row; pending still dropped', async () => {
+    const list = tradeAdapterOpenOrders(
+      adapter([
+        order(),
+        order({ clientOrderId: 'btc-fee', venueOrderId: 'v-8', feeAsset: 'BTC' }),
+        order({ clientOrderId: 'p', status: 'pending', venueOrderId: null, feeAsset: 'USDT' }),
+      ]),
+    );
+    expect((await list(undefined, undefined, undefined, undefined, undefined, 'BTC')).map((o) => o.clientOrderId)).toEqual(['btc-fee']);
+    expect(await list(undefined, undefined, undefined, undefined, undefined, 'ETH')).toEqual([]);
+    expect(await list()).toHaveLength(2);
+    expect((await list())[0]?.feeAsset).toBe('USDT');
+  });
 });
