@@ -1368,6 +1368,18 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'trade.market_closed' });
 
+      // Hours must win over clientOrderId — a weekend order without a retry key
+      // is still market_closed, not trade.client_order_id_required (no hold).
+      await expect(
+        saturday.placeOrder(principalFor(ALICE), {
+          marketId: eurusd.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('100'),
+          price: amt('1.10000'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_closed' });
+
       // The three things that must all be untouched: no hold, nothing submitted,
       // and the full balance still spendable.
       expect(await held(ALICE, 'USD')).toBe('0');
