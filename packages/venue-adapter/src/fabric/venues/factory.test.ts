@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { createVenueMarketDataAdapter, PUBLIC_MARKET_DATA_VENUE_IDS, publicVenueBookMid } from './factory.js';
-import { OkxSpotMarketData } from './okx-spot.js';
+import { VenueCredentialScopeError, VenueCredentialsMissingError } from '@intafaced/venue-contracts';
+import { createVenueMarketDataAdapter, createVenueTradeAdapter, PUBLIC_MARKET_DATA_VENUE_IDS, publicVenueBookMid } from './factory.js';
+import { BinanceSpotTrade } from './binance-spot.js';
+import { BybitSpotTrade } from './bybit-spot.js';
+import { OkxSpotMarketData, OkxSpotTrade } from './okx-spot.js';
 import { crossCheckMids } from '../cross-check.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
@@ -83,5 +86,51 @@ describe('createVenueMarketDataAdapter — a third id is what makes a median a c
     const c = mid('okx-spot', 29_999n * scale);
     expect(crossCheckMids('BTC/USDT', [a, b], { now }).verdict).toBe('inconclusive');
     expect(crossCheckMids('BTC/USDT', [a, b, c], { now }).verdict).toBe('consensus');
+  });
+});
+
+describe('createVenueTradeAdapter', () => {
+  const tradeOnly = (venueId: string) => ({
+    venueId,
+    apiKey: 'k',
+    apiSecret: 's',
+    scopes: ['read', 'trade'] as const,
+  });
+
+  it('builds each signed spot trade class and returns null for unknown ids', () => {
+    expect(createVenueTradeAdapter('binance-spot')).toBeInstanceOf(BinanceSpotTrade);
+    expect(createVenueTradeAdapter('bybit-spot')).toBeInstanceOf(BybitSpotTrade);
+    expect(createVenueTradeAdapter('okx-spot')).toBeInstanceOf(OkxSpotTrade);
+    expect(createVenueTradeAdapter('BINANCE-SPOT', tradeOnly('binance-spot'))).toBeInstanceOf(BinanceSpotTrade);
+    expect(createVenueTradeAdapter('')).toBeNull();
+    expect(createVenueTradeAdapter('off')).toBeNull();
+    expect(createVenueTradeAdapter('none')).toBeNull();
+    expect(createVenueTradeAdapter('false')).toBeNull();
+    expect(createVenueTradeAdapter('not-a-venue')).toBeNull();
+    expect(createVenueTradeAdapter('ccxt')).toBeNull();
+    expect(createVenueTradeAdapter('kraken-spot')).toBeNull();
+  });
+
+  it('does not invent credentials — missing keys stay missing', async () => {
+    const trade = createVenueTradeAdapter('binance-spot', null);
+    expect(trade).not.toBeNull();
+    await expect(
+      trade!.placeOrder({
+        clientOrderId: 'c1',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        type: 'limit',
+        amount: 1n,
+        price: 1n,
+      }),
+    ).rejects.toThrow(VenueCredentialsMissingError);
+  });
+
+  it('REFUSES a withdrawal-capable key at construct, for every known id', () => {
+    for (const id of ['binance-spot', 'bybit-spot', 'okx-spot'] as const) {
+      expect(() => createVenueTradeAdapter(id, { venueId: id, apiKey: 'k', apiSecret: 's', scopes: ['trade', 'withdraw'] })).toThrow(
+        VenueCredentialScopeError,
+      );
+    }
   });
 });
