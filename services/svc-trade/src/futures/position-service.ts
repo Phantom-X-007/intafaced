@@ -403,27 +403,57 @@ export class PositionService {
 
   /**
    * Settled history: `closed` and `liquidated`. Empty [] when none — never
-   * invents a mark. Open/closing rows stay on listOpen.
+   * invents a mark. Open/closing rows stay on listOpen. Optional since is SQL
+   * on COALESCE(closed_at, opened_at); limit is capped like orderHistory.
    */
-  async listClosed(userId: string, symbol?: string): Promise<Position[]> {
-    const rows = symbol
-      ? await this.sql<PositionRow[]>`
-          SELECT p.*, m.symbol
-          FROM trade.positions p
-          JOIN trade.markets m ON m.id = p.market_id
-          WHERE p.user_id = ${userId}
-            AND p.status IN ('closed', 'liquidated')
-            AND m.symbol = ${symbol}
-          ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
-        `
-      : await this.sql<PositionRow[]>`
-          SELECT p.*, m.symbol
-          FROM trade.positions p
-          JOIN trade.markets m ON m.id = p.market_id
-          WHERE p.user_id = ${userId}
-            AND p.status IN ('closed', 'liquidated')
-          ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
-        `;
+  async listClosed(userId: string, input: { symbol?: string; limit?: number; sinceMs?: number } = {}): Promise<Position[]> {
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+    const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
+    const symbol = input.symbol?.trim() || undefined;
+    const rows =
+      symbol && sinceDate
+        ? await this.sql<PositionRow[]>`
+            SELECT p.*, m.symbol
+            FROM trade.positions p
+            JOIN trade.markets m ON m.id = p.market_id
+            WHERE p.user_id = ${userId}
+              AND p.status IN ('closed', 'liquidated')
+              AND m.symbol = ${symbol}
+              AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
+            ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+            LIMIT ${limit}
+          `
+        : symbol
+          ? await this.sql<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.user_id = ${userId}
+                AND p.status IN ('closed', 'liquidated')
+                AND m.symbol = ${symbol}
+              ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+              LIMIT ${limit}
+            `
+          : sinceDate
+            ? await this.sql<PositionRow[]>`
+                SELECT p.*, m.symbol
+                FROM trade.positions p
+                JOIN trade.markets m ON m.id = p.market_id
+                WHERE p.user_id = ${userId}
+                  AND p.status IN ('closed', 'liquidated')
+                  AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
+                ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+                LIMIT ${limit}
+              `
+            : await this.sql<PositionRow[]>`
+                SELECT p.*, m.symbol
+                FROM trade.positions p
+                JOIN trade.markets m ON m.id = p.market_id
+                WHERE p.user_id = ${userId}
+                  AND p.status IN ('closed', 'liquidated')
+                ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+                LIMIT ${limit}
+              `;
     return rows.map((row) => presentPosition(row));
   }
 
