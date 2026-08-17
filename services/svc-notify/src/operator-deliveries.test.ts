@@ -1,14 +1,23 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { MemoryDeliveryStore } from './channel-store.js';
-import type { NotifyService } from './notify-service.js';
+import { MemoryNotifyStore } from './store.js';
+import { MemoryDeliveryStore, MemoryTargetStore } from './channel-store.js';
+import { NotifyService } from './notify-service.js';
+import { NotificationDispatcher } from './dispatch.js';
+import { ChannelRegistry } from './channels/registry.js';
+import { InAppChannel, UnconfiguredChannel } from './channels/gateway.js';
+import { MemoryMuteStore } from './preferences/mute.js';
 import { createNotifyRouter } from './router.js';
 
 /**
- * D26-P1-O5 — operator delivery outcomes view (residual after #1701).
+ * Operator delivery outcomes — product path (not a mocked NotifyService).
  *
- * Product door: admin can list recent delivery rows; notify:read cannot.
+ * Done-bar: in-app accepted is readable; email without a gateway is
+ * `channel.not_configured` (never fake sent / never `delivered`); callers
+ * without `admin:read` are refused. Scope stays `admin:read` (existing operator
+ * scope) — `notify:ops` would require packages/auth, which this slice does not
+ * touch. Digest helpers stay unwired.
  */
 
 const SECRET = 'a-notify-operator-deliveries-test-secret-long';
@@ -39,7 +48,45 @@ function signed(scopes: string[]) {
   });
 }
 
-describe('operator delivery outcomes (D26-P1-O5)', () => {
+const anonymous = () => edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+
+function productHarness() {
+  const store = new MemoryNotifyStore();
+  const targets = new MemoryTargetStore();
+  const deliveries = new MemoryDeliveryStore();
+  const muteStore = new MemoryMuteStore();
+  const channels = new ChannelRegistry([
+    new InAppChannel(),
+    new UnconfiguredChannel('email', ['NOTIFY_EMAIL_GATEWAY_URL', 'NOTIFY_EMAIL_GATEWAY_TOKEN']),
+    new UnconfiguredChannel('push', ['NOTIFY_PUSH_GATEWAY_URL', 'NOTIFY_PUSH_GATEWAY_TOKEN']),
+    new UnconfiguredChannel('sms', ['NOTIFY_SMS_GATEWAY_URL', 'NOTIFY_SMS_GATEWAY_TOKEN']),
+  ]);
+  const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
+    maxAttempts: 3,
+    outOfAppEnabled: true,
+    mutePrefsOf: (userId) => muteStore.get(userId),
+  });
+  const notify = new NotifyService(
+    store,
+    { fanoutEnabled: true, verifyTtlMinutes: 15 },
+    { targets, deliveries, channels, dispatcher, muteStore },
+  );
+  return { notify, targets, deliveries };
+}
+
+async function confirmEmail(targets: MemoryTargetStore) {
+  await targets.upsert({
+    userId: USER,
+    channel: 'email',
+    address: 'ops-view@example.com',
+    locale: 'en',
+    verifyTokenHash: 'x'.repeat(64),
+    verifyExpiresAt: new Date(Date.now() + 60_000),
+  });
+  await targets.markVerified(USER, 'email', 'x'.repeat(64), new Date());
+}
+
+describe('operator delivery outcomes (ops.notifications residual)', () => {
   it('MemoryDeliveryStore.listRecent is newest-first and capped', async () => {
     const n1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const n2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -48,7 +95,13 @@ describe('operator delivery outcomes (D26-P1-O5)', () => {
     const c1 = await s.claim(n1, 'email', 3);
     expect(c1.claimed).toBe(true);
     if (!c1.claimed) throw new Error('expected claim');
-    await s.settle({ id: c1.id, attempt: 1, status: 'refused', refusalCode: 'channel.not_configured', attempted: false });
+    await s.settle({
+      id: c1.id,
+      attempt: 1,
+      status: 'refused',
+      refusalCode: 'channel.not_configured',
+      attempted: false,
+    });
     nowMs = Date.parse('2026-08-12T13:00:00.000Z');
     const c2 = await s.claim(n2, 'inapp', 3);
     expect(c2.claimed).toBe(true);
@@ -63,41 +116,66 @@ describe('operator delivery outcomes (D26-P1-O5)', () => {
     expect(await s.listRecent(1)).toHaveLength(1);
   });
 
-  it('admin:read can call operatorDeliveries; notify:read cannot', async () => {
-    const notificationId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-    const notify = {
-      fanoutEnabled: true,
-      operatorDeliveryOutcomes: vi.fn(async () => [
-        {
-          id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-          notificationId,
-          channel: 'inapp' as const,
-          status: 'accepted' as const,
-          attempts: 1,
-          attemptedAt: new Date('2026-08-12T12:00:00.000Z'),
-          acceptedAt: new Date('2026-08-12T12:00:00.000Z'),
-          leaseUntil: null,
-          refusalCode: null,
-          detail: null,
-          reference: null,
-          createdAt: new Date('2026-08-12T12:00:00.000Z'),
-          updatedAt: new Date('2026-08-12T12:00:01.000Z'),
-        },
-      ]),
-    } as unknown as NotifyService;
+  it('configured in-app is accepted; email without gateway is channel.not_configured — never delivered', async () => {
+    const { notify, targets } = productHarness();
+    await confirmEmail(targets);
+    const created = await notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: 'intafaced.bank.margin_call.created',
+      sourceIdempotencyKey: 'margin-op-outcomes-1',
+    });
+    expect(created.inserted).toBe(true);
+
+    const rows = await notify.operatorDeliveryOutcomes(50);
+    const inapp = rows.find((r) => r.channel === 'inapp');
+    const email = rows.find((r) => r.channel === 'email');
+
+    expect(inapp).toMatchObject({ status: 'accepted', refusalCode: null });
+    expect(inapp?.acceptedAt).toBeInstanceOf(Date);
+    expect(email).toMatchObject({ status: 'refused', refusalCode: 'channel.not_configured' });
+    expect(email?.acceptedAt).toBeNull();
+    expect(email?.attemptedAt).toBeNull();
+    expect(rows.every((r) => r.status !== ('delivered' as typeof r.status))).toBe(true);
+
+    const caller = createNotifyRouter(notify).createCaller(signed(['admin:read']));
+    const wired = await caller.notify.ops.deliveries({ limit: 50 });
+    expect(wired.some((r) => r.channel === 'inapp' && r.status === 'accepted')).toBe(true);
+    expect(wired.some((r) => r.channel === 'email' && r.status === 'refused' && r.refusalCode === 'channel.not_configured')).toBe(true);
+    for (const row of wired) {
+      expect(row).not.toHaveProperty('address');
+      expect(row).not.toHaveProperty('detail');
+      expect(row).not.toHaveProperty('userId');
+      expect(row.status).not.toBe('delivered');
+    }
+
+    const alias = await caller.notify.operatorDeliveries({ limit: 50 });
+    expect(alias).toEqual(wired);
+  });
+
+  it('admin:read can call notify.ops.deliveries; notify:read and anonymous cannot', async () => {
+    const { notify } = productHarness();
+    await notify.create({
+      userId: USER,
+      kind: 'trade.fill',
+      titleKey: 'notify.trade.fill.title',
+      bodyKey: 'notify.trade.fill.body',
+      sourceSubject: 'intafaced.trade.fill.settled',
+      sourceIdempotencyKey: 'fill-op-outcomes-auth',
+    });
 
     const router = createNotifyRouter(notify);
-    const asAdmin = await router.createCaller(signed(['admin:read'])).notify.operatorDeliveries({ limit: 10 });
-    expect(asAdmin).toHaveLength(1);
-    expect(asAdmin[0]).toMatchObject({
-      notificationId,
-      channel: 'inapp',
-      status: 'accepted',
-    });
-    expect(notify.operatorDeliveryOutcomes).toHaveBeenCalledWith(10);
+    const asAdmin = await router.createCaller(signed(['admin:read'])).notify.ops.deliveries({ limit: 10 });
+    expect(asAdmin.length).toBeGreaterThan(0);
 
-    await expect(router.createCaller(signed(['notify:read'])).notify.operatorDeliveries()).rejects.toMatchObject({
+    await expect(router.createCaller(signed(['notify:read'])).notify.ops.deliveries()).rejects.toMatchObject({
       code: 'FORBIDDEN',
+    });
+    await expect(router.createCaller(anonymous()).notify.ops.deliveries()).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
     });
   });
 });
