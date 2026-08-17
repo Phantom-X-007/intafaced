@@ -14,7 +14,7 @@ import type { Candle, Market, MarketKind, MarketStatus, PublicTapePrint } from '
  * Public CCXT-style REST slice (trade.ccxt-api — market data).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET /api/v1/markets?status=&kind=&quote=
+ *   GET /api/v1/markets?status=&kind=&quote=&base=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
@@ -39,8 +39,8 @@ const MAX_CANDLES = 1000;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
-  /** Optional status/kind/quote are SQL in the service. Omitted still includes halted, futures, and every quote. */
-  markets(status?: MarketStatus, kind?: MarketKind, quote?: string): Promise<Market[]>;
+  /** Optional status/kind/quote/base are SQL in the service. Omitted still includes halted, futures, and every quote/base. */
+  markets(status?: MarketStatus, kind?: MarketKind, quote?: string, base?: string): Promise<Market[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   depth(marketId: string, limit: number): Promise<EngineDepth>;
   /**
@@ -527,6 +527,15 @@ export function parseMarketQuote(raw: unknown): { ok: true; quote?: string } | {
   return { ok: true, quote };
 }
 
+/** Optional base-asset filter. Absent → every base. */
+export function parseMarketBase(raw: unknown): { ok: true; base?: string } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, base: undefined };
+  if (typeof raw !== 'string') return { ok: false, message: 'base must be 1-32 characters' };
+  const base = raw.trim();
+  if (base.length < 1 || base.length > 32) return { ok: false, message: 'base must be 1-32 characters' };
+  return { ok: true, base };
+}
+
 /**
  * Register the public REST routes on a Fastify instance.
  * Mount alongside `/trpc` — no auth middleware.
@@ -561,7 +570,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     });
   });
 
-  app.get<{ Querystring: { status?: string; kind?: string; quote?: string } }>('/api/v1/markets', async (req, reply) => {
+  app.get<{ Querystring: { status?: string; kind?: string; quote?: string; base?: string } }>('/api/v1/markets', async (req, reply) => {
     const statusParsed = parseMarketStatus(req.query.status);
     if (!statusParsed.ok) {
       return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_market_status'));
@@ -574,7 +583,11 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     if (!quoteParsed.ok) {
       return sendCcxt(reply, badRequest(quoteParsed.message, 'trade.invalid_market_quote'));
     }
-    const markets = await deps.markets(statusParsed.status, kindParsed.kind, quoteParsed.quote);
+    const baseParsed = parseMarketBase(req.query.base);
+    if (!baseParsed.ok) {
+      return sendCcxt(reply, badRequest(baseParsed.message, 'trade.invalid_market_base'));
+    }
+    const markets = await deps.markets(statusParsed.status, kindParsed.kind, quoteParsed.quote, baseParsed.base);
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
     return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));

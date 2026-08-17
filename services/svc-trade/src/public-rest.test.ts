@@ -407,6 +407,38 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/markets?base=BTC: passes base into markets', async () => {
+    let seen: { base?: string } = {};
+    const app = await build(
+      deps({
+        markets: async (_status, _kind, _quote, base) => {
+          seen = { base };
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?base=BTC' });
+    expect(res.statusCode).toBe(200);
+    expect(seen.base).toBe('BTC');
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?base=: invalid → 400 without markets', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: `/api/v1/markets?base=${'B'.repeat(33)}` });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /api/v1/markets?quote=: invalid → 400 without markets', async () => {
     let listed = false;
     const app = await build(
