@@ -56,11 +56,13 @@ class FakeRails {
   readonly assets: string[] = [];
   readonly enableds: (boolean | undefined)[] = [];
   readonly networks: (string | undefined)[] = [];
+  readonly toVenueIds: (string | undefined)[] = [];
   constructor(private readonly next: TransferRail[] | Error) {}
-  fn: OmsRailsFn = async (asset, enabled, network) => {
+  fn: OmsRailsFn = async (asset, enabled, network, toVenueId) => {
     this.assets.push(asset);
     this.enableds.push(enabled);
     this.networks.push(network);
+    this.toVenueIds.push(toVenueId);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -108,6 +110,20 @@ describe('observeOmsRails', () => {
     expect(street.networks).toEqual(['erc20']);
     if (!result.ok) return;
     expect(result.rails[0]!.network).toBe('erc20');
+  });
+
+  it('passes an optional toVenueId through and does not invent a missing rail', async () => {
+    const street = new FakeRails([usdtRail({ toVenueId: 'harbour' })]);
+    const result = await observeOmsRails({
+      venueId: 'street',
+      asset: 'USDT',
+      toVenueId: 'harbour',
+      railsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.toVenueIds).toEqual(['harbour']);
+    if (!result.ok) return;
+    expect(result.rails[0]!.toVenueId).toBe('harbour');
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -180,12 +196,19 @@ describe('execution.oms.rails tRPC', () => {
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, { street: street.fn }).createCaller(
       signed(),
     );
-    const out = await caller.execution.oms.rails({ venueId: 'street', asset: 'USDT', enabled: false, network: 'trc20' });
+    const out = await caller.execution.oms.rails({
+      venueId: 'street',
+      asset: 'USDT',
+      enabled: false,
+      network: 'trc20',
+      toVenueId: 'harbour',
+    });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.rails).toHaveLength(1);
     expect(street.assets).toEqual(['USDT']);
     expect(street.enableds).toEqual([false]);
     expect(street.networks).toEqual(['trc20']);
+    expect(street.toVenueIds).toEqual(['harbour']);
   });
 });
