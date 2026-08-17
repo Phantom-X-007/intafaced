@@ -160,11 +160,11 @@
       "kind": "product_ruling",
       "title": "Attestation threat model (blueprint.attestations)",
       "blocks": ["blueprint.attestations"],
-      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
+      "primaryDoc": "docs/THREAT-MODEL-BLUEPRINT-ATTESTATIONS.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-12--attestation-threat-model",
       "answerShape": "threat_model_plus_zero_pii_bar",
       "priority": 4,
-      "notes": "2026-08-14 seal: zero-PII bar + replay/issuer threats. On-chain implement stays Shehzad. No WebAuthn conflation."
+      "notes": "2026-08-15 dedicated threat model + zero-PII bar (rank vs identity/KYC/cross-plane addresses). Implementers refuse if bar unmet. On-chain stays Shehzad / protocol.smart-accounts. Predecessor subsection in 2026-08-14 remaining-p0-money-law ADR was not edited."
     },
     {
       "id": "D26-P0-13",
