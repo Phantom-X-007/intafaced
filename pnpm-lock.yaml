@@ -874,6 +874,9 @@ importers:
       '@intafaced/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@intafaced/quant-honesty':
+        specifier: workspace:*
+        version: link:../../packages/quant-honesty
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
