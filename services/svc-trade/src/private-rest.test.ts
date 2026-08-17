@@ -1359,6 +1359,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/closed?clientOrderId=alice-1: passes clientOrderId into orderHistory', async () => {
+    let seen: { clientOrderId?: string } | null = null;
+    const app = await build(
+      deps({
+        orderHistory: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?clientOrderId=alice-1',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.clientOrderId).toBe('alice-1');
+    await app.close();
+  });
+
+  it('GET /orders/closed?clientOrderId=: invalid → 400 without orderHistory', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/orders/closed?clientOrderId=${'x'.repeat(65)}`,
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/closed?tif=: invalid → 400 without orderHistory', async () => {
     let listed = false;
     const app = await build(

@@ -40,7 +40,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=&tif=&clientOrderId=)
- *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=&tif=)
+ *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=&tif=&clientOrderId=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
@@ -101,6 +101,7 @@ export interface PrivateRestDeps {
       side?: 'buy' | 'sell';
       type?: 'limit' | 'market';
       tif?: TimeInForce;
+      clientOrderId?: string;
     },
   ): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
@@ -518,7 +519,7 @@ export function parseOpenOrderTif(raw: unknown): { ok: true; tif?: TimeInForce }
   return { ok: false, message: 'tif must be GTC, IOC, FOK, or PO' };
 }
 
-/** Optional live-order clientOrderId filter. Absent → every retry key. */
+/** Optional clientOrderId filter (open or closed). Absent → every retry key. */
 export function parseOpenOrderClientId(raw: unknown): { ok: true; clientOrderId?: string } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, clientOrderId: undefined };
   if (typeof raw !== 'string') return { ok: false, message: 'clientOrderId must be 1-64 characters' };
@@ -751,7 +752,16 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   );
 
   app.get<{
-    Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string; type?: string; tif?: string };
+    Querystring: {
+      symbol?: string;
+      limit?: string;
+      since?: string;
+      status?: string;
+      side?: string;
+      type?: string;
+      tif?: string;
+      clientOrderId?: string;
+    };
   }>('/api/v1/orders/closed', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
@@ -787,9 +797,13 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     if (!tifParsed.ok) {
       return sendCcxt(reply, badRequest(tifParsed.message, 'trade.invalid_closed_order_tif'));
     }
+    const clientIdParsed = parseOpenOrderClientId(req.query.clientOrderId);
+    if (!clientIdParsed.ok) {
+      return sendCcxt(reply, badRequest(clientIdParsed.message, 'trade.invalid_closed_order_client_id'));
+    }
 
     try {
-      // since / side / type / tif → SQL via orderHistory — not a post-filter of a mixed page.
+      // since / side / type / tif / clientOrderId → SQL via orderHistory — not a post-filter of a mixed page.
       const orders = await deps.orderHistory(principal, {
         marketId,
         limit,
@@ -798,6 +812,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         ...(sideParsed.side ? { side: sideParsed.side } : {}),
         ...(typeParsed.type ? { type: typeParsed.type } : {}),
         ...(tifParsed.tif ? { tif: tifParsed.tif } : {}),
+        ...(clientIdParsed.clientOrderId ? { clientOrderId: clientIdParsed.clientOrderId } : {}),
       });
       const symbolByMarket = new Map<string, string>();
       const wire = [];

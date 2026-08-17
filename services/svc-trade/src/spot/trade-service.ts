@@ -2018,6 +2018,7 @@ export class TradeService {
    * Optional side narrows buy/sell in SQL — never invents a side.
    * Optional type narrows limit/market in SQL — never invents a type.
    * Optional tif narrows GTC/IOC/FOK/PO in SQL — never invents a tif.
+   * Optional clientOrderId narrows client_order_id in SQL — never invents a row.
    */
   async orderHistory(
     principal: Principal,
@@ -2029,6 +2030,7 @@ export class TradeService {
       side?: 'buy' | 'sell';
       type?: 'limit' | 'market';
       tif?: TimeInForce;
+      clientOrderId?: string;
     } = {},
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
@@ -2058,6 +2060,7 @@ export class TradeService {
             : input.tif === 'PO'
               ? this.sql`tif = 'PO'`
               : this.sql`TRUE`;
+    const clientOrderIdFilter = input.clientOrderId ? this.sql`client_order_id = ${input.clientOrderId}` : this.sql`TRUE`;
     const rows =
       input.marketId && sinceDate
         ? await this.sql<OrderRow[]>`
@@ -2068,6 +2071,7 @@ export class TradeService {
                AND ${sideFilter}
                AND ${typeFilter}
                AND ${tifFilter}
+               AND ${clientOrderIdFilter}
                AND created_at >= ${sinceDate}
              ORDER BY created_at DESC
              LIMIT ${limit}
@@ -2081,6 +2085,7 @@ export class TradeService {
                  AND ${sideFilter}
                  AND ${typeFilter}
                  AND ${tifFilter}
+                 AND ${clientOrderIdFilter}
                ORDER BY created_at DESC
                  LIMIT ${limit}
             `
@@ -2092,6 +2097,7 @@ export class TradeService {
                    AND ${sideFilter}
                    AND ${typeFilter}
                    AND ${tifFilter}
+                   AND ${clientOrderIdFilter}
                    AND created_at >= ${sinceDate}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
@@ -2103,6 +2109,7 @@ export class TradeService {
                    AND ${sideFilter}
                    AND ${typeFilter}
                    AND ${tifFilter}
+                   AND ${clientOrderIdFilter}
                  ORDER BY created_at DESC
                  LIMIT ${limit}
               `;
