@@ -56,11 +56,13 @@ class FakeMarkets {
   calls = 0;
   readonly types: (VenueInstrumentType | undefined)[] = [];
   readonly quotes: (string | undefined)[] = [];
+  readonly bases: (string | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type, quote) => {
+  fn: OmsMarketsFn = async (type, quote, base) => {
     this.calls += 1;
     this.types.push(type);
     this.quotes.push(quote);
+    this.bases.push(base);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -104,6 +106,19 @@ describe('observeOmsMarkets', () => {
     expect(street.quotes).toEqual(['BTC']);
     if (!result.ok) return;
     expect(result.markets[0]?.quote).toBe('BTC');
+  });
+
+  it('passes an optional base through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ base: 'ETH', symbol: 'ETH/USDT', venueSymbol: 'ETHUSDT' })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      base: 'ETH',
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.bases).toEqual(['ETH']);
+    if (!result.ok) return;
+    expect(result.markets[0]?.base).toBe('ETH');
   });
 
   it('passes through inactive listings — halted is not rewritten to active', async () => {
@@ -176,11 +191,12 @@ describe('execution.oms.markets tRPC', () => {
       {},
       { street: street.fn },
     ).createCaller(signed());
-    const out = await caller.execution.oms.markets({ venueId: 'street', type: 'spot', quote: 'USDT' });
+    const out = await caller.execution.oms.markets({ venueId: 'street', type: 'spot', quote: 'USDT', base: 'ETH' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.markets[0]?.symbol).toBe('ETH/USDT');
     expect(street.types).toEqual(['spot']);
     expect(street.quotes).toEqual(['USDT']);
+    expect(street.bases).toEqual(['ETH']);
   });
 });

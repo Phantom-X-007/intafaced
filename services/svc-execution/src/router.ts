@@ -358,6 +358,7 @@ export function createExecutionRouter(
               venueId: z.string().min(1).max(128),
               type: z.enum(['spot', 'perpetual', 'future', 'option', 'margin', 'fx', 'cfd']).optional(),
               quote: z.string().min(1).max(32).optional(),
+              base: z.string().min(1).max(32).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -367,6 +368,7 @@ export function createExecutionRouter(
                 venueId: input.venueId,
                 type: input.type,
                 quote: input.quote,
+                base: input.base,
                 kind: input.kind,
                 marketsByVenue,
               });
