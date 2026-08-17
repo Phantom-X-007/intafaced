@@ -49,6 +49,15 @@ describe('accountAdapterPositions', () => {
     expect(result[0]!.size).toBe(parseAmount('2'));
   });
 
+  it('filters by side without inventing the other side', async () => {
+    const observe = accountAdapterPositions(adapter([perp({ side: 'long' }), perp({ side: 'short', size: parseAmount('3') })]));
+    const result = await observe(undefined, 'short');
+    expect(result).toHaveLength(1);
+    expect(result[0]!.side).toBe('short');
+    expect(result[0]!.size).toBe(parseAmount('3'));
+    expect(await observe(undefined, 'long')).toHaveLength(1);
+  });
+
   it('propagates a missing key — does not invent an empty book', async () => {
     const observe = accountAdapterPositions(
       adapter(async () => {

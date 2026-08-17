@@ -3,16 +3,16 @@
  *
  * Does not swallow VenueCredentialsMissingError into []. A missing key is a
  * deployment that is not ready, not an empty book. Optional symbol filters the
- * observation; amounts and null marks are not rewritten.
+ * observation; optional side narrows long/short without inventing the other.
+ * Amounts and null marks are not rewritten.
  */
 import type { AccountAdapter, VenuePosition } from '@intafaced/venue-contracts';
 
-export type OmsPositionsFn = (symbol?: string) => Promise<VenuePosition[]>;
+export type OmsPositionsFn = (symbol?: string, side?: 'long' | 'short') => Promise<VenuePosition[]>;
 
 export function accountAdapterPositions(adapter: AccountAdapter): OmsPositionsFn {
-  return async (symbol) => {
+  return async (symbol, side) => {
     const rows = await adapter.positions();
-    if (!symbol) return rows;
-    return rows.filter((row) => row.symbol === symbol);
+    return rows.filter((row) => (!symbol || row.symbol === symbol) && (!side || row.side === side));
   };
 }
