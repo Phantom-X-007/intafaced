@@ -804,7 +804,8 @@ export class LoanService {
     const afterLtv = ltvBps(debtValue, collateralValue);
     if (afterLtv > product.maxLtvBps) {
       throw new BankError(
-        `Release would put loan ${loan.id} at LTV ${describeLtv(afterLtv)} above the ${describeLtv(product.maxLtvBps)} limit for "${product.name}"`,
+        `Release would put loan ${loan.id} at LTV ${describeLtv(afterLtv)} ` +
+          `above the ${describeLtv(product.maxLtvBps)} limit for "${product.name}"`,
         'bank.ltv_exceeded',
       );
     }
