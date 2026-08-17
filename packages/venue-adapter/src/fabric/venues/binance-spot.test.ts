@@ -454,6 +454,43 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
       }),
     ).rejects.toMatchObject({ reason: 'unreachable' });
   });
+
+  it('balances maps free/locked from signed GET /api/v3/account — never a ledger input', async () => {
+    const http = new FakeHttp().queue({
+      balances: [
+        { asset: 'BTC', free: '1.5', locked: '0.5' },
+        { asset: 'USDT', free: '100', locked: '0' },
+      ],
+    });
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const account = new BinanceSpotAccount(keys, { http, restBase: 'https://rest.test', clock: () => 1_700_000_000_000 });
+    const rows = await account.balances();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.asset).toBe('BTC');
+    expect(formatAmount(rows[0]!.free)).toBe('1.5');
+    expect(formatAmount(rows[0]!.used)).toBe('0.5');
+    expect(formatAmount(rows[0]!.total)).toBe('2');
+    expect(http.requests[0]).toMatch(/^https:\/\/rest\.test\/api\/v3\/account\?/);
+    expect(http.requests[0]).toContain('signature=');
+  });
+
+  it('spot positions is [] — honest empty, not not_ready', async () => {
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    expect(await new BinanceSpotAccount(keys, { http: new FakeHttp() }).positions()).toEqual([]);
+  });
+
+  it('transferRails stays not_ready — wallet permission refused', async () => {
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    await expect(new BinanceSpotAccount(keys).transferRails()).rejects.toMatchObject({ reason: 'not_ready' });
+  });
+
+  it('createListenKey POSTs userDataStream with the API key header', async () => {
+    const http = new FakeHttp().queue({ listenKey: 'lk-1' });
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const key = await new BinanceSpotAccount(keys, { http, restBase: 'https://rest.test' }).createListenKey();
+    expect(key).toBe('lk-1');
+    expect(http.requests[0]).toBe('POST https://rest.test/api/v3/userDataStream');
+  });
 });
 
 // ════════════════════════════════════════════════════════════════════════════
