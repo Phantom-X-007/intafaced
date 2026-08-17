@@ -242,6 +242,7 @@ function baseDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     markets: async () => [],
     userBalances: async () => [],
     listPositions: async () => [],
+    listClosedPositions: async () => [],
     getPosition: async () => {
       throw new Error('unused');
     },

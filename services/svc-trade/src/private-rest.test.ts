@@ -338,6 +338,7 @@ describe('private REST — mount boundary + order write path', () => {
       markets: async () => [market],
       userBalances: async () => [],
       listPositions: async () => [],
+      listClosedPositions: async () => [],
       getPosition: async () => {
         throw new Error('getPosition not stubbed');
       },
@@ -1341,6 +1342,70 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([sample]);
+    await app.close();
+  });
+
+  it('GET /positions/closed: anonymous → 401', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/positions/closed' });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe('AuthenticationError');
+    await app.close();
+  });
+
+  it('GET /positions/closed: signed → 200 + [] when none settled', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /positions/closed is not swallowed as GET /positions/:id', async () => {
+    const closed = {
+      id: ORDER_ID,
+      symbol: 'BTC/USDT',
+      timestamp: 1,
+      datetime: '1970-01-01T00:00:00.001Z',
+      side: 'long' as const,
+      contracts: '1',
+      contractSize: null,
+      entryPrice: '50000',
+      markPrice: null,
+      notional: '50000',
+      leverage: '10',
+      collateral: '0',
+      initialMargin: '5000',
+      maintenanceMargin: null,
+      unrealizedPnl: null,
+      realizedPnl: null,
+      liquidationPrice: null,
+      marginMode: 'isolated' as const,
+      percentage: null,
+      status: 'closed' as const,
+    };
+    let getHits = 0;
+    const app = await build(
+      deps({
+        listClosedPositions: async () => [closed],
+        getPosition: async () => {
+          getHits += 1;
+          throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([closed]);
+    expect(getHits).toBe(0);
     await app.close();
   });
 
