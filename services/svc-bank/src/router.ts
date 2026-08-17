@@ -1554,6 +1554,39 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
+    /**
+     * Seize one underwater loan through ledger-client. Marks first — a missing
+     * mark refuses `bank.mark_missing` before any post. Same kill as the sweep.
+     */
+    seizeLoan: scopedProcedure('admin:treasury')
+      .input(z.object({ loanId: z.string().uuid() }))
+      .output(
+        z.object({
+          ledgerTxId: z.string(),
+          collateralSold: amountString,
+          proceeds: amountString,
+          principalRepaid: amountString,
+          interestRepaid: amountString,
+          closed: z.boolean(),
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          if (!loanRiskSweepEnabled) {
+            throw new BankError('loan risk sweep is disabled', 'bank.loan_risk_sweep_disabled');
+          }
+          const result = await bank.loans.seize({ loanId: input.loanId });
+          return {
+            ledgerTxId: result.ledgerTxId,
+            collateralSold: formatAmount(result.collateralSold),
+            proceeds: formatAmount(result.proceeds),
+            principalRepaid: formatAmount(result.principalRepaid),
+            interestRepaid: formatAmount(result.interestRepaid),
+            closed: result.closed,
+          };
+        }),
+      ),
+
     /** Re-drive loans stuck between the collateral lock and the draw. */
     resumePendingLoans: scopedProcedure('admin:treasury')
       .input(z.object({ limit: z.number().int().min(1).max(1_000).optional() }))
