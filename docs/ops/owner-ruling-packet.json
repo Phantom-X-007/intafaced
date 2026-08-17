@@ -330,11 +330,12 @@
       "kind": "product_ruling",
       "title": "Affiliate payout handoff — hops / fee pool / atomicity / multi-beneficiary",
       "blocks": ["ops.affiliates payout"],
-      "primaryDoc": "docs/OWNER-RULINGS-FROM-DENON-PAYOUT-2026-08-09.md",
+      "primaryDoc": "docs/adr/2026-08-15-payout-01-affiliate-handoff-seal.md",
+      "packetRef": "docs/OWNER-RULINGS-FROM-DENON-PAYOUT-2026-08-09.md",
       "related": ["D26-P0-02"],
       "answerShape": "click_or_override_recommended_defaults",
       "priority": 3,
-      "notes": "2026-08-13 Denon click: hops=5, identity pool + per-event sourceModule, replay-safe keys, no multi-beneficiary recipe."
+      "notes": "2026-08-15 v1 law: MAX_PAYOUT_TIER_DEPTH=5; AFFILIATE_PAYOUT_SOURCE_MODULE=\"identity\" + override; replay-safe keys affiliate:<feeEventId>:<beneficiaryId>:h<hop>; no multi-beneficiary recipe. Magnitudes remain D26-P0-02. Engine stays refuse-closed on unpublished rates."
     },
     {
       "id": "CLASS-X-NOTIFY",
