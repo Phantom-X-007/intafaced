@@ -21,8 +21,9 @@ registerProcessHooks(
  * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
  * (SOR `planRoute`, does not submit), `execution.oms.execute` (same plan,
  * then injected submit), `execution.oms.cancel` (client order id),
- * `execution.oms.fetch` (client order id), `execution.oms.openOrders`, and
- * `execution.oms.balances` (venue observation — not a ledger read).
+ * `execution.oms.fetch` (client order id), `execution.oms.openOrders`,
+ * `execution.oms.balances`, and `execution.oms.positions`
+ * (venue observation — not a ledger read).
  * No live CEX keys. Internal venues refused. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
@@ -37,7 +38,7 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'oms-balances',
+  stage: 'oms-positions',
   store: 'memory',
   internalVenue: 'blocked',
 }));
