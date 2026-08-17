@@ -39,7 +39,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET    /api/v1/orders/open     scope: trade:read
+ *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
@@ -82,7 +82,7 @@ export interface PrivateRestDeps {
   /** Shared EDGE_PRINCIPAL_SECRET — same value tRPC uses. */
   edgeSecret: string;
   serviceName: string;
-  openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
+  openOrders(principal: Principal, marketId?: string, status?: 'pending' | 'open'): Promise<OrderRecord[]>;
   orderHistory(
     principal: Principal,
     input: { marketId?: string; limit?: number; sinceMs?: number; status?: 'filled' | 'cancelled' | 'rejected' | 'expired' },
@@ -458,6 +458,13 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
   return { ok: true, sinceMs: Math.floor(n) };
 }
 
+/** Optional live-order status filter. Absent → both pending and open. */
+export function parseOpenOrderStatus(raw: unknown): { ok: true; status?: 'pending' | 'open' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
+  if (raw === 'pending' || raw === 'open') return { ok: true, status: raw };
+  return { ok: false, message: 'status must be pending or open' };
+}
+
 /** Optional live-status filter. Absent → both open and closing. */
 export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'open' | 'closing' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
@@ -610,7 +617,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
   // ── Static paths first (before :id) ───────────────────────────────────────
 
-  app.get<{ Querystring: { symbol?: string } }>('/api/v1/orders/open', async (req, reply) => {
+  app.get<{ Querystring: { symbol?: string; status?: string } }>('/api/v1/orders/open', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
@@ -624,9 +631,13 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       marketId = market.id;
     }
+    const statusParsed = parseOpenOrderStatus(req.query.status);
+    if (!statusParsed.ok) {
+      return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_open_order_status'));
+    }
 
     try {
-      const orders = await deps.openOrders(principal, marketId);
+      const orders = await deps.openOrders(principal, marketId, statusParsed.status);
       const symbolByMarket = new Map<string, string>();
       const wire = [];
       for (const order of orders) {

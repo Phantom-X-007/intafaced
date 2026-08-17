@@ -393,6 +393,18 @@ if (!available) {
       expect(await trade.orderHistory(principalFor(ALICE), { status: 'filled' })).toEqual([]);
     });
 
+    it('openOrders default still lists pending; status=open hides it', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const live = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-open');
+      const heldPending = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-pending');
+      await sql`UPDATE trade.orders SET status = 'pending' WHERE id = ${heldPending.id}`;
+
+      const alice = principalFor(ALICE);
+      expect((await trade.openOrders(alice)).map((row) => row.id).sort()).toEqual([live.id, heldPending.id].sort());
+      expect((await trade.openOrders(alice, undefined, 'open')).map((row) => row.id)).toEqual([live.id]);
+      expect((await trade.openOrders(alice, undefined, 'pending')).map((row) => row.id)).toEqual([heldPending.id]);
+    });
+
     it('releases a sell hold in the base asset', async () => {
       await fund(BOB, 'BTC', '5');
       const order = await rest(BOB, btcusdt, 'sell', '2', '100', 'bob-1');

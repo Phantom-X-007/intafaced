@@ -1923,17 +1923,33 @@ export class TradeService {
     return order;
   }
 
-  async openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]> {
+  /**
+   * Live orders for the principal (pending / open). Optional status narrows
+   * the IN-list — never invents a status. Default still includes pending
+   * (hiding a hold that has not reached the book is the risk this list exists
+   * to show).
+   */
+  async openOrders(
+    principal: Principal,
+    marketId?: string,
+    status?: 'pending' | 'open',
+  ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
+    const statusFilter =
+      status === 'pending'
+        ? this.sql`status = 'pending'`
+        : status === 'open'
+          ? this.sql`status = 'open'`
+          : this.sql`status IN ('pending', 'open')`;
     const rows = marketId
       ? await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open') AND market_id = ${marketId}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND market_id = ${marketId}
            ORDER BY created_at DESC
         `
       : await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open')
+           WHERE user_id = ${principal.userId} AND ${statusFilter}
            ORDER BY created_at DESC
         `;
     return rows.map(toOrder);

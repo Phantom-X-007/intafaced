@@ -500,6 +500,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/open?status=pending: passes status into openOrders', async () => {
+    let seen: { marketId?: string; status?: string } = {};
+    const app = await build(
+      deps({
+        openOrders: async (_p, marketId, status) => {
+          seen = { marketId, status };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?status=pending',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen.status).toBe('pending');
+    await app.close();
+  });
+
+  it('GET /orders/open?status=: invalid → 400 without openOrders', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        openOrders: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?status=filled',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('404s when symbol filter names an unknown market', async () => {
     const app = await build();
     const res = await app.inject({
