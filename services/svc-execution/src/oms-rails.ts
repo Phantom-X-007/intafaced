@@ -13,12 +13,7 @@
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { TransferRail } from '@intafaced/venue-contracts';
 
-export type OmsRailsFn = (
-  asset: string,
-  enabled?: boolean,
-  network?: string,
-  toVenueId?: string,
-) => Promise<TransferRail[]>;
+export type OmsRailsFn = (asset: string, enabled?: boolean, network?: string, toVenueId?: string) => Promise<TransferRail[]>;
 
 export type OmsRailsInput = {
   readonly venueId: string;
@@ -67,12 +62,7 @@ export async function observeOmsRails(input: OmsRailsInput): Promise<OmsRailsRes
   try {
     return {
       ok: true,
-      rails: await rails(
-        asset,
-        input.enabled,
-        input.network?.trim() || undefined,
-        input.toVenueId?.trim() || undefined,
-      ),
+      rails: await rails(asset, input.enabled, input.network?.trim() || undefined, input.toVenueId?.trim() || undefined),
     };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
