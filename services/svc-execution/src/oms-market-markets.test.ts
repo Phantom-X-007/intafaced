@@ -51,6 +51,17 @@ describe('marketDataAdapterMarkets', () => {
     expect(result[0]?.active).toBe(false);
   });
 
+  it('filters by type without inventing a missing listing', async () => {
+    const observe = marketDataAdapterMarkets(
+      adapter({
+        markets: async () => [listed(), listed({ type: 'perpetual', symbol: 'BTC/USDT:USDT', venueSymbol: 'BTCUSDT', settle: 'USDT' })],
+      }),
+    );
+    expect((await observe('perpetual')).map((row) => row.type)).toEqual(['perpetual']);
+    expect(await observe('option')).toEqual([]);
+    expect(await observe()).toHaveLength(2);
+  });
+
   it('propagates venue not_ready — does not invent a catalog', async () => {
     const observe = marketDataAdapterMarkets(
       adapter({
