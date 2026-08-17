@@ -4,16 +4,13 @@ import {
   readInteger,
   readLevels,
   readOptionalDecimal,
-  requireCredentials,
   unifiedSymbol,
   VenueCapabilityError,
   VenueUnavailableError,
-  type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
-  type VenueCredentials,
   type VenueDescriptor,
   type VenueMarket,
   type VenueTrade,
@@ -101,12 +98,12 @@ import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
  *      delta feed at all. `DEFAULT_WS_DEPTH` is 50 for that reason, not for tuning.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * TRADING / ACCOUNT — EXIST, AND REFUSE
+ * TRADING / ACCOUNT — signed, observation-only balances
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * `BybitSpotAccount` still throws typed `not_ready` after `requireCredentials`.
- * Signed place/cancel/fetch lives in `bybit-spot-trade.ts`. No live key is
- * invented. Public market data still needs none.
+ * Signed place/cancel/fetch lives in `bybit-spot-trade.ts`. Signed SPOT wallet
+ * observation lives in `bybit-spot-account.ts`. transferRails stays not_ready.
+ * No live key is invented. Public market data still needs none.
  *
  * The fee schedule is Bybit's published non-VIP spot default and is marked
  * `indicative: true` for the reason `market.ts` gives: the rate an ACCOUNT pays
@@ -663,38 +660,11 @@ export class BybitSpotMarketData implements MarketDataAdapter {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// TRADING AND ACCOUNT — credentialed, and honest about not being built
+// TRADING AND ACCOUNT — signed trade + signed SPOT wallet observation
 // ════════════════════════════════════════════════════════════════════════════
 
 export { BybitSpotTrade, mapBybitSpotOrder, signBybitV5 } from './bybit-spot-trade.js';
-
-const ACCOUNT_NOT_BUILT =
-  'account/listen-key REST for this venue is NOT BUILT. Signed spot place/cancel/fetch is live on an injected HTTP port; balances are not. Refused rather than simulated.';
-
-export class BybitSpotAccount implements AccountAdapter {
-  readonly venue = VENUE;
-  readonly #credentials: VenueCredentials | null;
-
-  constructor(credentials: VenueCredentials | null = null) {
-    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
-    this.#credentials = credentials;
-  }
-
-  async balances(): Promise<never> {
-    requireCredentials(VENUE.id, 'balances', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${ACCOUNT_NOT_BUILT}`);
-  }
-
-  async positions(): Promise<never> {
-    requireCredentials(VENUE.id, 'positions', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${ACCOUNT_NOT_BUILT}`);
-  }
-
-  async transferRails(): Promise<never> {
-    requireCredentials(VENUE.id, 'transferRails', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${ACCOUNT_NOT_BUILT}`);
-  }
-}
+export { BybitSpotAccount, mapBybitSpotCoins } from './bybit-spot-account.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
 

@@ -903,7 +903,7 @@ describe('MaintainedBook on bybit-spot — subscribe, buffer, snapshot, join', (
 // THE TRADING HALF — loud not_ready, never silent success
 // ════════════════════════════════════════════════════════════════════════════
 
-describe('BybitSpotTrade / BybitSpotAccount — signed trade, account still not_ready', () => {
+describe('BybitSpotTrade / BybitSpotAccount — signed trade and SPOT wallet observation', () => {
   const order = {
     symbol: 'BTC/USDT',
     side: 'buy' as const,
@@ -966,15 +966,39 @@ describe('BybitSpotTrade / BybitSpotAccount — signed trade, account still not_
     expect(open[0]!.status).toBe('open');
   });
 
-  it('account balances stay not_ready WITH a trade-only key', async () => {
-    const account = new BybitSpotAccount(keys);
-    try {
-      await account.balances();
-      expect.unreachable('balances should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(VenueUnavailableError);
-      expect((error as VenueUnavailableError).reason).toBe('not_ready');
-    }
+  it('balances maps SPOT wallet-balance coins from signed GET', async () => {
+    const http = new FakeHttp().queue({
+      retCode: 0,
+      retMsg: 'OK',
+      result: {
+        list: [
+          {
+            accountType: 'SPOT',
+            coin: [
+              { coin: 'USDT', walletBalance: '100', locked: '10', availableToWithdraw: '90' },
+              { coin: 'BTC', walletBalance: '1', locked: '0', availableToWithdraw: '1' },
+            ],
+          },
+        ],
+      },
+    });
+    const account = new BybitSpotAccount(keys, { http, clock: () => 1_700_000_000_000 });
+    const rows = await account.balances();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.asset).toBe('USDT');
+    expect(formatAmount(rows[0]!.free)).toBe('90');
+    expect(formatAmount(rows[0]!.used)).toBe('10');
+    expect(formatAmount(rows[0]!.total)).toBe('100');
+    expect(http.requests[0]).toContain('/v5/account/wallet-balance?accountType=SPOT');
+    expect(http.requests[0]).not.toMatch(/^POST /);
+  });
+
+  it('spot positions is [] — honest empty, not not_ready', async () => {
+    expect(await new BybitSpotAccount(keys, { http: new FakeHttp() }).positions()).toEqual([]);
+  });
+
+  it('transferRails stays not_ready — wallet permission refused', async () => {
+    await expect(new BybitSpotAccount(keys).transferRails()).rejects.toMatchObject({ reason: 'not_ready' });
   });
 
   it('without credentials, throws missing-key rather than a fabricated order', async () => {
