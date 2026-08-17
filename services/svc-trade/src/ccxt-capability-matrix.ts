@@ -300,7 +300,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
   },
 
   // ── Public (REST_ROUTES) ──────────────────────────────────────────────────
-  route('fetchMarkets', 'supported', [], 'List listings; optional status=; unfiltered still includes halted'),
+  route('fetchMarkets', 'supported', [], 'List listings; optional status=/kind=; unfiltered still includes halted and futures'),
   route('fetchTicker', 'supported', [], 'BBO + last from book/tape; never invents 24h stats'),
   route('fetchTickers', 'supported', [], 'All-market ticker map; missing book → empty BBO, not 502'),
   route('fetchOrderBook', 'supported', [], 'Depth from matching; empty [] is honest no-book'),

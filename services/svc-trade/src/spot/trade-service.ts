@@ -64,6 +64,7 @@ import {
   type FillRecord,
   type Market,
   type MarketKind,
+  type MarketStatus,
   type OrderRecord,
   type OrderSide,
   type OrderStatus,
@@ -552,8 +553,10 @@ export class TradeService {
    * Optional status narrows pending/active/halted/delisted in SQL.
    * Omitted still returns halted (and pending/delisted) — never hide the
    * risky set by inventing a default of active.
+   * Optional kind narrows spot/futures/options in SQL — omitted still
+   * returns futures and options (not-orderable is still listed).
    */
-  async markets(status?: MarketStatus): Promise<Market[]> {
+  async markets(status?: MarketStatus, kind?: MarketKind): Promise<Market[]> {
     const statusFilter =
       status === 'pending'
         ? this.sql`status = 'pending'`
@@ -564,12 +567,21 @@ export class TradeService {
             : status === 'delisted'
               ? this.sql`status = 'delisted'`
               : this.sql`TRUE`;
+    const kindFilter =
+      kind === 'spot'
+        ? this.sql`kind = 'spot'`
+        : kind === 'futures'
+          ? this.sql`kind = 'futures'`
+          : kind === 'options'
+            ? this.sql`kind = 'options'`
+            : this.sql`TRUE`;
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule, paper
         FROM trade.markets
        WHERE ${statusFilter}
+         AND ${kindFilter}
        ORDER BY symbol ASC
     `;
     return rows.map(toMarket);

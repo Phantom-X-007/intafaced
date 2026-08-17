@@ -530,7 +530,7 @@ app.get('/ready', async (_req, reply) => {
 // OHLCV is aggregated in SQL from the real taker fill tape — no candle is
 // invented, and a bucket with no fills is absent rather than zero-filled.
 registerPublicRest(app, {
-  markets: (status) => trade.markets(status),
+  markets: (status, kind) => trade.markets(status, kind),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs, side) => trade.publicTape(marketId, limit, sinceMs, side),

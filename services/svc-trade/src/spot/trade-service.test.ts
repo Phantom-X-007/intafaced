@@ -1074,6 +1074,12 @@ if (!available) {
       expect((await trade.markets('halted')).map((row) => row.id)).toContain(btcusdt.id);
     });
 
+    it('markets default still lists every kind; kind=futures hides spot', async () => {
+      expect((await trade.markets()).some((row) => row.id === btcusdt.id && row.kind === 'spot')).toBe(true);
+      expect((await trade.markets(undefined, 'futures')).some((row) => row.id === btcusdt.id)).toBe(false);
+      expect((await trade.markets(undefined, 'spot')).map((row) => row.id)).toContain(btcusdt.id);
+    });
+
     it('lets a user out of a halted market — cancelling is not gated', async () => {
       await fund(ALICE, 'USDT', '1000');
       const order = await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-1');

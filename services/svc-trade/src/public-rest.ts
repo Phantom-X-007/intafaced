@@ -8,13 +8,13 @@ import { DEFAULT_MAX_LEVERAGE } from './futures/initial-margin.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
-import type { Candle, Market, MarketStatus, PublicTapePrint } from './spot/types.js';
+import type { Candle, Market, MarketKind, MarketStatus, PublicTapePrint } from './spot/types.js';
 
 /**
  * Public CCXT-style REST slice (trade.ccxt-api — market data).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET /api/v1/markets?status=
+ *   GET /api/v1/markets?status=&kind=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
@@ -39,8 +39,8 @@ const MAX_CANDLES = 1000;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
-  /** Optional status is SQL in the service. Omitted still includes halted. */
-  markets(status?: MarketStatus): Promise<Market[]>;
+  /** Optional status/kind are SQL in the service. Omitted still includes halted and futures. */
+  markets(status?: MarketStatus, kind?: MarketKind): Promise<Market[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   depth(marketId: string, limit: number): Promise<EngineDepth>;
   /**
@@ -511,6 +511,13 @@ export function parseMarketStatus(raw: unknown): { ok: true; status?: MarketStat
   return { ok: false, message: 'status must be pending, active, halted, or delisted' };
 }
 
+/** Optional listing-kind filter. Absent → spot, futures, and options. */
+export function parseMarketKind(raw: unknown): { ok: true; kind?: MarketKind } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, kind: undefined };
+  if (raw === 'spot' || raw === 'futures' || raw === 'options') return { ok: true, kind: raw };
+  return { ok: false, message: 'kind must be spot, futures, or options' };
+}
+
 /**
  * Register the public REST routes on a Fastify instance.
  * Mount alongside `/trpc` — no auth middleware.
@@ -545,12 +552,16 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     });
   });
 
-  app.get<{ Querystring: { status?: string } }>('/api/v1/markets', async (req, reply) => {
+  app.get<{ Querystring: { status?: string; kind?: string } }>('/api/v1/markets', async (req, reply) => {
     const statusParsed = parseMarketStatus(req.query.status);
     if (!statusParsed.ok) {
       return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_market_status'));
     }
-    const markets = await deps.markets(statusParsed.status);
+    const kindParsed = parseMarketKind(req.query.kind);
+    if (!kindParsed.ok) {
+      return sendCcxt(reply, badRequest(kindParsed.message, 'trade.invalid_market_kind'));
+    }
+    const markets = await deps.markets(statusParsed.status, kindParsed.kind);
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
     return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));

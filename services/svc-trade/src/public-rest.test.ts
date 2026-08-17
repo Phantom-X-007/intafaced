@@ -359,6 +359,38 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/markets?kind=futures: passes kind into markets', async () => {
+    let seen: { kind?: string } = {};
+    const app = await build(
+      deps({
+        markets: async (_status, kind) => {
+          seen = { kind };
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=futures' });
+    expect(res.statusCode).toBe(200);
+    expect(seen.kind).toBe('futures');
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?kind=: invalid → 400 without markets', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=perp' });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /api/v1/markets lists futures as active but not orderable unless the host enables them', async () => {
     const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
     const app = await build(
