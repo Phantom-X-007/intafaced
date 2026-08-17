@@ -429,6 +429,10 @@ if (!available) {
         [live.id, heldPending.id].sort(),
       );
       expect(await trade.openOrders(alice, undefined, undefined, undefined, 'market')).toEqual([]);
+      expect((await trade.openOrders(alice, undefined, undefined, undefined, undefined, 'GTC')).map((row) => row.id).sort()).toEqual(
+        [live.id, heldPending.id].sort(),
+      );
+      expect(await trade.openOrders(alice, undefined, undefined, undefined, undefined, 'IOC')).toEqual([]);
     });
 
     it('releases a sell hold in the base asset', async () => {

@@ -26,7 +26,7 @@ import {
 } from './ccxt-errors.js';
 import type { Position } from '@intafaced/exchange-contract';
 import type { PlaceOrderInput } from './spot/trade-service.js';
-import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
+import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus, type TimeInForce } from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
 import { presentFuturesErrorWire } from './futures/futures-error-wire.js';
 import type { MarginCallWire } from './futures/margin-call-transport.js';
@@ -88,6 +88,7 @@ export interface PrivateRestDeps {
     status?: 'pending' | 'open',
     side?: 'buy' | 'sell',
     type?: 'limit' | 'market',
+    tif?: TimeInForce,
   ): Promise<OrderRecord[]>;
   orderHistory(
     principal: Principal,
@@ -508,6 +509,13 @@ export function parseOpenOrderType(raw: unknown): { ok: true; type?: 'limit' | '
   return { ok: false, message: 'type must be limit or market' };
 }
 
+/** Optional live-order tif filter. Absent → GTC, IOC, FOK, and PO. */
+export function parseOpenOrderTif(raw: unknown): { ok: true; tif?: TimeInForce } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, tif: undefined };
+  if (raw === 'GTC' || raw === 'IOC' || raw === 'FOK' || raw === 'PO') return { ok: true, tif: raw };
+  return { ok: false, message: 'tif must be GTC, IOC, FOK, or PO' };
+}
+
 /** Optional live-status filter. Absent → both open and closing. */
 export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'open' | 'closing' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
@@ -667,7 +675,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
   // ── Static paths first (before :id) ───────────────────────────────────────
 
-  app.get<{ Querystring: { symbol?: string; status?: string; side?: string; type?: string } }>(
+  app.get<{ Querystring: { symbol?: string; status?: string; side?: string; type?: string; tif?: string } }>(
     '/api/v1/orders/open',
     async (req, reply) => {
       const principal = requirePrincipal(req, reply);
@@ -695,9 +703,13 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       if (!typeParsed.ok) {
         return sendCcxt(reply, badRequest(typeParsed.message, 'trade.invalid_open_order_type'));
       }
+      const tifParsed = parseOpenOrderTif(req.query.tif);
+      if (!tifParsed.ok) {
+        return sendCcxt(reply, badRequest(tifParsed.message, 'trade.invalid_open_order_tif'));
+      }
 
       try {
-        const orders = await deps.openOrders(principal, marketId, statusParsed.status, sideParsed.side, typeParsed.type);
+        const orders = await deps.openOrders(principal, marketId, statusParsed.status, sideParsed.side, typeParsed.type, tifParsed.tif);
         const symbolByMarket = new Map<string, string>();
         const wire = [];
         for (const order of orders) {

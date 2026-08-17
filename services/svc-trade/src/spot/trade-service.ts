@@ -1964,6 +1964,7 @@ export class TradeService {
    * (hiding a hold that has not reached the book is the risk this list exists
    * to show). Optional side narrows buy/sell in SQL — never invents a side.
    * Optional type narrows limit/market in SQL — never invents a type.
+   * Optional tif narrows GTC/IOC/FOK/PO in SQL — never invents a tif.
    */
   async openOrders(
     principal: Principal,
@@ -1971,6 +1972,7 @@ export class TradeService {
     status?: 'pending' | 'open',
     side?: 'buy' | 'sell',
     type?: 'limit' | 'market',
+    tif?: TimeInForce,
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const statusFilter =
@@ -1981,15 +1983,25 @@ export class TradeService {
           : this.sql`status IN ('pending', 'open')`;
     const sideFilter = side === 'buy' ? this.sql`side = 'buy'` : side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
     const typeFilter = type === 'limit' ? this.sql`type = 'limit'` : type === 'market' ? this.sql`type = 'market'` : this.sql`TRUE`;
+    const tifFilter =
+      tif === 'GTC'
+        ? this.sql`tif = 'GTC'`
+        : tif === 'IOC'
+          ? this.sql`tif = 'IOC'`
+          : tif === 'FOK'
+            ? this.sql`tif = 'FOK'`
+            : tif === 'PO'
+              ? this.sql`tif = 'PO'`
+              : this.sql`TRUE`;
     const rows = marketId
       ? await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND market_id = ${marketId}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND ${tifFilter} AND market_id = ${marketId}
            ORDER BY created_at DESC
         `
       : await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND ${tifFilter}
            ORDER BY created_at DESC
         `;
     return rows.map(toOrder);

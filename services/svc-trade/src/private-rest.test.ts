@@ -580,6 +580,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/open?tif=GTC: passes tif into openOrders', async () => {
+    let seen: { tif?: string } = {};
+    const app = await build(
+      deps({
+        openOrders: async (_p, _marketId, _status, _side, _type, tif) => {
+          seen = { tif };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?tif=GTC',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen.tif).toBe('GTC');
+    await app.close();
+  });
+
+  it('GET /orders/open?tif=: invalid → 400 without openOrders', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        openOrders: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?tif=DAY',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/open?type=: invalid → 400 without openOrders', async () => {
     let listed = false;
     const app = await build(
