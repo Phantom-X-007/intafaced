@@ -377,16 +377,25 @@ export class PositionService {
   /**
    * Active positions: `open` and `closing`. A frozen exit must remain visible
    * and must never render as a normal open (ADR 2026-08-07 done bar 7).
+   * Optional status='open'|'closing' narrows the IN-list — never invents a
+   * status, and unknown values are the caller's to refuse before this.
    */
-  async listOpen(userId: string, symbol?: string): Promise<Position[]> {
-    const rows = symbol
+  async listOpen(userId: string, symbol?: string, status?: 'open' | 'closing'): Promise<Position[]> {
+    const market = symbol?.trim() || undefined;
+    const statusFilter =
+      status === 'open'
+        ? this.sql`p.status = 'open'`
+        : status === 'closing'
+          ? this.sql`p.status = 'closing'`
+          : this.sql`p.status IN ('open', 'closing')`;
+    const rows = market
       ? await this.sql<PositionRow[]>`
           SELECT p.*, m.symbol
           FROM trade.positions p
           JOIN trade.markets m ON m.id = p.market_id
           WHERE p.user_id = ${userId}
-            AND p.status IN ('open', 'closing')
-            AND m.symbol = ${symbol}
+            AND ${statusFilter}
+            AND m.symbol = ${market}
           ORDER BY p.opened_at DESC
         `
       : await this.sql<PositionRow[]>`
@@ -394,7 +403,7 @@ export class PositionService {
           FROM trade.positions p
           JOIN trade.markets m ON m.id = p.market_id
           WHERE p.user_id = ${userId}
-            AND p.status IN ('open', 'closing')
+            AND ${statusFilter}
           ORDER BY p.opened_at DESC
         `;
     // List is not a valuation: no mark source, no invented 0. Close attaches extras.

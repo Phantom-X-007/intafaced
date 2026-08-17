@@ -198,6 +198,8 @@ if (!available) {
     const listed = await positions.listOpen(ALICE);
     expect(listed).toHaveLength(1);
     expect(listed[0]!.id).toBe(pos.id);
+    expect((await positions.listOpen(ALICE, undefined, 'open')).map((row) => row.id)).toEqual([pos.id]);
+    expect(await positions.listOpen(ALICE, undefined, 'closing')).toEqual([]);
 
     const got = await positions.get(ALICE, pos.id!);
     expect(got.id).toBe(pos.id);
@@ -549,6 +551,8 @@ if (!available) {
     expect(frozen.status).toBe('closing');
     expect(frozen.closingReason).toBe('trade.mark_unusable');
     expect(await positions.listOpen(ALICE)).toHaveLength(1);
+    expect(await positions.listOpen(ALICE, undefined, 'open')).toEqual([]);
+    expect((await positions.listOpen(ALICE, undefined, 'closing')).map((row) => row.id)).toEqual([pos.id]);
   });
 
   /**

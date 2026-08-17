@@ -48,7 +48,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
- *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
+ *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=)
  *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since=&status=)
  *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
@@ -108,8 +108,8 @@ export interface PrivateRestDeps {
    * self-only is enforced here at the edge of this surface.
    */
   userBalances(userId: string): Promise<readonly Balance[]>;
-  /** Open futures positions for the principal (empty [] when none). */
-  listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
+  /** Open/closing futures positions for the principal (empty [] when none). */
+  listPositions(principal: Principal, symbol?: string, status?: 'open' | 'closing'): Promise<Position[]>;
   /** Closed/liquidated rows for the principal (empty [] when none). */
   listClosedPositions(
     principal: Principal,
@@ -455,6 +455,13 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
   return { ok: true, sinceMs: Math.floor(n) };
 }
 
+/** Optional live-status filter. Absent → both open and closing. */
+export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'open' | 'closing' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
+  if (raw === 'open' || raw === 'closing') return { ok: true, status: raw };
+  return { ok: false, message: 'status must be open or closing' };
+}
+
 /** Optional settled-status filter. Absent → both closed and liquidated. */
 export function parseClosedPositionStatus(raw: unknown): { ok: true; status?: 'closed' | 'liquidated' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
@@ -755,15 +762,21 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
    *
    * Lists open and closing rows from trade.positions (F2/F3). Empty [] when none —
    * never invents leverage/mark. `closing` is a voluntary exit waiting on a mark
-   * (ADR 2026-08-07) and must not look like a normal open. Optional ?symbol= filters.
+   * (ADR 2026-08-07) and must not look like a normal open. Optional ?symbol= and
+   * ?status=open|closing filter in SQL.
    */
-  app.get<{ Querystring: { symbol?: string } }>('/api/v1/positions', async (req, reply) => {
+  app.get<{ Querystring: { symbol?: string; status?: string } }>('/api/v1/positions', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
+    const statusParsed = parseOpenPositionStatus(req.query.status);
+    if (!statusParsed.ok) {
+      return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_open_status'));
+    }
+
     try {
       requireScope(principal, 'trade:read');
-      const rows = await deps.listPositions(principal, req.query.symbol);
+      const rows = await deps.listPositions(principal, req.query.symbol, statusParsed.status);
       return reply.code(200).send(rows);
     } catch (err) {
       const sent = sendDomainError(reply, err);

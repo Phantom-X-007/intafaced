@@ -1345,6 +1345,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /positions?status=closing: passes status into listPositions', async () => {
+    let seen: { symbol?: string; status?: 'open' | 'closing' } | null = null;
+    const app = await build(
+      deps({
+        listPositions: async (_p, symbol, status) => {
+          seen = { symbol, status };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions?status=closing&symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({ symbol: 'BTC/USDT', status: 'closing' });
+    await app.close();
+  });
+
+  it('GET /positions?status=: invalid → 400 without listPositions', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        listPositions: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions?status=closed',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /positions/closed: anonymous → 401', async () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: '/api/v1/positions/closed' });
