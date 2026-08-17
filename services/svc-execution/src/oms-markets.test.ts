@@ -57,12 +57,14 @@ class FakeMarkets {
   readonly types: (VenueInstrumentType | undefined)[] = [];
   readonly quotes: (string | undefined)[] = [];
   readonly bases: (string | undefined)[] = [];
+  readonly actives: (boolean | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type, quote, base) => {
+  fn: OmsMarketsFn = async (type, quote, base, active) => {
     this.calls += 1;
     this.types.push(type);
     this.quotes.push(quote);
     this.bases.push(base);
+    this.actives.push(active);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -131,6 +133,20 @@ describe('observeOmsMarkets', () => {
     if (!result.ok) return;
     expect(result.markets[0]?.active).toBe(false);
     expect(result.markets[0]?.symbol).toBe('BTC/USDT');
+    expect(street.actives).toEqual([undefined]);
+  });
+
+  it('passes an optional active through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ active: false })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      active: false,
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.actives).toEqual([false]);
+    if (!result.ok) return;
+    expect(result.markets[0]?.active).toBe(false);
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -191,12 +207,19 @@ describe('execution.oms.markets tRPC', () => {
       {},
       { street: street.fn },
     ).createCaller(signed());
-    const out = await caller.execution.oms.markets({ venueId: 'street', type: 'spot', quote: 'USDT', base: 'ETH' });
+    const out = await caller.execution.oms.markets({
+      venueId: 'street',
+      type: 'spot',
+      quote: 'USDT',
+      base: 'ETH',
+      active: false,
+    });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.markets[0]?.symbol).toBe('ETH/USDT');
     expect(street.types).toEqual(['spot']);
     expect(street.quotes).toEqual(['USDT']);
     expect(street.bases).toEqual(['ETH']);
+    expect(street.actives).toEqual([false]);
   });
 });
