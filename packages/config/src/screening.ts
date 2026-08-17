@@ -237,13 +237,20 @@ export function screeningMoneyGrade(list: ScreeningList): ScreeningMoneyGrade {
   return 'counsel';
 }
 
-export type ScreeningMoneyPosture = {
-  readonly allowed: boolean;
-  readonly code: ScreeningMoneyRefuseCode | 'allowed.screening_counsel' | 'allowed.screening_dev_gap';
-  readonly grade: ScreeningMoneyGrade;
-  /** True only for counsel-grade lists. Fixtures and unset never read as clean. */
-  readonly readsAsScreenedClean: boolean;
-};
+export type ScreeningMoneyPosture =
+  | {
+      readonly allowed: true;
+      readonly code: 'allowed.screening_counsel' | 'allowed.screening_dev_gap';
+      readonly grade: ScreeningMoneyGrade;
+      /** True only for counsel-grade lists. Fixtures and unset never read as clean. */
+      readonly readsAsScreenedClean: boolean;
+    }
+  | {
+      readonly allowed: false;
+      readonly code: ScreeningMoneyRefuseCode;
+      readonly grade: ScreeningMoneyGrade;
+      readonly readsAsScreenedClean: false;
+    };
 
 /**
  * Prod/staging fail closed without counsel. Dev/test may boot on a gap, but
