@@ -580,7 +580,7 @@ registerInternalFundingRate(app, {
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
-  openOrders: (principal, marketId, status) => trade.openOrders(principal, marketId, status),
+  openOrders: (principal, marketId, status, side) => trade.openOrders(principal, marketId, status, side),
   orderHistory: (principal, input) => trade.orderHistory(principal, input),
   getOrder: (principal, orderId) => trade.getOrder(principal, orderId),
   placeOrder: (principal, input) => trade.placeOrder(principal, input),

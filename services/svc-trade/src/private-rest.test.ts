@@ -520,6 +520,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/open?side=buy: passes side into openOrders', async () => {
+    let seen: { marketId?: string; side?: string } = {};
+    const app = await build(
+      deps({
+        openOrders: async (_p, marketId, _status, side) => {
+          seen = { marketId, side };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen.side).toBe('buy');
+    await app.close();
+  });
+
+  it('GET /orders/open?side=: invalid → 400 without openOrders', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        openOrders: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?side=both',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/open?status=: invalid → 400 without openOrders', async () => {
     let listed = false;
     const app = await build(

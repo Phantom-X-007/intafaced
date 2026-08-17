@@ -417,6 +417,10 @@ if (!available) {
       expect((await trade.openOrders(alice)).map((row) => row.id).sort()).toEqual([live.id, heldPending.id].sort());
       expect((await trade.openOrders(alice, undefined, 'open')).map((row) => row.id)).toEqual([live.id]);
       expect((await trade.openOrders(alice, undefined, 'pending')).map((row) => row.id)).toEqual([heldPending.id]);
+      expect((await trade.openOrders(alice, undefined, undefined, 'buy')).map((row) => row.id).sort()).toEqual(
+        [live.id, heldPending.id].sort(),
+      );
+      expect(await trade.openOrders(alice, undefined, undefined, 'sell')).toEqual([]);
     });
 
     it('releases a sell hold in the base asset', async () => {

@@ -39,7 +39,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=)
+ *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
@@ -82,7 +82,7 @@ export interface PrivateRestDeps {
   /** Shared EDGE_PRINCIPAL_SECRET — same value tRPC uses. */
   edgeSecret: string;
   serviceName: string;
-  openOrders(principal: Principal, marketId?: string, status?: 'pending' | 'open'): Promise<OrderRecord[]>;
+  openOrders(principal: Principal, marketId?: string, status?: 'pending' | 'open', side?: 'buy' | 'sell'): Promise<OrderRecord[]>;
   orderHistory(
     principal: Principal,
     input: { marketId?: string; limit?: number; sinceMs?: number; status?: 'filled' | 'cancelled' | 'rejected' | 'expired' },
@@ -640,7 +640,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
   // ── Static paths first (before :id) ───────────────────────────────────────
 
-  app.get<{ Querystring: { symbol?: string; status?: string } }>('/api/v1/orders/open', async (req, reply) => {
+  app.get<{ Querystring: { symbol?: string; status?: string; side?: string } }>('/api/v1/orders/open', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
@@ -658,9 +658,13 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     if (!statusParsed.ok) {
       return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_open_order_status'));
     }
+    const sideParsed = parseFillSide(req.query.side);
+    if (!sideParsed.ok) {
+      return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_open_order_side'));
+    }
 
     try {
-      const orders = await deps.openOrders(principal, marketId, statusParsed.status);
+      const orders = await deps.openOrders(principal, marketId, statusParsed.status, sideParsed.side);
       const symbolByMarket = new Map<string, string>();
       const wire = [];
       for (const order of orders) {
