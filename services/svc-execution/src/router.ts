@@ -8,6 +8,7 @@ import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
 import { observeOmsBalances, type OmsBalancesFn } from './oms-balances.js';
 import { observeOmsPositions, type OmsPositionsFn } from './oms-positions.js';
+import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -75,6 +76,7 @@ export type ExecutionFetchMap = Readonly<Record<string, OmsFetchFn>>;
 export type ExecutionOpenOrdersMap = Readonly<Record<string, OmsOpenOrdersFn>>;
 export type ExecutionBalancesMap = Readonly<Record<string, OmsBalancesFn>>;
 export type ExecutionPositionsMap = Readonly<Record<string, OmsPositionsFn>>;
+export type ExecutionRailsMap = Readonly<Record<string, OmsRailsFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -84,6 +86,7 @@ export function createExecutionRouter(
   openOrdersByVenue: ExecutionOpenOrdersMap = {},
   balancesByVenue: ExecutionBalancesMap = {},
   positionsByVenue: ExecutionPositionsMap = {},
+  railsByVenue: ExecutionRailsMap = {},
 ) {
   return router({
     execution: router({
@@ -250,6 +253,25 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 kind: input.kind,
                 positionsByVenue,
+              });
+            });
+          }),
+
+        rails: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              asset: z.string().min(1).max(32),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.rails', input.venueId, async () => {
+              return observeOmsRails({
+                venueId: input.venueId,
+                asset: input.asset,
+                kind: input.kind,
+                railsByVenue,
               });
             });
           }),
