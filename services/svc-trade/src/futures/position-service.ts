@@ -402,6 +402,32 @@ export class PositionService {
   }
 
   /**
+   * Settled history: `closed` and `liquidated`. Empty [] when none — never
+   * invents a mark. Open/closing rows stay on listOpen.
+   */
+  async listClosed(userId: string, symbol?: string): Promise<Position[]> {
+    const rows = symbol
+      ? await this.sql<PositionRow[]>`
+          SELECT p.*, m.symbol
+          FROM trade.positions p
+          JOIN trade.markets m ON m.id = p.market_id
+          WHERE p.user_id = ${userId}
+            AND p.status IN ('closed', 'liquidated')
+            AND m.symbol = ${symbol}
+          ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+        `
+      : await this.sql<PositionRow[]>`
+          SELECT p.*, m.symbol
+          FROM trade.positions p
+          JOIN trade.markets m ON m.id = p.market_id
+          WHERE p.user_id = ${userId}
+            AND p.status IN ('closed', 'liquidated')
+          ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+        `;
+    return rows.map((row) => presentPosition(row));
+  }
+
+  /**
    * One position owned by this user. Closed rows are returned as closed — not
    * hidden, and not revalued. Missing / not theirs is 404 (same answer).
    */

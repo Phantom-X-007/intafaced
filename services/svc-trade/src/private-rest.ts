@@ -49,6 +49,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
+ *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none)
  *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
  *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
@@ -109,6 +110,8 @@ export interface PrivateRestDeps {
   userBalances(userId: string): Promise<readonly Balance[]>;
   /** Open futures positions for the principal (empty [] when none). */
   listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
+  /** Closed/liquidated rows for the principal (empty [] when none). */
+  listClosedPositions(principal: Principal, symbol?: string): Promise<Position[]>;
   /** One owned futures row. Missing / not theirs → 404, never another user's row. */
   getPosition(principal: Principal, positionId: string): Promise<Position>;
   /**
@@ -751,6 +754,25 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     try {
       requireScope(principal, 'trade:read');
       const rows = await deps.listPositions(principal, req.query.symbol);
+      return reply.code(200).send(rows);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * Settled futures history. Mounted as `/closed` (not `:id`) so it cannot be
+   * swallowed by GET /positions/:id. Empty [] when none — no invented mark.
+   */
+  app.get<{ Querystring: { symbol?: string } }>('/api/v1/positions/closed', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const rows = await deps.listClosedPositions(principal, req.query.symbol);
       return reply.code(200).send(rows);
     } catch (err) {
       const sent = sendDomainError(reply, err);

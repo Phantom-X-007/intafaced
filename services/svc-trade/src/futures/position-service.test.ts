@@ -238,6 +238,27 @@ if (!available) {
     expect(got.status).toBe('closed');
   });
 
+  it('listClosed returns settled rows and stays empty for another user', async () => {
+    feed('40000');
+    const pos = await positions.open({
+      clientOpenId: 't-list-closed-position',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'short',
+      size: amt('0.5'),
+      leverage: amt('5'),
+    });
+    expect(await positions.listClosed(ALICE)).toEqual([]);
+    await positions.close(ALICE, pos.id!);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+    const closed = await positions.listClosed(ALICE);
+    expect(closed).toHaveLength(1);
+    expect(closed[0]!.id).toBe(pos.id);
+    expect(closed[0]!.status).toBe('closed');
+    expect(closed[0]!.markPrice).toBeNull();
+    expect(await positions.listClosed(BOB)).toEqual([]);
+  });
+
   it('get missing or not-theirs is the same 404', async () => {
     feed('50000');
     const pos = await positions.open({

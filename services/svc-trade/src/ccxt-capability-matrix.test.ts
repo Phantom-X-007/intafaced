@@ -100,6 +100,7 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     markets: async () => [market],
     userBalances: async () => [],
     listPositions: async () => [],
+    listClosedPositions: async () => [],
     getPosition: async () => {
       throw new Error('getPosition should not run in this matrix test');
     },
@@ -246,6 +247,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(names).toContain('fetchAdlDisclosure');
     expect(names).toContain('ackAdlDisclosure');
     expect(names).toContain('fetchAdlDisclosureEvents');
+    expect(names).toContain('fetchClosedPositions');
     expect(names).toContain('fetchPosition');
     expect(names).toContain('fetchPositionMarginCall');
   });
@@ -322,6 +324,20 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().collateral).toBe('7500');
+    await app.close();
+  });
+
+  it('fetchClosedPositions supported: signed → 200 [] when none', async () => {
+    const app = Fastify();
+    registerPrivateRest(app, privateDeps());
+    await app.ready();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
     await app.close();
   });
 
