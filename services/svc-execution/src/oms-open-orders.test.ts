@@ -65,10 +65,11 @@ class FakeList {
     side?: 'buy' | 'sell';
     type?: 'limit' | 'market';
     clientOrderId?: string;
+    venueOrderId?: string;
   }> = [];
   constructor(private readonly next: VenueOrder[] | Error) {}
-  fn: OmsOpenOrdersFn = async (symbol, side, type, clientOrderId) => {
-    this.calls.push({ symbol, side, type, clientOrderId });
+  fn: OmsOpenOrdersFn = async (symbol, side, type, clientOrderId, venueOrderId) => {
+    this.calls.push({ symbol, side, type, clientOrderId, venueOrderId });
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -86,7 +87,9 @@ describe('listOmsOpenOrders', () => {
     if (!result.ok) return;
     expect(result.orders).toHaveLength(1);
     expect(result.orders[0]!.status).toBe('open');
-    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: undefined, type: undefined, clientOrderId: undefined }]);
+    expect(street.calls).toEqual([
+      { symbol: 'BTC/USDT', side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: undefined },
+    ]);
   });
 
   it('passes an optional side through and does not invent the other', async () => {
@@ -97,7 +100,7 @@ describe('listOmsOpenOrders', () => {
       openOrdersByVenue: { street: street.fn },
     });
     expect(result.ok).toBe(true);
-    expect(street.calls).toEqual([{ symbol: undefined, side: 'sell', type: undefined, clientOrderId: undefined }]);
+    expect(street.calls).toEqual([{ symbol: undefined, side: 'sell', type: undefined, clientOrderId: undefined, venueOrderId: undefined }]);
     if (!result.ok) return;
     expect(result.orders[0]?.side).toBe('sell');
   });
@@ -110,7 +113,9 @@ describe('listOmsOpenOrders', () => {
       openOrdersByVenue: { street: street.fn },
     });
     expect(result.ok).toBe(true);
-    expect(street.calls).toEqual([{ symbol: undefined, side: undefined, type: 'market', clientOrderId: undefined }]);
+    expect(street.calls).toEqual([
+      { symbol: undefined, side: undefined, type: 'market', clientOrderId: undefined, venueOrderId: undefined },
+    ]);
     if (!result.ok) return;
     expect(result.orders[0]?.type).toBe('market');
   });
@@ -123,9 +128,24 @@ describe('listOmsOpenOrders', () => {
       openOrdersByVenue: { street: street.fn },
     });
     expect(result.ok).toBe(true);
-    expect(street.calls).toEqual([{ symbol: undefined, side: undefined, type: undefined, clientOrderId: 'oms-street' }]);
+    expect(street.calls).toEqual([
+      { symbol: undefined, side: undefined, type: undefined, clientOrderId: 'oms-street', venueOrderId: undefined },
+    ]);
     if (!result.ok) return;
     expect(result.orders[0]?.clientOrderId).toBe('oms-street');
+  });
+
+  it('passes an optional venueOrderId through and still drops pending', async () => {
+    const street = new FakeList([openOrder({ venueOrderId: 'v-1' })]);
+    const result = await listOmsOpenOrders({
+      venueId: 'street',
+      venueOrderId: 'v-1',
+      openOrdersByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.calls).toEqual([{ symbol: undefined, side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: 'v-1' }]);
+    if (!result.ok) return;
+    expect(result.orders[0]?.venueOrderId).toBe('v-1');
   });
 
   it('refuses internal venues and does not call the list', async () => {
@@ -190,10 +210,11 @@ describe('execution.oms.openOrders tRPC', () => {
       side: 'buy',
       type: 'limit',
       clientOrderId: 'oms-street',
+      venueOrderId: 'v-1',
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.orders).toHaveLength(1);
-    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: 'buy', type: 'limit', clientOrderId: 'oms-street' }]);
+    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', side: 'buy', type: 'limit', clientOrderId: 'oms-street', venueOrderId: 'v-1' }]);
   });
 });
