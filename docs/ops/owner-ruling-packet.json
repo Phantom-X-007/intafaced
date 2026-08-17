@@ -259,11 +259,12 @@
       "kind": "product_ruling",
       "title": "Turning funding on for a market",
       "blocks": ["TRADE_FUTURES_JOBS_ENABLED funding path"],
-      "primaryDoc": "docs/adr/2026-08-13-d26-p0-02-owner-launch-seals.md",
+      "primaryDoc": "docs/adr/2026-08-05-futures-risk-and-mark-law.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#6--turning-funding-on-for-a-market",
+      "satelliteDocs": ["docs/adr/2026-08-13-d26-p0-02-owner-launch-seals.md"],
       "answerShape": "per_market_owner_enable",
       "priority": 4,
-      "notes": "2026-08-13 Denon: funding stays OFF until a listed market is explicitly enabled. No invented |rate| ceiling."
+      "notes": "2026-08-15 Denon: TRADE_FUTURES_JOBS_ENABLED ships off. Jobs and funding remain off until the owner enables a listed market explicitly. No global silent on. Do not invent funding rates or |rate| ceilings. ADR: docs/adr/2026-08-05-futures-risk-and-mark-law.md (owner-reserved: turning funding on for a market at all; implementations MUST NOT invent a placeholder rate)."
     },
     {
       "id": "PKT-C7",
