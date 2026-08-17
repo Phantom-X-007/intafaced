@@ -4,6 +4,7 @@
  * Confirm already refuses a blank key. Enrol start used to mint a secret and
  * write pending hashes anyway — a secret that can never be sealed. This door
  * refuses before generateSecret / pending put. No invented AES key.
+ * Execute, not a pin.
  */
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
