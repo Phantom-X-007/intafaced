@@ -49,7 +49,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open/closing; [] when none; ?symbol=&status=&side=)
- *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since=&status=)
+ *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since=&status=&side=)
  *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
  *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
@@ -131,7 +131,7 @@ export interface PrivateRestDeps {
   /** Closed/liquidated rows for the principal (empty [] when none). */
   listClosedPositions(
     principal: Principal,
-    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated' },
+    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated'; side?: 'long' | 'short' },
   ): Promise<Position[]>;
   /** One owned futures row. Missing / not theirs → 404, never another user's row. */
   getPosition(principal: Principal, positionId: string): Promise<Position>;
@@ -880,7 +880,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
    * Settled futures history. Mounted as `/closed` (not `:id`) so it cannot be
    * swallowed by GET /positions/:id. Empty [] when none — no invented mark.
    */
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string } }>(
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string } }>(
     '/api/v1/positions/closed',
     async (req, reply) => {
       const principal = requirePrincipal(req, reply);
@@ -895,6 +895,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       if (!statusParsed.ok) {
         return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_closed_status'));
       }
+      const sideParsed = parseOpenPositionSide(req.query.side);
+      if (!sideParsed.ok) {
+        return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_closed_position_side'));
+      }
 
       try {
         requireScope(principal, 'trade:read');
@@ -903,6 +907,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
           limit,
           sinceMs: sinceParsed.sinceMs,
           status: statusParsed.status,
+          side: sideParsed.side,
         });
         return reply.code(200).send(rows);
       } catch (err) {

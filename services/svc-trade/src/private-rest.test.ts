@@ -1769,6 +1769,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /positions/closed?side=long: passes side into listClosedPositions', async () => {
+    let seen: { side?: 'long' | 'short' } | null = null;
+    const app = await build(
+      deps({
+        listClosedPositions: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?side=long',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen?.side).toBe('long');
+    await app.close();
+  });
+
+  it('GET /positions/closed?side=: invalid → 400 without listClosedPositions', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        listClosedPositions: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /positions/closed?status=: invalid → 400 without listClosedPositions', async () => {
     let listed = false;
     const app = await build(

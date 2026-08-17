@@ -421,10 +421,11 @@ export class PositionService {
    * on COALESCE(closed_at, opened_at); limit is capped like orderHistory.
    * Optional status='closed'|'liquidated' narrows the IN-list — never invents
    * a status, and unknown values are the caller's to refuse before this.
+   * Optional side='long'|'short' narrows in SQL — never invents a side.
    */
   async listClosed(
     userId: string,
-    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated' } = {},
+    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated'; side?: 'long' | 'short' } = {},
   ): Promise<Position[]> {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
@@ -435,6 +436,8 @@ export class PositionService {
         : input.status === 'liquidated'
           ? this.sql`p.status = 'liquidated'`
           : this.sql`p.status IN ('closed', 'liquidated')`;
+    const sideFilter =
+      input.side === 'long' ? this.sql`p.side = 'long'` : input.side === 'short' ? this.sql`p.side = 'short'` : this.sql`TRUE`;
     const rows =
       symbol && sinceDate
         ? await this.sql<PositionRow[]>`
@@ -443,6 +446,7 @@ export class PositionService {
             JOIN trade.markets m ON m.id = p.market_id
             WHERE p.user_id = ${userId}
               AND ${statusFilter}
+              AND ${sideFilter}
               AND m.symbol = ${symbol}
               AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
             ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
@@ -455,6 +459,7 @@ export class PositionService {
               JOIN trade.markets m ON m.id = p.market_id
               WHERE p.user_id = ${userId}
                 AND ${statusFilter}
+                AND ${sideFilter}
                 AND m.symbol = ${symbol}
               ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
               LIMIT ${limit}
@@ -466,6 +471,7 @@ export class PositionService {
                 JOIN trade.markets m ON m.id = p.market_id
                 WHERE p.user_id = ${userId}
                   AND ${statusFilter}
+                  AND ${sideFilter}
                   AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
                 ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
                 LIMIT ${limit}
@@ -476,6 +482,7 @@ export class PositionService {
                 JOIN trade.markets m ON m.id = p.market_id
                 WHERE p.user_id = ${userId}
                   AND ${statusFilter}
+                  AND ${sideFilter}
                 ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
                 LIMIT ${limit}
               `;

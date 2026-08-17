@@ -260,6 +260,8 @@ if (!available) {
     expect(closed[0]!.id).toBe(pos.id);
     expect(closed[0]!.status).toBe('closed');
     expect(closed[0]!.markPrice).toBeNull();
+    expect((await positions.listClosed(ALICE, { side: 'short' })).map((row) => row.id)).toEqual([pos.id]);
+    expect(await positions.listClosed(ALICE, { side: 'long' })).toEqual([]);
     expect(await positions.listClosed(BOB)).toEqual([]);
   });
 
