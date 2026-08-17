@@ -50,7 +50,10 @@ const SKIP_DIRS = new Set([
 const COPY_ROOT_GLOBS = [
   join('packages', 'i18n'),
   join('vendor', 'upstream-exchange', '05_Web_Front', 'src', 'assets', 'lang'),
+  // Historical path — walk if a later drop puts catalogues here.
   join('vendor', 'upstream-exchange', '04_Web_Admin', 'src', 'assets', 'lang'),
+  // Actual admin i18n tree on tip (locale.js / index.js). assets/lang does not exist.
+  join('vendor', 'upstream-exchange', '04_Web_Admin', 'src', 'locale'),
 ];
 
 const COPY_EXTENSIONS = new Set(['.js', '.ts', '.mjs', '.json', '.vue']);
@@ -161,7 +164,7 @@ function scanTree(root) {
       kind: 'empty',
       message:
         'MARKETING LANGUAGE SCAN FAILED — 0 product-copy files were read. NOTHING WAS SCANNED.\n' +
-        '  Expected locale catalogues under packages/i18n or vendor/**/assets/lang.',
+        '  Expected locale catalogues under packages/i18n, vendor/**/assets/lang, or 04_Web_Admin/src/locale.',
     };
   }
 
@@ -239,6 +242,16 @@ function selfTest() {
     );
     const good = scanTree(fix);
     assert(good.ok === true && good.scanned >= 1, 'sealed + honest fixture passes');
+
+    // Admin catalogues live under src/locale, not assets/lang — that skip is a hole.
+    const adminLocale = join(fix, 'vendor', 'upstream-exchange', '04_Web_Admin', 'src', 'locale');
+    mkdirSync(adminLocale, { recursive: true });
+    writeFileSync(join(adminLocale, 'locale.js'), `export default { claim: "funds are insured" };\n`, 'utf8');
+    const adminBad = scanTree(fix);
+    assert(
+      adminBad.ok === false && adminBad.kind === 'hits' && adminBad.violations?.some((v) => v.word === 'insured'),
+      'admin src/locale unsealed claim fails',
+    );
   } finally {
     rmSync(fix, { recursive: true, force: true });
   }
