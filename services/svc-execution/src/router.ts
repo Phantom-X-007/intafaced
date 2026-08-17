@@ -7,6 +7,7 @@ import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
 import { observeOmsBalances, type OmsBalancesFn } from './oms-balances.js';
+import { observeOmsPositions, type OmsPositionsFn } from './oms-positions.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -73,6 +74,7 @@ export type ExecutionCancelMap = Readonly<Record<string, OmsCancelFn>>;
 export type ExecutionFetchMap = Readonly<Record<string, OmsFetchFn>>;
 export type ExecutionOpenOrdersMap = Readonly<Record<string, OmsOpenOrdersFn>>;
 export type ExecutionBalancesMap = Readonly<Record<string, OmsBalancesFn>>;
+export type ExecutionPositionsMap = Readonly<Record<string, OmsPositionsFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -81,6 +83,7 @@ export function createExecutionRouter(
   fetchByVenue: ExecutionFetchMap = {},
   openOrdersByVenue: ExecutionOpenOrdersMap = {},
   balancesByVenue: ExecutionBalancesMap = {},
+  positionsByVenue: ExecutionPositionsMap = {},
 ) {
   return router({
     execution: router({
@@ -228,6 +231,25 @@ export function createExecutionRouter(
                 venueId: input.venueId,
                 kind: input.kind,
                 balancesByVenue,
+              });
+            });
+          }),
+
+        positions: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              symbol: z.string().min(1).max(64).optional(),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.positions', input.venueId, async () => {
+              return observeOmsPositions({
+                venueId: input.venueId,
+                symbol: input.symbol,
+                kind: input.kind,
+                positionsByVenue,
               });
             });
           }),
