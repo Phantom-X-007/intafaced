@@ -357,6 +357,7 @@ export function createExecutionRouter(
             z.object({
               venueId: z.string().min(1).max(128),
               type: z.enum(['spot', 'perpetual', 'future', 'option', 'margin', 'fx', 'cfd']).optional(),
+              quote: z.string().min(1).max(32).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -365,6 +366,7 @@ export function createExecutionRouter(
               return observeOmsMarkets({
                 venueId: input.venueId,
                 type: input.type,
+                quote: input.quote,
                 kind: input.kind,
                 marketsByVenue,
               });

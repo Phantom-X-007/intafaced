@@ -6,16 +6,18 @@
  * throw is observe_failed, not an invented listing. Empty array stays
  * empty (no listings is not a fake BTC/USDT). Internal venues refused.
  * Optional type forwards spot/perpetual/…; omitted still observes every
- * type. Inactive listings stay inactive.
+ * type. Optional quote forwards USDT/…; omitted still observes every quote.
+ * Inactive listings stay inactive.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueInstrumentType, VenueMarket } from '@intafaced/venue-contracts';
 
-export type OmsMarketsFn = (type?: VenueInstrumentType) => Promise<readonly VenueMarket[]>;
+export type OmsMarketsFn = (type?: VenueInstrumentType, quote?: string) => Promise<readonly VenueMarket[]>;
 
 export type OmsMarketsInput = {
   readonly venueId: string;
   readonly type?: VenueInstrumentType;
+  readonly quote?: string;
   readonly kind?: VenueKind;
   readonly marketsByVenue?: Readonly<Record<string, OmsMarketsFn>>;
 };
@@ -51,7 +53,7 @@ export async function observeOmsMarkets(input: OmsMarketsInput): Promise<OmsMark
   }
 
   try {
-    return { ok: true, markets: await markets(input.type) };
+    return { ok: true, markets: await markets(input.type, input.quote?.trim() || undefined) };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
   }

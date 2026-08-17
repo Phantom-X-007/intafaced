@@ -55,10 +55,12 @@ function listed(over: Partial<VenueMarket> = {}): VenueMarket {
 class FakeMarkets {
   calls = 0;
   readonly types: (VenueInstrumentType | undefined)[] = [];
+  readonly quotes: (string | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type) => {
+  fn: OmsMarketsFn = async (type, quote) => {
     this.calls += 1;
     this.types.push(type);
+    this.quotes.push(quote);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -89,6 +91,19 @@ describe('observeOmsMarkets', () => {
     expect(street.types).toEqual(['perpetual']);
     if (!result.ok) return;
     expect(result.markets[0]?.type).toBe('perpetual');
+  });
+
+  it('passes an optional quote through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ quote: 'BTC', symbol: 'ETH/BTC', venueSymbol: 'ETHBTC', base: 'ETH' })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      quote: 'BTC',
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.quotes).toEqual(['BTC']);
+    if (!result.ok) return;
+    expect(result.markets[0]?.quote).toBe('BTC');
   });
 
   it('passes through inactive listings — halted is not rewritten to active', async () => {
@@ -161,10 +176,11 @@ describe('execution.oms.markets tRPC', () => {
       {},
       { street: street.fn },
     ).createCaller(signed());
-    const out = await caller.execution.oms.markets({ venueId: 'street', type: 'spot' });
+    const out = await caller.execution.oms.markets({ venueId: 'street', type: 'spot', quote: 'USDT' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.markets[0]?.symbol).toBe('ETH/USDT');
     expect(street.types).toEqual(['spot']);
+    expect(street.quotes).toEqual(['USDT']);
   });
 });
