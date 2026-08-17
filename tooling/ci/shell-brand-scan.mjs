@@ -396,11 +396,11 @@ function selfTest(rules) {
     for (const root of vueRoots) {
       for (const f of walk(root)) vueFiles.push(f);
     }
-    assert(vueFiles.some((f) => f.endsWith('App.vue')), 'fixture Vue surface not walked');
     assert(
-      !vueFiles.some((f) => /CorsConfig\.java$/.test(f)),
-      'CORS Java must sit outside the Vue project walk (the skipped-today hole)',
+      vueFiles.some((f) => f.endsWith('App.vue')),
+      'fixture Vue surface not walked',
     );
+    assert(!vueFiles.some((f) => /CorsConfig\.java$/.test(f)), 'CORS Java must sit outside the Vue project walk (the skipped-today hole)');
 
     const corsFiles = collectCorsAdjacentJava(vendor);
     assert(
@@ -411,24 +411,15 @@ function selfTest(rules) {
       corsFiles.some((f) => f.endsWith('CorsAllowlist.java')),
       'CORS-adjacent walk must include CorsAllowlist.java',
     );
-    assert(
-      !corsFiles.some((f) => f.endsWith('WalletDao.java')),
-      'CORS-adjacent walk must not swallow unrelated Java',
-    );
+    assert(!corsFiles.some((f) => f.endsWith('WalletDao.java')), 'CORS-adjacent walk must not swallow unrelated Java');
 
     const corsHits = corsFiles.flatMap((file) => scanFileHits(file, tmp, rules, { javaIdentity: true }));
     assert(
       corsHits.some((h) => h.text.includes(plant) && /CorsConfig\.java$/.test(h.reported)),
       'planted partner name in CORS Java must fail the scan',
     );
-    assert(
-      !corsHits.some((h) => /CorsAllowlist\.java$/.test(h.reported)),
-      'package/import identity lines must not force a Java rebrand',
-    );
-    assert(
-      !corsHits.some((h) => /WalletDao\.java$/.test(h.reported)),
-      'planted name in non-CORS Java must remain out of this gate',
-    );
+    assert(!corsHits.some((h) => /CorsAllowlist\.java$/.test(h.reported)), 'package/import identity lines must not force a Java rebrand');
+    assert(!corsHits.some((h) => /WalletDao\.java$/.test(h.reported)), 'planted name in non-CORS Java must remain out of this gate');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
