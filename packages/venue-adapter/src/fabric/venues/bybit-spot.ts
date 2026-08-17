@@ -4,15 +4,21 @@ import {
   readInteger,
   readLevels,
   readOptionalDecimal,
+  requireCredentials,
   unifiedSymbol,
   VenueCapabilityError,
   VenueUnavailableError,
+  type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
+  type PlaceOrderRequest,
+  type TradeAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
+  type VenueCredentials,
   type VenueDescriptor,
   type VenueMarket,
+  type VenueOrder,
   type VenueTrade,
 } from '@intafaced/venue-contracts';
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
@@ -98,16 +104,14 @@ import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
  *      delta feed at all. `DEFAULT_WS_DEPTH` is 50 for that reason, not for tuning.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * WHAT THIS FILE DELIBERATELY DOES NOT CONTAIN
+ * TRADING / ACCOUNT — EXIST, AND REFUSE
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * There is no `BybitSpotTrade` and no `BybitSpotAccount`. Not an oversight and
- * not a TODO: this venue is mounted for PUBLIC MARKET DATA and nothing else. The
- * trading half of the fabric is unbuilt on every venue (see `NOT_BUILT` in
- * `binance-spot.ts`), and adding a second pair of classes whose every method
- * throws would grow the surface that *looks* like connectivity without adding
- * one unit of it. No credential is read, held, or named anywhere in this file,
- * and no Venue Vault is required to run it.
+ * `BybitSpotTrade` and `BybitSpotAccount` exist so a caller that asks for the
+ * trading half cannot read "no class" or an empty list as "flat / rejected".
+ * Every method throws typed `not_ready` (after `requireCredentials`) — the same
+ * honesty as `binance-spot.ts`. The signed REST path is not built. No live key
+ * is invented, held, or named. Public market data still needs none.
  *
  * The fee schedule is Bybit's published non-VIP spot default and is marked
  * `indicative: true` for the reason `market.ts` gives: the rate an ACCOUNT pays
@@ -660,6 +664,70 @@ export class BybitSpotMarketData implements MarketDataAdapter {
       fees: { makerBps: DEFAULT_FEE_BPS.maker, takerBps: DEFAULT_FEE_BPS.taker, indicative: true },
       observedAt,
     };
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TRADING AND ACCOUNT — credentialed, and honest about not being built
+// ════════════════════════════════════════════════════════════════════════════
+
+const NOT_BUILT =
+  'the signed REST path for this venue is NOT BUILT. Public market data is live; ' +
+  'order placement, cancellation and account state are not. This call is refused rather than ' +
+  'simulated — a fabricated order status is worse than an outage (§27).';
+
+export class BybitSpotTrade implements TradeAdapter {
+  readonly venue = VENUE;
+  readonly #credentials: VenueCredentials | null;
+
+  constructor(credentials: VenueCredentials | null = null) {
+    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
+    this.#credentials = credentials;
+  }
+
+  async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
+    requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `placeOrder(${request.clientOrderId}): ${NOT_BUILT}`);
+  }
+
+  async cancelOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
+    requireCredentials(VENUE.id, 'cancelOrder', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `cancelOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
+  }
+
+  async fetchOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
+    requireCredentials(VENUE.id, 'fetchOrder', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `fetchOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
+  }
+
+  async openOrders(): Promise<VenueOrder[]> {
+    requireCredentials(VENUE.id, 'openOrders', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `openOrders: ${NOT_BUILT}`);
+  }
+}
+
+export class BybitSpotAccount implements AccountAdapter {
+  readonly venue = VENUE;
+  readonly #credentials: VenueCredentials | null;
+
+  constructor(credentials: VenueCredentials | null = null) {
+    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
+    this.#credentials = credentials;
+  }
+
+  async balances(): Promise<never> {
+    requireCredentials(VENUE.id, 'balances', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${NOT_BUILT}`);
+  }
+
+  async positions(): Promise<never> {
+    requireCredentials(VENUE.id, 'positions', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${NOT_BUILT}`);
+  }
+
+  async transferRails(): Promise<never> {
+    requireCredentials(VENUE.id, 'transferRails', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${NOT_BUILT}`);
   }
 }
 

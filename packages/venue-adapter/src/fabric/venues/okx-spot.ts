@@ -4,15 +4,21 @@ import {
   readInteger,
   readLevels,
   readOptionalDecimal,
+  requireCredentials,
   unifiedSymbol,
   VenueCapabilityError,
   VenueUnavailableError,
+  type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
+  type PlaceOrderRequest,
+  type TradeAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
+  type VenueCredentials,
   type VenueDescriptor,
   type VenueMarket,
+  type VenueOrder,
   type VenueTrade,
 } from '@intafaced/venue-contracts';
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
@@ -44,9 +50,11 @@ import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
  *   6. REST depth is sz on the closed set {1,5,10,50,100,200,400}.
  *   7. A second WS action: snapshot is a feed restart — fail the subscription.
  *
- * No OkxSpotTrade / OkxSpotAccount. Public market data only. No credential
- * is read, held, or named. Fees are published regular-user spot defaults
- * and travel as indicative: true.
+ * `OkxSpotTrade` and `OkxSpotAccount` exist so a missing trading half cannot
+ * look like success. Every method throws typed `not_ready` after
+ * `requireCredentials` — same honesty as binance-spot / bybit-spot. No live
+ * key is invented. Fees are published regular-user spot defaults and travel
+ * as indicative: true.
  */
 
 const VENUE: VenueDescriptor = {
@@ -450,4 +458,64 @@ export function retryAfterFrom(header: string | null, fallbackMs = 60_000): numb
   const seconds = Number(header.trim());
   if (!Number.isFinite(seconds) || seconds <= 0) return fallbackMs;
   return Math.ceil(seconds * 1_000);
+}
+
+const NOT_BUILT =
+  'the signed REST path for this venue is NOT BUILT. Public market data is live; ' +
+  'order placement, cancellation and account state are not. This call is refused rather than ' +
+  'simulated — a fabricated order status is worse than an outage (§27).';
+
+export class OkxSpotTrade implements TradeAdapter {
+  readonly venue = VENUE;
+  readonly #credentials: VenueCredentials | null;
+
+  constructor(credentials: VenueCredentials | null = null) {
+    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
+    this.#credentials = credentials;
+  }
+
+  async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
+    requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `placeOrder(${request.clientOrderId}): ${NOT_BUILT}`);
+  }
+
+  async cancelOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
+    requireCredentials(VENUE.id, 'cancelOrder', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `cancelOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
+  }
+
+  async fetchOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
+    requireCredentials(VENUE.id, 'fetchOrder', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `fetchOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
+  }
+
+  async openOrders(): Promise<VenueOrder[]> {
+    requireCredentials(VENUE.id, 'openOrders', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `openOrders: ${NOT_BUILT}`);
+  }
+}
+
+export class OkxSpotAccount implements AccountAdapter {
+  readonly venue = VENUE;
+  readonly #credentials: VenueCredentials | null;
+
+  constructor(credentials: VenueCredentials | null = null) {
+    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
+    this.#credentials = credentials;
+  }
+
+  async balances(): Promise<never> {
+    requireCredentials(VENUE.id, 'balances', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${NOT_BUILT}`);
+  }
+
+  async positions(): Promise<never> {
+    requireCredentials(VENUE.id, 'positions', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${NOT_BUILT}`);
+  }
+
+  async transferRails(): Promise<never> {
+    requireCredentials(VENUE.id, 'transferRails', this.#credentials);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${NOT_BUILT}`);
+  }
 }
