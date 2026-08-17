@@ -13,6 +13,7 @@ import { observeOmsFunding, type OmsFundingFn } from './oms-funding.js';
 import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
 import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
+import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -85,6 +86,7 @@ export type ExecutionFundingMap = Readonly<Record<string, OmsFundingFn>>;
 export type ExecutionBorrowMap = Readonly<Record<string, OmsBorrowFn>>;
 export type ExecutionLatencyMap = Readonly<Record<string, OmsLatencyFn>>;
 export type ExecutionMarketsMap = Readonly<Record<string, OmsMarketsFn>>;
+export type ExecutionSnapshotMap = Readonly<Record<string, OmsSnapshotFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -99,6 +101,7 @@ export function createExecutionRouter(
   borrowByVenue: ExecutionBorrowMap = {},
   latencyByVenue: ExecutionLatencyMap = {},
   marketsByVenue: ExecutionMarketsMap = {},
+  snapshotByVenue: ExecutionSnapshotMap = {},
 ) {
   return router({
     execution: router({
@@ -356,6 +359,27 @@ export function createExecutionRouter(
                 venueId: input.venueId,
                 kind: input.kind,
                 marketsByVenue,
+              });
+            });
+          }),
+
+        snapshot: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              symbol: z.string().min(1).max(64),
+              limit: z.number().int().positive().max(1000).optional(),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.snapshot', input.venueId, async () => {
+              return observeOmsSnapshot({
+                venueId: input.venueId,
+                symbol: input.symbol,
+                limit: input.limit,
+                kind: input.kind,
+                snapshotByVenue,
               });
             });
           }),

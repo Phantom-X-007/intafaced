@@ -25,8 +25,9 @@ registerProcessHooks(
  * `execution.oms.balances`, `execution.oms.positions`,
  * `execution.oms.rails` (not a transfer), `execution.oms.funding`
  * (not a settlement), `execution.oms.borrow` (not a loan),
- * `execution.oms.latency` (venue observation — not a routing weight), and
- * `execution.oms.markets` (instrument catalog — not a route).
+ * `execution.oms.latency` (venue observation — not a routing weight),
+ * `execution.oms.markets` (instrument catalog — not a route), and
+ * `execution.oms.snapshot` (seed book — not a mark).
  * No live CEX keys. Internal venues refused. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
@@ -41,7 +42,7 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'oms-markets',
+  stage: 'oms-snapshot',
   store: 'memory',
   internalVenue: 'blocked',
 }));
