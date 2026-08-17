@@ -4,16 +4,13 @@ import {
   readInteger,
   readLevels,
   readOptionalDecimal,
-  requireCredentials,
   unifiedSymbol,
   VenueCapabilityError,
   VenueUnavailableError,
-  type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
-  type VenueCredentials,
   type VenueDescriptor,
   type VenueMarket,
   type VenueTrade,
@@ -47,9 +44,10 @@ import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
  *   6. REST depth is sz on the closed set {1,5,10,50,100,200,400}.
  *   7. A second WS action: snapshot is a feed restart — fail the subscription.
  *
- * Signed spot trade lives in `okx-spot-trade.ts` (HMAC OK-ACCESS). Account
- * stays `not_ready` after `requireCredentials` — no fabricated balances.
- * Fees are published regular-user spot defaults and travel as indicative: true.
+ * Signed spot trade lives in `okx-spot-trade.ts` (HMAC OK-ACCESS). Signed
+ * account observation lives in `okx-spot-account.ts`. transferRails stays
+ * not_ready — wallet surfaces stay off trade-only keys. Fees are published
+ * regular-user spot defaults and travel as indicative: true.
  */
 
 const VENUE: VenueDescriptor = {
@@ -455,34 +453,5 @@ export function retryAfterFrom(header: string | null, fallbackMs = 60_000): numb
   return Math.ceil(seconds * 1_000);
 }
 
-const NOT_BUILT =
-  'the signed REST path for this venue is NOT BUILT. Public market data is live; ' +
-  'order placement, cancellation and account state are not. This call is refused rather than ' +
-  'simulated — a fabricated order status is worse than an outage (§27).';
-
 export { OkxSpotTrade, type OkxSpotTradeOptions } from './okx-spot-trade.js';
-
-export class OkxSpotAccount implements AccountAdapter {
-  readonly venue = VENUE;
-  readonly #credentials: VenueCredentials | null;
-
-  constructor(credentials: VenueCredentials | null = null) {
-    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
-    this.#credentials = credentials;
-  }
-
-  async balances(): Promise<never> {
-    requireCredentials(VENUE.id, 'balances', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${NOT_BUILT}`);
-  }
-
-  async positions(): Promise<never> {
-    requireCredentials(VENUE.id, 'positions', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${NOT_BUILT}`);
-  }
-
-  async transferRails(): Promise<never> {
-    requireCredentials(VENUE.id, 'transferRails', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${NOT_BUILT}`);
-  }
-}
+export { OkxSpotAccount } from './okx-spot-account.js';
