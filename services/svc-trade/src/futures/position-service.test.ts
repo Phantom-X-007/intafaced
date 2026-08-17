@@ -259,6 +259,32 @@ if (!available) {
     expect(await positions.listClosed(BOB)).toEqual([]);
   });
 
+  it('listClosed pages with limit and since in SQL', async () => {
+    feed('50000');
+    const first = await positions.open({
+      clientOpenId: 't-list-closed-page-1',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, first.id!);
+    const second = await positions.open({
+      clientOpenId: 't-list-closed-page-2',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, second.id!);
+    expect(await positions.listClosed(ALICE)).toHaveLength(2);
+    expect(await positions.listClosed(ALICE, { limit: 1 })).toHaveLength(1);
+    expect(await positions.listClosed(ALICE, { sinceMs: Date.now() + 86_400_000 })).toEqual([]);
+    expect(await positions.listClosed(ALICE, { sinceMs: 0 })).toHaveLength(2);
+  });
+
   it('get missing or not-theirs is the same 404', async () => {
     feed('50000');
     const pos = await positions.open({

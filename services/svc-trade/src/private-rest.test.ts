@@ -1409,6 +1409,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /positions/closed?since=: passes sinceMs and limit into listClosedPositions', async () => {
+    let seen: { symbol?: string; limit?: number; sinceMs?: number } | null = null;
+    const app = await build(
+      deps({
+        listClosedPositions: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?since=1700000000000&limit=2&symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({ symbol: 'BTC/USDT', limit: 2, sinceMs: 1_700_000_000_000 });
+    await app.close();
+  });
+
+  it('GET /positions/closed?since=: invalid → 400 without listClosedPositions', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        listClosedPositions: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?since=-1',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /positions/:id: anonymous → 401', async () => {
     const app = await build();
     const res = await app.inject({ method: 'GET', url: `/api/v1/positions/${ORDER_ID}` });
