@@ -231,6 +231,20 @@ const ETL_ABSENT_NOTE = 'ETL watermark: ABSENT — cannot claim "ran and found n
 const ETL_PRESENT_NOTE = 'ETL watermark: PRESENT (operator-stamped). Does not imply live cubes — lag probe still required.';
 
 /**
+ * Live cubes require all four: replica configured, fresh probed lag in the live
+ * band, an ETL watermark, and real facts. Any missing piece → never mayLabelLive.
+ * Watermark alone never paints live; lag probe alone never paints live.
+ */
+export function mayPaintLiveCubes(input: {
+  readonly replicaConfigured: boolean;
+  readonly lagMayLabelLive: boolean;
+  readonly etlWatermark: EtlWatermarkState;
+  readonly hasFacts: boolean;
+}): boolean {
+  return input.replicaConfigured === true && input.lagMayLabelLive === true && input.etlWatermark === 'present' && input.hasFacts === true;
+}
+
+/**
  * Resolve ETL watermark from env. Fail-closed: junk timestamps are absent.
  */
 export function resolveEtlWatermark(env: Record<string, string | undefined> = process.env): EtlWatermarkResolution {
@@ -272,38 +286,43 @@ export type WarehouseLagMeta = {
   readonly lagMeasuredAt: number | null;
 };
 
+export type WarehouseEtlHonesty = {
+  readonly etlWatermark: EtlWatermarkState;
+  readonly etlWatermarkAt: string | null;
+};
+
 export type WarehouseSurfaceResult =
-  | {
+  | ({
       readonly status: 'ok';
       readonly points: readonly CubePoint[];
       readonly freshness: LagFreshness;
       readonly mayLabelLive: boolean;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    }
-  | {
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'empty';
       readonly reason: 'no_facts';
       readonly freshness: LagFreshness;
       readonly mayLabelLive: false;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    }
-  | {
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'unavailable';
       readonly reason: 'replica_unconfigured' | 'lag_unknown' | 'lag_stale';
       readonly freshness: LagFreshness;
       readonly mayLabelLive: false;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    }
-  | {
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'refuse';
       readonly reason: string;
       readonly mayLabelLive: false;
       readonly lagSource: LagSource;
       readonly lagMeasuredAt: number | null;
-    };
+    } & WarehouseEtlHonesty);
 
 export type WarehouseSurfaceInput = {
   /** False until ANALYTICS_REPLICA_* URLs (or dry-run flag) are configured. */
@@ -327,6 +346,12 @@ export type WarehouseSurfaceInput = {
    * (never invent trading volume).
    */
   readonly facts?: readonly CubeFactRow[] | null;
+  /**
+   * ETL watermark honesty. Omitted → `absent` (fail-closed). Presence never
+   * paints live cubes by itself; absence forbids `mayLabelLive`.
+   */
+  readonly etlWatermark?: EtlWatermarkState;
+  readonly etlWatermarkAt?: string | null;
 };
 
 export type EffectiveWarehouseLag = {
@@ -433,8 +458,13 @@ export function resolveEffectiveWarehouseLag(input: {
  * Honest empty warehouse: no facts → `empty`. Unconfigured replica or lag that
  * fails the live SLO → `unavailable`. Never fabricates volume series.
  * Env-only lag without measurement age never claims live.
+ * Missing ETL watermark never claims live (fail-closed if omitted).
  */
 export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSurfaceResult {
+  const etlWatermark: EtlWatermarkState = input.etlWatermark ?? 'absent';
+  const etlWatermarkAt = etlWatermark === 'present' ? (input.etlWatermarkAt ?? null) : null;
+  const etl: WarehouseEtlHonesty = { etlWatermark, etlWatermarkAt };
+
   if (!input.replicaConfigured) {
     return {
       status: 'unavailable',
@@ -443,6 +473,7 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
       mayLabelLive: false,
       lagSource: 'unknown',
       lagMeasuredAt: null,
+      ...etl,
     };
   }
 
@@ -461,6 +492,7 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
       mayLabelLive: false,
       lagSource: effective.lagSource,
       lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
   if (effective.freshness === 'stale') {
@@ -471,6 +503,7 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
       mayLabelLive: false,
       lagSource: effective.lagSource,
       lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
 
@@ -483,6 +516,7 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
       mayLabelLive: false,
       lagSource: effective.lagSource,
       lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
 
@@ -494,6 +528,7 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
       mayLabelLive: false,
       lagSource: effective.lagSource,
       lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
 
@@ -506,6 +541,7 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
         mayLabelLive: false,
         lagSource: effective.lagSource,
         lagMeasuredAt: effective.lagMeasuredAt,
+        ...etl,
       };
     }
   }
@@ -514,9 +550,15 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
     status: 'ok',
     points: evaluated.points,
     freshness: effective.freshness,
-    mayLabelLive: effective.mayLabelLive,
+    mayLabelLive: mayPaintLiveCubes({
+      replicaConfigured: true,
+      lagMayLabelLive: effective.mayLabelLive,
+      etlWatermark,
+      hasFacts: evaluated.points.length > 0,
+    }),
     lagSource: effective.lagSource,
     lagMeasuredAt: effective.lagMeasuredAt,
+    ...etl,
   };
 }
 
@@ -524,16 +566,17 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
  * Operator-facing one-liner. Never implies live volume when surface is empty.
  */
 export function warehouseSurfaceStatusLine(result: WarehouseSurfaceResult): string {
+  const wm = `wm=${result.etlWatermark}`;
   if (result.status === 'ok') {
-    return `status=ok points=${result.points.length} freshness=${result.freshness} live=${result.mayLabelLive ? '1' : '0'} lagSource=${result.lagSource}`;
+    return `status=ok points=${result.points.length} freshness=${result.freshness} live=${result.mayLabelLive ? '1' : '0'} lagSource=${result.lagSource} ${wm}`;
   }
   if (result.status === 'empty') {
-    return `status=empty reason=${result.reason} freshness=${result.freshness} live=0 lagSource=${result.lagSource}`;
+    return `status=empty reason=${result.reason} freshness=${result.freshness} live=0 lagSource=${result.lagSource} ${wm}`;
   }
   if (result.status === 'unavailable') {
-    return `status=unavailable reason=${result.reason} freshness=${result.freshness} live=0 lagSource=${result.lagSource}`;
+    return `status=unavailable reason=${result.reason} freshness=${result.freshness} live=0 lagSource=${result.lagSource} ${wm}`;
   }
-  return `status=refuse reason=${result.reason} live=0 lagSource=${result.lagSource}`;
+  return `status=refuse reason=${result.reason} live=0 lagSource=${result.lagSource} ${wm}`;
 }
 
 // ── Replica env resolution + optional lag probe ─────────────────────────────
