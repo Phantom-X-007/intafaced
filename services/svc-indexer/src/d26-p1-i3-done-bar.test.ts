@@ -191,4 +191,37 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
     expect(status.statusCode).toBe(200);
     expect(JSON.stringify(trpcResultJson(status.body))).toMatch(/indexer\.chain_unreachable/);
   });
+
+  it('venue_not_deployed lastError: /trpc/book 503 — not an empty live ladder', async () => {
+    class MissingVenueSource implements ChainSource {
+      constructor(readonly chainId: number) {}
+      async head(): Promise<never> {
+        throw new ChainUnavailableError('indexer.venue_not_deployed', 'no code at venue — would paint empty book');
+      }
+      async blockAt(_height: number): Promise<never> {
+        throw new ChainUnavailableError('indexer.venue_not_deployed', 'no code at venue — would paint empty book');
+      }
+    }
+
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new MissingVenueSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    await expect(indexer.sync()).rejects.toMatchObject({ code: 'indexer.venue_not_deployed' });
+
+    const app = await mountPublicDoor(indexer, store, 'evm');
+
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(503);
+    expect((ready.json() as { reason: string }).reason).toMatch(/indexer\.venue_not_deployed/);
+
+    const book = await getTrpc(app, 'book', { market: 'IFC-USD' });
+    expect(book.statusCode).toBe(503);
+    expect(trpcErrorCode(book.body)).toBe('SERVICE_UNAVAILABLE');
+    expect(book.body.error?.message).toMatch(/indexer\.venue_not_deployed/);
+    expect(JSON.stringify(trpcResultJson(book.body) ?? {})).not.toMatch(/"bids"/);
+  });
 });
