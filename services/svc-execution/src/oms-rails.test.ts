@@ -55,10 +55,12 @@ function usdtRail(over: Partial<TransferRail> = {}): TransferRail {
 class FakeRails {
   readonly assets: string[] = [];
   readonly enableds: (boolean | undefined)[] = [];
+  readonly networks: (string | undefined)[] = [];
   constructor(private readonly next: TransferRail[] | Error) {}
-  fn: OmsRailsFn = async (asset, enabled) => {
+  fn: OmsRailsFn = async (asset, enabled, network) => {
     this.assets.push(asset);
     this.enableds.push(enabled);
+    this.networks.push(network);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -92,6 +94,20 @@ describe('observeOmsRails', () => {
     expect(street.enableds).toEqual([false]);
     if (!result.ok) return;
     expect(result.rails[0]!.enabled).toBe(false);
+  });
+
+  it('passes an optional network through and does not invent a missing rail', async () => {
+    const street = new FakeRails([usdtRail({ network: 'erc20' })]);
+    const result = await observeOmsRails({
+      venueId: 'street',
+      asset: 'USDT',
+      network: 'erc20',
+      railsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.networks).toEqual(['erc20']);
+    if (!result.ok) return;
+    expect(result.rails[0]!.network).toBe('erc20');
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -164,11 +180,12 @@ describe('execution.oms.rails tRPC', () => {
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, { street: street.fn }).createCaller(
       signed(),
     );
-    const out = await caller.execution.oms.rails({ venueId: 'street', asset: 'USDT', enabled: false });
+    const out = await caller.execution.oms.rails({ venueId: 'street', asset: 'USDT', enabled: false, network: 'trc20' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.rails).toHaveLength(1);
     expect(street.assets).toEqual(['USDT']);
     expect(street.enableds).toEqual([false]);
+    expect(street.networks).toEqual(['trc20']);
   });
 });

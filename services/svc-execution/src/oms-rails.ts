@@ -7,16 +7,18 @@
  * that asset. Disabled rails stay disabled. Internal venues refused.
  * Asset is required — AccountAdapter.transferRails is per-asset.
  * Optional enabled forwards true/false; omitted still observes disabled rails.
+ * Optional network forwards trc20/…; omitted still observes every network.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { TransferRail } from '@intafaced/venue-contracts';
 
-export type OmsRailsFn = (asset: string, enabled?: boolean) => Promise<TransferRail[]>;
+export type OmsRailsFn = (asset: string, enabled?: boolean, network?: string) => Promise<TransferRail[]>;
 
 export type OmsRailsInput = {
   readonly venueId: string;
   readonly asset: string;
   readonly enabled?: boolean;
+  readonly network?: string;
   readonly kind?: VenueKind;
   readonly railsByVenue?: Readonly<Record<string, OmsRailsFn>>;
 };
@@ -56,7 +58,7 @@ export async function observeOmsRails(input: OmsRailsInput): Promise<OmsRailsRes
   }
 
   try {
-    return { ok: true, rails: await rails(asset, input.enabled) };
+    return { ok: true, rails: await rails(asset, input.enabled, input.network?.trim() || undefined) };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
   }
