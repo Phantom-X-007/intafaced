@@ -1,0 +1,10 @@
+---
+description: Product over process. Money and chain locks only.
+alwaysApply: true
+---
+
+Build services and packages. Do not write docs boards, ADRs, LIVE-LANES, or TRACKER recooks.
+
+Money only through `packages/ledger-client`. Never store money in a `number`. Do not implement Shehzad chain (protocol / INTACHAIN / dex self-custody). One service per PR. `pnpm verify` before done.
+
+Do not refuse product work for missing tracker IDs, model-routing, or graphify. Those are not product.

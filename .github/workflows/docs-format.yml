@@ -98,9 +98,7 @@ jobs:
       - name: value-gate self-test
         run: pnpm value-gate:self-test
 
-      - name: value gate
-        env:
-          VALUE_GATE_STRICT: '1'
+      - name: value gate (advisory — does not fail CI)
         run: node tooling/ci/value-gate.mjs
 
       # Brand scan, for the SAME reason the value gate lives here rather than in

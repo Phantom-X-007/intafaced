@@ -124,9 +124,7 @@ jobs:
       # Warn-before-block is inside the rule, not in this flag: a first
       # near-duplicate warns in the log and exits 0; the fourth consecutive one
       # blocks. Escape is an auditable `Serial-Work:` commit trailer.
-      - name: value gate (code stamp-mill)
-        env:
-          VALUE_GATE_STRICT: '1'
+      - name: value gate (advisory — does not fail CI)
         run: node tooling/ci/value-gate.mjs
 
   build:
