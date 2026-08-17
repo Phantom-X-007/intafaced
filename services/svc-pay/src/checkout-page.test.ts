@@ -245,6 +245,8 @@ describe('stateForError', () => {
     // A posture refusal and a suspended merchant land on the same page: telling
     // an anonymous payer which one it is discloses our rail estate.
     expect(stateForError(payErr('pay.checkout_rail_not_live', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.checkout_rails_unset', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.psp_unset', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.routing_no_rail', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.merchant_inactive', '')).kind).toBe('unavailable');
     // Layer B money-door refuse — hosted HTML must not 500 a live KYB gap.
@@ -447,6 +449,47 @@ describe('checkout routes', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.body).toContain('Nothing has been charged');
+    expect(res.body).not.toContain('Payment received');
+    await app.close();
+  });
+
+  it('shows the unavailable page when rails are unset, never a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.checkout_rails_unset', 'no rails');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body).not.toContain('Payment received');
+    await app.close();
+  });
+
+  it('shows the unavailable page when PSP is unset, never a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.psp_unset', 'no psp');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body).not.toContain('Payment received');
     await app.close();
   });
 

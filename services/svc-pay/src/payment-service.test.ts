@@ -2123,6 +2123,36 @@ if (!available) {
       expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
     });
 
+    it('REFUSES hosted checkout when rails are unset — typed code, no ledger post', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const unset = new PayService(sql, ledger, rails, { checkoutRails: [], checkoutRiskBand: 'low' });
+
+      await expect(unset.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.checkout_rails_unset',
+      });
+
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+      expect(ledger.journal()).toHaveLength(0);
+    });
+
+    it('REFUSES hosted checkout when PSP/card acquiring is unset — typed code, no ledger post', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const noPsp = new PayService(sql, ledger, rails, {
+        checkoutRails: [{ railId: 'card-acquirer', method: 'card' }],
+        routingProfiles: [{ railId: 'card-acquirer', methods: ['card'], countries: ['*'], riskBands: ['low'] }],
+        checkoutRiskBand: 'low',
+      });
+
+      await expect(noPsp.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.psp_unset',
+      });
+
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+      expect(ledger.journal()).toHaveLength(0);
+    });
+
     it('refuses when the link is exhausted, expired or revoked — before any row exists', async () => {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT', maxUses: 1 });
       await sql`UPDATE pay.payment_links SET uses = 1 WHERE id = ${link.id}`;

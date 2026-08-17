@@ -121,6 +121,10 @@ export type PayErrorCode =
   | 'pay.checkout_amount_required'
   /** Too many sessions open on one link. The cheap floor under an anonymous caller. */
   | 'pay.checkout_busy'
+  /** Public checkout rail list is empty — refuse by name, never a silent charge. */
+  | 'pay.checkout_rails_unset'
+  /** Card/PSP acquiring unset (`socket.psp-partners`) — refuse by name, never fake success. */
+  | 'pay.psp_unset'
   /**
    * Smart routing (D26-P1-P3) — a required geo/method/risk dim was blank.
    * Never invent a country, method, risk band, or approval rate.
@@ -576,6 +580,21 @@ const TRANSITIONS: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
 /** The v1 public checkout estate: one rail, and the only one that can ever be live. */
 export const DEFAULT_CHECKOUT_RAILS: readonly CheckoutRail[] = [{ railId: 'crypto-native', method: 'crypto' }];
 
+function isCardishCheckoutRail(rail: CheckoutRail): boolean {
+  return rail.method.trim().toLowerCase() === 'card' || /card|psp|acquirer/i.test(rail.railId);
+}
+
+/**
+ * The public checkout list is entirely card/PSP, and none of those rails is a
+ * registered non-absent adapter. That is `socket.psp-partners` unset — not a
+ * missing geo field and not a sandbox that could still fake a capture.
+ */
+function checkoutRailsAreUnsetPsp(checkoutRails: readonly CheckoutRail[], rails: RailRegistry): boolean {
+  if (checkoutRails.length === 0) return false;
+  if (!checkoutRails.every(isCardishCheckoutRail)) return false;
+  return checkoutRails.every((r) => !rails.has(r.railId) || rails.get(r.railId).mode === 'absent');
+}
+
 export class PayService {
   private readonly defaultFeeBps: number | undefined;
   private readonly valueMovement: ValueMovementPolicy;
@@ -632,6 +651,17 @@ export class PayService {
 
   /** D26-P1-P3 — geo/method/risk rail pick. Payer never names a rail id. */
   private selectCheckoutRail(input: { geoCountry?: string; method?: string; riskBand?: string }) {
+    // BEFORE smart routing. An empty list used to surface as
+    // `pay.routing_input_missing` (no unique method) — that names the payer's
+    // form, not the operator gap. Unset PSP used to surface as
+    // `pay.routing_no_rail`. Both are silent-adjacent: the public door must
+    // refuse by the name of what is missing, and must not open a session.
+    if (this.checkoutRails.length === 0) {
+      throw new PublicCheckoutUnavailable(null, 'none-configured');
+    }
+    if (checkoutRailsAreUnsetPsp(this.checkoutRails, this.rails)) {
+      throw new PublicCheckoutUnavailable(null, 'psp-unset');
+    }
     try {
       return selectSmartCheckoutRail({
         inputs: {

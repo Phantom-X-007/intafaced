@@ -450,6 +450,8 @@ export function stateForError(err: unknown): CheckoutPageState {
     // — those are not "merchant cannot take live payment", and the unavailable
     // copy says no payment was started.
     case 'pay.checkout_rail_not_live':
+    case 'pay.checkout_rails_unset':
+    case 'pay.psp_unset':
     case 'pay.rail_not_live':
     case 'pay.sandbox_rail_refused':
     case 'pay.merchant_inactive':
