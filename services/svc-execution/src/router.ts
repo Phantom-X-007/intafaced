@@ -5,6 +5,7 @@ import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } fr
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
+import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -69,12 +70,14 @@ const omsPlanInput = z.object({
 export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
 export type ExecutionCancelMap = Readonly<Record<string, OmsCancelFn>>;
 export type ExecutionFetchMap = Readonly<Record<string, OmsFetchFn>>;
+export type ExecutionOpenOrdersMap = Readonly<Record<string, OmsOpenOrdersFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
   submitByVenue: ExecutionSubmitMap = {},
   cancelByVenue: ExecutionCancelMap = {},
   fetchByVenue: ExecutionFetchMap = {},
+  openOrdersByVenue: ExecutionOpenOrdersMap = {},
 ) {
   return router({
     execution: router({
@@ -186,6 +189,25 @@ export function createExecutionRouter(
                 clientOrderId: input.clientOrderId,
                 kind: input.kind,
                 fetchByVenue,
+              });
+            });
+          }),
+
+        openOrders: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              symbol: z.string().min(1).max(64).optional(),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.openOrders', input.venueId, async () => {
+              return listOmsOpenOrders({
+                venueId: input.venueId,
+                symbol: input.symbol,
+                kind: input.kind,
+                openOrdersByVenue,
               });
             });
           }),
