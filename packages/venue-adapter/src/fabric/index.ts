@@ -47,3 +47,4 @@ export * from './venues/binance-spot.js';
 export * from './venues/bybit-spot.js';
 export { OkxSpotMarketData, okxSymbolOf, capDepth, OKX_SPOT_RATE_LIMIT, type OkxSpotOptions } from './venues/okx-spot.js';
 export * from './venues/factory.js';
+export { createVenueAccountAdapter, type VenueAccountAdapterOptions } from './venues/factory-account.js';
