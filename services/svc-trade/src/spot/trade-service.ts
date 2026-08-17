@@ -650,11 +650,11 @@ export class TradeService {
     assertSpotSurface(market, 'convert');
     assertTradable(market);
     assertSettlementRails(market);
-    assertQty(market, input.qty);
-    // Same schedule gate as placeOrder / TWAP create. A quote for a shut venue
-    // is a lie — convertExecute would then refuse market_closed after the user
-    // already saw a price (weekend EUR/USD was the live break).
+    // Same schedule gate as placeOrder / TWAP create — before qty or book walk.
+    // A quote for a shut / unrecognised venue is a lie (invented mid / weekend
+    // EUR/USD fundable quote while place refuses market_closed).
     assertMarketOpen(market, this.now());
+    assertQty(market, input.qty);
 
     const depth = await this.matching.depth(market.id, 50);
     const levels = input.side === 'buy' ? depth.asks : depth.bids;
@@ -761,6 +761,12 @@ export class TradeService {
     // W4 U1: seed FX/commodity stay active in DB; place must refuse before hold.
     assertSettlementRails(market);
 
+    // Hours/schedule refuse BEFORE paper SQL, clientOrderId, or any hold.
+    // A closed or unrecognised venue must not take funds (weekend EUR/USD used
+    // to rest a funded order until Monday). Read the clock ONCE so this request
+    // cannot straddle a session boundary and get two answers.
+    assertMarketOpen(market, this.now());
+
     // Retry key is load-bearing money law (live and paper). Optional used to
     // mint a random id so a transport timeout double-posted `order.hold:<uuid>`.
     if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
@@ -774,14 +780,6 @@ export class TradeService {
       return this.placePaperOrderIsolated(principal, input, market);
     }
 
-    // Before any hold is taken. A closed venue cannot fill, so funding an order
-    // into one locks the user's balance behind a book nobody is matching until
-    // the session reopens.
-    //
-    // Read ONCE, here, and passed down. Calling the clock twice on one order
-    // could straddle a session boundary and decide two different things about
-    // the same request.
-    assertMarketOpen(market, this.now());
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
 
@@ -948,7 +946,7 @@ export class TradeService {
     if (input.subAccountId != null) {
       await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
     }
-    assertMarketOpen(market, this.now());
+    // Session already sealed in placeOrderInner (one clock). Do not re-read now().
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
     if (orderType === 'limit') {

@@ -158,6 +158,7 @@ function privateDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps 
 /** Real place-path seal: tradable + settlement rails (no invented hold). */
 function realSettlementPlaceOrder(opts: {
   marketBySymbol: (symbol: string) => Promise<Market | null>;
+  fundHold: () => void;
 }): (principal: Principal, input: PlaceOrderInput) => Promise<ReturnType<typeof fakeOrder>> {
   return async (_principal, input) => {
     const symbol = input.symbol;
@@ -171,6 +172,7 @@ function realSettlementPlaceOrder(opts: {
     assertTradable(market);
     assertSettlementRails(market);
     // Session open assumed mid-week so the settlement refuse is what we prove.
+    opts.fundHold();
     const orderType = input.type as OrderType;
     return fakeOrder({
       marketId: market.id,
@@ -250,7 +252,8 @@ describe('D26-P1-T7 public doors — complete refuse-closed forex product', () =
       minQty: parseAmount('1000'),
     });
     const marketBySymbol = async (s: string) => (s === eurusd.symbol ? eurusd : null);
-    const placeOrder = vi.fn(realSettlementPlaceOrder({ marketBySymbol }));
+    const fundHold = vi.fn();
+    const placeOrder = vi.fn(realSettlementPlaceOrder({ marketBySymbol, fundHold }));
 
     const app = Fastify({ logger: false });
     registerPrivateRest(
@@ -282,6 +285,7 @@ describe('D26-P1-T7 public doors — complete refuse-closed forex product', () =
     expect(res.json().intafacedCode).toBe(FOREX_SETTLEMENT_REFUSE_CODE);
     expect(String(res.json().message)).toContain(FOREX_SETTLEMENT_SOCKET);
     expect(placeOrder).toHaveBeenCalled();
+    expect(fundHold).not.toHaveBeenCalled();
     await app.close();
   });
 
@@ -294,7 +298,8 @@ describe('D26-P1-T7 public doors — complete refuse-closed forex product', () =
       paper: false,
     });
     const marketBySymbol = async (s: string) => (s === btc.symbol ? btc : null);
-    const placeOrder = vi.fn(realSettlementPlaceOrder({ marketBySymbol }));
+    const fundHold = vi.fn();
+    const placeOrder = vi.fn(realSettlementPlaceOrder({ marketBySymbol, fundHold }));
 
     const app = Fastify({ logger: false });
     registerPrivateRest(
@@ -323,6 +328,7 @@ describe('D26-P1-T7 public doors — complete refuse-closed forex product', () =
 
     expect(res.statusCode).toBe(201);
     expect(placeOrder).toHaveBeenCalled();
+    expect(fundHold).toHaveBeenCalledTimes(1);
     await app.close();
   });
 });
