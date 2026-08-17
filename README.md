@@ -10,23 +10,23 @@
 
 <!-- tracker:start -->
 
-`██████████░░░░░░░░░░` **51%** — 76 of 149 features shipped
+`██████████░░░░░░░░░░` **52%** — 77 of 149 features shipped
 
-Phases: **0** 11/12 · **1** 12/13 · **2** 9/26 · **3** 12/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 9/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
 
 **In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Support desk, tickets, KB (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007)
 
-**🟢 19 ready to claim** — nothing blocks these:
+**🟢 18 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.forex` — Fiat pairs on the same engine
-- `trade.algo` — TWAP / VWAP / POV execution
 - `venue.aggregation` — External venue adapters via CCXT (cross-venue)
 - `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
 - `pay.gateway` — Branded gateway, hosted checkout, payment links
 - `pay.payfac` — PayFac mode — sub-merchant trees, 14 permission areas
 - `p2p.payment-instruments` — Payment instruments — where the buyer actually pays
-- …and 11 more
+- `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
+- …and 10 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
