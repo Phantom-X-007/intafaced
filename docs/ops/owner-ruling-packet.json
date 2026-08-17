@@ -398,6 +398,7 @@
       "blocks": ["force-push trunk risk"],
       "primaryDoc": "docs/ops/OWNER-GITHUB-CONFIG.md",
       "answerShape": "admin_enable_protection",
+      "notes": "2026-08-15 gh api: GET protection 200 (not 404). Checks Gitleaks+Dependency audit only; strict=false; enforce_admins=false; allow_force_pushes=false; 1 approving review; rulesets []. Strengthen remaining — agents must not PUT.",
       "priority": 2
     },
     {
@@ -408,6 +409,7 @@
       "blocks": ["money/chain merge without required review"],
       "primaryDoc": "docs/ops/OWNER-GITHUB-CONFIG.md",
       "answerShape": "require_codeowner_review",
+      "notes": "2026-08-15 gh api: codeowners/errors=[]; require_code_owner_reviews=false. File valid; still advisory. Admin click 2.",
       "priority": 2
     },
     {
@@ -418,6 +420,7 @@
       "blocks": ["manual merge polling"],
       "primaryDoc": "docs/ops/OWNER-GITHUB-CONFIG.md",
       "answerShape": "admin_toggle",
+      "notes": "2026-08-15 gh api: allow_auto_merge=false; squash=true; merge_commit=false; delete_branch_on_merge=true. Admin click 3. Agents must not PATCH.",
       "priority": 4
     },
     {
