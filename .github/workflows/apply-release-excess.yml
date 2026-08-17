@@ -1,0 +1,23 @@
+name: apply-release-excess
+on:
+  push:
+    branches:
+      - feat/bank-loan-release-excess
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply releaseExcess
+        run: python3 scripts/apply-release-excess.py
+      - name: Commit and remove one-shot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/apply-release-excess.yml scripts/apply-release-excess.py
+          git add services/svc-bank/src/loans/loan-service.ts services/svc-bank/src/router.ts
+          git diff --cached --quiet && echo 'no product change' && exit 1
+          git commit -m "feat(svc-bank): releaseExcess refuses missing loan or mark before release"
+          git push
