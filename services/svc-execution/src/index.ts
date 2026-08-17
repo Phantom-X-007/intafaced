@@ -20,8 +20,9 @@ registerProcessHooks(
  *
  * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
  * (SOR `planRoute`, does not submit), `execution.oms.execute` (same plan,
- * then injected submit), and `execution.oms.cancel` (client order id).
- * No live CEX keys. Internal venues refused. In-memory sealed registry.
+ * then injected submit), `execution.oms.cancel` (client order id), and
+ * `execution.oms.fetch` (client order id). No live CEX keys. Internal venues
+ * refused. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
 const appRouter = createExecutionRouter(registry);
@@ -35,7 +36,7 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'oms-cancel',
+  stage: 'oms-fetch',
   store: 'memory',
   internalVenue: 'blocked',
 }));
