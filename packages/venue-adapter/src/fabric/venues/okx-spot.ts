@@ -11,14 +11,11 @@ import {
   type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
-  type PlaceOrderRequest,
-  type TradeAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
   type VenueCredentials,
   type VenueDescriptor,
   type VenueMarket,
-  type VenueOrder,
   type VenueTrade,
 } from '@intafaced/venue-contracts';
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
@@ -50,11 +47,9 @@ import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
  *   6. REST depth is sz on the closed set {1,5,10,50,100,200,400}.
  *   7. A second WS action: snapshot is a feed restart — fail the subscription.
  *
- * `OkxSpotTrade` and `OkxSpotAccount` exist so a missing trading half cannot
- * look like success. Every method throws typed `not_ready` after
- * `requireCredentials` — same honesty as binance-spot / bybit-spot. No live
- * key is invented. Fees are published regular-user spot defaults and travel
- * as indicative: true.
+ * Signed spot trade lives in `okx-spot-trade.ts` (HMAC OK-ACCESS). Account
+ * stays `not_ready` after `requireCredentials` — no fabricated balances.
+ * Fees are published regular-user spot defaults and travel as indicative: true.
  */
 
 const VENUE: VenueDescriptor = {
@@ -465,35 +460,7 @@ const NOT_BUILT =
   'order placement, cancellation and account state are not. This call is refused rather than ' +
   'simulated — a fabricated order status is worse than an outage (§27).';
 
-export class OkxSpotTrade implements TradeAdapter {
-  readonly venue = VENUE;
-  readonly #credentials: VenueCredentials | null;
-
-  constructor(credentials: VenueCredentials | null = null) {
-    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
-    this.#credentials = credentials;
-  }
-
-  async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `placeOrder(${request.clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async cancelOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'cancelOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `cancelOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async fetchOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'fetchOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `fetchOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async openOrders(): Promise<VenueOrder[]> {
-    requireCredentials(VENUE.id, 'openOrders', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `openOrders: ${NOT_BUILT}`);
-  }
-}
+export { OkxSpotTrade, type OkxSpotTradeOptions } from './okx-spot-trade.js';
 
 export class OkxSpotAccount implements AccountAdapter {
   readonly venue = VENUE;

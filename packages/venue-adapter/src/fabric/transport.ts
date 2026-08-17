@@ -37,6 +37,7 @@ export interface HttpResponse {
 export interface HttpRequestInit {
   readonly headers?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
+  /** JSON-encoded POST body. Omitted on GET. Signatures hash `JSON.stringify` of this value. */
   readonly jsonBody?: unknown;
 }
 

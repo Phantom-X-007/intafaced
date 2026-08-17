@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount } from '@intafaced/ledger-client/money';
-import { VenueCapabilityError, VenueUnavailableError } from '@intafaced/venue-contracts';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
+import {
+  VenueCapabilityError,
+  VenueCredentialsMissingError,
+  VenueUnavailableError,
+  type VenueCredentials,
+} from '@intafaced/venue-contracts';
 import { SequencedBookTracker } from '../sequenced-book.js';
 import { RateLimitGovernor } from '../rate-limit.js';
-import type { HttpPort, HttpResponse, StreamHandle, StreamPort } from '../transport.js';
+import type { HttpPort, HttpRequestInit, HttpResponse, StreamHandle, StreamPort } from '../transport.js';
 import {
   capDepth,
   OKX_SPOT_RATE_LIMIT,
@@ -15,13 +20,23 @@ import {
   subscribeRefusal,
   takerSideOf,
 } from './okx-spot.js';
+import { signOkxRequest } from './okx-spot-trade.js';
 
 class FakeHttp implements HttpPort {
   readonly requests: string[] = [];
-  constructor(private readonly responder: (url: string) => HttpResponse | Promise<HttpResponse>) {}
-  async get(url: string): Promise<HttpResponse> {
+  readonly calls: Array<{ method: 'GET' | 'POST'; url: string; init?: HttpRequestInit }> = [];
+  constructor(
+    private readonly responder: (url: string, method?: 'GET' | 'POST', init?: HttpRequestInit) => HttpResponse | Promise<HttpResponse>,
+  ) {}
+  async get(url: string, init?: HttpRequestInit): Promise<HttpResponse> {
     this.requests.push(url);
-    return this.responder(url);
+    this.calls.push({ method: 'GET', url, init });
+    return this.responder(url, 'GET', init);
+  }
+  async post(url: string, init?: HttpRequestInit): Promise<HttpResponse> {
+    this.requests.push(url);
+    this.calls.push({ method: 'POST', url, init });
+    return this.responder(url, 'POST', init);
   }
 }
 
@@ -420,7 +435,7 @@ describe('okx-spot — public market data (third venue)', () => {
     expect('balances' in md).toBe(false);
   });
 
-  it('OkxSpotTrade / OkxSpotAccount throw not_ready, never silent success', async () => {
+  it('OkxSpotAccount throws not_ready with keys; missing trade keys stay VenueCredentialsMissingError', async () => {
     const keys = { venueId: 'okx-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
     const order = {
       symbol: 'BTC/USDT',
@@ -430,24 +445,183 @@ describe('okx-spot — public market data (third venue)', () => {
       price: 1n,
       clientOrderId: 'abc',
     };
-    const trade = new OkxSpotTrade(keys);
+    const trade = new OkxSpotTrade();
     const account = new OkxSpotAccount(keys);
 
-    const expectNotReady = async (run: () => Promise<unknown>) => {
-      try {
-        await run();
-        expect.unreachable('should have thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(VenueUnavailableError);
-        expect((error as VenueUnavailableError).reason).toBe('not_ready');
-        expect((error as VenueUnavailableError).venueId).toBe('okx-spot');
-      }
-    };
+    await expect(trade.placeOrder(order)).rejects.toThrow(VenueCredentialsMissingError);
+    await expect(trade.cancelOrder('BTC/USDT', 'abc')).rejects.toThrow(VenueCredentialsMissingError);
+    await expect(trade.fetchOrder('BTC/USDT', 'abc')).rejects.toThrow(VenueCredentialsMissingError);
+    await expect(trade.openOrders()).rejects.toThrow(VenueCredentialsMissingError);
 
-    await expectNotReady(() => trade.placeOrder(order));
-    await expectNotReady(() => trade.cancelOrder('BTC/USDT', 'abc'));
-    await expectNotReady(() => trade.fetchOrder('BTC/USDT', 'abc'));
-    await expectNotReady(() => trade.openOrders());
-    await expectNotReady(() => account.balances());
+    try {
+      await account.balances();
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('not_ready');
+      expect((error as VenueUnavailableError).venueId).toBe('okx-spot');
+    }
+  });
+});
+
+const KEYS: VenueCredentials = {
+  venueId: 'okx-spot',
+  apiKey: 'okx-key',
+  apiSecret: 'okx-secret',
+  passphrase: 'okx-pass',
+  scopes: ['read', 'trade'],
+};
+
+const PLACE = {
+  symbol: 'BTC/USDT',
+  side: 'buy' as const,
+  type: 'limit' as const,
+  amount: parseAmount('1'),
+  price: parseAmount('30000'),
+  clientOrderId: 'abc',
+};
+
+const CLOCK = () => Date.parse('2026-08-17T00:00:00.000Z');
+
+function okxOrder(state: string, extra: Record<string, unknown> = {}) {
+  return {
+    instId: 'BTC-USDT',
+    ordId: '1',
+    clOrdId: 'abc',
+    px: '30000',
+    sz: '1',
+    accFillSz: '0',
+    avgPx: '0',
+    state,
+    side: 'buy',
+    ordType: 'limit',
+    cTime: '1700000000000',
+    uTime: '1700000000000',
+    ...extra,
+  };
+}
+
+function ack(ordId = '1') {
+  return { code: '0', msg: '', data: [{ clOrdId: 'abc', ordId, sCode: '0', sMsg: '' }] };
+}
+
+describe('okx-spot — signed trade (FakeHttp, no live network)', () => {
+  it('refuses keys without a passphrase after requireCredentials', async () => {
+    const noPass = { venueId: 'okx-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const http = new FakeHttp(() => json(200, ack()));
+    const trade = new OkxSpotTrade(noPass, { http, clock: CLOCK });
+    await expect(trade.placeOrder(PLACE)).rejects.toMatchObject({
+      reason: 'not_ready',
+      message: expect.stringMatching(/passphrase required/),
+    });
+    expect(http.calls).toHaveLength(0);
+  });
+
+  it('placeOrder POSTs BTC-USDT with OK-ACCESS-SIGN and maps live → open via fetch', async () => {
+    const http = new FakeHttp((url, method) => {
+      if (method === 'POST') return json(200, ack());
+      expect(url).toContain('/api/v5/trade/order?instId=BTC-USDT&clOrdId=abc');
+      return json(200, { code: '0', msg: '', data: [okxOrder('live')] });
+    });
+    const trade = new OkxSpotTrade(KEYS, { http, restBase: 'https://www.okx.com', clock: CLOCK });
+    const placed = await trade.placeOrder(PLACE);
+    expect(placed.status).toBe('open');
+    expect(placed.venueOrderId).toBe('1');
+    expect(placed.clientOrderId).toBe('abc');
+    expect(formatAmount(placed.amount)).toBe('1');
+    expect(formatAmount(placed.remaining)).toBe('1');
+    expect(http.calls[0]!.method).toBe('POST');
+    expect(http.calls[0]!.url).toBe('https://www.okx.com/api/v5/trade/order');
+    expect(http.calls[0]!.init?.jsonBody).toMatchObject({
+      instId: 'BTC-USDT',
+      tdMode: 'cash',
+      clOrdId: 'abc',
+      side: 'buy',
+      ordType: 'limit',
+      sz: '1',
+      px: '30000',
+    });
+    const headers = http.calls[0]!.init?.headers ?? {};
+    const timestamp = '2026-08-17T00:00:00.000Z';
+    const body = JSON.stringify(http.calls[0]!.init?.jsonBody);
+    expect(headers['OK-ACCESS-KEY']).toBe('okx-key');
+    expect(headers['OK-ACCESS-PASSPHRASE']).toBe('okx-pass');
+    expect(headers['OK-ACCESS-TIMESTAMP']).toBe(timestamp);
+    expect(headers['OK-ACCESS-SIGN']).toBe(signOkxRequest('okx-secret', timestamp, 'POST', '/api/v5/trade/order', body));
+    expect(http.calls[1]!.method).toBe('GET');
+    expect(http.calls[1]!.init?.headers?.['OK-ACCESS-SIGN']).toBeTruthy();
+  });
+
+  it('code !== "0" throws and never returns a rejected fill', async () => {
+    const http = new FakeHttp(() => json(200, { code: '51000', msg: 'Account error', data: [] }));
+    const trade = new OkxSpotTrade(KEYS, { http, clock: CLOCK });
+    await expect(trade.placeOrder(PLACE)).rejects.toBeInstanceOf(VenueUnavailableError);
+    await expect(trade.placeOrder(PLACE)).rejects.toMatchObject({
+      reason: 'not_ready',
+      message: expect.stringMatching(/51000/),
+    });
+  });
+
+  it('maps body code 50011 to rate_limited', async () => {
+    const http = new FakeHttp(() => json(200, { code: '50011', msg: 'Rate limit reached', data: [] }));
+    const trade = new OkxSpotTrade(KEYS, { http, clock: CLOCK });
+    await expect(trade.fetchOrder('BTC/USDT', 'abc')).rejects.toMatchObject({
+      reason: 'rate_limited',
+      message: expect.stringMatching(/50011/),
+    });
+  });
+
+  it('maps known states and throws malformed on unknown', async () => {
+    const http = new FakeHttp((_url, method) => {
+      if (method === 'POST') return json(200, ack());
+      return json(200, { code: '0', msg: '', data: [okxOrder('filled', { accFillSz: '1', avgPx: '30000' })] });
+    });
+    const filled = await new OkxSpotTrade(KEYS, { http, clock: CLOCK }).fetchOrder('BTC/USDT', 'abc');
+    expect(filled.status).toBe('filled');
+    expect(formatAmount(filled.filled)).toBe('1');
+    expect(formatAmount(filled.remaining)).toBe('0');
+    expect(formatAmount(filled.averagePrice!)).toBe('30000');
+
+    const partial = new FakeHttp(() => json(200, { code: '0', msg: '', data: [okxOrder('partially_filled', { accFillSz: '0.4' })] }));
+    expect((await new OkxSpotTrade(KEYS, { http: partial, clock: CLOCK }).fetchOrder('BTC/USDT', 'abc')).status).toBe('partially_filled');
+
+    const canceled = new FakeHttp((_url, method) => {
+      if (method === 'POST') return json(200, ack());
+      return json(200, { code: '0', msg: '', data: [okxOrder('canceled')] });
+    });
+    const cancelled = await new OkxSpotTrade(KEYS, { http: canceled, clock: CLOCK }).cancelOrder('BTC/USDT', 'abc');
+    expect(cancelled.status).toBe('canceled');
+    expect(canceled.calls[0]!.url).toContain('/api/v5/trade/cancel-order');
+
+    const unknown = new FakeHttp(() => json(200, { code: '0', msg: '', data: [okxOrder('mmp_canceled')] }));
+    await expect(new OkxSpotTrade(KEYS, { http: unknown, clock: CLOCK }).fetchOrder('BTC/USDT', 'abc')).rejects.toMatchObject({
+      reason: 'malformed',
+    });
+  });
+
+  it('openOrders GETs orders-pending and maps live rows', async () => {
+    const http = new FakeHttp(() =>
+      json(200, { code: '0', msg: '', data: [okxOrder('live'), okxOrder('live', { clOrdId: 'def', ordId: '2' })] }),
+    );
+    const trade = new OkxSpotTrade(KEYS, { http, clock: CLOCK });
+    const open = await trade.openOrders('BTC/USDT');
+    expect(open).toHaveLength(2);
+    expect(open[0]!.status).toBe('open');
+    expect(http.calls[0]!.method).toBe('GET');
+    expect(http.calls[0]!.url).toContain('/api/v5/trade/orders-pending?instType=SPOT&instId=BTC-USDT');
+    expect(http.calls[0]!.init?.headers?.['OK-ACCESS-SIGN']).toBeTruthy();
+  });
+
+  it('refuses when POST is not wired', async () => {
+    const getOnly: HttpPort = {
+      async get() {
+        return json(200, ack());
+      },
+    };
+    const trade = new OkxSpotTrade(KEYS, { http: getOnly, clock: CLOCK });
+    await expect(trade.placeOrder(PLACE)).rejects.toMatchObject({
+      reason: 'not_ready',
+      message: expect.stringMatching(/POST/),
+    });
   });
 });
