@@ -441,7 +441,8 @@
       "blocks": ["authorship attribution"],
       "primaryDoc": "docs/ops/OWNER-GITHUB-CONFIG.md",
       "answerShape": "machine_account_or_accept",
-      "priority": 5
+      "priority": 5,
+      "notes": "2026-08-15 decision frame (not a seal): recommend Option B — accept authorship-is-not-evidence. Option A (swarm machine account) costs admin-created user, PAT split, false confidence; does not restore person attribution. Denon already labelled G5 structural. Agents must not create GitHub users or silently pick. Stays open until Denon seals."
     }
   ],
   "answerFirst": ["CLASS-X-WALLET-SECRETS", "D26-P0-15", "D26-P0-04"]
