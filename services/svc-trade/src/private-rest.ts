@@ -3,7 +3,17 @@ import { requireScope, type Principal } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext, type Context, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema, type CreateOrderRequest } from '@intafaced/exchange-contract';
-import { ZERO, add, formatAmount, mul, parseAmount, type AccountKind, type Amount, type Balance } from '@intafaced/ledger-client';
+import {
+  ZERO,
+  add,
+  formatAmount,
+  mul,
+  parseAmount,
+  MoneyError,
+  type AccountKind,
+  type Amount,
+  type Balance,
+} from '@intafaced/ledger-client';
 import {
   UNAUTHENTICATED,
   badRequest,
@@ -127,6 +137,11 @@ export interface PrivateRestDeps {
    * margin refuse without writing.
    */
   setLeverage(principal: Principal, input: { symbol: string; leverage: string; positionId?: string }): Promise<Position>;
+  /**
+   * Isolated extra collateral via futuresMarginAdd. Does not change leverage or
+   * margin mode. Amount is a decimal string; JSON numbers refused.
+   */
+  addIsolatedMargin(principal: Principal, input: { symbol: string; amount: string; positionId?: string }): Promise<Position>;
   /**
    * Open delivered margin call for a position owned by the principal.
    * Null → 404 (no call, or not theirs). Never invents a call.
@@ -983,6 +998,54 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const positionId = positionIdRaw.trim() || undefined;
 
       const pos = await deps.setLeverage(principal, { symbol, leverage: leverageRaw, positionId });
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.post('/api/v1/positions/margin', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const supplied = suppliedPriceFields(body);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
+      }
+
+      const symbol = typeof body.symbol === 'string' ? body.symbol : '';
+      if (!symbol) {
+        return reply.code(400).send({
+          ...badRequest('symbol is required', 'trade.bad_request').body,
+        });
+      }
+      if (typeof body.amount !== 'string') {
+        return reply.code(400).send({
+          ...badRequest('amount is required as a decimal string — JSON numbers are not money', 'trade.bad_request').body,
+        });
+      }
+      try {
+        parseAmount(body.amount);
+      } catch (err) {
+        const message = err instanceof MoneyError ? err.message : 'malformed amount';
+        return reply.code(400).send({
+          ...badRequest(message, 'trade.bad_request').body,
+        });
+      }
+      const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
+      const positionId = positionIdRaw.trim() || undefined;
+
+      const pos = await deps.addIsolatedMargin(principal, { symbol, amount: body.amount, positionId });
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {
