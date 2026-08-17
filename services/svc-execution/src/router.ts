@@ -6,6 +6,7 @@ import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
+import { observeOmsBalances, type OmsBalancesFn } from './oms-balances.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -71,6 +72,7 @@ export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
 export type ExecutionCancelMap = Readonly<Record<string, OmsCancelFn>>;
 export type ExecutionFetchMap = Readonly<Record<string, OmsFetchFn>>;
 export type ExecutionOpenOrdersMap = Readonly<Record<string, OmsOpenOrdersFn>>;
+export type ExecutionBalancesMap = Readonly<Record<string, OmsBalancesFn>>;
 
 export function createExecutionRouter(
   registry: SealedHouseTenantRegistry,
@@ -78,6 +80,7 @@ export function createExecutionRouter(
   cancelByVenue: ExecutionCancelMap = {},
   fetchByVenue: ExecutionFetchMap = {},
   openOrdersByVenue: ExecutionOpenOrdersMap = {},
+  balancesByVenue: ExecutionBalancesMap = {},
 ) {
   return router({
     execution: router({
@@ -208,6 +211,23 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 kind: input.kind,
                 openOrdersByVenue,
+              });
+            });
+          }),
+
+        balances: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              venueId: z.string().min(1).max(128),
+              kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            return withExecutionSpan('execution.oms.balances', input.venueId, async () => {
+              return observeOmsBalances({
+                venueId: input.venueId,
+                kind: input.kind,
+                balancesByVenue,
               });
             });
           }),
