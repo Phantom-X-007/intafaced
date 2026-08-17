@@ -198,6 +198,11 @@ if (!available) {
     const listed = await positions.listOpen(ALICE);
     expect(listed).toHaveLength(1);
     expect(listed[0]!.id).toBe(pos.id);
+
+    const got = await positions.get(ALICE, pos.id!);
+    expect(got.id).toBe(pos.id);
+    expect(got.entryPrice).toBe('50000');
+    expect(got.markPrice).toBeNull();
   });
 
   it('close releases margin and empties listOpen', async () => {
@@ -214,6 +219,43 @@ if (!available) {
     await positions.close(ALICE, pos.id!);
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('100000');
     expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  it('get returns a closed row instead of inventing it gone', async () => {
+    feed('40000');
+    const pos = await positions.open({
+      clientOpenId: 't-get-closed-position',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'short',
+      size: amt('0.5'),
+      leverage: amt('5'),
+    });
+    await positions.close(ALICE, pos.id!);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+    const got = await positions.get(ALICE, pos.id!);
+    expect(got.id).toBe(pos.id);
+    expect(got.status).toBe('closed');
+  });
+
+  it('get missing or not-theirs is the same 404', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-get-not-theirs',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await expect(positions.get(ALICE, randomUUID())).rejects.toMatchObject({
+      code: 'trade.position_not_found',
+      status: 404,
+    });
+    await expect(positions.get(BOB, pos.id!)).rejects.toMatchObject({
+      code: 'trade.position_not_found',
+      status: 404,
+    });
   });
 
   it('publishes positionUpdated on open and close (F4 private WS feed)', async () => {

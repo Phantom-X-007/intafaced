@@ -338,6 +338,9 @@ describe('private REST — mount boundary + order write path', () => {
       markets: async () => [market],
       userBalances: async () => [],
       listPositions: async () => [],
+      getPosition: async () => {
+        throw new Error('getPosition not stubbed');
+      },
       openPosition: async () => {
         throw new Error('openPosition not stubbed');
       },
@@ -1338,6 +1341,78 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([sample]);
+    await app.close();
+  });
+
+  it('GET /positions/:id: anonymous → 401', async () => {
+    const app = await build();
+    const res = await app.inject({ method: 'GET', url: `/api/v1/positions/${ORDER_ID}` });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe('AuthenticationError');
+    await app.close();
+  });
+
+  it('GET /positions/:id: signed → 200 for an owned row', async () => {
+    const sample = {
+      id: ORDER_ID,
+      symbol: 'BTC/USDT',
+      timestamp: 1,
+      datetime: '1970-01-01T00:00:00.001Z',
+      side: 'long' as const,
+      contracts: '1',
+      contractSize: null,
+      entryPrice: '50000',
+      markPrice: null,
+      notional: '50000',
+      leverage: '10',
+      collateral: '5000',
+      initialMargin: '5000',
+      maintenanceMargin: null,
+      unrealizedPnl: null,
+      realizedPnl: null,
+      liquidationPrice: null,
+      marginMode: 'isolated' as const,
+      percentage: null,
+      status: 'open' as const,
+    };
+    const app = await build(deps({ getPosition: async () => sample }));
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/positions/${ORDER_ID}`,
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(sample);
+    await app.close();
+  });
+
+  it('GET /positions/:id: missing / not theirs → 404 (same answer)', async () => {
+    const app = await build(
+      deps({
+        getPosition: async () => {
+          throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/positions/${ORDER_ID}`,
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('trade.position_not_found');
+    await app.close();
+  });
+
+  it('GET /positions/:id/margin-call still 404s when none is open', async () => {
+    const app = await build();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/positions/${ORDER_ID}/margin-call`,
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toBe('trade.margin_call_not_found');
     await app.close();
   });
 

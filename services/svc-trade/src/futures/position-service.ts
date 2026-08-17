@@ -401,6 +401,26 @@ export class PositionService {
     return rows.map((row) => presentPosition(row));
   }
 
+  /**
+   * One position owned by this user. Closed rows are returned as closed — not
+   * hidden, and not revalued. Missing / not theirs is 404 (same answer).
+   */
+  async get(userId: string, positionId: string): Promise<Position> {
+    const id = positionId.trim();
+    if (!id) {
+      throw new FuturesError('position id is required', 'trade.bad_request', 400);
+    }
+    const [row] = await this.sql<PositionRow[]>`
+      SELECT p.*, m.symbol
+      FROM trade.positions p
+      JOIN trade.markets m ON m.id = p.market_id
+      WHERE p.id = ${id} AND p.user_id = ${userId}
+      LIMIT 1
+    `;
+    if (!row) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+    return presentPosition(row);
+  }
+
   async open(input: OpenPositionInput): Promise<Position> {
     /**
      * NO POT, NO NEW POSITIONS.
