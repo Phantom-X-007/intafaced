@@ -42,8 +42,8 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      */
     BLUEPRINT_ENGINE_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
 
-    /** Never logged. */
-    BLUEPRINT_ENGINE_API_KEY: z.string().optional(),
+    /** Never logged. Empty string fails; unset omits. */
+    BLUEPRINT_ENGINE_API_KEY: z.string().min(1).optional(),
 
     /**
      * `mock` runs the deterministic in-process engine — for local development
@@ -83,8 +83,8 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      */
     BLUEPRINT_CARD_RENDERER_TIMEOUT_MS: z.coerce.number().int().min(500).max(60_000).default(10_000),
 
-    /** Never logged. */
-    BLUEPRINT_CARD_RENDERER_API_KEY: z.string().optional(),
+    /** Never logged. Empty string fails; unset omits. */
+    BLUEPRINT_CARD_RENDERER_API_KEY: z.string().min(1).optional(),
   }),
 );
 
