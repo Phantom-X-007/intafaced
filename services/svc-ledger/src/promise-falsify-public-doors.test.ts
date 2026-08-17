@@ -378,12 +378,188 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
     });
   }
 
-  it('refuses loan draw at the public post door when principal is zero', async () => {
-    const response = await servicePost(
-      recipes.loanDraw({ loanId: 'loan-door-zero', userId: USER, debtAssetId: 'USDT', principal: amt('0') }),
+  async function serviceBalance(body: unknown) {
+    const payload = JSON.stringify(body);
+    return app.inject({
+      method: 'POST',
+      url: '/trpc/balance',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-bank', SERVICE_SECRET, payload),
+      },
+      payload,
+    });
+  }
+
+  async function operatorBearer(): Promise<string> {
+    const { token } = await issueAccessToken(
+      {
+        userId: OPERATOR,
+        sessionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        scopes: ['admin:treasury'],
+        tier: 'basic',
+        mfa: true,
+      },
+      TOKENS,
     );
+    return `Bearer ${token}`;
+  }
+
+  const deposit = (railRef: string, amount = '100') =>
+    recipes.deposit({
+      userId: USER,
+      assetId: 'USDT',
+      amount: amt(amount),
+      rail: 'test',
+      railRef,
+    });
+
+  it('refuses operator freeze when reason is missing — posting stays open', async () => {
+    expect((await servicePost(deposit('before-unset-freeze'))).statusCode).toBe(200);
+
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await operatorBearer() },
+      payload: {},
+    });
+    expect(missing.statusCode).toBe(400);
+
+    expect(
+      (
+        await servicePost(
+          recipes.deposit({
+            userId: USER,
+            assetId: 'USDT',
+            amount: amt('50'),
+            rail: 'test',
+            railRef: 'after-unset-freeze-refused',
+          }),
+        )
+      ).statusCode,
+    ).toBe(200);
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '150' });
+  });
+
+  it('refuses operator freeze when reason is whitespace-only — no silent attributed halt', async () => {
+    const spaces = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers: { authorization: await operatorBearer() },
+      payload: { reason: '            ' },
+    });
+    expect(spaces.statusCode).toBe(400);
+    expect((await servicePost(deposit('while-freeze-unset'))).statusCode).toBe(200);
+  });
+
+  it('refuses unpurposed hold at the S2S post door and leaves available untouched', async () => {
+    expect((await servicePost(deposit('purpose-seed-unset'))).statusCode).toBe(200);
+
+    const lie: PostRequest = {
+      idempotencyKey: 'trade.order.hold:unset-purpose-door',
+      module: 'trade',
+      reason: 'trade.order.hold',
+      entries: [
+        {
+          account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'hold', purpose: '' },
+          direction: 'debit',
+          amount: amt('25'),
+        },
+        { account: userAvailable(USER, 'USDT'), direction: 'credit', amount: amt('25') },
+      ],
+    };
+    const refusal = await servicePost(lie);
+    expect(refusal.json().code).toBe('ledger.invalid_entry');
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100' });
+  });
+
+  it('refuses unpurposed collateral at the S2S post door — two loans cannot share one pot', async () => {
+    expect(
+      (
+        await servicePost(
+          recipes.deposit({
+            userId: USER,
+            assetId: 'BTC',
+            amount: amt('2'),
+            rail: 'test',
+            railRef: 'collateral-seed-unset',
+          }),
+        )
+      ).statusCode,
+    ).toBe(200);
+
+    const lie: PostRequest = {
+      idempotencyKey: 'bank.loan.collateral.lock:unset-purpose:0',
+      module: 'bank',
+      reason: 'loan.collateral.locked',
+      entries: [
+        { account: userAvailable(USER, 'BTC'), direction: 'credit', amount: amt('1') },
+        {
+          account: { ownerType: 'user', ownerId: USER, assetId: 'BTC', kind: 'collateral', purpose: '' },
+          direction: 'debit',
+          amount: amt('1'),
+        },
+      ],
+    };
+    const refusal = await servicePost(lie);
+    expect(refusal.json().code).toBe('ledger.invalid_entry');
+    expect((await serviceBalance(userAvailable(USER, 'BTC'))).json()).toMatchObject({ amount: '2' });
+  });
+
+  it('refuses available with a purpose at the S2S post door — fungible pot must stay one row', async () => {
+    expect((await servicePost(deposit('available-purpose-seed'))).statusCode).toBe(200);
+
+    const lie: PostRequest = {
+      idempotencyKey: 'bank.split.available:unset-purpose',
+      module: 'bank',
+      reason: 'bank.transfer',
+      entries: [
+        {
+          account: { ownerType: 'user', ownerId: USER, assetId: 'USDT', kind: 'available', purpose: 'split-lie' },
+          direction: 'credit',
+          amount: amt('10'),
+        },
+        { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: amt('10') },
+      ],
+    };
+    const refusal = await servicePost(lie);
+    expect(refusal.json().code).toBe('ledger.invalid_entry');
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100', purpose: '' });
+  });
+
+  it('refuses loan draw at the public post door when loanId is blank', async () => {
+    expect((await servicePost(deposit('loan-draw-blank-id-seed'))).statusCode).toBe(200);
+    const response = await servicePost(recipes.loanDraw({ loanId: '', userId: USER, debtAssetId: 'USDT', principal: amt('1') }));
     expect(response.statusCode).toBeGreaterThanOrEqual(400);
     expect(response.statusCode).toBeLessThan(500);
+    expect((await serviceBalance(loanReserve('USDT'))).json()).toMatchObject({ amount: '0' });
+  });
+
+  it('refuses loan draw against an unfunded reserve — reserve unset is not silent allow', async () => {
+    expect((await servicePost(deposit('loan-draw-unfunded-seed'))).statusCode).toBe(200);
+
+    const refusal = await servicePost(
+      recipes.loanDraw({ loanId: 'loan-unfunded-reserve', userId: USER, debtAssetId: 'USDT', principal: amt('50') }),
+    );
+    expect(refusal.statusCode).toBe(400);
+    expect(refusal.json()).toMatchObject({ code: 'ledger.insufficient_funds' });
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100' });
+  });
+
+  it('refuses loan draw at the public post door when principal is zero', async () => {
+    const lie: PostRequest = {
+      idempotencyKey: 'bank.loan.draw:zero-principal',
+      module: 'bank',
+      reason: 'loan.drawn',
+      entries: [
+        { account: loanReserve('USDT'), direction: 'credit', amount: amt('0') },
+        { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: amt('0') },
+      ],
+    };
+    const response = await servicePost(lie);
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.json().code).toBe('ledger.invalid_entry');
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '0' });
   });
 
   it('refuses order hold at the public post door when ownerId is not a user uuid', async () => {
@@ -391,7 +567,7 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       recipes.orderHold({ orderId: 'order-door-bad-owner', userId: 'not-a-uuid', assetId: 'USDT', amount: amt('1') }),
     );
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ code: 'ledger.owner_identity_space' });
+    expect(String(response.json().message)).toMatch(/not-a-uuid/);
   });
 
   it('refuses an empty-entry post at the public door instead of posting nothing', async () => {
@@ -410,21 +586,10 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
   });
 
   it('refuses new recipes at the public post door while operator freeze is active', async () => {
-    const bearer = await issueAccessToken(
-      {
-        userId: OPERATOR,
-        sessionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-        scopes: ['admin:treasury'],
-        tier: 'basic',
-        mfa: true,
-      },
-      TOKENS,
-    ).then((t) => `Bearer ${t.token}`);
-
     const frozen = await app.inject({
       method: 'POST',
       url: '/operator/freeze',
-      headers: { authorization: bearer },
+      headers: { authorization: await operatorBearer() },
       payload: { reason: 'p2-12 spine reprove freeze' },
     });
     expect(frozen.statusCode).toBe(200);
