@@ -5,14 +5,17 @@
  * decision and never a ledger input (Doctrine §0.6). Missing injection /
  * throw is observe_failed, not an invented listing. Empty array stays
  * empty (no listings is not a fake BTC/USDT). Internal venues refused.
+ * Optional type forwards spot/perpetual/…; omitted still observes every
+ * type. Inactive listings stay inactive.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
-import type { VenueMarket } from '@intafaced/venue-contracts';
+import type { VenueInstrumentType, VenueMarket } from '@intafaced/venue-contracts';
 
-export type OmsMarketsFn = () => Promise<readonly VenueMarket[]>;
+export type OmsMarketsFn = (type?: VenueInstrumentType) => Promise<readonly VenueMarket[]>;
 
 export type OmsMarketsInput = {
   readonly venueId: string;
+  readonly type?: VenueInstrumentType;
   readonly kind?: VenueKind;
   readonly marketsByVenue?: Readonly<Record<string, OmsMarketsFn>>;
 };
@@ -48,7 +51,7 @@ export async function observeOmsMarkets(input: OmsMarketsInput): Promise<OmsMark
   }
 
   try {
-    return { ok: true, markets: await markets() };
+    return { ok: true, markets: await markets(input.type) };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
   }

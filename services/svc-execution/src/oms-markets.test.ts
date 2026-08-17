@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
-import type { VenueMarket } from '@intafaced/venue-contracts';
+import type { VenueInstrumentType, VenueMarket } from '@intafaced/venue-contracts';
 import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { createExecutionRouter } from './router.js';
 
@@ -54,9 +54,11 @@ function listed(over: Partial<VenueMarket> = {}): VenueMarket {
 
 class FakeMarkets {
   calls = 0;
+  readonly types: (VenueInstrumentType | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async () => {
+  fn: OmsMarketsFn = async (type) => {
     this.calls += 1;
+    this.types.push(type);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -73,6 +75,20 @@ describe('observeOmsMarkets', () => {
     if (!result.ok) return;
     expect(result.markets).toEqual([]);
     expect(street.calls).toBe(1);
+    expect(street.types).toEqual([undefined]);
+  });
+
+  it('passes an optional type through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ type: 'perpetual', symbol: 'BTC/USDT:USDT', venueSymbol: 'BTCUSDT' })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      type: 'perpetual',
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.types).toEqual(['perpetual']);
+    if (!result.ok) return;
+    expect(result.markets[0]?.type).toBe('perpetual');
   });
 
   it('passes through inactive listings — halted is not rewritten to active', async () => {
@@ -145,10 +161,10 @@ describe('execution.oms.markets tRPC', () => {
       {},
       { street: street.fn },
     ).createCaller(signed());
-    const out = await caller.execution.oms.markets({ venueId: 'street' });
+    const out = await caller.execution.oms.markets({ venueId: 'street', type: 'spot' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.markets[0]?.symbol).toBe('ETH/USDT');
-    expect(street.calls).toBe(1);
+    expect(street.types).toEqual(['spot']);
   });
 });
