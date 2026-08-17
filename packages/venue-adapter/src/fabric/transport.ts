@@ -34,8 +34,16 @@ export interface HttpResponse {
   header(name: string): string | null;
 }
 
+export interface HttpRequestInit {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly signal?: AbortSignal;
+  readonly jsonBody?: unknown;
+}
+
 export interface HttpPort {
-  get(url: string, signal?: AbortSignal): Promise<HttpResponse>;
+  get(url: string, init?: HttpRequestInit): Promise<HttpResponse>;
+  post?(url: string, init?: HttpRequestInit): Promise<HttpResponse>;
+  delete?(url: string, init?: HttpRequestInit): Promise<HttpResponse>;
 }
 
 export interface StreamHandle {
@@ -141,24 +149,34 @@ export class AsyncFrameQueue<T> {
 
 /** The real HTTP port. Uses the platform `fetch`; parses JSON, never throws on a non-2xx. */
 export function fetchHttpPort(): HttpPort {
+  async function send(method: string, url: string, init?: HttpRequestInit): Promise<HttpResponse> {
+    // A non-2xx is DATA here, not an exception. 429 and 418 carry the venue's
+    // own instruction about when to come back, and an adapter that let them
+    // throw would lose it — then keep asking, and get banned.
+    const headers: Record<string, string> = init?.headers ? { ...init.headers } : {};
+    let body: string | undefined;
+    if (init?.jsonBody !== undefined) {
+      headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+      body = JSON.stringify(init.jsonBody);
+    }
+    const response = await fetch(url, { method, headers, body, signal: init?.signal });
+    let parsed: unknown = null;
+    try {
+      parsed = await response.json();
+    } catch {
+      parsed = null;
+    }
+    return {
+      status: response.status,
+      body: parsed,
+      header: (name) => response.headers.get(name),
+    };
+  }
+
   return {
-    async get(url, signal) {
-      // A non-2xx is DATA here, not an exception. 429 and 418 carry the venue's
-      // own instruction about when to come back, and an adapter that let them
-      // throw would lose it — then keep asking, and get banned.
-      const response = await fetch(url, signal ? { signal } : {});
-      let body: unknown = null;
-      try {
-        body = await response.json();
-      } catch {
-        body = null;
-      }
-      return {
-        status: response.status,
-        body,
-        header: (name: string) => response.headers.get(name),
-      };
-    },
+    get: (url, init) => send('GET', url, init),
+    post: (url, init) => send('POST', url, init),
+    delete: (url, init) => send('DELETE', url, init),
   };
 }
 
