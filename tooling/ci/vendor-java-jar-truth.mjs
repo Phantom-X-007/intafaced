@@ -13,18 +13,22 @@
  *
  * What this gate proves (and what it does not):
  *   · Proves Grade D booby-trap shapes are absent from non-test Java.
- *   · Proves the money-scan allowlist carries zero Grade D rows.
+ *   · Proves the money-scan allowlist Grade D band contains zero object rows.
+ *   · Proves gitignored compose `target/*.jar` are not the scan object
+ *     (walk is `.java` only and skips `target/`).
  *   · Proves the rebuild script exists, parses the same compose jar set, and
  *     is wired in package.json.
  *   · Proves any PRESENT compose jar is not older than its module's scanned
  *     sources (stale jar = lying posture).
  *   · Does NOT claim a JVM boot, does NOT claim wallet_rpc safety, does NOT
  *     treat an absent jar as "safe" — absence is the honest unverified state.
+ *   · Does NOT claim "the Java book is closed."
  *
  * Exit 0 = Grade D empty + jar truth posture honest + rebuild path real.
  * Exit 1 = regression or lying claim surface.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -35,6 +39,10 @@ const FRAMEWORK = join(ROOT, 'vendor', 'upstream-exchange', '00_framework');
 const MONEY_SCAN = join(ROOT, 'tooling', 'ci', 'vendor-java-money-scan.mjs');
 const REBUILD = join(ROOT, 'tooling', 'scripts', 'vendor-java-rebuild.mjs');
 const PACKAGE_JSON = join(ROOT, 'package.json');
+const HONESTY = join(ROOT, 'docs', 'JAVA-GRADE-D-JAR-TRUTH.md');
+const VENDOR_GITIGNORE = join(ROOT, 'vendor', '.gitignore');
+/** Committed classpath jars (not compose boot artifacts). Measured 2026-08-15. */
+const TRACKED_JAR_RESIDUAL = 32;
 
 if (!statSync(VENDOR, { throwIfNoEntry: false })?.isDirectory()) {
   console.error('✖ vendor-java-jar-truth: vendor/ tree missing — cannot prove Grade D empty or jar posture');
@@ -117,10 +125,25 @@ if (!existsSync(MONEY_SCAN)) {
   if (!/Grade D:\s*EMPTY/i.test(moneySrc)) {
     failures.push('vendor-java-money-scan.mjs lost the "Grade D: EMPTY" allowlist band heading');
   }
+  // Structural band: objects between the Grade D heading and the next heading.
+  const band = moneySrc.match(/\/\/ ── Grade D:[^\n]*\n([\s\S]*?)(?=\n  \/\/ ── )/);
+  if (!band) {
+    failures.push('vendor-java-money-scan.mjs Grade D allowlist band unparseable');
+  } else {
+    const sites = [...band[1].matchAll(/\{\s*\n\s*module:\s*'([^']+)'\s*,\s*\n\s*file:\s*'([^']+)'/g)].map((m) => `${m[1]}:${m[2]}`);
+    if (sites.length > 0) {
+      failures.push(`Grade D allowlist is not empty (${sites.length}): ${sites.join(', ')}`);
+    } else {
+      notes.push('Grade D allowlist band empty (0 sites)');
+    }
+  }
   // Any allowlist reason that still says Grade D is a new ungated mint row.
   const gradeDRows = [...moneySrc.matchAll(/reason:\s*['`]([^'`]*Grade D[^'`]*)['`]/gi)];
   if (gradeDRows.length > 0) {
     for (const m of gradeDRows) failures.push(`money-scan allowlist still carries Grade D row: ${m[1].slice(0, 120)}`);
+  }
+  if (!/if \(name === 'node_modules' \|\| name === 'target'/.test(moneySrc) || !/name\.endsWith\('\.java'\)/.test(moneySrc)) {
+    failures.push('vendor-java-money-scan walk must skip target/ and only open .java — otherwise gitignored jars could be the scan object');
   }
   // Forbidden overclaim — source scan must not market itself as runtime closure.
   const forbiddenClaims = [
@@ -139,6 +162,45 @@ if (!existsSync(MONEY_SCAN)) {
       'vendor-java-money-scan.mjs must state SOURCE ONLY / not jar-runtime proof (ADR: no safety claim from source scan alone)',
     );
   }
+}
+
+// ── 2b. Gitignored compose jars ≠ scanned source ───────────────────────────
+if (!existsSync(VENDOR_GITIGNORE)) {
+  failures.push('vendor/.gitignore missing — cannot prove compose target jars are gitignored');
+} else if (!/\*\*\/target\//.test(readFileSync(VENDOR_GITIGNORE, 'utf8'))) {
+  failures.push('vendor/.gitignore must ignore **/target/ so compose boot jars are not tracked source');
+}
+
+if (!existsSync(HONESTY)) {
+  failures.push('docs/JAVA-GRADE-D-JAR-TRUTH.md missing — Grade D / jar honesty sheet required');
+} else {
+  const sheet = readFileSync(HONESTY, 'utf8');
+  if (/Java book is closed/i.test(sheet) && !/not claim[\s\S]{0,80}Java book is closed/i.test(sheet)) {
+    failures.push('JAVA-GRADE-D-JAR-TRUTH.md must not claim the Java book is closed');
+  }
+  for (const needle of ['Grade D', 'gitignored', 'pnpm vendor-java:rebuild', 'not the scan object', String(TRACKED_JAR_RESIDUAL)]) {
+    if (!sheet.includes(needle)) {
+      failures.push(`JAVA-GRADE-D-JAR-TRUTH.md must name "${needle}"`);
+    }
+  }
+}
+
+let trackedJars = [];
+try {
+  trackedJars = execFileSync('git', ['ls-files', 'vendor/**/*.jar'], { cwd: ROOT, encoding: 'utf8' }).split(/\r?\n/).filter(Boolean);
+} catch (err) {
+  failures.push(`git ls-files vendor/**/*.jar failed: ${err.message}`);
+}
+const trackedTarget = trackedJars.filter((p) => /\/target\/[^/]+\.jar$/i.test(p.replace(/\\/g, '/')));
+if (trackedTarget.length > 0) {
+  failures.push(`compose-style target jars are tracked (must be gitignored, not scan objects): ${trackedTarget.slice(0, 8).join(', ')}`);
+}
+if (trackedJars.length !== TRACKED_JAR_RESIDUAL) {
+  failures.push(
+    `tracked vendor jar residual is ${trackedJars.length}, expected ${TRACKED_JAR_RESIDUAL} — update JAVA-GRADE-D-JAR-TRUTH.md and this pin; do not silently mass-delete`,
+  );
+} else {
+  notes.push(`jar residual ${trackedJars.length} tracked classpath jars (0 compose target/*.jar tracked)`);
 }
 
 // ── 3. Rebuild path must be real ───────────────────────────────────────────
@@ -239,6 +301,6 @@ if (failures.length) {
 }
 
 console.log(
-  `✓ vendor-java-jar-truth — Grade D gone; source scan ≠ runtime safety; rebuild path real` +
+  `✓ vendor-java-jar-truth — Grade D count 0; gitignored jars ≠ scanned source; rebuild path real` +
     (notes.length ? ` · ${notes.join(' · ')}` : ''),
 );
