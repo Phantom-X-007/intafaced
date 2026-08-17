@@ -92,4 +92,17 @@ describe('tradeAdapterOpenOrders', () => {
     expect(await list(undefined, undefined, undefined, 'p')).toEqual([]);
     expect(await list()).toHaveLength(2);
   });
+
+  it('filters by venueOrderId without inventing a row; pending still dropped', async () => {
+    const list = tradeAdapterOpenOrders(
+      adapter([
+        order(),
+        order({ clientOrderId: 'other', venueOrderId: 'v-9' }),
+        order({ clientOrderId: 'p', status: 'pending', venueOrderId: null }),
+      ]),
+    );
+    expect((await list(undefined, undefined, undefined, undefined, 'v-9')).map((o) => o.venueOrderId)).toEqual(['v-9']);
+    expect(await list(undefined, undefined, undefined, undefined, 'missing')).toEqual([]);
+    expect(await list()).toHaveLength(2);
+  });
 });
