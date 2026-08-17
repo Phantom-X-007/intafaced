@@ -154,6 +154,8 @@ The predicted address must be cross-checked against the deployed factory **on ev
 
 ## 6 · Spine crash WIP — one line each
 
+**CURRENT (2026-08-15):** [`ops/SPINE-BRANCH-DISPOSITION-2026-08-15.md`](ops/SPINE-BRANCH-DISPOSITION-2026-08-15.md) — re-derived from `git ls-remote` / `gh` against origin. **Resume count: 0.** Table below is historical (written 2026-07-31).
+
 | branch                                                                                                                                                        | call                                                                                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `feat/multi-asset-instruments`                                                                                                                                | **RESUME** — real work, rebase on tip, see §2                                                                                                                                               |
