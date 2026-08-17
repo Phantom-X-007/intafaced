@@ -24,11 +24,15 @@ export {
 export {
   CMS_PLUGIN_FAMILIES,
   CMS_PLUGIN_SOCKET,
+  SHIPPED_CMS_PLUGIN_FAMILY,
+  UNWIRED_CMS_PLUGIN_FAMILIES,
   cmsPluginsShipped,
+  isCmsPluginShipped,
   PAY_PLUGIN_CMS_UNWIRED,
   refuseAllCmsPlugins,
   refuseCmsPlugin,
   type CmsPluginFamily,
   type CmsPluginRefuse,
+  type UnwiredCmsPluginFamily,
 } from './cms-unwired.js';
 export { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS, type FrozenWebhookVector } from './webhook-vectors.js';

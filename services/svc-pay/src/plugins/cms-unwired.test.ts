@@ -1,8 +1,8 @@
 /**
- * D26-P1-P8 — named §13 CMS refuse + honesty pins.
+ * D26-P1-P8 — Magento/OpenCart stay unwired; WooCommerce is the shipped CMS adapter.
  *
- * Fail if Woo/Magento/OpenCart PHP trees appear, if money amount serialises as
- * a JSON number, or if webhook verify accepts missing/bad HMAC.
+ * Fail if Magento/OpenCart PHP trees appear under svc-pay/src/plugins, if money
+ * amount serialises as a JSON number, or if webhook verify accepts missing/bad HMAC.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
@@ -11,7 +11,10 @@ import { describe, expect, it } from 'vitest';
 import {
   CMS_PLUGIN_FAMILIES,
   CMS_PLUGIN_SOCKET,
+  SHIPPED_CMS_PLUGIN_FAMILY,
+  UNWIRED_CMS_PLUGIN_FAMILIES,
   cmsPluginsShipped,
+  isCmsPluginShipped,
   PAY_PLUGIN_CMS_UNWIRED,
   refuseAllCmsPlugins,
   refuseCmsPlugin,
@@ -32,15 +35,20 @@ function walkFiles(dir: string): string[] {
 }
 
 describe('D26-P1-P8 pay.plugin_cms_unwired', () => {
-  it('exports a named refuse so Woo/Magento/OpenCart cannot be read as shipped', () => {
+  it('ships WooCommerce and refuses Magento/OpenCart', () => {
     expect(PAY_PLUGIN_CMS_UNWIRED).toBe('pay.plugin_cms_unwired');
     expect(CMS_PLUGIN_SOCKET).toBe('socket.pay-plugin-cms-php');
-    expect(cmsPluginsShipped()).toBe(false);
+    expect(cmsPluginsShipped()).toBe(true);
+    expect(SHIPPED_CMS_PLUGIN_FAMILY).toBe('woocommerce');
     expect([...CMS_PLUGIN_FAMILIES]).toEqual(['woocommerce', 'magento', 'opencart']);
+    expect([...UNWIRED_CMS_PLUGIN_FAMILIES]).toEqual(['magento', 'opencart']);
+    expect(isCmsPluginShipped('woocommerce')).toBe(true);
+    expect(isCmsPluginShipped('magento')).toBe(false);
+    expect(isCmsPluginShipped('opencart')).toBe(false);
 
     const all = refuseAllCmsPlugins();
-    expect(all).toHaveLength(3);
-    for (const family of CMS_PLUGIN_FAMILIES) {
+    expect(all).toHaveLength(2);
+    for (const family of UNWIRED_CMS_PLUGIN_FAMILIES) {
       const r = refuseCmsPlugin(family);
       expect(r.status).toBe('refuse');
       expect(r.code).toBe(PAY_PLUGIN_CMS_UNWIRED);
@@ -52,13 +60,13 @@ describe('D26-P1-P8 pay.plugin_cms_unwired', () => {
     }
   });
 
-  it('fails if PHP CMS trees appear under plugins/', () => {
+  it('fails if PHP CMS trees appear under svc-pay/src/plugins', () => {
     const files = walkFiles(here);
     const php = files.filter((f) => extname(f).toLowerCase() === '.php');
     expect(php, 'no PHP plugin trees in svc-pay/src/plugins').toEqual([]);
 
-    // Real PHP integration markers — assembled so this test file does not match itself.
-    const phpMarkers = new RegExp(['woocommerce_api', 'Mage::', 'class ControllerExtensionPayment'].join('|'), 'i');
+    // Magento / OpenCart integration markers — assembled so this test file does not match itself.
+    const phpMarkers = new RegExp(['Mage::', 'class ControllerExtensionPayment'].join('|'), 'i');
     for (const f of files) {
       if (!/\.(ts|js|mjs)$/.test(f) || f.endsWith('.test.ts')) continue;
       const src = readFileSync(f, 'utf8');

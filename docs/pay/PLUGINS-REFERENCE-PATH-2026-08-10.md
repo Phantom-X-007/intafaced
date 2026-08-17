@@ -1,14 +1,12 @@
-# pay.plugins — reference path (not three CMS plugins)
+# pay.plugins — reference path + WooCommerce adapter
 
-**Date:** 2026-08-10 · **Wave:** 13 L02 · **Closed:** D26-P1-P8 2026-08-12 · **Class:** N
+**Date:** 2026-08-10 · **Wave:** 13 L02 · **Closed:** D26-P1-P8 2026-08-12 · **Woo slice:** 2026-08-16 · **Class:** N/M
 
 ## Decision
 
-We do **not** ship WooCommerce / Magento / OpenCart PHP plugins in this monorepo.
+The **shared contract** is the TypeScript reference client plus frozen webhook vectors. We do **not** restamp that client as if it were WooCommerce.
 
-House ruling (Phase B + harvest): _wrong stack; residual craft on our API._
-
-**Product path that ships (D26-P1-P8 Done bar — one real plugin path):**
+**Product paths:**
 
 1. **TypeScript reference client** — `services/svc-pay/src/plugins/reference-client.ts`  
    Builds public API requests with the real contract pins (Bearer key, Idempotency-Key, decimal-string amounts, `/api/pay/v1` paths).
@@ -16,27 +14,24 @@ House ruling (Phase B + harvest): _wrong stack; residual craft on our API._
 3. **Webhook install path** — register endpoint (https only), list endpoints, list deliveries, verify HMAC vectors.
 4. **Frozen webhook signature vectors** — `services/svc-pay/src/plugins/webhook-vectors.ts`  
    HMAC-SHA256 over `timestamp + "." + raw body`; must match `rails/webhook-signature.signPayload` and outbound `X-Intafaced-Signature`.
-5. **Tests that fail when the contract breaks** — `reference-client.test.ts`.
+5. **WooCommerce adapter** — `plugins/woocommerce-intafaced-pay/`  
+   PHP checkout + webhook handler that **consumes** the same pins. Contract tests: `woocommerce-contract.test.ts`.
+6. **Magento / OpenCart** — still §13 (`pay.plugin_cms_unwired`). Not this PR.
 
-Store plugins (Woo/Magento/OpenCart) are **downstream** of this client: they call the same paths, amounts, and webhook verify. First-party PHP CMS packages are a **§13 socket** (see law §13), not a monorepo CI tree.
+Greenfield is the CMS adapter only — not a second pay stack or money book (Phase B `pay.plugins` GF LATE). Phase A leverage: `pay.public-api` + reference-client + webhook-vectors.
 
-## Done bar
+## Done bar (Woo slice)
 
-- One real integration path exists in-repo (TS reference client).
-- Authorize / capture / refund money POSTs require Idempotency-Key.
-- Webhook registration refuses non-https URLs (matches merchant-webhooks refuse path).
-- Webhook vectors verify against the core signer.
-- Amount-as-number and missing Idempotency-Key are refused by the client helpers.
-- No invented PHP tree, no second money book, no invent fees.
+- Woo plugin creates a payment via existing public API (`PAY_PUBLIC_API_BASE` `/api/pay/v1`, Bearer, Idempotency-Key, decimal string amounts).
+- Merchant webhooks verify with the frozen HMAC vectors.
+- Sandbox vs live key mode (`ifc_test_` / `ifc_`).
+- Tests fail if the public contract pins drift.
+- No second money book. No PSP invent.
 
 ## Not this mountain
 
-| Item                         | Why parked                        |
-| ---------------------------- | --------------------------------- |
-| PHP Woo/Magento/OpenCart     | Wrong stack; §13 socket (law §13) |
-| `pay:*` grant path           | Nitro DIRECTION §8                |
-| Live acquirer plugin listing | Class X / partner                 |
-
-## §13 socket (CMS plugins)
-
-Opened on tip for D26-P1-P8: first-party Woo / Magento / OpenCart packages live outside this monorepo's TypeScript CI set. Any future PHP package/repo must pin to this reference client's paths + vector tests as the contract gate. Until then this document + the TS client **are** `pay.plugins` product Done (reference path).
+| Item                         | Why parked                      |
+| ---------------------------- | ------------------------------- |
+| Magento / OpenCart PHP       | §13 `socket.pay-plugin-cms-php` |
+| `pay:*` grant path           | Nitro DIRECTION §8              |
+| Live acquirer plugin listing | Class X / partner               |
