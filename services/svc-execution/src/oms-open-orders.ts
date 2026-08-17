@@ -2,16 +2,18 @@
  * OMS open-orders door — list acknowledged opens on an injected venue fn.
  *
  * Pending rows are dropped, not rewritten to open. Missing injection or throw
- * is list_failed. Internal venues refused.
+ * is list_failed. Internal venues refused. Optional side forwards buy/sell;
+ * omitted still lists both (after dropping pending).
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueOrder } from '@intafaced/venue-contracts';
 
-export type OmsOpenOrdersFn = (symbol?: string) => Promise<VenueOrder[]>;
+export type OmsOpenOrdersFn = (symbol?: string, side?: 'buy' | 'sell') => Promise<VenueOrder[]>;
 
 export type OmsOpenOrdersInput = {
   readonly venueId: string;
   readonly symbol?: string;
+  readonly side?: 'buy' | 'sell';
   readonly kind?: VenueKind;
   readonly openOrdersByVenue?: Readonly<Record<string, OmsOpenOrdersFn>>;
 };
@@ -49,7 +51,7 @@ export async function listOmsOpenOrders(input: OmsOpenOrdersInput): Promise<OmsO
 
   let orders: VenueOrder[];
   try {
-    orders = await list(symbol);
+    orders = await list(symbol, input.side);
   } catch (err) {
     return { ok: false, reason: 'list_failed', detail: listErrorMessage(err) };
   }
