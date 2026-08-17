@@ -60,8 +60,9 @@ class FakeMarkets {
   readonly actives: (boolean | undefined)[] = [];
   readonly settles: (string | undefined)[] = [];
   readonly symbols: (string | undefined)[] = [];
+  readonly venueSymbols: (string | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type, quote, base, active, settle, symbol) => {
+  fn: OmsMarketsFn = async (type, quote, base, active, settle, symbol, venueSymbol) => {
     this.calls += 1;
     this.types.push(type);
     this.quotes.push(quote);
@@ -69,6 +70,7 @@ class FakeMarkets {
     this.actives.push(active);
     this.settles.push(settle);
     this.symbols.push(symbol);
+    this.venueSymbols.push(venueSymbol);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -179,6 +181,19 @@ describe('observeOmsMarkets', () => {
     expect(result.markets[0]?.symbol).toBe('ETH/USDT');
   });
 
+  it('passes an optional venueSymbol through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ symbol: 'ETH/USDT', venueSymbol: 'ETHUSDT', base: 'ETH' })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      venueSymbol: 'ETHUSDT',
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.venueSymbols).toEqual(['ETHUSDT']);
+    if (!result.ok) return;
+    expect(result.markets[0]?.venueSymbol).toBe('ETHUSDT');
+  });
+
   it('refuses internal venues and does not observe', async () => {
     const book = new FakeMarkets([listed()]);
     const result = await observeOmsMarkets({
@@ -245,6 +260,7 @@ describe('execution.oms.markets tRPC', () => {
       active: false,
       settle: 'USDT',
       symbol: 'ETH/USDT',
+      venueSymbol: 'ETHUSDT',
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -255,5 +271,6 @@ describe('execution.oms.markets tRPC', () => {
     expect(street.actives).toEqual([false]);
     expect(street.settles).toEqual(['USDT']);
     expect(street.symbols).toEqual(['ETH/USDT']);
+    expect(street.venueSymbols).toEqual(['ETHUSDT']);
   });
 });
