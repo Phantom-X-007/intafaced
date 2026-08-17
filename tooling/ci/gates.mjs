@@ -229,8 +229,9 @@ export const GATES = [
     doctrine: '§16 / D26-P2-09',
     why:
       'continuous perimeter regression for 01_wallet_rpc — mainnet / sign / width refuse classes must each keep ' +
-      'firing + silent probe halves, and deleting the class register, counters, claim mint, or any class rule ' +
-      'binding must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
+      'firing + silent probe halves, and chain-id / RPC / key-width / disclosed-secret-width axes must fail closed ' +
+      'independently. Deleting the class or axis register, counters, claim mint, a class rule binding, or a named ' +
+      'axis must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
   },
   {
     id: 'vendor-shell',

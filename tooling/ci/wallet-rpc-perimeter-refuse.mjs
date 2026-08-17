@@ -2,7 +2,8 @@
 /**
  * WALLET RPC CONTINUOUS PERIMETER REFUSE SUITE — D26-P2-09.
  *
- * Done bar: mainnet / sign / width refuse classes stay refused; regression suite.
+ * Done bar: mainnet / sign / width classes stay refused; chain-id / RPC /
+ * key-width / disclosed-secret-width fail closed independently.
  *
  * `wallet-rpc-mainnet-scan.mjs` already walks the tree, freezes constants, and
  * runs RULE_PROBES. What this file adds is the question that harness cannot ask
@@ -13,16 +14,19 @@
  *   · If the class register, the class counters, or a class's rule binding are
  *     deleted, does the build go red — or does a green summary keep saying
  *     continuous refuse held?
+ *   · If chain-id / RPC / key-width / disclosed-secret-width lose their named
+ *     fixtures or drop out of the axis register, does the build go red even
+ *     while the parent class still has both halves?
  *
  * Subject-side RULE_PROBES already answer "does M3 still fire on ChainId.NONE".
  * This suite mutates the CHECKER, the same way `wallet-rpc-mainnet-scan.mutation.mjs`
  * does for the probe harness and occurrence drift, scoped to the three perimeter
- * classes the board names.
+ * classes the board names plus the four fail-closed axes.
  *
  * Usage:  pnpm scan:wallet-rpc-perimeter
- * Exit 0 = control scan clean, every class deletion detected, every class still
- *          has both probe halves in source.
- * Exit 1 = a class went unproved, a mutant no longer applies, or control is red.
+ * Exit 0 = control scan clean, every class/axis deletion detected, every class
+ *          still has both probe halves, every axis still has named fixtures.
+ * Exit 1 = a class or axis went unproved, a mutant no longer applies, or control is red.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -79,7 +83,7 @@ const MUTANTS = [
   {
     id: 'perimeter-register-emptied',
     from: 'const PERIMETER_CLASSES = [',
-    to: 'const RULE_PROBES = [',
+    to: 'const PERIMETER_AXES = [',
     replace: 'const PERIMETER_CLASSES = [];\n\n',
     detected: true,
     why: 'emptying the class register must fail — continuous refuse claimed with zero classes is a sentence about nothing',
@@ -117,10 +121,53 @@ const MUTANTS = [
   {
     id: 'class-width-unbound',
     from: "    rules: ['M11', 'M11-known'],",
-    to: '\n];\n\nconst RULE_PROBES = [',
+    to: '\n];\n\nconst PERIMETER_AXES = [',
     replace: "    rules: ['__perimeter_unbound__'],",
     detected: true,
     why: 'width refuse unbound — M11/M11-known no longer counted into the class',
+  },
+  {
+    id: 'axis-register-emptied',
+    from: 'const PERIMETER_AXES = [',
+    to: '/**\n * Which fail-closed axis a probe feeds.',
+    replace: 'const PERIMETER_AXES = [];\n\n',
+    detected: true,
+    why: 'emptying the axis register must fail — a green width class must not stand in for key-width / disclosed-secret-width',
+  },
+  {
+    id: 'axis-chain-id-dropped',
+    from: "  { id: 'chain-id', label: 'chain-id-less EVM signing' },\n",
+    to: "  { id: 'rpc',",
+    detected: true,
+    why: 'dropping chain-id from the axis register must go red even if M3 probes still pass',
+  },
+  {
+    id: 'axis-rpc-dropped',
+    from: "  { id: 'rpc', label: 'hardcoded or defaulted RPC endpoint' },\n",
+    to: "  { id: 'key-width',",
+    detected: true,
+    why: 'dropping rpc from the axis register must go red even if M2 still feeds the mainnet class',
+  },
+  {
+    id: 'axis-key-width-dropped',
+    from: "  { id: 'key-width', label: 'secp256k1 key hex width' },\n",
+    to: "  { id: 'disclosed-secret-width',",
+    detected: true,
+    why: 'dropping key-width must go red — address-width fixtures must not launder the key-width axis',
+  },
+  {
+    id: 'axis-disclosed-dropped',
+    from: "  { id: 'disclosed-secret-width', label: 'disclosed-secret digest width' },\n",
+    to: '];\n\n/**\n * Which fail-closed axis',
+    detected: true,
+    why: 'dropping disclosed-secret-width must go red — other M11 fixtures must not launder the digest-guard axis',
+  },
+  {
+    id: 'axis-disclosed-probes-removed',
+    from: '      \'class P { private static final String DISCLOSED_DIGEST_SHA256 = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f"; }\'',
+    to: "    source: 'class P { String privateKey = \"' + '0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1' + '\"; }'",
+    detected: true,
+    why: 'deleting the disclosed-secret digest fixtures must fail the disclosed-secret-width axis even though other M11 probes remain',
   },
 ];
 
@@ -155,7 +202,50 @@ function assertClassProbeHalvesInSource() {
   }
 }
 
+/**
+ * D26-P2-09 done-bar: chain-id / RPC / key-width / disclosed-secret-width each
+ * still have a named firing fixture and a named silent fixture in the scan.
+ * Class regions can stay green on address/topic halves while these axes vanish.
+ */
+const AXIS_MARKERS = [
+  {
+    id: 'chain-id',
+    fire: 'TransactionEncoder.signMessage(tx, ChainId.NONE, credentials)',
+    silent: 'TransactionEncoder.signMessage(tx, chainId, credentials)',
+  },
+  {
+    id: 'rpc',
+    fire: "source: 'coin.rpc=${ETH_NODE_RPC_URL:https://mainnet.example-provider.io/v3/KEY}',",
+    silent: "source: 'coin.rpc=${ETH_NODE_RPC_URL}',",
+  },
+  {
+    id: 'key-width',
+    fire: "String privateKey = \"' + '0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1'",
+    silent: 'String privateKey = "${WITHDRAW_KEY}"',
+  },
+  {
+    id: 'disclosed-secret-width',
+    fire: 'DISCLOSED_DIGEST_SHA256 = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f"',
+    silent: 'DISCLOSED_DIGEST_SHA256 = "${ECT_GUARD_DIGEST}"',
+  },
+];
+
+function assertAxisMarkersInSource() {
+  const problems = [];
+  for (const a of AXIS_MARKERS) {
+    if (!SOURCE.includes(a.fire)) problems.push(`[${a.id}] firing fixture missing`);
+    if (!SOURCE.includes(a.silent)) problems.push(`[${a.id}] silent fixture missing`);
+  }
+  if (problems.length > 0) {
+    console.error('\n✖ wallet-rpc-perimeter-refuse — a fail-closed axis lost a named fixture:\n');
+    for (const p of problems) console.error(`  · ${p}`);
+    console.error('');
+    process.exit(1);
+  }
+}
+
 assertClassProbeHalvesInSource();
+assertAxisMarkersInSource();
 
 const root = mkdtempSync(join(tmpdir(), 'wallet-rpc-perimeter-refuse-'));
 
@@ -230,6 +320,7 @@ if (survivors.length > 0) {
 if (inapplicable.length > 0 || brokenControl.length > 0 || survivors.length > 0) process.exit(1);
 
 console.log(
-  `✓ wallet-rpc-perimeter-refuse — ${killed}/${scored.length} class/register deletions detected; ` +
-    'mainnet/sign/width each keep fires+silent halves; control scan clean (D26-P2-09)',
+  `✓ wallet-rpc-perimeter-refuse — ${killed}/${scored.length} class/register/axis deletions detected; ` +
+    'mainnet/sign/width each keep fires+silent halves; chain-id/rpc/key-width/disclosed-secret-width ' +
+    'fixtures present; control scan clean (D26-P2-09)',
 );
