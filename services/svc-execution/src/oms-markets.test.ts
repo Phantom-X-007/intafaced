@@ -59,14 +59,16 @@ class FakeMarkets {
   readonly bases: (string | undefined)[] = [];
   readonly actives: (boolean | undefined)[] = [];
   readonly settles: (string | undefined)[] = [];
+  readonly symbols: (string | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type, quote, base, active, settle) => {
+  fn: OmsMarketsFn = async (type, quote, base, active, settle, symbol) => {
     this.calls += 1;
     this.types.push(type);
     this.quotes.push(quote);
     this.bases.push(base);
     this.actives.push(active);
     this.settles.push(settle);
+    this.symbols.push(symbol);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -164,6 +166,19 @@ describe('observeOmsMarkets', () => {
     expect(result.markets[0]?.settle).toBe('USDT');
   });
 
+  it('passes an optional symbol through and does not invent a missing listing', async () => {
+    const street = new FakeMarkets([listed({ symbol: 'ETH/USDT', venueSymbol: 'ETHUSDT', base: 'ETH' })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      symbol: 'ETH/USDT',
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.symbols).toEqual(['ETH/USDT']);
+    if (!result.ok) return;
+    expect(result.markets[0]?.symbol).toBe('ETH/USDT');
+  });
+
   it('refuses internal venues and does not observe', async () => {
     const book = new FakeMarkets([listed()]);
     const result = await observeOmsMarkets({
@@ -229,6 +244,7 @@ describe('execution.oms.markets tRPC', () => {
       base: 'ETH',
       active: false,
       settle: 'USDT',
+      symbol: 'ETH/USDT',
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -238,5 +254,6 @@ describe('execution.oms.markets tRPC', () => {
     expect(street.bases).toEqual(['ETH']);
     expect(street.actives).toEqual([false]);
     expect(street.settles).toEqual(['USDT']);
+    expect(street.symbols).toEqual(['ETH/USDT']);
   });
 });
