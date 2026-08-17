@@ -120,6 +120,8 @@ export class KycDocumentStore implements KycDocumentVault {
   }
 
   async put(input: PutDocumentInput): Promise<StoredDocumentMeta> {
+    // Refuse before any validation write-up — no invented key, no ciphertext.
+    const key = this.requireKey();
     if (!input.contentType || input.contentType.length > 128 || /[\r\n]/.test(input.contentType)) {
       throw new KycDocumentError('Invalid content type', 'kyc_doc.bad_content_type');
     }
@@ -127,7 +129,6 @@ export class KycDocumentStore implements KycDocumentVault {
       throw new KycDocumentError(`Document must be 1..${MAX_BYTES} bytes`, 'kyc_doc.too_large');
     }
     const storedBy = input.storedBy?.trim() ? input.storedBy.trim() : null;
-    const key = this.requireKey();
     const { ciphertext, nonce } = encryptDocument(key, input.bytes);
 
     const rows = await this.sql<
@@ -306,6 +307,8 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
   }
 
   async put(input: PutDocumentInput): Promise<StoredDocumentMeta> {
+    // Refuse before any validation write-up — no invented key, no ciphertext.
+    const key = this.requireKey();
     if (!input.contentType || input.contentType.length > 128 || /[\r\n]/.test(input.contentType)) {
       throw new KycDocumentError('Invalid content type', 'kyc_doc.bad_content_type');
     }
@@ -313,7 +316,6 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
       throw new KycDocumentError(`Document must be 1..${MAX_BYTES} bytes`, 'kyc_doc.too_large');
     }
     const storedBy = input.storedBy?.trim() ? input.storedBy.trim() : null;
-    const key = this.requireKey();
     const { ciphertext, nonce } = encryptDocument(key, input.bytes);
     const id = randomUUID();
     const createdAt = new Date();
