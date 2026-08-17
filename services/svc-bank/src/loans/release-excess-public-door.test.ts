@@ -160,12 +160,7 @@ async function fund(ledger: MemoryLedger, userId: string, assetId: string, value
   );
 }
 
-async function seedOpenLoan(
-  bank: ReturnType<typeof createBankServices>,
-  ledger: MemoryLedger,
-  now: Date = NOW,
-  collateral = '2',
-) {
+async function seedOpenLoan(bank: ReturnType<typeof createBankServices>, ledger: MemoryLedger, now: Date = NOW, collateral = '2') {
   await fund(ledger, PAYER, 'USDT', '100000');
   await bank.loans.fundReserve({
     debtAssetId: 'USDT',
