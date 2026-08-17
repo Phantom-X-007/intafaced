@@ -49,6 +49,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
+ *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
  *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
  *   POST   /api/v1/futures/adl-disclosure/ack scope: trade:write (ack before open)
@@ -108,6 +109,8 @@ export interface PrivateRestDeps {
   userBalances(userId: string): Promise<readonly Balance[]>;
   /** Open futures positions for the principal (empty [] when none). */
   listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
+  /** One owned futures row. Missing / not theirs → 404, never another user's row. */
+  getPosition(principal: Principal, positionId: string): Promise<Position>;
   /**
    * Open a futures position. NO PRICE PARAMETER, on purpose — the entry price is
    * read from the mark port inside the service. See `PRICE_FIELDS` below.
@@ -911,6 +914,29 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       return reply.code(200).send(call);
     } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * One owned futures position. Closed is still a row — 404 only when missing
+   * or not theirs (same answer, no leak). Not a valuation: no invented mark.
+   * Registered after `/positions/:id/margin-call` so that door stays specific.
+   */
+  app.get<{ Params: { id: string } }>('/api/v1/positions/:id', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const pos = await deps.getPosition(principal, req.params.id);
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
       throw err;

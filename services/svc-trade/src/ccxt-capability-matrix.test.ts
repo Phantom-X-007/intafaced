@@ -100,6 +100,9 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     markets: async () => [market],
     userBalances: async () => [],
     listPositions: async () => [],
+    getPosition: async () => {
+      throw new Error('getPosition should not run in this matrix test');
+    },
     openPosition: async () => {
       throw new Error('openPosition should not run when price refused');
     },
@@ -243,6 +246,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(names).toContain('fetchAdlDisclosure');
     expect(names).toContain('ackAdlDisclosure');
     expect(names).toContain('fetchAdlDisclosureEvents');
+    expect(names).toContain('fetchPosition');
     expect(names).toContain('fetchPositionMarginCall');
   });
 });
@@ -318,6 +322,25 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().collateral).toBe('7500');
+    await app.close();
+  });
+
+  it('fetchPosition supported: signed → 200 from the injected service', async () => {
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        getPosition: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', status: 'open' }) as never,
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/pos-1',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().id).toBe('pos-1');
     await app.close();
   });
 

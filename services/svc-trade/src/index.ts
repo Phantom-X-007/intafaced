@@ -593,6 +593,7 @@ registerPrivateRest(app, {
   // Self-only: route always passes principal.userId — never client ownerId.
   userBalances: (userId) => ledger.balances('user', userId),
   listPositions: (principal, symbol) => positions.listOpen(principal.userId, symbol),
+  getPosition: (principal, positionId) => positions.get(principal.userId, positionId),
   openPosition: (principal, input) =>
     positions.open({
       userId: principal.userId,
@@ -691,6 +692,7 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'GET /api/v1/positions/:id',
       'GET /api/v1/positions/:id/margin-call',
       'GET /api/v1/futures/adl-disclosure',
       'POST /api/v1/futures/adl-disclosure/ack',

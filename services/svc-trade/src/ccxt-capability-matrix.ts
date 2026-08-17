@@ -380,6 +380,16 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     notes: 'Isolated excess out via futuresMarginRelease; cannot pull below IM; would-be liq 400; leverage unchanged',
   },
   {
+    name: 'fetchPosition',
+    method: 'GET',
+    path: '/api/v1/positions/:id',
+    auth: 'private',
+    scope: 'trade:read',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'One owned futures row; missing/not theirs 404; closed is still a row — no invented mark',
+  },
+  {
     name: 'fetchPositionMarginCall',
     method: 'GET',
     path: '/api/v1/positions/:id/margin-call',
