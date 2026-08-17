@@ -75,7 +75,7 @@ describe('the enforcement field is answered for every flag', () => {
   it('leaves no flag undeclared', () => {
     for (const flag of FLAG_REGISTRY) {
       expect(flag.enforcement, `${flag.key} has no enforcement declaration`).toBeDefined();
-      expect(['none', 'service-env', 'operator-api']).toContain(flag.enforcement.kind);
+      expect(['none', 'service-env', 'operator-api', 'request-path']).toContain(flag.enforcement.kind);
     }
   });
 
@@ -94,6 +94,17 @@ describe('a declared gate exists in the service that is said to hold it', () => 
    */
   it.each(enforcedFlags().map((f) => [f.key, f.enforcement] as const))('%s', (key, enforcement) => {
     if (enforcement.kind === 'none') throw new Error('unreachable — enforcedFlags() excludes none');
+
+    if (enforcement.kind === 'request-path') {
+      const service = join(SERVICES_DIR, enforcement.service, 'src', 'waitlist', 'waitlist-service.ts');
+      const source = readFileSync(service, 'utf8');
+      expect(source, `${key} claims assertEnabled on ${enforcement.service}`).toContain(`assertEnabled('${key}'`);
+      const envFile = readFileSync(join(SERVICES_DIR, enforcement.service, 'src', 'env.ts'), 'utf8');
+      expect(envFile, `${key} pin ${enforcement.envVar}`).toContain(enforcement.envVar);
+      const router = readFileSync(join(SERVICES_DIR, enforcement.service, 'src', 'router.ts'), 'utf8');
+      expect(router, `${key} surface ${enforcement.surface}`).toContain(enforcement.surface);
+      return;
+    }
 
     const envFile = join(SERVICES_DIR, enforcement.service, 'src', 'env.ts');
     const source = readFileSync(envFile, 'utf8');
@@ -120,10 +131,11 @@ describe('no flag is enforced through this registry', () => {
    * the file that does it — do not delete the check, or the next `NOT_ENFORCED`
    * becomes unfalsifiable again.
    */
-  const RESOLVERS = ['isEnabled', 'resolveAll', 'explainAll', 'FLAG_REGISTRY', 'flagsForModule', 'flagDef'];
+  const RESOLVERS = ['isEnabled', 'resolveAll', 'explainAll', 'FLAG_REGISTRY', 'flagsForModule', 'flagDef', 'assertEnabled'];
 
-  it('no services/*/src file imports a flag resolver from @intafaced/config', { timeout: 20_000 }, () => {
+  it('no services/*/src file imports a flag resolver from @intafaced/config except named request-path gates', { timeout: 20_000 }, () => {
     const offenders: string[] = [];
+    const allowedAssertEnabled = new Set(['waitlist-service.ts']);
 
     for (const file of SERVICE_FILES) {
       const source = readFileSync(file, 'utf8');
@@ -138,7 +150,9 @@ describe('no flag is enforced through this registry', () => {
               ?.trim() ?? '',
         );
         const found = named.filter((n) => RESOLVERS.includes(n));
-        if (found.length > 0) offenders.push(`${file.slice(REPO_ROOT.length)} imports ${found.join(', ')}`);
+        const allowed =
+          found.every((n) => n === 'assertEnabled') && allowedAssertEnabled.has(file.replace(/\\/g, '/').split('/').pop() ?? '');
+        if (found.length > 0 && !allowed) offenders.push(`${file.slice(REPO_ROOT.length)} imports ${found.join(', ')}`);
       }
     }
 
