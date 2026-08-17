@@ -23,7 +23,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
@@ -68,209 +68,201 @@ describe('originate pins marksFor before the ledger posts', () => {
   });
 });
 
-const available = await postgresAvailable(DB_URL);
+const db: TestDatabase = await createTestDatabase({ service: 'bank', url: DB_URL, migrations: MIGRATIONS });
+const sql = db.sql;
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
 
-if (!available) {
-  describe.skip('originate a loan (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+afterAll(async () => {
+  await db.drop();
+}, 30_000);
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: BORROWER,
+    userId: BORROWER,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['bank:read', 'bank:write'],
+    tier: 'full',
+    mfa: true,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+function signedHeaders(p: Principal = principal()): Record<string, string> {
+  const raw = encodePrincipal(p);
+  return {
+    'x-intafaced-principal': raw,
+    'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+    'x-intafaced-region': 'DE',
+    'content-type': 'application/json',
+  };
+}
+
+async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
+  const router = createBankRouter(bank);
+  const app = Fastify({ logger: false });
+  await app.register(fastifyTRPCPlugin, {
+    prefix: '/trpc',
+    trpcOptions: {
+      router,
+      createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: DB_URL, migrations: MIGRATIONS });
-  const sql = db.sql;
-  const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
+  await app.ready();
+  return app;
+}
 
-  afterAll(async () => {
-    await db.drop();
-  }, 30_000);
+async function post(
+  app: FastifyInstance,
+  path: string,
+  input: Record<string, unknown>,
+  headers: Record<string, string> = signedHeaders(),
+): Promise<{ statusCode: number; body: WireBody }> {
+  const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
+  return { statusCode: res.statusCode, body: res.json() as WireBody };
+}
 
-  function principal(overrides: Partial<Principal> = {}): Principal {
-    return {
-      sub: BORROWER,
-      userId: BORROWER,
-      sid: '22222222-2222-4222-8222-222222222222',
-      scopes: ['bank:read', 'bank:write'],
-      tier: 'full',
-      mfa: true,
-      expiresAt: new Date(Date.now() + 60_000),
-      ...overrides,
-    } as Principal;
+function procedureData(body: WireBody): unknown {
+  const data = body.result?.data;
+  if (data && typeof data === 'object' && data !== null && 'json' in data) {
+    return (data as { json: unknown }).json;
   }
+  return data;
+}
 
-  function signedHeaders(p: Principal = principal()): Record<string, string> {
-    const raw = encodePrincipal(p);
-    return {
-      'x-intafaced-principal': raw,
-      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
-      'x-intafaced-region': 'DE',
-      'content-type': 'application/json',
-    };
-  }
+async function fund(ledger: MemoryLedger, userId: string, assetId: string, value: string) {
+  await ledger.post(
+    recipes.deposit({
+      userId,
+      assetId,
+      amount: amt(value),
+      rail: 'test',
+      railRef: `${userId}:${assetId}:${randomUUID()}`,
+    }),
+  );
+}
 
-  async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
-    const router = createBankRouter(bank);
-    const app = Fastify({ logger: false });
-    await app.register(fastifyTRPCPlugin, {
-      prefix: '/trpc',
-      trpcOptions: {
-        router,
-        createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
-      } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
-    });
-    await app.ready();
-    return app;
-  }
-
-  async function post(
-    app: FastifyInstance,
-    path: string,
-    input: Record<string, unknown>,
-    headers: Record<string, string> = signedHeaders(),
-  ): Promise<{ statusCode: number; body: WireBody }> {
-    const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
-    return { statusCode: res.statusCode, body: res.json() as WireBody };
-  }
-
-  function procedureData(body: WireBody): unknown {
-    const data = body.result?.data;
-    if (data && typeof data === 'object' && data !== null && 'json' in data) {
-      return (data as { json: unknown }).json;
-    }
-    return data;
-  }
-
-  async function fund(ledger: MemoryLedger, userId: string, assetId: string, value: string) {
-    await ledger.post(
-      recipes.deposit({
-        userId,
-        assetId,
-        amount: amt(value),
-        rail: 'test',
-        railRef: `${userId}:${assetId}:${randomUUID()}`,
-      }),
-    );
-  }
-
-  async function seedProduct(bank: ReturnType<typeof createBankServices>, ledger: MemoryLedger) {
-    await fund(ledger, PAYER, 'USDT', '100000');
-    await bank.loans.fundReserve({
-      debtAssetId: 'USDT',
-      fundingId: `f:${randomUUID()}`,
-      amount: amt('100000'),
-      from: userAvailable(PAYER, 'USDT'),
-    });
-    await fund(ledger, BORROWER, 'BTC', '1');
-    return bank.loans.createProduct({
-      name: 'BTC-backed USDT',
-      debtAssetId: 'USDT',
-      collateralAssetId: 'BTC',
-      quoteAssetId: 'USDT',
-      aprBps: 1_000,
-      maxLtvBps: 5_000,
-      policy: DEFAULT_LIQUIDATION_POLICY,
-    });
-  }
-
-  describe('LoanService.open refuses a missing mark before any post', () => {
-    let ledger: MemoryLedger;
-
-    beforeEach(async () => {
-      await sql`
-        TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
-                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
-                 bank.loan_reserve_fundings
-        RESTART IDENTITY CASCADE
-      `;
-      ledger = new MemoryLedger();
-    });
-
-    it('bank.mark_missing — no loan row, no lock, no draw', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        loans: { priceSource: fixedPriceSource({}, () => NOW) },
-      });
-      const product = await seedProduct(bank, ledger);
-
-      await expect(
-        bank.loans.open({
-          productId: product.id,
-          userId: BORROWER,
-          collateralAmount: amt('1'),
-          principal: amt('5000'),
-          now: NOW,
-        }),
-      ).rejects.toMatchObject({ code: 'bank.mark_missing' });
-
-      expect(await sql`SELECT id FROM bank.loans`).toHaveLength(0);
-      expect(ledger.journal().some((tx) => tx.reason === 'loan.collateral.locked')).toBe(false);
-      expect(ledger.journal().some((tx) => tx.reason === 'loan.drawn')).toBe(false);
-      expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
-      expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(0n);
-    });
+async function seedProduct(bank: ReturnType<typeof createBankServices>, ledger: MemoryLedger) {
+  await fund(ledger, PAYER, 'USDT', '100000');
+  await bank.loans.fundReserve({
+    debtAssetId: 'USDT',
+    fundingId: `f:${randomUUID()}`,
+    amount: amt('100000'),
+    from: userAvailable(PAYER, 'USDT'),
   });
-
-  describe('HTTP /trpc/loans.open — originate through ledger-client', () => {
-    let ledger: MemoryLedger;
-
-    beforeEach(async () => {
-      await sql`
-        TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
-                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
-                 bank.loan_reserve_fundings
-        RESTART IDENTITY CASCADE
-      `;
-      ledger = new MemoryLedger();
-    });
-
-    it('refuses bank.mark_missing on the public door and posts nothing', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger));
-      const product = await seedProduct(bank, ledger);
-      const app = await mountDoors(bank);
-
-      const opened = await post(app, 'loans.open', {
-        loanId: randomUUID(),
-        productId: product.id,
-        collateralAmount: '1',
-        principal: '5000',
-      });
-      expect(opened.statusCode).toBe(412);
-      const wire = JSON.stringify(opened.body.error);
-      expect(opened.body.error?.data?.code).toBe('PRECONDITION_FAILED');
-      expect(wire).toMatch(/bank\.mark_missing/);
-      await app.close();
-
-      expect(await sql`SELECT id FROM bank.loans`).toHaveLength(0);
-      expect(ledger.journal().some((tx) => tx.reason === 'loan.collateral.locked')).toBe(false);
-      expect(ledger.journal().some((tx) => tx.reason === 'loan.drawn')).toBe(false);
-      expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
-    });
-
-    it('with a mark, posts lock then draw — no invented rate', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }) },
-      });
-      const product = await seedProduct(bank, ledger);
-      const app = await mountDoors(bank);
-      const loanId = randomUUID();
-
-      const opened = await post(app, 'loans.open', {
-        loanId,
-        productId: product.id,
-        collateralAmount: '1',
-        principal: '5000',
-      });
-      expect(opened.statusCode).toBe(200);
-      const data = procedureData(opened.body) as { loanId: string; status: string; drawLedgerTxId: string };
-      expect(data.loanId).toBe(loanId);
-      expect(data.status).toBe('active');
-      expect(data.drawLedgerTxId.length).toBeGreaterThan(0);
-      await app.close();
-
-      const journal = ledger.journal();
-      const lockAt = journal.findIndex((tx) => tx.reason === 'loan.collateral.locked');
-      const drawAt = journal.findIndex((tx) => tx.reason === 'loan.drawn');
-      expect(lockAt).toBeGreaterThan(-1);
-      expect(drawAt).toBeGreaterThan(lockAt);
-      expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(amt('5000'));
-      expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(0n);
-    });
+  await fund(ledger, BORROWER, 'BTC', '1');
+  return bank.loans.createProduct({
+    name: 'BTC-backed USDT',
+    debtAssetId: 'USDT',
+    collateralAssetId: 'BTC',
+    quoteAssetId: 'USDT',
+    aprBps: 1_000,
+    maxLtvBps: 5_000,
+    policy: DEFAULT_LIQUIDATION_POLICY,
   });
 }
+
+describe('LoanService.open refuses a missing mark before any post', () => {
+  let ledger: MemoryLedger;
+
+  beforeEach(async () => {
+    await sql`
+      TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+               bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+               bank.loan_reserve_fundings
+      RESTART IDENTITY CASCADE
+    `;
+    ledger = new MemoryLedger();
+  });
+
+  it('bank.mark_missing — no loan row, no lock, no draw', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({}, () => NOW) },
+    });
+    const product = await seedProduct(bank, ledger);
+
+    await expect(
+      bank.loans.open({
+        productId: product.id,
+        userId: BORROWER,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: 'bank.mark_missing' });
+
+    expect(await sql`SELECT id FROM bank.loans`).toHaveLength(0);
+    expect(ledger.journal().some((tx) => tx.reason === 'loan.collateral.locked')).toBe(false);
+    expect(ledger.journal().some((tx) => tx.reason === 'loan.drawn')).toBe(false);
+    expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
+    expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(0n);
+  });
+});
+
+describe('HTTP /trpc/loans.open — originate through ledger-client', () => {
+  let ledger: MemoryLedger;
+
+  beforeEach(async () => {
+    await sql`
+      TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+               bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+               bank.loan_reserve_fundings
+      RESTART IDENTITY CASCADE
+    `;
+    ledger = new MemoryLedger();
+  });
+
+  it('refuses bank.mark_missing on the public door and posts nothing', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger));
+    const product = await seedProduct(bank, ledger);
+    const app = await mountDoors(bank);
+
+    const opened = await post(app, 'loans.open', {
+      loanId: randomUUID(),
+      productId: product.id,
+      collateralAmount: '1',
+      principal: '5000',
+    });
+    expect(opened.statusCode).toBe(412);
+    const wire = JSON.stringify(opened.body.error);
+    expect(opened.body.error?.data?.code).toBe('PRECONDITION_FAILED');
+    expect(wire).toMatch(/bank\.mark_missing/);
+    await app.close();
+
+    expect(await sql`SELECT id FROM bank.loans`).toHaveLength(0);
+    expect(ledger.journal().some((tx) => tx.reason === 'loan.collateral.locked')).toBe(false);
+    expect(ledger.journal().some((tx) => tx.reason === 'loan.drawn')).toBe(false);
+    expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
+  });
+
+  it('with a mark, posts lock then draw — no invented rate', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }) },
+    });
+    const product = await seedProduct(bank, ledger);
+    const app = await mountDoors(bank);
+    const loanId = randomUUID();
+
+    const opened = await post(app, 'loans.open', {
+      loanId,
+      productId: product.id,
+      collateralAmount: '1',
+      principal: '5000',
+    });
+    expect(opened.statusCode).toBe(200);
+    const data = procedureData(opened.body) as { loanId: string; status: string; drawLedgerTxId: string };
+    expect(data.loanId).toBe(loanId);
+    expect(data.status).toBe('active');
+    expect(data.drawLedgerTxId.length).toBeGreaterThan(0);
+    await app.close();
+
+    const journal = ledger.journal();
+    const lockAt = journal.findIndex((tx) => tx.reason === 'loan.collateral.locked');
+    const drawAt = journal.findIndex((tx) => tx.reason === 'loan.drawn');
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(drawAt).toBeGreaterThan(lockAt);
+    expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(amt('5000'));
+    expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(0n);
+  });
+});
