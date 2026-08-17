@@ -105,15 +105,15 @@
     },
     {
       "id": "D26-P0-08",
-      "status": "sealed",
+      "status": "mechanism_only",
       "kind": "product_ruling",
       "title": "pay:write / KYB grant mechanism shape",
       "blocks": ["merchant KYB grant", "pay.psp expand"],
-      "primaryDoc": "docs/adr/2026-08-13-pay-write-grant-a2-unpublished.md",
+      "primaryDoc": "docs/adr/2026-08-15-pay-write-grantor-refuse-until-named.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md#p0-08--paywrite--kyb-grant-mechanism-shape",
       "answerShape": "grant_mechanism_shape_on_tip",
       "priority": 3,
-      "notes": "2026-08-13 seal: A2 unpublished = refuse. No invented grantor. issueMerchantPayScopes stays closed until Nitro publishes."
+      "notes": "2026-08-15: A2 grantor/predicates/revocation still owner-named. issueMerchantPayScopes refuse-closed. No auto-grant on kyb approved. Shape ADR 2026-08-12 Layer B unchanged. Not a full owner seal."
     },
     {
       "id": "D26-P0-09",
