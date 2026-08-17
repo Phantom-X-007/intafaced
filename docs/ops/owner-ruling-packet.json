@@ -283,11 +283,12 @@
       "kind": "product_ruling",
       "title": "p2p:moderate scope split",
       "blocks": ["p2p moderation"],
-      "primaryDoc": "docs/adr/2026-08-14-remaining-p0-money-law.md",
+      "primaryDoc": "docs/adr/2026-08-15-p2p-moderate-scope-owner-only.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#8--the-p2pmoderate-scope-split",
+      "satelliteDocs": ["docs/adr/2026-08-14-remaining-p0-money-law.md", "docs/adr/2026-08-04-p2p-escrow-and-dispute-law.md"],
       "answerShape": "owner_signoff_scope",
       "priority": 4,
-      "notes": "2026-08-14 seal: do not mint p2p:moderate. Allowlist + admin:compliance. Empty list = unreachable. Who is on the list is Class X."
+      "notes": "2026-08-15 owner sign-off: p2p:moderate mint stays refuse / owner-gated (DIRECTION §3). Empty P2P_MODERATOR_USER_IDS remains p2p.moderation_unreachable. No auto-ruling. Agents must not invent who moderates or user ids. Tracker p2p.disputes. Do not edit svc-p2p from this packet."
     },
     {
       "id": "PKT-C9",
