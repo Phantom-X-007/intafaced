@@ -319,8 +319,23 @@ export function assertRailMayMoveValue(adapter: RailAdapter, capability: RailCap
 
 // ── THE PUBLIC INBOUND GATE ──────────────────────────────────────────────────
 
+export type PublicCheckoutUnavailableReason = 'sandbox' | 'absent' | 'none-configured' | 'unhealthy' | 'psp-unset';
+
+export type PublicCheckoutUnavailableCode =
+  | 'pay.checkout_rail_not_live'
+  /** Operator checkout rail list is empty — not "the rail is down". */
+  | 'pay.checkout_rails_unset'
+  /** Card/PSP acquiring is not configured (`socket.psp-partners`) — not a sandbox lie. */
+  | 'pay.psp_unset';
+
+export function publicCheckoutUnavailableCode(reason: PublicCheckoutUnavailableReason): PublicCheckoutUnavailableCode {
+  if (reason === 'none-configured') return 'pay.checkout_rails_unset';
+  if (reason === 'psp-unset') return 'pay.psp_unset';
+  return 'pay.checkout_rail_not_live';
+}
+
 export class PublicCheckoutUnavailable extends Error {
-  readonly code = 'pay.checkout_rail_not_live';
+  readonly code: PublicCheckoutUnavailableCode;
 
   constructor(
     readonly railId: string | null,
@@ -328,8 +343,9 @@ export class PublicCheckoutUnavailable extends Error {
      * `absent` is its own reason for the same operator-facing purpose the third
      * `RailMode` serves: "we have a rail and it lies" and "we have no rail" send
      * a reader to two different places, and only one of them is fixable today.
+     * `psp-unset` is the card-acquiring socket (`socket.psp-partners`) specifically.
      */
-    readonly reason: 'sandbox' | 'absent' | 'none-configured' | 'unhealthy',
+    readonly reason: PublicCheckoutUnavailableReason,
   ) {
     super(
       (railId === null
@@ -339,6 +355,7 @@ export class PublicCheckoutUnavailable extends Error {
         `could not complete.`,
     );
     this.name = 'PublicCheckoutUnavailable';
+    this.code = publicCheckoutUnavailableCode(reason);
   }
 }
 
@@ -502,7 +519,17 @@ export function selectPublicCheckoutRailDetailed(
   // deployment with a sandbox rail configured has made a posture decision it can
   // revisit; `absent` outranks `unhealthy` because "nothing is configured" is not
   // something waiting five minutes will fix.
-  throw new PublicCheckoutUnavailable(null, sawSandbox ? 'sandbox' : sawAbsent ? 'absent' : sawUnhealthy ? 'unhealthy' : 'none-configured');
+  const cardishPref = preference.length > 0 && preference.every((id) => /card|psp|acquirer/i.test(id));
+  const collapsed: PublicCheckoutUnavailableReason = sawSandbox
+    ? 'sandbox'
+    : sawAbsent
+      ? cardishPref
+        ? 'psp-unset'
+        : 'absent'
+      : sawUnhealthy
+        ? 'unhealthy'
+        : 'none-configured';
+  throw new PublicCheckoutUnavailable(null, collapsed);
 }
 
 /**

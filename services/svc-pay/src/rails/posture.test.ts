@@ -521,6 +521,36 @@ describe('selectPublicCheckoutRail', () => {
       throw new Error('should have refused');
     } catch (err) {
       expect((err as PublicCheckoutUnavailable).reason).toBe('none-configured');
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.checkout_rails_unset');
+    }
+  });
+
+  it('refuses an empty preference list as rails-unset, never as a live-rail outage', () => {
+    try {
+      selectPublicCheckoutRail(new RailRegistry([cardSandbox()]), [], 'allow-sandbox');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PublicCheckoutUnavailable);
+      expect((err as PublicCheckoutUnavailable).reason).toBe('none-configured');
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.checkout_rails_unset');
+    }
+  });
+
+  it('names PSP-unset when the only public candidate is an absent acquirer', () => {
+    const absent = new Proxy(cardSandbox(), {
+      get(target, prop, receiver) {
+        if (prop === 'id') return 'card-acquirer';
+        if (prop === 'mode') return 'absent';
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as CardSandboxAdapter;
+    try {
+      selectPublicCheckoutRail(new RailRegistry([absent]), ['card-acquirer'], 'allow-sandbox');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PublicCheckoutUnavailable);
+      expect((err as PublicCheckoutUnavailable).reason).toBe('psp-unset');
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.psp_unset');
     }
   });
 

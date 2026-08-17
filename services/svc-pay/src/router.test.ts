@@ -1261,6 +1261,20 @@ describe('hosted checkout is public, and safe because of its shape', () => {
     expect(codeOf(err)).toBe('SERVICE_UNAVAILABLE');
   });
 
+  it('maps unset rails and unset PSP to SERVICE_UNAVAILABLE by their typed codes', async () => {
+    const api = await caller([]);
+
+    stub.fail(new PublicCheckoutUnavailable(null, 'none-configured'));
+    const railsUnset = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(railsUnset)).toBe('SERVICE_UNAVAILABLE');
+    expect(String((railsUnset as Error).message)).toContain('pay.checkout_rails_unset');
+
+    stub.fail(new PublicCheckoutUnavailable(null, 'psp-unset'));
+    const pspUnset = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(pspUnset)).toBe('SERVICE_UNAVAILABLE');
+    expect(String((pspUnset as Error).message)).toContain('pay.psp_unset');
+  });
+
   it('maps an exhausted link to CONFLICT and a busy one to TOO_MANY_REQUESTS', async () => {
     const api = await caller([]);
 
