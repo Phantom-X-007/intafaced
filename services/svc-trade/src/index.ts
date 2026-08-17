@@ -604,6 +604,13 @@ registerPrivateRest(app, {
       clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
+  setLeverage: (principal, input) =>
+    positions.setLeverage({
+      userId: principal.userId,
+      symbol: input.symbol,
+      leverage: parseAmount(input.leverage),
+      positionId: input.positionId,
+    }),
   getOpenMarginCall: async (principal, positionId) => {
     const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);
     if (!row || row.userId !== principal.userId) return null;

@@ -106,6 +106,9 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     closePosition: async () => {
       throw new Error('closePosition should not run when price refused');
     },
+    setLeverage: async () => {
+      throw new Error('setLeverage should not run in this matrix test');
+    },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async () => ({
       version: 'DIRECTION-2026-07-31:34',
@@ -166,7 +169,9 @@ describe('ccxt capability matrix — inventory integrity', () => {
         'futuresUnconfiguredOnOpen',
         'leverageRequiredOnOpen',
         'profitSourceUnconfiguredOnClose',
-        'setLeverage',
+        'setLeverageInsufficientMargin',
+        'setLeverageTooHigh',
+        'setLeverageWouldLiquidate',
         'setMarginMode',
       ].sort(),
     );
@@ -174,22 +179,20 @@ describe('ccxt capability matrix — inventory integrity', () => {
       refuseOnlyRoutes()
         .map((r) => r.name)
         .sort(),
-    ).toEqual(['setLeverage', 'setMarginMode'].sort());
+    ).toEqual(['setMarginMode']);
   });
 
-  it('setLeverage/setMarginMode stay refuse 501 NotSupported — never a 200 path', () => {
+  it('setMarginMode stays refuse 501; setLeverage is a supported 200 path within 10×', () => {
     expect([...leverageRefuseDrift()]).toEqual([]);
-    expect(CCXT_LEVERAGE_REFUSE_IDS).toEqual(['setLeverage', 'setMarginMode']);
-    for (const id of CCXT_LEVERAGE_REFUSE_IDS) {
-      const row = CCXT_CAPABILITY_MATRIX.find((r) => r.name === id)!;
-      expect(row.kind, id).toBe('refuse');
-      expect(row.kind, id).not.toBe('supported');
-      expect(row.kind, id).not.toBe('conditional');
-      const arm = refuseArmById(id)!;
-      expect(arm.httpStatus, id).toBe(501);
-      expect(arm.httpStatus, id).not.toBe(200);
-      expect(arm.ccxtCode, id).toBe('NotSupported');
-    }
+    expect(CCXT_LEVERAGE_REFUSE_IDS).toEqual(['setMarginMode']);
+    const lev = CCXT_CAPABILITY_MATRIX.find((r) => r.name === 'setLeverage')!;
+    expect(lev.kind).toBe('supported');
+    expect(lev.kind).not.toBe('refuse');
+    const mode = CCXT_CAPABILITY_MATRIX.find((r) => r.name === 'setMarginMode')!;
+    expect(mode.kind).toBe('refuse');
+    const arm = refuseArmById('setMarginMode')!;
+    expect(arm.httpStatus).toBe(501);
+    expect(arm.ccxtCode).toBe('NotSupported');
   });
 
   it('caller-refused price fields pin private-rest PRICE_FIELDS', () => {
@@ -250,20 +253,13 @@ describe('ccxt capability matrix — claim ≡ mount source', () => {
     }
   });
 
-  it('refuse-only leverage mounts pin 501 NotSupported and never reply.code(200)', () => {
-    expect(privateRestSource).toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/);
+  it('setMarginMode stays 501; setLeverage is a live isolated path that can 200', () => {
+    expect(privateRestSource).not.toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/);
+    expect(privateRestSource).toContain("app.post('/api/v1/positions/leverage'");
     expect(privateRestSource).toMatch(/app\.post\('\/api\/v1\/positions\/margin-mode',\s*derivativesNotSupported\('setMarginMode'/);
-    expect(privateRestSource).toContain('never invent leverage');
-    expect(privateRestSource).toContain('httpStatus !== 501');
-    expect(privateRestSource).toContain("ccxtCode !== 'NotSupported'");
+    expect(privateRestSource).toContain('setMarginMode must stay 501');
     expect(privateRestSource).toContain('notSupported(');
-    const leverageBlockStart = privateRestSource.indexOf('const derivativesNotSupported');
-    const leverageBlockEnd = privateRestSource.indexOf('// ── Create (money path)');
-    expect(leverageBlockStart).toBeGreaterThanOrEqual(0);
-    expect(leverageBlockEnd).toBeGreaterThan(leverageBlockStart);
-    const block = privateRestSource.slice(leverageBlockStart, leverageBlockEnd);
-    expect(block).not.toMatch(/reply\.code\(200\)/);
-    expect(block).not.toMatch(/rateLimited\(/);
+    expect(privateRestSource).toContain('reply.code(200).send(pos)');
     expect(publicRestSource).not.toContain("app.post('/api/v1/positions/leverage'");
     expect(publicRestSource).not.toContain("app.post('/api/v1/positions/margin-mode'");
   });
@@ -276,23 +272,47 @@ describe('ccxt capability matrix — claim ≡ mount source', () => {
 });
 
 describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
-  it('setLeverage refuse arm: signed → matrix httpStatus + codes', async () => {
-    const arm = refuseArmById('setLeverage')!;
+  it('setLeverage supported: signed → 200 from the injected service', async () => {
     const app = Fastify();
-    registerPrivateRest(app, privateDeps());
+    registerPrivateRest(
+      app,
+      privateDeps({
+        setLeverage: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', leverage: '5' }) as never,
+      }),
+    );
     await app.ready();
     const res = await app.inject({
-      method: arm.method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS',
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', leverage: '5' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().leverage).toBe('5');
+    await app.close();
+  });
+
+  it('setLeverageTooHigh arm: signed → 400 domain, never clamped to 10×', async () => {
+    const arm = refuseArmById('setLeverageTooHigh')!;
+    const { FuturesError } = await import('./futures/position-service.js');
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        setLeverage: async () => {
+          throw new FuturesError('11x exceeds 10x', arm.intafacedCode, 400);
+        },
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
       url: arm.path,
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', leverage: '10' },
+      payload: { symbol: 'BTC/USDT', leverage: '11' },
     });
-    expect(res.statusCode).not.toBe(200);
     expect(res.statusCode).toBe(arm.httpStatus);
-    expect(arm.httpStatus).toBe(501);
-    expect(res.json().code).toBe(arm.ccxtCode);
-    expect(res.json().intafacedCode).toBe(arm.intafacedCode);
-    expect(JSON.stringify(res.json())).not.toMatch(/"leverage"\s*:/);
+    expect(res.json().error).toBe(arm.intafacedCode);
     await app.close();
   });
 
@@ -497,6 +517,8 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 403)).toBe(true);
     expect(body.routes.some((r) => r.name === 'closePosition' && r.refuseArmIds?.includes('profitSourceUnconfiguredOnClose'))).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'profitSourceUnconfiguredOnClose' && a.httpStatus === 403)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'supported')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setMarginMode' && r.kind === 'refuse')).toBe(true);
     for (const id of CCXT_LEVERAGE_REFUSE_IDS) {
       const route = body.routes.find((r) => r.name === id);
       expect(route?.kind, id).toBe('refuse');
