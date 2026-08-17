@@ -70,4 +70,13 @@ describe('tradeAdapterOpenOrders', () => {
     expect(await list(undefined, 'buy')).toHaveLength(1);
     expect(await list()).toHaveLength(2);
   });
+
+  it('filters by type without inventing the other', async () => {
+    const list = tradeAdapterOpenOrders(
+      adapter([order(), order({ clientOrderId: 'mkt-1', venueOrderId: 'v-3', type: 'market', price: null })]),
+    );
+    expect((await list(undefined, undefined, 'market')).map((o) => o.clientOrderId)).toEqual(['mkt-1']);
+    expect(await list(undefined, undefined, 'limit')).toHaveLength(1);
+    expect(await list()).toHaveLength(2);
+  });
 });
