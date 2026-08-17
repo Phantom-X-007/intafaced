@@ -27,7 +27,7 @@ export type LessonSubstanceIssue = {
 
 export type LessonSubstanceInput = {
   readonly body: string;
-  readonly objectives?: readonly unknown;
+  readonly objectives?: unknown;
 };
 
 const MIN_SECTIONS = 2;
