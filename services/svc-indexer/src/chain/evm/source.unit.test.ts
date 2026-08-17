@@ -211,7 +211,7 @@ async function missingVenueRpc(): Promise<{ url: string; methods: string[]; clos
         methods.push(method);
         return { jsonrpc: '2.0', id: entry.id ?? 1, result: rpcResultFor(method) };
       });
-      res.writeHead(200, { 'content-type': 'application/json' });
+      res.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
       res.end(JSON.stringify(batch ? replies : replies[0]));
     });
   });
@@ -222,6 +222,11 @@ async function missingVenueRpc(): Promise<{ url: string; methods: string[]; clos
     methods,
     close: () =>
       new Promise((resolve, reject) => {
+        // viem's HTTP agent keep-alives; without this, vitest waits on open
+        // sockets and CI Tests never finish (observed on #2232).
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections();
+        }
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };
