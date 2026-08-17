@@ -1,0 +1,23 @@
+name: apply-seize-door
+on:
+  push:
+    branches:
+      - feat/bank-loan-seize-missing-mark
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply seize door
+        run: python3 scripts/apply-seize-door.py
+      - name: Commit and remove one-shot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/apply-seize-door.yml scripts/apply-seize-door.py
+          git add services/svc-bank/src/loans/loan-service.ts services/svc-bank/src/router.ts
+          git status
+          git commit -m "feat(svc-bank): seize one underwater loan through ledger-client"
+          git push
