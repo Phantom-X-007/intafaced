@@ -24,6 +24,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine/engine.js';
 import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
+import { userCopy } from './user-copy.js';
 
 const SECRET = 'matching-promise-falsify-public-doors-secret-32';
 const MARKET = 'BTC-USDT';
@@ -658,5 +659,184 @@ describe('D26-P2-01d public doors — determinism edges', () => {
     expect(listed.json().markets).toEqual([]);
     expect((await recoveredApp.inject({ method: 'GET', url: '/markets/LEGACY-CANCEL-PUBLIC-DOOR/depth' })).statusCode).toBe(404);
     await recoveredApp.close();
+  });
+});
+
+describe('promise-falsify public doors — D26-P2-12 spine reprove (phantom / unauth)', () => {
+  const ghost = 'NEVER-TRADED-SPINE-REPROVE-PF';
+  const ghostOrder = '12121212-1212-4121-8121-121212121212';
+
+  function ghostLimitBody() {
+    return limitBody(ghostOrder, 'acct-spine', 'buy', '1', '100');
+  }
+
+  async function unauthSubmit(app: FastifyInstance, marketId: string, body = ghostLimitBody()) {
+    return app.inject({
+      method: 'POST',
+      url: `/markets/${marketId}/orders`,
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify(body),
+    });
+  }
+
+  async function unauthOrders(app: FastifyInstance, marketId: string) {
+    return app.inject({ method: 'GET', url: `/markets/${marketId}/orders` });
+  }
+
+  async function unauthReconcile(app: FastifyInstance, orders: unknown[]) {
+    return app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ orders }),
+    });
+  }
+
+  it('unauthenticated submit on a never-traded market is 401 and allocates nothing', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+    const before = engine.serialize();
+
+    const res = await unauthSubmit(app, ghost);
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'Unauthenticated', message: userCopy('matching.unauthenticated') });
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.serialize()).toBe(before);
+    expect((await app.inject({ method: 'GET', url: '/markets' })).json().markets).toEqual([]);
+
+    await app.close();
+  });
+
+  it('unauthenticated submit on a live market is 401 and leaves the resting book untouched', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+    const liveId = '13131313-1313-4131-8131-131313131313';
+    await submit(app, MARKET, limitBody(liveId, 'acct-live', 'buy', '1', '100'));
+    const before = engine.serialize();
+
+    const res = await unauthSubmit(app, MARKET, limitBody('14141414-1414-4141-8141-141414141414', 'acct-attack', 'sell', '1', '100'));
+    expect(res.statusCode).toBe(401);
+    expect(engine.serialize()).toBe(before);
+    expect((await orders(app, MARKET)).json().orders).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('unauthenticated orders read on a ghost market is 401 — never allocates to answer 404', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+
+    const res = await unauthOrders(app, ghost);
+    expect(res.statusCode).toBe(401);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).toEqual([]);
+
+    await app.close();
+  });
+
+  it('forged service credentials on submit refuse before the engine and leave GET /markets empty', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+    const payload = JSON.stringify(ghostLimitBody());
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/markets/${ghost}/orders`,
+      headers: {
+        'content-type': 'application/json',
+        'x-intafaced-service': 'svc-trade',
+        'x-intafaced-service-ts': String(Math.floor(Date.now() / 1000)),
+        'x-intafaced-service-sig': 'a'.repeat(64),
+      },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect((await app.inject({ method: 'GET', url: '/markets' })).json().markets).toEqual([]);
+    await app.close();
+  });
+
+  it('cancel credentials lifted onto submit on a ghost market refuse with body-mismatch', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+    const payload = JSON.stringify(ghostLimitBody());
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/markets/${ghost}/orders`,
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-trade', SECRET, ''),
+      },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({
+      code: 'Unauthenticated',
+      rejected: 'body-mismatch',
+      message: userCopy('matching.unauthenticated'),
+    });
+    expect(engine.hasMarket(ghost)).toBe(false);
+    await app.close();
+  });
+
+  it('unauthenticated reconcile with a funded ghost open refuses before inventing the market', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+    const before = engine.serialize();
+
+    const res = await unauthReconcile(app, [
+      {
+        orderId: ghostOrder,
+        marketId: ghost,
+        state: 'open',
+        remaining: '1',
+        funded: true,
+        detail: 'hold=100 USDT',
+      },
+    ]);
+
+    expect(res.statusCode).toBe(401);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.serialize()).toBe(before);
+    expect((await app.inject({ method: 'GET', url: '/markets' })).json().markets).toEqual([]);
+
+    await app.close();
+  });
+
+  it('repeated unauthenticated write probes across submit, cancel, orders, and reconcile stay empty', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+
+    for (let i = 0; i < 20; i++) {
+      const probe = `PHANTOM-UNAUTH-${i}`;
+      const orderId = `15151515-1515-4151-8151-${String(i).padStart(12, '0')}`;
+      await unauthSubmit(app, probe, limitBody(orderId, 'acct-probe', 'buy', '1', '100'));
+      await app.inject({ method: 'DELETE', url: `/markets/${probe}/orders/${orderId}` });
+      await unauthOrders(app, probe);
+      await unauthReconcile(app, [{ orderId, marketId: probe, state: 'open', remaining: '1', funded: true }]);
+    }
+
+    expect(engine.markets).toHaveLength(0);
+    expect(engine.serialize()).toBe('[]');
+    expect((await app.inject({ method: 'GET', url: '/markets' })).json().markets).toEqual([]);
+    await app.close();
+  });
+
+  it('unauthenticated cancel on a ghost market is 401 and does not journal a phantom book', async () => {
+    const engine = buildEngine();
+    const app = await mount(engine);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/markets/${ghost}/orders/${ghostOrder}`,
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.serialize()).toBe('[]');
+    await app.close();
   });
 });
