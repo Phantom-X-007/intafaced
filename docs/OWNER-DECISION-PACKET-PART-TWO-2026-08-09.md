@@ -68,10 +68,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-09 · Fee + revenue recipe map
 
+**Status:** **SEALED 2026-08-15 (D26-P0-09)** — [`adr/2026-08-15-d26-p0-09-fee-revenue-recipe-map.md`](adr/2026-08-15-d26-p0-09-fee-revenue-recipe-map.md).  
 **Blocks:** agents adding ledger recipes because a fee path “needs one.”  
-**Also open:** part one item 5 — `TRADE_FUTURES_PROFIT_SOURCE` has **no default** (index `PKT-B5`).  
-**Question:** for every fee/revenue path, is there a **named** recipe or an explicit §13 socket?  
-**Recommendation:** closed matrix in the packet index (and later a short ADR if the matrix grows). Inventing a recipe is inventing money shape.
+**Still no default:** part one item 5 — `TRADE_FUTURES_PROFIT_SOURCE` has **no compose default** (index `PKT-B5`). Recipe `futuresRealizeProfit` exists; empty host still refuses.  
+**Closed matrix:** every fee/revenue path → named recipe or explicit §13. Live inventory is D26-P2-11 **#1745** (`packages/ledger-client` `live-path-inventory.ts`) — this packet does not duplicate it and does not invent recipes. New recipes require an owner carve-out on this row.
 
 ---
 
