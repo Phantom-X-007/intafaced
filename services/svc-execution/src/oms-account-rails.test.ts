@@ -72,4 +72,11 @@ describe('accountAdapterRails', () => {
     expect((await observe('USDT', false)).map((row) => row.enabled)).toEqual([false]);
     expect(await observe('USDT')).toHaveLength(2);
   });
+
+  it('filters by network without hiding other rails when omitted', async () => {
+    const observe = accountAdapterRails(adapter([usdtRail({ network: 'trc20' }), usdtRail({ network: 'erc20', enabled: true })]));
+    expect((await observe('USDT', undefined, 'erc20')).map((row) => row.network)).toEqual(['erc20']);
+    expect(await observe('USDT', undefined, 'bep20')).toEqual([]);
+    expect(await observe('USDT')).toHaveLength(2);
+  });
 });

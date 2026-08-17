@@ -4,16 +4,16 @@
  * Does not swallow VenueCredentialsMissingError into []. A missing key is a
  * deployment that is not ready, not "no rails". Disabled rails stay disabled.
  * Optional enabled narrows open/suspended without inventing the other.
+ * Optional network narrows trc20/… without inventing a rail.
  * Does not invent a transfer.
  */
 import type { AccountAdapter, TransferRail } from '@intafaced/venue-contracts';
 
-export type OmsRailsFn = (asset: string, enabled?: boolean) => Promise<TransferRail[]>;
+export type OmsRailsFn = (asset: string, enabled?: boolean, network?: string) => Promise<TransferRail[]>;
 
 export function accountAdapterRails(adapter: AccountAdapter): OmsRailsFn {
-  return async (asset, enabled) => {
+  return async (asset, enabled, network) => {
     const rows = await adapter.transferRails(asset);
-    if (enabled === undefined) return rows;
-    return rows.filter((row) => row.enabled === enabled);
+    return rows.filter((row) => (enabled === undefined || row.enabled === enabled) && (!network || row.network === network));
   };
 }
