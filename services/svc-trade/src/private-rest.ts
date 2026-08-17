@@ -39,7 +39,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=)
+ *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=&tif=&clientOrderId=)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=&tif=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
@@ -89,6 +89,7 @@ export interface PrivateRestDeps {
     side?: 'buy' | 'sell',
     type?: 'limit' | 'market',
     tif?: TimeInForce,
+    clientOrderId?: string,
   ): Promise<OrderRecord[]>;
   orderHistory(
     principal: Principal,
@@ -517,6 +518,17 @@ export function parseOpenOrderTif(raw: unknown): { ok: true; tif?: TimeInForce }
   return { ok: false, message: 'tif must be GTC, IOC, FOK, or PO' };
 }
 
+/** Optional live-order clientOrderId filter. Absent → every retry key. */
+export function parseOpenOrderClientId(raw: unknown): { ok: true; clientOrderId?: string } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, clientOrderId: undefined };
+  if (typeof raw !== 'string') return { ok: false, message: 'clientOrderId must be 1-64 characters' };
+  const clientOrderId = raw.trim();
+  if (clientOrderId.length < 1 || clientOrderId.length > 64) {
+    return { ok: false, message: 'clientOrderId must be 1-64 characters' };
+  }
+  return { ok: true, clientOrderId };
+}
+
 /** Optional live-status filter. Absent → both open and closing. */
 export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'open' | 'closing' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
@@ -676,7 +688,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
   // ── Static paths first (before :id) ───────────────────────────────────────
 
-  app.get<{ Querystring: { symbol?: string; status?: string; side?: string; type?: string; tif?: string } }>(
+  app.get<{ Querystring: { symbol?: string; status?: string; side?: string; type?: string; tif?: string; clientOrderId?: string } }>(
     '/api/v1/orders/open',
     async (req, reply) => {
       const principal = requirePrincipal(req, reply);
@@ -708,9 +720,21 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       if (!tifParsed.ok) {
         return sendCcxt(reply, badRequest(tifParsed.message, 'trade.invalid_open_order_tif'));
       }
+      const clientIdParsed = parseOpenOrderClientId(req.query.clientOrderId);
+      if (!clientIdParsed.ok) {
+        return sendCcxt(reply, badRequest(clientIdParsed.message, 'trade.invalid_open_order_client_id'));
+      }
 
       try {
-        const orders = await deps.openOrders(principal, marketId, statusParsed.status, sideParsed.side, typeParsed.type, tifParsed.tif);
+        const orders = await deps.openOrders(
+          principal,
+          marketId,
+          statusParsed.status,
+          sideParsed.side,
+          typeParsed.type,
+          tifParsed.tif,
+          clientIdParsed.clientOrderId,
+        );
         const symbolByMarket = new Map<string, string>();
         const wire = [];
         for (const order of orders) {

@@ -620,6 +620,46 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/open?clientOrderId=alice-open: passes clientOrderId into openOrders', async () => {
+    let seen: { clientOrderId?: string } = {};
+    const app = await build(
+      deps({
+        openOrders: async (_p, _marketId, _status, _side, _type, _tif, clientOrderId) => {
+          seen = { clientOrderId };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?clientOrderId=alice-open',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen.clientOrderId).toBe('alice-open');
+    await app.close();
+  });
+
+  it('GET /orders/open?clientOrderId=: invalid → 400 without openOrders', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        openOrders: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/orders/open?clientOrderId=${'x'.repeat(65)}`,
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(listed).toBe(false);
+    await app.close();
+  });
+
   it('GET /orders/open?type=: invalid → 400 without openOrders', async () => {
     let listed = false;
     const app = await build(

@@ -1965,6 +1965,7 @@ export class TradeService {
    * to show). Optional side narrows buy/sell in SQL — never invents a side.
    * Optional type narrows limit/market in SQL — never invents a type.
    * Optional tif narrows GTC/IOC/FOK/PO in SQL — never invents a tif.
+   * Optional clientOrderId narrows client_order_id in SQL — never invents a row.
    */
   async openOrders(
     principal: Principal,
@@ -1973,6 +1974,7 @@ export class TradeService {
     side?: 'buy' | 'sell',
     type?: 'limit' | 'market',
     tif?: TimeInForce,
+    clientOrderId?: string,
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const statusFilter =
@@ -1993,15 +1995,16 @@ export class TradeService {
             : tif === 'PO'
               ? this.sql`tif = 'PO'`
               : this.sql`TRUE`;
+    const clientOrderIdFilter = clientOrderId ? this.sql`client_order_id = ${clientOrderId}` : this.sql`TRUE`;
     const rows = marketId
       ? await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND ${tifFilter} AND market_id = ${marketId}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND ${tifFilter} AND ${clientOrderIdFilter} AND market_id = ${marketId}
            ORDER BY created_at DESC
         `
       : await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND ${tifFilter}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND ${tifFilter} AND ${clientOrderIdFilter}
            ORDER BY created_at DESC
         `;
     return rows.map(toOrder);
