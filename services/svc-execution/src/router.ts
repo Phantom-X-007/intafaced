@@ -375,6 +375,7 @@ export function createExecutionRouter(
               base: z.string().min(1).max(32).optional(),
               active: z.boolean().optional(),
               settle: z.string().min(1).max(32).optional(),
+              symbol: z.string().min(1).max(64).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -387,6 +388,7 @@ export function createExecutionRouter(
                 base: input.base,
                 active: input.active,
                 settle: input.settle,
+                symbol: input.symbol,
                 kind: input.kind,
                 marketsByVenue,
               });

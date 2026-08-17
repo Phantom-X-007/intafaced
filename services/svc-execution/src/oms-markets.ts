@@ -10,6 +10,7 @@
  * Optional base forwards BTC/…; omitted still observes every base.
  * Optional active forwards true/false; omitted still observes inactive listings.
  * Optional settle forwards USDT/…; omitted still observes null settle (spot).
+ * Optional symbol forwards the unified BASE/QUOTE; omitted still observes every listing.
  * Inactive listings stay inactive. Null settle stays null.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
@@ -21,6 +22,7 @@ export type OmsMarketsFn = (
   base?: string,
   active?: boolean,
   settle?: string,
+  symbol?: string,
 ) => Promise<readonly VenueMarket[]>;
 
 export type OmsMarketsInput = {
@@ -30,6 +32,7 @@ export type OmsMarketsInput = {
   readonly base?: string;
   readonly active?: boolean;
   readonly settle?: string;
+  readonly symbol?: string;
   readonly kind?: VenueKind;
   readonly marketsByVenue?: Readonly<Record<string, OmsMarketsFn>>;
 };
@@ -73,6 +76,7 @@ export async function observeOmsMarkets(input: OmsMarketsInput): Promise<OmsMark
         input.base?.trim() || undefined,
         input.active,
         input.settle?.trim() || undefined,
+        input.symbol?.trim() || undefined,
       ),
     };
   } catch (err) {
