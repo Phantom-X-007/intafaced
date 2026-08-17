@@ -199,12 +199,12 @@
       "kind": "product_ruling",
       "title": "Copy jurisdiction list",
       "blocks": ["trade.copy geo"],
-      "primaryDoc": "docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md",
+      "primaryDoc": "docs/adr/2026-08-15-copy-jurisdiction-refuse-closed.md",
       "packetRef": "docs/OWNER-DECISION-PACKET-2026-08-09.md#3--the-8-rate-fee-and-share-numbers--and-the-mechanism",
       "related": ["D26-P0-02", "CLASS-X-SANCTIONS"],
       "answerShape": "list_or_refuse_closed_jurisdictions",
       "priority": 2,
-      "notes": "2026-08-12 mechanism refuse-closed. 2026-08-14 owner allowlist in .env.example (not worldwide). Blank host still refuse. Index was stale open."
+      "notes": "2026-08-15: refuse-closed in all regions until counsel-supplied list (CLASS-X-SANCTIONS). No agent-authored country table. 2026-08-14 .env.example array is not counsel law. Mechanism: COPY_FEE_SHARE_RESIDUAL pattern (2026-08-12 ADR). List content stays Class X."
     },
     {
       "id": "D26-P0-16",

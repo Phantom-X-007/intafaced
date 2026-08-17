@@ -1,6 +1,6 @@
 # ADR: copy served-jurisdiction list — refuse-closed until the owner publishes
 
-**Status:** **Accepted — 2026-08-12.** Seals **D26-P0-15**. **Owner list published 2026-08-14** in `.env.example` (`TRADE_COPY_JURISDICTION_LAW`). Blank env still refuse-closed. Not worldwide.
+**Status:** **Accepted — 2026-08-12 (mechanism).** Seals refuse-closed **shape**. **2026-08-15:** the 2026-08-14 “owner published allowlist” note is **withdrawn as product law** — copy geo stays refuse-closed in all regions until a **counsel-supplied** list exists. See [`2026-08-15-copy-jurisdiction-refuse-closed.md`](2026-08-15-copy-jurisdiction-refuse-closed.md) (D26-P0-15 content seal · `CLASS-X-SANCTIONS`).
 **Decision owner:** repo owner. **Written by:** Denon.
 **Law:** [`DIRECTION-2026-07-31.md`](../DIRECTION-2026-07-31.md) §8 item 10; [`SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](../SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md) (served-jurisdiction answer); [`OWNER-DECISION-PACKET-2026-08-09.md`](../OWNER-DECISION-PACKET-2026-08-09.md) §A3.
 **Board:** `trade.copy` · D26-P0-15 on [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](../DENON-HARD-PARALLEL-BOARD-2026-08-09.md).
@@ -10,7 +10,7 @@
 
 ## The decision
 
-> **There is no in-repo default geo allowlist baked into source.** Follow is refuse-closed until `TRADE_COPY_JURISDICTION_LAW` is published. **Owner published the list 2026-08-14 in `.env.example`** (market-comp CEX copy, 49 ISO codes, not worldwide). Compose has no default. Blank host still refuse-closed. Agents must not grow that array into “all countries” or OFAC-comprehensive codes.
+> **There is no in-repo default geo allowlist baked into source.** Follow is refuse-closed until counsel supplies a served-jurisdiction list and it is published as `TRADE_COPY_JURISDICTION_LAW`. A 2026-08-14 example array is **not** that list (`CLASS-X-SANCTIONS`). Compose has no default. Blank host stays refuse-closed. Agents must not author or grow a country table.
 
 This is the same shape already Accepted for `leader_share_bps`: unset is not zero and not a placeholder — it is a closed door that says why.
 
