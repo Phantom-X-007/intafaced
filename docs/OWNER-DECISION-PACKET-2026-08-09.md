@@ -109,7 +109,7 @@ The relative one exists because the absolute one alone was exploited: **two orde
 
 ## 5 · Which account funds realised futures profit
 
-Open since [`adr/2026-08-05`](adr/2026-08-05-futures-risk-and-mark-law.md). **Taken (PKT-B5 / 2026-08-13):** name `house:fees:trade:available` in host env; compose still has **no default**. Futures that have not named a pot pay no realised profit. That is Denon law, not a Nitro click.
+Open since [`adr/2026-08-05`](adr/2026-08-05-futures-risk-and-mark-law.md). **PKT-B5 seal (2026-08-15):** `TRADE_FUTURES_PROFIT_SOURCE` remains unset. `futuresRealizeProfit` stays refuse-closed until the owner names the account. No silent `houseFees` fallback; no house account invented. Compose still has **no default**. That is Denon law, not a Nitro click.
 
 ## 6 · Turning funding on for a market
 

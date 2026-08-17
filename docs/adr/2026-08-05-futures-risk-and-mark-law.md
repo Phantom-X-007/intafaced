@@ -105,6 +105,14 @@ The ladder is already built and argued in `services/svc-bank/src/loans/risk.ts` 
 
 Which account, and how it is funded, is an owner decision — it is a fee and revenue recipe, `DIRECTION` §8 item 6.
 
+### PKT-B5 seal — 2026-08-15
+
+**`TRADE_FUTURES_PROFIT_SOURCE` has no default.** This ADR does not name an account.
+
+`futuresRealizeProfit` stays refuse-closed until the owner names the account that funds realised futures profit. Agents must not invent an account id and must not silently fall back to `houseFees`. A fee balance is not a named source.
+
+Until that name exists, realised profit is not paid. The payout-bound mechanism (refuse rather than overdraw) remains implementable; the account choice does not.
+
 ---
 
 ## Done bar
@@ -129,7 +137,7 @@ Which account, and how it is funded, is an owner decision — it is a fee and re
 
 ## What still needs the owner
 
-- **Which account funds realised profit, and how it is capitalised.** A fee and revenue recipe, and a `DIRECTION` §3 carve-out twice over.
+- **Which account funds realised profit, and how it is capitalised.** PKT-B5 (2026-08-15): the variable stays unset; `futuresRealizeProfit` stays refuse-closed until the owner names it. No silent `houseFees` fallback. A fee and revenue recipe, and a `DIRECTION` §3 carve-out twice over.
 - Any leverage or margin parameter beyond §1's stated defaults — `DIRECTION` §8 item 8.
 - Cross-margin, which is a different product and needs its own spec.
 - Turning funding on for a market at all.
