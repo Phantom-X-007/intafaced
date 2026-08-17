@@ -130,6 +130,7 @@ interface PayStubs {
   getSettlement?: ReturnType<typeof vi.fn>;
   getMerchant?: ReturnType<typeof vi.fn>;
   getMerchantByUserId?: ReturnType<typeof vi.fn>;
+  payoutSettlement?: ReturnType<typeof vi.fn>;
 }
 
 interface SubStubs {
@@ -168,6 +169,11 @@ async function mountDoors(opts: { pay?: PayStubs; subs?: SubStubs; trees?: SubMe
     });
   const getMerchantByUserId =
     opts.pay?.getMerchantByUserId ?? vi.fn(async (userId: string) => (userId === USER ? ({ id: MERCHANT } as never) : null));
+  const payoutSettlement =
+    opts.pay?.payoutSettlement ??
+    vi.fn(async () => {
+      throw new PayError('no payout', 'pay.rail_failed');
+    });
 
   const pay = {
     settleWindow,
@@ -178,9 +184,7 @@ async function mountDoors(opts: { pay?: PayStubs; subs?: SubStubs; trees?: SubMe
     releasePendingSettlement: async () => {
       throw new PayError('not pending', 'pay.settlement_not_pending');
     },
-    payoutSettlement: async () => {
-      throw new PayError('no payout', 'pay.rail_failed');
-    },
+    payoutSettlement,
   } as unknown as PayService;
 
   const money = {
@@ -673,6 +677,54 @@ describe('D26-P2-01b public doors — grant refuse invent authority', () => {
 
     expect(statusCode).toBe(401);
     expect(grantPermission).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
+describe('D26-P2-01b spine reprove — malformed settlement wire', () => {
+  it('settlement.run rejects non-uuid merchantId at the schema', async () => {
+    const settleWindow = vi.fn();
+    const { app } = await mountDoors({ pay: { settleWindow } });
+
+    const { statusCode } = await post(app, 'settlement.run', {
+      merchantId: 'not-a-uuid',
+      window: 'w-malformed-merchant',
+      assetId: 'USDT',
+    });
+
+    expect(statusCode).toBe(400);
+    expect(settleWindow).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('settlement.run rejects blank window at the schema', async () => {
+    const settleWindow = vi.fn();
+    const { app } = await mountDoors({ pay: { settleWindow } });
+
+    const { statusCode } = await post(app, 'settlement.run', {
+      merchantId: MERCHANT,
+      window: '',
+      assetId: 'USDT',
+    });
+
+    expect(statusCode).toBe(400);
+    expect(settleWindow).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('settlement.payout rejects non-uuid settlementId before payout rail lookup', async () => {
+    const payoutSettlement = vi.fn();
+    const { app } = await mountDoors({ pay: { payoutSettlement } });
+
+    const { statusCode } = await post(
+      app,
+      'settlement.payout',
+      { settlementId: 'deadbeef', railId: 'card-sandbox' },
+      signedHeaders(principal({ scopes: ['pay:payout', 'pay:write'] })),
+    );
+
+    expect(statusCode).toBe(400);
+    expect(payoutSettlement).not.toHaveBeenCalled();
     await app.close();
   });
 });
