@@ -28,7 +28,12 @@ describe('D26-P1-P5 fraud review queue', () => {
 
   it('refuses allow/decline enqueue (no silent queue pollution)', () => {
     const q = new MemoryFraudReviewQueue();
-    const allow = evaluateFraud({ merchantId: 'm1', amount: '1', assetId: 'USDT' });
+    const allow = evaluateFraud({
+      merchantId: 'm1',
+      amount: '1',
+      assetId: 'USDT',
+      enabled: { velocity_count: false, velocity_volume: false, amount_anomaly: false },
+    });
     expect(allow.outcome).toBe('allow');
     expect(() => q.enqueue({ id: 'x', merchantId: 'm1', amount: '1', assetId: 'USDT', decision: allow })).toThrowError(FraudReviewError);
   });
