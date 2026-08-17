@@ -1928,8 +1928,15 @@ export class TradeService {
    * the IN-list — never invents a status. Default still includes pending
    * (hiding a hold that has not reached the book is the risk this list exists
    * to show). Optional side narrows buy/sell in SQL — never invents a side.
+   * Optional type narrows limit/market in SQL — never invents a type.
    */
-  async openOrders(principal: Principal, marketId?: string, status?: 'pending' | 'open', side?: 'buy' | 'sell'): Promise<OrderRecord[]> {
+  async openOrders(
+    principal: Principal,
+    marketId?: string,
+    status?: 'pending' | 'open',
+    side?: 'buy' | 'sell',
+    type?: 'limit' | 'market',
+  ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
     const statusFilter =
       status === 'pending'
@@ -1938,15 +1945,16 @@ export class TradeService {
           ? this.sql`status = 'open'`
           : this.sql`status IN ('pending', 'open')`;
     const sideFilter = side === 'buy' ? this.sql`side = 'buy'` : side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
+    const typeFilter = type === 'limit' ? this.sql`type = 'limit'` : type === 'market' ? this.sql`type = 'market'` : this.sql`TRUE`;
     const rows = marketId
       ? await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND market_id = ${marketId}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter} AND market_id = ${marketId}
            ORDER BY created_at DESC
         `
       : await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter}
+           WHERE user_id = ${principal.userId} AND ${statusFilter} AND ${sideFilter} AND ${typeFilter}
            ORDER BY created_at DESC
         `;
     return rows.map(toOrder);

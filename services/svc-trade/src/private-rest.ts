@@ -39,7 +39,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=)
+ *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
@@ -82,7 +82,13 @@ export interface PrivateRestDeps {
   /** Shared EDGE_PRINCIPAL_SECRET — same value tRPC uses. */
   edgeSecret: string;
   serviceName: string;
-  openOrders(principal: Principal, marketId?: string, status?: 'pending' | 'open', side?: 'buy' | 'sell'): Promise<OrderRecord[]>;
+  openOrders(
+    principal: Principal,
+    marketId?: string,
+    status?: 'pending' | 'open',
+    side?: 'buy' | 'sell',
+    type?: 'limit' | 'market',
+  ): Promise<OrderRecord[]>;
   orderHistory(
     principal: Principal,
     input: {
@@ -494,6 +500,13 @@ export function parseOpenOrderStatus(raw: unknown): { ok: true; status?: 'pendin
   return { ok: false, message: 'status must be pending or open' };
 }
 
+/** Optional live-order type filter. Absent → both limit and market. */
+export function parseOpenOrderType(raw: unknown): { ok: true; type?: 'limit' | 'market' } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, type: undefined };
+  if (raw === 'limit' || raw === 'market') return { ok: true, type: raw };
+  return { ok: false, message: 'type must be limit or market' };
+}
+
 /** Optional live-status filter. Absent → both open and closing. */
 export function parseOpenPositionStatus(raw: unknown): { ok: true; status?: 'open' | 'closing' } | { ok: false; message: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, status: undefined };
@@ -653,44 +666,51 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
   // ── Static paths first (before :id) ───────────────────────────────────────
 
-  app.get<{ Querystring: { symbol?: string; status?: string; side?: string } }>('/api/v1/orders/open', async (req, reply) => {
-    const principal = requirePrincipal(req, reply);
-    if (!principal) return;
+  app.get<{ Querystring: { symbol?: string; status?: string; side?: string; type?: string } }>(
+    '/api/v1/orders/open',
+    async (req, reply) => {
+      const principal = requirePrincipal(req, reply);
+      if (!principal) return;
 
-    let marketId: string | undefined;
-    const symbolRaw = req.query.symbol;
-    if (symbolRaw !== undefined && symbolRaw !== '') {
-      const symbol = decodeURIComponent(symbolRaw);
-      const market = await deps.marketBySymbol(symbol);
-      if (!market) {
-        return sendCcxt(reply, badSymbol(symbol));
+      let marketId: string | undefined;
+      const symbolRaw = req.query.symbol;
+      if (symbolRaw !== undefined && symbolRaw !== '') {
+        const symbol = decodeURIComponent(symbolRaw);
+        const market = await deps.marketBySymbol(symbol);
+        if (!market) {
+          return sendCcxt(reply, badSymbol(symbol));
+        }
+        marketId = market.id;
       }
-      marketId = market.id;
-    }
-    const statusParsed = parseOpenOrderStatus(req.query.status);
-    if (!statusParsed.ok) {
-      return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_open_order_status'));
-    }
-    const sideParsed = parseFillSide(req.query.side);
-    if (!sideParsed.ok) {
-      return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_open_order_side'));
-    }
+      const statusParsed = parseOpenOrderStatus(req.query.status);
+      if (!statusParsed.ok) {
+        return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_open_order_status'));
+      }
+      const sideParsed = parseFillSide(req.query.side);
+      if (!sideParsed.ok) {
+        return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_open_order_side'));
+      }
+      const typeParsed = parseOpenOrderType(req.query.type);
+      if (!typeParsed.ok) {
+        return sendCcxt(reply, badRequest(typeParsed.message, 'trade.invalid_open_order_type'));
+      }
 
-    try {
-      const orders = await deps.openOrders(principal, marketId, statusParsed.status, sideParsed.side);
-      const symbolByMarket = new Map<string, string>();
-      const wire = [];
-      for (const order of orders) {
-        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
-        wire.push(presentCcxtOrder(order, symbol));
+      try {
+        const orders = await deps.openOrders(principal, marketId, statusParsed.status, sideParsed.side, typeParsed.type);
+        const symbolByMarket = new Map<string, string>();
+        const wire = [];
+        for (const order of orders) {
+          const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+          wire.push(presentCcxtOrder(order, symbol));
+        }
+        return reply.code(200).send(wire);
+      } catch (err) {
+        const sent = sendDomainError(reply, err);
+        if (sent) return sent;
+        throw err;
       }
-      return reply.code(200).send(wire);
-    } catch (err) {
-      const sent = sendDomainError(reply, err);
-      if (sent) return sent;
-      throw err;
-    }
-  });
+    },
+  );
 
   app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string } }>(
     '/api/v1/orders/closed',
