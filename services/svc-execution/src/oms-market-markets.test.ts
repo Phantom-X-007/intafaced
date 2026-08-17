@@ -95,6 +95,18 @@ describe('marketDataAdapterMarkets', () => {
     expect(await observe()).toHaveLength(2);
   });
 
+  it('filters by settle without hiding null-settle spot when omitted', async () => {
+    const observe = marketDataAdapterMarkets(
+      adapter({
+        markets: async () => [listed(), listed({ type: 'perpetual', symbol: 'BTC/USDT:USDT', venueSymbol: 'BTCUSDT', settle: 'USDT' })],
+      }),
+    );
+    expect((await observe(undefined, undefined, undefined, undefined, 'USDT')).map((row) => row.settle)).toEqual(['USDT']);
+    expect(await observe(undefined, undefined, undefined, undefined, 'USD')).toEqual([]);
+    expect(await observe()).toHaveLength(2);
+    expect((await observe())[0]?.settle).toBeNull();
+  });
+
   it('propagates venue not_ready — does not invent a catalog', async () => {
     const observe = marketDataAdapterMarkets(
       adapter({
