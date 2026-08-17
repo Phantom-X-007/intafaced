@@ -92,7 +92,7 @@ import {
   type TicketFixture,
 } from './data-tools.js';
 import type { SupportDeskPort } from './desk-port.js';
-import type { SupportDeskPlane } from './grounded.js';
+import { supportGrounded, type SupportDeskPlane } from './grounded.js';
 import { resolveSupportAskFixtures } from './grounding-resolve.js';
 import { supportTierGate, type SupportTierLaw } from './tier-gate.js';
 
@@ -414,6 +414,22 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     };
   }
 
+  // Checked before the KB-plane gate, because a money request needs no lookup
+  // to be answered: the answer is "a person handles this", even when the KB is dark.
+  if (input.moneyRequest === true) {
+    return {
+      status: 'escalate',
+      reason: 'money_request',
+      userMessageKey: 'agents.support.escalated',
+      findings: [],
+      unanswered: [],
+      caseFile: buildSupportCaseFile({ reason: 'money_request', moneyRequest: true }),
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
+  const catalogCount = input.kbCatalog?.length ?? 0;
+
   const tier = supportTierGate({ law: input.tierLaw ?? null, userTier: input.userTier });
   if (tier.status === 'refuse') {
     return {
@@ -425,18 +441,25 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     };
   }
 
-  // Checked before the ask list, because a refund request needs no lookup to be
-  // answered: the answer is "a person handles this", whatever the KB says.
-  if (input.moneyRequest === true) {
-    return {
-      status: 'escalate',
-      reason: 'money_request',
-      userMessageKey: 'agents.support.escalated',
-      findings: [],
-      unanswered: [],
-      caseFile: buildSupportCaseFile({ reason: 'money_request', moneyRequest: true }),
-      metering: unmetered(input.feeAssetId),
-    };
+  // Any KB search — kbQuery *or* smuggled article fixtures — needs a published
+  // catalog. Fixture articles are not a live ops.support KB plane.
+  const kbAsked = input.asks.some((ask) => ask.tool.trim() === SUPPORT_KB_TOOL);
+  if (kbAsked) {
+    const grounded = supportGrounded({
+      plane: input.plane,
+      kbPlane: catalogCount > 0 ? 'live' : 'dark',
+      requireKb: true,
+      kbHitCount: catalogCount,
+    });
+    if (grounded.status === 'refuse') {
+      return {
+        status: 'refuse',
+        reason: grounded.reason === 'kb_empty' ? 'kb_plane_ungrounded' : grounded.reason,
+        userMessageKey: grounded.userMessageKey,
+        unanswered: [],
+        metering: unmetered(input.feeAssetId),
+      };
+    }
   }
 
   if (input.asks.length === 0) {
@@ -549,6 +572,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
             return invokeSupportDataTool({
               tool,
               plane: input.plane,
+              kbPlane: catalogCount > 0 ? 'live' : 'dark',
               requesterUserId: input.userId,
               tierLaw: input.tierLaw ?? null,
               userTier: input.userTier,

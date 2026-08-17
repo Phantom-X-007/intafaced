@@ -132,6 +132,7 @@ function baseInput(fake: FakeRuntime) {
     userId: USER,
     feeAssetId: 'IFC',
     plane: 'live' as const,
+    kbCatalog: [{ id: ARTICLE.articleKey, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }],
     tierLaw: law,
     userTier: 'free',
     desk: createFixtureSupportDesk({
@@ -199,6 +200,26 @@ describe('D26-P1-A2 agents.support Done bar', () => {
     expect(result).toMatchObject({ status: 'stopped', reason: 'aborted' });
     expect(fake.executed).toEqual([]);
     if (result.status !== 'stopped') return;
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('KB-dark with fixture articles never produces a confident product reply', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: null,
+      asks: [
+        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE] },
+        {
+          tool: 'identity.account.read',
+          account: { userId: USER, status: 'active' as const, kycTier: 'tier2' },
+        },
+      ],
+    });
+    expect(result.status).not.toBe('ok');
+    expect(result).toMatchObject({ status: 'refuse', reason: 'kb_plane_ungrounded' });
+    expect(result).not.toHaveProperty('citedArticleKeys');
+    expect(fake.openCalls).toBe(0);
     expect(result.metering.billedAmount).toBe('0');
   });
 });

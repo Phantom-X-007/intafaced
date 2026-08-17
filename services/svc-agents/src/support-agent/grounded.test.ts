@@ -28,6 +28,12 @@ describe('support agent Stage-2 grounded', () => {
     const r = supportGrounded({ plane: 'live', requireKb: true, kbHitCount: 0 });
     expect(r).toMatchObject({ status: 'refuse', reason: 'kb_empty' });
   });
+
+  it('dark KB plane refuses even when the desk plane is live', () => {
+    const r = supportGrounded({ plane: 'live', kbPlane: 'dark' });
+    expect(r).toMatchObject({ status: 'refuse', reason: 'kb_empty', userMessageKey: 'agents.support.unavailable' });
+    expect(r.status === 'ok').toBe(false);
+  });
 });
 
 describe('L3 wave51 support grounded status/export', () => {

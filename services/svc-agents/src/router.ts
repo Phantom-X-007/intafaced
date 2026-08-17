@@ -1789,6 +1789,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .input(
           z.object({
             plane: z.enum(['live', 'dark']),
+            kbPlane: z.enum(['live', 'dark']).optional(),
             kbHitCount: z.number().int().min(0).max(10_000).optional(),
             requireKb: z.boolean().optional(),
           }),
@@ -1811,6 +1812,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .query(({ input }) => {
           const result = supportGrounded({
             plane: input.plane,
+            ...(input.kbPlane === undefined ? {} : { kbPlane: input.kbPlane }),
             ...(input.kbHitCount === undefined ? {} : { kbHitCount: input.kbHitCount }),
             ...(input.requireKb === undefined ? {} : { requireKb: input.requireKb }),
           });
@@ -1947,6 +1949,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .nullable()
               .optional(),
             occurredAt: z.string().datetime().optional(),
+            kbPlane: z.enum(['live', 'dark']).optional(),
           }),
         )
         .output(
@@ -2032,6 +2035,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           const result = await invokeSupportDataTool({
             tool: input.tool,
             plane: input.plane,
+            ...(input.kbPlane === undefined ? {} : { kbPlane: input.kbPlane }),
             requesterUserId: ctx.principal.userId,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
@@ -2102,6 +2106,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .nullable()
               .optional(),
             moneyRequest: z.boolean().optional(),
+            /** Omitted → dark. Fixture articles are not a live ops.support KB. */
+            kbPlane: z.enum(['live', 'dark']).optional(),
           }),
         )
         .output(
@@ -2121,6 +2127,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           const kbResult = await invokeSupportDataTool({
             tool: input.tool,
             plane: input.plane,
+            kbPlane: input.kbPlane ?? 'dark',
             requesterUserId: ctx.principal.userId,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',

@@ -33,7 +33,7 @@
 
 import type { SupportDeskPort } from './desk-port.js';
 import { isSupportMoneyTool, supportAgentGuardrail } from './guardrail.js';
-import { supportGrounded, type SupportDeskPlane } from './grounded.js';
+import { supportGrounded, type SupportDeskPlane, type SupportKbPlane } from './grounded.js';
 import { supportTierGate, type SupportTierLaw, type SupportTierGateRefuse } from './tier-gate.js';
 
 export const SUPPORT_DATA_TOOLS = ['support.kb.search', 'support.ticket.read', 'identity.account.read'] as const;
@@ -236,6 +236,8 @@ async function invokeViaDesk(
 export async function invokeSupportDataTool(input: {
   tool: string;
   plane: SupportDeskPlane;
+  /** Dark KB plane refuses even when the caller smuggled article fixtures. */
+  kbPlane?: SupportKbPlane;
   /** The user asking. Row-scoped tools refuse when the row is not theirs. */
   requesterUserId: string;
   /** Product-law tier matrix. Blank → refuse-closed (no invent). */
@@ -258,7 +260,10 @@ export async function invokeSupportDataTool(input: {
 
   // The plane gate's own reason travels rather than being restated — hardcoding
   // `desk_plane_dark` here would mislabel every future refusal that gate learns.
-  const grounded = supportGrounded({ plane: input.plane });
+  const grounded = supportGrounded({
+    plane: input.plane,
+    ...(input.kbPlane === undefined ? {} : { kbPlane: input.kbPlane }),
+  });
   if (grounded.status === 'refuse') {
     return { status: 'refuse', tool, reason: grounded.reason, userMessageKey: grounded.userMessageKey };
   }

@@ -45,6 +45,9 @@ function kbAsk(articles: readonly (typeof ARTICLE)[] | null = [ARTICLE]) {
   return { tool: SUPPORT_KB_TOOL, articles };
 }
 
+/** Published ops.support catalog — fixture article keys are not a live KB by themselves. */
+const PUBLISHED_KB = [{ id: ARTICLE.articleKey, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }];
+
 function accountAsk(userId = USER) {
   return {
     tool: 'identity.account.read',
@@ -186,6 +189,7 @@ function baseInput(fake: FakeRuntime) {
     userId: USER,
     feeAssetId: 'IFC',
     plane: 'live' as const,
+    kbCatalog: PUBLISHED_KB,
     tierLaw: law,
     userTier: 'free',
     desk: testDesk(),
@@ -678,7 +682,7 @@ describe('support.reply metered session run', () => {
 
     expect(result).toMatchObject({
       status: 'refuse',
-      reason: 'no_live_kb',
+      reason: 'kb_plane_ungrounded',
       userMessageKey: 'agents.support.unavailable',
     });
     // Not a live KB plane: no session, no articles composed, no silent fee.
@@ -701,9 +705,62 @@ describe('support.reply metered session run', () => {
 
     expect(result).toMatchObject({
       status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('live catalog without a desk port refuses no_live_kb — fixtures are not a live KB', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: null,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
       reason: 'no_live_kb',
       userMessageKey: 'agents.support.unavailable',
     });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('refuses smuggled article fixtures when the KB catalog is dark — never status ok', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: null,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result.status).not.toBe('ok');
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(result).not.toHaveProperty('citedArticleKeys');
+    expect(result).not.toHaveProperty('findings');
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('still escalates a money request when the KB catalog is dark', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: null,
+      moneyRequest: true,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result.status).not.toBe('ok');
+    expect(result).toMatchObject({ status: 'escalate', reason: 'money_request' });
     expect(fake.openCalls).toBe(0);
     expect(result.metering.billedAmount).toBe('0');
   });

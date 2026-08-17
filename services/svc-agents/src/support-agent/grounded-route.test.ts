@@ -63,4 +63,10 @@ describe('support.grounded route', () => {
       .support.grounded({ plane: 'live', requireKb: true, kbHitCount: 0 });
     expect(result).toMatchObject({ status: 'refuse', reason: 'kb_empty' });
   });
+
+  it('dark KB plane refuses invent even when the desk is live', async () => {
+    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).support.grounded({ plane: 'live', kbPlane: 'dark' });
+    expect(result).toMatchObject({ status: 'refuse', reason: 'kb_empty' });
+    expect(result.status).not.toBe('ok');
+  });
 });
