@@ -324,6 +324,7 @@ if (!e2e) {
       ['trade.convert.execute', 'that convert is in the money kill catalogue'],
       ['pay.withdrawal.create', 'that withdrawal is in the money kill catalogue'],
       ['agents.run.complete', 'that agents metering is in the money kill catalogue'],
+      ['assertMoneyRoutesHaveKillMapping', 'that an unmapped money prefix fails closed'],
     ]) {
       if (!moneySurface.includes(needle)) {
         failures.push(`money-kill-surface.ts no longer covers ${what} ("${needle}" not found)`);
@@ -346,6 +347,75 @@ if (!e2e) {
       `control-plane.e2e.test.ts contains ${skipped.length} skipped/conditional suite(s) (${[...new Set(skipped)].join(', ')}) — ` +
         'the kill-switch proof must run unconditionally. A gate that greps a test it never runs has proved nothing (§14.6).',
     );
+  }
+}
+
+// ── 8 · A new money route without a kill mapping fails this gate (D26-P2-10) ─
+//
+// Assertion 1 proves every prefix *names* a module. That is not a kill mapping:
+// `/api/pay/v2` can say `module: 'pay'` and still be absent from MONEY_PUBLIC_DOORS,
+// so the prove suite never walks it and an operator cannot show the door refuses.
+// Catalogue rows are opt-in until this check: parse live UPSTREAMS, require every
+// money-module prefix to have at least one catalogue path under it.
+{
+  const moneySurface = read('packages', 'config', 'src', 'money-kill-surface.ts');
+  if (!moneySurface) {
+    failures.push('packages/config/src/money-kill-surface.ts is missing — money-route kill mapping has no catalogue');
+  } else {
+    if (!/assertMoneyRoutesHaveKillMapping/.test(moneySurface)) {
+      failures.push(
+        'money-kill-surface.ts is missing assertMoneyRoutesHaveKillMapping — the fail-closed mapping check is not in the catalogue module',
+      );
+    }
+    const modulesSrc = read('packages', 'config', 'src', 'modules.ts') ?? '';
+    const custodial = new Set();
+    for (const m of modulesSrc.matchAll(/id:\s*'([a-z][a-z0-9-]*)'[\s\S]*?custodial:\s*(true|false)/g)) {
+      if (m[2] === 'true') custodial.add(m[1]);
+    }
+    if (custodial.size === 0) {
+      failures.push('modules.ts custodial ids could not be parsed — money-route mapping would skip every prefix');
+    }
+    // agents bills via ledger recipes — same kill surface even though custodial:false.
+    const moneyModules = new Set([...custodial, 'agents']);
+
+    const doorRows = [...moneySurface.matchAll(/\{\s*id:\s*'([^']+)',\s*module:\s*'([^']+)',\s*method:\s*'[^']+',\s*path:\s*'([^']+)'/g)];
+    if (doorRows.length === 0) {
+      failures.push('MONEY_PUBLIC_DOORS could not be parsed — a mapping check that sees zero doors would pass vacuously');
+    }
+
+    const pathUnder = (path, prefix) => path === prefix || path.startsWith(`${prefix}/`);
+
+    if (routes) {
+      const upstreams = [...routes.matchAll(/\{\s*prefix:\s*'([^']+)'([^}]*)\}/g)].map(([, prefix, rest]) => {
+        const m = /\bmodule:\s*'([^']+)'/.exec(rest);
+        return { prefix, module: m ? m[1] : '' };
+      });
+      if (upstreams.length === 0) {
+        failures.push('UPSTREAMS could not be parsed for money-route kill mapping');
+      }
+      for (const u of upstreams) {
+        if (!moneyModules.has(u.module)) continue;
+        if (u.module === 'ledger') {
+          failures.push(`money route prefix "${u.prefix}" maps to ledger — halt the book at /admin/ledger/freeze, not an /api prefix`);
+          continue;
+        }
+        const covering = doorRows.filter(([, , module, path]) => module === u.module && pathUnder(path, u.prefix));
+        if (covering.length === 0) {
+          failures.push(
+            `money route prefix "${u.prefix}" (module ${u.module}) has no kill mapping in MONEY_PUBLIC_DOORS — ` +
+              'a new money door that is not in the catalogue cannot be proved killable from /admin/kill-switches (D26-P2-10)',
+          );
+        }
+      }
+      for (const [, id, module, path] of doorRows) {
+        const match = [...upstreams].filter((u) => pathUnder(path, u.prefix)).sort((a, b) => b.prefix.length - a.prefix.length)[0];
+        if (!match) {
+          failures.push(`money door "${id}" path ${path} matches no edge prefix — unmapped`);
+        } else if (match.module !== module) {
+          failures.push(`money door "${id}" path ${path} resolves to ${match.prefix} (${match.module}), catalogue says ${module}`);
+        }
+      }
+    }
   }
 }
 
@@ -373,3 +443,4 @@ console.log('    · every edge route names a module; only enforceable modules ca
 console.log('    · guard is an onRequest hook wired into the running edge, with a fail-closed catch');
 console.log('    · nothing publishes a host port outside the door unrecorded');
 console.log('    · the behavioural proof exists and is not skipped — it runs under `pnpm test`');
+console.log('    · every live money edge prefix has a MONEY_PUBLIC_DOORS kill mapping (D26-P2-10)');
