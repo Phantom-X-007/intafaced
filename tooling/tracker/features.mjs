@@ -323,7 +323,7 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade'],
-    note: 'Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining.',
+    note: 'Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). Actions are unlimited on this public repo (thrift retired 2026-08-07) — do not read billing as a Done blocker. Edge product-check optional remaining.',
   }),
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
@@ -333,8 +333,8 @@ export const FEATURES = [
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/futures'],
     note:
-      'WIP 2026-08-12 Denon D26-P1-T1e (feat/futures-gap-series-proof / #1689): mark/liq honesty on gapping depth series ' +
-      '(mark-gap-series-honesty.test.ts — markSourceFromDepth mid gap + smooth-ramp control). ' +
+      'WIP (not umbrella-done) — D26-P4-09 2026-08-15: T1e is LANDED #1689, not current craft. ' +
+      'Gap-series honesty on tip (mark-gap-series-honesty.test.ts — markSourceFromDepth mid gap + smooth-ramp control). ' +
       'Also sealed on tip: #1685 T1g ADL disclosure; #1684 T1d insurance shortfall; #1681 T1c partial vs real book; #1679 T1f; #1678 T1b. Isolated margin ONLY. ' +
       'Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). ' +
       'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
@@ -369,7 +369,8 @@ export const FEATURES = [
     dependsOn: ['trade.spot', 'token.staking'],
     requires: ['services/svc-trade/src/otc'],
     note:
-      'WIP 2026-08-12 Denon D26-P1-T2 (feat/trade-otc-rfq-settle): RFQ→stake→fail-closed quote (mid asOf + owner maxMidAgeSeconds)→ledger settle. ' +
+      'WIP residual (not umbrella-done) — D26-P4-09 2026-08-15: T2 RFQ/stake/settle LANDED #1686; durable quotes #1814; mid-feed #1812. ' +
+      'RFQ→stake→fail-closed quote (mid asOf + owner maxMidAgeSeconds)→ledger settle. ' +
       'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
       'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
       '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
@@ -569,7 +570,7 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['matching.engine'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'D26-P4-06 (2026-08-15) product SLO for the shell: empty book stays empty — `docs/ops/DEPTH-TAPE-PRODUCT-SLO.md`. No fake depth, no invent mid, no seed fills as live tape; no measured latency SLO (honesty, not a p99). Status stays `done` (backend doors); Vue craft remains HUMAN. services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them.',
+    note: 'D26-P4-06 (2026-08-15) product SLO for the shell: empty book stays empty — `docs/ops/DEPTH-TAPE-PRODUCT-SLO.md`. No fake depth, no invent mid, no seed fills as live tape; no measured latency SLO (honesty, not a p99). Status stays `done` (backend doors); Vue craft remains HUMAN. CORRECTED 2026-08-15 D26-P4-09: `apps/web` is deleted (ADR retire-apps-web). services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; the vendored shell (`vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-depth-feed.js`) applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them.',
   }),
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
     module: 'trade',
@@ -615,7 +616,7 @@ export const FEATURES = [
       '`payment.list`, `getMerchantByUserId`, `scripts/card-sandbox-e2e.mjs` and migration `0005_pay_merchant_kyb`. ' +
       '#800 supplied the merchant-state writer the surface had been missing, so `merchants.status` is now written and historied ' +
       '(`merchant_status_events`, append-only by trigger, migration `0006`). 514 svc-pay tests green. ' +
-      'WHY IT IS STILL `wip` AND NOT `done`, two reasons, both checked in code rather than inferred: ' +
+      'WHY IT IS STILL `ready` AND NOT `done` (D26-P4-09 2026-08-15: status is `ready`, not `wip` — no owner, free to claim), two reasons, both checked in code rather than inferred: ' +
       '(1) CARD ACQUIRING IS ABSENT, NOT SANDBOX. `PAY_REGISTER_CARD_SANDBOX` defaults to off in staging/prod, `PAY_CHECKOUT_RAILS` ' +
       'defaults to `crypto-native:crypto` so the public hosted checkout never sees a card, and `PAY_ALLOW_SANDBOX_RAILS=false` makes ' +
       'staging/prod refuse to BOOT while any registered rail declares itself sandbox. So in every posture that ships, this gateway is ' +
@@ -690,7 +691,7 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.rails'],
-    note: '**D26-P1-P3 2026-08-13:** Hosted checkout open walks selectSmartCheckoutRail (geo/method/risk). Blank dims → pay.routing_input_missing; no invented approval/cost. Payer cannot name a rail. STILL NOT done: live acquiring / PSP (Class X). Not tracker done until live connectors.',
+    note: 'WIP residual — D26-P4-09 2026-08-15: P3 checkout smart-routing LANDED #1793, not current craft. Hosted checkout open walks selectSmartCheckoutRail (geo/method/risk). Blank dims → pay.routing_input_missing; no invented approval/cost. Payer cannot name a rail. STILL NOT done: live acquiring / PSP (Class X). Not tracker done until live connectors.',
   }),
   f('pay.settlement', 'Dual settlement — bank or crypto', {
     module: 'pay',
@@ -2124,9 +2125,8 @@ export const FEATURES = [
     dependsOn: ['trade.copy', 'trade.spot'],
     requires: ['services/svc-trade/src/copy/auto-mirror-place.ts', 'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts'],
     note:
-      '§13 — D26-P1-T3 (2026-08-12). planMirror + exposure claim are real; placing the plan as a follower spot order is not wired. ' +
-      'copy.placeMirror / deskStatus.autoMirrorPlace refuse-closed naming this socket — never invent fills or silently drop plans. ' +
-      'Closing needs a durable follower place path (session-key / principal wire), not a fake order id.',
+      'CORRECTED 2026-08-15 D26-P4-09 — do not read as unwired on tip. Production `svc-trade` `index.ts` wires `placeFollowerOrder` → follower `placeOrder` (IOC market; #1811). Unwired port still refuses by name (never invent fills). ' +
+      'deskStatus.autoMirrorPlace.published tracks the port. Status stays `socket` (not flipped to done): session-key / protocol residual still open. Closing needs that durable allowance, not a fake order id.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
