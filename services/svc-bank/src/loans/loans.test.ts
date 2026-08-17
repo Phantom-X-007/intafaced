@@ -1755,7 +1755,7 @@ if (!available) {
         expect((await loans.loan(opened.loan.id)).status).toBe('margin_call');
 
         await fund(BORROWER, 'BTC', '1');
-        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1') });
+        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1'), now });
 
         const sweep = await sweepAt(new Date(now.getTime() + 60_000));
         expect(sweep.cleared).toBe(1);

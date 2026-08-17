@@ -748,12 +748,15 @@ export class LoanService {
    * loan alone. Clearing the call is left to the next mark rather than done here:
    * curing is a question about a price, and this method does not have one.
    */
-  async addCollateral(input: { loanId: string; amount: Amount }): Promise<{ ledgerTxId: string; sequence: number }> {
+  async addCollateral(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+    const now = input.now ?? new Date();
     const loan = await this.loan(input.loanId);
     if (loan.status === 'repaid' || loan.status === 'liquidated') {
       throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
     }
     if (input.amount <= 0n) throw new BankError('Collateral top-up must be positive', 'bank.below_minimum');
+
+    await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
 
     const sequence = await this.nextCollateralSequence(loan.id);
     const txId = await this.lockCollateral(loan, input.amount, sequence);
