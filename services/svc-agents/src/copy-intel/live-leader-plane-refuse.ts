@@ -90,16 +90,13 @@ export function refuseLiveLeaderBoard(rankBy = 'live'): never {
 export function presentLiveLeaderBoard(
   stats: readonly LeaderStat[],
   options: { readonly rankBy?: string; readonly leaderAllowlist?: LiveLeaderIds } = {},
-): DirectoryResult | never {
+): DirectoryResult | LiveLeaderPlaneRefuse | never {
   if (options.rankBy !== undefined && isForbiddenReturnsRankKey(options.rankBy)) {
     return refuseLiveLeaderBoard(options.rankBy);
   }
   if (!isLiveLeaderPlaneAllowlisted(options.leaderAllowlist)) {
-    return {
-      status: 'refuse',
-      reason: 'marketing_board',
-      userMessageKey: 'agents.copy_intel.unavailable',
-    };
+    // Missing live trade.copy leaders — named refuse, never an invented ROI board.
+    return refuseLiveLeaderPlane();
   }
   // Unreachable while LIVE_TRADE_COPY_LEADER_PLANE_OPEN is false / ids empty.
   // Directory only — never a returns rank — if Class X later opens the seal.
