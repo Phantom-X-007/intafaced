@@ -241,14 +241,7 @@ describe('committed AMM artefacts match the Solidity in this tree', () => {
 
 describe('committed vault artefacts match the Solidity in this tree', () => {
   const vaults = (SUITES as Suite[]).find((s) => s.name === 'vaults');
-  const vaultNames = [
-    'CrewVault',
-    'LegacyVault',
-    'LaunchLpLock',
-    'LaunchVesting',
-    'DeployerReputation',
-    'TreasuryYieldVault',
-  ] as const;
+  const vaultNames = ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'LaunchVesting', 'DeployerReputation', 'TreasuryYieldVault'] as const;
 
   it('compiles crew/legacy/trust/yield vaults', () => {
     expect(vaults?.expect).toBe('compiles');
