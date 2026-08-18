@@ -664,6 +664,18 @@ describe('svc-market mount — commerce scopes', () => {
     });
   });
 
+  it('forwards optional myListings offerType and refuses an invalid enum', async () => {
+    const commerce = stubCommerce();
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await caller.myListings({ offerType: 'subscription' });
+    expect(commerce.myListings).toHaveBeenCalledWith(USER, { offerType: 'subscription' });
+    await caller.myListings({ status: 'active', offerType: 'one_time' });
+    expect(commerce.myListings).toHaveBeenCalledWith(USER, { status: 'active', offerType: 'one_time' });
+    await expect(caller.myListings({ offerType: 'lease' as 'one_time' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('forwards optional myPurchases status and refuses an invalid enum', async () => {
     const commerce = stubCommerce();
     const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());

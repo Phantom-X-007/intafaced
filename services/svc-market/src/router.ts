@@ -421,7 +421,14 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       }),
 
     myListings: scopedProcedure('market:read', { module: 'market' })
-      .input(z.object({ status: z.enum(['active', 'archived']).optional() }).optional())
+      .input(
+        z
+          .object({
+            status: z.enum(['active', 'archived']).optional(),
+            offerType: z.enum(['one_time', 'subscription']).optional(),
+          })
+          .optional(),
+      )
       .output(z.array(listingOut))
       .query(async ({ ctx, input }) => {
         requireCommerce(commerce);

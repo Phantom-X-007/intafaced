@@ -552,6 +552,69 @@ if (!available) {
       });
       expect(await commerce.myListings(VENDOR_USER, { status: 'archived' })).toEqual([]);
     });
+
+    it('myListings omits offerType to mix one_time and subscription; filter is exact; public catalogue is unchanged', async () => {
+      await approvedVendor(VENDOR_USER);
+      const oneTime = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'One-shot pack',
+        description: 'one time',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10.50',
+      });
+      const sub = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Period pack',
+        description: 'subscription',
+        offerType: 'subscription',
+        assetId: 'USDT',
+        price: '12.00',
+        periodSeconds: 86400,
+      });
+
+      const omitted = await commerce.myListings(VENDOR_USER);
+      expect(omitted.map((l) => l.id).sort()).toEqual([oneTime.id, sub.id].sort());
+      expect(omitted.map((l) => l.offerType).sort()).toEqual(['one_time', 'subscription']);
+      expect(omitted.every((l) => typeof l.price === 'string')).toBe(true);
+      expect(formatAmount(amt(omitted.find((l) => l.id === oneTime.id)!.price))).toBe(formatAmount(amt(oneTime.price)));
+      expect(formatAmount(amt(omitted.find((l) => l.id === sub.id)!.price))).toBe(formatAmount(amt(sub.price)));
+
+      const oneTimeOnly = await commerce.myListings(VENDOR_USER, { offerType: 'one_time' });
+      expect(oneTimeOnly.map((l) => l.id)).toEqual([oneTime.id]);
+      expect(oneTimeOnly.every((l) => l.offerType === 'one_time')).toBe(true);
+      expect(typeof oneTimeOnly[0]?.price).toBe('string');
+      expect(formatAmount(amt(oneTimeOnly[0]!.price))).toBe(formatAmount(amt(oneTime.price)));
+
+      const subOnly = await commerce.myListings(VENDOR_USER, { offerType: 'subscription' });
+      expect(subOnly.map((l) => l.id)).toEqual([sub.id]);
+      expect(subOnly.every((l) => l.offerType === 'subscription')).toBe(true);
+      expect(typeof subOnly[0]?.price).toBe('string');
+      expect(formatAmount(amt(subOnly[0]!.price))).toBe(formatAmount(amt(sub.price)));
+
+      expect((await commerce.publicListings()).map((l) => l.id).sort()).toEqual([oneTime.id, sub.id].sort());
+
+      await commerce.archiveListing({ userId: VENDOR_USER, listingId: sub.id });
+      const nested = await commerce.myListings(VENDOR_USER, { status: 'archived', offerType: 'subscription' });
+      expect(nested.map((l) => l.id)).toEqual([sub.id]);
+      expect(await commerce.myListings(VENDOR_USER, { status: 'active', offerType: 'subscription' })).toEqual([]);
+      expect((await commerce.publicListings()).map((l) => l.id)).toEqual([oneTime.id]);
+    });
+
+    it('myListings returns [] when the offerType filter matches none', async () => {
+      expect(await commerce.myListings(VENDOR_USER, { offerType: 'subscription' })).toEqual([]);
+
+      await approvedVendor(VENDOR_USER);
+      await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Only one-time',
+        description: 'no sub',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      expect(await commerce.myListings(VENDOR_USER, { offerType: 'subscription' })).toEqual([]);
+    });
   });
 
   describe('purchases honesty residual', () => {
