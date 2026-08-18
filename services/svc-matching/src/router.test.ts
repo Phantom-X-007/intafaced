@@ -306,6 +306,17 @@ describe('the reconciliation routes', () => {
     sequence: 1,
   };
 
+  const RESTING_SELL = {
+    marketId: 'BTC-USDT',
+    orderId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    accountId: 'acct-2',
+    kind: 'stop' as const,
+    side: 'sell' as const,
+    price: '99',
+    remaining: '1',
+    sequence: 2,
+  };
+
   /** Fails loudly if the read routes ever reach for a write. */
   function fakeEngine(over: Record<string, unknown> = {}) {
     return {
@@ -375,6 +386,57 @@ describe('the reconciliation routes', () => {
     expect(unknown.json().message).toBe(userCopy('matching.market_not_found'));
     expect(empty.statusCode).toBe(200);
     expect(empty.json().orders).toEqual([]);
+    await app.close();
+  });
+
+  it('returns every resting order when side is omitted — book and stop, both sides', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ marketId: 'BTC-USDT', orders: live });
+    await app.close();
+  });
+
+  it('keeps only buy orders when side=buy, including an honest empty list', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const buys = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?side=buy', headers });
+    const sells = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?side=sell', headers });
+
+    expect(buys.statusCode).toBe(200);
+    expect(buys.json().orders).toEqual([RESTING]);
+    expect(sells.statusCode).toBe(200);
+    expect(sells.json().orders).toEqual([RESTING_SELL]);
+
+    await app.close();
+
+    const emptyApp = await mount(fakeEngine({ restingOrders: () => [RESTING] }));
+    const none = await emptyApp.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=sell',
+      headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
+    });
+    expect(none.statusCode).toBe(200);
+    expect(none.json().orders).toEqual([]);
+    await emptyApp.close();
+  });
+
+  it('refuses an invalid side with 400 and never asks restingOrders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?side=bid', headers });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidSide');
+    expect(asked).toBe(false);
     await app.close();
   });
 

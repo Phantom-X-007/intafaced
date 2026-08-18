@@ -286,6 +286,10 @@ export function registerRoutes(
    * 404 for a market with no book, matching `/depth`: "no such market" and "a
    * market with nothing resting" are different answers and a reconciler that
    * cannot tell them apart will report a whole book as missing.
+   *
+   * Optional `?side=buy|sell` filters the list after the engine answers. An
+   * unknown value is 400 before `restingOrders` is called — the engine is not
+   * asked to invent a book, and an empty match is still `[]`.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -299,7 +303,22 @@ export function registerRoutes(
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
 
-    return reply.code(200).send({ marketId, orders: engine.restingOrders(marketId) });
+    const sideRaw = (req.query as { side?: string | string[] }).side;
+    const sideParam = Array.isArray(sideRaw) ? sideRaw[0] : sideRaw;
+    let sideFilter: z.infer<typeof orderSideSchema> | undefined;
+    if (sideParam !== undefined) {
+      const parsed = orderSideSchema.safeParse(sideParam);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: 'InvalidSide', message: 'side must be buy or sell' });
+      }
+      sideFilter = parsed.data;
+    }
+
+    const orders = engine.restingOrders(marketId);
+    return reply.code(200).send({
+      marketId,
+      orders: sideFilter === undefined ? orders : orders.filter((order) => order.side === sideFilter),
+    });
   });
 
   /**
