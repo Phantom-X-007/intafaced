@@ -1028,6 +1028,7 @@ export function createIdentityRouter(
         }),
 
       list: scopedProcedure('identity:read')
+        .input(z.object({ revoked: z.boolean().optional() }).optional())
         .output(
           z.array(
             z.object({
@@ -1041,8 +1042,8 @@ export function createIdentityRouter(
             }),
           ),
         )
-        .query(async ({ ctx }) => {
-          const keys = await auth.listApiKeys(ctx.principal.userId);
+        .query(async ({ ctx, input }) => {
+          const keys = await auth.listApiKeys(ctx.principal.userId, input);
           return keys.map((k) => ({
             id: k.id,
             name: k.name,

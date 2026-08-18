@@ -996,7 +996,8 @@ export class AuthService {
     return result.count > 0;
   }
 
-  async listApiKeys(userId: string) {
+  async listApiKeys(userId: string, opts?: { revoked?: boolean }) {
+    const revoked = opts?.revoked;
     return this.sql<
       Array<{
         id: string;
@@ -1009,7 +1010,9 @@ export class AuthService {
       }>
     >`
       SELECT id, name, key_prefix, scopes, last_used_at, revoked, mode FROM api_keys
-       WHERE user_id = ${userId} ORDER BY created_at DESC
+       WHERE user_id = ${userId}
+       ${revoked === undefined ? this.sql`` : this.sql`AND revoked = ${revoked}`}
+       ORDER BY created_at DESC
     `;
   }
 

@@ -699,6 +699,55 @@ if (!available) {
       expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
     });
 
+    it('filters listApiKeys by revoked in SQL; omitted still returns live and retired', async () => {
+      const owner = await register();
+      const other = await register();
+      const live = await auth.createApiKey({
+        userId: owner.userId,
+        name: 'live',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      const retired = await auth.createApiKey({
+        userId: owner.userId,
+        name: 'retired',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      await auth.revokeApiKey(owner.userId, retired.id);
+      const foreign = await auth.createApiKey({
+        userId: other.userId,
+        name: 'foreign-live',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      const foreignRetired = await auth.createApiKey({
+        userId: other.userId,
+        name: 'foreign-retired',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      await auth.revokeApiKey(other.userId, foreignRetired.id);
+
+      const omitted = await auth.listApiKeys(owner.userId);
+      expect(omitted.map((k) => k.id).sort()).toEqual([live.id, retired.id].sort());
+      expect(omitted.find((k) => k.id === live.id)?.revoked).toBe(false);
+      expect(omitted.find((k) => k.id === retired.id)?.revoked).toBe(true);
+
+      const onlyLive = await auth.listApiKeys(owner.userId, { revoked: false });
+      expect(onlyLive).toEqual([expect.objectContaining({ id: live.id, revoked: false })]);
+
+      const onlyRetired = await auth.listApiKeys(owner.userId, { revoked: true });
+      expect(onlyRetired).toEqual([expect.objectContaining({ id: retired.id, revoked: true })]);
+
+      expect(onlyLive.some((k) => k.id === foreign.id)).toBe(false);
+      expect(onlyRetired.some((k) => k.id === foreign.id)).toBe(false);
+
+      const stranger = await register();
+      expect(await auth.listApiKeys(stranger.userId, { revoked: true })).toEqual([]);
+      expect(await auth.listApiKeys(stranger.userId, { revoked: false })).toEqual([]);
+    });
+
     it('freezeIdentity bulk-revokes API keys and stops exchange', async () => {
       const session = await register();
       const { key, id } = await auth.createApiKey({
