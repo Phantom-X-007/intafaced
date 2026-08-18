@@ -897,6 +897,7 @@ export function createP2pRouter(
               includeRemoved: z.boolean().optional(),
               methodId: z.string().min(1).max(64).optional(),
               fiatCurrency: z.string().min(1).optional(),
+              country: z.string().min(1).optional(),
             })
             .optional(),
         )
@@ -904,7 +905,13 @@ export function createP2pRouter(
         .query(async ({ ctx, input }) =>
           guard(async () =>
             (
-              await instruments.listInstruments(ctx.principal.userId, input?.includeRemoved === true, input?.methodId, input?.fiatCurrency)
+              await instruments.listInstruments(
+                ctx.principal.userId,
+                input?.includeRemoved === true,
+                input?.methodId,
+                input?.fiatCurrency,
+                input?.country,
+              )
             ).map(toHeaderOut),
           ),
         ),

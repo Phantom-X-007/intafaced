@@ -175,12 +175,18 @@ if (!available) {
   }
 
   async function sellerInstrument(
-    overrides: { fiatCurrency?: string; ownerId?: string; methodId?: string; details?: Record<string, string> } = {},
+    overrides: {
+      fiatCurrency?: string;
+      ownerId?: string;
+      methodId?: string;
+      country?: string;
+      details?: Record<string, string>;
+    } = {},
   ) {
     return instruments.createInstrument({
       ownerId: overrides.ownerId ?? SELLER,
       methodId: overrides.methodId ?? METHOD,
-      country: 'DE',
+      country: overrides.country ?? 'DE',
       fiatCurrency: overrides.fiatCurrency ?? 'USD',
       label: 'Main account',
       details: overrides.details ?? { account_reference: CANARY, holder_name: 'A Seller' },
@@ -1617,6 +1623,48 @@ if (!available) {
 
       const combined = await callerFor(SELLER).instruments.list({ methodId: METHOD, fiatCurrency: 'usd' });
       expect(combined.map((h) => h.id)).toEqual([usd.id]);
+    });
+
+    it('returns mixed countries when country is omitted, and exact-matches after normalisation when it is set', async () => {
+      const de = await sellerInstrument({ fiatCurrency: 'USD' });
+      const fr = await sellerInstrument({ fiatCurrency: 'GBP', country: 'FR' });
+
+      const all = await instruments.listInstruments(SELLER);
+      expect(all.map((h) => h.country).sort()).toEqual(['DE', 'FR']);
+      expect(all.map((h) => h.id).sort()).toEqual([de.id, fr.id].sort());
+
+      const viaRouter = await callerFor(SELLER).instruments.list({});
+      expect(viaRouter.map((h) => h.country).sort()).toEqual(['DE', 'FR']);
+      expect(JSON.stringify(viaRouter)).not.toContain(CANARY);
+      expect(viaRouter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
+
+      const filtered = await instruments.listInstruments(SELLER, false, undefined, undefined, 'de');
+      expect(filtered.map((h) => h.id)).toEqual([de.id]);
+      expect(filtered[0]!.country).toBe('DE');
+      expect(JSON.stringify(filtered)).not.toContain(CANARY);
+      expect(filtered.every((h) => !('details' in h))).toBe(true);
+
+      const viaFilter = await callerFor(SELLER).instruments.list({ country: 'de' });
+      expect(viaFilter.map((h) => h.id)).toEqual([de.id]);
+      expect(JSON.stringify(viaFilter)).not.toContain(CANARY);
+      expect(viaFilter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
+
+      expect(await instruments.listInstruments(SELLER, false, undefined, undefined, 'US')).toEqual([]);
+      expect(await callerFor(SELLER).instruments.list({ country: 'US' })).toEqual([]);
+
+      await expect(instruments.listInstruments(SELLER, false, undefined, undefined, 'D1')).rejects.toMatchObject({
+        code: 'p2p.instrument_country_invalid',
+      });
+      await expect(instruments.listInstruments(SELLER, false, undefined, undefined, ANY_COUNTRY)).rejects.toMatchObject({
+        code: 'p2p.instrument_country_invalid',
+      });
+      await expect(callerFor(SELLER).instruments.list({ country: 'D1' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(callerFor(SELLER).instruments.list({ country: ANY_COUNTRY })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(callerFor(SELLER).instruments.list({ country: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      const combined = await callerFor(SELLER).instruments.list({ country: 'de', fiatCurrency: 'usd' });
+      expect(combined.map((h) => h.id)).toEqual([de.id]);
+      expect(await callerFor(SELLER).instruments.list({ country: 'FR', fiatCurrency: 'USD' })).toEqual([]);
     });
   });
 

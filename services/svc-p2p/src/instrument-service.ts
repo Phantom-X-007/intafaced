@@ -465,15 +465,27 @@ export class InstrumentService {
    * the label they chose; seeing the numbers is `reveal`, and `reveal` is
    * logged like every other read.
    */
-  async listInstruments(ownerId: string, includeRemoved = false, methodId?: string, fiatCurrency?: string): Promise<InstrumentHeader[]> {
+  async listInstruments(
+    ownerId: string,
+    includeRemoved = false,
+    methodId?: string,
+    fiatCurrency?: string,
+    country?: string,
+  ): Promise<InstrumentHeader[]> {
     const methodFilter = methodId === undefined ? null : normaliseMethodId(methodId);
     const fiatFilter = fiatCurrency === undefined ? null : fiatCurrency.trim().toUpperCase();
+    const countryFilter = country === undefined ? null : normaliseCountry(country);
+    if (countryFilter === ANY_COUNTRY) {
+      // Same law as create: the wildcard is a schema property, never an instrument.
+      throw new InstrumentError('An instrument must name a real country', 'p2p.instrument_country_invalid');
+    }
     const rows = await this.sql<InstrumentRow[]>`
       SELECT * FROM p2p.payment_instruments
        WHERE owner_id = ${ownerId}
          AND (${includeRemoved}::boolean OR status = 'active')
          ${methodFilter === null ? this.sql`` : this.sql`AND method_id = ${methodFilter}`}
          ${fiatFilter === null ? this.sql`` : this.sql`AND fiat_currency = ${fiatFilter}`}
+         ${countryFilter === null ? this.sql`` : this.sql`AND country = ${countryFilter}`}
        ORDER BY created_at DESC
        LIMIT 200
     `;
