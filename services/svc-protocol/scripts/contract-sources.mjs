@@ -232,6 +232,15 @@ export const SUITES = [
      */
     sources: ['entrypoint/EntryPointGetUserOpHash.sol'],
   },
+  {
+    name: 'nft',
+    expect: 'compiles',
+    /**
+     * S-G3 / `launch.nft` — mint, fixed-price list, English auction.
+     * RoyaltyMarket pays ERC-2981 on sale; signalling-only is not this suite.
+     */
+    sources: ['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol'],
+  },
 ];
 
 /** The exact `sources` object a suite is compiled from. */
