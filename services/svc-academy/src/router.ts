@@ -352,6 +352,8 @@ const ambassadorBadgeOut = z.object({
 });
 
 const seasonStatus = z.enum(['scheduled', 'live', 'frozen', 'ended']);
+/** Same bounds as `assertSeasonSlug` after lowercase — 3–64 [a-z0-9] with hyphen. */
+const seasonSlug = z.string().regex(/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/);
 const seasonOut = z.object({
   id: z.string().uuid(),
   slug: z.string(),
@@ -1410,9 +1412,16 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
     // a paper/live source is product-lawed (Stage-2+).
 
     seasons: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ status: seasonStatus.optional() }).optional())
+      .input(z.object({ status: seasonStatus.optional(), slug: seasonSlug.optional() }).optional())
       .output(z.array(seasonOut))
-      .query(({ input }) => guard(async () => academy.listSeasons({ ...(input?.status ? { status: input.status } : {}) }))),
+      .query(({ input }) =>
+        guard(async () =>
+          academy.listSeasons({
+            ...(input?.status ? { status: input.status } : {}),
+            ...(input?.slug ? { slug: input.slug } : {}),
+          }),
+        ),
+      ),
 
     season: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid() }))

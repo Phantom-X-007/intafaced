@@ -741,38 +741,25 @@ export class AcademyService {
     return this.toSeason(rows[0]);
   }
 
-  async listSeasons(filter: { status?: SeasonStatus } = {}): Promise<SeasonRecord[]> {
+  async listSeasons(filter: { status?: SeasonStatus; slug?: string } = {}): Promise<SeasonRecord[]> {
     this.assertTournamentEnabled();
-    const rows = filter.status
-      ? await this.sql<
-          Array<{
-            id: string;
-            slug: string;
-            title: string;
-            status: SeasonStatus;
-            rules_summary: string;
-            starts_at: Date;
-            ends_at: Date | null;
-          }>
-        >`
-          SELECT id, slug, title, status, rules_summary, starts_at, ends_at
-            FROM academy.tournament_seasons WHERE status = ${filter.status}
-            ORDER BY starts_at DESC
-        `
-      : await this.sql<
-          Array<{
-            id: string;
-            slug: string;
-            title: string;
-            status: SeasonStatus;
-            rules_summary: string;
-            starts_at: Date;
-            ends_at: Date | null;
-          }>
-        >`
-          SELECT id, slug, title, status, rules_summary, starts_at, ends_at
-            FROM academy.tournament_seasons ORDER BY starts_at DESC
-        `;
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        slug: string;
+        title: string;
+        status: SeasonStatus;
+        rules_summary: string;
+        starts_at: Date;
+        ends_at: Date | null;
+      }>
+    >`
+      SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+        FROM academy.tournament_seasons
+       WHERE ${filter.status == null ? this.sql`true` : this.sql`status = ${filter.status}`}
+         AND ${filter.slug == null ? this.sql`true` : this.sql`slug = ${filter.slug}`}
+       ORDER BY starts_at DESC
+    `;
     return rows.map((r) => this.toSeason(r));
   }
 

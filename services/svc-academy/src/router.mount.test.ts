@@ -677,6 +677,103 @@ describe('svc-academy mount — rooms may filter by host', () => {
   });
 });
 
+const SEASON_LIVE = '2a2a2a2a-2a2a-42a2-82a2-2a2a2a2a2a2a';
+const SEASON_LIVE_B = '2b2b2b2b-2b2b-42b2-82b2-2b2b2b2b2b2b';
+const SEASON_ENDED = '2c2c2c2c-2c2c-42c2-82c2-2c2c2c2c2c2c';
+const SEASON_SCHEDULED = '2d2d2d2d-2d2d-42d2-82d2-2d2d2d2d2d2d';
+
+function seasonRecord(overrides: { id: string; slug: string; title: string; status: 'scheduled' | 'live' | 'frozen' | 'ended' }) {
+  return {
+    rulesSummary: 'No prize money. Scores only.',
+    startsAt: new Date('2026-08-01T00:00:00.000Z'),
+    endsAt: null,
+    ...overrides,
+  };
+}
+
+const mixedSeasons = [
+  seasonRecord({ id: SEASON_LIVE, slug: 'summer-2026', title: 'Summer 2026', status: 'live' }),
+  seasonRecord({ id: SEASON_LIVE_B, slug: 'autumn-2026', title: 'Autumn 2026', status: 'live' }),
+  seasonRecord({ id: SEASON_ENDED, slug: 'spring-2026', title: 'Spring 2026', status: 'ended' }),
+  seasonRecord({ id: SEASON_SCHEDULED, slug: 'winter-2026', title: 'Winter 2026', status: 'scheduled' }),
+];
+
+describe('svc-academy mount — seasons may filter by slug', () => {
+  it('omits slug and returns mixed slugs', async () => {
+    const listSeasons = vi.fn(async () => mixedSeasons);
+    const academy = stubAcademy({ listSeasons: listSeasons as AcademyService['listSeasons'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).seasons();
+
+    expect(listSeasons).toHaveBeenCalledWith({});
+    expect(out.map((s) => s.slug).sort()).toEqual(['autumn-2026', 'spring-2026', 'summer-2026', 'winter-2026']);
+  });
+
+  it('omits slug and still forwards status', async () => {
+    const listSeasons = vi.fn(async (filter: { status?: string; slug?: string } = {}) =>
+      mixedSeasons.filter((s) => (filter.status ? s.status === filter.status : true)),
+    );
+    const academy = stubAcademy({ listSeasons: listSeasons as AcademyService['listSeasons'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).seasons({ status: 'live' });
+
+    expect(listSeasons).toHaveBeenCalledWith({ status: 'live' });
+    expect(out.map((s) => s.slug).sort()).toEqual(['autumn-2026', 'summer-2026']);
+    expect(out.every((s) => s.status === 'live')).toBe(true);
+  });
+
+  it('forwards slug and returns only that season', async () => {
+    const listSeasons = vi.fn(async (filter: { status?: string; slug?: string } = {}) =>
+      mixedSeasons.filter((s) => (filter.slug ? s.slug === filter.slug : true)),
+    );
+    const academy = stubAcademy({ listSeasons: listSeasons as AcademyService['listSeasons'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).seasons({ slug: 'summer-2026' });
+
+    expect(listSeasons).toHaveBeenCalledWith({ slug: 'summer-2026' });
+    expect(out).toEqual([expect.objectContaining({ id: SEASON_LIVE, slug: 'summer-2026' })]);
+  });
+
+  it('returns an empty list when no season matches a well-formed slug', async () => {
+    const listSeasons = vi.fn(async () => []);
+    const academy = stubAcademy({ listSeasons: listSeasons as AcademyService['listSeasons'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).seasons({ slug: 'never-listed-2026' });
+
+    expect(listSeasons).toHaveBeenCalledWith({ slug: 'never-listed-2026' });
+    expect(out).toEqual([]);
+  });
+
+  it('rejects an invalid slug at the door before the service', async () => {
+    const listSeasons = vi.fn(async () => mixedSeasons);
+    const academy = stubAcademy({ listSeasons: listSeasons as AcademyService['listSeasons'] });
+
+    await expect(createAcademyRouter(academy).createCaller(signed()).seasons({ slug: 'x' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    await expect(createAcademyRouter(academy).createCaller(signed()).seasons({ slug: 'Summer-2026' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(listSeasons).not.toHaveBeenCalled();
+  });
+
+  it('ANDs slug with status so a live summer season is not an ended hit', async () => {
+    const listSeasons = vi.fn(async (filter: { status?: string; slug?: string } = {}) =>
+      mixedSeasons.filter((s) => (filter.status ? s.status === filter.status : true) && (filter.slug ? s.slug === filter.slug : true)),
+    );
+    const academy = stubAcademy({ listSeasons: listSeasons as AcademyService['listSeasons'] });
+    const caller = createAcademyRouter(academy).createCaller(signed());
+
+    const liveHit = await caller.seasons({ slug: 'summer-2026', status: 'live' });
+    expect(listSeasons).toHaveBeenCalledWith({ status: 'live', slug: 'summer-2026' });
+    expect(liveHit).toEqual([expect.objectContaining({ id: SEASON_LIVE, slug: 'summer-2026', status: 'live' })]);
+
+    const endedMiss = await caller.seasons({ slug: 'summer-2026', status: 'ended' });
+    expect(listSeasons).toHaveBeenCalledWith({ status: 'ended', slug: 'summer-2026' });
+    expect(endedMiss).toEqual([]);
+  });
+});
+
 const LIVE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SCHEDULED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const ENDED = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
