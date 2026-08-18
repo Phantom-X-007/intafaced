@@ -10,8 +10,15 @@ import type { PrivateOrderUpdate, PrivatePositionUpdate } from './hub.js';
  * Never invents a mid or a price. Decimal strings on the wire; a JSON number
  * fails the parse and the snapshot is empty rather than coerced.
  */
+export interface ListOpenOrdersInput {
+  readonly accessToken: string;
+  readonly userId: string;
+  /** Unified symbol. Omitted or empty → full open book (no query). */
+  readonly symbol?: string;
+}
+
 export interface PrivateBookPort {
-  listOpenOrders(input: { accessToken: string; userId: string }): Promise<readonly PrivateOrderUpdate[]>;
+  listOpenOrders(input: ListOpenOrdersInput): Promise<readonly PrivateOrderUpdate[]>;
   listOpenPositions(input: { accessToken: string; userId: string }): Promise<readonly PrivatePositionUpdate[]>;
 }
 
@@ -158,13 +165,22 @@ export interface HttpPrivateBookPortOptions {
   readonly fetch?: typeof globalThis.fetch;
 }
 
+/** Trade already filters `GET /api/v1/orders/open?symbol=`. Empty/omitted → full book. */
+export function openOrdersPath(symbol?: string): string {
+  if (typeof symbol !== 'string' || symbol.length === 0) {
+    return '/api/v1/orders/open';
+  }
+  return `/api/v1/orders/open?symbol=${encodeURIComponent(symbol)}`;
+}
+
 /**
  * svc-trade private REST: `GET /api/v1/orders/open` and `GET /api/v1/positions`.
  *
  * Forwards the socket's access token. The process still holds no edge principal
  * secret and no service secret — it is a user-scoped read, same token the
  * client already presented on upgrade. Non-OK / unreachable → empty list
- * (honest miss, not a fabricated book).
+ * (honest miss, not a fabricated book). Optional `symbol` is forwarded as a
+ * query — this process does not post-filter a mixed page.
  */
 export class HttpPrivateBookPort implements PrivateBookPort {
   readonly #baseUrl: string;
@@ -177,8 +193,8 @@ export class HttpPrivateBookPort implements PrivateBookPort {
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
-  async listOpenOrders(input: { accessToken: string; userId: string }): Promise<readonly PrivateOrderUpdate[]> {
-    const body = await this.#get('/api/v1/orders/open', input.accessToken);
+  async listOpenOrders(input: ListOpenOrdersInput): Promise<readonly PrivateOrderUpdate[]> {
+    const body = await this.#get(openOrdersPath(input.symbol), input.accessToken);
     if (body === null) return [];
     try {
       return parseOpenOrderList(body, input.userId);
