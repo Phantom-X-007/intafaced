@@ -6,7 +6,7 @@ import type { ChannelRegistry, ChannelStatus } from './channels/registry.js';
 import { ChannelRefusal, type OutOfAppChannel, type RefusalCode } from './channels/channel.js';
 import { normaliseLocale, renderVerification } from './channels/render.js';
 import { withNotifySpan } from './tracing.js';
-import type { ChannelMutePrefs, MuteStore, MuteableChannel } from './preferences/mute.js';
+import { allMuteableChannels, type ChannelMutePrefs, type MuteStore, type MuteableChannel } from './preferences/mute.js';
 import { TargetRateLimiter, type TargetRateLimiterPort } from './target-rate-limit.js';
 
 /** Insert plus delivery scope. `outOfApp: false` is inbox-only (agentActionCompleted). */
@@ -338,11 +338,12 @@ export class NotifyService {
     return store.setMuted(userId, channel, muted);
   }
 
-  async listMutePrefs(userId: string): Promise<{ channel: MuteableChannel; muted: boolean }[]> {
+  async listMutePrefs(userId: string, channel?: MuteableChannel): Promise<{ channel: MuteableChannel; muted: boolean }[]> {
     const prefs = await this.getMutePrefs(userId);
-    return (['email', 'push', 'sms'] as const).map((channel) => ({
-      channel,
-      muted: prefs.muted.has(channel),
+    const channels: readonly MuteableChannel[] = channel === undefined ? allMuteableChannels() : [channel];
+    return channels.map((c) => ({
+      channel: c,
+      muted: prefs.muted.has(c),
     }));
   }
 }

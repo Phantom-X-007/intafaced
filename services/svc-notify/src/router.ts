@@ -88,6 +88,9 @@ const operatorDeliveriesInput = z
   })
   .optional();
 
+const muteableChannelSchema = z.enum(['email', 'push', 'sms']);
+const mutePrefsInput = z.object({ channel: muteableChannelSchema.optional() }).optional();
+
 const targetOutput = z.object({
   channel: outOfAppChannelSchema,
   address: z.string(),
@@ -421,18 +424,19 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
 
       /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */
       mutePrefs: scopedProcedure('notify:read', { module: 'notify' })
+        .input(mutePrefsInput)
         .output(
           z.array(
             z.object({
-              channel: z.enum(['email', 'push', 'sms']),
+              channel: muteableChannelSchema,
               muted: z.boolean(),
             }),
           ),
         )
-        .query(async ({ ctx }) => notify.listMutePrefs(ctx.principal.userId)),
+        .query(async ({ ctx, input }) => notify.listMutePrefs(ctx.principal.userId, input?.channel)),
 
       setMute: scopedProcedure('notify:write', { module: 'notify' })
-        .input(z.object({ channel: z.enum(['email', 'push', 'sms']), muted: z.boolean() }))
+        .input(z.object({ channel: muteableChannelSchema, muted: z.boolean() }))
         .output(
           z.array(
             z.object({
