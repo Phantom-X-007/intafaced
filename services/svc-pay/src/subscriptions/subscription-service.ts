@@ -480,29 +480,23 @@ export class SubscriptionService {
   /** Merchant fleet list — subscriptions (ops truth). Read-only. */
   async listSubscriptions(
     merchantId: string,
-    options: { status?: SubscriptionStatus; limit?: number } = {},
+    options: { status?: SubscriptionStatus; limit?: number; customerId?: string } = {},
   ): Promise<SubscriptionRecord[]> {
     await this.requireMerchant(merchantId);
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
-    const rows = options.status
-      ? await this.sql<SubRow[]>`
-          SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
-                 cancelled_at, path, created_at, anchor_at, anchor_occurrence,
-                 paused_at, resumed_at, stalled_at, stall_reason
-            FROM pay.subscriptions
-           WHERE merchant_id = ${merchantId} AND status = ${options.status}
-           ORDER BY created_at DESC
-           LIMIT ${limit}
-        `
-      : await this.sql<SubRow[]>`
-          SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
-                 cancelled_at, path, created_at, anchor_at, anchor_occurrence,
-                 paused_at, resumed_at, stalled_at, stall_reason
-            FROM pay.subscriptions
-           WHERE merchant_id = ${merchantId}
-           ORDER BY created_at DESC
-           LIMIT ${limit}
-        `;
+    const status = options.status;
+    const customerId = options.customerId;
+    const rows = await this.sql<SubRow[]>`
+      SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
+             cancelled_at, path, created_at, anchor_at, anchor_occurrence,
+             paused_at, resumed_at, stalled_at, stall_reason
+        FROM pay.subscriptions
+       WHERE merchant_id = ${merchantId}
+         ${status === undefined ? this.sql`` : this.sql`AND status = ${status}`}
+         ${customerId === undefined ? this.sql`` : this.sql`AND customer_id = ${customerId}`}
+       ORDER BY created_at DESC
+       LIMIT ${limit}
+    `;
     return rows.map(toSub);
   }
 

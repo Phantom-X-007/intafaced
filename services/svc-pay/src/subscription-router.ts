@@ -470,6 +470,7 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           z.object({
             merchantId: z.string().uuid(),
             status: z.enum(['active', 'paused', 'cancelled', 'completed']).optional(),
+            customerId: z.string().uuid().optional(),
             limit: z.number().int().min(1).max(200).optional(),
           }),
         )
@@ -479,6 +480,7 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             await assertPaymentArea(ctx.principal?.userId, input.merchantId);
             const rows = await subscriptions.listSubscriptions(input.merchantId, {
               status: input.status,
+              customerId: input.customerId,
               limit: input.limit,
             });
             return rows.map(toSubOut);

@@ -19,6 +19,10 @@ const OTHER = '77777777-7777-4777-8777-777777777777';
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const MANDATE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const SUB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const SUB_OTHER_CUSTOMER = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const CUSTOMER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CUSTOMER_B = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const MISSING_CUSTOMER = '99999999-9999-4999-8999-999999999999';
 
 async function ctx(scopes: string[], userId = USER): Promise<Context> {
   const { token } = await issueAccessToken(
@@ -153,9 +157,20 @@ describe('subscription merchant surface', () => {
         calls.push('listMandates');
         return [mandateRecord()];
       },
-      listSubscriptions: async () => {
-        calls.push('listSubscriptions');
-        return [subRecord()];
+      listSubscriptions: async (_merchantId: string, options: { status?: string; customerId?: string; limit?: number } = {}) => {
+        const parts = ['listSubscriptions'];
+        if (options.status !== undefined) parts.push(`status:${options.status}`);
+        if (options.customerId !== undefined) parts.push(`customer:${options.customerId}`);
+        calls.push(parts.join(':'));
+        const rows = [
+          subRecord({ customerId: CUSTOMER_A, status: 'active' }),
+          subRecord({ id: SUB_OTHER_CUSTOMER, customerId: CUSTOMER_B, status: 'paused' }),
+        ];
+        return rows.filter((row) => {
+          if (options.status !== undefined && row.status !== options.status) return false;
+          if (options.customerId !== undefined && row.customerId !== options.customerId) return false;
+          return true;
+        });
       },
       listCycles: async (_subscriptionId: string, status?: string) => {
         calls.push(status === undefined ? 'listCycles' : `listCycles:${status}`);
@@ -308,14 +323,58 @@ describe('subscription merchant surface', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.id).toBe(SUB);
     expect(rows[0]!.path).toBe('crypto_invoice');
+    expect(calls).toContain('listSubscriptions:status:active');
+  });
+
+  it('omitted customerId returns mixed customers', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.list({ merchantId: MERCHANT });
+    expect(rows.map((row) => row.customerId)).toEqual([CUSTOMER_A, CUSTOMER_B]);
     expect(calls).toContain('listSubscriptions');
+  });
+
+  it('filters subscriptions by exact customerId', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.list({ merchantId: MERCHANT, customerId: CUSTOMER_A });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.customerId).toBe(CUSTOMER_A);
+    expect(rows[0]!.id).toBe(SUB);
+    expect(calls).toContain(`listSubscriptions:customer:${CUSTOMER_A}`);
+  });
+
+  it('ANDs customerId with status', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.list({
+      merchantId: MERCHANT,
+      customerId: CUSTOMER_B,
+      status: 'paused',
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.customerId).toBe(CUSTOMER_B);
+    expect(rows[0]!.status).toBe('paused');
+    expect(calls).toContain(`listSubscriptions:status:paused:customer:${CUSTOMER_B}`);
+  });
+
+  it('empty customer filter is []', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.list({ merchantId: MERCHANT, customerId: MISSING_CUSTOMER });
+    expect(rows).toEqual([]);
+    expect(calls).toContain(`listSubscriptions:customer:${MISSING_CUSTOMER}`);
+  });
+
+  it('rejects a customerId that is not a uuid', async () => {
+    const api = await caller(['pay:read']);
+    await expect(api.subscription.list({ merchantId: MERCHANT, customerId: 'not-a-uuid' as typeof CUSTOMER_A })).rejects.toThrow(
+      /BAD_REQUEST|invalid/i,
+    );
+    expect(calls.filter((c) => c.startsWith('listSubscriptions'))).toHaveLength(0);
   });
 
   it('stranger cannot list subscriptions', async () => {
     owner = OTHER;
     const api = await caller(['pay:read'], USER);
     await expect(api.subscription.list({ merchantId: MERCHANT })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
-    expect(calls).not.toContain('listSubscriptions');
+    expect(calls.filter((c) => c.startsWith('listSubscriptions'))).toHaveLength(0);
   });
 
   it('omitted status returns mixed cycles; amounts stay decimal strings', async () => {

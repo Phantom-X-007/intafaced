@@ -159,11 +159,11 @@ if (!available) {
 
   async function mandateAndSubscription(
     subs: SubscriptionService,
-    input: { merchantId: string; amount?: string; ceiling?: string | null; endsAt?: Date | null },
+    input: { merchantId: string; amount?: string; ceiling?: string | null; endsAt?: Date | null; customerId?: string },
   ) {
     const mandate = await subs.createMandate({
       merchantId: input.merchantId,
-      customerId: CUSTOMER,
+      customerId: input.customerId ?? CUSTOMER,
       assetId: 'USDT',
       amount: amt(input.amount ?? '10'),
       ceiling: input.ceiling === undefined || input.ceiling === null ? null : amt(input.ceiling),
@@ -1024,6 +1024,49 @@ if (!available) {
 
       expect(await subs.listExecutions(sub.id, { status: 'skipped' })).toEqual([]);
       expect(await subs.listExecutions(other.sub.id, { status: 'pending' })).toEqual([]);
+    });
+  });
+
+  describe('listSubscriptions optional customerId is exact and scoped to the merchant', () => {
+    const CUST_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const CUST_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const MISSING = '99999999-9999-4999-8999-999999999999';
+
+    it('omitted customer is mixed; exact uuid; AND status; empty is []; other merchant is not leaked', async () => {
+      const { subs } = build({ defaultFeeBps: 250 });
+      const merchantA = await merchant();
+      const merchantB = await pay.createMerchant({
+        userId: '22222222-2222-4222-8222-222222222222',
+        pricing: { feeBps: 250 },
+      });
+
+      const aActive = await mandateAndSubscription(subs, { merchantId: merchantA.id, customerId: CUST_A });
+      const aCancelled = await mandateAndSubscription(subs, { merchantId: merchantA.id, customerId: CUST_A });
+      await subs.cancelSubscription(aCancelled.sub.id);
+      const aOtherCustomer = await mandateAndSubscription(subs, { merchantId: merchantA.id, customerId: CUST_B });
+      const bSameCustomer = await mandateAndSubscription(subs, { merchantId: merchantB.id, customerId: CUST_A });
+
+      const mixed = await subs.listSubscriptions(merchantA.id);
+      expect(mixed.map((row) => row.id).sort()).toEqual([aActive.sub.id, aCancelled.sub.id, aOtherCustomer.sub.id].sort());
+      expect(mixed.every((row) => row.merchantId === merchantA.id)).toBe(true);
+      expect(mixed.some((row) => row.customerId === CUST_A)).toBe(true);
+      expect(mixed.some((row) => row.customerId === CUST_B)).toBe(true);
+      expect(mixed.map((row) => row.id)).not.toContain(bSameCustomer.sub.id);
+
+      const exact = await subs.listSubscriptions(merchantA.id, { customerId: CUST_A });
+      expect(exact.map((row) => row.id).sort()).toEqual([aActive.sub.id, aCancelled.sub.id].sort());
+      expect(exact.every((row) => row.customerId === CUST_A)).toBe(true);
+      expect(exact.map((row) => row.id)).not.toContain(aOtherCustomer.sub.id);
+      expect(exact.map((row) => row.id)).not.toContain(bSameCustomer.sub.id);
+
+      const andStatus = await subs.listSubscriptions(merchantA.id, { customerId: CUST_A, status: 'active' });
+      expect(andStatus).toHaveLength(1);
+      expect(andStatus[0]!.id).toBe(aActive.sub.id);
+      expect(andStatus[0]!.status).toBe('active');
+      expect(andStatus[0]!.customerId).toBe(CUST_A);
+
+      expect(await subs.listSubscriptions(merchantA.id, { customerId: MISSING })).toEqual([]);
+      expect(await subs.listSubscriptions(merchantB.id, { customerId: CUST_B })).toEqual([]);
     });
   });
 }
