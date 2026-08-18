@@ -35,7 +35,9 @@ function signed(p: Principal = principal()) {
   });
 }
 
-function stubDeps(userLog: (userId: string, limit?: number, tool?: string) => Promise<AuditedAction[]>): AgentsRouterDeps {
+function stubDeps(
+  userLog: (userId: string, limit?: number, tool?: string, kind?: AuditedAction['kind']) => Promise<AuditedAction[]>,
+): AgentsRouterDeps {
   return {
     runtime: { userLog } as AgentsRouterDeps['runtime'],
     gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
@@ -131,6 +133,70 @@ describe('log.mine tool filter', () => {
     ).createCaller(signed());
 
     await expect(caller.log.mine({ tool: 't'.repeat(65) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(called).toBe(false);
+  });
+});
+
+describe('log.mine kind filter', () => {
+  it('omits kind and still returns mixed kinds for the caller', async () => {
+    const calls: Array<{ userId: string; limit?: number; tool?: string; kind?: AuditedAction['kind'] }> = [];
+    const mixed = [action({ tool: null, kind: 'session_open' }), action({ tool: 'trade.quote', kind: 'tool_call', sequence: 1 })];
+    const caller = createAgentsRouter(
+      stubDeps(async (userId, limit, tool, kind) => {
+        calls.push({ userId, limit, tool, kind });
+        return mixed;
+      }),
+    ).createCaller(signed());
+
+    const result = await caller.log.mine({});
+    expect(calls).toEqual([{ userId: USER, limit: 100, tool: undefined, kind: undefined }]);
+    expect(new Set(result.map((row) => row.kind))).toEqual(new Set(['session_open', 'tool_call']));
+  });
+
+  it('passes an exact kind and scopes the query to the caller', async () => {
+    const calls: Array<{ userId: string; limit?: number; tool?: string; kind?: AuditedAction['kind'] }> = [];
+    const caller = createAgentsRouter(
+      stubDeps(async (userId, limit, tool, kind) => {
+        calls.push({ userId, limit, tool, kind });
+        return [action({ userId, kind: 'tool_call' })];
+      }),
+    ).createCaller(signed());
+
+    const result = await caller.log.mine({ kind: 'tool_call', limit: 50 });
+    expect(calls).toEqual([{ userId: USER, limit: 50, tool: undefined, kind: 'tool_call' }]);
+    expect(result.every((row) => row.kind === 'tool_call')).toBe(true);
+    expect(calls.every((call) => call.userId !== OTHER)).toBe(true);
+  });
+
+  it('ANDs kind with tool on the caller query', async () => {
+    const calls: Array<{ userId: string; limit?: number; tool?: string; kind?: AuditedAction['kind'] }> = [];
+    const caller = createAgentsRouter(
+      stubDeps(async (userId, limit, tool, kind) => {
+        calls.push({ userId, limit, tool, kind });
+        return [action({ userId, tool: 'trade.quote', kind: 'tool_call' })];
+      }),
+    ).createCaller(signed());
+
+    const result = await caller.log.mine({ tool: 'trade.quote', kind: 'tool_call' });
+    expect(calls).toEqual([{ userId: USER, limit: 100, tool: 'trade.quote', kind: 'tool_call' }]);
+    expect(result.every((row) => row.kind === 'tool_call' && row.tool === 'trade.quote')).toBe(true);
+  });
+
+  it('returns [] when the store has no matching kind', async () => {
+    const caller = createAgentsRouter(stubDeps(async () => [])).createCaller(signed());
+    expect(await caller.log.mine({ kind: 'embedding' })).toEqual([]);
+  });
+
+  it('rejects an invalid kind with 400 before the store', async () => {
+    let called = false;
+    const caller = createAgentsRouter(
+      stubDeps(async () => {
+        called = true;
+        return [];
+      }),
+    ).createCaller(signed());
+
+    await expect(caller.log.mine({ kind: 'not_a_kind' as 'tool_call' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(called).toBe(false);
   });
 });

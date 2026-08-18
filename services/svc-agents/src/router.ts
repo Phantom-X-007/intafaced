@@ -601,11 +601,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           z.object({
             limit: z.number().int().min(1).max(500).default(100),
             tool: z.string().trim().min(1).max(64).optional(),
+            kind: z.enum(['session_open', 'session_close', 'completion', 'embedding', 'tool_call', 'usage_settlement']).optional(),
           }),
         )
         .output(z.array(actionOutput))
         .query(({ ctx, input }) =>
-          guard(async () => (await runtime.userLog(ctx.principal.userId, input.limit, input.tool)).map(toActionOutput)),
+          guard(async () => (await runtime.userLog(ctx.principal.userId, input.limit, input.tool, input.kind)).map(toActionOutput)),
         ),
     }),
 

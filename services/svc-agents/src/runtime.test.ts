@@ -880,6 +880,55 @@ if (!available) {
       expect(log.every((entry) => entry.userId === USER_A && entry.tool === 'trade.quote')).toBe(true);
     });
 
+    it('omits a kind filter so the own log still mixes kinds', async () => {
+      const a = await open(USER_A);
+      await runtime.think({ sessionId: a.id, requestId: 'r-kind-mix', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A);
+      const kinds = new Set(log.map((entry) => entry.kind));
+      expect(kinds.has('session_open')).toBe(true);
+      expect(kinds.has('completion')).toBe(true);
+      expect(kinds.has('tool_call')).toBe(true);
+      expect(log.every((entry) => entry.userId === USER_A)).toBe(true);
+    });
+
+    it('filters the own log to an exact kind', async () => {
+      const a = await open(USER_A);
+      await runtime.think({ sessionId: a.id, requestId: 'r-kind-exact', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A, 100, undefined, 'tool_call');
+      expect(log.length).toBeGreaterThan(0);
+      expect(log.every((entry) => entry.kind === 'tool_call' && entry.userId === USER_A)).toBe(true);
+    });
+
+    it('ANDs kind with tool on the own log', async () => {
+      const a = await open(USER_A);
+      await runtime.think({ sessionId: a.id, requestId: 'r-kind-and', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A, 100, 'trade.quote', 'tool_call');
+      expect(log.length).toBeGreaterThan(0);
+      expect(log.every((entry) => entry.kind === 'tool_call' && entry.tool === 'trade.quote' && entry.userId === USER_A)).toBe(true);
+    });
+
+    it('returns an empty log when no own row matches the kind', async () => {
+      await open(USER_A);
+      expect(await runtime.userLog(USER_A, 100, undefined, 'embedding')).toEqual([]);
+    });
+
+    it('does not leak another user’s rows for the same kind', async () => {
+      const a = await open(USER_A);
+      const b = await open(USER_B);
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: b.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A, 100, undefined, 'tool_call');
+      expect(log.length).toBeGreaterThan(0);
+      expect(log.every((entry) => entry.userId === USER_A && entry.kind === 'tool_call')).toBe(true);
+    });
+
     it('keys every log line for i18n rather than shipping prose', async () => {
       const session = await open();
       await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
