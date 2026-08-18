@@ -265,6 +265,16 @@ export const SUITES = [
     sources: ['launch/FairLaunch.sol', 'amm/IERC20Minimal.sol'],
   },
   {
+    name: 'recovery',
+    expect: 'compiles',
+    /**
+     * S-A1 / `socket.social-recovery` — user-elected M-of-N ERC-1271 owner.
+     * Platform is never a guardian. Own suite so an accounts edit does not
+     * stale this bytecode (and reverse).
+     */
+    sources: ['recovery/UserElectedRecovery.sol', 'interfaces/IAccount.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**

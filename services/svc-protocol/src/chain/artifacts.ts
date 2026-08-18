@@ -65,7 +65,8 @@ export type ArtifactName =
   | 'RoyaltyMarket'
   | 'MemeLaunch'
   | 'RankAttestation'
-  | 'FairLaunch';
+  | 'FairLaunch'
+  | 'UserElectedRecovery';
 
 export interface ContractArtifact {
   readonly contractName: string;

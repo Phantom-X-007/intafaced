@@ -465,3 +465,34 @@ describe('committed launchpad artefacts match the Solidity in this tree', () => 
     expect(names).toContain('refund');
   });
 });
+
+describe('committed recovery artefacts match the Solidity in this tree', () => {
+  const recovery = (SUITES as Suite[]).find((s) => s.name === 'recovery');
+
+  it('compiles UserElectedRecovery', () => {
+    expect(recovery?.expect).toBe('compiles');
+    const artefact = loadArtifact('UserElectedRecovery');
+    expect(artefact.contractName).toBe('UserElectedRecovery');
+    expect(artefact.suite).toBe('recovery');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(recovery, collectSources()));
+    expect(loadArtifact('UserElectedRecovery').sourceHash).toBe(expected);
+  });
+
+  it('exposes user-elected guardian recovery and no platform admin', () => {
+    const names = loadArtifact('UserElectedRecovery')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+
+    for (const forbidden of ['pause', 'setAdmin', 'upgradeTo', 'upgradeToAndCall']) {
+      expect(names, `UserElectedRecovery must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    for (const required of ['addGuardian', 'removeGuardian', 'setThreshold', 'proposeRecovery', 'cancelRecovery', 'executeRecovery']) {
+      expect(names).toContain(required);
+    }
+  });
+});

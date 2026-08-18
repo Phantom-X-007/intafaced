@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**87 of 156 shipped (56%)** · 12 in progress · 19 ready to claim · 38 blocked · 32 deliberate §13 sockets
+**88 of 157 shipped (56%)** · 12 in progress · 19 ready to claim · 38 blocked · 31 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -300,7 +300,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted) <br/>_§13 — the interface exists (services/svc-academy/src/stream/provider.ts) and lobbies run without it: seats, presence, capacity, invites and the 2D scene need no provider. NullStreamProvider REFUSES a join credential by name rather than returning a plausible one, because a lobby that opens against no SFU fails silently in the browser and reads as a broken platform. Needs a self-hosted LiveKit deployment and its API key — neither exists in this environment._ | F |  | `socket.stream-provider` |
 | 🔌 | Per-asset hash chains with cross-shard anchor | F |  | `socket.ledger-sharding` |
 
-### Phase 5P — Protocol P2–P3 (3/6)
+### Phase 5P — Protocol P2–P3 (4/7)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -312,7 +312,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Crew vaults — shared multi-sig treasuries, threshold spend, split on exit (§33) <br/>_S-L1 2026-08-08: CrewVault — immutable share bps summing to 10_000, M-of-N spend, exit pays construction share of current balance (split designed before deposit). Residual: multi-asset vaults, share rebalance after exit._ | P |  | `protocol.crew-vaults` |
 | ✅ | Legacy vaults — time-locked inheritance, staged heir release (§34) <br/>_CLOSED engineering bar 2026-08-18 (S-L2): LegacyVault — owner is constructor msg.sender, user-set/revocable heirs, inactivity delay + challenge-window abort via heartbeat, staged tranche claim. Matches S-K7 ADR (docs/adr/2026-08-08-inheritance-never-platform-guardian.md): no platform key, no guardian role. Residuals: multi-asset, attestation-based beneficiary claims, public Base Sepolia deploy (Nitro RPC). Unaudited._ | P |  | `protocol.legacy-vaults` |
 | 🔌 | MPC custody for self-custody wallets <br/>_Owner set 2026-08-07: this is Protocol Plane key custody and belongs to the chain owner, not to whoever claims it first._ | P |  | `socket.mpc-custody` |
-| 🔌 | Guardian-based account recovery <br/>_DOCTRINE, not a backlog item, and the blockchain task board contradicted it until 2026-08-07 (board S-A1 invited a guardian/multi-sig design; this row forbids one). RESOLVED IN FAVOUR OF THIS ROW: the platform must NEVER be a guardian, because a guardian is a second party who can take the account. What is permitted, and is the only shape worth designing: guardians the USER elects and can revoke, where no platform-controlled key is ever eligible, no platform quorum can move funds, and the recovery path is provable to the user without trusting us. If that cannot be built without the platform being a party, the honest answer is that this stays a socket._ | P |  | `socket.social-recovery` |
+| ✅ | Guardian-based account recovery <br/>_CLOSED 2026-08-18 (S-A1 permitted shape). UserElectedRecovery.sol is an ERC-1271 owner a SmartAccount may set: the USER elects guardians and threshold (M-of-N), can revoke either, and can cancelRecovery during the delay; after delay + M guardian calls/signatures the owner rotates. Platform is never a guardian — no hardcoded platform address, no admin, no upgrade, no platform quorum. Residual: not wired as the default SmartAccount owner (factory still takes the key it is given). Unaudited; no audited:true._ | P |  | `socket.social-recovery` |
 
 ---
 
