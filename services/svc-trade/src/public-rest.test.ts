@@ -1209,6 +1209,143 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/tickers?base=BTC keeps only BTC-based keys', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const btcEur = fakeMarket({ id: 'm-btceur', symbol: 'BTC/EUR', baseAsset: 'BTC', quoteAsset: 'EUR' });
+    let seenBase: string | undefined;
+    const app = await build(
+      deps({
+        markets: async (_status, _kind, _quote, base) => {
+          seenBase = base;
+          return [market, eth, btcEur];
+        },
+        marketBySymbol: async (symbol) =>
+          symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : symbol === 'BTC/EUR' ? btcEur : null,
+      }),
+    );
+    const omitted = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    expect(omitted.statusCode).toBe(200);
+    expect(Object.keys(omitted.json() as Record<string, unknown>).sort()).toEqual(['BTC/EUR', 'BTC/USDT', 'ETH/USDT']);
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?base=BTC' });
+    expect(res.statusCode).toBe(200);
+    expect(seenBase).toBe('BTC');
+    const body = res.json() as Record<string, { high: null; average: null; last: string }>;
+    expect(Object.keys(body).sort()).toEqual(['BTC/EUR', 'BTC/USDT']);
+    expect(tickerSchema.safeParse(body['BTC/USDT']).success).toBe(true);
+    expect(body['BTC/USDT']!.high).toBeNull();
+    expect(body['BTC/USDT']!.average).toBeNull();
+    expect(typeof body['BTC/USDT']!.last).toBe('string');
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?base= empty string is omitted (full venue map)', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const app = await build(
+      deps({
+        markets: async () => [market, eth],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?base=' });
+    expect(res.statusCode).toBe(200);
+    expect(Object.keys(res.json() as Record<string, unknown>).sort()).toEqual(['BTC/USDT', 'ETH/USDT']);
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?base= whitespace or oversized garbage → 400 before the map', async () => {
+    let listed = false;
+    let lookedUp = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+        marketBySymbol: async () => {
+          lookedUp = true;
+          return market;
+        },
+      }),
+    );
+    for (const base of ['   ', 'B'.repeat(33)]) {
+      listed = false;
+      lookedUp = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/tickers?base=${encodeURIComponent(base)}`,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(res.json().intafacedCode).toBe('trade.invalid_market_base');
+      expect(res.json().message).toBe('base must be 1-32 characters');
+      expect(listed).toBe(false);
+      expect(lookedUp).toBe(false);
+    }
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?base= unknown asset → honest empty map, not 404', async () => {
+    const app = await build(
+      deps({
+        markets: async () => [market],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?base=NOPE' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?base=&quote= is AND: mismatch → {}', async () => {
+    const ethBtc = fakeMarket({ id: 'm-ethbtc', symbol: 'ETH/BTC', baseAsset: 'ETH', quoteAsset: 'BTC' });
+    const app = await build(
+      deps({
+        markets: async () => [market, ethBtc],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?base=BTC&quote=BTC' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?base=&quote= is AND: matching pair keeps those keys', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const btcEur = fakeMarket({ id: 'm-btceur', symbol: 'BTC/EUR', baseAsset: 'BTC', quoteAsset: 'EUR' });
+    const app = await build(
+      deps({
+        markets: async () => [market, eth, btcEur],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?base=BTC&quote=USDT' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, { high: null; average: null }>;
+    expect(Object.keys(body)).toEqual(['BTC/USDT']);
+    expect(body['BTC/USDT']!.high).toBeNull();
+    expect(body['BTC/USDT']!.average).toBeNull();
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol=&base= is AND: mismatch → {}', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('BTC/USDT')}&base=ETH`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(listed).toBe(false);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
   // ── OHLCV ────────────────────────────────────────────────────────────────
 
   const candle = {
