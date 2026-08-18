@@ -532,6 +532,41 @@ if (!available) {
       expect(await money.listWithdrawals(OTHER_USER)).toHaveLength(0);
     });
 
+    it('filters the caller’s withdrawals by status in SQL, never inventing a row', async () => {
+      const dest = sql.json({ kind: 'bank', ref: 'DE89370400440532013000' } as never);
+      const seed = async (userId: string, clientRef: string, status: 'pending' | 'held' | 'sent' | 'failed', createdAt: string) => {
+        const railRef = status === 'sent' ? `po-${clientRef}` : null;
+        await sql`
+          INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, rail_ref, status, created_at)
+          VALUES (${userId}, 'USDT', ${formatAmount(amt('40'))}::numeric, 'card-sandbox', ${dest}, ${clientRef}, ${railRef}, ${status}, ${createdAt}::timestamptz)
+        `;
+      };
+      // Newest first: three pending, then two sent. A post-filter of LIMIT 2
+      // would return [] for status=sent; the SQL filter must still find the sent rows.
+      await seed(USER, 'w-sent-old', 'sent', '2026-08-18T10:00:00Z');
+      await seed(USER, 'w-sent-new', 'sent', '2026-08-18T11:00:00Z');
+      await seed(USER, 'w-pend-1', 'pending', '2026-08-18T12:00:00Z');
+      await seed(USER, 'w-pend-2', 'pending', '2026-08-18T13:00:00Z');
+      await seed(USER, 'w-pend-3', 'pending', '2026-08-18T14:00:00Z');
+      await seed(USER, 'w-held', 'held', '2026-08-18T09:00:00Z');
+      await seed(USER, 'w-failed', 'failed', '2026-08-18T08:00:00Z');
+      await seed(OTHER_USER, 'w-other-sent', 'sent', '2026-08-18T15:00:00Z');
+
+      const unfiltered = await money.listWithdrawals(USER);
+      expect(unfiltered).toHaveLength(7);
+      expect(unfiltered.every((w) => w.userId === USER)).toBe(true);
+
+      const sent = await money.listWithdrawals(USER, 2, 'sent');
+      expect(sent.map((w) => w.clientRef)).toEqual(['w-sent-new', 'w-sent-old']);
+      expect(sent.every((w) => w.status === 'sent')).toBe(true);
+      expect(sent.every((w) => typeof w.amount === 'bigint')).toBe(true);
+
+      expect(await money.listWithdrawals(USER, 50, 'held')).toHaveLength(1);
+      expect(await money.listWithdrawals(USER, 50, 'failed')).toHaveLength(1);
+      expect(await money.listWithdrawals(USER, 50, 'pending')).toHaveLength(3);
+      expect(await money.listWithdrawals(OTHER_USER, 50, 'pending')).toEqual([]);
+    });
+
     it('reports a missing withdrawal rather than returning nothing', async () => {
       await expect(money.getWithdrawal('00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(PayError);
     });

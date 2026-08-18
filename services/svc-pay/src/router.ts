@@ -1357,10 +1357,17 @@ export function createPayRouter(
         ),
 
       mine: scopedProcedure('trade:read')
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              limit: z.number().int().min(1).max(200).optional(),
+              status: z.enum(['pending', 'held', 'sent', 'failed']).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(withdrawalView))
         .query(({ ctx, input }) =>
-          wrap(async () => (await userMoney.listWithdrawals(ctx.principal.userId, input?.limit ?? 50)).map(toWithdrawalOut)),
+          wrap(async () => (await userMoney.listWithdrawals(ctx.principal.userId, input?.limit ?? 50, input?.status)).map(toWithdrawalOut)),
         ),
 
       /**

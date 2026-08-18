@@ -1142,6 +1142,23 @@ describe('withdrawal reads', () => {
     await expect(api.withdrawal.mine()).resolves.toHaveLength(1);
   });
 
+  it('forwards optional status on withdrawals.mine and keeps omitted status unfiltered', async () => {
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    await api.withdrawal.mine();
+    await api.withdrawal.mine({ limit: 10, status: 'held' });
+
+    const lists = money.calls.filter((c) => c.method === 'listWithdrawals');
+    expect(lists[0]!.args).toEqual([USER, 50, undefined]);
+    expect(lists[1]!.args).toEqual([USER, 10, 'held']);
+  });
+
+  it('rejects a status that is not a withdrawal status', async () => {
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    const err = await api.withdrawal.mine({ status: 'captured' as 'sent' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(money.calls.filter((c) => c.method === 'listWithdrawals')).toHaveLength(0);
+  });
+
   it('REFUSE ANOTHER ACCOUNT’S WITHDRAWAL — a scope is not an ownership check', async () => {
     money.ownedBy('88888888-8888-4888-8888-888888888888');
     const api = await caller(['trade:read'], { tier: 'basic' });
