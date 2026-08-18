@@ -325,7 +325,7 @@ describe('committed NFT artefacts match the Solidity in this tree', () => {
 
   it('compiles SovereignNft + RoyaltyMarket (enforced royalty, not signalling-only)', () => {
     expect(nft?.expect).toBe('compiles');
-    expect(nft?.sources).toEqual(['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol']);
+    expect(nft?.sources).toEqual(['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol']);
     for (const name of ['SovereignNft', 'RoyaltyMarket'] as const) {
       const artefact = loadArtifact(name);
       expect(artefact.contractName).toBe(name);

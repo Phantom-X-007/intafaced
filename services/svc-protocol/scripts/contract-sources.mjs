@@ -239,7 +239,7 @@ export const SUITES = [
      * S-G3 / `launch.nft` — mint, fixed-price list, English auction.
      * RoyaltyMarket pays ERC-2981 on sale; signalling-only is not this suite.
      */
-    sources: ['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+    sources: ['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol'],
   },
 ];
 
