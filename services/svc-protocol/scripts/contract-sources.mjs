@@ -246,6 +246,16 @@ export const SUITES = [
     sources: ['launch/MemeLaunch.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol'],
   },
   {
+    name: 'attestations',
+    expect: 'compiles',
+    /**
+     * S-F1 / `blueprint.attestations` — on-chain rank standing, zero PII.
+     * Subject is a commitment, never an address / name / email / user id / KYC.
+     * Permissionless issuers; consumers choose whom to trust off-chain.
+     */
+    sources: ['attestations/RankAttestation.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**

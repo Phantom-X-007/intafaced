@@ -385,3 +385,35 @@ describe('committed meme artefacts match the Solidity in this tree', () => {
     expect(names).toContain('poolFactory');
   });
 });
+
+describe('committed attestation artefacts match the Solidity in this tree', () => {
+  const attestations = (SUITES as Suite[]).find((s) => s.name === 'attestations');
+
+  it('compiles RankAttestation', () => {
+    expect(attestations?.expect).toBe('compiles');
+    const artefact = loadArtifact('RankAttestation');
+    expect(artefact.contractName).toBe('RankAttestation');
+    expect(artefact.suite).toBe('attestations');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(attestations, collectSources()));
+    expect(
+      loadArtifact('RankAttestation').sourceHash,
+      'RankAttestation.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build',
+    ).toBe(expected);
+  });
+
+  it('exposes no identity, KYC, or platform-issuer surface', () => {
+    const names = loadArtifact('RankAttestation')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+    for (const forbidden of ['email', 'name', 'userId', 'kyc', 'setIssuer', 'platformIssuer', 'owner', 'pause']) {
+      expect(names, `RankAttestation must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    expect(names).toContain('attest');
+    expect(names).toContain('revoke');
+  });
+});

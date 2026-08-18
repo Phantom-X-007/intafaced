@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**85 of 156 shipped (54%)** · 12 in progress · 19 ready to claim · 40 blocked · 32 deliberate §13 sockets
+**86 of 156 shipped (55%)** · 12 in progress · 19 ready to claim · 39 blocked · 32 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -203,7 +203,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Price oracle for on-chain marks and liquidations <br/>_S-A12 2026-08-08: FailClosedOracle — dual reporters, staleness + disagreement refuse, min mark, never AMM. Hermetic + on-chain with lending. TWAP / own-pool oracles residual and must not replace this path._ | P |  | `socket.price-oracle` |
 | ✅ | Which contracts are deployed where, and verified against what source <br/>_S-A13 2026-08-08: zod schema + example artefact. Real chain rows + explorer verified:true wait on Nitro RPC funding._ | P |  | `socket.deployment-registry` |
 
-### Phase 4 — Blueprint (4/5)
+### Phase 4 — Blueprint ✅
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -211,7 +211,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Share card render (1080×1350, 1200×630) <br/>_Stage-1 DONE 2026-08-04 (implementable TRK pilot): product accepts SVG as the share artifact via `shareMode: svg|png` on CardRender. Composition is ours (`card/compose.ts`), both §7.2 canvases, zero PII, self-only blueprint:read. PNG rail residual: UnconfiguredCardRenderer returns unavailable (never fabricates URL) until BLUEPRINT_CARD_RENDERER_URL + rasterizer/object storage exist. Stage-2 residual tracked separately._ | F |  | `blueprint.card` |
 | ✅ | Crew matching + mentor shortlist <br/>_The tracker row was stale, the code was not — this is a re-score of work already on main, not new work. Reachable: placement runs inside the mounted `blueprint.onboard`, the shortlist is the mounted `blueprint.mentors`. Placement and mentor scoring are pure deterministic functions (`matching/`), so a re-run lands a user in the SAME crew — asserted, not hoped. Capacity is enforced under `serializable` with the crew row locked; crew ids are derived, so two concurrent "form a crew" calls collide into one instead of stranding two crews of one; and every run writes a `match_runs` row scoring EVERY open crew, so "why am I not with them" is answerable from a row. 38 pure matching tests (28 crew + 10 mentor) plus placement, capacity, concurrency and determinism tests against real Postgres. Self-contained: nothing here waits on another service. `crewMemberCreated` is published for svc-academy lobby routing and has no consumer yet — that is svc-academy's feature, not a hole in this one._ | F |  | `blueprint.crews` |
 | ✅ | Export + hard delete, cascading <br/>_Stage A DONE 2026-08-04: cascade end-to-end on tip. svc-blueprint publish half (export/erase + blueprintCreated/Deleted) + svc-identity consumer (`subscribeBlueprintProfileEvents` / blueprint-profile) sets and clears profiles.blueprint_id under §2. Identity unit tests cover redelivery match-guard and re-onboard. Blueprint README no longer claims a void subscriber. Optional residual: multi-service bus e2e + legal-hold policy — not a reopen of this mountain._ | F |  | `blueprint.ownership` |
-| ⛔ | On-chain rank attestations, zero PII (§19) <br/>_Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity. D26-P1-I4 2026-08-16: Fiat-plane zero-PII refuse + product-Done refuse while P0-12 unsealed (svc-blueprint attestations helper). STATUS stays ready — on-chain leftover Shehzad; do not flip done from this slice._ | B | `protocol.smart-accounts` | `blueprint.attestations` |
+| ✅ | On-chain rank attestations, zero PII (§19) <br/>_CLOSED engineering bar 2026-08-18 (S-F1 Protocol Plane): RankAttestation.sol — subject is bytes32 commitment (not address/name/email/user id/KYC); permissionless attest/revoke by msg.sender; no platform issuer; consumers choose trusted issuers off-chain. Joining to a Fiat Plane person is forbidden. Unaudited. SPLIT: this done bar is the on-chain half in svc-protocol. Fiat/blueprint zero-PII card refuse + product-Done helper (P0-12 unsealed) is a different service — Denon D26-P1-I4 / svc-blueprint — not this PR._ | B |  | `blueprint.attestations` |
 
 ### Phase 4P — INTACHAIN (0/3)
 

@@ -1005,9 +1005,16 @@ export const FEATURES = [
     module: 'blueprint',
     phase: '4',
     plane: 'B',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['blueprint.onboarding', 'protocol.smart-accounts'],
-    note: 'Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity. D26-P1-I4 2026-08-16: Fiat-plane zero-PII refuse + product-Done refuse while P0-12 unsealed (svc-blueprint attestations helper). STATUS stays ready — on-chain leftover Shehzad; do not flip done from this slice.',
+    requires: ['services/svc-protocol/contracts/attestations/RankAttestation.sol', 'services/svc-protocol/src/attestations/commitment.ts'],
+    note:
+      'CLOSED engineering bar 2026-08-18 (S-F1 Protocol Plane): RankAttestation.sol — subject is bytes32 commitment ' +
+      '(not address/name/email/user id/KYC); permissionless attest/revoke by msg.sender; no platform issuer; ' +
+      'consumers choose trusted issuers off-chain. Joining to a Fiat Plane person is forbidden. Unaudited. ' +
+      'SPLIT: this done bar is the on-chain half in svc-protocol. Fiat/blueprint zero-PII card refuse + product-Done ' +
+      'helper (P0-12 unsealed) is a different service — Denon D26-P1-I4 / svc-blueprint — not this PR.',
   }),
 
   // ── PHASE 4P · INTACHAIN ─────────────────────────────────────────────────
