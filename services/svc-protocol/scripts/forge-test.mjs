@@ -21,7 +21,16 @@ const forge = spawnSync('forge', ['test', '--fuzz-runs', '64'], { stdio: 'inheri
 if (!forge.error) process.exit(forge.status ?? 1);
 if (forge.error.code !== 'ENOENT' && required) process.exit(1);
 
-const docker = run('docker', ['run', '--rm', '-v', `${root}:/work`, '-w', '/work', image, 'forge test --fuzz-runs 64']);
+const docker = run('docker', [
+  'run',
+  '--rm',
+  '-v',
+  `${root}:/work`,
+  '-w',
+  '/work',
+  image,
+  'forge test --fuzz-runs 64 --out /tmp/intafaced-forge-out --cache-path /tmp/intafaced-forge-cache',
+]);
 if (docker.status === 0) process.exit(0);
 
 if (!required) {
