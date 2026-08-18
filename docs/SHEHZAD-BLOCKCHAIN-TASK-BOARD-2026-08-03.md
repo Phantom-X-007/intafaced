@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-18 delta — S-I3 (this PR)
+> ### 2026-08-19 delta — S-L3 ECDH scanner (this PR)
+>
+> **Stealth receive half:** `src/stealth/scan.ts` is ERC-5564 scheme-1 (secp256k1 + view tags). Recipients scan `StealthAnnouncer` logs with a viewing key the service never holds. Keccak `presentationAddress` stays a separate P0 helper — not an ECDH match. Unaudited.
+>
+> ### 2026-08-18 delta — S-I3
 >
 > **S-I3 dex fees:** CLOB knobs no longer default to 0 / `'0'`. Set both from the venue or omit both — omitted means `intachain-clob` is not quoted. Quote path still uses projections, never `eth_call`. Internal-book 20bps remains a configured guess. Tracker `socket.dex-fee-source` → **ready**.
 > **#2364 merged** (S-C1 SovereignVenue + S-L4 trust). Venue publishes `takerFeeBps` + `settlementCostQuote()=0`; this PR makes svc-dex refuse silent zeros instead of quoting from them.
@@ -15,7 +19,7 @@
 > **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar · #2362 S-L2 LegacyVault · #2363 S-L6/L3/L5.
 > **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
 >
-> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · EntryPoint differential · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · EIP-5564 scanner.
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · Foundry fuzz/gas (S-A8 residual).
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -234,7 +238,7 @@ Every row here was a **counted gap** in `tooling/coverage.yaml`: the law named t
 | -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **S-L1** | **Crew vaults** (§33)           | Crews are `done` as a social object; a shared treasury for one is a contract and had no row in any form                                  | Member shares · M-of-N spend threshold · **a defined split on exit, designed before anyone deposits** · money-path invariant tests                                                                                                            |
 | **S-L2** | **Legacy vaults** (§34)         | **Arrived with a contradiction.** §34 describes guardian M-of-N recovery; `socket.social-recovery` forbids the platform being a guardian | **Shipped #2362.** S-K7 ADR then LegacyVault: user-set/revocable heirs, inactivity + challenge-window abort via heartbeat, staged tranche claim. No platform key, no guardian role. Residuals: multi-asset, attestation claims, public deploy |
-| **S-L3** | **Stealth handles** (§26)       | `blueprint.attestations` covered the zero-PII half; the receiving half had no row                                                        | **Shipped #2363.** Two ephemerals → two unlinkable presentations; StealthAnnouncer has no user id. Residual: EIP-5564 ECDH scanner                                                                                                            |
+| **S-L3** | **Stealth handles** (§26)       | `blueprint.attestations` covered the zero-PII half; the receiving half had no row                                                        | **Shipped #2363 + scanner this PR.** Two ephemerals → two unlinkable presentations; StealthAnnouncer has no user id; ERC-5564 scheme-1 ECDH scan of logs. Residual: unaudited. keccak P0 presentations are not ECDH matches.                  |
 | **S-L4** | **Launch trust layer** (§35)    | The law calls trust the moat in meme season; the anti-rug architecture was missing without being recorded as missing                     | **Shipped this PR.** LaunchLpLock + LaunchVesting (no admin unlock) + DeployerReputation counts. Empty history cannot render as a clean badge.                                                                                                |
 | **S-L5** | **Treasury yield vaults** (§36) | `launch.rwa` recorded the licence blocker for one half of the pair and nothing recorded the other                                        | **Shipped #2363 (contract half).** TreasuryYieldVault refuse-closed on bytes32(0) licenceHash. Licence _content_ remains Class X                                                                                                              |
 | **S-L6** | **Venue Vault** (§27)           | `venue.aggregation` has admitted "Venue Vault absent" in its own note since 2026-08-02 with no row behind it                             | **Shipped #2363.** Per-user AES-256-GCM vault; withdrawal/internal-transfer refused at register. Residuals: HSM KEK, durable store, svc-trade/OMS wiring. Still the hard blocker under S-I4 until those residuals + OMS exist                 |
