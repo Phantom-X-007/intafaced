@@ -311,14 +311,16 @@ export function registerRoutes(
    * cannot tell them apart will report a whole book as missing.
    *
    * Optional `?side=buy|sell`, `?kind=book|stop`, `?accountId=`, `?tif=`,
-   * `?price=` (exact Amount match), and `?remaining=` (exact live remaining
-   * Amount) filter after the engine answers. Side then kind then accountId
-   * then tif then price then remaining are parsed first. An unknown or
-   * invalid value is 400 before `restingOrders` is called — the engine is not
-   * asked to invent a book, and an empty match is still `[]`. The filters
-   * compose when more than one is present. IOC/FOK that never rested stay `[]`
-   * — this read does not invent them. A row with no comparable price does not
-   * match a provided price. Remaining is the live working qty, not original qty.
+   * `?price=` (exact Amount match), `?remaining=` (exact live remaining
+   * Amount), and `?orderId=` (exact id after trim) filter after the engine
+   * answers. Side then kind then accountId then tif then price then remaining
+   * then orderId are parsed first. An unknown or invalid value is 400 before
+   * `restingOrders` is called — the engine is not asked to invent a book, and
+   * an empty match is still `[]`. The filters compose when more than one is
+   * present. IOC/FOK that never rested stay `[]` — this read does not invent
+   * them. A row with no comparable price does not match a provided price.
+   * Remaining is the live working qty, not original qty. A well-formed
+   * orderId that is not on the live book is `[]`, not 404.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -339,6 +341,7 @@ export function registerRoutes(
       tif?: string | string[];
       price?: string | string[] | number;
       remaining?: string | string[] | number;
+      orderId?: string | string[];
     };
 
     const sideRaw = query.side;
@@ -431,6 +434,26 @@ export function registerRoutes(
       remainingFilter = parseAmount(parsed.data);
     }
 
+    const orderIdRaw = query.orderId;
+    const orderIdParam = Array.isArray(orderIdRaw) ? orderIdRaw[0] : orderIdRaw;
+    let orderIdFilter: string | undefined;
+    if (orderIdParam !== undefined) {
+      if (typeof orderIdParam !== 'string') {
+        return reply.code(400).send({
+          code: 'InvalidOrderId',
+          message: 'orderId must be 1 to 128 characters',
+        });
+      }
+      const trimmed = orderIdParam.trim();
+      if (trimmed.length === 0 || trimmed.length > 128) {
+        return reply.code(400).send({
+          code: 'InvalidOrderId',
+          message: 'orderId must be 1 to 128 characters',
+        });
+      }
+      orderIdFilter = trimmed;
+    }
+
     const orders = engine.restingOrders(marketId);
     return reply.code(200).send({
       marketId,
@@ -441,7 +464,8 @@ export function registerRoutes(
           (accountIdFilter === undefined || order.accountId === accountIdFilter) &&
           (tifFilter === undefined || order.tif === tifFilter) &&
           (priceFilter === undefined || orderPriceEquals(order.price, priceFilter)) &&
-          (remainingFilter === undefined || orderRemainingEquals(order.remaining, remainingFilter)),
+          (remainingFilter === undefined || orderRemainingEquals(order.remaining, remainingFilter)) &&
+          (orderIdFilter === undefined || order.orderId === orderIdFilter),
       ),
     });
   });
