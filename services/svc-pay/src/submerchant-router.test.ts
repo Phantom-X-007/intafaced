@@ -76,6 +76,7 @@ interface Seen {
   createActorId?: string;
   getActorMerchantId?: string;
   grantActorMerchantId?: string;
+  listArgs?: unknown[];
 }
 
 function harness(
@@ -98,8 +99,9 @@ function harness(
       seen.createActorId = input.actorId;
       return record();
     },
-    listSubMerchants: async () => {
+    listSubMerchants: async (...args: unknown[]) => {
       if (opts.throws) throw opts.throws;
+      seen.listArgs = args;
       return [record()];
     },
     getSubMerchant: async (actorMerchantId: string) => {
@@ -274,6 +276,23 @@ describe('the wire shape', () => {
         reason: 'because I said so',
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('forwards optional status on list and keeps omitted unfiltered', async () => {
+    const { caller, seen } = harness();
+    await caller(await ctx(['pay:read'])).submerchant.list({ merchantId: PLATFORM_MERCHANT });
+    expect(seen.listArgs).toEqual([PLATFORM_MERCHANT, PLATFORM_MERCHANT, 100, undefined]);
+
+    await caller(await ctx(['pay:read'])).submerchant.list({ merchantId: PLATFORM_MERCHANT, status: 'active', limit: 20 });
+    expect(seen.listArgs).toEqual([PLATFORM_MERCHANT, PLATFORM_MERCHANT, 20, 'active']);
+  });
+
+  it('rejects a status outside the merchant vocabulary before the service is called', async () => {
+    const { caller, seen } = harness();
+    await expect(
+      caller(await ctx(['pay:read'])).submerchant.list({ merchantId: PLATFORM_MERCHANT, status: 'alive' as never }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(seen.listArgs).toBeUndefined();
   });
 
   it('records the granting NODE on the event, resolved from the principal', async () => {

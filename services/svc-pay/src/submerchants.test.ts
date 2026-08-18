@@ -738,7 +738,34 @@ if (!available) {
       expect((await trees.getSubMerchant(mid.id, leaf.id)).id).toBe(leaf.id);
       // But it can no longer enumerate or extend beneath it.
       expect((await rejection(trees.listSubMerchants(mid.id, leaf.id), SubMerchantError)).code).toBe('pay.submerchant_permission_denied');
+      expect((await rejection(trees.listSubMerchants(mid.id, leaf.id, 100, 'pending'), SubMerchantError)).code).toBe(
+        'pay.submerchant_permission_denied',
+      );
       expect((await rejection(child(mid.id, leaf.id), SubMerchantError)).code).toBe('pay.submerchant_permission_denied');
+    });
+
+    it('lists mixed statuses when omitted, exact matches when given, and [] when none', async () => {
+      const platform = await root();
+      const pending = await child(platform.merchantId, platform.merchantId);
+      const live = await child(platform.merchantId, platform.merchantId);
+      const parked = await child(platform.merchantId, platform.merchantId);
+      await sql`UPDATE pay.merchants SET status = 'active' WHERE id = ${live.id}`;
+      await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${parked.id}`;
+
+      const mixed = await trees.listSubMerchants(platform.merchantId, platform.merchantId);
+      expect(mixed.map((r) => r.id).sort()).toEqual([pending.id, live.id, parked.id].sort());
+      expect(new Set(mixed.map((r) => r.status))).toEqual(new Set(['pending', 'active', 'suspended']));
+      expect(mixed.every((r) => r.parentMerchantId === platform.merchantId)).toBe(true);
+
+      const onlyActive = await trees.listSubMerchants(platform.merchantId, platform.merchantId, 100, 'active');
+      expect(onlyActive.map((r) => r.id)).toEqual([live.id]);
+      expect(onlyActive.every((r) => r.status === 'active')).toBe(true);
+
+      const onlyPending = await trees.listSubMerchants(platform.merchantId, platform.merchantId, 100, 'pending');
+      expect(onlyPending.map((r) => r.id)).toEqual([pending.id]);
+
+      expect(await trees.listSubMerchants(platform.merchantId, platform.merchantId, 100, 'closed')).toEqual([]);
+      expect(await trees.listSubMerchants(platform.merchantId, live.id)).toEqual([]);
     });
   });
 }

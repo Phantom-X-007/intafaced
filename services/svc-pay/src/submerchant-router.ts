@@ -214,12 +214,18 @@ export function createSubMerchantRouter(subMerchants: SubMerchantService, mercha
 
       /** Direct children of a node the caller can reach. Requires `submerchant`. */
       list: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().uuid(), limit: z.number().int().min(1).max(500).optional() }))
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            limit: z.number().int().min(1).max(500).optional(),
+            status: z.enum(['pending', 'active', 'suspended', 'closed']).optional(),
+          }),
+        )
         .output(z.array(subMerchantView))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const actorMerchantId = await actor(ctx.principal?.userId);
-            const rows = await subMerchants.listSubMerchants(actorMerchantId, input.merchantId, input.limit ?? 100);
+            const rows = await subMerchants.listSubMerchants(actorMerchantId, input.merchantId, input.limit ?? 100, input.status);
             return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
           }),
         ),

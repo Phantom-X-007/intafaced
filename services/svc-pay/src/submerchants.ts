@@ -552,7 +552,12 @@ export class SubMerchantService {
    * structure in one response, which is a different disclosure decision from the
    * one `submerchant` permission expresses.
    */
-  async listSubMerchants(actorMerchantId: string, merchantId: string, limit = 100): Promise<SubMerchantRecord[]> {
+  async listSubMerchants(
+    actorMerchantId: string,
+    merchantId: string,
+    limit = 100,
+    status?: SubMerchantRecord['status'],
+  ): Promise<SubMerchantRecord[]> {
     const chain = await this.assertWithinSubtree(actorMerchantId, merchantId);
     await this.assertHolds(actorMerchantId, merchantId, 'submerchant', this.sql, chain);
 
@@ -560,6 +565,7 @@ export class SubMerchantService {
       SELECT id, user_id, parent_merchant_id, mode, status, kyb_status, settling_party, pricing, created_at
         FROM pay.merchants
        WHERE parent_merchant_id = ${merchantId}
+         ${status === undefined ? this.sql`` : this.sql`AND status = ${status}`}
        ORDER BY created_at ASC
        LIMIT ${Math.min(Math.max(limit, 1), 500)}
     `;
