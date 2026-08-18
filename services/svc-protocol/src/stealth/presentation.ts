@@ -5,8 +5,8 @@
  * ephemeral the sender chooses. Two ephemerals never collide into the same
  * presentation, and neither presentation is the spending key itself.
  *
- * Full EIP-5564 ECDH scanning is residual; this P0 proves the unlinkable
- * receive shape so we do not ship a public address as the only receive path.
+ * ECDH scanning of announcer logs lives in `scan.ts` (ERC-5564 scheme 1).
+ * This helper is the P0 keccak presentation — not an ECDH match.
  */
 import { concat, keccak256, type Address, type Hex } from 'viem';
 

@@ -881,10 +881,10 @@ export const FEATURES = [
       '(#193) and factory honesty on predict/build (#128). ERC-4337 v0.7 user operations are built and hashed ' +
       'independently by src/chain/userop.ts, which is the whole basis on which the relay can refuse to forward ' +
       'something the user did not authorise. ' +
-      'STATUS stays ready (not done) — honesty residuals 2026-08-08: (1) EXTERNAL audit / Nitro budget ' +
+      'STATUS stays ready (not done) — honesty residuals 2026-08-19: (1) EXTERNAL audit / Nitro budget ' +
       '(socket.contract-audit; internal package #1176 shipped); (2) S-A9 PasskeyOwner ON-CHAIN exists but live passkey ' +
       'owner flow on configured Base Sepolia env is not proven (RPC/funding Nitro); (3) userOp hash vs live EntryPoint ' +
-      '(socket.userop-differential-test); (4) fuzz/invariant + gas snapshots (socket.contract-toolchain); ' +
+      'CLOSED #2366 (socket.userop-differential-test); (4) fuzz/invariant + gas snapshots (socket.contract-toolchain); ' +
       '(5) paymaster FUNDING Nitro — policy modules exist; (6) public deployment registry rows wait on Nitro RPC.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
@@ -2008,11 +2008,15 @@ export const FEATURES = [
     status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    requires: ['services/svc-protocol/contracts/privacy/StealthAnnouncer.sol', 'services/svc-protocol/src/stealth/presentation.ts'],
+    requires: [
+      'services/svc-protocol/contracts/privacy/StealthAnnouncer.sol',
+      'services/svc-protocol/src/stealth/presentation.ts',
+      'services/svc-protocol/src/stealth/scan.ts',
+    ],
     note:
-      'CLOSED engineering bar 2026-08-18 (S-L3): presentationAddress(spending, ephemeral) — two ephemerals are unlinkable; ' +
-      'StealthAnnouncer emits schemeId+stealthAddress+ephemeralPubKey with no user id. Indexer must stay aggregate-only. ' +
-      'Residual: full EIP-5564 ECDH scanner. Unaudited.',
+      'CLOSED engineering bar 2026-08-18 (S-L3 presentations) + 2026-08-19 ECDH scanner: presentationAddress is the ' +
+      'keccak P0 helper; scan.ts is ERC-5564 scheme-1 (secp256k1 + view tags) over StealthAnnouncer logs. Viewing keys ' +
+      'never enter env. Indexer must stay aggregate-only. Residual: unaudited; keccak presentations are not ECDH matches.',
   }),
   f('protocol.crew-vaults', 'Crew vaults — shared multi-sig treasuries, threshold spend, split on exit (§33)', {
     module: 'protocol',
