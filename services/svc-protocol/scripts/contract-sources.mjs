@@ -168,7 +168,13 @@ export const SUITES = [
     name: 'lending',
     expect: 'compiles',
     /** S-A4 — isolated over-collateral market; needs oracle interface + ERC-20. */
-    sources: ['lending/IsolatedLendingMarket.sol', 'oracle/IPriceOracle.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+    sources: [
+      'lending/IsolatedLendingMarket.sol',
+      'lending/test/LendingAdversary.sol',
+      'oracle/IPriceOracle.sol',
+      'amm/IERC20Minimal.sol',
+      'test/MockERC20.sol',
+    ],
   },
   {
     name: 'merchant',

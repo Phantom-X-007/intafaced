@@ -5,11 +5,13 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-08 delta — P0 remainder ship
+> ### 2026-08-08 delta — P0 wave (tip)
 >
-> Shipped on `feat/protocol-p0-remainder` (this PR): **S-A12** FailClosedOracle · **S-A4** IsolatedLendingMarket (ready, not full SPEC done-bar) · **S-A5** SovereignRouter + quote pick · **S-A6** MerchantAccept · **S-A10/A11** paymaster + bundler policy modules + ADR · **S-A13** deployment registry artefact · **S-K7** inheritance ADR · **S-L1** CrewVault · **S-L4** LaunchLpLock (LP leg).
+> **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package.
+> **S-A4 engineering done-bar:** cascade + flash/reentrancy adversarial + no invent rates (this PR). Public Base Sepolia deploy = Nitro RPC residual.
+> **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
 >
-> Still open / Nitro-gated: S-A1 **external** audit (internal package shipped) · S-A3 escrow (separate PR) · S-A9 passkey (separate PR) · S-C1 venue · S-I3/I4 · S-L2 (ADR only) · S-L3/L5/L6 · S-D2–D4 INTACHAIN · paymaster **funding** · public registry rows.
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · EntryPoint differential · S-A2 invariants/LP · S-C1 venue · S-I3/I4 · S-L2 (ADR only — no platform guardian) · S-L3/L5/L6 · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows.
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -60,14 +62,14 @@
 
 Added 2026-08-07. Each of these gates something on this board and **no PR closes any of them**. If one blocks you, say so and move to the next item — an owner-gated wall is never your delay.
 
-| Blocked on                                     | Whose call         | What it gates                                                                       | Status                                            |
-| ---------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Which venue this platform quotes**           | **Nitro**          | `socket.dex-venue-set` — svc-dex and the indexer both stay honestly dead until then | Open. Not tracked as pending in any ADR until now |
-| **Money for an external contract audit**       | **Nitro**          | S-J1 / `socket.contract-audit` — `audited:true` is unreachable without it           | Open                                              |
-| **Testnet / mainnet funding, RPC access**      | **Nitro**          | Anything past a local dev chain, incl. S-A13 deployment registry                    | Open                                              |
-| **Which EVM chain P0 deploys to**              | Nitro, on your ADR | S-D1, and every deployed-address item                                               | **You propose in S-D1; Nitro rules**              |
-| **Class X — mainnet keys, go-live, sanctions** | **Nitro human**    | Any live-money posture                                                              | Standing law, unchanged                           |
-| **Gas sponsorship funding** (if we sponsor)    | **Nitro**          | S-A10 paymaster — the contract is yours, the funded account is not                  | Open                                              |
+| Blocked on                                     | Whose call         | What it gates                                                                       | Status                                                              |
+| ---------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Which venue this platform quotes**           | **Nitro**          | `socket.dex-venue-set` — svc-dex and the indexer both stay honestly dead until then | Open. Not tracked as pending in any ADR until now                   |
+| **Money for an external contract audit**       | **Nitro**          | S-J1 / `socket.contract-audit` — `audited:true` is unreachable without it           | Open                                                                |
+| **Testnet / mainnet funding, RPC access**      | **Nitro**          | Anything past a local dev chain, incl. S-A13 deployment registry                    | Open                                                                |
+| **Which EVM chain P0 deploys to**              | Nitro, on your ADR | S-D1, and every deployed-address item                                               | **Ruled 2026-08-08: Base Sepolia → Base; HyperEVM later; anvil=CI** |
+| **Class X — mainnet keys, go-live, sanctions** | **Nitro human**    | Any live-money posture                                                              | Standing law, unchanged                                             |
+| **Gas sponsorship funding** (if we sponsor)    | **Nitro**          | S-A10 paymaster — the contract is yours, the funded account is not                  | Open                                                                |
 
 ---
 

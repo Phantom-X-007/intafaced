@@ -50,6 +50,8 @@ export type ArtifactName =
   | 'LaunchLpLock'
   | 'SovereignEscrow'
   | 'MockERC20'
+  | 'LendingSameTxRoundTrip'
+  | 'ReenteringBorrowToken'
   | 'PasskeyOwner'
   | 'P256';
 
