@@ -136,6 +136,69 @@ if (!available) {
       });
     });
 
+    it('earn.pools filters by kind in SQL and returns [] on a kind leftover miss', async () => {
+      const flexible = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Open flexible',
+        aprBps: 1000,
+      });
+      const fixed = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'fixed',
+        name: 'Open fixed',
+        aprBps: 2000,
+        termDays: 90,
+      });
+      const eurFixed = await bank.earn.createPool({
+        assetId: 'EUR',
+        kind: 'fixed',
+        name: 'EUR fixed',
+        aprBps: 1500,
+        termDays: 30,
+      });
+      const closedFlexible = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Closed flexible',
+        aprBps: 500,
+      });
+      await sql`UPDATE bank.earn_pools SET status = 'closed' WHERE id = ${closedFlexible.id}::uuid`;
+      const user = signedCaller(bank, principal(USER, ['bank:read', 'bank:write']));
+
+      const unfiltered = await user.earn.pools({});
+      expect(unfiltered.map((p) => p.id).sort()).toEqual([flexible.id, fixed.id, eurFixed.id].sort());
+      expect(unfiltered.every((p) => p.kind === 'flexible' || p.kind === 'fixed')).toBe(true);
+      expect(unfiltered.find((p) => p.id === flexible.id)?.minDeposit).toBe('0');
+
+      expect(await user.earn.pools({ kind: 'flexible' })).toEqual([
+        expect.objectContaining({ id: flexible.id, assetId: 'USDT', kind: 'flexible' }),
+      ]);
+      expect(await user.earn.pools({ kind: 'fixed', assetId: 'USDT' })).toEqual([
+        expect.objectContaining({ id: fixed.id, assetId: 'USDT', kind: 'fixed' }),
+      ]);
+      expect(await user.earn.pools({ kind: 'flexible', assetId: 'EUR' })).toEqual([]);
+      expect(await user.earn.pools({ kind: 'fixed', assetId: 'BTC' })).toEqual([]);
+    });
+
+    it('earn.pools({ kind }) returns [] when no open pool of that kind exists, without earn_rate_unset', async () => {
+      await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Only flexible is open',
+        aprBps: 1000,
+      });
+      const user = signedCaller(bank, principal(USER, ['bank:read', 'bank:write']));
+
+      await expect(user.earn.pools({ kind: 'fixed' })).resolves.toEqual([]);
+    });
+
+    it('rejects an invalid kind at zod before the service', async () => {
+      const user = signedCaller(bank, principal(USER, ['bank:read', 'bank:write']));
+      const err = await user.earn.pools({ kind: 'locked' } as never).catch((e: unknown) => e);
+      expect((err as { code?: string }).code).toBe('BAD_REQUEST');
+    });
+
     it('ops.accrueInterest refuses by name when no yield rate is configured', async () => {
       const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
 

@@ -174,17 +174,19 @@ export class EarnService {
     return toPool(row);
   }
 
-  async listPools(assetId?: string): Promise<PoolRecord[]> {
-    const rows = assetId
-      ? await this.sql<PoolRow[]>`
-          SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
-            FROM bank.earn_pools WHERE asset_id = ${assetId} AND status = 'open' ORDER BY apr_bps DESC
-        `
-      : await this.sql<PoolRow[]>`
-          SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
-            FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
-        `;
+  async listPools(assetId?: string, kind?: PoolRecord['kind']): Promise<PoolRecord[]> {
+    const rows = await this.sql<PoolRow[]>`
+      SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
+        FROM bank.earn_pools
+       WHERE status = 'open'
+             ${assetId ? this.sql`AND asset_id = ${assetId}` : this.sql``}
+             ${kind ? this.sql`AND kind = ${kind}` : this.sql``}
+       ORDER BY ${assetId ? this.sql`apr_bps DESC` : this.sql`asset_id ASC, apr_bps DESC`}
+    `;
     if (rows.length === 0) {
+      // A kind leftover miss is not "no earn rate is configured" — another open
+      // kind may still exist. Only the unfiltered (and assetId-only) door throws.
+      if (kind) return [];
       throw new BankError(assetId ? `No earn rate is configured for ${assetId}` : 'No earn rates are configured', 'bank.earn_rate_unset');
     }
     return rows.map(toPool);

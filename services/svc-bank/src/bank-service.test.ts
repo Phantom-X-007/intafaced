@@ -1398,6 +1398,32 @@ if (!available) {
       });
     });
 
+    it('listPools() still throws when no open pool is configured', async () => {
+      await expect(bank.earn.listPools()).rejects.toMatchObject({ code: 'bank.earn_rate_unset' });
+    });
+
+    it('filters listPools by kind in SQL and returns [] on a kind leftover miss', async () => {
+      const flexible = await openPool({ kind: 'flexible', apr: 1000 });
+      const fixed = await openPool({ kind: 'fixed', termDays: 90, apr: 2000 });
+      const eurFixed = await openPool({ kind: 'fixed', termDays: 30, apr: 1500, assetId: 'EUR' });
+      const closedFlexible = await openPool({ kind: 'flexible', apr: 500 });
+      await sql`UPDATE bank.earn_pools SET status = 'closed' WHERE id = ${closedFlexible.id}::uuid`;
+
+      const unfiltered = await bank.earn.listPools();
+      expect(unfiltered.map((p) => p.id).sort()).toEqual([flexible.id, fixed.id, eurFixed.id].sort());
+      expect(unfiltered.every((p) => p.status === 'open')).toBe(true);
+      expect(unfiltered.every((p) => typeof p.minDeposit === 'bigint')).toBe(true);
+
+      expect(await bank.earn.listPools(undefined, 'flexible')).toEqual([
+        expect.objectContaining({ id: flexible.id, assetId: 'USDT', kind: 'flexible', status: 'open' }),
+      ]);
+      expect(await bank.earn.listPools('USDT', 'fixed')).toEqual([
+        expect.objectContaining({ id: fixed.id, assetId: 'USDT', kind: 'fixed' }),
+      ]);
+      expect(await bank.earn.listPools('EUR', 'flexible')).toEqual([]);
+      expect(await bank.earn.listPools('USDT', 'flexible')).toEqual([expect.objectContaining({ id: flexible.id, kind: 'flexible' })]);
+    });
+
     it('returns the principal on withdrawal from a flexible pool', async () => {
       const pool = await openPool();
       await fund(USER_A, 'USDT', '1000');

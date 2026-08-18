@@ -795,7 +795,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
   const earn = router({
     pools: scopedProcedure('bank:read', { module: 'bank' })
-      .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
+      .input(z.object({ assetId: z.string().min(1).max(16).optional(), kind: z.enum(['flexible', 'fixed']).optional() }))
       .output(
         z.array(
           z.object({
@@ -811,7 +811,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .query(async ({ input }) =>
         guard(async () => {
-          const pools = await bank.earn.listPools(input.assetId);
+          const pools = await bank.earn.listPools(input.assetId, input.kind);
           return pools.map((p) => ({
             id: p.id,
             assetId: p.assetId,
