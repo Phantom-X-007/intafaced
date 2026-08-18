@@ -223,6 +223,15 @@ export const SUITES = [
      */
     sources: ['venue/SovereignVenue.sol', 'amm/IERC20Minimal.sol'],
   },
+  {
+    name: 'entrypoint',
+    expect: 'compiles',
+    /**
+     * S-A11 / `socket.userop-differential-test` — ERC-4337 v0.7 getUserOpHash
+     * so TypeScript can be checked against the Solidity the live EntryPoint runs.
+     */
+    sources: ['entrypoint/EntryPointGetUserOpHash.sol'],
+  },
 ];
 
 /** The exact `sources` object a suite is compiled from. */

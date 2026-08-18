@@ -298,3 +298,20 @@ describe('committed venue artefacts match the Solidity in this tree', () => {
     expect(loadArtifact('SovereignVenue').sourceHash).toBe(expected);
   });
 });
+
+describe('committed entrypoint artefacts match the Solidity in this tree', () => {
+  const entrypoint = (SUITES as Suite[]).find((s) => s.name === 'entrypoint');
+
+  it('compiles EntryPointGetUserOpHash', () => {
+    expect(entrypoint?.expect).toBe('compiles');
+    const artefact = loadArtifact('EntryPointGetUserOpHash');
+    expect(artefact.contractName).toBe('EntryPointGetUserOpHash');
+    expect(artefact.suite).toBe('entrypoint');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(entrypoint, collectSources()));
+    expect(loadArtifact('EntryPointGetUserOpHash').sourceHash).toBe(expected);
+  });
+});

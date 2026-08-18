@@ -59,7 +59,8 @@ export type ArtifactName =
   | 'LendingSameTxRoundTrip'
   | 'ReenteringBorrowToken'
   | 'PasskeyOwner'
-  | 'P256';
+  | 'P256'
+  | 'EntryPointGetUserOpHash';
 
 export interface ContractArtifact {
   readonly contractName: string;
