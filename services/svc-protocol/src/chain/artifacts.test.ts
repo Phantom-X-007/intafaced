@@ -315,3 +315,39 @@ describe('committed entrypoint artefacts match the Solidity in this tree', () =>
     expect(loadArtifact('EntryPointGetUserOpHash').sourceHash).toBe(expected);
   });
 });
+
+describe('committed NFT artefacts match the Solidity in this tree', () => {
+  const nft = (SUITES as Suite[]).find((s) => s.name === 'nft');
+
+  it('is the last suite so a launch-NFT edit cannot stale vault/privacy bytecode', () => {
+    expect((SUITES as Suite[]).at(-1)?.name).toBe('nft');
+  });
+
+  it('compiles SovereignNft + RoyaltyMarket (enforced royalty, not signalling-only)', () => {
+    expect(nft?.expect).toBe('compiles');
+    expect(nft?.sources).toEqual(['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol']);
+    for (const name of ['SovereignNft', 'RoyaltyMarket'] as const) {
+      const artefact = loadArtifact(name);
+      expect(artefact.contractName).toBe(name);
+      expect(artefact.suite).toBe('nft');
+      expect(artefact.bytecode.length).toBeGreaterThan(2);
+      expect(artefact.bytecode).not.toContain('__$');
+    }
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(nft, collectSources()));
+    for (const name of ['SovereignNft', 'RoyaltyMarket'] as const) {
+      expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
+        expected,
+      );
+    }
+  });
+
+  it('pins the same compiler and EVM version as the rest of the tree', () => {
+    const artefact = loadArtifact('SovereignNft');
+    expect(artefact.solcVersion).toBe('0.8.28');
+    expect(artefact.evmVersion).toBe('paris');
+    expect(artefact.optimizer).toEqual({ enabled: true, runs: 200 });
+  });
+});

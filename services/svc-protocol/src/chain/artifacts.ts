@@ -60,7 +60,9 @@ export type ArtifactName =
   | 'ReenteringBorrowToken'
   | 'PasskeyOwner'
   | 'P256'
-  | 'EntryPointGetUserOpHash';
+  | 'EntryPointGetUserOpHash'
+  | 'SovereignNft'
+  | 'RoyaltyMarket';
 
 export interface ContractArtifact {
   readonly contractName: string;

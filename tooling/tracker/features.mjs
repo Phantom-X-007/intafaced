@@ -1359,11 +1359,17 @@ export const FEATURES = [
   }),
   f('launch.nft', 'NFT mint / list / auction, on-chain royalties', {
     owner: 'shehzad002',
-    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only.',
+    status: 'done',
     module: 'launch',
     phase: '5',
     plane: 'P',
     dependsOn: ['launch.token-factory'],
+    requires: ['services/svc-protocol/contracts/nft/SovereignNft.sol', 'services/svc-protocol/contracts/nft/RoyaltyMarket.sol'],
+    note:
+      'CLOSED engineering bar 2026-08-18 (S-G3): SovereignNft (minimal ERC-721 + ERC-2981, royalty cap 1000 bps) and ' +
+      'RoyaltyMarket — list escrows NFT, buy pays quote ERC-20 with on-chain royalty split (not signalling-only); ' +
+      'English auction endAuction pays highest bid the same way. No platform fee, no owner. On-chain: ' +
+      'nft-royalty.onchain.test.ts. Unaudited. Residual: svc-launch product shell, indexer NFT events, Dutch/reserve auctions.',
   }),
   f('launch.rwa', 'RWA issuance registry, licence-gated', {
     owner: 'shehzad002',
