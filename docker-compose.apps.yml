@@ -195,11 +195,10 @@ services:
       # Set false to make this front door quote nothing custodial. Either way the
       # venue is DISCLOSED as `custodial: true` in the response, never hidden.
       DEX_INTERNAL_BOOK_ENABLED: ${DEX_INTERNAL_BOOK_ENABLED:-true}
-      # Venue cost parameters (SOCKET §13 — socket.dex-fee-source). CONFIGURED,
-      # not sourced: every response discloses the exact figures it applied, so
-      # the arithmetic can be checked against a venue's real schedule.
-      DEX_CLOB_FEE_BPS: ${DEX_CLOB_FEE_BPS:-0}
-      DEX_CLOB_SETTLEMENT_COST: '${DEX_CLOB_SETTLEMENT_COST:-0}'
+      # CLOB fee schedule (S-I3): no default 0 — that understates cost. Set both
+      # from SovereignVenue.takerFeeBps / settlementCostQuote, or omit both.
+      DEX_CLOB_FEE_BPS: ${DEX_CLOB_FEE_BPS:-}
+      DEX_CLOB_SETTLEMENT_COST: '${DEX_CLOB_SETTLEMENT_COST:-}'
       DEX_INTERNAL_BOOK_FEE_BPS: ${DEX_INTERNAL_BOOK_FEE_BPS:-20}
       # The §27 multi-venue fabric, as configuration. EMPTY BY DEFAULT — a
       # service with no outbound egress does not silently acquire it. Public
