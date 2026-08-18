@@ -467,6 +467,76 @@ describe('svc-academy mount — a stake threshold is a decimal string on the wir
   });
 });
 
+const LIVE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const SCHEDULED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const ENDED = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+function sessionRecord(overrides: { id: string; status: 'scheduled' | 'live' | 'ended' | 'cancelled'; title: string }) {
+  return {
+    roomId: ROOM,
+    hostId: USER,
+    startsAt: new Date('2026-08-18T12:00:00.000Z'),
+    endsAt: null,
+    streamProvider: null,
+    streamRoom: null,
+    scene: {},
+    sceneFingerprint: 'stub-session-scene-fp',
+    ...overrides,
+  };
+}
+
+const mixedRoomSessions = [
+  sessionRecord({ id: SCHEDULED, status: 'scheduled', title: 'Upcoming' }),
+  sessionRecord({ id: LIVE, status: 'live', title: 'On now' }),
+  sessionRecord({ id: ENDED, status: 'ended', title: 'Done' }),
+];
+
+describe('svc-academy mount — room sessions may filter by status', () => {
+  it('omits status and returns mixed statuses for that room', async () => {
+    const listSessions = vi.fn(async () => mixedRoomSessions);
+    const academy = stubAcademy({ listSessions: listSessions as AcademyService['listSessions'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).room({ roomId: ROOM });
+
+    expect(listSessions).toHaveBeenCalledWith({ roomId: ROOM });
+    expect(out.sessions.map((s) => s.status).sort()).toEqual(['ended', 'live', 'scheduled']);
+  });
+
+  it("forwards status: 'live' and returns only live sessions", async () => {
+    const listSessions = vi.fn(async (filter: { roomId?: string; status?: string }) =>
+      mixedRoomSessions.filter((s) => (filter.status ? s.status === filter.status : true)),
+    );
+    const academy = stubAcademy({ listSessions: listSessions as AcademyService['listSessions'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).room({ roomId: ROOM, status: 'live' });
+
+    expect(listSessions).toHaveBeenCalledWith({ roomId: ROOM, status: 'live' });
+    expect(out.sessions).toEqual([expect.objectContaining({ id: LIVE, status: 'live' })]);
+  });
+
+  it('returns an empty list when no session matches the status', async () => {
+    const listSessions = vi.fn(async () => []);
+    const academy = stubAcademy({ listSessions: listSessions as AcademyService['listSessions'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).room({ roomId: ROOM, status: 'cancelled' });
+
+    expect(listSessions).toHaveBeenCalledWith({ roomId: ROOM, status: 'cancelled' });
+    expect(out.sessions).toEqual([]);
+  });
+
+  it('rejects an unknown status at the door before the service', async () => {
+    const listSessions = vi.fn(async () => mixedRoomSessions);
+    const academy = stubAcademy({ listSessions: listSessions as AcademyService['listSessions'] });
+
+    await expect(
+      createAcademyRouter(academy)
+        .createCaller(signed())
+        .room({ roomId: ROOM, status: 'bogus' as never }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(listSessions).not.toHaveBeenCalled();
+  });
+});
+
 describe('svc-academy mount — no SFU means an error, never a fake token', () => {
   it('reports stream_unavailable as a 500 rather than returning a credential', async () => {
     const academy = stubAcademy({

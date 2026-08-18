@@ -1012,14 +1012,17 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
       .output(z.array(roomOut))
       .query(async ({ input }) => (await academy.listRooms({ ...(input?.kind ? { kind: input.kind } : {}) })).map(serialiseRoom)),
 
-    /** A room, its terms, and what is on in it. */
+    /** A room, its terms, and what is on in it. Optional status is an exact match only. */
     room: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ roomId: z.string().uuid() }))
+      .input(z.object({ roomId: z.string().uuid(), status: sessionStatus.optional() }))
       .output(z.object({ room: roomOut, sessions: z.array(sessionOut) }))
       .query(({ input }) =>
         guard(async () => ({
           room: serialiseRoom(await academy.room(input.roomId)),
-          sessions: await academy.listSessions({ roomId: input.roomId }),
+          sessions: await academy.listSessions({
+            roomId: input.roomId,
+            ...(input.status ? { status: input.status } : {}),
+          }),
         })),
       ),
 
