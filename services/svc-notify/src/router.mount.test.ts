@@ -342,15 +342,51 @@ describe('svc-notify mount — authorisation', () => {
 
   it('deliveries forwards channel exact-match including inapp', async () => {
     const noteId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    let listed: { userId: string; notificationId: string; channel?: string } | null = null;
+    let listed: { userId: string; notificationId: string; channel?: string; status?: string } | null = null;
     const notify = stubNotify({
-      deliveriesFor: async (userId: string, notificationId: string, channel?: string) => {
-        listed = { userId, notificationId, ...(channel !== undefined ? { channel } : {}) };
+      deliveriesFor: async (userId: string, notificationId: string, channel?: string, status?: string) => {
+        listed = {
+          userId,
+          notificationId,
+          ...(channel !== undefined ? { channel } : {}),
+          ...(status !== undefined ? { status } : {}),
+        };
         return [];
       },
     });
     await createNotifyRouter(notify).createCaller(signed()).notify.deliveries({ notificationId: noteId, channel: 'inapp' });
     expect(listed).toEqual({ userId: USER, notificationId: noteId, channel: 'inapp' });
+    expect(listed).not.toHaveProperty('status');
+  });
+
+  it('deliveries forwards status exact-match; delivered is 400', async () => {
+    const noteId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    let listed: { userId: string; notificationId: string; channel?: string; status?: string } | null = null;
+    const notify = stubNotify({
+      deliveriesFor: async (userId: string, notificationId: string, channel?: string, status?: string) => {
+        listed = {
+          userId,
+          notificationId,
+          ...(channel !== undefined ? { channel } : {}),
+          ...(status !== undefined ? { status } : {}),
+        };
+        return [];
+      },
+    });
+    await createNotifyRouter(notify)
+      .createCaller(signed())
+      .notify.deliveries({ notificationId: noteId, channel: 'email', status: 'accepted' });
+    expect(listed).toEqual({ userId: USER, notificationId: noteId, channel: 'email', status: 'accepted' });
+
+    const caller = createNotifyRouter(stubNotify()).createCaller(signed());
+    await expect(
+      caller.notify.deliveries({
+        notificationId: noteId,
+        status: 'delivered' as unknown as 'accepted',
+      }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
   });
 
   it('deliveries refuses an unknown channel at the door', async () => {

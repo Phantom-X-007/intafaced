@@ -8,11 +8,12 @@ import { MemoryNotifyStore } from './store.js';
 import type { ChannelId } from './channels/channel.js';
 
 /**
- * Notification leftover list — optional exact-match channel filter.
+ * Notification leftover list — optional exact-match channel and status filters.
  *
  * Load the notification under the caller FIRST. Foreign / unknown ids stay
- * `[]` even when a channel is provided. `inapp` is valid here. Invalid
- * channel is 400 at the door. Never invents a leftover or a delivery success.
+ * `[]` even when a channel or status is provided. `inapp` is valid here.
+ * Invalid channel/status (including invented `delivered`) is 400 at the door.
+ * Never invents a leftover or a delivery success. `accepted` ≠ delivered.
  */
 
 const SECRET = 'a-notify-deliveries-channel-test-secret-long';
@@ -69,6 +70,23 @@ async function ownNote(store: MemoryNotifyStore, userId = USER, key = 'owned') {
 
 async function leftover(deliveries: MemoryDeliveryStore, notificationId: string, channel: ChannelId) {
   await deliveries.claim(notificationId, channel, 3);
+}
+
+async function leftoverAs(
+  deliveries: MemoryDeliveryStore,
+  notificationId: string,
+  channel: ChannelId,
+  status: 'accepted' | 'failed' | 'refused',
+) {
+  const claim = await deliveries.claim(notificationId, channel, 3);
+  if (!claim.claimed) throw new Error('expected claim');
+  await deliveries.settle({
+    id: claim.id,
+    attempt: 1,
+    status,
+    attempted: status !== 'refused',
+    refusalCode: status === 'refused' ? 'channel.not_configured' : undefined,
+  });
 }
 
 describe('notify.deliveries — optional channel filter', () => {
@@ -148,5 +166,90 @@ describe('notify.deliveries — optional channel filter', () => {
     const note = await ownNote(store);
     expect(await notify.deliveriesFor(USER, note.id)).toEqual([]);
     expect(await notify.deliveriesFor(USER, note.id, 'email')).toEqual([]);
+  });
+
+  it('omitted status returns mixed leftovers; channel filter still works', async () => {
+    const { store, deliveries, notify, caller } = harness();
+    const note = await ownNote(store);
+    await leftoverAs(deliveries, note.id, 'email', 'accepted');
+    await leftoverAs(deliveries, note.id, 'sms', 'refused');
+    await leftoverAs(deliveries, note.id, 'inapp', 'failed');
+
+    const mixed = await notify.deliveriesFor(USER, note.id);
+    expect(mixed.map((r) => r.channel)).toEqual(['email', 'inapp', 'sms']);
+    expect(mixed.map((r) => r.status).sort()).toEqual(['accepted', 'failed', 'refused']);
+
+    const viaRouter = await caller.notify.deliveries({ notificationId: note.id });
+    expect(viaRouter.map((r) => r.channel)).toEqual(['email', 'inapp', 'sms']);
+
+    const email = await notify.deliveriesFor(USER, note.id, 'email');
+    expect(email).toHaveLength(1);
+    expect(email[0]).toMatchObject({ channel: 'email', status: 'accepted' });
+    const viaChannel = await caller.notify.deliveries({ notificationId: note.id, channel: 'email' });
+    expect(viaChannel).toHaveLength(1);
+    expect(viaChannel[0]).toMatchObject({ channel: 'email', status: 'accepted' });
+  });
+
+  it('status exact-matches; unmatched status is empty', async () => {
+    const { store, deliveries, notify, caller } = harness();
+    const note = await ownNote(store);
+    await leftoverAs(deliveries, note.id, 'email', 'accepted');
+    await leftoverAs(deliveries, note.id, 'sms', 'refused');
+
+    const accepted = await notify.deliveriesFor(USER, note.id, undefined, 'accepted');
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]).toMatchObject({ channel: 'email', status: 'accepted' });
+
+    const viaRouter = await caller.notify.deliveries({ notificationId: note.id, status: 'accepted' });
+    expect(viaRouter).toHaveLength(1);
+    expect(viaRouter[0]?.status).toBe('accepted');
+
+    expect(await notify.deliveriesFor(USER, note.id, undefined, 'failed')).toEqual([]);
+    await expect(caller.notify.deliveries({ notificationId: note.id, status: 'abandoned' })).resolves.toEqual([]);
+  });
+
+  it('channel and status AND together in the leftover query', async () => {
+    const { store, deliveries, notify, caller } = harness();
+    const note = await ownNote(store);
+    await leftoverAs(deliveries, note.id, 'email', 'accepted');
+    await leftoverAs(deliveries, note.id, 'sms', 'accepted');
+    await leftoverAs(deliveries, note.id, 'inapp', 'refused');
+
+    const and = await notify.deliveriesFor(USER, note.id, 'email', 'accepted');
+    expect(and).toHaveLength(1);
+    expect(and[0]).toMatchObject({ channel: 'email', status: 'accepted' });
+
+    const viaRouter = await caller.notify.deliveries({
+      notificationId: note.id,
+      channel: 'email',
+      status: 'accepted',
+    });
+    expect(viaRouter).toHaveLength(1);
+    expect(viaRouter[0]).toMatchObject({ channel: 'email', status: 'accepted' });
+
+    expect(await notify.deliveriesFor(USER, note.id, 'email', 'refused')).toEqual([]);
+    await expect(caller.notify.deliveries({ notificationId: note.id, channel: 'sms', status: 'refused' })).resolves.toEqual([]);
+  });
+
+  it('delivered is 400 — that stamp does not exist', async () => {
+    const { store, caller } = harness();
+    const note = await ownNote(store);
+    await expect(caller.notify.deliveries({ notificationId: note.id, status: 'delivered' as unknown as 'accepted' })).rejects.toMatchObject(
+      {
+        code: 'BAD_REQUEST',
+      },
+    );
+  });
+
+  it('foreign notificationId with a status still returns [] and does not leak existence', async () => {
+    const { store, deliveries, notify } = harness();
+    const theirs = await ownNote(store, OTHER, 'foreign-status');
+    await leftoverAs(deliveries, theirs.id, 'email', 'accepted');
+
+    expect(await notify.deliveriesFor(USER, theirs.id, undefined, 'accepted')).toEqual([]);
+    expect(await notify.deliveriesFor(USER, theirs.id, 'email', 'accepted')).toEqual([]);
+
+    const caller = createNotifyRouter(notify).createCaller(signed(USER));
+    await expect(caller.notify.deliveries({ notificationId: theirs.id, channel: 'email', status: 'accepted' })).resolves.toEqual([]);
   });
 });

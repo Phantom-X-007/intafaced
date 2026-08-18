@@ -211,12 +211,13 @@ export interface DeliveryStore {
   claim(notificationId: string, channel: ChannelId, maxAttempts: number): Promise<ClaimResult>;
   settle(input: SettleInput): Promise<void>;
   /**
-   * Per-notification leftover. Omitted channel returns every channel for that
-   * id, still sorted channel ASC. Provided channel exact-matches in the store
-   * (`AND channel = $channel`), never a mixed-page post-filter. Empty match
-   * is `[]`. Does not invent a row.
+   * Per-notification leftover. Omitted channel/status returns mixed leftovers
+   * for that id, still sorted channel ASC. Provided channel and status
+   * exact-match in the store (`AND channel = $channel`, `AND status = $status`)
+   * together — never a mixed-page post-filter. Empty match is `[]`. Does not
+   * invent a row or a `delivered` stamp.
    */
-  listForNotification(notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]>;
+  listForNotification(notificationId: string, channel?: ChannelId, status?: DeliveryStatus): Promise<DeliveryRecord[]>;
   /**
    * Operator delivery-outcomes view (D26-P1-O5 residual).
    *
@@ -395,9 +396,14 @@ export class MemoryDeliveryStore implements DeliveryStore {
     record.updatedAt = now;
   }
 
-  async listForNotification(notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]> {
+  async listForNotification(notificationId: string, channel?: ChannelId, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
     return [...this.byId.values()]
-      .filter((r) => r.notificationId === notificationId && (channel === undefined || r.channel === channel))
+      .filter(
+        (r) =>
+          r.notificationId === notificationId &&
+          (channel === undefined || r.channel === channel) &&
+          (status === undefined || r.status === status),
+      )
       .sort((a, b) => a.channel.localeCompare(b.channel));
   }
 
@@ -692,12 +698,14 @@ export class PostgresDeliveryStore implements DeliveryStore {
     `;
   }
 
-  async listForNotification(notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]> {
+  async listForNotification(notificationId: string, channel?: ChannelId, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
     const channelMatch = channel !== undefined ? this.sql`AND channel = ${channel}` : this.sql``;
+    const statusMatch = status !== undefined ? this.sql`AND status = ${status}` : this.sql``;
     const rows = await this.sql<DeliveryPgRow[]>`
       SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId}
          ${channelMatch}
+         ${statusMatch}
        ORDER BY channel ASC
     `;
     return rows.map(fromDeliveryPg);

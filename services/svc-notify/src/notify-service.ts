@@ -300,15 +300,16 @@ export class NotifyService {
    * Scoped by loading the notification under the caller's id FIRST, so a
    * delivery record is only ever returned for a row the caller owns. An id
    * belonging to somebody else returns an empty list rather than an error that
-   * would confirm it exists. Optional channel is an exact-match leftover after
-   * that ownership check — never a way to probe a foreign id.
+   * would confirm it exists. Optional channel/status are exact-match leftovers
+   * after that ownership check — never a way to probe a foreign id, and never
+   * a `delivered` stamp (`accepted` is gateway acceptance).
    */
-  async deliveriesFor(userId: string, notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]> {
+  async deliveriesFor(userId: string, notificationId: string, channel?: ChannelId, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
     return withNotifySpan('notify.deliveries', { op: 'deliveries' }, async () => {
       if (!this.deps) return [];
       const own = await this.store.findById(userId, notificationId);
       if (!own) return [];
-      return this.deps.deliveries.listForNotification(notificationId, channel);
+      return this.deps.deliveries.listForNotification(notificationId, channel, status);
     });
   }
 
