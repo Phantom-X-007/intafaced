@@ -45,6 +45,7 @@ interface RestingOrder {
   remaining: Amount;
   /** Acceptance sequence — the "time" in price-time priority. */
   readonly sequence: number;
+  readonly tif: TimeInForce;
 }
 
 interface PriceLevel {
@@ -511,6 +512,7 @@ export class OrderBook {
       price,
       remaining,
       sequence,
+      tif: order.tif,
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -636,6 +638,7 @@ export class OrderBook {
           accountId: o.accountId,
           remaining: formatAmount(o.remaining),
           sequence: o.sequence,
+          tif: o.tif,
         })),
       }));
 
@@ -679,6 +682,7 @@ export class OrderBook {
           price,
           remaining: parseAmount(o.remaining),
           sequence: o.sequence,
+          tif: o.tif,
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });

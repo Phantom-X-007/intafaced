@@ -217,6 +217,7 @@ export class MatchingEngine {
               price: level.price,
               remaining: order.remaining,
               sequence: order.sequence,
+              tif: order.tif,
             });
           }
         }
@@ -238,6 +239,7 @@ export class MatchingEngine {
           price: stop.stopPrice,
           remaining: stop.qty,
           sequence: stop.sequence,
+          tif: stop.tif,
         });
       }
     }

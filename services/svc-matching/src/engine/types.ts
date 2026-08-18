@@ -162,6 +162,7 @@ export interface RestingOrderState {
   readonly accountId: string;
   readonly remaining: string;
   readonly sequence: number;
+  readonly tif: TimeInForce;
 }
 
 export interface PriceLevelState {
@@ -223,4 +224,6 @@ export interface EngineLiveOrder {
   /** Quantity still working. A stop has not traded, so this is its full qty. */
   readonly remaining: string;
   readonly sequence: number;
+  /** Time-in-force that was accepted when this order rested. */
+  readonly tif: TimeInForce;
 }

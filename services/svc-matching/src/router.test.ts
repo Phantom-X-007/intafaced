@@ -304,6 +304,7 @@ describe('the reconciliation routes', () => {
     price: '100',
     remaining: '2',
     sequence: 1,
+    tif: 'GTC' as const,
   };
 
   const RESTING_SELL = {
@@ -315,6 +316,7 @@ describe('the reconciliation routes', () => {
     price: '99',
     remaining: '1',
     sequence: 2,
+    tif: 'PO' as const,
   };
 
   /** Fails loudly if the read routes ever reach for a write. */
@@ -633,6 +635,117 @@ describe('the reconciliation routes', () => {
     expect(missAccount.json().orders).toEqual([]);
     expect(missSide.statusCode).toBe(200);
     expect(missSide.json().orders).toEqual([]);
+    await app.close();
+  });
+
+  it('returns every resting order when tif is omitted — mixed GTC and PO', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ marketId: 'BTC-USDT', orders: live });
+    expect(
+      res
+        .json()
+        .orders.map((o: { tif: string }) => o.tif)
+        .sort(),
+    ).toEqual(['GTC', 'PO']);
+    await app.close();
+  });
+
+  it('keeps only GTC when tif=GTC, including an honest empty list for IOC', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const gtc = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?tif=GTC', headers });
+    const po = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?tif=PO', headers });
+    const ioc = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?tif=IOC', headers });
+    const fok = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?tif=FOK', headers });
+
+    expect(gtc.statusCode).toBe(200);
+    expect(gtc.json().orders).toEqual([RESTING]);
+    expect(po.statusCode).toBe(200);
+    expect(po.json().orders).toEqual([RESTING_SELL]);
+    // IOC/FOK typically do not rest. An empty list is the honest answer — not a
+    // fabricated resting IOC.
+    expect(ioc.statusCode).toBe(200);
+    expect(ioc.json().orders).toEqual([]);
+    expect(fok.statusCode).toBe(200);
+    expect(fok.json().orders).toEqual([]);
+    await app.close();
+  });
+
+  it('refuses an invalid tif with 400 and never asks restingOrders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?tif=DAY', headers });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidTif');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('still 404s an unknown market when tif is set — the read does not allocate a book', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const unknown = await app.inject({
+      method: 'GET',
+      url: '/markets/NOT-A-MARKET/orders?tif=GTC',
+      headers,
+    });
+
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().code).toBe('MarketNotFound');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('parses accountId before tif — a bad accountId is 400 even when tif is also bad', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?accountId=%20&tif=DAY',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidAccountId');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('applies side, kind, accountId, and tif together after the engine answers', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const hit = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=book&accountId=acct-1&tif=GTC',
+      headers,
+    });
+    const missTif = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=book&accountId=acct-1&tif=PO',
+      headers,
+    });
+
+    expect(hit.statusCode).toBe(200);
+    expect(hit.json().orders).toEqual([RESTING]);
+    expect(missTif.statusCode).toBe(200);
+    expect(missTif.json().orders).toEqual([]);
     await app.close();
   });
 

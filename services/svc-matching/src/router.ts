@@ -290,11 +290,13 @@ export function registerRoutes(
    * market with nothing resting" are different answers and a reconciler that
    * cannot tell them apart will report a whole book as missing.
    *
-   * Optional `?side=buy|sell`, `?kind=book|stop`, and `?accountId=` filter
-   * after the engine answers. Side then kind are parsed first. An unknown or
-   * invalid value is 400 before `restingOrders` is called — the engine is not
-   * asked to invent a book, and an empty match is still `[]`. The filters
-   * compose when more than one is present.
+   * Optional `?side=buy|sell`, `?kind=book|stop`, `?accountId=`, and `?tif=`
+   * filter after the engine answers. Side then kind then accountId then tif
+   * are parsed first. An unknown or invalid value is 400 before
+   * `restingOrders` is called — the engine is not asked to invent a book, and
+   * an empty match is still `[]`. The filters compose when more than one is
+   * present. IOC/FOK that never rested stay `[]` — this read does not invent
+   * them.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -312,6 +314,7 @@ export function registerRoutes(
       side?: string | string[];
       kind?: string | string[];
       accountId?: string | string[];
+      tif?: string | string[];
     };
 
     const sideRaw = query.side;
@@ -350,6 +353,20 @@ export function registerRoutes(
       accountIdFilter = trimmed;
     }
 
+    const tifRaw = query.tif;
+    const tifParam = Array.isArray(tifRaw) ? tifRaw[0] : tifRaw;
+    let tifFilter: z.infer<typeof timeInForceSchema> | undefined;
+    if (tifParam !== undefined) {
+      const parsed = timeInForceSchema.safeParse(tifParam);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          code: 'InvalidTif',
+          message: 'tif must be GTC, IOC, FOK, or PO',
+        });
+      }
+      tifFilter = parsed.data;
+    }
+
     const orders = engine.restingOrders(marketId);
     return reply.code(200).send({
       marketId,
@@ -357,7 +374,8 @@ export function registerRoutes(
         (order) =>
           (sideFilter === undefined || order.side === sideFilter) &&
           (kindFilter === undefined || order.kind === kindFilter) &&
-          (accountIdFilter === undefined || order.accountId === accountIdFilter),
+          (accountIdFilter === undefined || order.accountId === accountIdFilter) &&
+          (tifFilter === undefined || order.tif === tifFilter),
       ),
     });
   });
