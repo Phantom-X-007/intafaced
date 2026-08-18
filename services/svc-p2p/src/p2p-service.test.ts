@@ -449,6 +449,47 @@ if (!available) {
     });
   });
 
+  describe('listTrades', () => {
+    it('returns every self trade when status is omitted, and exact-matches in SQL when it is set', async () => {
+      await fund(MAKER, '1000');
+      const offer = await sellOffer();
+      const oldest = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('10'), method: 'sepa' });
+      const middle = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('10'), method: 'sepa' });
+      const newest = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('10'), method: 'sepa' });
+
+      for (const trade of [middle, newest]) {
+        await p2p.markFiatSent(trade.id, TAKER);
+        await p2p.confirmFiatReceived(trade.id, MAKER);
+      }
+
+      const escrowBefore = await escrowOf(MAKER);
+      expect(escrowBefore).toBe('10');
+
+      const all = await p2p.listTrades(TAKER);
+      expect(all.map((t) => t.id)).toEqual([newest.id, middle.id, oldest.id]);
+
+      // Mixed page of size 2 is both released trades. A post-filter of that
+      // page would miss the older escrowed row; SQL AND status must not.
+      const mixedPage = await p2p.listTrades(TAKER, 2);
+      expect(mixedPage.map((t) => t.id)).toEqual([newest.id, middle.id]);
+      expect(mixedPage.every((t) => t.status === 'released')).toBe(true);
+
+      const escrowed = await p2p.listTrades(TAKER, 2, 'escrowed');
+      expect(escrowed.map((t) => t.id)).toEqual([oldest.id]);
+      expect(escrowed[0]!.status).toBe('escrowed');
+
+      const released = await p2p.listTrades(MAKER, 50, 'released');
+      expect(released.map((t) => t.id)).toEqual([newest.id, middle.id]);
+
+      expect(await p2p.listTrades(TAKER, 50, 'disputed')).toEqual([]);
+      expect(await p2p.listTrades(OTHER)).toEqual([]);
+      expect(await p2p.listTrades(OTHER, 50, 'escrowed')).toEqual([]);
+
+      expect(await escrowOf(MAKER)).toBe(escrowBefore);
+      await expectBooksClosed();
+    });
+  });
+
   // ── Happy path ────────────────────────────────────────────────────────────
 
   describe('HAPPY PATH — lock, then release', () => {

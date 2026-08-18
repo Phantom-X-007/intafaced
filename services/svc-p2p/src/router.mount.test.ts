@@ -159,6 +159,28 @@ describe('svc-p2p mount — authorisation', () => {
     await expect(routerFor(stubP2p()).createCaller(signed()).offers.list({})).resolves.toEqual([]);
   });
 
+  it('forwards optional trades.list status to listTrades and rejects unknown statuses', async () => {
+    const seen: unknown[] = [];
+    const p2p = stubP2p({
+      listTrades: async (userId: string, limit?: number, status?: string) => {
+        seen.push([userId, limit, status]);
+        return [];
+      },
+    });
+    const caller = routerFor(p2p).createCaller(signed());
+
+    await expect(caller.trades.list({})).resolves.toEqual([]);
+    await expect(caller.trades.list({ status: 'escrowed' })).resolves.toEqual([]);
+    await expect(caller.trades.list({ status: 'bogus' as 'escrowed' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+
+    expect(seen).toEqual([
+      [USER, undefined, undefined],
+      [USER, undefined, 'escrowed'],
+    ]);
+  });
+
   /**
    * The payment-instrument surface, at the mount.
    *

@@ -2284,13 +2284,22 @@ export class P2pService {
     return toTrade(row);
   }
 
-  async listTrades(userId: string, limit = 50): Promise<TradeRecord[]> {
-    const rows = await this.sql<TradeRow[]>`
-      SELECT * FROM p2p.p2p_trades
-       WHERE seller_id = ${userId} OR buyer_id = ${userId}
-       ORDER BY created_at DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
-    `;
+  async listTrades(userId: string, limit = 50, status?: TradeStatus): Promise<TradeRecord[]> {
+    const capped = Math.min(Math.max(limit, 1), 200);
+    const rows = status
+      ? await this.sql<TradeRow[]>`
+          SELECT * FROM p2p.p2p_trades
+           WHERE (seller_id = ${userId} OR buyer_id = ${userId})
+             AND status = ${status}
+           ORDER BY created_at DESC
+           LIMIT ${capped}
+        `
+      : await this.sql<TradeRow[]>`
+          SELECT * FROM p2p.p2p_trades
+           WHERE seller_id = ${userId} OR buyer_id = ${userId}
+           ORDER BY created_at DESC
+           LIMIT ${capped}
+        `;
     return rows.map(toTrade);
   }
 

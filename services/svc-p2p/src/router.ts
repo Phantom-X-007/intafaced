@@ -25,6 +25,7 @@ import {
 } from './merchant-limits.js';
 import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
+import { TRADE_STATUSES } from './state.js';
 
 export type P2pRouterOptions = {
   /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
@@ -676,9 +677,18 @@ export function createP2pRouter(
         ),
 
       list: merchantApiProcedure('p2p:read')
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              limit: z.number().int().min(1).max(200).optional(),
+              status: z.enum(TRADE_STATUSES).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(tradeOutput))
-        .query(async ({ ctx, input }) => guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit)).map(toTradeOut))),
+        .query(async ({ ctx, input }) =>
+          guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit, input?.status)).map(toTradeOut)),
+        ),
 
       /**
        * WHERE TO SEND THE MONEY. The only path to a seller's account details.
