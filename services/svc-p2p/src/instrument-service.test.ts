@@ -174,10 +174,12 @@ if (!available) {
     });
   }
 
-  async function sellerInstrument(overrides: { fiatCurrency?: string; ownerId?: string; details?: Record<string, string> } = {}) {
+  async function sellerInstrument(
+    overrides: { fiatCurrency?: string; ownerId?: string; methodId?: string; details?: Record<string, string> } = {},
+  ) {
     return instruments.createInstrument({
       ownerId: overrides.ownerId ?? SELLER,
-      methodId: METHOD,
+      methodId: overrides.methodId ?? METHOD,
       country: 'DE',
       fiatCurrency: overrides.fiatCurrency ?? 'USD',
       label: 'Main account',
@@ -1525,6 +1527,64 @@ if (!available) {
       await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toMatchObject({
         details: { account_reference: CANARY, holder_name: 'A Seller' },
       });
+    });
+  });
+
+  describe('listInstruments', () => {
+    const OTHER = 'other-rail';
+
+    async function mixedDestinations() {
+      await registerMethod({ methodId: OTHER });
+      const primary = await sellerInstrument();
+      const other = await sellerInstrument({ methodId: OTHER });
+      return { primary, other };
+    }
+
+    it('returns mixed methods when methodId is omitted, and exact-matches after normalisation when it is set', async () => {
+      const { primary, other } = await mixedDestinations();
+
+      const all = await instruments.listInstruments(SELLER);
+      expect(all.map((h) => h.methodId).sort()).toEqual([OTHER, METHOD].sort());
+      expect(all.map((h) => h.id).sort()).toEqual([primary.id, other.id].sort());
+
+      const viaRouter = await callerFor(SELLER).instruments.list({});
+      expect(viaRouter.map((h) => h.methodId).sort()).toEqual([OTHER, METHOD].sort());
+      expect(JSON.stringify(viaRouter)).not.toContain(CANARY);
+      expect(viaRouter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
+
+      const filtered = await instruments.listInstruments(SELLER, false, 'Other-Rail');
+      expect(filtered.map((h) => h.id)).toEqual([other.id]);
+      expect(filtered[0]!.methodId).toBe(OTHER);
+      expect(JSON.stringify(filtered)).not.toContain(CANARY);
+      expect(filtered.every((h) => !('details' in h))).toBe(true);
+
+      const viaFilter = await callerFor(SELLER).instruments.list({ methodId: 'Other-Rail' });
+      expect(viaFilter.map((h) => h.id)).toEqual([other.id]);
+      expect(JSON.stringify(viaFilter)).not.toContain(CANARY);
+      expect(viaFilter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
+
+      expect(await instruments.listInstruments(SELLER, false, 'no-such-rail')).toEqual([]);
+      expect(await callerFor(SELLER).instruments.list({ methodId: 'no-such-rail' })).toEqual([]);
+      await expect(callerFor(SELLER).instruments.list({ methodId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    it('still honours includeRemoved when combined with methodId', async () => {
+      const { primary, other } = await mixedDestinations();
+      await instruments.removeInstrument({ instrumentId: other.id, ownerId: SELLER });
+
+      expect((await instruments.listInstruments(SELLER)).map((h) => h.id)).toEqual([primary.id]);
+      expect(await instruments.listInstruments(SELLER, false, OTHER)).toEqual([]);
+
+      const withRemoved = await instruments.listInstruments(SELLER, true, OTHER);
+      expect(withRemoved).toHaveLength(1);
+      expect(withRemoved[0]).toMatchObject({ id: other.id, methodId: OTHER, status: 'removed' });
+      expect(JSON.stringify(withRemoved)).not.toContain(CANARY);
+
+      const viaRouter = await callerFor(SELLER).instruments.list({ includeRemoved: true, methodId: OTHER });
+      expect(viaRouter).toHaveLength(1);
+      expect(viaRouter[0]).toMatchObject({ id: other.id, methodId: OTHER, status: 'removed' });
+      expect(JSON.stringify(viaRouter)).not.toContain(CANARY);
+      expect(viaRouter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
     });
   });
 

@@ -891,10 +891,12 @@ export function createP2pRouter(
 
       /** The caller's own instruments. Headers only — no field values, ever. */
       list: merchantApiProcedure('p2p:read')
-        .input(z.object({ includeRemoved: z.boolean().optional() }).optional())
+        .input(z.object({ includeRemoved: z.boolean().optional(), methodId: z.string().min(1).max(64).optional() }).optional())
         .output(z.array(instrumentHeaderOutput))
         .query(async ({ ctx, input }) =>
-          guard(async () => (await instruments.listInstruments(ctx.principal.userId, input?.includeRemoved === true)).map(toHeaderOut)),
+          guard(async () =>
+            (await instruments.listInstruments(ctx.principal.userId, input?.includeRemoved === true, input?.methodId)).map(toHeaderOut),
+          ),
         ),
 
       /**

@@ -181,6 +181,26 @@ describe('svc-p2p mount — authorisation', () => {
     ]);
   });
 
+  it('forwards optional instruments.list methodId and rejects an empty string', async () => {
+    const seen: unknown[] = [];
+    const instruments = stubInstruments({
+      listInstruments: async (ownerId: string, includeRemoved?: boolean, methodId?: string) => {
+        seen.push([ownerId, includeRemoved, methodId]);
+        return [];
+      },
+    });
+    const caller = routerFor(stubP2p(), instruments).createCaller(signed());
+
+    await expect(caller.instruments.list({})).resolves.toEqual([]);
+    await expect(caller.instruments.list({ methodId: 'Bank-Transfer_2' })).resolves.toEqual([]);
+    await expect(caller.instruments.list({ methodId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    expect(seen).toEqual([
+      [USER, false, undefined],
+      [USER, false, 'Bank-Transfer_2'],
+    ]);
+  });
+
   /**
    * The payment-instrument surface, at the mount.
    *
