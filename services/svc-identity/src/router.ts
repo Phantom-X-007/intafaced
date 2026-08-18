@@ -1102,6 +1102,7 @@ export function createIdentityRouter(
         .mutation(({ ctx, input }) => auth.createSubAccount(ctx.principal.userId, input.label, input.purpose)),
 
       list: scopedProcedure('identity:read')
+        .input(z.object({ revoked: z.boolean().optional() }).optional())
         .output(
           z.array(
             z.object({
@@ -1113,8 +1114,8 @@ export function createIdentityRouter(
             }),
           ),
         )
-        .query(async ({ ctx }) => {
-          const rows = await auth.listSubAccounts(ctx.principal.userId);
+        .query(async ({ ctx, input }) => {
+          const rows = await auth.listSubAccounts(ctx.principal.userId, input);
           return rows.map((r) => ({
             id: r.id,
             label: r.label,

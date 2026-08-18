@@ -772,6 +772,35 @@ if (!available) {
       expect(await auth.listSubAccounts(other.userId)).toHaveLength(1);
     });
 
+    it('filters listSubAccounts by revoked in SQL; omitted still returns live and retired', async () => {
+      const owner = await register();
+      const other = await register();
+      const live = await auth.createSubAccount(owner.userId, 'live');
+      const retired = await auth.createSubAccount(owner.userId, 'retired');
+      await auth.revokeSubAccount(owner.userId, retired.id);
+      const foreign = await auth.createSubAccount(other.userId, 'foreign-live');
+      const foreignRetired = await auth.createSubAccount(other.userId, 'foreign-retired');
+      await auth.revokeSubAccount(other.userId, foreignRetired.id);
+
+      const omitted = await auth.listSubAccounts(owner.userId);
+      expect(omitted.map((r) => r.id).sort()).toEqual([live.id, retired.id].sort());
+      expect(omitted.find((r) => r.id === live.id)?.revoked).toBe(false);
+      expect(omitted.find((r) => r.id === retired.id)?.revoked).toBe(true);
+
+      const onlyLive = await auth.listSubAccounts(owner.userId, { revoked: false });
+      expect(onlyLive).toEqual([expect.objectContaining({ id: live.id, revoked: false })]);
+
+      const onlyRetired = await auth.listSubAccounts(owner.userId, { revoked: true });
+      expect(onlyRetired).toEqual([expect.objectContaining({ id: retired.id, revoked: true })]);
+
+      expect(onlyLive.some((r) => r.id === foreign.id)).toBe(false);
+      expect(onlyRetired.some((r) => r.id === foreign.id)).toBe(false);
+
+      const stranger = await register();
+      expect(await auth.listSubAccounts(stranger.userId, { revoked: true })).toEqual([]);
+      expect(await auth.listSubAccounts(stranger.userId, { revoked: false })).toEqual([]);
+    });
+
     it('soft-revokes without deleting the row (ledger owner id must survive)', async () => {
       const session = await register();
       const { id } = await auth.createSubAccount(session.userId, 'retire-me');

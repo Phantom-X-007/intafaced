@@ -1447,10 +1447,13 @@ export class AuthService {
 
   async listSubAccounts(
     userId: string,
+    opts?: { revoked?: boolean },
   ): Promise<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; createdAt: Date }>> {
+    const revoked = opts?.revoked;
     const rows = await this.sql<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>>`
       SELECT id, label, purpose, revoked, created_at FROM sub_accounts
        WHERE parent_user_id = ${userId}
+       ${revoked === undefined ? this.sql`` : this.sql`AND revoked = ${revoked}`}
        ORDER BY created_at DESC
     `;
     return rows.map((r) => ({
