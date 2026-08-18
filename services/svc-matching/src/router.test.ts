@@ -522,6 +522,120 @@ describe('the reconciliation routes', () => {
     await app.close();
   });
 
+  it('returns every resting order when accountId is omitted — both accounts', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ marketId: 'BTC-USDT', orders: live });
+    await app.close();
+  });
+
+  it('keeps only the matching account when accountId is set, including an honest empty list', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const one = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?accountId=acct-1',
+      headers,
+    });
+    const other = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?accountId=acct-2',
+      headers,
+    });
+
+    expect(one.statusCode).toBe(200);
+    expect(one.json().orders).toEqual([RESTING]);
+    expect(other.statusCode).toBe(200);
+    expect(other.json().orders).toEqual([RESTING_SELL]);
+
+    await app.close();
+
+    const emptyApp = await mount(fakeEngine({ restingOrders: () => live }));
+    const none = await emptyApp.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?accountId=acct-missing',
+      headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
+    });
+    expect(none.statusCode).toBe(200);
+    expect(none.json().orders).toEqual([]);
+    await emptyApp.close();
+  });
+
+  it('refuses an invalid accountId with 400 and never asks restingOrders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const empty = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?accountId=%20', headers });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().code).toBe('InvalidAccountId');
+    expect(asked).toBe(false);
+
+    const tooLong = await app.inject({
+      method: 'GET',
+      url: `/markets/BTC-USDT/orders?accountId=${'a'.repeat(129)}`,
+      headers,
+    });
+    expect(tooLong.statusCode).toBe(400);
+    expect(tooLong.json().code).toBe('InvalidAccountId');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('parses side then kind before accountId — a bad kind is 400 even when accountId is also bad', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?kind=limit&accountId=%20',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidKind');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('applies side, kind, and accountId together after the engine answers', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const hit = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=sell&kind=stop&accountId=acct-2',
+      headers,
+    });
+    const missAccount = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=sell&kind=stop&accountId=acct-1',
+      headers,
+    });
+    const missSide = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=stop&accountId=acct-2',
+      headers,
+    });
+
+    expect(hit.statusCode).toBe(200);
+    expect(hit.json().orders).toEqual([RESTING_SELL]);
+    expect(missAccount.statusCode).toBe(200);
+    expect(missAccount.json().orders).toEqual([]);
+    expect(missSide.statusCode).toBe(200);
+    expect(missSide.json().orders).toEqual([]);
+    await app.close();
+  });
+
   // ── POST /reconcile ────────────────────────────────────────────────────────
 
   it('refuses an unauthenticated reconcile', async () => {

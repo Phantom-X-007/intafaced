@@ -290,10 +290,11 @@ export function registerRoutes(
    * market with nothing resting" are different answers and a reconciler that
    * cannot tell them apart will report a whole book as missing.
    *
-   * Optional `?side=buy|sell` and `?kind=book|stop` filter after the engine
-   * answers. Side is parsed first. An unknown value is 400 before
-   * `restingOrders` is called — the engine is not asked to invent a book, and
-   * an empty match is still `[]`. Both filters compose when both are present.
+   * Optional `?side=buy|sell`, `?kind=book|stop`, and `?accountId=` filter
+   * after the engine answers. Side then kind are parsed first. An unknown or
+   * invalid value is 400 before `restingOrders` is called — the engine is not
+   * asked to invent a book, and an empty match is still `[]`. The filters
+   * compose when more than one is present.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -307,7 +308,11 @@ export function registerRoutes(
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
 
-    const query = req.query as { side?: string | string[]; kind?: string | string[] };
+    const query = req.query as {
+      side?: string | string[];
+      kind?: string | string[];
+      accountId?: string | string[];
+    };
 
     const sideRaw = query.side;
     const sideParam = Array.isArray(sideRaw) ? sideRaw[0] : sideRaw;
@@ -331,11 +336,28 @@ export function registerRoutes(
       kindFilter = parsed.data;
     }
 
+    const accountIdRaw = query.accountId;
+    const accountIdParam = Array.isArray(accountIdRaw) ? accountIdRaw[0] : accountIdRaw;
+    let accountIdFilter: string | undefined;
+    if (accountIdParam !== undefined) {
+      const trimmed = accountIdParam.trim();
+      if (trimmed.length === 0 || trimmed.length > 128) {
+        return reply.code(400).send({
+          code: 'InvalidAccountId',
+          message: 'accountId must be 1 to 128 characters',
+        });
+      }
+      accountIdFilter = trimmed;
+    }
+
     const orders = engine.restingOrders(marketId);
     return reply.code(200).send({
       marketId,
       orders: orders.filter(
-        (order) => (sideFilter === undefined || order.side === sideFilter) && (kindFilter === undefined || order.kind === kindFilter),
+        (order) =>
+          (sideFilter === undefined || order.side === sideFilter) &&
+          (kindFilter === undefined || order.kind === kindFilter) &&
+          (accountIdFilter === undefined || order.accountId === accountIdFilter),
       ),
     });
   });
