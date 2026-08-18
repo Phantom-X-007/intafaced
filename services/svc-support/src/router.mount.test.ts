@@ -278,16 +278,46 @@ describe('svc-support mount', () => {
     const support = stubSupport();
     const caller = createSupportRouter(support).createCaller(signed());
     await caller.listMine();
-    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: undefined });
+    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: undefined, category: undefined });
     await caller.listMine({ status: 'open' });
-    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: 'open' });
+    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: 'open', category: undefined });
 
     const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
     const ops = createSupportRouter(support).createCaller(signed(op));
     await ops.listAll();
-    expect(support.listAllTickets).toHaveBeenCalledWith({ status: undefined });
+    expect(support.listAllTickets).toHaveBeenCalledWith({ status: undefined, category: undefined });
     await ops.listAll({ status: 'pending' });
-    expect(support.listAllTickets).toHaveBeenCalledWith({ status: 'pending' });
+    expect(support.listAllTickets).toHaveBeenCalledWith({ status: 'pending', category: undefined });
+  });
+
+  it('forwards optional category on listMine and listAll', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await caller.listMine({ category: 'trading' });
+    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: undefined, category: 'trading' });
+    await caller.listMine({ status: 'open', category: 'account' });
+    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: 'open', category: 'account' });
+
+    const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
+    const ops = createSupportRouter(support).createCaller(signed(op));
+    await ops.listAll({ category: 'deposit_withdraw' });
+    expect(support.listAllTickets).toHaveBeenCalledWith({ status: undefined, category: 'deposit_withdraw' });
+  });
+
+  it('rejects invalid category on listMine and listAll', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.listMine({ category: 'not-a-category' as 'account' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(support.listMyTickets).not.toHaveBeenCalled();
+
+    const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
+    const ops = createSupportRouter(support).createCaller(signed(op));
+    await expect(ops.listAll({ category: 'billing' as 'other' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(support.listAllTickets).not.toHaveBeenCalled();
   });
 
   it('refuses setStatus without support:ops', async () => {

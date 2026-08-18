@@ -81,6 +81,95 @@ describe('SupportService Stage-1', () => {
     expect(a.status).toBe('open');
   });
 
+  it('listMyTickets exact-matches optional category without leaking other users', async () => {
+    const svc = new SupportService();
+    const mineAccount = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine account',
+      body: 'B',
+    });
+    const mineTrading = await svc.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'Mine trading',
+      body: 'B',
+    });
+    await svc.createTicket({
+      userId: OTHER,
+      category: 'account',
+      subject: 'Theirs account',
+      body: 'B',
+    });
+
+    const omitted = await svc.listMyTickets({ userId: USER });
+    expect(omitted.map((t) => t.id).sort()).toEqual([mineAccount.id, mineTrading.id].sort());
+    expect(new Set(omitted.map((t) => t.category))).toEqual(new Set(['account', 'trading']));
+
+    const accountOnly = await svc.listMyTickets({ userId: USER, category: 'account' });
+    expect(accountOnly).toHaveLength(1);
+    expect(accountOnly[0]!.id).toBe(mineAccount.id);
+
+    expect(await svc.listMyTickets({ userId: USER, category: 'other' })).toEqual([]);
+  });
+
+  it('listMyTickets ANDs category with parent status filter', async () => {
+    const svc = new SupportService();
+    const openAccount = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Open account',
+      body: 'B',
+    });
+    const openTrading = await svc.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'Open trading',
+      body: 'B',
+    });
+    const resolvedAccount = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Resolved account',
+      body: 'B',
+    });
+    await svc.setStatus({ operatorId: OP, ticketId: resolvedAccount.id, status: 'resolved' });
+
+    const both = await svc.listMyTickets({ userId: USER, status: 'open', category: 'account' });
+    expect(both).toHaveLength(1);
+    expect(both[0]!.id).toBe(openAccount.id);
+    expect(openTrading.status).toBe('open');
+  });
+
+  it('listAllTickets exact-matches optional category across users and ANDs with status', async () => {
+    const svc = new SupportService();
+    const a = await svc.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'A',
+      body: 'B',
+    });
+    const b = await svc.createTicket({
+      userId: OTHER,
+      category: 'deposit_withdraw',
+      subject: 'B',
+      body: 'B',
+    });
+    await svc.setStatus({ operatorId: OP, ticketId: b.id, status: 'resolved' });
+
+    expect(await svc.listAllTickets()).toHaveLength(2);
+    const omittedCats = new Set((await svc.listAllTickets()).map((t) => t.category));
+    expect(omittedCats).toEqual(new Set(['trading', 'deposit_withdraw']));
+
+    const trading = await svc.listAllTickets({ category: 'trading' });
+    expect(trading).toHaveLength(1);
+    expect(trading[0]!.id).toBe(a.id);
+
+    expect(await svc.listAllTickets({ category: 'other' })).toEqual([]);
+    expect(await svc.listAllTickets({ status: 'resolved', category: 'deposit_withdraw' })).toHaveLength(1);
+    expect(await svc.listAllTickets({ status: 'open', category: 'deposit_withdraw' })).toEqual([]);
+  });
+
   it('hides other users tickets from non-operators', async () => {
     const svc = new SupportService();
     const t = await svc.createTicket({

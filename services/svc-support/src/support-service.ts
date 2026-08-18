@@ -9,6 +9,7 @@ import type {
   SupportContract,
   SupportKbArticle,
   SupportTicket,
+  SupportTicketCategory,
   SupportTicketEvent,
   SupportTicketStatus,
 } from '@intafaced/contracts';
@@ -73,14 +74,16 @@ export class SupportService implements SupportContract {
     });
   }
 
-  async listMyTickets(input: { userId: string; status?: SupportTicketStatus }): Promise<SupportTicket[]> {
+  async listMyTickets(input: { userId: string; status?: SupportTicketStatus; category?: SupportTicketCategory }): Promise<SupportTicket[]> {
     return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () =>
-      this.store.listByUser(input.userId, { status: input.status }),
+      this.store.listByUser(input.userId, { status: input.status, category: input.category }),
     );
   }
 
-  async listAllTickets(input: { status?: SupportTicketStatus } = {}): Promise<SupportTicket[]> {
-    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () => this.store.listAll({ status: input.status }));
+  async listAllTickets(input: { status?: SupportTicketStatus; category?: SupportTicketCategory } = {}): Promise<SupportTicket[]> {
+    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () =>
+      this.store.listAll({ status: input.status, category: input.category }),
+    );
   }
 
   /**

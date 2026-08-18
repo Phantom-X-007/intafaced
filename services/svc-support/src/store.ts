@@ -7,6 +7,7 @@ import type {
   SupportComment,
   SupportKbArticle,
   SupportTicket,
+  SupportTicketCategory,
   SupportTicketEvent,
   SupportTicketEventKind,
   SupportTicketStatus,
@@ -102,6 +103,8 @@ export type SetStatusInput = {
 export type ListTicketsFilter = {
   /** Exact status match in the store. Omitted = every visible ticket. */
   status?: SupportTicketStatus;
+  /** Exact category match in the store. Omitted = every visible ticket. */
+  category?: SupportTicketCategory;
 };
 
 export interface SupportStore {
@@ -438,13 +441,22 @@ export class MemorySupportStore implements SupportStore {
 
   async listByUser(userId: string, filter?: ListTicketsFilter): Promise<SupportTicket[]> {
     return [...this.tickets.values()]
-      .filter((t) => t.userId === userId && (filter?.status === undefined || t.status === filter.status))
+      .filter(
+        (t) =>
+          t.userId === userId &&
+          (filter?.status === undefined || t.status === filter.status) &&
+          (filter?.category === undefined || t.category === filter.category),
+      )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async listAll(filter?: ListTicketsFilter): Promise<SupportTicket[]> {
     return [...this.tickets.values()]
-      .filter((t) => filter?.status === undefined || t.status === filter.status)
+      .filter(
+        (t) =>
+          (filter?.status === undefined || t.status === filter.status) &&
+          (filter?.category === undefined || t.category === filter.category),
+      )
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
@@ -695,11 +707,13 @@ export class PostgresSupportStore implements SupportStore {
 
   async listByUser(userId: string, filter?: ListTicketsFilter): Promise<SupportTicket[]> {
     const status = filter?.status;
+    const category = filter?.category;
     const rows = await this.sql<PgTicket[]>`
       SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
       FROM support.tickets
       WHERE user_id = ${userId}
       ${status !== undefined ? this.sql`AND status = ${status}` : this.sql``}
+      ${category !== undefined ? this.sql`AND category = ${category}` : this.sql``}
       ORDER BY created_at DESC
     `;
     return rows.map(ticketFromPg);
@@ -707,10 +721,18 @@ export class PostgresSupportStore implements SupportStore {
 
   async listAll(filter?: ListTicketsFilter): Promise<SupportTicket[]> {
     const status = filter?.status;
+    const category = filter?.category;
     const rows = await this.sql<PgTicket[]>`
       SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
       FROM support.tickets
       ${status !== undefined ? this.sql`WHERE status = ${status}` : this.sql``}
+      ${
+        category !== undefined
+          ? status !== undefined
+            ? this.sql`AND category = ${category}`
+            : this.sql`WHERE category = ${category}`
+          : this.sql``
+      }
       ORDER BY created_at DESC
     `;
     return rows.map(ticketFromPg);

@@ -87,4 +87,43 @@ describe('MemorySupportStore claim exclusivity', () => {
     expect((await store.listAll({ status: 'open' })).map((t) => t.id)).toEqual([theirs.id]);
     expect(await store.listAll({ status: 'pending' })).toEqual([]);
   });
+
+  it('listByUser and listAll exact-match category in memory', async () => {
+    const store = new MemorySupportStore();
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+    const mineAccount = await store.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine account',
+      body: 'Body',
+    });
+    const mineTrading = await store.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'Mine trading',
+      body: 'Body',
+    });
+    const theirsAccount = await store.createTicket({
+      userId: OTHER,
+      category: 'account',
+      subject: 'Theirs account',
+      body: 'Body',
+    });
+    const moved = await store.setStatus({ ticketId: mineAccount.id, status: 'resolved', operatorId: OP_A });
+    expect(moved.status).toBe('ok');
+
+    const omitted = await store.listByUser(USER);
+    expect(omitted.map((t) => t.id).sort()).toEqual([mineAccount.id, mineTrading.id].sort());
+    expect(new Set(omitted.map((t) => t.category))).toEqual(new Set(['account', 'trading']));
+
+    expect((await store.listByUser(USER, { category: 'account' })).map((t) => t.id)).toEqual([mineAccount.id]);
+    expect(await store.listByUser(USER, { category: 'other' })).toEqual([]);
+    expect((await store.listByUser(OTHER, { category: 'account' })).map((t) => t.id)).toEqual([theirsAccount.id]);
+
+    expect((await store.listAll({ category: 'account' })).map((t) => t.id).sort()).toEqual([mineAccount.id, theirsAccount.id].sort());
+    expect(await store.listAll({ category: 'deposit_withdraw' })).toEqual([]);
+    expect((await store.listAll({ status: 'resolved', category: 'account' })).map((t) => t.id)).toEqual([mineAccount.id]);
+    expect(await store.listAll({ status: 'open', category: 'account' })).toHaveLength(1);
+    expect((await store.listAll({ status: 'open', category: 'account' }))[0]!.id).toBe(theirsAccount.id);
+  });
 });

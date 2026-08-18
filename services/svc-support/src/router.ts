@@ -12,6 +12,7 @@ import {
   supportCommentSchema,
   supportKbArticleSchema,
   supportTicketEventSchema,
+  supportTicketCategorySchema,
   supportTicketSchema,
   supportTicketStatusSchema,
 } from '@intafaced/contracts';
@@ -86,19 +87,19 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
       }),
 
     listMine: scopedProcedure('support:read')
-      .input(z.object({ status: supportTicketStatusSchema.optional() }).optional())
+      .input(z.object({ status: supportTicketStatusSchema.optional(), category: supportTicketCategorySchema.optional() }).optional())
       .output(z.array(supportTicketSchema))
       .query(async ({ ctx, input }) => {
-        return support.listMyTickets({ userId: ctx.principal!.userId, status: input?.status });
+        return support.listMyTickets({ userId: ctx.principal!.userId, status: input?.status, category: input?.category });
       }),
 
     /** Operator list — Stage-1 desk spine (no UI required). */
     listAll: scopedProcedure('support:ops')
-      .input(z.object({ status: supportTicketStatusSchema.optional() }).optional())
+      .input(z.object({ status: supportTicketStatusSchema.optional(), category: supportTicketCategorySchema.optional() }).optional())
       .output(z.array(supportTicketSchema))
       .query(async ({ ctx, input }) => {
         requireSupportOps(ctx.principal!);
-        return support.listAllTickets({ status: input?.status });
+        return support.listAllTickets({ status: input?.status, category: input?.category });
       }),
 
     get: scopedProcedure('support:read')

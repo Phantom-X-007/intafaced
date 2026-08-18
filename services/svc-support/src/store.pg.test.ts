@@ -101,6 +101,46 @@ describe.skipIf(!available)('PostgresSupportStore — durable desk', () => {
     expect(await s.listAll()).toHaveLength(2);
   });
 
+  it('listByUser and listAll exact-match category in SQL', async () => {
+    const s = store();
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+    const mineAccount = await s.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine account',
+      body: 'Help',
+    });
+    const mineTrading = await s.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'Mine trading',
+      body: 'Help',
+    });
+    const theirsAccount = await s.createTicket({
+      userId: OTHER,
+      category: 'account',
+      subject: 'Theirs account',
+      body: 'Help',
+    });
+    const moved = await s.setStatus({ ticketId: mineAccount.id, status: 'resolved', operatorId: OP_A });
+    expect(moved.status).toBe('ok');
+
+    const omitted = await s.listByUser(USER);
+    expect(omitted).toHaveLength(2);
+    expect(new Set(omitted.map((t) => t.category))).toEqual(new Set(['account', 'trading']));
+
+    expect((await s.listByUser(USER, { category: 'account' })).map((row) => row.id)).toEqual([mineAccount.id]);
+    expect(await s.listByUser(USER, { category: 'other' })).toEqual([]);
+    expect(await s.listByUser(OTHER, { category: 'account' })).toHaveLength(1);
+
+    const allAccount = await s.listAll({ category: 'account' });
+    expect(allAccount.map((row) => row.id).sort()).toEqual([mineAccount.id, theirsAccount.id].sort());
+    expect(await s.listAll({ category: 'deposit_withdraw' })).toEqual([]);
+    expect((await s.listAll({ status: 'resolved', category: 'account' })).map((row) => row.id)).toEqual([mineAccount.id]);
+    expect((await s.listAll({ status: 'open', category: 'account' })).map((row) => row.id)).toEqual([theirsAccount.id]);
+    expect(mineTrading.category).toBe('trading');
+  });
+
   it('two concurrent claims: exactly one operator wins', async () => {
     const s = store();
     const t = await s.createTicket({
