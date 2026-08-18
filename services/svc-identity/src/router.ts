@@ -1,74 +1,124 @@
 import { z } from 'zod';
-import { router, publicProcedure, protectedProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
-import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
-import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
-import { AuthError, assertOperatorKycReview, type AuthService, type KycRecordView } from './auth/auth-service.js';
+import { router, publicProcedure, TRPCError } from '@intafaced/contracts';
+import type { AuthService } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import type { LedgerClient } from '@intafaced/ledger-client';
-import {
-  AFFILIATE_PAYOUT_RESIDUAL,
-  AffiliatePayoutRefuseError,
-  affiliateFreezeHonestyLine,
-  affiliateMemberListStatusLine,
-  affiliateTreeStatusLine,
-} from './affiliates/admin-tree-read.js';
-import {
-  affiliatePayoutPlanStatusLine,
-  assertPayoutRateProvenance,
-  planAffiliatePayout,
-  postAffiliatePayout,
-} from './affiliates/payout-engine.js';
-import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
-import { FreezeError } from './affiliates/freeze-store.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
-import { CommissionError } from './affiliates/commission.js';
-import {
-  AccrualRateRefuseError,
-  accrualTierLawIsPublished,
-  type AccrualTierLaw,
-  UNPUBLISHED_ACCRUAL_TIER_LAW,
-} from './affiliates/commission-rate-law.js';
-import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
+import { type AccrualTierLaw, UNPUBLISHED_ACCRUAL_TIER_LAW } from './affiliates/commission-rate-law.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import { KYC_VAULT_UNWIRED } from './kyc/boot-vault.js';
-import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
-import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
-import { FlagDisabledError } from '@intafaced/config';
-import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
-import { userCopy } from './user-copy.js';
+import type { KycDocumentVault } from './kyc/document-store.js';
+import type { BindProviderRefInput, BindProviderRefResult } from './kyc/provider-ref-bind.js';
+import type { WaitlistService } from './waitlist/waitlist-service.js';
+import { createAuthRouter, createTotpRouter, createWebauthnRouter } from './router-auth.js';
+import { createKycRouter } from './router-kyc.js';
+import { createRankRouter, createApiKeysRouter, createComplianceRouter, createSubAccountsRouter } from './router-rest.js';
+import { createAffiliatesRouter } from './router-affiliates.js';
+import { createWaitlistRouter } from './router-waitlist.js';
 
-/**
- * svc-identity's API (§4.1).
- *
- * The contract shape lives in `packages/contracts` — this implements it. A
- * breaking change there is a compile error here, caught in the contracts PR
- * before any consumer is touched (§15.2).
- */
+export { toTrpcError, presentKyc, presentDocMeta } from './router-shared.js';
 
-function toTrpcError(err: unknown): TRPCError {
-  // Already shaped for the wire — do not re-wrap.
-  if (err instanceof TRPCError) return err;
+export function createIdentityRouter(
+  auth: AuthService,
+  rank: RankService,
+  options: {
+    registrationOpen: boolean;
+    webauthnEnabled?: boolean;
+    referral?: ReferralService;
+    freeze?: FreezeService;
+    accruals?: AccrualStore;
+    accrualTierLaw?: AccrualTierLaw;
+    ledger?: Pick<LedgerClient, 'post'>;
+    kycDocs?: KycDocumentVault;
+    bindKycProviderRef?: (input: BindProviderRefInput) => Promise<BindProviderRefResult>;
+    waitlist?: WaitlistService;
+  },
+) {
+  const webauthnEnabled = options.webauthnEnabled !== false;
+  const referral = options.referral;
+  const freeze = options.freeze;
+  const accruals = options.accruals;
+  const accrualTierLaw = options.accrualTierLaw ?? UNPUBLISHED_ACCRUAL_TIER_LAW;
+  const ledger = options.ledger;
+  const kycDocs = options.kycDocs;
+  const bindKycProviderRef = options.bindKycProviderRef;
+  const waitlist = options.waitlist;
 
-  // A guard rejection (`requireMfa`) is not a server fault. It arrives as the
-  // shared package's AuthError, which is a different class from this service's.
-  if (err instanceof GuardError) {
-    return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
-  }
-
-  if (err instanceof KycDocumentError) {
-    switch (err.code) {
-      case 'kyc_doc.not_found':
-        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
-      case 'kyc_doc.key_missing':
-        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
-      case 'kyc_doc.forbidden':
-      case 'kyc_doc.reader_missing':
-        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
-      case 'kyc_doc.too_large':
-      case 'kyc_doc.bad_content_type':
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
-      case 'kyc_doc.decrypt_failed':
-        return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+  function requireReferral(): ReferralService {
+    if (!referral) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Referral tree is not configured' });
     }
+    return referral;
   }
+
+  function requireFreeze(): FreezeService {
+    if (!freeze) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate freeze store is not configured' });
+    }
+    return freeze;
+  }
+
+  function requireAccruals(): AccrualStore {
+    if (!accruals) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate accrual store is not configured' });
+    }
+    return accruals;
+  }
+
+  function requireKycDocs(): KycDocumentVault {
+    if (!kycDocs) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: `KYC document vault is not configured [${KYC_VAULT_UNWIRED}]`,
+      });
+    }
+    return kycDocs;
+  }
+
+  function requireBindKyc(): (input: BindProviderRefInput) => Promise<BindProviderRefResult> {
+    if (!bindKycProviderRef) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'KYC provider_ref bind is not configured',
+      });
+    }
+    return bindKycProviderRef;
+  }
+
+  function requireWaitlist(): WaitlistService {
+    if (!waitlist) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Waitlist capture is not wired [waitlist.unbuilt]',
+      });
+    }
+    return waitlist;
+  }
+
+  return router({
+    health: publicProcedure
+      .output(z.object({ ok: z.boolean(), service: z.literal('svc-identity') }))
+      .query(() => ({ ok: true, service: 'svc-identity' as const })),
+
+    auth: createAuthRouter({ auth, registrationOpen: options.registrationOpen, webauthnEnabled, requireReferral }),
+    totp: createTotpRouter({ auth }),
+    webauthn: createWebauthnRouter({ auth, webauthnEnabled }),
+    kyc: createKycRouter({ auth, requireKycDocs, requireBindKyc }),
+    rank: createRankRouter({ rank }),
+    apiKeys: createApiKeysRouter({ auth }),
+    compliance: createComplianceRouter({ auth }),
+    subAccounts: createSubAccountsRouter({ auth }),
+    affiliates: createAffiliatesRouter({
+      requireReferral,
+      requireFreeze,
+      requireAccruals,
+      freeze,
+      accrualTierLaw,
+      ledger,
+    }),
+    waitlist: createWaitlistRouter({ requireWaitlist }),
+  });
+}
+
+export type IdentityRouter = ReturnType<typeof createIdentityRouter>;
