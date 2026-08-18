@@ -84,6 +84,16 @@ function orderPriceEquals(price: unknown, expected: Amount): boolean {
   }
 }
 
+/** Exact Amount match on live remaining qty. Original submit qty is not this field. */
+function orderRemainingEquals(remaining: unknown, expected: Amount): boolean {
+  if (typeof remaining !== 'string' || remaining.length === 0) return false;
+  try {
+    return parseAmount(remaining) === expected;
+  } catch {
+    return false;
+  }
+}
+
 function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
   return {
     orderId: body.orderId,
@@ -300,14 +310,15 @@ export function registerRoutes(
    * market with nothing resting" are different answers and a reconciler that
    * cannot tell them apart will report a whole book as missing.
    *
-   * Optional `?side=buy|sell`, `?kind=book|stop`, `?accountId=`, `?tif=`, and
-   * `?price=` (exact Amount match) filter after the engine answers. Side then
-   * kind then accountId then tif then price are parsed first. An unknown or
+   * Optional `?side=buy|sell`, `?kind=book|stop`, `?accountId=`, `?tif=`,
+   * `?price=` (exact Amount match), and `?remaining=` (exact live remaining
+   * Amount) filter after the engine answers. Side then kind then accountId
+   * then tif then price then remaining are parsed first. An unknown or
    * invalid value is 400 before `restingOrders` is called — the engine is not
    * asked to invent a book, and an empty match is still `[]`. The filters
    * compose when more than one is present. IOC/FOK that never rested stay `[]`
    * — this read does not invent them. A row with no comparable price does not
-   * match a provided price.
+   * match a provided price. Remaining is the live working qty, not original qty.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -327,6 +338,7 @@ export function registerRoutes(
       accountId?: string | string[];
       tif?: string | string[];
       price?: string | string[] | number;
+      remaining?: string | string[] | number;
     };
 
     const sideRaw = query.side;
@@ -399,6 +411,26 @@ export function registerRoutes(
       priceFilter = parseAmount(parsed.data);
     }
 
+    const remainingRaw = query.remaining;
+    const remainingParam = Array.isArray(remainingRaw) ? remainingRaw[0] : remainingRaw;
+    let remainingFilter: Amount | undefined;
+    if (remainingParam !== undefined) {
+      if (typeof remainingParam !== 'string') {
+        return reply.code(400).send({
+          code: 'InvalidRemaining',
+          message: 'remaining must be a positive decimal string',
+        });
+      }
+      const parsed = decimal.safeParse(remainingParam);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          code: 'InvalidRemaining',
+          message: 'remaining must be a positive decimal string',
+        });
+      }
+      remainingFilter = parseAmount(parsed.data);
+    }
+
     const orders = engine.restingOrders(marketId);
     return reply.code(200).send({
       marketId,
@@ -408,7 +440,8 @@ export function registerRoutes(
           (kindFilter === undefined || order.kind === kindFilter) &&
           (accountIdFilter === undefined || order.accountId === accountIdFilter) &&
           (tifFilter === undefined || order.tif === tifFilter) &&
-          (priceFilter === undefined || orderPriceEquals(order.price, priceFilter)),
+          (priceFilter === undefined || orderPriceEquals(order.price, priceFilter)) &&
+          (remainingFilter === undefined || orderRemainingEquals(order.remaining, remainingFilter)),
       ),
     });
   });

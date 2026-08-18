@@ -928,6 +928,185 @@ describe('the reconciliation routes', () => {
     await app.close();
   });
 
+  it('returns every resting order when remaining is omitted — mixed remaining qty', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ marketId: 'BTC-USDT', orders: live });
+    expect(
+      res
+        .json()
+        .orders.map((o: { remaining: string }) => o.remaining)
+        .sort(),
+    ).toEqual(['1', '2']);
+    await app.close();
+  });
+
+  it('keeps only the matching live remaining Amount, including an honest empty list', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const at2 = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=2',
+      headers,
+    });
+    const at2canonical = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=2.00',
+      headers,
+    });
+    const at1 = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=1',
+      headers,
+    });
+    const miss = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=9',
+      headers,
+    });
+
+    expect(at2.statusCode).toBe(200);
+    expect(at2.json()).toEqual({ marketId: 'BTC-USDT', orders: [RESTING] });
+    expect(at2canonical.statusCode).toBe(200);
+    expect(at2canonical.json().orders).toEqual([RESTING]);
+    expect(at1.statusCode).toBe(200);
+    expect(at1.json().orders).toEqual([RESTING_SELL]);
+    expect(miss.statusCode).toBe(200);
+    expect(miss.json()).toEqual({ marketId: 'BTC-USDT', orders: [] });
+    await app.close();
+  });
+
+  it('matches live remaining, not original qty', async () => {
+    const partial = { ...RESTING, remaining: '0.5' };
+    const app = await mount(fakeEngine({ restingOrders: () => [partial] }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const missOriginal = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=2',
+      headers,
+    });
+    const hitLive = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=0.5',
+      headers,
+    });
+
+    expect(missOriginal.statusCode).toBe(200);
+    expect(missOriginal.json()).toEqual({ marketId: 'BTC-USDT', orders: [] });
+    expect(hitLive.statusCode).toBe(200);
+    expect(hitLive.json().orders).toEqual([partial]);
+    await app.close();
+  });
+
+  it('refuses an invalid remaining with 400 and never asks restingOrders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const empty = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?remaining=', headers });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().code).toBe('InvalidRemaining');
+    expect(asked).toBe(false);
+
+    const garbage = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=not-a-decimal',
+      headers,
+    });
+    expect(garbage.statusCode).toBe(400);
+    expect(garbage.json().code).toBe('InvalidRemaining');
+    expect(asked).toBe(false);
+
+    const scientific = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?remaining=1e2',
+      headers,
+    });
+    expect(scientific.statusCode).toBe(400);
+    expect(scientific.json().code).toBe('InvalidRemaining');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('still 404s an unknown market when remaining is set — the read does not allocate a book', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const unknown = await app.inject({
+      method: 'GET',
+      url: '/markets/NOT-A-MARKET/orders?remaining=2',
+      headers,
+    });
+
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().code).toBe('MarketNotFound');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('parses price before remaining — a bad price is 400 even when remaining is also bad', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=&remaining=',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidPrice');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('composes remaining with parent price and side filters', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const hit = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&price=100&remaining=2',
+      headers,
+    });
+    const missRemaining = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&price=100&remaining=1',
+      headers,
+    });
+    const missSide = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=sell&price=100&remaining=2',
+      headers,
+    });
+    const missPrice = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&price=99&remaining=2',
+      headers,
+    });
+
+    expect(hit.statusCode).toBe(200);
+    expect(hit.json().orders).toEqual([RESTING]);
+    expect(missRemaining.statusCode).toBe(200);
+    expect(missRemaining.json().orders).toEqual([]);
+    expect(missSide.statusCode).toBe(200);
+    expect(missSide.json().orders).toEqual([]);
+    expect(missPrice.statusCode).toBe(200);
+    expect(missPrice.json().orders).toEqual([]);
+    await app.close();
+  });
+
   // ── POST /reconcile ────────────────────────────────────────────────────────
 
   it('refuses an unauthenticated reconcile', async () => {
