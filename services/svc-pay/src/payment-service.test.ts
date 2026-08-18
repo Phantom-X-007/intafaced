@@ -1965,6 +1965,36 @@ if (!available) {
       await sql`UPDATE pay.payment_links SET uses = 1 WHERE id = ${link.id}`;
       await expect(pay.resolvePaymentLink(link.token)).rejects.toMatchObject({ code: 'pay.link_exhausted' });
     });
+
+    it('lists mixed links when active is omitted, and exact sets when it is not', async () => {
+      const m = await merchant();
+      const other = await merchant(250, OTHER_USER);
+      const live = await pay.createPaymentLink({ merchantId: m.id, label: 'Live', amount: amt('10.5'), currency: 'USDT' });
+      const gone = await pay.createPaymentLink({ merchantId: m.id, label: 'Gone', amount: amt('3'), currency: 'USDT' });
+      await pay.createPaymentLink({ merchantId: other.id, label: 'Other', amount: amt('1'), currency: 'USDT' });
+      expect(await pay.deactivatePaymentLink(m.id, gone.id)).toEqual({ deactivated: true });
+
+      const unfiltered = await pay.listPaymentLinks(m.id);
+      expect(unfiltered.map((row) => row.id).sort()).toEqual([live.id, gone.id].sort());
+      expect(unfiltered.every((row) => typeof row.amount === 'string')).toBe(true);
+      expect(unfiltered.find((row) => row.id === live.id)?.amount).toMatch(/^10\.5/);
+
+      const onlyActive = await pay.listPaymentLinks(m.id, true);
+      expect(onlyActive.map((row) => row.id)).toEqual([live.id]);
+      expect(onlyActive.every((row) => row.active === true)).toBe(true);
+
+      const onlyInactive = await pay.listPaymentLinks(m.id, false);
+      expect(onlyInactive.map((row) => row.id)).toEqual([gone.id]);
+      expect(onlyInactive.every((row) => row.active === false)).toBe(true);
+
+      expect(await pay.listPaymentLinks(other.id, false)).toEqual([]);
+    });
+
+    it('refuses to list links for an unknown merchant', async () => {
+      await expect(pay.listPaymentLinks('44444444-4444-4444-8444-444444444444')).rejects.toMatchObject({
+        code: 'pay.merchant_not_found',
+      });
+    });
   });
 
   // ── HOSTED CHECKOUT ───────────────────────────────────────────────────────

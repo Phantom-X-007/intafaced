@@ -190,6 +190,20 @@ function stubService(): Stub {
       expiresAt: new Date('2026-08-29T00:00:00.000Z'),
       maxUses: null,
     })),
+    listPaymentLinks: record('listPaymentLinks', () => [
+      {
+        id: LINK,
+        prefix: 'pl_generat',
+        label: 'Invoice',
+        amount: '19.99',
+        currency: 'USDT',
+        active: true,
+        expiresAt: '2026-08-29T00:00:00.000Z',
+        maxUses: null,
+        uses: 0,
+        createdAt: '2026-07-27T12:00:00.000Z',
+      },
+    ]),
     resolvePaymentLink: record('resolvePaymentLink', () => ({
       id: LINK,
       merchantId: MERCHANT,
@@ -1346,5 +1360,38 @@ describe('payment links are capability URLs on the wire too', () => {
     const api = await caller(['pay:read']);
     const err = await api.merchant.createLink({ merchantId: MERCHANT, label: 'Invoice' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('forwards optional active on listLinks and keeps omitted unfiltered', async () => {
+    const api = await caller(['pay:read']);
+    await api.merchant.listLinks({ merchantId: MERCHANT });
+    await api.merchant.listLinks({ merchantId: MERCHANT, active: true });
+    await api.merchant.listLinks({ merchantId: MERCHANT, active: false });
+
+    const lists = stub.calls.filter((c) => c.method === 'listPaymentLinks');
+    expect(lists[0]!.args).toEqual([MERCHANT, undefined]);
+    expect(lists[1]!.args).toEqual([MERCHANT, true]);
+    expect(lists[2]!.args).toEqual([MERCHANT, false]);
+  });
+
+  it('rejects an active that is not a boolean', async () => {
+    const api = await caller(['pay:read']);
+    const err = await api.merchant.listLinks({ merchantId: MERCHANT, active: 'true' as unknown as boolean }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(stub.calls.filter((c) => c.method === 'listPaymentLinks')).toHaveLength(0);
+  });
+
+  it('returns link amounts as decimal strings that survive JSON', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.merchant.listLinks({ merchantId: MERCHANT });
+    expect(rows[0]!.amount).toBe('19.99');
+    expect(typeof rows[0]!.amount).toBe('string');
+    expect(() => JSON.stringify(rows)).not.toThrow();
+  });
+
+  it('maps an unknown merchant on listLinks to NOT_FOUND', async () => {
+    stub.fail(new PayError('gone', 'pay.merchant_not_found'));
+    const api = await caller(['pay:read']);
+    expect(codeOf(await api.merchant.listLinks({ merchantId: MERCHANT }).catch((e: unknown) => e))).toBe('NOT_FOUND');
   });
 });

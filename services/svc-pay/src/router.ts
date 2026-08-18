@@ -497,7 +497,7 @@ export function createPayRouter(
         ),
 
       listLinks: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().uuid() }))
+        .input(z.object({ merchantId: z.string().uuid(), active: z.boolean().optional() }))
         .output(
           z.array(
             z.object({
@@ -517,7 +517,7 @@ export function createPayRouter(
         .query(({ ctx, input }) =>
           wrap(async () => {
             await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.listLinks');
-            return pay.listPaymentLinks(input.merchantId);
+            return pay.listPaymentLinks(input.merchantId, input.active);
           }),
         ),
 

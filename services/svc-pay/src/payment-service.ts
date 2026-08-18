@@ -1067,7 +1067,10 @@ export class PayService {
     };
   }
 
-  async listPaymentLinks(merchantId: string): Promise<
+  async listPaymentLinks(
+    merchantId: string,
+    active?: boolean,
+  ): Promise<
     Array<{
       id: string;
       prefix: string;
@@ -1099,6 +1102,7 @@ export class PayService {
       SELECT id, token_prefix, label, amount::text, currency, active, expires_at, max_uses, uses, created_at
         FROM pay.payment_links
        WHERE merchant_id = ${merchantId}
+         ${active === undefined ? this.sql`` : this.sql`AND active = ${active}`}
        ORDER BY created_at DESC
     `;
     return rows.map((r) => ({
