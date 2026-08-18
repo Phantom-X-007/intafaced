@@ -1354,7 +1354,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen).toEqual({ marketId: market.id, limit: 100, sinceMs: 1_700_000_000_000 });
+    expect(seen).toEqual({ marketId: market.id, limit: 100, sinceMs: 1_700_000_000_000, untilMs: undefined });
     expect(res.json()).toHaveLength(1);
     await app.close();
   });
@@ -1574,6 +1574,51 @@ describe('private REST — mount boundary + order write path', () => {
       const res = await app.inject({
         method: 'GET',
         url: `/api/v1/orders/closed?since=${encodeURIComponent(since)}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(listed).toBe(false);
+    }
+    await app.close();
+  });
+
+  it('GET /orders/closed?until=: passes untilMs into orderHistory', async () => {
+    let seen: { marketId?: string; limit?: number; sinceMs?: number; untilMs?: number } | null = null;
+    const app = await build(
+      deps({
+        orderHistory: async (_p, input) => {
+          seen = input;
+          return [closed];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/closed?until=1700000000000&symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({ marketId: market.id, limit: 100, sinceMs: undefined, untilMs: 1_700_000_000_000 });
+    expect(res.json()).toHaveLength(1);
+    await app.close();
+  });
+
+  it('GET /orders/closed?until=: invalid (NaN / negative) → 400 without orderHistory', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        orderHistory: async () => {
+          listed = true;
+          return [closed];
+        },
+      }),
+    );
+    for (const until of ['abc', '-5']) {
+      listed = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/orders/closed?until=${encodeURIComponent(until)}`,
         headers: signedHeaders(),
       });
       expect(res.statusCode).toBe(400);

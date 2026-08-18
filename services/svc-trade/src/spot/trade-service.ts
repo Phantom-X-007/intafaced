@@ -2012,9 +2012,9 @@ export class TradeService {
 
   /**
    * Terminal orders for the principal (filled / cancelled / rejected / expired).
-   * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
-   * (CCXT convention). Optional status narrows the terminal IN-list — never
-   * invents a status, and unknown values are the caller's to refuse before this.
+   * Optional `sinceMs` / `untilMs` (unix ms) are SQL on `orders.created_at`
+   * (CCXT; timestamptz via Date). Optional status narrows the terminal IN-list —
+   * never invents a status, and unknown values are the caller's to refuse before this.
    * Optional side narrows buy/sell in SQL — never invents a side.
    * Optional type narrows limit/market in SQL — never invents a type.
    * Optional tif narrows GTC/IOC/FOK/PO in SQL — never invents a tif.
@@ -2026,6 +2026,7 @@ export class TradeService {
       marketId?: string;
       limit?: number;
       sinceMs?: number;
+      untilMs?: number;
       status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
       side?: 'buy' | 'sell';
       type?: 'limit' | 'market';
@@ -2037,6 +2038,7 @@ export class TradeService {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     // timestamptz compare: Date carries ms precision into postgres.js.
     const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
+    const untilDate = input.untilMs !== undefined ? new Date(input.untilMs) : undefined;
     const statusFilter =
       input.status === 'filled'
         ? this.sql`status = 'filled'`
@@ -2061,58 +2063,23 @@ export class TradeService {
               ? this.sql`tif = 'PO'`
               : this.sql`TRUE`;
     const clientOrderIdFilter = input.clientOrderId ? this.sql`client_order_id = ${input.clientOrderId}` : this.sql`TRUE`;
-    const rows =
-      input.marketId && sinceDate
-        ? await this.sql<OrderRow[]>`
-            SELECT * FROM trade.orders
-             WHERE user_id = ${principal.userId}
-               AND market_id = ${input.marketId}
-               AND ${statusFilter}
-               AND ${sideFilter}
-               AND ${typeFilter}
-               AND ${tifFilter}
-               AND ${clientOrderIdFilter}
-               AND created_at >= ${sinceDate}
-             ORDER BY created_at DESC
-             LIMIT ${limit}
-          `
-        : input.marketId
-          ? await this.sql<OrderRow[]>`
-              SELECT * FROM trade.orders
-               WHERE user_id = ${principal.userId}
-                 AND market_id = ${input.marketId}
-                 AND ${statusFilter}
-                 AND ${sideFilter}
-                 AND ${typeFilter}
-                 AND ${tifFilter}
-                 AND ${clientOrderIdFilter}
-               ORDER BY created_at DESC
-                 LIMIT ${limit}
-            `
-          : sinceDate
-            ? await this.sql<OrderRow[]>`
-                SELECT * FROM trade.orders
-                 WHERE user_id = ${principal.userId}
-                   AND ${statusFilter}
-                   AND ${sideFilter}
-                   AND ${typeFilter}
-                   AND ${tifFilter}
-                   AND ${clientOrderIdFilter}
-                   AND created_at >= ${sinceDate}
-                 ORDER BY created_at DESC
-                 LIMIT ${limit}
-              `
-            : await this.sql<OrderRow[]>`
-                SELECT * FROM trade.orders
-                 WHERE user_id = ${principal.userId}
-                   AND ${statusFilter}
-                   AND ${sideFilter}
-                   AND ${typeFilter}
-                   AND ${tifFilter}
-                   AND ${clientOrderIdFilter}
-                 ORDER BY created_at DESC
-                 LIMIT ${limit}
-              `;
+    const marketFilter = input.marketId ? this.sql`market_id = ${input.marketId}` : this.sql`TRUE`;
+    const sinceFilter = sinceDate ? this.sql`created_at >= ${sinceDate}` : this.sql`TRUE`;
+    const untilFilter = untilDate ? this.sql`created_at <= ${untilDate}` : this.sql`TRUE`;
+    const rows = await this.sql<OrderRow[]>`
+      SELECT * FROM trade.orders
+       WHERE user_id = ${principal.userId}
+         AND ${marketFilter}
+         AND ${statusFilter}
+         AND ${sideFilter}
+         AND ${typeFilter}
+         AND ${tifFilter}
+         AND ${clientOrderIdFilter}
+         AND ${sinceFilter}
+         AND ${untilFilter}
+       ORDER BY created_at DESC
+       LIMIT ${limit}
+    `;
     return rows.map(toOrder);
   }
 

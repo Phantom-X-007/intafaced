@@ -40,7 +40,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&status=&side=&type=&tif=&clientOrderId=)
- *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&status=&side=&type=&tif=&clientOrderId=)
+ *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since=&until=&status=&side=&type=&tif=&clientOrderId=)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
@@ -97,6 +97,7 @@ export interface PrivateRestDeps {
       marketId?: string;
       limit?: number;
       sinceMs?: number;
+      untilMs?: number;
       status?: 'filled' | 'cancelled' | 'rejected' | 'expired';
       side?: 'buy' | 'sell';
       type?: 'limit' | 'market';
@@ -800,6 +801,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       symbol?: string;
       limit?: string;
       since?: string;
+      until?: string;
       status?: string;
       side?: string;
       type?: string;
@@ -825,6 +827,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     if (!sinceParsed.ok) {
       return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
     }
+    const untilParsed = parseUntil(req.query.until);
+    if (!untilParsed.ok) {
+      return sendCcxt(reply, badRequest(untilParsed.message, 'trade.invalid_until'));
+    }
     const statusParsed = parseClosedOrderStatus(req.query.status);
     if (!statusParsed.ok) {
       return sendCcxt(reply, badRequest(statusParsed.message, 'trade.invalid_closed_order_status'));
@@ -847,11 +853,12 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
 
     try {
-      // since / side / type / tif / clientOrderId → SQL via orderHistory — not a post-filter of a mixed page.
+      // since / until / side / type / tif / clientOrderId → SQL via orderHistory — not a post-filter of a mixed page.
       const orders = await deps.orderHistory(principal, {
         marketId,
         limit,
         sinceMs: sinceParsed.sinceMs,
+        untilMs: untilParsed.untilMs,
         ...(statusParsed.status ? { status: statusParsed.status } : {}),
         ...(sideParsed.side ? { side: sideParsed.side } : {}),
         ...(typeParsed.type ? { type: typeParsed.type } : {}),

@@ -423,6 +423,10 @@ if (!available) {
       expect(await trade.orderHistory(principalFor(ALICE), { tif: 'IOC' })).toEqual([]);
       expect((await trade.orderHistory(principalFor(ALICE), { clientOrderId: 'alice-1' })).map((row) => row.id)).toEqual([order.id]);
       expect(await trade.orderHistory(principalFor(ALICE), { clientOrderId: 'missing' })).toEqual([]);
+      expect(await trade.orderHistory(principalFor(ALICE), { sinceMs: Date.now() + 86_400_000 })).toEqual([]);
+      expect(await trade.orderHistory(principalFor(ALICE), { sinceMs: 0 })).toHaveLength(1);
+      expect(await trade.orderHistory(principalFor(ALICE), { untilMs: 0 })).toEqual([]);
+      expect(await trade.orderHistory(principalFor(ALICE), { untilMs: Date.now() + 86_400_000 })).toHaveLength(1);
     });
 
     it('openOrders default still lists pending; status=open hides it', async () => {
