@@ -34,7 +34,7 @@ export type AffiliateRouterArgs = {
 };
 
 export function affiliateTreeRoutes(args: AffiliateRouterArgs) {
-  const { requireReferral, requireFreeze, freeze, accrualTierLaw } = args;
+  const { requireReferral, requireFreeze, requireAccruals, freeze, accrualTierLaw } = args;
   return {
       attribute: scopedProcedure('identity:write')
         .input(z.object({ referrerId: z.string().uuid() }))
