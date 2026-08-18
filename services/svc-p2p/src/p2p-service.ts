@@ -1487,17 +1487,21 @@ export class P2pService {
     /** Who is reading. Recorded, because an unattributed queue read proves nothing. */
     moderatorId: string;
     status?: 'open' | 'resolved';
+    /** Exact `p2p.p2p_disputes.trade_id`. Omitted keeps the full status queue. */
+    tradeId?: string;
     limit?: number;
     cursor?: string | null;
   }): Promise<{ disputes: DisputeRecord[]; nextCursor: string | null }> {
     const status = input.status ?? 'open';
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
     const after = assertDisputeCursor(input.cursor ?? null);
+    const tradeId = input.tradeId ?? null;
 
     const rows = await this.sql<DisputeRow[]>`
       WITH page AS (
         SELECT id FROM p2p.p2p_disputes
          WHERE status = ${status}
+           AND (${tradeId}::uuid IS NULL OR trade_id = ${tradeId}::uuid)
            AND (
              ${after}::uuid IS NULL
              OR (deadline_at, id) > (

@@ -995,6 +995,45 @@ if (!available) {
       expect((await p2p.listDisputes({ moderatorId: MODERATOR, status: 'resolved' })).disputes.map((d) => d.tradeId)).toEqual([ruled.id]);
     });
 
+    it('omits mixed trades when tradeId is omitted, and exact-matches trade_id in SQL when it is set', async () => {
+      const a = await disputedTrade();
+      const b = await disputedTrade();
+      const ruled = await disputedTrade();
+      await p2p.resolveDispute({ tradeId: ruled.id, moderatorId: MODERATOR, resolution: 'refund' });
+
+      const exact = await p2p.listDisputes({ moderatorId: MODERATOR, tradeId: b.id });
+      expect(exact.disputes.map((d) => d.tradeId)).toEqual([b.id]);
+      expect(exact.disputes[0]!.status).toBe('open');
+      expect(exact.nextCursor).toBeNull();
+      expect((await p2p.getDispute(a.id)).lastSeenByModeratorAt).toBeNull();
+      expect((await p2p.getDispute(b.id)).lastSeenByModeratorAt).not.toBeNull();
+      expect((await p2p.getDispute(b.id)).moderatorViews).toBe(1);
+
+      const omitted = await p2p.listDisputes({ moderatorId: MODERATOR });
+      expect(omitted.disputes.map((d) => d.tradeId).sort()).toEqual([a.id, b.id].sort());
+      expect(omitted.nextCursor).toBeNull();
+
+      const miss = await p2p.listDisputes({
+        moderatorId: MODERATOR,
+        tradeId: '55555555-5555-4555-8555-555555555555',
+      });
+      expect(miss).toEqual({ disputes: [], nextCursor: null });
+
+      const openUnderResolved = await p2p.listDisputes({
+        moderatorId: MODERATOR,
+        status: 'resolved',
+        tradeId: a.id,
+      });
+      expect(openUnderResolved).toEqual({ disputes: [], nextCursor: null });
+
+      const resolvedExact = await p2p.listDisputes({
+        moderatorId: MODERATOR,
+        status: 'resolved',
+        tradeId: ruled.id,
+      });
+      expect(resolvedExact.disputes.map((d) => d.tradeId)).toEqual([ruled.id]);
+    });
+
     /**
      * THE ONE THAT MAKES "REACHABLE" A FACT RATHER THAN A CLAIM.
      *

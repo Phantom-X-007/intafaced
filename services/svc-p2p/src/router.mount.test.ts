@@ -399,6 +399,28 @@ describe('svc-p2p mount — the moderator queue', () => {
     expect(page.disputes[0]!.overdue).toBe(true);
   });
 
+  it('forwards optional tradeId to the queue, and 400s an invalid uuid', async () => {
+    const seen: Array<{ tradeId?: string }> = [];
+    const p2p = stubP2p({
+      listDisputes: async (input: { tradeId?: string }) => {
+        seen.push({ tradeId: input.tradeId });
+        return { disputes: [], nextCursor: null };
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'admin:compliance'] }));
+    const caller = createP2pRouter(p2p, stubInstruments()).createCaller(ctx);
+
+    await caller.disputes.list({});
+    expect(seen[0]).toEqual({ tradeId: undefined });
+
+    const tradeId = dispute.tradeId;
+    await caller.disputes.list({ tradeId });
+    expect(seen[1]).toEqual({ tradeId });
+
+    await expect(caller.disputes.list({ tradeId: 'not-a-uuid' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(seen).toHaveLength(2);
+  });
+
   it('gives a PARTY only the evidence they filed themselves', async () => {
     // Their counterparty's submissions are free-form text about them, filed by
     // someone they are in dispute with, with no redaction and no erase path.

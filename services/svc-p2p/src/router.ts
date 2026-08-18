@@ -1082,6 +1082,7 @@ export function createP2pRouter(
           z
             .object({
               status: z.enum(['open', 'resolved']).optional(),
+              tradeId: z.string().uuid().optional(),
               limit: z.number().int().min(1).max(200).optional(),
               cursor: z.string().max(200).nullable().optional(),
             })
@@ -1094,6 +1095,7 @@ export function createP2pRouter(
             const page = await p2p.listDisputes({
               moderatorId: ctx.principal.userId,
               ...(input?.status ? { status: input.status } : {}),
+              ...(input?.tradeId ? { tradeId: input.tradeId } : {}),
               ...(input?.limit ? { limit: input.limit } : {}),
               ...(input?.cursor ? { cursor: input.cursor } : {}),
             });
