@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import { PERMISSION_AREAS, SubMerchantError, type SubMerchantService } from './submerchants.js';
+import { PERMISSION_ACTIONS, PERMISSION_AREAS, SubMerchantError, type SubMerchantService } from './submerchants.js';
 
 /**
  * THE PAYFAC SURFACE (§6.1) — sub-merchant trees and the permissions over them.
@@ -38,6 +38,7 @@ import { PERMISSION_AREAS, SubMerchantError, type SubMerchantService } from './s
  */
 
 const areaSchema = z.enum(PERMISSION_AREAS);
+const actionSchema = z.enum(PERMISSION_ACTIONS);
 
 const subMerchantView = z.object({
   id: z.string().uuid(),
@@ -75,7 +76,7 @@ const permissionEventView = z.object({
   granteeMerchantId: z.string().uuid(),
   subjectMerchantId: z.string().uuid(),
   area: z.string(),
-  action: z.enum(['grant', 'revoke']),
+  action: actionSchema,
   reason: z.string(),
   actorId: z.string(),
   actorMerchantId: z.string().uuid(),
@@ -108,6 +109,7 @@ const CALLER_FAULT: Readonly<Record<string, 'FORBIDDEN' | 'BAD_REQUEST' | 'NOT_F
   'pay.submerchant_grant_redundant': 'BAD_REQUEST',
   'pay.submerchant_revoke_redundant': 'BAD_REQUEST',
   'pay.submerchant_area_unknown': 'BAD_REQUEST',
+  'pay.submerchant_action_unknown': 'BAD_REQUEST',
   'pay.submerchant_too_deep': 'BAD_REQUEST',
   'pay.submerchant_reason_required': 'BAD_REQUEST',
   'pay.submerchant_pricing_invalid': 'BAD_REQUEST',
@@ -321,12 +323,18 @@ export function createSubMerchantRouter(subMerchants: SubMerchantService, mercha
 
       /** Grants AND revokes, newest first — the answer to "who could do this, and when". */
       history: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ subjectMerchantId: z.string().uuid(), limit: z.number().int().min(1).max(200).optional() }))
+        .input(
+          z.object({
+            subjectMerchantId: z.string().uuid(),
+            limit: z.number().int().min(1).max(200).optional(),
+            action: actionSchema.optional(),
+          }),
+        )
         .output(z.array(permissionEventView))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const actorMerchantId = await actor(ctx.principal?.userId);
-            const rows = await subMerchants.permissionHistory(actorMerchantId, input.subjectMerchantId, input.limit ?? 50);
+            const rows = await subMerchants.permissionHistory(actorMerchantId, input.subjectMerchantId, input.limit ?? 50, input.action);
             return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
           }),
         ),

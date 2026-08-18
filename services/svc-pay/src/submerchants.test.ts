@@ -748,6 +748,60 @@ if (!available) {
         'pay.submerchant_area_unknown',
       );
     });
+
+    it('lists mixed journal actions when omitted, exact matches when given, and [] when none', async () => {
+      const platform = await root();
+      const mid = await child(platform.merchantId, platform.merchantId);
+      const leaf = await child(mid.id, mid.id);
+
+      await trees.grantPermission({
+        actorMerchantId: platform.merchantId,
+        granteeMerchantId: mid.id,
+        subjectMerchantId: leaf.id,
+        area: 'payment',
+        reason: 'mid captures for this cohort',
+        actorId: 'platform-user',
+        actorScope: 'pay:write',
+      });
+      await trees.revokePermission({
+        actorMerchantId: platform.merchantId,
+        granteeMerchantId: mid.id,
+        subjectMerchantId: leaf.id,
+        area: 'payment',
+        reason: 'capture rights withdrawn',
+        actorId: 'platform-user',
+        actorScope: 'pay:write',
+      });
+
+      const mixed = await trees.permissionHistory(platform.merchantId, leaf.id);
+      expect(mixed.map((e) => e.action).slice(0, 2)).toEqual(['revoke', 'grant']);
+      expect(mixed.some((e) => e.action === 'grant')).toBe(true);
+      expect(mixed.some((e) => e.action === 'revoke')).toBe(true);
+      expect(mixed.every((e) => e.granteeMerchantId === mid.id)).toBe(true);
+      expect(mixed.some((e) => e.granteeMerchantId === platform.merchantId)).toBe(false);
+
+      const onlyGrant = await trees.permissionHistory(platform.merchantId, leaf.id, 50, 'grant');
+      expect(onlyGrant.length).toBeGreaterThan(0);
+      expect(onlyGrant.every((e) => e.action === 'grant')).toBe(true);
+      expect(onlyGrant.every((e) => e.granteeMerchantId === mid.id)).toBe(true);
+
+      const onlyRevoke = await trees.permissionHistory(platform.merchantId, leaf.id, 50, 'revoke');
+      expect(onlyRevoke.map((e) => e.action)).toEqual(['revoke']);
+      expect(onlyRevoke[0]?.area).toBe('payment');
+      expect(onlyRevoke.every((e) => e.granteeMerchantId === mid.id)).toBe(true);
+
+      const other = await child(platform.merchantId, platform.merchantId);
+      expect(await trees.permissionHistory(platform.merchantId, other.id, 50, 'revoke')).toEqual([]);
+
+      expect((await rejection(trees.permissionHistory(mid.id, leaf.id), SubMerchantError)).code).toBe('pay.submerchant_permission_denied');
+      expect((await rejection(trees.permissionHistory(mid.id, leaf.id, 50, 'grant'), SubMerchantError)).code).toBe(
+        'pay.submerchant_permission_denied',
+      );
+
+      expect((await rejection(trees.permissionHistory(platform.merchantId, leaf.id, 50, 'pause' as never), SubMerchantError)).code).toBe(
+        'pay.submerchant_action_unknown',
+      );
+    });
   });
 
   // ══ LISTING ═══════════════════════════════════════════════════════════════

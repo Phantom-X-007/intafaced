@@ -114,6 +114,10 @@ export const PERMISSION_AREAS = [
 
 export type PermissionArea = (typeof PERMISSION_AREAS)[number];
 
+/** The two journal verbs. There is no third — a change is a grant or a revoke. */
+export const PERMISSION_ACTIONS = ['grant', 'revoke'] as const;
+export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
+
 /**
  * WHAT A NEWLY ONBOARDED SUB-MERCHANT'S ANCESTORS GET FOR FREE.
  *
@@ -191,7 +195,7 @@ export interface PermissionEventRecord {
   granteeMerchantId: string;
   subjectMerchantId: string;
   area: string;
-  action: 'grant' | 'revoke';
+  action: PermissionAction;
   reason: string;
   actorId: string;
   actorMerchantId: string;
@@ -217,7 +221,7 @@ interface PermissionEventRow {
   grantee_merchant_id: string;
   subject_merchant_id: string;
   area: string;
-  action: 'grant' | 'revoke';
+  action: PermissionAction;
   reason: string;
   actor_id: string;
   actor_merchant_id: string;
@@ -265,6 +269,10 @@ function toEvent(row: PermissionEventRow): PermissionEventRecord {
 
 export function isPermissionArea(value: string): value is PermissionArea {
   return (PERMISSION_AREAS as readonly string[]).includes(value);
+}
+
+export function isPermissionAction(value: string): value is PermissionAction {
+  return (PERMISSION_ACTIONS as readonly string[]).includes(value);
 }
 
 export interface CreateSubMerchantInput {
@@ -762,16 +770,33 @@ export class SubMerchantService {
    * Newest first for the same reason the merchant status history is: the
    * question is almost always about what is true now, and the row that explains
    * it is the last one written.
+   *
+   * Optional `action` is an exact match against `PERMISSION_ACTIONS`. It only
+   * filters which journal rows are returned; it does not invent a row for
+   * implicit root (or self) authority, and omitted still returns the mixed
+   * grant+revoke journal, capped and newest-first.
    */
-  async permissionHistory(actorMerchantId: string, subjectMerchantId: string, limit = 50): Promise<PermissionEventRecord[]> {
+  async permissionHistory(
+    actorMerchantId: string,
+    subjectMerchantId: string,
+    limit = 50,
+    action?: PermissionAction,
+  ): Promise<PermissionEventRecord[]> {
     const chain = await this.assertWithinSubtree(actorMerchantId, subjectMerchantId);
     await this.assertHolds(actorMerchantId, subjectMerchantId, 'permission', this.sql, chain);
+
+    if (action !== undefined && !isPermissionAction(action)) {
+      throw new SubMerchantError(`Unknown permission action "${action}"`, 'pay.submerchant_action_unknown', {
+        known: PERMISSION_ACTIONS,
+      });
+    }
 
     const rows = await this.sql<PermissionEventRow[]>`
       SELECT id, seq, grantee_merchant_id, subject_merchant_id, area, action, reason,
              actor_id, actor_merchant_id, actor_scope, created_at
         FROM pay.merchant_permission_events
        WHERE subject_merchant_id = ${subjectMerchantId}
+         ${action === undefined ? this.sql`` : this.sql`AND action = ${action}`}
        ORDER BY seq DESC
        LIMIT ${Math.min(Math.max(limit, 1), 200)}
     `;

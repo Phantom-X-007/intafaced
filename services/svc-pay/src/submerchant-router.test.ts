@@ -78,6 +78,7 @@ interface Seen {
   grantActorMerchantId?: string;
   listArgs?: unknown[];
   listPermissionArgs?: unknown[];
+  historyArgs?: unknown[];
 }
 
 function harness(
@@ -135,8 +136,9 @@ function harness(
       seen.listPermissionArgs = args;
       return [];
     },
-    permissionHistory: async () => {
+    permissionHistory: async (...args: unknown[]) => {
       if (opts.throws) throw opts.throws;
+      seen.historyArgs = args;
       return [];
     },
   } as unknown as SubMerchantService;
@@ -213,6 +215,7 @@ describe('refusals a merchant’s engineer can act on', () => {
     ['pay.submerchant_too_deep', 'BAD_REQUEST'],
     ['pay.submerchant_settling_party_unsupported', 'BAD_REQUEST'],
     ['pay.submerchant_area_unknown', 'BAD_REQUEST'],
+    ['pay.submerchant_action_unknown', 'BAD_REQUEST'],
     ['pay.submerchant_user_already_merchant', 'CONFLICT'],
     ['pay.merchant_not_found', 'NOT_FOUND'],
   ];
@@ -315,6 +318,30 @@ describe('the wire shape', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(seen.listPermissionArgs).toBeUndefined();
+  });
+
+  it('forwards optional action on permission history and keeps omitted mixed', async () => {
+    const { caller, seen } = harness();
+    await caller(await ctx(['pay:read'])).submerchantPermission.history({ subjectMerchantId: SUB_MERCHANT });
+    expect(seen.historyArgs).toEqual([PLATFORM_MERCHANT, SUB_MERCHANT, 50, undefined]);
+
+    await caller(await ctx(['pay:read'])).submerchantPermission.history({
+      subjectMerchantId: SUB_MERCHANT,
+      action: 'revoke',
+      limit: 20,
+    });
+    expect(seen.historyArgs).toEqual([PLATFORM_MERCHANT, SUB_MERCHANT, 20, 'revoke']);
+  });
+
+  it('rejects an action outside grant|revoke before the service is called', async () => {
+    const { caller, seen } = harness();
+    await expect(
+      caller(await ctx(['pay:read'])).submerchantPermission.history({
+        subjectMerchantId: SUB_MERCHANT,
+        action: 'pause' as never,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(seen.historyArgs).toBeUndefined();
   });
 
   it('records the granting NODE on the event, resolved from the principal', async () => {
