@@ -1,12 +1,6 @@
 import { z } from 'zod';
 import { scopedProcedure } from '@intafaced/contracts';
-import {
-  AFFILIATE_PAYOUT_RESIDUAL,
-  AffiliatePayoutRefuseError,
-  affiliateFreezeHonestyLine,
-  affiliateMemberListStatusLine,
-  affiliateTreeStatusLine,
-} from './affiliates/admin-tree-read.js';
+import { AFFILIATE_PAYOUT_RESIDUAL, AffiliatePayoutRefuseError } from './affiliates/admin-tree-read.js';
 import {
   affiliatePayoutPlanStatusLine,
   assertPayoutRateProvenance,
@@ -15,8 +9,8 @@ import {
 } from './affiliates/payout-engine.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
-import { accrualTierLawIsPublished, type AccrualTierLaw } from './affiliates/commission-rate-law.js';
-import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
+import { type AccrualTierLaw } from './affiliates/commission-rate-law.js';
+import { accrueTreeUnderRateAuthority } from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import { toTrpcError } from './router-shared.js';
