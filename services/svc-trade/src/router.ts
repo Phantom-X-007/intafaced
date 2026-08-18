@@ -605,6 +605,17 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         .output(algoParentOutputSchema)
         .query(({ ctx, input }) => guard(async () => presentAlgo(await trade.getAlgo(ctx.principal, input.algoId)))),
 
+      list: scopedProcedure('trade:read')
+        .input(
+          z
+            .object({
+              status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']).optional(),
+            })
+            .optional(),
+        )
+        .output(z.array(algoParentOutputSchema))
+        .query(({ ctx, input }) => guard(async () => (await trade.listAlgos(ctx.principal, input)).map(presentAlgo))),
+
       progress: scopedProcedure('trade:read')
         .input(z.object({ algoId: z.string().min(1) }))
         .output(

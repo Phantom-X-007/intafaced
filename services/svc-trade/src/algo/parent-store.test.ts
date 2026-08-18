@@ -72,6 +72,44 @@ describe('TwapParentStore (durable schedule residual)', () => {
     expect((await store.listForUser('alice')).map((p) => p.id)).toEqual(['u1']);
   });
 
+  it('listForUser returns every owned parent when status is omitted', async () => {
+    const store = new MemoryTwapParentStore();
+    const older = new Date('2026-08-07T11:00:00.000Z');
+    const newer = new Date('2026-08-07T13:00:00.000Z');
+    await store.save({
+      parent: sampleParent({ id: 'paused-1', userId: 'alice', status: 'paused', createdAt: older }),
+      plan: [parseAmount('1')],
+    });
+    await store.save({
+      parent: sampleParent({ id: 'active-1', userId: 'alice', status: 'active', createdAt: newer }),
+      plan: [parseAmount('1')],
+    });
+    await store.save({
+      parent: sampleParent({ id: 'bob-paused', userId: 'bob', status: 'paused' }),
+      plan: [parseAmount('1')],
+    });
+    expect((await store.listForUser('alice')).map((p) => p.id)).toEqual(['active-1', 'paused-1']);
+  });
+
+  it('listForUser filters by status when set and returns [] when none match', async () => {
+    const store = new MemoryTwapParentStore();
+    await store.save({
+      parent: sampleParent({ id: 'active-1', userId: 'alice', status: 'active' }),
+      plan: [parseAmount('1')],
+    });
+    await store.save({
+      parent: sampleParent({ id: 'paused-1', userId: 'alice', status: 'paused' }),
+      plan: [parseAmount('1')],
+    });
+    await store.save({
+      parent: sampleParent({ id: 'bob-paused', userId: 'bob', status: 'paused' }),
+      plan: [parseAmount('1')],
+    });
+    expect((await store.listForUser('alice', 'paused')).map((p) => p.id)).toEqual(['paused-1']);
+    expect(await store.listForUser('alice', 'halted')).toEqual([]);
+    expect(await store.listForUser('nobody')).toEqual([]);
+  });
+
   it('keeps the createTwap place grant across a later save that omits it', async () => {
     const store = new MemoryTwapParentStore();
     const parent = sampleParent();

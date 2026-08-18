@@ -50,6 +50,7 @@ import {
   TwapEngine,
   type AlgoProgressView,
   type AlgoQuotedMark,
+  type AlgoStatus,
   type CreateTwapInput,
   type TwapParent,
   type TwapParentStore,
@@ -2516,6 +2517,11 @@ export class TradeService {
   async getAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:read');
     return hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+  }
+
+  async listAlgos(principal: Principal, input?: { status?: AlgoStatus }): Promise<TwapParent[]> {
+    requireScope(principal, 'trade:read');
+    return this.algoStore.listForUser(principal.userId, input?.status);
   }
 
   async algoProgress(principal: Principal, parentId: string): Promise<AlgoProgressView> {
