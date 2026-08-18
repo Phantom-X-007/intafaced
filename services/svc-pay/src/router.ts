@@ -1362,12 +1362,15 @@ export function createPayRouter(
             .object({
               limit: z.number().int().min(1).max(200).optional(),
               status: z.enum(['pending', 'held', 'sent', 'failed']).optional(),
+              assetId: assetIdSchema.optional(),
             })
             .optional(),
         )
         .output(z.array(withdrawalView))
         .query(({ ctx, input }) =>
-          wrap(async () => (await userMoney.listWithdrawals(ctx.principal.userId, input?.limit ?? 50, input?.status)).map(toWithdrawalOut)),
+          wrap(async () =>
+            (await userMoney.listWithdrawals(ctx.principal.userId, input?.limit ?? 50, input?.status, input?.assetId)).map(toWithdrawalOut),
+          ),
         ),
 
       /**

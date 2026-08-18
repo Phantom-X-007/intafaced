@@ -571,22 +571,39 @@ export class UserMoneyService {
     return toWithdrawal(row);
   }
 
-  async listWithdrawals(userId: string, limit = 50, status?: WithdrawalRecord['status']): Promise<WithdrawalRecord[]> {
-    const rows = status
-      ? await this.sql<WithdrawalRow[]>`
-          SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
-            FROM pay.withdrawals
-           WHERE user_id = ${userId} AND status = ${status}
-           ORDER BY created_at DESC
-           LIMIT ${limit}
-        `
-      : await this.sql<WithdrawalRow[]>`
-          SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
-            FROM pay.withdrawals
-           WHERE user_id = ${userId}
-           ORDER BY created_at DESC
-           LIMIT ${limit}
-        `;
+  async listWithdrawals(userId: string, limit = 50, status?: WithdrawalRecord['status'], assetId?: string): Promise<WithdrawalRecord[]> {
+    const rows =
+      status && assetId
+        ? await this.sql<WithdrawalRow[]>`
+            SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
+              FROM pay.withdrawals
+             WHERE user_id = ${userId} AND status = ${status} AND asset_id = ${assetId}
+             ORDER BY created_at DESC
+             LIMIT ${limit}
+          `
+        : status
+          ? await this.sql<WithdrawalRow[]>`
+              SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
+                FROM pay.withdrawals
+               WHERE user_id = ${userId} AND status = ${status}
+               ORDER BY created_at DESC
+               LIMIT ${limit}
+            `
+          : assetId
+            ? await this.sql<WithdrawalRow[]>`
+                SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
+                  FROM pay.withdrawals
+                 WHERE user_id = ${userId} AND asset_id = ${assetId}
+                 ORDER BY created_at DESC
+                 LIMIT ${limit}
+              `
+            : await this.sql<WithdrawalRow[]>`
+                SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
+                  FROM pay.withdrawals
+                 WHERE user_id = ${userId}
+                 ORDER BY created_at DESC
+                 LIMIT ${limit}
+              `;
     return rows.map(toWithdrawal);
   }
 

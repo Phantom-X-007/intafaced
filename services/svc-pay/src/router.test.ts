@@ -1148,8 +1148,25 @@ describe('withdrawal reads', () => {
     await api.withdrawal.mine({ limit: 10, status: 'held' });
 
     const lists = money.calls.filter((c) => c.method === 'listWithdrawals');
-    expect(lists[0]!.args).toEqual([USER, 50, undefined]);
-    expect(lists[1]!.args).toEqual([USER, 10, 'held']);
+    expect(lists[0]!.args).toEqual([USER, 50, undefined, undefined]);
+    expect(lists[1]!.args).toEqual([USER, 10, 'held', undefined]);
+  });
+
+  it('forwards optional assetId on withdrawals.mine and ANDs it with status', async () => {
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    await api.withdrawal.mine({ assetId: 'USDT' });
+    await api.withdrawal.mine({ limit: 10, status: 'sent', assetId: 'BTC' });
+
+    const lists = money.calls.filter((c) => c.method === 'listWithdrawals');
+    expect(lists[0]!.args).toEqual([USER, 50, undefined, 'USDT']);
+    expect(lists[1]!.args).toEqual([USER, 10, 'sent', 'BTC']);
+  });
+
+  it('rejects an empty or overlong assetId', async () => {
+    const api = await caller(['trade:read'], { tier: 'basic' });
+    expect(codeOf(await api.withdrawal.mine({ assetId: '' }).catch((e: unknown) => e))).toBe('BAD_REQUEST');
+    expect(codeOf(await api.withdrawal.mine({ assetId: 'x'.repeat(17) }).catch((e: unknown) => e))).toBe('BAD_REQUEST');
+    expect(money.calls.filter((c) => c.method === 'listWithdrawals')).toHaveLength(0);
   });
 
   it('rejects a status that is not a withdrawal status', async () => {

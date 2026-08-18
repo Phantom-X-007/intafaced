@@ -567,6 +567,54 @@ if (!available) {
       expect(await money.listWithdrawals(OTHER_USER, 50, 'pending')).toEqual([]);
     });
 
+    it('filters the caller’s withdrawals by assetId in SQL, nested with status', async () => {
+      const dest = sql.json({ kind: 'bank', ref: 'DE89370400440532013000' } as never);
+      const seed = async (
+        userId: string,
+        clientRef: string,
+        status: 'pending' | 'held' | 'sent' | 'failed',
+        assetId: string,
+        createdAt: string,
+      ) => {
+        const railRef = status === 'sent' ? `po-${clientRef}` : null;
+        await sql`
+          INSERT INTO pay.withdrawals (user_id, asset_id, amount, rail, destination, client_ref, rail_ref, status, created_at)
+          VALUES (${userId}, ${assetId}, ${formatAmount(amt('40'))}::numeric, 'card-sandbox', ${dest}, ${clientRef}, ${railRef}, ${status}, ${createdAt}::timestamptz)
+        `;
+      };
+      // Newest two are USDT. A LIMIT 2 JS post-filter would miss older BTC rows.
+      await seed(USER, 'w-btc-sent', 'sent', 'BTC', '2026-08-18T10:00:00Z');
+      await seed(USER, 'w-btc-pend', 'pending', 'BTC', '2026-08-18T11:00:00Z');
+      await seed(USER, 'w-usdt-1', 'pending', 'USDT', '2026-08-18T12:00:00Z');
+      await seed(USER, 'w-usdt-2', 'pending', 'USDT', '2026-08-18T13:00:00Z');
+      await seed(USER, 'w-usdt-sent', 'sent', 'USDT', '2026-08-18T09:00:00Z');
+      await seed(OTHER_USER, 'w-other-btc', 'pending', 'BTC', '2026-08-18T15:00:00Z');
+
+      const mixedPending = await money.listWithdrawals(USER, 50, 'pending');
+      expect(mixedPending.map((w) => w.clientRef)).toEqual(['w-usdt-2', 'w-usdt-1', 'w-btc-pend']);
+      expect(new Set(mixedPending.map((w) => w.assetId))).toEqual(new Set(['USDT', 'BTC']));
+      expect(mixedPending.every((w) => w.userId === USER)).toBe(true);
+
+      const btc = await money.listWithdrawals(USER, 2, undefined, 'BTC');
+      expect(btc.map((w) => w.clientRef)).toEqual(['w-btc-pend', 'w-btc-sent']);
+      expect(btc.every((w) => w.assetId === 'BTC')).toBe(true);
+      expect(btc.every((w) => typeof w.amount === 'bigint')).toBe(true);
+
+      expect(await money.listWithdrawals(USER, 50, undefined, 'ETH')).toEqual([]);
+
+      const usdtSent = await money.listWithdrawals(USER, 50, 'sent', 'USDT');
+      expect(usdtSent.map((w) => w.clientRef)).toEqual(['w-usdt-sent']);
+      expect(usdtSent.every((w) => w.assetId === 'USDT' && w.status === 'sent')).toBe(true);
+
+      expect(btc.every((w) => w.userId === USER)).toBe(true);
+      expect(btc.map((w) => w.clientRef)).not.toContain('w-other-btc');
+
+      const otherBtc = await money.listWithdrawals(OTHER_USER, 50, undefined, 'BTC');
+      expect(otherBtc.map((w) => w.clientRef)).toEqual(['w-other-btc']);
+      expect(otherBtc.every((w) => w.userId === OTHER_USER)).toBe(true);
+      expect(await money.listWithdrawals(OTHER_USER, 50, 'sent', 'BTC')).toEqual([]);
+    });
+
     it('reports a missing withdrawal rather than returning nothing', async () => {
       await expect(money.getWithdrawal('00000000-0000-4000-8000-000000000000')).rejects.toBeInstanceOf(PayError);
     });
