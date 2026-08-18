@@ -1198,6 +1198,100 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /account/trades without side: mixed buy and sell as returned', async () => {
+    const sellFill = fakeFill({
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      side: 'sell',
+      qty: parseAmount('3'),
+      price: parseAmount('50'),
+      quoteAmount: parseAmount('150'),
+    });
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, side) => {
+          expect(side).toBeUndefined();
+          return [fill, sellFill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Array<{ side: string; amount: string }>;
+    expect(body.map((row) => row.side)).toEqual(['buy', 'sell']);
+    expect(typeof body[0]!.amount).toBe('string');
+    expect(typeof body[1]!.amount).toBe('string');
+    await app.close();
+  });
+
+  it('GET /account/trades?side=sell: passes sell into myFills', async () => {
+    let seenSide: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, side) => {
+          seenSide = side;
+          return [fakeFill({ side: 'sell' })];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?side=sell',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenSide).toBe('sell');
+    expect((res.json() as Array<{ side: string }>)[0]!.side).toBe('sell');
+    await app.close();
+  });
+
+  it('GET /account/trades?side=buy: unmatched → 200 []', async () => {
+    let seenSide: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, _marketId, _sinceMs, side) => {
+          seenSide = side;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenSide).toBe('buy');
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /account/trades?symbol=&side=: ANDs marketId and side', async () => {
+    let seenMarket: string | undefined = 'unset';
+    let seenSide: string | undefined = 'sentinel';
+    const app = await build(
+      deps({
+        myFills: async (_p, _limit, marketId, _sinceMs, side) => {
+          seenMarket = marketId;
+          seenSide = side;
+          return [fill];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account/trades?symbol=BTC%2FUSDT&side=buy',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenMarket).toBe(market.id);
+    expect(seenSide).toBe('buy');
+    await app.close();
+  });
+
   it('GET /account/trades?liquidity=taker: passes liquidity into myFills', async () => {
     let seenLiq: string | undefined = 'sentinel';
     const app = await build(
@@ -1328,13 +1422,17 @@ describe('private REST — mount boundary + order write path', () => {
         },
       }),
     );
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/account/trades?side=both',
-      headers: signedHeaders(),
-    });
-    expect(res.statusCode).toBe(400);
-    expect(listed).toBe(false);
+    for (const side of ['both', 'long', 'garbage', '']) {
+      listed = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/account/trades?side=${encodeURIComponent(side)}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(listed).toBe(false);
+    }
     await app.close();
   });
 

@@ -2122,7 +2122,7 @@ export class TradeService {
    * of a user-wide page that can under-fill the limit.
    * Optional `sinceMs` (unix ms) filters `fills.ts >= since` in SQL (CCXT).
    * `ts` is timestamptz — convert ms via `Date`, never raw int compare.
-   * Optional `side` narrows buy/sell in SQL — never invents a side.
+   * Optional `side` binds `side = $side` in SQL — never invents a side.
    * Optional `liquidity` narrows maker/taker in SQL — never invents a role.
    * Optional `orderId` narrows fills.order_id in SQL — never invents a fill.
    * Optional `counterOrderId` narrows fills.counter_order_id in SQL — never invents a fill.
@@ -2140,7 +2140,7 @@ export class TradeService {
     requireScope(principal, 'trade:read');
     const capped = Math.min(Math.max(limit, 1), 500);
     const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
-    const sideFilter = side === 'buy' ? this.sql`side = 'buy'` : side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
+    const sideFilter = side === undefined ? this.sql`TRUE` : this.sql`side = ${side}`;
     const liquidityFilter =
       liquidity === 'maker' ? this.sql`liquidity = 'maker'` : liquidity === 'taker' ? this.sql`liquidity = 'taker'` : this.sql`TRUE`;
     const orderIdFilter = orderId ? this.sql`order_id = ${orderId}` : this.sql`TRUE`;

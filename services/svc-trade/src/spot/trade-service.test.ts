@@ -299,6 +299,32 @@ if (!available) {
       expect(await trade.publicTape(btcusdt.id, 100, undefined, 'sell')).toEqual([]);
     });
 
+    it('myFills exact-matches side in SQL; omit keeps mixed buy and sell', async () => {
+      await fund(BOB, 'BTC', '5');
+      await fund(BOB, 'USDT', '1000');
+      await fund(ALICE, 'USDT', '1000');
+      await fund(ALICE, 'ETH', '5');
+
+      const btcMaker = await rest(BOB, btcusdt, 'sell', '2', '100', 'bob-btc-side');
+      matching.scriptFills([{ makerOrderId: btcMaker.id, makerAccountId: BOB, price: '100', qty: '2' }]);
+      await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-btc-side');
+
+      const ethMaker = await rest(ALICE, ethusdt, 'sell', '1', '50', 'alice-eth-side');
+      matching.scriptFills([{ makerOrderId: ethMaker.id, makerAccountId: ALICE, price: '50', qty: '1' }]);
+      await rest(BOB, ethusdt, 'buy', '1', '50', 'bob-eth-side');
+
+      const mixed = await trade.myFills(principalFor(ALICE));
+      expect(mixed.map((row) => row.side)).toEqual(['sell', 'buy']);
+      expect(mixed.map((row) => formatAmount(row.qty))).toEqual(['1', '2']);
+
+      expect((await trade.myFills(principalFor(ALICE), 100, undefined, undefined, 'buy')).map((row) => row.side)).toEqual(['buy']);
+      expect((await trade.myFills(principalFor(ALICE), 100, undefined, undefined, 'sell')).map((row) => row.side)).toEqual(['sell']);
+      expect(await trade.myFills(principalFor(ALICE), 100, btcusdt.id, undefined, 'sell')).toEqual([]);
+      expect((await trade.myFills(principalFor(ALICE), 100, btcusdt.id, undefined, 'buy')).map((row) => row.marketId)).toEqual([
+        btcusdt.id,
+      ]);
+    });
+
     it('emits XP per filled order (§5.2 step 4)', async () => {
       await fund(BOB, 'BTC', '5');
       await fund(ALICE, 'USDT', '1000');

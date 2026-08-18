@@ -515,9 +515,9 @@ export function parseFillLiquidity(raw: unknown): { ok: true; liquidity?: 'maker
   return { ok: false, message: 'liquidity must be maker or taker' };
 }
 
-/** Optional fill-side filter. Absent → both buy and sell. */
+/** Optional fill-side filter. Absent → both buy and sell. Empty / garbage → 400. */
 export function parseFillSide(raw: unknown): { ok: true; side?: 'buy' | 'sell' } | { ok: false; message: string } {
-  if (raw === undefined || raw === null || raw === '') return { ok: true, side: undefined };
+  if (raw === undefined || raw === null) return { ok: true, side: undefined };
   if (raw === 'buy' || raw === 'sell') return { ok: true, side: raw };
   return { ok: false, message: 'side must be buy or sell' };
 }
