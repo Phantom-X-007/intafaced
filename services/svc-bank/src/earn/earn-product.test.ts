@@ -26,6 +26,7 @@ import { createBankRouter } from '../router.js';
 
 const SECRET = 'bank-earn-product-boundary-secret-32';
 const USER = '11111111-1111-4111-8111-111111111111';
+const OTHER = '22222222-2222-4222-8222-222222222222';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -77,14 +78,14 @@ if (!available) {
     );
   }
 
-  async function fundUser(ledger: MemoryLedger, userId: string, value: string) {
+  async function fundUser(ledger: MemoryLedger, userId: string, value: string, assetId = 'USDT') {
     await ledger.post(
       recipes.deposit({
         userId,
-        assetId: 'USDT',
+        assetId,
         amount: amount(value),
         rail: 'test',
-        railRef: `${userId}:${randomUUID()}`,
+        railRef: `${userId}:${assetId}:${randomUUID()}`,
       }),
     );
   }
@@ -197,6 +198,65 @@ if (!available) {
       const user = signedCaller(bank, principal(USER, ['bank:read', 'bank:write']));
       const err = await user.earn.pools({ kind: 'locked' } as never).catch((e: unknown) => e);
       expect((err as { code?: string }).code).toBe('BAD_REQUEST');
+    });
+
+    it('earn.positions filters by assetId in SQL, stays active-only, and returns [] on a miss', async () => {
+      const usdt = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'USDT flexible',
+        aprBps: 1000,
+      });
+      const eur = await bank.earn.createPool({
+        assetId: 'EUR',
+        kind: 'flexible',
+        name: 'EUR flexible',
+        aprBps: 800,
+      });
+      await fundUser(ledger, USER, '1000', 'USDT');
+      await fundUser(ledger, USER, '400', 'EUR');
+      await fundUser(ledger, OTHER, '200', 'USDT');
+      const usdtOpen = await bank.earn.deposit({ poolId: usdt.id, userId: USER, amount: amount('300') });
+      const eurOpen = await bank.earn.deposit({ poolId: eur.id, userId: USER, amount: amount('150') });
+      const closed = await bank.earn.deposit({ poolId: usdt.id, userId: USER, amount: amount('50') });
+      await bank.earn.withdraw(closed.id);
+      await sql`
+        INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
+        VALUES (
+          ${'cccccccc-cccc-4ccc-8ccc-cccccccccccc'},
+          ${usdt.id},
+          ${USER},
+          'USDT',
+          ${'25'}::numeric,
+          ${new Date('2026-03-01T00:00:00Z')},
+          ${null},
+          'pending'
+        )
+      `;
+      await bank.earn.deposit({ poolId: usdt.id, userId: OTHER, amount: amount('200') });
+
+      const user = signedCaller(bank, principal(USER, ['bank:read', 'bank:write']));
+      const omitted = await user.earn.positions({});
+      expect(omitted.map((p) => p.id).sort()).toEqual([usdtOpen.id, eurOpen.id].sort());
+      expect(omitted.every((p) => p.assetId === 'USDT' || p.assetId === 'EUR')).toBe(true);
+      expect(omitted.find((p) => p.id === usdtOpen.id)?.principal).toBe('300');
+
+      expect(await user.earn.positions({ assetId: 'USDT' })).toEqual([
+        expect.objectContaining({ id: usdtOpen.id, assetId: 'USDT', principal: '300' }),
+      ]);
+      expect(await user.earn.positions({ assetId: 'BTC' })).toEqual([]);
+
+      const stranger = signedCaller(bank, principal(OTHER, ['bank:read']));
+      expect(await stranger.earn.positions({ assetId: 'USDT' })).toEqual([expect.objectContaining({ assetId: 'USDT', principal: '200' })]);
+      expect(await stranger.earn.positions({})).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: usdtOpen.id })]));
+    });
+
+    it('rejects an empty or too-long assetId on earn.positions at zod before the service', async () => {
+      const user = signedCaller(bank, principal(USER, ['bank:read']));
+      const empty = await user.earn.positions({ assetId: '' }).catch((e: unknown) => e);
+      expect((empty as { code?: string }).code).toBe('BAD_REQUEST');
+      const tooLong = await user.earn.positions({ assetId: '12345678901234567' }).catch((e: unknown) => e);
+      expect((tooLong as { code?: string }).code).toBe('BAD_REQUEST');
     });
 
     it('ops.accrueInterest refuses by name when no yield rate is configured', async () => {

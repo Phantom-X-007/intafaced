@@ -1402,6 +1402,46 @@ if (!available) {
       await expect(bank.earn.listPools()).rejects.toMatchObject({ code: 'bank.earn_rate_unset' });
     });
 
+    it('filters positionsOf by assetId in SQL and never throws earn_rate_unset', async () => {
+      const usdt = await openPool({ assetId: 'USDT' });
+      const eur = await openPool({ assetId: 'EUR' });
+      await fund(USER_A, 'USDT', '1000');
+      await fund(USER_A, 'EUR', '400');
+      await fund(USER_B, 'USDT', '200');
+      const usdtOpen = await bank.earn.deposit({ poolId: usdt.id, userId: USER_A, amount: amt('300') });
+      const eurOpen = await bank.earn.deposit({ poolId: eur.id, userId: USER_A, amount: amt('150') });
+      const closed = await bank.earn.deposit({ poolId: usdt.id, userId: USER_A, amount: amt('50') });
+      await bank.earn.withdraw(closed.id);
+      await sql`
+        INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
+        VALUES (
+          ${'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'},
+          ${usdt.id},
+          ${USER_A},
+          'USDT',
+          ${'25'}::numeric,
+          ${new Date('2026-03-01T00:00:00Z')},
+          ${null},
+          'pending'
+        )
+      `;
+      await bank.earn.deposit({ poolId: usdt.id, userId: USER_B, amount: amt('200') });
+
+      const omitted = await bank.earn.positionsOf(USER_A);
+      expect(omitted.map((p) => p.id).sort()).toEqual([usdtOpen.id, eurOpen.id].sort());
+      expect(omitted.every((p) => p.status === 'active')).toBe(true);
+
+      expect(await bank.earn.positionsOf(USER_A, 'USDT')).toEqual([
+        expect.objectContaining({ id: usdtOpen.id, assetId: 'USDT', status: 'active' }),
+      ]);
+      expect(await bank.earn.positionsOf(USER_A, 'BTC')).toEqual([]);
+      expect(await bank.earn.positionsOf(USER_B, 'USDT')).toEqual([
+        expect.objectContaining({ userId: USER_B, assetId: 'USDT', status: 'active' }),
+      ]);
+      expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('300');
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('300');
+    });
+
     it('filters listPools by kind in SQL and returns [] on a kind leftover miss', async () => {
       const flexible = await openPool({ kind: 'flexible', apr: 1000 });
       const fixed = await openPool({ kind: 'fixed', termDays: 90, apr: 2000 });

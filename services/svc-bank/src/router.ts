@@ -852,6 +852,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     positions: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
       .output(
         z.array(
           z.object({
@@ -863,9 +864,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }),
         ),
       )
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const positions = await bank.earn.positionsOf(ctx.principal.userId);
+          const positions = await bank.earn.positionsOf(ctx.principal.userId, input.assetId);
           return positions.map((p) => ({
             id: p.id,
             poolId: p.poolId,

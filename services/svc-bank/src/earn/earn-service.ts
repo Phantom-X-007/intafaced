@@ -452,10 +452,14 @@ export class EarnService {
     return toPosition(row);
   }
 
-  async positionsOf(userId: string): Promise<PositionRecord[]> {
+  async positionsOf(userId: string, assetId?: string): Promise<PositionRecord[]> {
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
-        FROM bank.earn_positions WHERE user_id = ${userId} AND status = 'active' ORDER BY opened_at DESC
+        FROM bank.earn_positions
+       WHERE user_id = ${userId}
+         AND status = 'active'
+             ${assetId ? this.sql`AND asset_id = ${assetId}` : this.sql``}
+       ORDER BY opened_at DESC
     `;
     return rows.map(toPosition);
   }
