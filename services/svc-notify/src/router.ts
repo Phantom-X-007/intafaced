@@ -401,9 +401,11 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * tells a stranger which notification ids exist.
        */
       deliveries: scopedProcedure('notify:read', { module: 'notify' })
-        .input(z.object({ notificationId: z.string().uuid() }))
+        .input(z.object({ notificationId: z.string().uuid(), channel: channelSchema.optional() }))
         .output(z.array(deliveryOutput))
-        .query(async ({ ctx, input }) => (await notify.deliveriesFor(ctx.principal.userId, input.notificationId)).map(deliveryToWire)),
+        .query(async ({ ctx, input }) =>
+          (await notify.deliveriesFor(ctx.principal.userId, input.notificationId, input.channel)).map(deliveryToWire),
+        ),
 
       /**
        * Operator delivery-outcomes view (`ops.notifications` residual).

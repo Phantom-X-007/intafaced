@@ -210,7 +210,13 @@ export interface DeliveryStore {
    */
   claim(notificationId: string, channel: ChannelId, maxAttempts: number): Promise<ClaimResult>;
   settle(input: SettleInput): Promise<void>;
-  listForNotification(notificationId: string): Promise<DeliveryRecord[]>;
+  /**
+   * Per-notification leftover. Omitted channel returns every channel for that
+   * id, still sorted channel ASC. Provided channel exact-matches in the store
+   * (`AND channel = $channel`), never a mixed-page post-filter. Empty match
+   * is `[]`. Does not invent a row.
+   */
+  listForNotification(notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]>;
   /**
    * Operator delivery-outcomes view (D26-P1-O5 residual).
    *
@@ -389,8 +395,10 @@ export class MemoryDeliveryStore implements DeliveryStore {
     record.updatedAt = now;
   }
 
-  async listForNotification(notificationId: string): Promise<DeliveryRecord[]> {
-    return [...this.byId.values()].filter((r) => r.notificationId === notificationId).sort((a, b) => a.channel.localeCompare(b.channel));
+  async listForNotification(notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]> {
+    return [...this.byId.values()]
+      .filter((r) => r.notificationId === notificationId && (channel === undefined || r.channel === channel))
+      .sort((a, b) => a.channel.localeCompare(b.channel));
   }
 
   async listRecent(limit: number, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
@@ -684,10 +692,12 @@ export class PostgresDeliveryStore implements DeliveryStore {
     `;
   }
 
-  async listForNotification(notificationId: string): Promise<DeliveryRecord[]> {
+  async listForNotification(notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]> {
+    const channelMatch = channel !== undefined ? this.sql`AND channel = ${channel}` : this.sql``;
     const rows = await this.sql<DeliveryPgRow[]>`
       SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
        WHERE notification_id = ${notificationId}
+         ${channelMatch}
        ORDER BY channel ASC
     `;
     return rows.map(fromDeliveryPg);

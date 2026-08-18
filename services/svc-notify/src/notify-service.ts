@@ -3,7 +3,7 @@ import type { InsertNotificationInput, ListQuery, ListResult, Notification, Noti
 import type { ChannelTarget, DeliveryRecord, DeliveryStatus, DeliveryStore, TargetStore } from './channel-store.js';
 import type { DispatchReport, NotificationDispatcher } from './dispatch.js';
 import type { ChannelRegistry, ChannelStatus } from './channels/registry.js';
-import { ChannelRefusal, type OutOfAppChannel, type RefusalCode } from './channels/channel.js';
+import { ChannelRefusal, type ChannelId, type OutOfAppChannel, type RefusalCode } from './channels/channel.js';
 import { normaliseLocale, renderVerification } from './channels/render.js';
 import { withNotifySpan } from './tracing.js';
 import { allMuteableChannels, type ChannelMutePrefs, type MuteStore, type MuteableChannel } from './preferences/mute.js';
@@ -300,14 +300,15 @@ export class NotifyService {
    * Scoped by loading the notification under the caller's id FIRST, so a
    * delivery record is only ever returned for a row the caller owns. An id
    * belonging to somebody else returns an empty list rather than an error that
-   * would confirm it exists.
+   * would confirm it exists. Optional channel is an exact-match leftover after
+   * that ownership check — never a way to probe a foreign id.
    */
-  async deliveriesFor(userId: string, notificationId: string): Promise<DeliveryRecord[]> {
+  async deliveriesFor(userId: string, notificationId: string, channel?: ChannelId): Promise<DeliveryRecord[]> {
     return withNotifySpan('notify.deliveries', { op: 'deliveries' }, async () => {
       if (!this.deps) return [];
       const own = await this.store.findById(userId, notificationId);
       if (!own) return [];
-      return this.deps.deliveries.listForNotification(notificationId);
+      return this.deps.deliveries.listForNotification(notificationId, channel);
     });
   }
 

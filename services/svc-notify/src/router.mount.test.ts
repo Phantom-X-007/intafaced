@@ -325,6 +325,45 @@ describe('svc-notify mount — authorisation', () => {
       code: 'BAD_REQUEST',
     });
   });
+
+  it('deliveries omits channel and still asks for every leftover of the owned id', async () => {
+    const noteId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    let listed: { userId: string; notificationId: string; channel?: string } | null = null;
+    const notify = stubNotify({
+      deliveriesFor: async (userId: string, notificationId: string, channel?: string) => {
+        listed = { userId, notificationId, ...(channel !== undefined ? { channel } : {}) };
+        return [];
+      },
+    });
+    await expect(createNotifyRouter(notify).createCaller(signed()).notify.deliveries({ notificationId: noteId })).resolves.toEqual([]);
+    expect(listed).toEqual({ userId: USER, notificationId: noteId });
+    expect(listed).not.toHaveProperty('channel');
+  });
+
+  it('deliveries forwards channel exact-match including inapp', async () => {
+    const noteId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    let listed: { userId: string; notificationId: string; channel?: string } | null = null;
+    const notify = stubNotify({
+      deliveriesFor: async (userId: string, notificationId: string, channel?: string) => {
+        listed = { userId, notificationId, ...(channel !== undefined ? { channel } : {}) };
+        return [];
+      },
+    });
+    await createNotifyRouter(notify).createCaller(signed()).notify.deliveries({ notificationId: noteId, channel: 'inapp' });
+    expect(listed).toEqual({ userId: USER, notificationId: noteId, channel: 'inapp' });
+  });
+
+  it('deliveries refuses an unknown channel at the door', async () => {
+    const caller = createNotifyRouter(stubNotify()).createCaller(signed());
+    await expect(
+      caller.notify.deliveries({
+        notificationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        channel: 'fax' as unknown as 'email',
+      }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
 });
 
 describe('svc-notify mount — public surface', () => {
