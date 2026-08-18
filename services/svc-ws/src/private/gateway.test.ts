@@ -791,6 +791,29 @@ describe('private WebSocket gateway', () => {
     client.socket.close();
   });
 
+  it('reconnect snapshot does not invent a symbol for the open-position read', async () => {
+    const seen: Array<{ accessToken: string; userId: string; symbol?: string }> = [];
+    await boot({
+      tokens,
+      book: {
+        async listOpenOrders() {
+          return [];
+        },
+        async listOpenPositions(input) {
+          seen.push(input);
+          return [];
+        },
+      },
+    });
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=positions`);
+    await client.untilSnapshot('positions');
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.userId).toBe(USER);
+    expect(seen[0]!.symbol).toBeUndefined();
+    client.socket.close();
+  });
+
   it('sends an empty orders snapshot when the user has none', async () => {
     await boot();
     const token = await accessToken(['trade:read']);

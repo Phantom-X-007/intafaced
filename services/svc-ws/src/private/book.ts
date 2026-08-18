@@ -17,9 +17,16 @@ export interface ListOpenOrdersInput {
   readonly symbol?: string;
 }
 
+export interface ListOpenPositionsInput {
+  readonly accessToken: string;
+  readonly userId: string;
+  /** Unified symbol. Omitted or empty → full open positions (no query). */
+  readonly symbol?: string;
+}
+
 export interface PrivateBookPort {
   listOpenOrders(input: ListOpenOrdersInput): Promise<readonly PrivateOrderUpdate[]>;
-  listOpenPositions(input: { accessToken: string; userId: string }): Promise<readonly PrivatePositionUpdate[]>;
+  listOpenPositions(input: ListOpenPositionsInput): Promise<readonly PrivatePositionUpdate[]>;
 }
 
 export class PrivateBookError extends Error {
@@ -173,6 +180,14 @@ export function openOrdersPath(symbol?: string): string {
   return `/api/v1/orders/open?symbol=${encodeURIComponent(symbol)}`;
 }
 
+/** Trade already filters `GET /api/v1/positions?symbol=`. Empty/omitted → full open positions. */
+export function openPositionsPath(symbol?: string): string {
+  if (typeof symbol !== 'string' || symbol.length === 0) {
+    return '/api/v1/positions';
+  }
+  return `/api/v1/positions?symbol=${encodeURIComponent(symbol)}`;
+}
+
 /**
  * svc-trade private REST: `GET /api/v1/orders/open` and `GET /api/v1/positions`.
  *
@@ -203,8 +218,8 @@ export class HttpPrivateBookPort implements PrivateBookPort {
     }
   }
 
-  async listOpenPositions(input: { accessToken: string; userId: string }): Promise<readonly PrivatePositionUpdate[]> {
-    const body = await this.#get('/api/v1/positions', input.accessToken);
+  async listOpenPositions(input: ListOpenPositionsInput): Promise<readonly PrivatePositionUpdate[]> {
+    const body = await this.#get(openPositionsPath(input.symbol), input.accessToken);
     if (body === null) return [];
     try {
       return parseOpenPositionList(body, input.userId);
