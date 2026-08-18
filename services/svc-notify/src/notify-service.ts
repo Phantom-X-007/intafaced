@@ -137,6 +137,7 @@ export class NotifyService {
       span.setAttribute('intafaced.notify.unread_only', query.unreadOnly);
       span.setAttribute('intafaced.notify.limit', query.limit);
       if (query.kind !== undefined) span.setAttribute('intafaced.notify.kind', query.kind);
+      if (query.severity !== undefined) span.setAttribute('intafaced.notify.severity', query.severity);
       const result = await this.store.list(query);
       span.setAttribute('intafaced.notify.item_count', result.items.length);
       return result;

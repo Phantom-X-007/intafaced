@@ -226,6 +226,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
               limit: z.number().int().min(1).max(100).optional(),
               unreadOnly: z.boolean().optional(),
               kind: z.string().min(1).max(128).optional(),
+              severity: severitySchema.optional(),
             })
             .optional(),
         )
@@ -242,6 +243,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
             limit: input?.limit ?? 20,
             unreadOnly: input?.unreadOnly ?? false,
             ...(input?.kind !== undefined ? { kind: input.kind } : {}),
+            ...(input?.severity !== undefined ? { severity: input.severity } : {}),
           });
           return {
             items: result.items.map(toWire),

@@ -115,9 +115,9 @@ describe('svc-notify mount — authorisation', () => {
   });
 
   it('list without kind still asks for the full principal page', async () => {
-    let query: { userId: string; unreadOnly: boolean; kind?: string } | null = null;
+    let query: { userId: string; unreadOnly: boolean; kind?: string; severity?: string } | null = null;
     const notify = stubNotify({
-      list: async (q: { userId: string; unreadOnly: boolean; kind?: string }) => {
+      list: async (q: { userId: string; unreadOnly: boolean; kind?: string; severity?: string }) => {
         query = q;
         return { items: [], nextCursor: null };
       },
@@ -129,12 +129,13 @@ describe('svc-notify mount — authorisation', () => {
     });
     expect(query).toMatchObject({ userId: USER, unreadOnly: false });
     expect(query).not.toHaveProperty('kind');
+    expect(query).not.toHaveProperty('severity');
   });
 
   it('list forwards kind exact-match and composes with unreadOnly', async () => {
-    let query: { userId: string; unreadOnly: boolean; kind?: string } | null = null;
+    let query: { userId: string; unreadOnly: boolean; kind?: string; severity?: string } | null = null;
     const notify = stubNotify({
-      list: async (q: { userId: string; unreadOnly: boolean; kind?: string }) => {
+      list: async (q: { userId: string; unreadOnly: boolean; kind?: string; severity?: string }) => {
         query = q;
         return { items: [], nextCursor: null };
       },
@@ -144,11 +145,38 @@ describe('svc-notify mount — authorisation', () => {
       createNotifyRouter(notify).createCaller(signed()).notify.list({ kind: 'p2p.escrow.locked', unreadOnly: true }),
     ).resolves.toEqual({ items: [], nextCursor: null });
     expect(query).toEqual(expect.objectContaining({ userId: USER, unreadOnly: true, kind: 'p2p.escrow.locked' }));
+    expect(query).not.toHaveProperty('severity');
   });
 
   it('list refuses an empty kind', async () => {
     const notify = stubNotify();
     await expect(createNotifyRouter(notify).createCaller(signed()).notify.list({ kind: '' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
+  it('list forwards severity exact-match and composes with unreadOnly and kind', async () => {
+    let query: { userId: string; unreadOnly: boolean; kind?: string; severity?: string } | null = null;
+    const notify = stubNotify({
+      list: async (q: { userId: string; unreadOnly: boolean; kind?: string; severity?: string }) => {
+        query = q;
+        return { items: [], nextCursor: null };
+      },
+    });
+
+    await expect(
+      createNotifyRouter(notify).createCaller(signed()).notify.list({ kind: 'bank.margin_call', unreadOnly: true, severity: 'critical' }),
+    ).resolves.toEqual({ items: [], nextCursor: null });
+    expect(query).toEqual(expect.objectContaining({ userId: USER, unreadOnly: true, kind: 'bank.margin_call', severity: 'critical' }));
+  });
+
+  it('list refuses a severity outside info|action|critical', async () => {
+    const notify = stubNotify();
+    await expect(
+      createNotifyRouter(notify)
+        .createCaller(signed())
+        .notify.list({ severity: 'warn' as unknown as 'info' }),
+    ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
     });
   });

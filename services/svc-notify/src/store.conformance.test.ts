@@ -320,6 +320,123 @@ for (const engine of ENGINES) {
       expect(new Set(all.map((r) => r.id))).toEqual(new Set(matched.map((r) => r.id)));
     });
 
+    it('omitted severity returns every notification for the caller', async () => {
+      await seed(USER, 2);
+      const otherSeverity = await store.insert({
+        userId: USER,
+        kind: 'p2p.escrow.locked',
+        titleKey: 'notify.p2p.escrow.locked.title',
+        bodyKey: 'notify.p2p.escrow.locked.body',
+        severity: 'info',
+        sourceSubject: 'intafaced.p2p.escrow.locked',
+        sourceIdempotencyKey: 'severity-other-1',
+      });
+      expect(otherSeverity.inserted).toBe(true);
+
+      const page = await store.list({ userId: USER, limit: 50, unreadOnly: false });
+      expect(page.items).toHaveLength(3);
+    });
+
+    it('severity exact-matches notification.severity', async () => {
+      await seed(USER, 2);
+      const matched = await store.insert({
+        userId: USER,
+        kind: 'p2p.escrow.locked',
+        titleKey: 'notify.p2p.escrow.locked.title',
+        bodyKey: 'notify.p2p.escrow.locked.body',
+        severity: 'action',
+        sourceSubject: 'intafaced.p2p.escrow.locked',
+        sourceIdempotencyKey: 'severity-match-1',
+      });
+      expect(matched.inserted).toBe(true);
+
+      const page = await store.list({ userId: USER, limit: 50, unreadOnly: false, severity: 'action' });
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]!.id).toBe(matched.notification!.id);
+      expect(page.items[0]!.severity).toBe('action');
+    });
+
+    it('severity miss returns empty items, never an invented row', async () => {
+      await seed(USER, 2);
+
+      const page = await store.list({ userId: USER, limit: 50, unreadOnly: false, severity: 'info' });
+      expect(page.items).toEqual([]);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('unreadOnly, kind and severity compose inside the filtered set', async () => {
+      const margin = await seed(USER, 2);
+      await store.markRead(USER, [margin[0]!.id]);
+      const locked = await store.insert({
+        userId: USER,
+        kind: 'p2p.escrow.locked',
+        titleKey: 'notify.p2p.escrow.locked.title',
+        bodyKey: 'notify.p2p.escrow.locked.body',
+        severity: 'action',
+        sourceSubject: 'intafaced.p2p.escrow.locked',
+        sourceIdempotencyKey: 'severity-compose-1',
+      });
+      expect(locked.inserted).toBe(true);
+      const actionMargin = await store.insert({
+        userId: USER,
+        kind: 'bank.margin_call',
+        titleKey: 'notify.bank.margin_call.title',
+        bodyKey: 'notify.bank.margin_call.body',
+        severity: 'action',
+        sourceSubject: 'intafaced.bank.margin_call.created',
+        sourceIdempotencyKey: 'severity-compose-2',
+      });
+      expect(actionMargin.inserted).toBe(true);
+
+      const page = await store.list({
+        userId: USER,
+        limit: 50,
+        unreadOnly: true,
+        kind: 'bank.margin_call',
+        severity: 'critical',
+      });
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0]!.id).toBe(margin[1]!.id);
+      expect(page.items[0]!.kind).toBe('bank.margin_call');
+      expect(page.items[0]!.severity).toBe('critical');
+      expect(page.items[0]!.readAt).toBeNull();
+    });
+
+    it('severity filters, and paging within it stays filtered', async () => {
+      const matched = [];
+      for (let i = 0; i < 3; i += 1) {
+        const result = await store.insert({
+          userId: USER,
+          kind: 'p2p.escrow.locked',
+          titleKey: 'notify.p2p.escrow.locked.title',
+          bodyKey: 'notify.p2p.escrow.locked.body',
+          severity: 'action',
+          sourceSubject: 'intafaced.p2p.escrow.locked',
+          sourceIdempotencyKey: `severity-page-${i}`,
+        });
+        expect(result.inserted).toBe(true);
+        matched.push(result.notification!);
+      }
+      await seed(USER, 2, 'noise');
+
+      const page1 = await store.list({ userId: USER, limit: 2, unreadOnly: false, severity: 'action' });
+      expect(page1.items).toHaveLength(2);
+      expect(page1.items.every((r) => r.severity === 'action')).toBe(true);
+      expect(page1.nextCursor).toBe(page1.items[page1.items.length - 1]!.id);
+
+      const page2 = await store.list({
+        userId: USER,
+        cursor: page1.nextCursor,
+        limit: 2,
+        unreadOnly: false,
+        severity: 'action',
+      });
+      const all = [...page1.items, ...page2.items];
+      expect(all).toHaveLength(3);
+      expect(all.every((r) => r.severity === 'action')).toBe(true);
+      expect(new Set(all.map((r) => r.id))).toEqual(new Set(matched.map((r) => r.id)));
+    });
+
     it('never lists, finds or counts another user', async () => {
       const mine = await seed(USER, 2);
       await seed(OTHER_USER, 3, 'theirs');

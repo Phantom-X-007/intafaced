@@ -44,6 +44,8 @@ export interface ListQuery {
   unreadOnly: boolean;
   /** Exact match on `notification.kind`. Omitted means every kind for the caller. */
   kind?: string;
+  /** Exact match on `notification.severity`. Omitted means every severity for the caller. */
+  severity?: Severity;
 }
 
 export interface ListResult {
@@ -125,6 +127,7 @@ export class MemoryNotifyStore implements NotifyStore {
     let rows = [...this.byId.values()].filter((r) => r.userId === query.userId);
     if (query.unreadOnly) rows = rows.filter((r) => r.readAt === null);
     if (query.kind !== undefined) rows = rows.filter((r) => r.kind === query.kind);
+    if (query.severity !== undefined) rows = rows.filter((r) => r.severity === query.severity);
     // Plain ordinal comparison on the tiebreak, matching `ORDER BY id DESC` on a
     // uuid column. `localeCompare` is locale-dependent, and the filter below has
     // always used `<` — two orderings deciding one page is how a row gets served
@@ -299,6 +302,7 @@ export class PostgresNotifyStore implements NotifyStore {
      */
     const unread = query.unreadOnly ? this.sql`AND read_at IS NULL` : this.sql``;
     const kind = query.kind !== undefined ? this.sql`AND kind = ${query.kind}` : this.sql``;
+    const severity = query.severity !== undefined ? this.sql`AND severity = ${query.severity}` : this.sql``;
 
     const rows = query.cursor
       ? await this.sql<PgRow[]>`
@@ -308,6 +312,7 @@ export class PostgresNotifyStore implements NotifyStore {
           WHERE user_id = ${query.userId}
             ${unread}
             ${kind}
+            ${severity}
             AND (created_at, id) < (
               SELECT created_at, id FROM notify.notifications
                WHERE id = ${query.cursor} AND user_id = ${query.userId}
@@ -322,6 +327,7 @@ export class PostgresNotifyStore implements NotifyStore {
           WHERE user_id = ${query.userId}
             ${unread}
             ${kind}
+            ${severity}
           ORDER BY created_at DESC, id DESC
           LIMIT ${limit + 1}
         `;

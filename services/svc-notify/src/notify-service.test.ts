@@ -145,6 +145,78 @@ describe('NotifyService — dedupe + self-only mark', () => {
     expect(page.items[0]!.id).toBe(second.notification!.id);
     expect(page.items[0]!.readAt).toBeNull();
   });
+
+  it('list omits severity and returns every notification for the caller', async () => {
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'a', severity: 'info' }));
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'b', severity: 'critical' }));
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: false });
+    expect(page.items).toHaveLength(2);
+  });
+
+  it('list exact-matches severity', async () => {
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'a', severity: 'info' }));
+    const action = await notify.create(baseInsert({ sourceIdempotencyKey: 'b', severity: 'action' }));
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: false, severity: 'action' });
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]!.id).toBe(action.notification!.id);
+    expect(page.items[0]!.severity).toBe('action');
+  });
+
+  it('list severity miss returns empty items', async () => {
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'a', severity: 'info' }));
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: false, severity: 'critical' });
+    expect(page.items).toEqual([]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('list unreadOnly, kind and severity compose', async () => {
+    const first = await notify.create(baseInsert({ sourceIdempotencyKey: 'a', kind: 'bank.margin_call', severity: 'critical' }));
+    const second = await notify.create(baseInsert({ sourceIdempotencyKey: 'b', kind: 'bank.margin_call', severity: 'critical' }));
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'c', kind: 'bank.margin_call', severity: 'action' }));
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'd', kind: 'p2p.escrow.locked', severity: 'critical' }));
+    await notify.markRead(USER, [first.notification!.id]);
+
+    const page = await notify.list({
+      userId: USER,
+      limit: 10,
+      unreadOnly: true,
+      kind: 'bank.margin_call',
+      severity: 'critical',
+    });
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]!.id).toBe(second.notification!.id);
+    expect(page.items[0]!.readAt).toBeNull();
+    expect(page.items[0]!.severity).toBe('critical');
+  });
+
+  it('list severity paging stays inside the filtered set', async () => {
+    const matched = [];
+    for (let i = 0; i < 3; i += 1) {
+      const row = await notify.create(baseInsert({ sourceIdempotencyKey: `sev-${i}`, severity: 'action' }));
+      matched.push(row.notification!.id);
+    }
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'noise', severity: 'info' }));
+
+    const page1 = await notify.list({ userId: USER, limit: 2, unreadOnly: false, severity: 'action' });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.items.every((r) => r.severity === 'action')).toBe(true);
+    expect(page1.nextCursor).toBeTruthy();
+
+    const page2 = await notify.list({
+      userId: USER,
+      limit: 2,
+      unreadOnly: false,
+      cursor: page1.nextCursor!,
+      severity: 'action',
+    });
+    const all = [...page1.items, ...page2.items];
+    expect(all).toHaveLength(3);
+    expect(all.every((r) => r.severity === 'action')).toBe(true);
+    expect(new Set(all.map((r) => r.id))).toEqual(new Set(matched));
+  });
 });
 
 describe('event fan-out', () => {
