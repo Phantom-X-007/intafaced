@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount, ZERO } from '@intafaced/ledger-client';
-import type { TradeAdapter, VenueOrder } from '@intafaced/venue-contracts';
+import { VenueUnavailableError, type TradeAdapter, type VenueOrder } from '@intafaced/venue-contracts';
 import { tradeAdapterOpenOrders } from './oms-trade-open-orders.js';
 
 const now = new Date('2026-08-17T12:00:00.000Z');
@@ -118,5 +118,40 @@ describe('tradeAdapterOpenOrders', () => {
     expect(await list(undefined, undefined, undefined, undefined, undefined, 'ETH')).toEqual([]);
     expect(await list()).toHaveLength(2);
     expect((await list())[0]?.feeAsset).toBe('USDT');
+  });
+
+  it('filters by acknowledged status without inventing a row; pending still dropped', async () => {
+    const list = tradeAdapterOpenOrders(
+      adapter([
+        order(),
+        order({
+          clientOrderId: 'pf-1',
+          venueOrderId: 'v-5',
+          status: 'partially_filled',
+          filled: parseAmount('0.4'),
+          remaining: parseAmount('0.6'),
+        }),
+        order({ clientOrderId: 'p', status: 'pending', venueOrderId: null }),
+      ]),
+    );
+    expect((await list(undefined, undefined, undefined, undefined, undefined, undefined, 'partially_filled')).map((o) => o.status)).toEqual(
+      ['partially_filled'],
+    );
+    expect((await list(undefined, undefined, undefined, undefined, undefined, undefined, 'open')).map((o) => o.status)).toEqual(['open']);
+    const onlyOpen = tradeAdapterOpenOrders(adapter([order()]));
+    expect(await onlyOpen(undefined, undefined, undefined, undefined, undefined, undefined, 'partially_filled')).toEqual([]);
+    const unfiltered = await list();
+    expect(unfiltered).toHaveLength(2);
+    expect(unfiltered.map((o) => o.status)).toEqual(['open', 'partially_filled']);
+  });
+
+  it('propagates venue not_ready — does not invent an open book', async () => {
+    const list = tradeAdapterOpenOrders({
+      ...adapter([]),
+      openOrders: async () => {
+        throw new VenueUnavailableError('street', 'not_ready', 'openOrders: not built');
+      },
+    });
+    await expect(list()).rejects.toBeInstanceOf(VenueUnavailableError);
   });
 });

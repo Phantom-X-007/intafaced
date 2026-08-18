@@ -7,10 +7,14 @@
  * without inventing the other. Optional clientOrderId narrows the
  * idempotency key without inventing a row. Optional venueOrderId narrows the
  * venue's id without inventing a row. Optional feeAsset narrows the fee
- * currency without inventing a row. Pending still dropped. Null feeAsset
- * stays null and does not match a provided asset.
+ * currency without inventing a row. Optional status narrows acknowledged
+ * open / partially_filled without inventing a row. Omitted status still
+ * returns every acknowledged open. Pending still dropped, never rewritten.
+ * Null feeAsset stays null and does not match a provided asset.
  */
 import type { TradeAdapter, VenueOrder, VenueOrderType } from '@intafaced/venue-contracts';
+
+export type OmsAcknowledgedOpenStatus = 'open' | 'partially_filled';
 
 export type OmsOpenOrdersFn = (
   symbol?: string,
@@ -19,10 +23,11 @@ export type OmsOpenOrdersFn = (
   clientOrderId?: string,
   venueOrderId?: string,
   feeAsset?: string,
+  status?: OmsAcknowledgedOpenStatus,
 ) => Promise<VenueOrder[]>;
 
 export function tradeAdapterOpenOrders(adapter: TradeAdapter): OmsOpenOrdersFn {
-  return async (symbol, side, type, clientOrderId, venueOrderId, feeAsset) => {
+  return async (symbol, side, type, clientOrderId, venueOrderId, feeAsset, status) => {
     const orders = await adapter.openOrders(symbol);
     return orders.filter(
       (order) =>
@@ -31,7 +36,8 @@ export function tradeAdapterOpenOrders(adapter: TradeAdapter): OmsOpenOrdersFn {
         (!type || order.type === type) &&
         (!clientOrderId || order.clientOrderId === clientOrderId) &&
         (!venueOrderId || order.venueOrderId === venueOrderId) &&
-        (!feeAsset || order.feeAsset === feeAsset),
+        (!feeAsset || order.feeAsset === feeAsset) &&
+        (!status || order.status === status),
     );
   };
 }
