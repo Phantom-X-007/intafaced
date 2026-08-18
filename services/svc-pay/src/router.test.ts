@@ -1369,15 +1369,34 @@ describe('payment links are capability URLs on the wire too', () => {
     await api.merchant.listLinks({ merchantId: MERCHANT, active: false });
 
     const lists = stub.calls.filter((c) => c.method === 'listPaymentLinks');
-    expect(lists[0]!.args).toEqual([MERCHANT, undefined]);
-    expect(lists[1]!.args).toEqual([MERCHANT, true]);
-    expect(lists[2]!.args).toEqual([MERCHANT, false]);
+    expect(lists[0]!.args).toEqual([MERCHANT, undefined, undefined]);
+    expect(lists[1]!.args).toEqual([MERCHANT, true, undefined]);
+    expect(lists[2]!.args).toEqual([MERCHANT, false, undefined]);
+  });
+
+  it('forwards optional currency on listLinks after trim', async () => {
+    const api = await caller(['pay:read']);
+    await api.merchant.listLinks({ merchantId: MERCHANT, currency: ' USDT ' });
+    await api.merchant.listLinks({ merchantId: MERCHANT, active: true, currency: 'USDT' });
+
+    const lists = stub.calls.filter((c) => c.method === 'listPaymentLinks');
+    expect(lists[0]!.args).toEqual([MERCHANT, undefined, 'USDT']);
+    expect(lists[1]!.args).toEqual([MERCHANT, true, 'USDT']);
   });
 
   it('rejects an active that is not a boolean', async () => {
     const api = await caller(['pay:read']);
     const err = await api.merchant.listLinks({ merchantId: MERCHANT, active: 'true' as unknown as boolean }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(stub.calls.filter((c) => c.method === 'listPaymentLinks')).toHaveLength(0);
+  });
+
+  it('rejects an empty or overlong currency at the door', async () => {
+    const api = await caller(['pay:read']);
+    const blank = await api.merchant.listLinks({ merchantId: MERCHANT, currency: '   ' }).catch((e: unknown) => e);
+    const long = await api.merchant.listLinks({ merchantId: MERCHANT, currency: 'X'.repeat(17) }).catch((e: unknown) => e);
+    expect(codeOf(blank)).toBe('BAD_REQUEST');
+    expect(codeOf(long)).toBe('BAD_REQUEST');
     expect(stub.calls.filter((c) => c.method === 'listPaymentLinks')).toHaveLength(0);
   });
 

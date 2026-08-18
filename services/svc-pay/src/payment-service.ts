@@ -112,6 +112,8 @@ export type PayErrorCode =
   | 'pay.link_exhausted'
   /** A merchant asked for a link that never expires, or one past the lifetime cap. */
   | 'pay.link_expiry_invalid'
+  /** List filter `currency` was empty after trim or longer than the asset-id bound. */
+  | 'pay.currency_filter_invalid'
   // ── Hosted checkout (public, unauthenticated — `openCheckoutSession`) ──
   | 'pay.checkout_session_not_found'
   | 'pay.checkout_session_expired'
@@ -1070,6 +1072,7 @@ export class PayService {
   async listPaymentLinks(
     merchantId: string,
     active?: boolean,
+    currency?: string,
   ): Promise<
     Array<{
       id: string;
@@ -1084,6 +1087,13 @@ export class PayService {
       createdAt: string;
     }>
   > {
+    let currencyFilter: string | undefined;
+    if (currency !== undefined) {
+      currencyFilter = currency.trim();
+      if (currencyFilter.length < 1 || currencyFilter.length > 16) {
+        throw new PayError('currency filter must be 1 to 16 characters after trim', 'pay.currency_filter_invalid');
+      }
+    }
     await this.getMerchant(merchantId);
     const rows = await this.sql<
       Array<{
@@ -1103,6 +1113,7 @@ export class PayService {
         FROM pay.payment_links
        WHERE merchant_id = ${merchantId}
          ${active === undefined ? this.sql`` : this.sql`AND active = ${active}`}
+         ${currencyFilter === undefined ? this.sql`` : this.sql`AND currency = ${currencyFilter}`}
        ORDER BY created_at DESC
     `;
     return rows.map((r) => ({

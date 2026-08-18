@@ -1990,8 +1990,55 @@ if (!available) {
       expect(await pay.listPaymentLinks(other.id, false)).toEqual([]);
     });
 
+    it('lists mixed currencies when currency is omitted, and exact sets when it is not', async () => {
+      const m = await merchant();
+      const other = await merchant(250, OTHER_USER);
+      const usdt = await pay.createPaymentLink({ merchantId: m.id, label: 'USDT live', amount: amt('10.5'), currency: 'USDT' });
+      const usdc = await pay.createPaymentLink({ merchantId: m.id, label: 'USDC', amount: amt('4'), currency: 'USDC' });
+      const inactiveUsdt = await pay.createPaymentLink({
+        merchantId: m.id,
+        label: 'USDT gone',
+        amount: amt('3'),
+        currency: 'USDT',
+      });
+      await pay.createPaymentLink({ merchantId: other.id, label: 'Other USDT', amount: amt('1'), currency: 'USDT' });
+      expect(await pay.deactivatePaymentLink(m.id, inactiveUsdt.id)).toEqual({ deactivated: true });
+
+      const unfiltered = await pay.listPaymentLinks(m.id);
+      expect(unfiltered.map((row) => row.id).sort()).toEqual([usdt.id, usdc.id, inactiveUsdt.id].sort());
+      expect(unfiltered.every((row) => typeof row.amount === 'string')).toBe(true);
+      expect(unfiltered.find((row) => row.id === usdt.id)?.amount).toMatch(/^10\.5/);
+
+      const onlyUsdt = await pay.listPaymentLinks(m.id, undefined, ' USDT ');
+      expect(onlyUsdt.map((row) => row.id).sort()).toEqual([usdt.id, inactiveUsdt.id].sort());
+      expect(onlyUsdt.every((row) => row.currency === 'USDT')).toBe(true);
+
+      expect(await pay.listPaymentLinks(m.id, undefined, 'EUR')).toEqual([]);
+
+      const activeUsdt = await pay.listPaymentLinks(m.id, true, 'USDT');
+      expect(activeUsdt.map((row) => row.id)).toEqual([usdt.id]);
+      expect(activeUsdt.every((row) => row.active === true && row.currency === 'USDT')).toBe(true);
+
+      const otherUsdt = await pay.listPaymentLinks(other.id, undefined, 'USDT');
+      expect(otherUsdt).toHaveLength(1);
+      expect(otherUsdt[0]!.id).not.toBe(usdt.id);
+    });
+
+    it('refuses an empty or overlong currency filter', async () => {
+      const m = await merchant();
+      await expect(pay.listPaymentLinks(m.id, undefined, '   ')).rejects.toMatchObject({
+        code: 'pay.currency_filter_invalid',
+      });
+      await expect(pay.listPaymentLinks(m.id, undefined, 'X'.repeat(17))).rejects.toMatchObject({
+        code: 'pay.currency_filter_invalid',
+      });
+    });
+
     it('refuses to list links for an unknown merchant', async () => {
       await expect(pay.listPaymentLinks('44444444-4444-4444-8444-444444444444')).rejects.toMatchObject({
+        code: 'pay.merchant_not_found',
+      });
+      await expect(pay.listPaymentLinks('44444444-4444-4444-8444-444444444444', undefined, 'USDT')).rejects.toMatchObject({
         code: 'pay.merchant_not_found',
       });
     });
