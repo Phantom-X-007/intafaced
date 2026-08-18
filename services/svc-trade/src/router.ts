@@ -748,7 +748,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           }),
         ),
 
-      /** Caller's follows only — product desk list. Optional leaderId / region / feeShareKilled exact-match. */
+      /** Caller's follows only — product desk list. Optional leaderId / region / feeShareKilled / marketId exact-match. */
       listMyFollows: scopedProcedure('trade:read', { module: 'trade' })
         .input(
           z
@@ -756,6 +756,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               leaderId: z.string().min(1).max(120).optional(),
               region: z.string().min(1).max(8).optional(),
               feeShareKilled: z.boolean().optional(),
+              marketId: z.string().min(1).max(64).optional(),
             })
             .optional(),
         )

@@ -439,6 +439,43 @@ describe('trade.copy product mount', () => {
     expect(await caller.copy.listMyFollows({ leaderId: LEADER, region: 'SG', feeShareKilled: false })).toHaveLength(1);
   });
 
+  it('listMyFollows optional marketId returns follows whose permittedMarkets contain it; composes with feeShareKilled', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const jur: CopyJurisdictionLaw = { published: true, allowedRegions: ['SG', 'AE'] };
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur }));
+    const caller = router.createCaller(signed());
+    const btc = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const eth = await caller.copy.follow({
+      leaderId: LEADER_B,
+      region: 'AE',
+      permittedMarkets: ['ETH-USDT', 'SOL-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await caller.copy.killFeeShare({ followId: eth.followId });
+    const omitted = await caller.copy.listMyFollows();
+    expect(omitted).toHaveLength(2);
+    expect(omitted.map((f) => f.permittedMarkets[0]).sort()).toEqual(['BTC-USDT', 'ETH-USDT']);
+    const onlyBtc = await caller.copy.listMyFollows({ marketId: 'BTC-USDT' });
+    expect(onlyBtc).toHaveLength(1);
+    expect(onlyBtc[0]?.followId).toBe(btc.followId);
+    const onlyEth = await caller.copy.listMyFollows({ marketId: 'ETH-USDT' });
+    expect(onlyEth).toHaveLength(1);
+    expect(onlyEth[0]?.followId).toBe(eth.followId);
+    expect(await caller.copy.listMyFollows({ marketId: 'DOGE-USDT' })).toEqual([]);
+    expect(await caller.copy.listMyFollows({ marketId: 'BTC-USDT', feeShareKilled: true })).toEqual([]);
+    expect(await caller.copy.listMyFollows({ marketId: 'ETH-USDT', feeShareKilled: true })).toHaveLength(1);
+    await expect(caller.copy.listMyFollows({ marketId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it('planMirror plans within envelope and redelivers the same fillId', async () => {
     const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
     const caller = router.createCaller(signed());

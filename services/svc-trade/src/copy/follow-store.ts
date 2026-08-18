@@ -136,12 +136,19 @@ export interface CopyFollowStore {
   listFollows(): Promise<CopyFollow[]>;
   /**
    * Caller-scoped list — followerId first, never another user's envelope.
-   * Optional leaderId / region / feeShareKilled are exact matches (SQL AND).
-   * Omitted filters return every follow owned by that follower (killed and live).
-   * Already-following checks pass leaderId with region and feeShareKilled
+   * Optional leaderId / region / feeShareKilled / marketId are exact matches (SQL AND).
+   * marketId is containment on permitted_markets (json/jsonb array), not a mixed-page post-filter.
+   * Omitted filters return every follow owned by that follower (killed and live; any market).
+   * Already-following checks pass leaderId with region, feeShareKilled, and marketId
    * omitted so uniqueness stays (follower, leader).
    */
-  listFollowsByFollower(followerId: string, leaderId?: string, region?: string, feeShareKilled?: boolean): Promise<CopyFollow[]>;
+  listFollowsByFollower(
+    followerId: string,
+    leaderId?: string,
+    region?: string,
+    feeShareKilled?: boolean,
+    marketId?: string,
+  ): Promise<CopyFollow[]>;
   getExposure(followId: string): Promise<Amount>;
   setExposure(followId: string, amount: Amount): Promise<void>;
   /**
@@ -295,12 +302,19 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     return [...this.follows.values()];
   }
 
-  async listFollowsByFollower(followerId: string, leaderId?: string, region?: string, feeShareKilled?: boolean): Promise<CopyFollow[]> {
+  async listFollowsByFollower(
+    followerId: string,
+    leaderId?: string,
+    region?: string,
+    feeShareKilled?: boolean,
+    marketId?: string,
+  ): Promise<CopyFollow[]> {
     return [...this.follows.values()].filter((f) => {
       if (f.followerId !== followerId) return false;
       if (leaderId && f.leaderId !== leaderId) return false;
       if (region && f.region !== region) return false;
       if (typeof feeShareKilled === 'boolean' && f.feeShareKilled !== feeShareKilled) return false;
+      if (marketId && !f.envelope.permittedMarkets.includes(marketId)) return false;
       return true;
     });
   }
@@ -621,10 +635,18 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     return rows.map(rowToFollow);
   }
 
-  async listFollowsByFollower(followerId: string, leaderId?: string, region?: string, feeShareKilled?: boolean): Promise<CopyFollow[]> {
+  async listFollowsByFollower(
+    followerId: string,
+    leaderId?: string,
+    region?: string,
+    feeShareKilled?: boolean,
+    marketId?: string,
+  ): Promise<CopyFollow[]> {
     const leaderFilter = leaderId ? this.sql`leader_id = ${leaderId}` : this.sql`TRUE`;
     const regionFilter = region ? this.sql`region = ${region}` : this.sql`TRUE`;
     const killedFilter = typeof feeShareKilled === 'boolean' ? this.sql`fee_share_killed = ${feeShareKilled}` : this.sql`TRUE`;
+    const marketNeedle = marketId ? JSON.stringify([marketId]) : null;
+    const marketFilter = marketNeedle ? this.sql`permitted_markets @> ${marketNeedle}::jsonb` : this.sql`TRUE`;
     const rows = await this.sql<FollowRow[]>`
       SELECT follow_id, follower_id, leader_id, region, permitted_markets,
              max_notional_per_order::text, max_aggregate_exposure::text,
@@ -634,6 +656,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
          AND ${leaderFilter}
          AND ${regionFilter}
          AND ${killedFilter}
+         AND ${marketFilter}
     `;
     return rows.map(rowToFollow);
   }

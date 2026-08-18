@@ -389,6 +389,94 @@ describe('CopyService', () => {
     expect(store.lastArgs).toEqual([FOLLOWER, LEADER_B, undefined, undefined]);
   });
 
+  it('listMyFollows optional marketId is permitted_markets containment in the store; composes with feeShareKilled; omitted returns mixed envelopes', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    const twoRegions: CopyJurisdictionLaw = { published: true, allowedRegions: ['SG', 'AE'] };
+    class SpyStore extends MemoryCopyFollowStore {
+      lastArgs: [string, string | undefined, string | undefined, boolean | undefined, string | undefined] | null = null;
+      override async listFollowsByFollower(
+        followerId: string,
+        leaderId?: string,
+        region?: string,
+        feeShareKilled?: boolean,
+        marketId?: string,
+      ) {
+        this.lastArgs = [followerId, leaderId, region, feeShareKilled, marketId];
+        return super.listFollowsByFollower(followerId, leaderId, region, feeShareKilled, marketId);
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: twoRegions,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    const mineBtc = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const mineEth = await svc.follow(principal, {
+      leaderId: LEADER_B,
+      region: 'AE',
+      permittedMarkets: ['ETH-USDT', 'SOL-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.killFeeShare(principal, { followId: mineEth.followId });
+
+    const omitted = await svc.listMyFollows(principal);
+    expect(omitted).toHaveLength(2);
+    expect(omitted.map((f) => f.permittedMarkets[0]).sort()).toEqual(['BTC-USDT', 'ETH-USDT']);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined, undefined, undefined]);
+
+    const btc = await svc.listMyFollows(principal, { marketId: 'BTC-USDT' });
+    expect(btc).toHaveLength(1);
+    expect(btc[0]?.followId).toBe(mineBtc.followId);
+    expect(btc[0]?.permittedMarkets).toContain('BTC-USDT');
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined, undefined, 'BTC-USDT']);
+
+    const eth = await svc.listMyFollows(principal, { marketId: 'ETH-USDT' });
+    expect(eth).toHaveLength(1);
+    expect(eth[0]?.followId).toBe(mineEth.followId);
+    expect(eth[0]?.permittedMarkets).toContain('ETH-USDT');
+
+    expect(await svc.listMyFollows(principal, { marketId: 'DOGE-USDT' })).toEqual([]);
+
+    expect(await svc.listMyFollows(principal, { marketId: 'BTC-USDT', feeShareKilled: true })).toEqual([]);
+    const composed = await svc.listMyFollows(principal, { marketId: 'ETH-USDT', feeShareKilled: true });
+    expect(composed).toHaveLength(1);
+    expect(composed[0]?.followId).toBe(mineEth.followId);
+    expect(composed[0]?.feeShareKilled).toBe(true);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined, true, 'ETH-USDT']);
+
+    store.lastArgs = null;
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'AE',
+        permittedMarkets: ['SOL-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.lastArgs).toEqual([FOLLOWER, LEADER, undefined, undefined, undefined]);
+  });
+
   it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {
     class RaceStore extends MemoryCopyFollowStore {
       override async listFollowsByFollower() {

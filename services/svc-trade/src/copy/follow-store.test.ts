@@ -7,13 +7,13 @@ import type { CopyFollow } from './follows.js';
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
 const LEADER = '00000000-0000-4000-8000-000000000002';
 
-function follow(followId: string, leaderId = LEADER, region = 'SG'): CopyFollow {
+function follow(followId: string, leaderId = LEADER, region = 'SG', markets: readonly string[] = ['BTC-USDT']): CopyFollow {
   return {
     followId,
     followerId: FOLLOWER,
     leaderId,
     envelope: {
-      permittedMarkets: ['BTC-USDT'],
+      permittedMarkets: [...markets],
       maxNotionalPerOrder: parseAmount('100'),
       maxAggregateExposure: parseAmount('1000'),
       expiresAt: new Date('2026-12-01T00:00:00.000Z'),
@@ -149,5 +149,47 @@ describe('listFollowsByFollower', () => {
     expect(stranger).toHaveLength(1);
     expect(stranger[0]?.followerId).toBe(other);
     expect(await store.listFollowsByFollower(FOLLOWER, 'no-such-leader', undefined, true)).toEqual([]);
+  });
+
+  it('scopes by followerId first; optional marketId is permitted_markets containment and composes with feeShareKilled', async () => {
+    const store = new MemoryCopyFollowStore();
+    const other = '00000000-0000-4000-8000-000000000099';
+    const leaderB = '00000000-0000-4000-8000-000000000003';
+    await store.saveFollow(follow('aaaa1111-1111-4111-8111-111111111111', LEADER, 'SG', ['BTC-USDT']));
+    await store.saveFollow({
+      ...follow('bbbb2222-2222-4222-8222-222222222222', leaderB, 'AE', ['ETH-USDT', 'SOL-USDT']),
+      feeShareKilled: true,
+    });
+    await store.saveFollow({
+      ...follow('cccc3333-3333-4333-8333-333333333333', LEADER, 'SG', ['BTC-USDT']),
+      followerId: other,
+    });
+
+    const omitted = await store.listFollowsByFollower(FOLLOWER);
+    expect(omitted).toHaveLength(2);
+    expect(omitted.map((f) => f.envelope.permittedMarkets[0]).sort()).toEqual(['BTC-USDT', 'ETH-USDT']);
+
+    const btc = await store.listFollowsByFollower(FOLLOWER, undefined, undefined, undefined, 'BTC-USDT');
+    expect(btc).toHaveLength(1);
+    expect(btc[0]?.envelope.permittedMarkets).toContain('BTC-USDT');
+    expect(btc[0]?.leaderId).toBe(LEADER);
+    expect(btc[0]?.followerId).toBe(FOLLOWER);
+
+    const eth = await store.listFollowsByFollower(FOLLOWER, undefined, undefined, undefined, 'ETH-USDT');
+    expect(eth).toHaveLength(1);
+    expect(eth[0]?.envelope.permittedMarkets).toContain('ETH-USDT');
+    expect(eth[0]?.leaderId).toBe(leaderB);
+
+    expect(await store.listFollowsByFollower(FOLLOWER, undefined, undefined, undefined, 'DOGE-USDT')).toEqual([]);
+
+    expect(await store.listFollowsByFollower(FOLLOWER, undefined, undefined, true, 'BTC-USDT')).toEqual([]);
+    const composed = await store.listFollowsByFollower(FOLLOWER, undefined, undefined, true, 'ETH-USDT');
+    expect(composed).toHaveLength(1);
+    expect(composed[0]?.leaderId).toBe(leaderB);
+    expect(composed[0]?.feeShareKilled).toBe(true);
+
+    const stranger = await store.listFollowsByFollower(other, undefined, undefined, undefined, 'BTC-USDT');
+    expect(stranger).toHaveLength(1);
+    expect(stranger[0]?.followerId).toBe(other);
   });
 });

@@ -239,19 +239,22 @@ export class CopyService {
   /**
    * List the caller's own follows (product desk). Store filters by followerId
    * first — never loads another user's envelope. Optional leaderId / region /
-   * feeShareKilled are exact matches in the store (not a post-filter of a mixed
-   * page). Omitted feeShareKilled returns killed and live follows the caller owns.
-   * Empty when none match.
+   * feeShareKilled / marketId are exact matches in the store (not a post-filter
+   * of a mixed page). marketId is permitted_markets containment. Omitted
+   * feeShareKilled / marketId returns killed and live follows the caller owns
+   * across every permitted market. Empty when none match.
    */
-  async listMyFollows(principal: Principal, input?: { leaderId?: string; region?: string; feeShareKilled?: boolean }) {
+  async listMyFollows(principal: Principal, input?: { leaderId?: string; region?: string; feeShareKilled?: boolean; marketId?: string }) {
     const leaderId = input?.leaderId?.trim();
     const region = input?.region?.trim();
     const feeShareKilled = typeof input?.feeShareKilled === 'boolean' ? input.feeShareKilled : undefined;
+    const marketId = input?.marketId?.trim();
     const mine = await this.store.listFollowsByFollower(
       principal.userId,
       leaderId ? leaderId : undefined,
       region ? region : undefined,
       feeShareKilled,
+      marketId ? marketId : undefined,
     );
     return mine.map(presentCopyFollow);
   }
