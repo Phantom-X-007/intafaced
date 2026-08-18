@@ -266,7 +266,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .input(
         z
           .object({
-            status: z.enum(['active', 'closed', 'pending', 'all']).default('active'),
+            status: z.enum(['active', 'closed', 'pending', 'unstaking', 'all']).default('active'),
             tier: stakeTier.optional(),
           })
           .default({ status: 'active' }),

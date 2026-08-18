@@ -422,4 +422,20 @@ describe('svc-token mount — the public surface', () => {
     await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'all', tier: 'flex' });
     expect(token.listStakes).toHaveBeenCalledWith(USER, 'all', 'flex');
   });
+
+  it('passes listStakes unstaking status through to the service', async () => {
+    const token = stubToken();
+    await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'unstaking', tier: 'flex' });
+    expect(token.listStakes).toHaveBeenCalledWith(USER, 'unstaking', 'flex');
+  });
+
+  it('rejects an invalid listStakes status without calling the service', async () => {
+    const token = stubToken();
+    await expect(
+      createTokenRouter(token)
+        .createCaller(signed())
+        .listStakes({ status: 'bogus' as never }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(token.listStakes).not.toHaveBeenCalled();
+  });
 });

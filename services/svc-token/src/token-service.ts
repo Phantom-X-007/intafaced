@@ -556,11 +556,16 @@ export class TokenService {
   }
 
   /**
-   * Stakes owned by a user. Defaults to active only.
-   * `all` includes pending so a crash mid-stake is visible for retry (M-02).
+   * Stakes owned by a user. Defaults to active only (unstaking is not included).
+   * `all` includes pending so a crash mid-stake is visible for retry (M-02),
+   * plus active, unstaking, and closed.
    * Optional `tier` is an exact-match SQL filter on every status branch.
    */
-  async listStakes(userId: string, status: 'active' | 'closed' | 'pending' | 'all' = 'active', tier?: StakeTier): Promise<StakeRecord[]> {
+  async listStakes(
+    userId: string,
+    status: 'active' | 'closed' | 'pending' | 'unstaking' | 'all' = 'active',
+    tier?: StakeTier,
+  ): Promise<StakeRecord[]> {
     const tierFilter = tier ? this.sql`AND tier = ${tier}` : this.sql``;
     const rows =
       status === 'all'

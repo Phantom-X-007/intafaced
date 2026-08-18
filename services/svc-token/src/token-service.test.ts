@@ -352,6 +352,37 @@ if (!available) {
       expect(allFlex[0]?.id).toBe(flex.id);
     });
 
+    it('listStakes filters unstaking exactly; default stays active-only; all includes it; tier ANDs', async () => {
+      await fund(USER_A, '6000');
+      const flex = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const m3 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'm3' });
+      await sql`UPDATE token.stakes SET status = 'unstaking' WHERE id = ${flex.id} AND status = 'active'`;
+
+      const active = await token.listStakes(USER_A);
+      expect(active).toHaveLength(1);
+      expect(active[0]?.id).toBe(m3.id);
+      expect(active[0]?.status).toBe('active');
+
+      const unstaking = await token.listStakes(USER_A, 'unstaking');
+      expect(unstaking).toHaveLength(1);
+      expect(unstaking[0]?.id).toBe(flex.id);
+      expect(unstaking[0]?.status).toBe('unstaking');
+
+      const none = await token.listStakes(USER_B, 'unstaking');
+      expect(none).toEqual([]);
+
+      const all = await token.listStakes(USER_A, 'all');
+      expect(all.map((s) => s.id).sort()).toEqual([flex.id, m3.id].sort());
+      expect(all.find((s) => s.id === flex.id)?.status).toBe('unstaking');
+
+      const unstakingFlex = await token.listStakes(USER_A, 'unstaking', 'flex');
+      expect(unstakingFlex).toHaveLength(1);
+      expect(unstakingFlex[0]?.id).toBe(flex.id);
+
+      const unstakingM3 = await token.listStakes(USER_A, 'unstaking', 'm3');
+      expect(unstakingM3).toEqual([]);
+    });
+
     it('getStake returns null for unknown ids and returns active stakes', async () => {
       expect(await token.getStake('44444444-4444-4444-8444-444444444444')).toBeNull();
 
