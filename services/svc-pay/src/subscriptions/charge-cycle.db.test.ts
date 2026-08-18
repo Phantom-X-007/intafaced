@@ -958,4 +958,37 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('0');
     });
   });
+
+  describe('listCycles optional status is exact and scoped to the subscription', () => {
+    it('omitted status returns mixed periods oldest first; filter is exact; empty is []', async () => {
+      const { subs } = build({ defaultFeeBps: 250 });
+      const m = await merchant();
+      const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
+      const other = await mandateAndSubscription(subs, { merchantId: m.id });
+
+      await sql`
+        INSERT INTO pay.subscription_executions (subscription_id, occurrence, amount, status)
+        VALUES
+          (${sub.id}, 0, 10.5::numeric, 'pending'),
+          (${sub.id}, 1, 10.5::numeric, 'settled'),
+          (${sub.id}, 2, 10.5::numeric, 'rejected'),
+          (${other.sub.id}, 0, 3::numeric, 'settled')
+      `;
+
+      const mixed = await subs.listCycles(sub.id);
+      expect(mixed.map((row) => row.status)).toEqual(['pending', 'settled', 'rejected']);
+      expect(mixed.map((row) => row.occurrence)).toEqual([0, 1, 2]);
+      expect(mixed.every((row) => typeof formatAmount(row.amount) === 'string')).toBe(true);
+      expect(formatAmount(mixed[0]!.amount)).toMatch(/^10\.5/);
+
+      const settled = await subs.listCycles(sub.id, 'settled');
+      expect(settled).toHaveLength(1);
+      expect(settled[0]!.status).toBe('settled');
+      expect(settled[0]!.occurrence).toBe(1);
+      expect(formatAmount(settled[0]!.amount)).toMatch(/^10\.5/);
+
+      expect(await subs.listCycles(sub.id, 'skipped')).toEqual([]);
+      expect(await subs.listCycles(other.sub.id, 'pending')).toEqual([]);
+    });
+  });
 }

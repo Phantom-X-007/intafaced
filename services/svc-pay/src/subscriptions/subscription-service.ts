@@ -506,14 +506,15 @@ export class SubscriptionService {
     return rows.map(toSub);
   }
 
-  /** Every recorded period of one subscription, oldest first. */
-  async listCycles(subscriptionId: string): Promise<CycleRecord[]> {
+  /** Every recorded period of one subscription, oldest first. Optional exact status. */
+  async listCycles(subscriptionId: string, status?: CycleRecord['status']): Promise<CycleRecord[]> {
     const rows = await this.sql<CycleRow[]>`
       SELECT occurrence, amount::text, status, idempotency_key, attempt_count,
              rejection_code, payment_id, exhausted_at, settled_at, last_attempt_at,
              notify_status, notify_code
         FROM pay.subscription_executions
        WHERE subscription_id = ${subscriptionId}
+         ${status === undefined ? this.sql`` : this.sql`AND status = ${status}`}
        ORDER BY occurrence ASC
     `;
     return rows.map(toCycle);

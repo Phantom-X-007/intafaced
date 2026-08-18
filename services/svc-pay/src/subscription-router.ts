@@ -568,13 +568,18 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
        * me twice" — two periods carry two keys, one period retried carries one.
        */
       cycles: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ subscriptionId: z.string().uuid() }))
+        .input(
+          z.object({
+            subscriptionId: z.string().uuid(),
+            status: z.enum(['pending', 'invoiced', 'settled', 'rejected', 'skipped']).optional(),
+          }),
+        )
         .output(z.object({ subscriptionId: z.string().uuid(), cycles: z.array(cycleView) }))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const existing = await subscriptions.getSubscription(input.subscriptionId);
             await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
-            const cycles = await subscriptions.listCycles(input.subscriptionId);
+            const cycles = await subscriptions.listCycles(input.subscriptionId, input.status);
             return { subscriptionId: input.subscriptionId, cycles: cycles.map(toCycleOut) };
           }),
         ),

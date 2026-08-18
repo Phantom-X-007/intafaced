@@ -142,6 +142,40 @@ describe('subscription merchant surface', () => {
         calls.push('listSubscriptions');
         return [subRecord()];
       },
+      listCycles: async (_subscriptionId: string, status?: string) => {
+        calls.push(status === undefined ? 'listCycles' : `listCycles:${status}`);
+        const rows = [
+          {
+            occurrence: 0,
+            amount: amt('10.5'),
+            status: 'pending' as const,
+            idempotencyKey: `pay.subscription:${SUB}:0`,
+            attemptCount: 1,
+            rejectionCode: null,
+            paymentId: null,
+            exhaustedAt: null,
+            settledAt: null,
+            lastAttemptAt: null,
+            notifyStatus: null,
+            notifyCode: null,
+          },
+          {
+            occurrence: 1,
+            amount: amt('10.5'),
+            status: 'settled' as const,
+            idempotencyKey: `pay.subscription:${SUB}:1`,
+            attemptCount: 1,
+            rejectionCode: null,
+            paymentId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            exhaustedAt: null,
+            settledAt: new Date('2026-08-01T01:00:00.000Z'),
+            lastAttemptAt: new Date('2026-08-01T01:00:00.000Z'),
+            notifyStatus: 'skipped_unwired' as const,
+            notifyCode: 'pay.subscription_notify_unwired',
+          },
+        ];
+        return status === undefined ? rows : rows.filter((row) => row.status === status);
+      },
     } as unknown as SubscriptionService;
 
     router = createSubscriptionRouter(subs, pay, null);
@@ -242,6 +276,38 @@ describe('subscription merchant surface', () => {
     const api = await caller(['pay:read'], USER);
     await expect(api.subscription.list({ merchantId: MERCHANT })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
     expect(calls).not.toContain('listSubscriptions');
+  });
+
+  it('omitted status returns mixed cycles; amounts stay decimal strings', async () => {
+    const api = await caller(['pay:read']);
+    const { cycles } = await api.subscription.cycles({ subscriptionId: SUB });
+    expect(cycles.map((row) => row.status)).toEqual(['pending', 'settled']);
+    expect(cycles[0]!.amount).toBe('10.5');
+    expect(typeof cycles[0]!.amount).toBe('string');
+    expect(typeof cycles[1]!.amount).toBe('string');
+    expect(calls).toContain('listCycles');
+  });
+
+  it('filters cycles by exact status', async () => {
+    const api = await caller(['pay:read']);
+    const { cycles } = await api.subscription.cycles({ subscriptionId: SUB, status: 'settled' });
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0]!.status).toBe('settled');
+    expect(cycles[0]!.amount).toBe('10.5');
+    expect(calls).toContain('listCycles:settled');
+  });
+
+  it('rejects a cycle status that is not in the enum', async () => {
+    const api = await caller(['pay:read']);
+    await expect(api.subscription.cycles({ subscriptionId: SUB, status: 'active' as 'pending' })).rejects.toThrow(/BAD_REQUEST|invalid/i);
+    expect(calls.filter((c) => c.startsWith('listCycles'))).toHaveLength(0);
+  });
+
+  it('stranger cannot list cycles', async () => {
+    owner = OTHER;
+    const api = await caller(['pay:read'], USER);
+    await expect(api.subscription.cycles({ subscriptionId: SUB })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
+    expect(calls.filter((c) => c.startsWith('listCycles'))).toHaveLength(0);
   });
 
   it('parent without payment area cannot cancel (PayFac fence)', async () => {

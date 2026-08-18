@@ -247,7 +247,7 @@ describe('the subscription cycle surface is mounted and reachable', () => {
     const { statusCode, body } = await get(app, 'subscription.cycles', { subscriptionId: SUB });
 
     expect(statusCode).toBe(200);
-    expect(listCycles).toHaveBeenCalledWith(SUB);
+    expect(listCycles).toHaveBeenCalledWith(SUB, undefined);
     const cycles = body.result?.data?.cycles as Array<Record<string, unknown>> | undefined;
     expect(cycles).toBeDefined();
     expect(cycles).toHaveLength(1);
@@ -256,6 +256,20 @@ describe('the subscription cycle surface is mounted and reachable', () => {
     expect(cycle.amount).toBe('10');
     expect(cycle.idempotencyKey).toBe(`pay.subscription:${SUB}:0`);
     expect(cycle.attemptCount).toBe(2);
+    await app.close();
+  });
+
+  it('forwards optional cycle status and refuses an unknown status on the wire', async () => {
+    const listCycles = vi.fn(async () => []);
+    const app = await mountTrpc({ getSubscription: async () => subRecord(), listCycles });
+
+    const filtered = await get(app, 'subscription.cycles', { subscriptionId: SUB, status: 'rejected' });
+    expect(filtered.statusCode).toBe(200);
+    expect(listCycles).toHaveBeenCalledWith(SUB, 'rejected');
+
+    const bad = await get(app, 'subscription.cycles', { subscriptionId: SUB, status: 'active' });
+    expect(bad.statusCode).toBe(400);
+    expect(listCycles).toHaveBeenCalledTimes(1);
     await app.close();
   });
 
