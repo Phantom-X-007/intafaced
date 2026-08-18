@@ -718,6 +718,121 @@ if (!available) {
       expect(await commerce.purchasesOf(BUYER, { status: 'settled' })).toEqual([]);
       expect(await commerce.purchasesOf(BUYER, { status: 'rejected' })).toEqual([]);
     });
+
+    it('purchasesOf omits offerType to mix one_time and subscription; filter is exact; AND with status; prices stay decimal strings', async () => {
+      await approvedVendor(VENDOR_USER);
+      const oneTime = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'One-shot pack',
+        description: 'one time',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10.50',
+      });
+      const sub = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Period pack',
+        description: 'subscription',
+        offerType: 'subscription',
+        assetId: 'USDT',
+        price: '12.00',
+        periodSeconds: 86400,
+      });
+
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-purchases-offer-type',
+        }),
+      );
+      const oneTimeSettled = await commerce.purchase({
+        buyerId: BUYER,
+        listingId: oneTime.id,
+        purchaseId: randomUUID(),
+      });
+      const subSettled = await commerce.purchase({
+        buyerId: BUYER,
+        listingId: sub.id,
+        purchaseId: randomUUID(),
+      });
+
+      const oneTimePendingId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${oneTimePendingId}, ${oneTime.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', ${oneTime.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+
+      const otherSubPendingId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${otherSubPendingId}, ${sub.id}, ${OTHER_BUYER}, id, ${VENDOR_USER},
+               'USDT', ${sub.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+
+      const omitted = await commerce.purchasesOf(BUYER);
+      expect(omitted.map((p) => p.id).sort()).toEqual([oneTimeSettled.id, subSettled.id, oneTimePendingId].sort());
+      expect(omitted.every((p) => p.buyerId === BUYER)).toBe(true);
+      expect(omitted.map((p) => p.id)).not.toContain(otherSubPendingId);
+      expect(omitted.every((p) => typeof p.price === 'string')).toBe(true);
+      expect(formatAmount(amt(omitted.find((p) => p.id === oneTimeSettled.id)!.price))).toBe(formatAmount(amt(oneTime.price)));
+      expect(formatAmount(amt(omitted.find((p) => p.id === subSettled.id)!.price))).toBe(formatAmount(amt(sub.price)));
+
+      const oneTimeOnly = await commerce.purchasesOf(BUYER, { offerType: 'one_time' });
+      expect(oneTimeOnly.map((p) => p.id).sort()).toEqual([oneTimeSettled.id, oneTimePendingId].sort());
+      expect(oneTimeOnly.every((p) => p.listingId === oneTime.id)).toBe(true);
+      expect(oneTimeOnly.every((p) => typeof p.price === 'string')).toBe(true);
+
+      const subOnly = await commerce.purchasesOf(BUYER, { offerType: 'subscription' });
+      expect(subOnly.map((p) => p.id)).toEqual([subSettled.id]);
+      expect(subOnly.every((p) => p.listingId === sub.id)).toBe(true);
+      expect(typeof subOnly[0]?.price).toBe('string');
+      expect(formatAmount(amt(subOnly[0]!.price))).toBe(formatAmount(amt(sub.price)));
+
+      const nested = await commerce.purchasesOf(BUYER, { status: 'settled', offerType: 'one_time' });
+      expect(nested.map((p) => p.id)).toEqual([oneTimeSettled.id]);
+      expect(nested.every((p) => p.status === 'settled')).toBe(true);
+      expect(await commerce.purchasesOf(BUYER, { status: 'pending', offerType: 'subscription' })).toEqual([]);
+
+      expect((await commerce.publicListings()).map((l) => l.id).sort()).toEqual([oneTime.id, sub.id].sort());
+      await commerce.archiveListing({ userId: VENDOR_USER, listingId: sub.id });
+      expect((await commerce.publicListings()).map((l) => l.id)).toEqual([oneTime.id]);
+    });
+
+    it('purchasesOf returns [] when the offerType filter matches none', async () => {
+      expect(await commerce.purchasesOf(BUYER, { offerType: 'subscription' })).toEqual([]);
+
+      await approvedVendor(VENDOR_USER);
+      const listing = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Only one-time',
+        description: 'no sub',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${randomUUID()}, ${listing.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', ${listing.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+      expect(await commerce.purchasesOf(BUYER, { offerType: 'subscription' })).toEqual([]);
+    });
   });
 
   describe('listings honesty residual', () => {

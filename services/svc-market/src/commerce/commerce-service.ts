@@ -553,13 +553,18 @@ export class CommerceService {
     );
   }
 
-  async purchasesOf(buyerId: string, opts?: { status?: PurchaseStatus }): Promise<PurchaseRecord[]> {
+  async purchasesOf(buyerId: string, opts?: { status?: PurchaseStatus; offerType?: OfferType }): Promise<PurchaseRecord[]> {
     const status = opts?.status ?? null;
+    const offerType = opts?.offerType ?? null;
     const rows = await this.sql<PurchaseRow[]>`
-      SELECT * FROM market.purchases
-       WHERE buyer_id = ${buyerId}
-         AND ${status === null ? this.sql`true` : this.sql`status = ${status}`}
-       ORDER BY created_at DESC
+      SELECT purchases.*
+        FROM market.purchases AS purchases
+        INNER JOIN market.listings AS listings
+          ON listings.id = purchases.listing_id
+         AND ${offerType === null ? this.sql`true` : this.sql`listings.offer_type = ${offerType}`}
+       WHERE purchases.buyer_id = ${buyerId}
+         AND ${status === null ? this.sql`true` : this.sql`purchases.status = ${status}`}
+       ORDER BY purchases.created_at DESC
     `;
     return rows.map(toPurchase);
   }
