@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
@@ -116,6 +119,94 @@ describe('operator delivery outcomes (ops.notifications residual)', () => {
     expect(await s.listRecent(1)).toHaveLength(1);
   });
 
+  it('listRecent omits status and mixes outcomes; status exact-matches then caps; miss is empty', async () => {
+    const nAccepted = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const nFailedA = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const nFailedB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const nRefused = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    let nowMs = Date.parse('2026-08-12T12:00:00.000Z');
+    const s = new MemoryDeliveryStore({ now: () => new Date(nowMs) });
+
+    async function settleAs(
+      notificationId: string,
+      channel: 'email' | 'inapp' | 'push' | 'sms',
+      status: 'accepted' | 'failed' | 'refused',
+    ) {
+      nowMs += 60_000;
+      const claim = await s.claim(notificationId, channel, 3);
+      expect(claim.claimed).toBe(true);
+      if (!claim.claimed) throw new Error('expected claim');
+      await s.settle({
+        id: claim.id,
+        attempt: 1,
+        status,
+        attempted: status !== 'refused',
+        refusalCode: status === 'refused' ? 'channel.not_configured' : undefined,
+      });
+    }
+
+    await settleAs(nAccepted, 'inapp', 'accepted');
+    await settleAs(nFailedA, 'email', 'failed');
+    await settleAs(nFailedB, 'push', 'failed');
+    await settleAs(nRefused, 'sms', 'refused');
+
+    const mixed = await s.listRecent(10);
+    expect(mixed.map((r) => r.status).sort()).toEqual(['accepted', 'failed', 'failed', 'refused']);
+
+    const failed = await s.listRecent(10, 'failed');
+    expect(failed).toHaveLength(2);
+    expect(failed.every((r) => r.status === 'failed')).toBe(true);
+    expect(failed.map((r) => r.notificationId)).toEqual([nFailedB, nFailedA]);
+
+    const cappedFailed = await s.listRecent(1, 'failed');
+    expect(cappedFailed).toHaveLength(1);
+    expect(cappedFailed[0]!.status).toBe('failed');
+    expect(cappedFailed[0]!.notificationId).toBe(nFailedB);
+
+    expect(await s.listRecent(10, 'abandoned')).toEqual([]);
+    expect(await s.listRecent(10, 'pending')).toEqual([]);
+  });
+
+  it('operatorDeliveryOutcomes threads status; router refuses delivered and other unknown enums', async () => {
+    const a = productHarness();
+    await confirmEmail(a.targets);
+    const created = await a.notify.create({
+      userId: USER,
+      kind: 'bank.margin_call',
+      titleKey: 'notify.bank.margin_call.title',
+      bodyKey: 'notify.bank.margin_call.body',
+      severity: 'critical',
+      sourceSubject: 'intafaced.bank.margin_call.created',
+      sourceIdempotencyKey: 'margin-op-outcomes-status',
+    });
+    expect(created.inserted).toBe(true);
+
+    const mixed = await a.notify.operatorDeliveryOutcomes(50);
+    expect(mixed.map((r) => r.status).sort()).toEqual(['accepted', 'refused', 'refused', 'refused']);
+
+    const accepted = await a.notify.operatorDeliveryOutcomes(50, 'accepted');
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0]!.status).toBe('accepted');
+    expect(accepted[0]!.channel).toBe('inapp');
+
+    const failed = await a.notify.operatorDeliveryOutcomes(50, 'failed');
+    expect(failed).toEqual([]);
+
+    const caller = createNotifyRouter(a.notify).createCaller(signed(['admin:read']));
+    const wiredAccepted = await caller.notify.ops.deliveries({ limit: 50, status: 'accepted' });
+    const aliasAccepted = await caller.notify.operatorDeliveries({ limit: 50, status: 'accepted' });
+    expect(wiredAccepted).toHaveLength(1);
+    expect(wiredAccepted[0]!.status).toBe('accepted');
+    expect(aliasAccepted).toEqual(wiredAccepted);
+
+    await expect(caller.notify.ops.deliveries({ status: 'delivered' as unknown as 'accepted' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    await expect(caller.notify.operatorDeliveries({ status: 'sent' as unknown as 'failed' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('configured in-app is accepted; email without gateway is channel.not_configured — never delivered', async () => {
     const { notify, targets } = productHarness();
     await confirmEmail(targets);
@@ -177,5 +268,17 @@ describe('operator delivery outcomes (ops.notifications residual)', () => {
     await expect(router.createCaller(anonymous()).notify.ops.deliveries()).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
+  });
+});
+
+describe('PostgresDeliveryStore.listRecent — status is a SQL predicate', () => {
+  it('filters with AND status in the query, not after mapping a mixed page', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(join(here, 'channel-store.ts'), 'utf8');
+    const pg = src.slice(src.indexOf('export class PostgresDeliveryStore'));
+    const list = pg.slice(pg.indexOf('async listRecent('), pg.indexOf('async reapExhausted('));
+    expect(list).toMatch(/AND status = \$\{status\}/);
+    expect(list).toMatch(/statusMatch/);
+    expect(list).not.toMatch(/\.filter\(/);
   });
 });

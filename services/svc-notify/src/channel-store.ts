@@ -217,8 +217,10 @@ export interface DeliveryStore {
    * Newest-first across the whole delivery table — not scoped to a caller.
    * Callers must gate with an admin scope; this store method has no auth.
    * Caps at `limit` so an ops console cannot pull the entire history by accident.
+   * Optional exact-match `status` is part of the query (filter, then cap) — omit
+   * to keep every outcome. There is no `delivered` status.
    */
-  listRecent(limit: number): Promise<DeliveryRecord[]>;
+  listRecent(limit: number, status?: DeliveryStatus): Promise<DeliveryRecord[]>;
   /**
    * Retire rows that have run out of attempts — or out of anyone who will try —
    * and that nobody owns.
@@ -386,10 +388,13 @@ export class MemoryDeliveryStore implements DeliveryStore {
     return [...this.byId.values()].filter((r) => r.notificationId === notificationId).sort((a, b) => a.channel.localeCompare(b.channel));
   }
 
-  async listRecent(limit: number): Promise<DeliveryRecord[]> {
+  async listRecent(limit: number, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
     const cap = Math.max(0, Math.min(Math.floor(limit), 500));
     if (cap === 0) return [];
-    return [...this.byId.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id)).slice(0, cap);
+    return [...this.byId.values()]
+      .filter((r) => status === undefined || r.status === status)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.id.localeCompare(b.id))
+      .slice(0, cap);
   }
 
   async reapExhausted(maxAttempts: number, opts: ReapExhaustedOptions = {}): Promise<number> {
@@ -683,11 +688,14 @@ export class PostgresDeliveryStore implements DeliveryStore {
     return rows.map(fromDeliveryPg);
   }
 
-  async listRecent(limit: number): Promise<DeliveryRecord[]> {
+  async listRecent(limit: number, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
     const cap = Math.max(0, Math.min(Math.floor(limit), 500));
     if (cap === 0) return [];
+    const statusMatch = status !== undefined ? this.sql`AND status = ${status}` : this.sql``;
     const rows = await this.sql<DeliveryPgRow[]>`
       SELECT id, notification_id, channel, status, attempts, attempted_at, accepted_at, lease_until, refusal_code, detail, reference, created_at, updated_at FROM notify.deliveries
+       WHERE TRUE
+         ${statusMatch}
        ORDER BY updated_at DESC, id ASC
        LIMIT ${cap}
     `;

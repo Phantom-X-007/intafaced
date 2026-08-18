@@ -81,7 +81,12 @@ const operatorDeliveryOutput = deliveryOutput.extend({
   updatedAt: z.string(),
 });
 
-const operatorDeliveriesInput = z.object({ limit: z.number().int().min(1).max(200).optional() }).optional();
+const operatorDeliveriesInput = z
+  .object({
+    limit: z.number().int().min(1).max(200).optional(),
+    status: z.enum(['pending', 'accepted', 'refused', 'failed', 'abandoned']).optional(),
+  })
+  .optional();
 
 const targetOutput = z.object({
   channel: outOfAppChannelSchema,
@@ -157,8 +162,11 @@ function operatorDeliveryToWire(d: DeliveryRecord) {
   };
 }
 
-async function loadOperatorDeliveries(notify: NotifyService, limit: number | undefined) {
-  return (await notify.operatorDeliveryOutcomes(limit ?? 50)).map(operatorDeliveryToWire);
+async function loadOperatorDeliveries(
+  notify: NotifyService,
+  input: { limit?: number; status?: 'pending' | 'accepted' | 'refused' | 'failed' | 'abandoned' } | undefined,
+) {
+  return (await notify.operatorDeliveryOutcomes(input?.limit ?? 50, input?.status)).map(operatorDeliveryToWire);
 }
 
 const priceAlertOutput = z.object({
@@ -402,13 +410,13 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
       operatorDeliveries: scopedProcedure('admin:read', { module: 'notify' })
         .input(operatorDeliveriesInput)
         .output(z.array(operatorDeliveryOutput))
-        .query(async ({ input }) => loadOperatorDeliveries(notify, input?.limit)),
+        .query(async ({ input }) => loadOperatorDeliveries(notify, input)),
 
       ops: router({
         deliveries: scopedProcedure('admin:read', { module: 'notify' })
           .input(operatorDeliveriesInput)
           .output(z.array(operatorDeliveryOutput))
-          .query(async ({ input }) => loadOperatorDeliveries(notify, input?.limit)),
+          .query(async ({ input }) => loadOperatorDeliveries(notify, input)),
       }),
 
       /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */

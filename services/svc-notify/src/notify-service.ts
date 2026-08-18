@@ -1,6 +1,6 @@
 import { createHash, randomInt } from 'node:crypto';
 import type { InsertNotificationInput, ListQuery, ListResult, Notification, NotifyStore } from './store.js';
-import type { ChannelTarget, DeliveryRecord, DeliveryStore, TargetStore } from './channel-store.js';
+import type { ChannelTarget, DeliveryRecord, DeliveryStatus, DeliveryStore, TargetStore } from './channel-store.js';
 import type { DispatchReport, NotificationDispatcher } from './dispatch.js';
 import type { ChannelRegistry, ChannelStatus } from './channels/registry.js';
 import { ChannelRefusal, type OutOfAppChannel, type RefusalCode } from './channels/channel.js';
@@ -315,10 +315,10 @@ export class NotifyService {
    * Cross-user, newest-first. Router gates with `admin:read`. Does not invent
    * delivered status: `accepted` is gateway acceptance, not end-device proof.
    */
-  async operatorDeliveryOutcomes(limit = 50): Promise<DeliveryRecord[]> {
+  async operatorDeliveryOutcomes(limit = 50, status?: DeliveryStatus): Promise<DeliveryRecord[]> {
     return withNotifySpan('notify.operatorDeliveries', { op: 'operatorDeliveries' }, async () => {
       if (!this.deps) return [];
-      return this.deps.deliveries.listRecent(limit);
+      return this.deps.deliveries.listRecent(limit, status);
     });
   }
 

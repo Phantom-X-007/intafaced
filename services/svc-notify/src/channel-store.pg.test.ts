@@ -297,7 +297,24 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
       expect(inapp).toMatchObject({ status: 'accepted' });
       expect(email).toMatchObject({ status: 'refused', refusalCode: 'channel.not_configured' });
       expect(email?.acceptedAt).toBeNull();
+      expect(ours.map((r) => r.status).sort()).toEqual(['accepted', 'refused']);
       expect(await s.listRecent(1)).toHaveLength(1);
+
+      const accepted = await s.listRecent(10, 'accepted');
+      expect(accepted.every((r) => r.status === 'accepted')).toBe(true);
+      expect(accepted.some((r) => r.notificationId === OTHER_NOTIFICATION && r.channel === 'inapp')).toBe(true);
+      expect(accepted.some((r) => r.notificationId === NOTIFICATION)).toBe(false);
+
+      const refused = await s.listRecent(10, 'refused');
+      expect(refused.every((r) => r.status === 'refused')).toBe(true);
+      expect(refused.some((r) => r.notificationId === NOTIFICATION && r.channel === 'email')).toBe(true);
+
+      expect(await s.listRecent(1, 'refused')).toHaveLength(1);
+      expect((await s.listRecent(1, 'refused'))[0]!.status).toBe('refused');
+      const failedOurs = (await s.listRecent(50, 'failed')).filter(
+        (r) => r.notificationId === NOTIFICATION || r.notificationId === OTHER_NOTIFICATION,
+      );
+      expect(failedOurs).toEqual([]);
     });
 
     it('arm 2 on Postgres names delivery_stuck when attempts are still below max', async () => {
