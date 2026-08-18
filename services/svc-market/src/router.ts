@@ -477,10 +477,11 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       }),
 
     myPurchases: scopedProcedure('market:read', { module: 'market' })
+      .input(z.object({ status: z.enum(['pending', 'settled', 'rejected']).optional() }).optional())
       .output(z.array(purchaseOut))
-      .query(async ({ ctx }) => {
+      .query(async ({ ctx, input }) => {
         requireCommerce(commerce);
-        return commerce.purchasesOf(ctx.principal!.userId);
+        return commerce.purchasesOf(ctx.principal!.userId, input);
       }),
 
     cancelSubscription: scopedProcedure('market:write', { module: 'market' })

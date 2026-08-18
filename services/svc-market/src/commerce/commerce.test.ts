@@ -552,7 +552,112 @@ if (!available) {
       });
       expect(await commerce.myListings(VENDOR_USER, { status: 'archived' })).toEqual([]);
     });
+  });
 
+  describe('purchases honesty residual', () => {
+    const OTHER_BUYER = '44444444-4444-4444-8444-444444444444';
+
+    it('purchasesOf omits status to include pending/settled/rejected; filter is exact; prices stay decimal strings', async () => {
+      await approvedVendor(VENDOR_USER);
+      const listing = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Bot pack',
+        description: 'A useful bot',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '100',
+      });
+
+      const rejectedId = randomUUID();
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: rejectedId })).rejects.toMatchObject({
+        code: 'market.insufficient_funds',
+      });
+
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-purchases-of',
+        }),
+      );
+      const settled = await commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() });
+      expect(settled.status).toBe('settled');
+
+      const pendingId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${pendingId}, ${listing.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', ${listing.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+
+      const otherPendingId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${otherPendingId}, ${listing.id}, ${OTHER_BUYER}, id, ${VENDOR_USER},
+               'USDT', ${listing.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+
+      const all = await commerce.purchasesOf(BUYER);
+      expect(all.map((p) => p.id).sort()).toEqual([rejectedId, settled.id, pendingId].sort());
+      expect(all.every((p) => p.buyerId === BUYER)).toBe(true);
+      expect(all.map((p) => p.id)).not.toContain(otherPendingId);
+      expect(all.find((p) => p.id === rejectedId)?.status).toBe('rejected');
+      expect(all.find((p) => p.id === settled.id)?.status).toBe('settled');
+      expect(all.find((p) => p.id === pendingId)?.status).toBe('pending');
+      expect(all.every((p) => typeof p.price === 'string')).toBe(true);
+      expect(all.every((p) => formatAmount(amt(p.price)) === formatAmount(amt(listing.price)))).toBe(true);
+
+      const pendingOnly = await commerce.purchasesOf(BUYER, { status: 'pending' });
+      expect(pendingOnly.map((p) => p.id)).toEqual([pendingId]);
+      expect(pendingOnly.every((p) => p.status === 'pending')).toBe(true);
+
+      const settledOnly = await commerce.purchasesOf(BUYER, { status: 'settled' });
+      expect(settledOnly.map((p) => p.id)).toEqual([settled.id]);
+      expect(settledOnly.every((p) => p.status === 'settled')).toBe(true);
+
+      const rejectedOnly = await commerce.purchasesOf(BUYER, { status: 'rejected' });
+      expect(rejectedOnly.map((p) => p.id)).toEqual([rejectedId]);
+      expect(rejectedOnly.every((p) => p.status === 'rejected')).toBe(true);
+    });
+
+    it('purchasesOf returns [] when the buyer has none, or when the status filter matches none', async () => {
+      expect(await commerce.purchasesOf(BUYER)).toEqual([]);
+      expect(await commerce.purchasesOf(BUYER, { status: 'settled' })).toEqual([]);
+
+      await approvedVendor(VENDOR_USER);
+      const listing = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Bot pack',
+        description: 'A useful bot',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '100',
+      });
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${randomUUID()}, ${listing.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', ${listing.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+      expect(await commerce.purchasesOf(BUYER, { status: 'settled' })).toEqual([]);
+      expect(await commerce.purchasesOf(BUYER, { status: 'rejected' })).toEqual([]);
+    });
+  });
+
+  describe('listings honesty residual', () => {
     it('archive releases the listing slot so capacity returns', async () => {
       await approvedVendor(VENDOR_USER);
       const listing = await commerce.createListing({

@@ -664,6 +664,18 @@ describe('svc-market mount — commerce scopes', () => {
     });
   });
 
+  it('forwards optional myPurchases status and refuses an invalid enum', async () => {
+    const commerce = stubCommerce();
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await caller.myPurchases();
+    expect(commerce.purchasesOf).toHaveBeenCalledWith(USER, undefined);
+    await caller.myPurchases({ status: 'pending' });
+    expect(commerce.purchasesOf).toHaveBeenCalledWith(USER, { status: 'pending' });
+    await expect(caller.myPurchases({ status: 'shipped' as 'pending' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('refuses archiveListing without market:write', async () => {
     const commerce = stubCommerce();
     const reader = principal({ scopes: ['market:read'] });
