@@ -842,6 +842,44 @@ if (!available) {
       expect(log.every((entry) => entry.userId === USER_A)).toBe(true);
     });
 
+    it('omits a tool filter so the own log still mixes tools', async () => {
+      const a = await open(USER_A);
+      await runtime.think({ sessionId: a.id, requestId: 'r-mix', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A);
+      const tools = new Set(log.map((entry) => entry.tool));
+      expect(tools.has(null)).toBe(true);
+      expect(tools.has('trade.quote')).toBe(true);
+      expect(log.every((entry) => entry.userId === USER_A)).toBe(true);
+    });
+
+    it('filters the own log to an exact tool', async () => {
+      const a = await open(USER_A);
+      await runtime.think({ sessionId: a.id, requestId: 'r-exact', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A, 100, 'trade.quote');
+      expect(log.length).toBeGreaterThan(0);
+      expect(log.every((entry) => entry.tool === 'trade.quote' && entry.userId === USER_A)).toBe(true);
+    });
+
+    it('returns an empty log when no own row matches the tool', async () => {
+      await open(USER_A);
+      expect(await runtime.userLog(USER_A, 100, 'trade.quote')).toEqual([]);
+    });
+
+    it('does not leak another user’s rows for the same tool', async () => {
+      const a = await open(USER_A);
+      const b = await open(USER_B);
+      await runtime.act({ sessionId: a.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: b.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.userLog(USER_A, 100, 'trade.quote');
+      expect(log.length).toBeGreaterThan(0);
+      expect(log.every((entry) => entry.userId === USER_A && entry.tool === 'trade.quote')).toBe(true);
+    });
+
     it('keys every log line for i18n rather than shipping prose', async () => {
       const session = await open();
       await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });

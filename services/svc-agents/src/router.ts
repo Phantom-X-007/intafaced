@@ -597,9 +597,16 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     /** THE USER-VISIBLE LOG (§8.2). Always the caller's own. */
     log: router({
       mine: scopedProcedure('agents:read', { module: 'agents' })
-        .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }))
+        .input(
+          z.object({
+            limit: z.number().int().min(1).max(500).default(100),
+            tool: z.string().trim().min(1).max(64).optional(),
+          }),
+        )
         .output(z.array(actionOutput))
-        .query(({ ctx, input }) => guard(async () => (await runtime.userLog(ctx.principal.userId, input.limit)).map(toActionOutput))),
+        .query(({ ctx, input }) =>
+          guard(async () => (await runtime.userLog(ctx.principal.userId, input.limit, input.tool)).map(toActionOutput)),
+        ),
     }),
 
     /**

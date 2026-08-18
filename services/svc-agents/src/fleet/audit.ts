@@ -193,10 +193,12 @@ export class AuditLog {
    * problem rather than a refactor (§9 i18n) — and what keeps this service from
    * ever being the thing that put a vendor's name on a screen.
    */
-  async forUser(userId: string, limit = 100): Promise<AuditedAction[]> {
+  async forUser(userId: string, limit = 100, tool?: string): Promise<AuditedAction[]> {
+    const toolFilter = tool === undefined ? this.sql`` : this.sql`AND tool = ${tool}`;
     const rows = await this.sql<ActionRow[]>`
       SELECT * FROM agents.agent_actions
        WHERE user_id = ${userId}
+       ${toolFilter}
        ORDER BY occurred_at DESC, sequence DESC
        LIMIT ${limit}
     `;
