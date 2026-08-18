@@ -665,6 +665,78 @@ describe('svc-academy mount — my residencies may filter by cohort slug', () =>
   });
 });
 
+function certGrantRecord(overrides: { certId: string; userId?: string }) {
+  const userId = overrides.userId ?? USER;
+  return {
+    userId,
+    certId: overrides.certId,
+    grantedAt: new Date('2026-08-18T12:00:00.000Z'),
+    idempotencyKey: `cert:${userId}:${overrides.certId}`,
+  };
+}
+
+const mixedMyCerts = [certGrantRecord({ certId: 'foundations-v1' }), certGrantRecord({ certId: 'not-in-policy-v1' })];
+const victimFoundationsGrant = certGrantRecord({ certId: 'foundations-v1', userId: VICTIM });
+
+describe('svc-academy mount — my certs may filter by cert id', () => {
+  it('omits certId and returns mixed grants for that user', async () => {
+    const myCertGrants = vi.fn(async () => mixedMyCerts);
+    const academy = stubAcademy({ myCertGrants: myCertGrants as AcademyService['myCertGrants'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myCerts();
+
+    expect(myCertGrants).toHaveBeenCalledWith(USER, {});
+    expect(out.map((g) => g.certId).sort()).toEqual(['foundations-v1', 'not-in-policy-v1']);
+  });
+
+  it('forwards exact certId foundations-v1 and returns only that grant', async () => {
+    const myCertGrants = vi.fn(async (_userId: string, filter: { certId?: string } = {}) =>
+      mixedMyCerts.filter((g) => (filter.certId ? g.certId === filter.certId : true)),
+    );
+    const academy = stubAcademy({ myCertGrants: myCertGrants as AcademyService['myCertGrants'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myCerts({ certId: 'foundations-v1' });
+
+    expect(myCertGrants).toHaveBeenCalledWith(USER, { certId: 'foundations-v1' });
+    expect(out).toEqual([expect.objectContaining({ certId: 'foundations-v1', userId: USER })]);
+  });
+
+  it('returns an empty list when no grant matches the certId', async () => {
+    const myCertGrants = vi.fn(async () => []);
+    const academy = stubAcademy({ myCertGrants: myCertGrants as AcademyService['myCertGrants'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myCerts({ certId: 'unknown-catalog-v1' });
+
+    expect(myCertGrants).toHaveBeenCalledWith(USER, { certId: 'unknown-catalog-v1' });
+    expect(out).toEqual([]);
+  });
+
+  it('rejects empty-after-trim and too-long certId at the door before the service', async () => {
+    const myCertGrants = vi.fn(async () => mixedMyCerts);
+    const academy = stubAcademy({ myCertGrants: myCertGrants as AcademyService['myCertGrants'] });
+    const caller = createAcademyRouter(academy).createCaller(signed());
+
+    await expect(caller.myCerts({ certId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.myCerts({ certId: '   ' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.myCerts({ certId: 'x'.repeat(65) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(myCertGrants).not.toHaveBeenCalled();
+  });
+
+  it('does not leak another user grant even when certId matches', async () => {
+    const myCertGrants = vi.fn(async (userId: string, filter: { certId?: string } = {}) => {
+      const rows = [...mixedMyCerts, victimFoundationsGrant].filter((g) => g.userId === userId);
+      return rows.filter((g) => (filter.certId ? g.certId === filter.certId : true));
+    });
+    const academy = stubAcademy({ myCertGrants: myCertGrants as AcademyService['myCertGrants'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myCerts({ certId: 'foundations-v1' });
+
+    expect(myCertGrants).toHaveBeenCalledWith(USER, { certId: 'foundations-v1' });
+    expect(out.every((g) => g.userId === USER)).toBe(true);
+    expect(out).not.toEqual(expect.arrayContaining([expect.objectContaining({ userId: VICTIM })]));
+  });
+});
+
 describe('svc-academy mount — no SFU means an error, never a fake token', () => {
   it('reports stream_unavailable as a 500 rather than returning a credential', async () => {
     const academy = stubAcademy({

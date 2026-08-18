@@ -1684,10 +1684,12 @@ export class AcademyService {
     };
   }
 
-  async myCertGrants(userId: string): Promise<CertGrantRecord[]> {
+  async myCertGrants(userId: string, filter: { certId?: string } = {}): Promise<CertGrantRecord[]> {
+    const certId = filter.certId;
     const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
       SELECT user_id, cert_id, granted_at, idempotency_key FROM academy.cert_grants
        WHERE user_id = ${userId}
+         AND ${certId == null ? this.sql`true` : this.sql`cert_id = ${certId}`}
        ORDER BY granted_at DESC
     `;
     return rows.map((r) => ({

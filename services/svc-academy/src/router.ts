@@ -1752,8 +1752,15 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
       }),
 
     myCerts: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ certId: z.string().trim().min(1).max(64).optional() }).optional())
       .output(z.array(certGrantOut))
-      .query(({ ctx }) => guard(() => academy.myCertGrants(ctx.principal!.userId))),
+      .query(({ input, ctx }) =>
+        guard(() =>
+          academy.myCertGrants(ctx.principal!.userId, {
+            ...(input?.certId ? { certId: input.certId } : {}),
+          }),
+        ),
+      ),
 
     certProgress: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ certId: z.string().min(1).max(64) }))
