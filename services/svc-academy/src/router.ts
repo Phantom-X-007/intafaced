@@ -1008,13 +1008,22 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
     // ── Lobbies ──────────────────────────────────────────────────────────────
 
     rooms: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ kind: roomKind.optional(), access: roomAccess.optional() }).optional())
+      .input(
+        z
+          .object({
+            kind: roomKind.optional(),
+            access: roomAccess.optional(),
+            hostId: z.string().uuid().optional(),
+          })
+          .optional(),
+      )
       .output(z.array(roomOut))
       .query(async ({ input }) =>
         (
           await academy.listRooms({
             ...(input?.kind ? { kind: input.kind } : {}),
             ...(input?.access ? { access: input.access } : {}),
+            ...(input?.hostId ? { hostId: input.hostId } : {}),
           })
         ).map(serialiseRoom),
       ),

@@ -554,6 +554,129 @@ describe('svc-academy mount — rooms may filter by access', () => {
   });
 });
 
+const HOST_A = '16161616-1616-4161-8161-161616161616';
+const HOST_B = '17171717-1717-4171-8171-171717171717';
+const UNKNOWN_HOST = '18181818-1818-4181-8181-181818181818';
+
+function hostedRoom(overrides: {
+  id: string;
+  slug: string;
+  name: string;
+  kind: 'general' | 'futures' | 'options' | 'meme_war_room' | 'forex' | 'defi_lab' | 'merchant_clinic';
+  access: 'free' | 'staked' | 'invite';
+  hostId: string;
+}) {
+  return {
+    minStake: overrides.access === 'staked' ? 1_000_000_000_000_000_000n : 0n,
+    capacity: 25,
+    ...overrides,
+  };
+}
+
+const HOST_A_FREE_FOREX = '19191919-1919-4191-8191-191919191919';
+const HOST_A_STAKED_FOREX = '1a1a1a1a-1a1a-41a1-81a1-1a1a1a1a1a1a';
+const HOST_B_STAKED_FOREX = '1b1b1b1b-1b1b-41b1-81b1-1b1b1b1b1b1b';
+const HOST_B_INVITE_OPTIONS = '1c1c1c1c-1c1c-41c1-81c1-1c1c1c1c1c1c';
+
+const mixedHostRooms = [
+  hostedRoom({
+    id: HOST_A_FREE_FOREX,
+    slug: 'host-a-forex-free',
+    name: 'Host A Forex Free',
+    kind: 'forex',
+    access: 'free',
+    hostId: HOST_A,
+  }),
+  hostedRoom({
+    id: HOST_A_STAKED_FOREX,
+    slug: 'host-a-forex-staked',
+    name: 'Host A Forex Staked',
+    kind: 'forex',
+    access: 'staked',
+    hostId: HOST_A,
+  }),
+  hostedRoom({
+    id: HOST_B_STAKED_FOREX,
+    slug: 'host-b-forex-staked',
+    name: 'Host B Forex Staked',
+    kind: 'forex',
+    access: 'staked',
+    hostId: HOST_B,
+  }),
+  hostedRoom({
+    id: HOST_B_INVITE_OPTIONS,
+    slug: 'host-b-options-invite',
+    name: 'Host B Options Invite',
+    kind: 'options',
+    access: 'invite',
+    hostId: HOST_B,
+  }),
+];
+
+describe('svc-academy mount — rooms may filter by host', () => {
+  it('omits hostId and returns mixed hosts', async () => {
+    const listRooms = vi.fn(async () => mixedHostRooms);
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms();
+
+    expect(listRooms).toHaveBeenCalledWith({});
+    expect(out.map((r) => r.hostId).sort()).toEqual([HOST_A, HOST_A, HOST_B, HOST_B].sort());
+  });
+
+  it('forwards hostId and returns only that host rooms', async () => {
+    const listRooms = vi.fn(async (filter: { kind?: string; access?: string; hostId?: string } = {}) =>
+      mixedHostRooms.filter((r) => (filter.hostId ? r.hostId === filter.hostId : true)),
+    );
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms({ hostId: HOST_A });
+
+    expect(listRooms).toHaveBeenCalledWith({ hostId: HOST_A });
+    expect(out.map((r) => r.id).sort()).toEqual([HOST_A_FREE_FOREX, HOST_A_STAKED_FOREX].sort());
+    expect(out.every((r) => r.hostId === HOST_A)).toBe(true);
+  });
+
+  it('returns an empty list when no room matches the hostId', async () => {
+    const listRooms = vi.fn(async () => []);
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms({ hostId: UNKNOWN_HOST });
+
+    expect(listRooms).toHaveBeenCalledWith({ hostId: UNKNOWN_HOST });
+    expect(out).toEqual([]);
+  });
+
+  it('rejects an invalid hostId at the door before the service', async () => {
+    const listRooms = vi.fn(async () => mixedHostRooms);
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    await expect(createAcademyRouter(academy).createCaller(signed()).rooms({ hostId: 'not-a-uuid' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(listRooms).not.toHaveBeenCalled();
+  });
+
+  it('ANDs hostId with kind and access so a host-A free forex room is not a staked hit', async () => {
+    const listRooms = vi.fn(async (filter: { kind?: string; access?: string; hostId?: string } = {}) =>
+      mixedHostRooms.filter(
+        (r) =>
+          (filter.kind ? r.kind === filter.kind : true) &&
+          (filter.access ? r.access === filter.access : true) &&
+          (filter.hostId ? r.hostId === filter.hostId : true),
+      ),
+    );
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms({ kind: 'forex', access: 'staked', hostId: HOST_A });
+
+    expect(listRooms).toHaveBeenCalledWith({ kind: 'forex', access: 'staked', hostId: HOST_A });
+    expect(out).toEqual([expect.objectContaining({ id: HOST_A_STAKED_FOREX, kind: 'forex', access: 'staked', hostId: HOST_A })]);
+    expect(out).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: HOST_A_FREE_FOREX, access: 'free' })]));
+    expect(out).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: HOST_B_STAKED_FOREX, hostId: HOST_B })]));
+  });
+});
+
 const LIVE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SCHEDULED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const ENDED = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
