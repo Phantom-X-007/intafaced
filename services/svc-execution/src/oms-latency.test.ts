@@ -54,9 +54,11 @@ function ungraded(over: Partial<VenueLatencyGrade> = {}): VenueLatencyGrade {
 
 class FakeLatency {
   calls = 0;
+  nows: Array<Date | undefined> = [];
   constructor(private readonly next: VenueLatencyGrade | Error) {}
-  fn: OmsLatencyFn = () => {
+  fn: OmsLatencyFn = (now?: Date) => {
     this.calls += 1;
+    this.nows.push(now);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -75,6 +77,20 @@ describe('observeOmsLatency', () => {
     expect(result.latency.samples).toBe(0);
     expect(result.latency.rejectRateBps).toBeNull();
     expect(street.calls).toBe(1);
+    expect(street.nows).toEqual([undefined]);
+  });
+
+  it('forwards a provided now Date to the latency grader', async () => {
+    const street = new FakeLatency(ungraded({ grade: 'A', samples: 8 }));
+    const now = new Date('2026-08-18T05:00:00.000Z');
+    const result = await observeOmsLatency({
+      venueId: 'street',
+      now,
+      latencyByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.nows).toEqual([now]);
+    expect(street.nows[0]).toBe(now);
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -139,5 +155,29 @@ describe('execution.oms.latency tRPC', () => {
     if (!out.ok) return;
     expect(out.latency.grade).toBe('B');
     expect(street.calls).toBe(1);
+    expect(street.nows).toEqual([undefined]);
+  });
+
+  it('passes a coerced now Date through to the injected grader', async () => {
+    const street = new FakeLatency(ungraded({ grade: 'B', samples: 40 }));
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      { street: street.fn },
+    ).createCaller(signed());
+    const now = new Date('2026-08-18T05:00:00.000Z');
+    const out = await caller.execution.oms.latency({ venueId: 'street', now });
+    expect(out.ok).toBe(true);
+    expect(street.nows).toHaveLength(1);
+    expect(street.nows[0]).toBeInstanceOf(Date);
+    expect(street.nows[0]?.toISOString()).toBe('2026-08-18T05:00:00.000Z');
   });
 });

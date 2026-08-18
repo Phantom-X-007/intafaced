@@ -14,6 +14,7 @@ export type OmsLatencyFn = (now?: Date) => VenueLatencyGrade | Promise<VenueLate
 export type OmsLatencyInput = {
   readonly venueId: string;
   readonly kind?: VenueKind;
+  readonly now?: Date;
   readonly latencyByVenue?: Readonly<Record<string, OmsLatencyFn>>;
 };
 
@@ -48,7 +49,7 @@ export async function observeOmsLatency(input: OmsLatencyInput): Promise<OmsLate
   }
 
   try {
-    return { ok: true, latency: await latency() };
+    return { ok: true, latency: await latency(input.now) };
   } catch (err) {
     return { ok: false, reason: 'observe_failed', detail: observeErrorMessage(err) };
   }
