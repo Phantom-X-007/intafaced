@@ -1296,6 +1296,63 @@ if (!available) {
       expect(report.schedule.nextRunAt.toISOString()).toBe('2026-06-01T00:00:00.000Z');
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
     });
+
+    it('lists every owned schedule when status is omitted, and exact-matches in SQL when provided', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      const bPrimary = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const bRent = await bank.spaces.create({ userId: USER_B, assetId: 'USDT', name: 'Rent' });
+      const startsAt = new Date('2026-06-01T00:00:00Z');
+
+      const active = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      const paused = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('20'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      await bank.transfers.pauseSchedule(paused.id);
+      const cancelled = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('30'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      await bank.transfers.cancelSchedule(cancelled.id);
+
+      const strangerPaused = await bank.transfers.schedule({
+        userId: USER_B,
+        fromSpaceId: bPrimary.id,
+        toSpaceId: bRent.id,
+        amount: amt('99'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      await bank.transfers.pauseSchedule(strangerPaused.id);
+
+      const all = await bank.transfers.listSchedules(USER_A);
+      expect(all.map((s) => s.id).sort()).toEqual([active.id, paused.id, cancelled.id].sort());
+
+      const onlyPaused = await bank.transfers.listSchedules(USER_A, 'paused');
+      expect(onlyPaused).toHaveLength(1);
+      expect(onlyPaused[0]!.id).toBe(paused.id);
+      expect(onlyPaused[0]!.status).toBe('paused');
+      expect(formatAmount(onlyPaused[0]!.amount)).toBe('20');
+
+      expect(await bank.transfers.listSchedules(USER_A, 'completed')).toEqual([]);
+      expect(ledger.journal()).toHaveLength(0);
+    });
   });
 
   // ══ Earn ══════════════════════════════════════════════════════════════════
@@ -2502,6 +2559,58 @@ if (!available) {
     await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
     return schedule;
   }
+
+  describe('transfers.listSchedules filters by status without leaking another user', () => {
+    async function ownedAndStrangerPaused() {
+      const aPrimary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const aRent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
+      const bPrimary = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const bRent = await bank.spaces.create({ userId: USER_B, assetId: 'USDT', name: 'Rent' });
+      const startsAt = new Date('2026-06-01T00:00:00Z');
+      const active = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: aPrimary.id,
+        toSpaceId: aRent.id,
+        amount: amt('10'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      const paused = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: aPrimary.id,
+        toSpaceId: aRent.id,
+        amount: amt('20'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      await bank.transfers.pauseSchedule(paused.id);
+      const stranger = await bank.transfers.schedule({
+        userId: USER_B,
+        fromSpaceId: bPrimary.id,
+        toSpaceId: bRent.id,
+        amount: amt('99'),
+        cadence: 'monthly',
+        startsAt,
+      });
+      await bank.transfers.pauseSchedule(stranger.id);
+      return { active, paused, stranger };
+    }
+
+    it('returns every owned schedule when status is omitted', async () => {
+      const { active, paused } = await ownedAndStrangerPaused();
+      const listed = await (await caller(USER_A, ['bank:read'])).transfers.listSchedules();
+      expect(listed.map((s) => s.id).sort()).toEqual([active.id, paused.id].sort());
+      expect(listed.every((s) => typeof s.amount === 'string')).toBe(true);
+    });
+
+    it('exact-matches status and returns [] when none of the caller’s rows match', async () => {
+      const { paused } = await ownedAndStrangerPaused();
+      const api = await caller(USER_A, ['bank:read']);
+      const pausedOnly = await api.transfers.listSchedules({ status: 'paused' });
+      expect(pausedOnly).toEqual([expect.objectContaining({ id: paused.id, status: 'paused', amount: '20' })]);
+      expect(await api.transfers.listSchedules({ status: 'cancelled' })).toEqual([]);
+    });
+  });
 
   describe('transfers.executions is not readable by another user', () => {
     it('refuses user B the firing history of user A’s standing order', async () => {

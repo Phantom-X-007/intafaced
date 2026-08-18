@@ -328,11 +328,14 @@ export class TransferService {
     return toSchedule(row);
   }
 
-  async listSchedules(userId: string): Promise<ScheduleRecord[]> {
+  async listSchedules(userId: string, status?: ScheduleRecord['status']): Promise<ScheduleRecord[]> {
     const rows = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
              starts_at, ends_at, next_run_at, status
-        FROM bank.scheduled_transfers WHERE user_id = ${userId} ORDER BY created_at DESC
+        FROM bank.scheduled_transfers
+       WHERE user_id = ${userId}
+             ${status ? this.sql`AND status = ${status}` : this.sql``}
+       ORDER BY created_at DESC
     `;
     return rows.map(toSchedule);
   }

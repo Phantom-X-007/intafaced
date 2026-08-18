@@ -669,6 +669,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     listSchedules: scopedProcedure('bank:read', { module: 'bank' })
+      .input(
+        z
+          .object({
+            status: z.enum(['active', 'paused', 'cancelled', 'completed']).optional(),
+          })
+          .optional(),
+      )
       .output(
         z.array(
           z.object({
@@ -681,9 +688,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }),
         ),
       )
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const schedules = await bank.transfers.listSchedules(ctx.principal.userId);
+          const schedules = await bank.transfers.listSchedules(ctx.principal.userId, input?.status);
           return schedules.map((s) => ({
             id: s.id,
             assetId: s.assetId,
