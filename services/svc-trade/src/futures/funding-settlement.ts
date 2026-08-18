@@ -28,24 +28,18 @@
  * left open. That is the third funding double-charge in this file's history;
  * the first two are #1034 and #1047.
  *
- * KNOWN RESIDUAL, deliberately not fixed here: the loader returns positions
- * open *now*, not positions open as of the period. A position OPENED between a
- * failed attempt and its replay is a genuinely new pair with a genuinely new
- * key, so the replay posts an extra leg.
- *
- * The victim is NOT the new position — it is consistent, charged once in both
- * the ledger and its margin. The victim is the PAYER, whose collateral the
- * ledger drains for both the original legs and the new one while
- * `applyFundingNets` (idempotent on (position, period)) records only the first.
- * That is the same ledger-vs-`margin_current` divergence as #1034 and #1047,
- * which is the thing to say out loud: this residual is in the same family as
- * the bug above it, not a fairness question about period membership.
- *
- * It is unchanged by this fix — measured identical under the old and new keys —
- * so nothing was traded away. Closing it needs a decision about what a period's
- * membership IS, which is product law, not a refactor.
+ * Membership + size/notional for a period is NOT decided here — the planner
+ * plans whatever positions it is handed. `runFundingTick` freezes full
+ * position snapshots on the first plan for a periodId
+ * (`FundingPeriodStore.freezeMembership`) and passes only those frozen rows
+ * into this planner. That closes both residuals: a position OPENED mid-gap
+ * minting a new (payer, payee) key (C14), and a size change mid-gap re-planning
+ * different amounts under the same keys (W8 notional freeze). Product law about
+ * "who should have paid at the boundary" is still open; freeze-at-first-plan is
+ * the money-safe rule that needs no owner number.
  */
 import { formatAmount, mul, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
+import { assertFundingRateWithinBound } from './funding-rate-bound.js';
 
 export interface FundingOpenPosition {
   positionId: string;
@@ -66,6 +60,12 @@ export interface FundingPlanInput {
    * Positive: longs pay shorts. Negative: shorts pay longs.
    */
   rate: string;
+  /**
+   * Absolute max |rate| for this period (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * NO product default — null/empty refuses (unpublished bound = no charge).
+   * Owner residual D2 sets the number; this field is the mechanism only.
+   */
+  maxAbsRate: string | null;
   positions: readonly FundingOpenPosition[];
 }
 
@@ -108,8 +108,12 @@ export function fundingAmount(notional: Amount, rateAbs: Amount): Amount {
  *   (so sum of legs from a long = their full pay)
  */
 export function planFundingSettlement(input: FundingPlanInput): FundingLeg[] {
+  // Zero is a completed period outcome (no transfer). Bound still applies to
+  // any non-zero rate — including the absurd `"1000000"` that used to charge
+  // 1e6 × notional with no ceiling (C12 / BUILD-STOP D2).
   const rate = parseAmount(input.rate);
   if (rate === 0n) return [];
+  assertFundingRateWithinBound(input.rate, input.maxAbsRate);
 
   const longs = input.positions.filter((p) => p.side === 'long');
   const shorts = input.positions.filter((p) => p.side === 'short');

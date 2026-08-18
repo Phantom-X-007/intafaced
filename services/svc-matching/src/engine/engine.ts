@@ -149,6 +149,17 @@ export class MatchingEngine {
     return this.books.get(marketId) ?? null;
   }
 
+  /**
+   * Drop a book that never printed and holds nothing.
+   * Used after submit so invent-on-write does not stick: FOK/PO/structural
+   * reject (sequence 0) and IOC/market remainder on a virgin book (sequence
+   * advanced, still no print and no rest) must not appear on GET /markets.
+   */
+  private dropIfNeverTraded(marketId: MarketId): void {
+    const book = this.books.get(marketId);
+    if (book?.isNeverPrintedEmpty) this.books.delete(marketId);
+  }
+
   hasMarket(marketId: MarketId): boolean {
     return this.books.has(marketId);
   }
@@ -268,6 +279,15 @@ export class MatchingEngine {
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order) });
 
         const result = this.book(marketId).submit(order);
+        /**
+         * SUBMIT MUST NOT LEAVE A NEVER-TRADED MARKET. `book()` allocates and
+         * stores an empty OrderBook so the first *accepted* rest or print can
+         * open a market. A FOK/PO/structural reject never advances sequence;
+         * an IOC/market remainder on a virgin book advances sequence then
+         * cancels in full. Keeping either empty book would list a market that
+         * never traded (and turn depth null → empty forever).
+         */
+        this.dropIfNeverTraded(marketId);
         await this.emit(this.eventsForSubmit(marketId, order.orderId, result, at));
         await this.maybeSnapshot();
 
@@ -278,10 +298,26 @@ export class MatchingEngine {
 
   async cancel(marketId: MarketId, orderId: OrderId): Promise<CancelResult> {
     return withEngineSpan('matching.cancel', { marketId, orderId }, async (): Promise<CancelResult & { fillCount: number }> => {
+      /**
+       * CANCEL MUST NOT CREATE A MARKET. `book()` allocates and stores an empty
+       * OrderBook for any string — correct for the first submit that opens a
+       * market, wrong for a cancel of an order that never lived here. Depth
+       * already uses `existingBook` for this reason; cancel used to grow the
+       * market list (and the journal) with phantom books that then survived
+       * replay forever.
+       *
+       * Unknown market → not cancelled, nothing journalled, nothing stored.
+       * Unknown order on a known market still journals (cancel races fill).
+       */
+      const existing = this.existingBook(marketId);
+      if (!existing) {
+        return { cancelled: false, orderId, sequence: null, cancellation: null, fillCount: 0 };
+      }
+
       const at = this.clock().toISOString();
       this.journal.append({ kind: 'cancel', marketId, at, orderId });
 
-      const result = this.book(marketId).cancel(orderId);
+      const result = existing.cancel(orderId);
       if (result.cancellation) await this.emit([cancelledEvent(marketId, result.cancellation)]);
       await this.maybeSnapshot();
 

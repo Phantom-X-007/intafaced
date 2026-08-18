@@ -1,7 +1,8 @@
 # Spec factory index — D-S-01…18, what exists and what is genuinely blank
 
-**Written by:** Denon, 2026-08-04. **Status:** authoritative index for the D-S board.
-**The board it indexes:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) §3, lines 64–83.
+**Written by:** Denon, 2026-08-04. **Status:** authoritative index for the D-S board (**18/18 done**).  
+**The board it indexes (factory origin):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) §3.  
+**Live Denon hard inventory (engines / rulings after factory):** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md).
 
 ---
 

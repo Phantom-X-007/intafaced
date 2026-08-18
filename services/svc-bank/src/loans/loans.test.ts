@@ -27,6 +27,7 @@ import {
   assertPolicyCoherent,
   dailyLoanInterest,
   daysToAccrue,
+  isMarginCallCured,
   ltvBps,
   planLiquidation,
   splitProceeds,
@@ -61,6 +62,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const BANK_INIT = readFileSync(join(here, '..', '..', 'drizzle', '0000_bank_init.sql'), 'utf8');
 const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_position_pending.sql'), 'utf8');
 const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
+const OPENING_COLLATERAL = readFileSync(join(here, '..', '..', 'drizzle', '0008_loan_opening_collateral.sql'), 'utf8');
+const RESERVE_FUNDINGS = readFileSync(join(here, '..', '..', 'drizzle', '0009_loan_reserve_fundings.sql'), 'utf8');
 
 const LOANS_DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
@@ -408,6 +411,57 @@ describe('planLiquidation', () => {
   });
 });
 
+describe('isMarginCallCured — full coll sale must not false-cure', () => {
+  const calledAt = new Date('2026-06-01T11:00:00Z');
+
+  it('clears a real recovery (LTV back below threshold with collateral held)', () => {
+    expect(
+      isMarginCallCured({
+        ladderAction: 'none',
+        debt: amt('5000'),
+        collateral: amt('1'),
+        marginCalledAt: calledAt,
+      }),
+    ).toBe(true);
+  });
+
+  it('does NOT clear when collateral is gone and residual debt remains', () => {
+    // The residual is typically unpaid interest after a closing sale whose
+    // proceeds paid some interest then booked principal shortfall to insurance.
+    // Reporting this as cured `active` is the honesty bug.
+    expect(
+      isMarginCallCured({
+        ladderAction: 'none',
+        debt: amt('40'), // residual interest
+        collateral: 0n,
+        marginCalledAt: calledAt,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not clear when the ladder still wants a margin call or liquidation', () => {
+    expect(
+      isMarginCallCured({
+        ladderAction: 'margin-call',
+        debt: amt('5000'),
+        collateral: amt('1'),
+        marginCalledAt: calledAt,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not clear a loan that was never called', () => {
+    expect(
+      isMarginCallCured({
+        ladderAction: 'none',
+        debt: amt('5000'),
+        collateral: amt('1'),
+        marginCalledAt: null,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe('the proceeds waterfall', () => {
   it('pays penalty, then interest, then principal, then the borrower', () => {
     const split = splitProceeds({
@@ -481,6 +535,28 @@ describe('the proceeds waterfall', () => {
     });
     expect(split.shortfall).toBe(0n);
     expect(formatAmount(split.principalRepaid)).toBe('100');
+  });
+
+  /**
+   * Shortfall is PRINCIPAL-only. Interest is paid first in the waterfall; when
+   * proceeds cannot cover interest, the unpaid interest is NOT folded into
+   * `shortfall` (that field feeds `loanBadDebt` → insurance → reserve, and
+   * interest never sat on the reserve). Residual interest is a real claim that
+   * must not be silently cured away after a full collateral sale.
+   */
+  it('does not book unpaid interest as reserve shortfall on a closing sale', () => {
+    const split = splitProceeds({
+      proceeds: amt('10'),
+      interestOwed: amt('50'),
+      principalOwed: amt('1000'),
+      penaltyBps: 200,
+      closesPosition: true,
+    });
+    expect(formatAmount(split.interestRepaid)).toBe('10');
+    expect(split.principalRepaid).toBe(0n);
+    expect(formatAmount(split.shortfall)).toBe('1000'); // principal only
+    // 40 of interest remains uncollected — not in shortfall.
+    expect(split.interestRepaid + split.principalRepaid + split.penalty + split.surplusToBorrower).toBe(amt('10'));
   });
 });
 
@@ -883,7 +959,7 @@ if (!available) {
   const db: TestDatabase = await createTestDatabase({
     service: 'bank',
     url: LOANS_DB_URL,
-    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION],
+    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION, OPENING_COLLATERAL, RESERVE_FUNDINGS],
   });
   const sql = db.sql;
 
@@ -923,10 +999,14 @@ if (!available) {
     async function fundReserve(assetId: string, value: string) {
       const payer = '99999999-9999-4999-8999-999999999999';
       await fund(payer, assetId, value);
-      await ledger.post(
-        recipes.feeCharge({ chargeId: `bank:${Math.random()}`, userId: payer, module: 'bank', mode: 'asset', assetId, amount: amt(value) }),
-      );
-      await ledger.post(recipes.loanReserveFund({ fundingId: `f:${Math.random()}`, debtAssetId: assetId, amount: amt(value) }));
+      // Fund through the service so the independent funding table records it
+      // (B-02). Direct ledger-only fundings would leave reconcile drift ≠ 0.
+      await loans.fundReserve({
+        debtAssetId: assetId,
+        fundingId: `f:${Math.random()}`,
+        amount: amt(value),
+        from: userAvailable(payer, assetId),
+      });
     }
 
     async function makeProduct(overrides: Partial<Parameters<LoanService['createProduct']>[0]> = {}) {
@@ -945,7 +1025,8 @@ if (!available) {
     beforeEach(async () => {
       await sql`
         TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
-                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products
+                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+                 bank.loan_reserve_fundings
         RESTART IDENTITY CASCADE
       `;
       ledger = new MemoryLedger();
@@ -1004,6 +1085,88 @@ if (!available) {
       await expect(
         loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('6000'), now }),
       ).rejects.toThrow(/exceeds the/);
+    });
+
+    /**
+     * Underfunded `loanReserve` must refuse the draw. The reserve is a module
+     * account (hard non-negative); inventing the shortfall would be printing.
+     * Existing product LTV / APR — no invented rates.
+     */
+    it('refuses an underfunded loanReserve draw rather than printing principal', async () => {
+      await fundReserve('USDT', '1000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+
+      await expect(
+        loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }),
+      ).rejects.toMatchObject({ code: 'bank.loan_reserve_underfunded' });
+
+      expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('1000');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+    });
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * "SAME TERMS" HAS TO INCLUDE WHO IS ASKING
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * `bank.loan_principal_mismatch` below already refuses a retry that changes
+     * the AMOUNT, on exactly the right reasoning: `ON CONFLICT (id) DO NOTHING`
+     * makes the service read back the first call's row while every guard ran on
+     * the new input. That reasoning did not reach the borrower.
+     *
+     * With the principal held equal, a second caller reusing the id was told
+     * "your loan is open" — a status, an LTV, and two ledger transaction ids —
+     * with no collateral of theirs locked and no principal of theirs drawn.
+     * On the `pending` branch it is not merely a wrong answer: the second
+     * caller's collateral FIGURE drives the first borrower's loan, out of the
+     * first borrower's account.
+     */
+    describe('a loan id belonging to another borrower', () => {
+      it('refuses the second borrower, and draws nothing for them', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        await fund(OTHER, 'BTC', '1');
+        const product = await makeProduct();
+        const loanId = '6f000000-0000-4000-8000-00000000dddd';
+
+        await loans.open({ loanId, productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+
+        await expect(
+          loans.open({ loanId, productId: product.id, userId: OTHER, collateralAmount: amt('1'), principal: amt('5000'), now }),
+        ).rejects.toMatchObject({ code: 'bank.loan_borrower_mismatch' });
+
+        // OTHER borrowed nothing and pledged nothing — the state they are in is
+        // the state they were in before the call.
+        expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'USDT'))).amount)).toBe('0');
+        expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'BTC'))).amount)).toBe('1');
+        expect(await loans.loansOf(OTHER)).toHaveLength(0);
+      });
+
+      it('refuses the second borrower on a loan still stuck pending, leaving the first one alone', async () => {
+        await fund(BORROWER, 'BTC', '1');
+        await fund(OTHER, 'BTC', '5');
+        const product = await makeProduct();
+        const loanId = '6f000000-0000-4000-8000-00000000eeee';
+
+        // Reserve empty: the draw fails and the loan is left `pending` with the
+        // borrower's collateral locked — the documented crash window above.
+        await loans
+          .open({ loanId, productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
+        await fundReserve('USDT', '100000');
+
+        await expect(
+          loans.open({ loanId, productId: product.id, userId: OTHER, collateralAmount: amt('5'), principal: amt('5000'), now }),
+        ).rejects.toMatchObject({ code: 'bank.loan_borrower_mismatch' });
+
+        // The first borrower's collateral is still the ONE they pledged, not the
+        // five the second caller named, and the second caller still has theirs.
+        const loan = await loans.loan(loanId);
+        expect(loan.userId).toBe(BORROWER);
+        expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
+        expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'BTC'))).amount)).toBe('5');
+      });
     });
 
     /**
@@ -1106,6 +1269,88 @@ if (!available) {
         // The reserve never moved and the borrower drew nothing.
         expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
         expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('100000');
+      });
+
+      /**
+       * Hold principal equal and shrink the collateral on the retry: LTV is
+       * re-checked on the dust pledge while the draw still pays the stored
+       * principal. Same family as principal_mismatch — "same terms" includes
+       * the opening pledge amount.
+       */
+      it('refuses a retry that changes the opening collateral, instead of locking the new amount against the old principal', async () => {
+        const product = await makeProduct();
+        await fundReserve('USDT', '100000');
+        const loanId = '3fa85f64-5717-4562-b3fc-2c963f66afb1';
+
+        // 1. Open for 5 000 against 1 BTC the borrower does not hold. Row
+        //    persists with opening_collateral=1; lock fails; pending.
+        await expect(
+          loans.open({
+            productId: product.id,
+            userId: BORROWER,
+            collateralAmount: amt('1'),
+            principal: amt('5000'),
+            loanId,
+            now,
+          }),
+        ).rejects.toThrow(BankError);
+
+        const pending = await sql<Array<{ status: string; opening_collateral: string | null }>>`
+          SELECT status, opening_collateral::text AS opening_collateral FROM bank.loans WHERE id = ${loanId}
+        `;
+        expect(pending[0]!.status).toBe('pending');
+        expect(formatAmount(amt(pending[0]!.opening_collateral!))).toBe('1');
+
+        // 2. Same principal, DIFFERENT collateral that still clears LTV (2 BTC
+        //    at the test mark is under max LTV). Must refuse on term-compare —
+        //    not on LTV — or the attack path is not what we claim.
+        await fund(BORROWER, 'BTC', '2');
+        await expect(
+          loans.open({
+            productId: product.id,
+            userId: BORROWER,
+            collateralAmount: amt('2'),
+            principal: amt('5000'),
+            loanId,
+            now,
+          }),
+        ).rejects.toMatchObject({ code: 'bank.loan_collateral_mismatch' });
+
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount)).toBe('2');
+        expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('100000');
+      });
+
+      it('refuses a hostile collateral swap after the loan is already active', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        const loanId = '3fa85f64-5717-4562-b3fc-2c963f66afb2';
+
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          loanId,
+          now,
+        });
+        expect(opened.loan.status).toBe('active');
+
+        await expect(
+          loans.open({
+            productId: product.id,
+            userId: BORROWER,
+            collateralAmount: amt('2'),
+            principal: amt('5000'),
+            loanId,
+            now,
+          }),
+        ).rejects.toMatchObject({ code: 'bank.loan_collateral_mismatch' });
+
+        // Original position untouched.
+        expect(formatAmount(await loans.collateralOf(opened.loan))).toBe('1');
+        expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
       });
 
       it('still lets an unchanged retry re-drive the same loan', async () => {
@@ -1510,7 +1755,7 @@ if (!available) {
         expect((await loans.loan(opened.loan.id)).status).toBe('margin_call');
 
         await fund(BORROWER, 'BTC', '1');
-        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1') });
+        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1'), now });
 
         const sweep = await sweepAt(new Date(now.getTime() + 60_000));
         expect(sweep.cleared).toBe(1);
@@ -1590,6 +1835,90 @@ if (!available) {
         expect(sweep.refused[0]!.reason).toMatch(/No counterparty/);
       });
 
+      /**
+       * HONESTY RESIDUAL: full collateral sale with unpaid interest remaining
+       * must NOT false-cure to healthy `active`.
+       *
+       * After the last unit of collateral is sold, `planLiquidation` returns
+       * `action: none` (nothing left to sell). The old markAndAct path treated
+       * `none` + `marginCalledAt` as "cured" and wrote status=active with zero
+       * collateral and residual interest still outstanding — an unsecured
+       * claim reported as a healthy loan.
+       *
+       * Choice (b): status stays non-active until residual interest is repaid
+       * (or a future named write-off). Interest is not pushed through
+       * `loanBadDebt` (that recipe restores the reserve; interest never sat there).
+       */
+      it('does not false-cure to active after full coll sale leaves unpaid interest', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        await fund(MM_SWEEP, 'USDT', '100000');
+        await ledger.post({
+          idempotencyKey: `seed-mm-fc-${Math.random()}`,
+          module: 'test',
+          reason: 'seed',
+          entries: [
+            { account: userAvailable(MM_SWEEP, 'USDT'), direction: 'credit', amount: amt('100000') },
+            { account: marketMaker('USDT'), direction: 'debit', amount: amt('100000') },
+          ],
+        });
+        // Insurance covers principal shortfall after the dust sale.
+        await fund(INSURANCE_FUNDER, 'USDT', '10000');
+        await ledger.post({
+          idempotencyKey: `seed-ins-fc-${Math.random()}`,
+          module: 'test',
+          reason: 'seed',
+          entries: [
+            { account: userAvailable(INSURANCE_FUNDER, 'USDT'), direction: 'credit', amount: amt('10000') },
+            { account: insuranceFund('USDT'), direction: 'debit', amount: amt('10000') },
+          ],
+        });
+
+        // Full-tranche policy so one insolvency rung exhausts collateral.
+        const product = await makeProduct({
+          aprBps: 3_650,
+          policy: { ...DEFAULT_LIQUIDATION_POLICY, maxTrancheBps: 10_000 },
+        });
+        const opened = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+        // ~5 USDT interest after one day at 36.5% APR on 5000.
+        await loans.accrue({ loanId: opened.loan.id, until: new Date(now.getTime() + DAY_MS) });
+        const interestBefore = (await loans.outstanding(opened.loan.id)).interest;
+        expect(interestBefore).toBeGreaterThan(0n);
+
+        // Gap crash: 1 USDT/BTC → proceeds 1 < interest; insolvency waives grace.
+        loans = new LoanService(sql, ledger, {
+          priceSource: price('1'),
+          venue: marketMakerVenue(),
+          marginCalls: { send: async () => undefined },
+        });
+        const crash = await sweepAt(now);
+        expect(crash.liquidated).toBe(1);
+
+        const afterSale = await loans.loan(opened.loan.id);
+        expect(formatAmount(await loans.collateralOf(afterSale))).toBe('0');
+        const residual = await loans.outstanding(opened.loan.id);
+        expect(residual.interest).toBeGreaterThan(0n);
+        expect(residual.total).toBeGreaterThan(0n);
+        // Closing rung left residual debt → must not already look healthy.
+        expect(afterSale.status).not.toBe('active');
+
+        // Next mark: nothing left to sell → planLiquidation action:none.
+        // Must NOT clear to active-healthy with unsecured residual interest.
+        const next = await sweepAt(new Date(now.getTime() + 60_000));
+        expect(next.cleared).toBe(0);
+
+        const afterMark = await loans.loan(opened.loan.id);
+        expect(afterMark.status).not.toBe('active');
+        expect(afterMark.status).toBe('margin_call');
+        expect((await loans.outstanding(opened.loan.id)).interest).toBeGreaterThan(0n);
+      });
+
       /** One bad mark must not stop the sweep for everybody else. */
       it('keeps sweeping past a loan it cannot mark', async () => {
         await openAt('10000');
@@ -1608,7 +1937,7 @@ if (!available) {
 
     // ── Reconciliation ───────────────────────────────────────────────────────
 
-    it('the reserve identity holds: balance + outstanding principal == funded', async () => {
+    it('the reserve identity holds: funded − badDebt == reserve + outstanding (independent)', async () => {
       await fundReserve('USDT', '100000');
       await fund(BORROWER, 'BTC', '1');
       const product = await makeProduct();
@@ -1618,6 +1947,46 @@ if (!available) {
       expect(formatAmount(r.reserveBalance)).toBe('95000');
       expect(formatAmount(r.outstandingPrincipal)).toBe('5000');
       expect(formatAmount(r.funded)).toBe('100000');
+      // B-02: funded is the bank funding table sum — independent of the ledger reserve.
+      expect(r.independent).toBe(true);
+      expect(formatAmount(r.drift)).toBe('0');
+    });
+
+    it('reconcileReserve reports independent drift when funding table and ledger disagree', async () => {
+      await fundReserve('USDT', '50000');
+      // Steal from the reserve without a funding row — drift must surface, not hide as 0.
+      await ledger.post({
+        idempotencyKey: `steal-reserve-${Math.random()}`,
+        module: 'test',
+        reason: 'adversarial-reserve-drain',
+        entries: [
+          { account: loanReserve('USDT'), direction: 'credit', amount: amt('1000') },
+          { account: userAvailable(BORROWER, 'USDT'), direction: 'debit', amount: amt('1000') },
+        ],
+      });
+
+      const r = await loans.reconcileReserve('USDT');
+      expect(r.independent).toBe(true);
+      expect(formatAmount(r.funded)).toBe('50000');
+      expect(formatAmount(r.reserveBalance)).toBe('49000');
+      expect(formatAmount(r.drift)).toBe('1000');
+    });
+
+    it('pending undrawn principal does not inflate outstanding (reserve never left)', async () => {
+      // Reserve empty so open locks collateral and fails the draw — status pending.
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+      await loans
+        .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+        .catch(() => undefined);
+
+      const r = await loans.reconcileReserve('USDT');
+      // No draw happened; outstanding must stay zero even though a loan row names 5000.
+      expect(formatAmount(r.outstandingPrincipal)).toBe('0');
+      expect(formatAmount(r.reserveBalance)).toBe('0');
+      expect(formatAmount(r.funded)).toBe('0');
+      expect(r.independent).toBe(true);
+      expect(formatAmount(r.drift)).toBe('0');
     });
 
     it('a borrower can never see another borrower&apos;s loan through the service', async () => {

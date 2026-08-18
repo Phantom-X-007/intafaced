@@ -40,10 +40,14 @@ const schema = baseEnvSchema
       /**
        * Jurisdiction region, resolved server-side.
        *
-       * `XX` is the deliberate default: it is the region the matrix treats as
-       * unknown, so a deployment that forgets to configure this is restrictive
-       * rather than permissive. A wrong-but-open default would let a caller
-       * reach modules their actual jurisdiction forbids.
+       * Default `XX` is the platform UNRESOLVED sentinel (`UNRESOLVED_REGION` in
+       * `@intafaced/config`) — not a restrictive jurisdiction. There is no matrix
+       * entry for `XX`, so `checkAccess` falls through to `DEFAULT_MODULE_RULES`
+       * (open defaults) and, for non-custodial protocol modules, still returns
+       * `allowed.permissionless`. The decision now carries `regionResolved: false`
+       * so that open outcome is distinguishable from a real code; set
+       * `INTAFACED_REGION_FAIL_CLOSED=true` if a deployment must refuse instead
+       * of falling open. Do not read `XX` as "safe default / locked down".
        *
        * ── READ THIS BEFORE TRUSTING ANY REGION-BASED CONTROL ─────────────────
        * IT IS ONE CONSTANT FOR EVERY REQUEST. The value is read once and stamped
@@ -63,7 +67,8 @@ const schema = baseEnvSchema
        * the caller — one who could set it would choose its own regulator — so it
        * needs a trusted upstream geo header, a stated precedence, proof the
        * header cannot be forged by reaching origin directly, and a fail-closed
-       * answer when it is absent.
+       * answer when it is absent (`INTAFACED_REGION_FAIL_CLOSED` arms the
+       * mechanism; per-request resolution still has to supply a real code).
        */
       DEFAULT_REGION: z.string().length(2).default('XX'),
 
@@ -137,6 +142,38 @@ const schema = baseEnvSchema
        * comma-separated CIDR list.
        */
       EDGE_TRUST_PROXY: z.string().optional(),
+
+      /**
+       * Trusted geo country header name (mechanism half of socket.geo-region-resolution).
+       *
+       * Empty/unset → every request still stamps `DEFAULT_REGION` (constant).
+       * Set (e.g. `cf-ipcountry`) **and** `EDGE_TRUST_PROXY` set → per-request
+       * region from that header. Header without trustProxy is ignored (forge path).
+       * Missing/invalid header → unresolved `XX` (regionResolved false).
+       *
+       * Never invents a geo vendor product or sanctions list content (Class X).
+       */
+      EDGE_GEO_COUNTRY_HEADER: z.string().optional(),
+
+      /**
+       * Max request body bytes the edge will parse before refusing with 413.
+       *
+       * Fastify's default is ~1 MiB. An explicit env makes the budget an operator
+       * decision rather than a library constant, and keeps a hostile oversized
+       * body from being buffered into the edge process memory on the way to an
+       * upstream that would only refuse it later. The proxy re-serialises with
+       * `JSON.stringify`, so this is also the max JSON payload the edge will
+       * re-encode.
+       *
+       * Default 1 MiB matches Fastify's historical default so existing clients
+       * see no behaviour change until an operator tightens it.
+       */
+      EDGE_BODY_LIMIT_BYTES: z.coerce
+        .number()
+        .int()
+        .min(1024)
+        .max(32 * 1024 * 1024)
+        .default(1_048_576),
     }),
   );
 

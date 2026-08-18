@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeCbor } from './cbor.js';
 import {
   ChallengeStore,
+  SqlChallengeStore,
   AuthenticationResponseJSON,
   RegistrationResponseJSON,
   StoredWebAuthnCredential,
@@ -17,6 +18,7 @@ import {
   verifyAuthenticationResponse,
   verifyRegistrationResponse,
   WebAuthnError,
+  type ChallengeKind,
 } from './webauthn.js';
 
 const config = {
@@ -62,18 +64,117 @@ describe('base64url', () => {
   });
 });
 
-describe('ChallengeStore', () => {
-  it('returns a matching challenge once, then never again', () => {
+describe('ChallengeStore (in-memory)', () => {
+  it('returns a matching challenge once, then never again', async () => {
     const store = new ChallengeStore(60_000);
-    store.put('registration', 'chal-1', 'user-1');
-    expect(store.take('chal-1', 'registration')).toMatchObject({ userId: 'user-1', kind: 'registration' });
-    expect(store.take('chal-1', 'registration')).toBeNull();
+    await store.put('registration', 'chal-1', 'user-1');
+    expect(await store.take('chal-1', 'registration')).toMatchObject({ userId: 'user-1', kind: 'registration' });
+    expect(await store.take('chal-1', 'registration')).toBeNull();
   });
 
-  it('refuses a challenge used for the wrong ceremony', () => {
+  it('refuses a challenge used for the wrong ceremony', async () => {
     const store = new ChallengeStore(60_000);
-    store.put('registration', 'chal-2', 'user-1');
-    expect(store.take('chal-2', 'authentication')).toBeNull();
+    await store.put('registration', 'chal-2', 'user-1');
+    expect(await store.take('chal-2', 'authentication')).toBeNull();
+  });
+
+  it('refuses an expired challenge and does not accept after TTL', async () => {
+    const store = new ChallengeStore(60_000);
+    await store.put('authentication', 'chal-exp', 'user-1', 1);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(await store.take('chal-exp', 'authentication')).toBeNull();
+    expect(store.size).toBe(0);
+  });
+
+  it('accepts null userId (unknown authentication target)', async () => {
+    const store = new ChallengeStore(60_000);
+    await store.put('authentication', 'chal-null', null);
+    expect(await store.take('chal-null', 'authentication')).toMatchObject({ userId: null, kind: 'authentication' });
+  });
+});
+
+/**
+ * In-memory stand-in for Postgres so SqlChallengeStore can be unit-tested
+ * without a live database. Two store instances share the same map → multi-pod.
+ */
+function makeSharedChallengeSql() {
+  type Row = { challenge: string; kind: ChallengeKind; user_id: string | null; expires_at: Date };
+  const table = new Map<string, Row>();
+
+  const sql = Object.assign(
+    async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const text = strings.join('?').replace(/\s+/g, ' ').trim().toLowerCase();
+
+      // DELETE expired (prune)
+      if (text.startsWith('delete from webauthn_challenges where expires_at < now()')) {
+        const now = Date.now();
+        for (const [k, v] of table) {
+          if (v.expires_at.getTime() < now) table.delete(k);
+        }
+        return [];
+      }
+
+      // take: DELETE … WHERE challenge = ? RETURNING …
+      if (text.startsWith('delete from webauthn_challenges where challenge =')) {
+        const challenge = values[0] as string;
+        const row = table.get(challenge);
+        if (!row) return [];
+        table.delete(challenge);
+        return [row];
+      }
+
+      // put: INSERT … ON CONFLICT
+      if (text.startsWith('insert into webauthn_challenges')) {
+        const challenge = values[0] as string;
+        const kind = values[1] as ChallengeKind;
+        const userId = values[2] as string | null;
+        const expiresAt = values[3] as Date;
+        table.set(challenge, { challenge, kind, user_id: userId, expires_at: expiresAt });
+        return [];
+      }
+
+      throw new Error(`unexpected sql in mock: ${text}`);
+    },
+    { json: (v: unknown) => v },
+  );
+
+  return { sql: sql as unknown as import('postgres').Sql, table };
+}
+
+describe('SqlChallengeStore (shared backend — multi-pod simulation)', () => {
+  it('put on instance A is takeable on instance B (same sql)', async () => {
+    const { sql } = makeSharedChallengeSql();
+    const a = new SqlChallengeStore(sql, 60_000);
+    const b = new SqlChallengeStore(sql, 60_000);
+
+    await a.put('registration', 'cross-pod-1', 'user-a');
+    const held = await b.take('cross-pod-1', 'registration');
+    expect(held).toMatchObject({ userId: 'user-a', kind: 'registration', challenge: 'cross-pod-1' });
+    // single-use across pods
+    expect(await a.take('cross-pod-1', 'registration')).toBeNull();
+  });
+
+  it('refuses wrong kind and expired; prunes on put', async () => {
+    const { sql, table } = makeSharedChallengeSql();
+    const store = new SqlChallengeStore(sql, 60_000);
+
+    await store.put('step-up', 'kind-check', 'user-b');
+    expect(await store.take('kind-check', 'authentication')).toBeNull();
+
+    await store.put('authentication', 'ttl-check', 'user-b', 1);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(await store.take('ttl-check', 'authentication')).toBeNull();
+
+    // prune drops expired leftovers
+    table.set('stale', {
+      challenge: 'stale',
+      kind: 'registration',
+      user_id: 'x',
+      expires_at: new Date(Date.now() - 1000),
+    });
+    await store.put('registration', 'fresh', 'user-b');
+    expect(table.has('stale')).toBe(false);
+    expect(table.has('fresh')).toBe(true);
   });
 });
 

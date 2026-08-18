@@ -171,6 +171,27 @@ export const cardInput = z.object({
   size: cardSizeSchema.default('portrait'),
 });
 
+/**
+ * Authenticated read of someone else's share card.
+ *
+ * `userId` is the SUBJECT — whose card. The viewer is always the signed
+ * principal; the service applies `blueprints.visibility` on top of
+ * `blueprint:read` (packages/auth scopes). This is not a public unfurl URL.
+ */
+export const cardOfInput = z.object({
+  userId: z.string().uuid(),
+  size: cardSizeSchema.default('portrait'),
+});
+
+/**
+ * Change the caller's own visibility. `userId` is filled from the principal
+ * at the router — same omit pattern as `onboardInput`.
+ */
+export const setVisibilityInput = z.object({
+  userId: z.string().uuid(),
+  visibility: visibilitySchema,
+});
+
 // ── Crews (§7.1, §33) ────────────────────────────────────────────────────────
 
 export const crewSchema = z.object({
@@ -330,6 +351,15 @@ export interface BlueprintContract {
   onboard(input: OnboardInput): Promise<OnboardOutput>;
   get(input: { userId: string }): Promise<BlueprintRecord | null>;
   card(input: { userId: string; size: CardSize }): Promise<CardRender>;
+  /**
+   * Visibility-gated card read. `viewerId` is the caller; `subjectUserId` is
+   * whose card. Self always succeeds (same as `card`). Other viewers: `public`
+   * any authenticated principal, `crew` same crew, `private` not found.
+   * Denied and missing are the same error — existence of a private Blueprint
+   * is not enumerable.
+   */
+  cardFor(input: { viewerId: string; subjectUserId: string; size: CardSize }): Promise<CardRender>;
+  setVisibility(input: { userId: string; visibility: Visibility }): Promise<BlueprintRecord>;
   export(input: { userId: string }): Promise<BlueprintExport>;
   erase(input: { userId: string }): Promise<EraseReceipt>;
 }

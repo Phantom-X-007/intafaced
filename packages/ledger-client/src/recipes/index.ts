@@ -1,10 +1,26 @@
 import { mulBps, sub, type Amount } from '../money.js';
 import type { AccountRef, EntryInput, PostRequest } from '../types.js';
 import { InvalidEntryError } from '../types.js';
-import { bankTransfer, earnDeposit, earnWithdraw, earnPoolFund, earnInterest } from './bank.js';
+import {
+  bankTransfer,
+  earnDeposit,
+  earnWithdraw,
+  earnPoolFund,
+  earnInterest,
+  businessApprovalHold,
+  businessApprovalRelease,
+  businessApprovalSettle,
+} from './bank.js';
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
 import { subAccountTransfer } from './sub-accounts.js';
+import { marketListingFee, marketPremiumPlacement, marketPurchase } from './market.js';
+import {
+  assertEscrowDisputeRuling,
+  assertEscrowRefundResolution,
+  disputeRulingMeta,
+  type EscrowDisputeRuling,
+} from './escrow-dispute-law.js';
 import {
   burnAccount,
   houseFees,
@@ -22,6 +38,9 @@ import {
   tokenStakeAccount,
   withdrawalHoldAccount,
 } from '../accounts.js';
+
+export type { EscrowDisputeRuling } from './escrow-dispute-law.js';
+export { NATURAL_PERSON_ID, isNaturalPersonId, assertEscrowDisputeRuling, assertEscrowRefundResolution } from './escrow-dispute-law.js';
 
 /**
  * LEDGER RECIPES (§4.2).
@@ -612,7 +631,14 @@ export interface EscrowInput {
   amount: Amount;
 }
 
-/** Seller's crypto moves into escrow the moment the taker accepts. */
+/**
+ * Seller's crypto moves into escrow the moment the taker accepts — the hold.
+ *
+ * Under dispute law (ADR 2026-08-04) this pot stays put through `disputed` and
+ * through escalate-and-hold: the timer never posts a release/refund. Disposition
+ * is `escrowRelease` / `escrowRefund` only after a human ruling (optional
+ * `ruling` on those recipes enforces natural-person attribution on the wire).
+ */
 export function escrowLock(input: EscrowInput): PostRequest {
   requirePositive('escrow amount', input.amount);
   return {
@@ -627,9 +653,18 @@ export function escrowLock(input: EscrowInput): PostRequest {
   };
 }
 
-/** Seller confirms fiat received — escrow releases to the buyer. */
-export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostRequest {
+/**
+ * Seller confirms fiat received — escrow releases to the buyer.
+ *
+ * Optional `ruling` (ADR D-S-08): when the caller marks this post as a
+ * moderated dispute disposition, `rulingBy` must be a natural-person UUID.
+ * Happy-path seller confirm omits `ruling` and is unchanged. Idempotency key
+ * stays `p2p.escrow.release:<tradeId>` so svc-p2p can adopt attribution without
+ * a key migration.
+ */
+export function escrowRelease(input: EscrowInput & { feeBps?: number; ruling?: EscrowDisputeRuling }): PostRequest {
   requirePositive('escrow amount', input.amount);
+  assertEscrowDisputeRuling(input.ruling, 'escrowRelease');
   const feeBps = input.feeBps ?? 0;
   // Same class as tradeFill: an unbound feeBps at 10000 gives the buyer nothing;
   // above that the buyer leg goes negative and is refused four layers down with a
@@ -645,11 +680,12 @@ export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostReq
     throw new InvalidEntryError('Fee exceeds escrow value — check fee bps configuration');
   }
 
+  const rulingMeta = disputeRulingMeta(input.ruling);
   return {
     idempotencyKey: `p2p.escrow.release:${input.tradeId}`,
     module: 'p2p',
     reason: 'p2p.escrow.release',
-    meta: { tradeId: input.tradeId, feeBps },
+    meta: { tradeId: input.tradeId, feeBps, ...rulingMeta },
     entries: [
       credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.buyerId, input.assetId), toBuyer),
@@ -658,14 +694,24 @@ export function escrowRelease(input: EscrowInput & { feeBps?: number }): PostReq
   };
 }
 
-/** Cancelled or resolved in the seller's favour — escrow returns untouched. */
-export function escrowRefund(input: EscrowInput & { resolution?: string }): PostRequest {
+/**
+ * Cancelled or resolved in the seller's favour — escrow returns untouched.
+ *
+ * Machine disposition strings (`system:p2p-backstop`, `timeout`, …) are refused
+ * on `resolution`. Moderated dispute refunds pass `ruling` with a natural-person
+ * `rulingBy` (same allowlist as `escrowRelease`).
+ */
+export function escrowRefund(input: EscrowInput & { resolution?: string; ruling?: EscrowDisputeRuling }): PostRequest {
   requirePositive('escrow amount', input.amount);
+  assertEscrowRefundResolution(input.resolution, 'escrowRefund');
+  assertEscrowDisputeRuling(input.ruling, 'escrowRefund');
+  const resolution = input.resolution ?? 'cancelled';
+  const rulingMeta = disputeRulingMeta(input.ruling);
   return {
     idempotencyKey: `p2p.escrow.refund:${input.tradeId}`,
     module: 'p2p',
     reason: 'p2p.escrow.refund',
-    meta: { tradeId: input.tradeId, resolution: input.resolution ?? 'cancelled' },
+    meta: { tradeId: input.tradeId, resolution, ...rulingMeta },
     entries: [
       credit(tradeEscrowAccount(input.sellerId, input.assetId, input.tradeId), input.amount),
       debit(userAvailable(input.sellerId, input.assetId), input.amount),
@@ -783,7 +829,13 @@ export interface PaymentRefundInput {
   source: 'clearing' | 'settled';
 }
 
-/** Value leaves the book, back out through the rail it came in on. */
+/**
+ * Value leaves the book, back out through the rail it came in on.
+ *
+ * Key is namespaced by `paymentId` so an explicit merchant `refundId` reused
+ * on a second payment cannot no-op the ledger while the rail still pays out
+ * (cross-payment key collision).
+ */
 export function paymentRefund(input: PaymentRefundInput): PostRequest {
   requirePositive('refund amount', input.amount);
 
@@ -791,7 +843,7 @@ export function paymentRefund(input: PaymentRefundInput): PostRequest {
     input.source === 'clearing' ? merchantClearing(input.merchantId, input.assetId) : userAvailable(input.merchantUserId, input.assetId);
 
   return {
-    idempotencyKey: `payment.refund:${input.refundId}`,
+    idempotencyKey: `payment.refund:${input.paymentId}:${input.refundId}`,
     module: 'pay',
     reason: 'payment.refunded',
     meta: { paymentId: input.paymentId, refundId: input.refundId, source: input.source, rail: input.rail },
@@ -818,7 +870,7 @@ export function paymentRefundReverse(input: PaymentRefundInput): PostRequest {
     input.source === 'clearing' ? merchantClearing(input.merchantId, input.assetId) : userAvailable(input.merchantUserId, input.assetId);
 
   return {
-    idempotencyKey: `payment.refund.reverse:${input.refundId}`,
+    idempotencyKey: `payment.refund.reverse:${input.paymentId}:${input.refundId}`,
     module: 'pay',
     reason: 'payment.refund.reversed',
     meta: { paymentId: input.paymentId, refundId: input.refundId, source: input.source, rail: input.rail },
@@ -876,10 +928,12 @@ export interface MintInput {
 export function mintEmission(input: MintInput): PostRequest {
   requirePositive('emission amount', input.amount);
   return {
-    idempotencyKey: `token.emission:${input.epoch}`,
+    // Asset in the key: one epoch can mint more than one asset. Without it the
+    // second asset's post is an idempotent no-op of the first (supply never lands).
+    idempotencyKey: `token.emission:${input.assetId}:${input.epoch}`,
     module: 'token',
     reason: 'token.emission',
-    meta: { epoch: input.epoch },
+    meta: { epoch: input.epoch, assetId: input.assetId },
     entries: [credit(mintBoundary(input.assetId), input.amount), debit(input.destination, input.amount)],
   };
 }
@@ -895,10 +949,11 @@ export interface BurnInput {
 export function burn(input: BurnInput): PostRequest {
   requirePositive('burn amount', input.amount);
   return {
-    idempotencyKey: `token.burn:${input.runId}`,
+    // Asset in the key: same runId across assets must not collide.
+    idempotencyKey: `token.burn:${input.assetId}:${input.runId}`,
     module: 'token',
     reason: 'token.burn',
-    meta: { runId: input.runId },
+    meta: { runId: input.runId, assetId: input.assetId },
     entries: [credit(input.from, input.amount), debit(burnAccount(input.assetId), input.amount)],
   };
 }
@@ -1021,6 +1076,14 @@ export function rewardPay(input: RewardPayInput): PostRequest {
 export * from './bank.js';
 export * from './loans.js';
 export * from './chargeback.js';
+export {
+  marketPurchase,
+  marketListingFee,
+  marketPremiumPlacement,
+  type MarketPurchaseInput,
+  type MarketListingFeeInput,
+  type MarketPremiumPlacementInput,
+} from './market.js';
 
 export const recipes = {
   deposit,
@@ -1079,8 +1142,17 @@ export const recipes = {
   earnWithdraw,
   earnPoolFund,
   earnInterest,
+  // bank.business dual-control — purposed holds so pending is not paper-only.
+  businessApprovalHold,
+  businessApprovalRelease,
+  businessApprovalSettle,
   // SPEC-SUBACCOUNTS — only legal cross-partition value path. See ./sub-accounts.ts.
   subAccountTransfer,
+  // §8.7 market — purchase (live) + listing/premium fees (§13 unwired; D26-P1-M2).
+  // Flagged shared-package. No existing recipe body was rewritten for the fee legs.
+  marketPurchase,
+  marketListingFee,
+  marketPremiumPlacement,
 } as const;
 
 export type RecipeName = keyof typeof recipes;

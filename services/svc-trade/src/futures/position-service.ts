@@ -30,15 +30,16 @@
  * learns instead of getting different behaviour than they asked for.
  */
 import type { Sql } from 'postgres';
-import { randomUUID } from 'node:crypto';
+import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
-import { checkLeverage, initialMargin, maxLeverage } from './initial-margin.js';
+import { checkLeverage, initialMargin, resolveMaxLeverage } from './initial-margin.js';
 import { planClose } from './close-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
+  acceptableForEntry,
   acceptableForLiquidation,
   acceptableForMarking,
   markMissing,
@@ -46,6 +47,7 @@ import {
   type MarkPolicy,
 } from './mark-policy.js';
 import { PROFIT_SOURCE_UNCONFIGURED, checkProfitBound, type ProfitSource } from './profit-source.js';
+import { INSURANCE_UNDERFUNDED, checkInsuranceBound } from './insurance-bound.js';
 import { breakerBasis, readAcceptedMark, type PreviousMark } from './accepted-mark.js';
 
 /**
@@ -109,6 +111,13 @@ export interface OpenPositionInput {
    * callers TypeScript is not watching.
    */
   marginMode?: 'isolated';
+  /**
+   * Caller-supplied open intent key (required). Position id and margin lock key
+   * are derived from (user, market, clientOpenId) the same way spot derives
+   * order ids from clientOrderId. A timeout + retry finds the original open
+   * instead of locking a second pot under a random id.
+   */
+  clientOpenId: string;
 }
 
 export interface PositionServiceDeps {
@@ -141,16 +150,17 @@ export interface PositionServiceDeps {
   /**
    * THE LEVERAGE CEILING FOR THIS DEPLOYMENT.
    *
-   * Omitted → `DEFAULT_MAX_LEVERAGE`. There is deliberately no way to express
-   * "no ceiling": the unbounded reading is what the repository had, and it was
-   * worth 190,000 USDT. An operator who wants more says how much more.
-   *
-   * Present so `DIRECTION` §8 item 8's ruling has one place to land — see
-   * `initial-margin.ts` for the number and for the argument that it is not an
-   * agent's to pick.
+   * Omitted → DIRECTION §1 10× (`resolveMaxLeverage`). Env may only tighten
+   * (≤ 10). A raise above 10× is D26-P0-07 and fails at parse, not here.
    */
   maxLeverage?: Amount;
   now?: () => Date;
+  /**
+   * DIRECTION:34 — ADL disclosure gate. When set (production), `open()` refuses
+   * until the trader has ack'd in-product disclosure. Omitted in hermetic unit
+   * tests that are not proving the public door; public-door + index always wire it.
+   */
+  assertAdlDisclosureAcked?: (userId: string) => Promise<void>;
 }
 
 /** Why a position is frozen waiting for a mark — futures-namespaced refuse codes. */
@@ -204,7 +214,7 @@ export class PositionService {
   ) {
     this.bus = deps.bus ?? null;
     this.markPolicy = deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY;
-    this.maxLeverage = maxLeverage(deps.maxLeverage ?? null);
+    this.maxLeverage = resolveMaxLeverage(deps.maxLeverage ?? null);
     this.now = deps.now ?? (() => new Date());
   }
 
@@ -242,7 +252,20 @@ export class PositionService {
     authorisesSize: Amount | null,
   ): Promise<{ ok: true; mark: FuturesQuotedMark } | { ok: false; reason: ClosingReason; detail: string }> {
     const request: MarkRequest = { marketId, symbol, at, ...(authorisesSize != null ? { authorisesSize } : {}) };
-    const quoted = this.deps.marks.quote ? await this.deps.marks.quote(request) : await this.legacyQuote(request);
+    /**
+     * Money paths require a LABELLED quote. An unlabelled `markPrice` string
+     * must not be stamped `quality: 'mid'` (Denon handoff §6) — that invents a
+     * liquidation/payout quality and disarms staleness. Missing `quote()` is
+     * darkness, not a mid.
+     */
+    if (!this.deps.marks.quote) {
+      return {
+        ok: false,
+        reason: 'trade.mark_missing',
+        detail: `${marketId}: mark source has no labelled quote() — refuse inventing quality from bare markPrice`,
+      };
+    }
+    const quoted = await this.deps.marks.quote(request);
 
     if (!quoted) {
       return { ok: false, reason: 'trade.mark_missing', detail: markMissing(marketId).reason! };
@@ -258,7 +281,11 @@ export class PositionService {
     return { ok: true, mark: quoted };
   }
 
-  /** Open path: darkness refuses. Close path uses `tryMarkForMarking` + freeze. */
+  /**
+   * Open path: darkness refuses, and so does last-trade (DIRECTION MVP-1).
+   * Close path uses `tryMarkForMarking` + freeze — losing exits may still mark
+   * on `last`; entry may not.
+   */
   private async markFor(marketId: string, symbol: string, at: Date, authorisesSize: Amount | null): Promise<FuturesQuotedMark> {
     const got = await this.tryMarkForMarking(marketId, symbol, at, authorisesSize);
     if (!got.ok) {
@@ -268,24 +295,15 @@ export class PositionService {
         503,
       );
     }
-    return got.mark;
-  }
-
-  /**
-   * A source that predates `quote()` still gives a price and nothing else. Read
-   * it as `mid` observed now — which is exactly what `markPrice` has always
-   * implied — rather than inventing a quality it never claimed.
-   */
-  private async legacyQuote(request: MarkRequest): Promise<FuturesQuotedMark | null> {
-    const price = await this.deps.marks.markPrice(request);
-    if (price == null || price.trim() === '') return null;
-    let parsed: Amount;
-    try {
-      parsed = parseAmount(price);
-    } catch {
-      return null;
+    const entry = acceptableForEntry(got.mark, at, this.markPolicy);
+    if (!entry.ok) {
+      throw new FuturesError(
+        entry.code === 'trade.mark_missing' ? (entry.reason ?? 'mark missing') : `Refusing to value this position — ${entry.reason}`,
+        entry.code ?? 'trade.mark_unusable',
+        503,
+      );
     }
-    return { marketId: request.marketId, symbol: request.symbol, price: parsed, asOf: request.at, quality: 'mid' };
+    return got.mark;
   }
 
   /**
@@ -346,6 +364,7 @@ export class PositionService {
             AND p.status IN ('open', 'closing')
           ORDER BY p.opened_at DESC
         `;
+    // List is not a valuation: no mark source, no invented 0. Close attaches extras.
     return rows.map((row) => presentPosition(row));
   }
 
@@ -360,7 +379,29 @@ export class PositionService {
      * a pot was configured stay available — see `close()`.
      */
     if (this.deps.profitSource == null) {
-      throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 503);
+      throw new FuturesError(`Futures is not open on this deployment — ${PROFIT_SOURCE_UNCONFIGURED}`, 'trade.futures_unconfigured', 403);
+    }
+
+    /**
+     * DIRECTION:34 — disclosure before open. Wired in production via
+     * `assertAdlDisclosureAcked`; missing ack is a named 403, not a silent open.
+     */
+    if (this.deps.assertAdlDisclosureAcked) {
+      await this.deps.assertAdlDisclosureAcked(input.userId);
+    }
+
+    /**
+     * IDEMPOTENT OPEN KEY (required) — refuse before mark/ledger.
+     * Same clientOpenId → same lock key → ledger no-ops on retry.
+     * Parity with spot clientOrderId — omit no longer mints randomUUID (double margin).
+     */
+    const clientOpenId = input.clientOpenId?.trim() ?? '';
+    if (clientOpenId.length === 0 || clientOpenId.length > 64) {
+      throw new FuturesError(
+        'clientOpenId is required (1–64 chars) — omit would double-lock margin on retry',
+        'trade.client_open_id_required',
+        400,
+      );
     }
 
     const market = await this.sql<
@@ -399,7 +440,7 @@ export class PositionService {
      * something it does not offer. Validating here makes it a named 400 that
      * never locked anything, so there is nothing to compensate.
      *
-     * The cap itself, and why 10x, is argued in `initial-margin.ts`.
+     * The cap is DIRECTION §1 10× unless the host tightened it.
      */
     const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
     if (!leverageCheck.ok) {
@@ -450,7 +491,7 @@ export class PositionService {
       entryPrice,
       leverage,
     });
-    const positionId = randomUUID();
+    const positionId = positionIdFor(input.userId, m.id, clientOpenId);
 
     // Money first — never a position row without a ledger claim.
     await this.ledger.post(
@@ -501,6 +542,24 @@ export class PositionService {
         )
       `;
     } catch (err) {
+      /**
+       * RETRY PATH. Same clientOpenId already wrote this row (or a concurrent
+       * open with the same key won the race). Do not release the lock we just
+       * no-op'd on — the original position still owns it. Re-read and return.
+       * Other failures still release (unique open on a *different* id, etc.).
+       */
+      {
+        const existing = await this.sql<PositionRow[]>`
+          SELECT p.*, m.symbol
+          FROM trade.positions p
+          JOIN trade.markets m ON m.id = p.market_id
+          WHERE p.id = ${positionId}
+          LIMIT 1
+        `;
+        if (existing[0]) {
+          return presentPosition(existing[0]);
+        }
+      }
       // Roll margin back if the row failed (unique open, etc.).
       await this.ledger.post(
         recipes.futuresMarginRelease({
@@ -690,6 +749,32 @@ export class PositionService {
          */
         const previous = readAcceptedMark(row);
 
+        /**
+         * CLOSING SETTLES AT FREEZE-TIME `accepted_mark` (Denon handoff 2026-08-09
+         * §§3–4; ADR 2026-08-07 property 2).
+         *
+         * A `closing` row means the trader already asked to leave while the feed
+         * was dark. Charging (or paying) the move that happened during our outage
+         * is mark-driven loss/gain after exit. The current mark only *triggers*
+         * settlement (feed is usable again); the exit price is the last basis we
+         * already accepted on this position. Fail closed if that basis is missing
+         * (pre-0007 rows) rather than inventing a price from the fresh mark.
+         */
+        const settlingFromClosing = row.status === 'closing';
+        let exitPrice: string;
+        if (settlingFromClosing) {
+          if (row.accepted_mark == null || row.accepted_mark.trim() === '') {
+            throw new FuturesError(
+              'closing position has no accepted_mark to settle at — refuse invent from current mark',
+              'trade.closing_basis_missing',
+              503,
+            );
+          }
+          exitPrice = formatAmount(parseAmount(row.accepted_mark));
+        } else {
+          exitPrice = formatAmount(mark.price);
+        }
+
         const plan = planClose({
           // STABLE, not per attempt. See the header — this is half the fix.
           closeId: closeIdFor(row.id),
@@ -702,7 +787,7 @@ export class PositionService {
             margin: parseAmount(row.margin_current ?? row.margin_initial),
             marginAsset: row.margin_asset,
           },
-          exitPrice: formatAmount(mark.price),
+          exitPrice,
         });
         if (!plan.close) {
           throw new FuturesError(`cannot close: ${plan.reason}`, 'trade.close_refused', 400);
@@ -710,8 +795,13 @@ export class PositionService {
 
         if (plan.profit > 0n) {
           // Money is about to leave the platform on the strength of this mark, so it
-          // has to be a mark we would seize on.
-          this.requirePayoutGrade(mark, previous, at);
+          // has to be a mark we would seize on — except when settling from
+          // `closing` at freeze-time accepted_mark: that basis was already gated
+          // when stored, and the current mid-gap mark must not re-price the exit
+          // (breaker trap / dark-period charge — Denon §§3–4).
+          if (!settlingFromClosing) {
+            this.requirePayoutGrade(mark, previous, at);
+          }
 
           /**
            * NO NAMED POT, NO PAYOUT. The deployment never chose an account for
@@ -725,7 +815,7 @@ export class PositionService {
             throw new FuturesError(
               `Cannot realise ${formatAmount(plan.profit)} ${row.margin_asset} of profit — ${PROFIT_SOURCE_UNCONFIGURED}`,
               'trade.profit_source_unconfigured',
-              503,
+              403,
             );
           }
 
@@ -754,6 +844,23 @@ export class PositionService {
           }
         }
 
+        /**
+         * INSURANCE SHORTFALL BOUND (voluntary close). Same law as the
+         * liquidation tick: a loss past margin is not cover the house invents.
+         * Checked before the first post so a refusal cannot leave margin moved
+         * and the position half-closed.
+         */
+        if (plan.fromInsurance > 0n) {
+          const insurance = await checkInsuranceBound({
+            assetId: row.margin_asset,
+            fromInsurance: plan.fromInsurance,
+            balance: (ref) => this.ledger.balance(ref),
+          });
+          if (!insurance.ok) {
+            throw new FuturesError(`Cannot close through insurance shortfall — ${insurance.reason}`, INSURANCE_UNDERFUNDED, 409);
+          }
+        }
+
         for (const recipe of plan.recipes) {
           await this.ledger.post(recipe);
         }
@@ -767,6 +874,8 @@ export class PositionService {
          * basis only ever moves to a mark the platform actually settled on.
          *
          * Settling from `closing` clears `closing_reason` with the status write.
+         * `accepted_mark` records the exit we actually settled at (freeze basis
+         * when closing; current mark on ordinary open→closed).
          */
         const [closed] = await tx<PositionRow[]>`
           UPDATE trade.positions p
@@ -774,7 +883,7 @@ export class PositionService {
               closed_at = now(),
               updated_at = now(),
               closing_reason = NULL,
-              accepted_mark = ${formatAmount(mark.price)},
+              accepted_mark = ${exitPrice},
               accepted_mark_at = ${at}
           FROM trade.markets m
           WHERE p.id = ${positionId}
@@ -853,7 +962,11 @@ function presentPosition(row: PositionRow, extras?: { markPrice?: string | null;
   const size = parseAmount(row.size);
   const entry = parseAmount(row.entry_price);
   const leverage = parseAmount(row.leverage);
-  const margin = parseAmount(row.margin_current ?? row.margin_initial);
+  // W4 R6: collateral = residual margin; initialMargin stays the open stake.
+  // After funding debits, margin_current drops while margin_initial does not —
+  // reporting both as residual lied to every client risk view.
+  const marginCurrent = parseAmount(row.margin_current ?? row.margin_initial);
+  const marginInitial = parseAmount(row.margin_initial);
   const SCALE = 10n ** 18n;
   const notional = (size * entry) / SCALE;
   const opened = row.opened_at instanceof Date ? row.opened_at : new Date(row.opened_at);
@@ -872,8 +985,8 @@ function presentPosition(row: PositionRow, extras?: { markPrice?: string | null;
     markPrice: extras?.markPrice ?? null,
     notional: formatAmount(notional),
     leverage: formatAmount(leverage),
-    collateral: formatAmount(margin),
-    initialMargin: formatAmount(margin),
+    collateral: formatAmount(marginCurrent),
+    initialMargin: formatAmount(marginInitial),
     maintenanceMargin: null,
     unrealizedPnl: null,
     realizedPnl: extras?.realizedPnl ?? null,

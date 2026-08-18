@@ -21,21 +21,16 @@
 import { formatAmount, parseAmount, type Amount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { planLiquidation, summarizeLiquidation, type LiquidationPosition, type LiquidationDecision } from './liquidation-planner.js';
 import {
-  DEFAULT_FUTURES_LADDER_POLICY,
   DEPTH_UNKNOWN,
   FuturesLadderError,
+  mayLiquidateFromExpiredMarginCallGrace,
   planLadderLiquidation,
   summarizeLadder,
   type FuturesLadderPolicy,
 } from './maintenance-ladder.js';
-import {
-  DEFAULT_FUTURES_MARK_POLICY,
-  MARK_INVALID,
-  acceptableForLiquidation,
-  type FuturesQuotedMark,
-  type MarkPolicy,
-} from './mark-policy.js';
+import { DEFAULT_FUTURES_MARK_POLICY, acceptableForLiquidation, type FuturesQuotedMark, type MarkPolicy } from './mark-policy.js';
 import { breakerBasis, type AcceptedMarkStore } from './accepted-mark.js';
+import { INSURANCE_UNDERFUNDED, checkInsuranceBound } from './insurance-bound.js';
 
 /**
  * WHAT A CALLER ASKS A MARK SOURCE FOR — AND WHAT THE ANSWER IS FOR.
@@ -67,16 +62,19 @@ export interface MarkRequest {
   authorisesSize?: Amount;
 }
 
-/** External mark for one market. Null → skip that position (never invent). */
+/**
+ * External mark for one market.
+ *
+ * `markPrice` may feed screens. **Money paths (this tick, position close/open)
+ * require `quote()`** — a labelled FuturesQuotedMark. An unlabelled bare string
+ * must not be stamped `quality: 'mid'` (Denon handoff §6).
+ */
 export interface MarkSource {
   markPrice(input: MarkRequest): Promise<string | null>;
   /**
-   * The same mark, LABELLED — price, observation time, and how it was derived.
-   *
-   * Optional so every existing adapter still satisfies `MarkSource`. A source
-   * that provides it gets the `mark-policy.ts` gates applied here, with a
-   * stated reason instead of a bare null; a source that does not is limited to
-   * whatever gating it does internally.
+   * LABELLED mark — price, observation time, and how it was derived.
+   * Optional on the type so display adapters stay simple; the liquidation tick
+   * and position money paths refuse when it is absent rather than invent mid.
    */
   quote?(input: MarkRequest): Promise<FuturesQuotedMark | null>;
 }
@@ -138,13 +136,82 @@ export interface DepthNotionalSource {
 export interface LiquidationLadderDeps {
   depth: DepthNotionalSource;
   reducer: PositionReducer;
+  /**
+   * Owner D3 table. Omitted is skip, not `DEFAULT_FUTURES_LADDER_POLICY`
+   * placeholders — those numbers are not a risk opinion.
+   */
   policy?: FuturesLadderPolicy;
 }
 
-/** Prevent double-liquidation attempts for the same position+attempt key. */
+/**
+ * Deliver a futures margin-call notice.
+ *
+ * Port, so RAISING the rung and TELLING the trader stay separable facts (same
+ * split as bank's `MarginCallSink`). Must return `delivered: true` only when
+ * transport accepted the notice — that is the sole predicate that may start a
+ * future grace clock (`mayStartMarginCallGrace` in `maintenance-ladder.ts`).
+ *
+ * Production wires `durableMarginCallNotifier` (store write ⇒ delivered).
+ * Tests that want the pre-transport seal still use `stubMarginCallNotifier`
+ * (always undelivered). An optional port that defaults to "pretend delivered"
+ * would re-open C15; the tick still defaults to the stub when the dep is omitted.
+ */
+export interface MarginCallNotifier {
+  notifyMarginCall(input: {
+    positionId: string;
+    userId: string;
+    marketId: string;
+    /** Health ratio the ladder computed (bps). Diagnostic only — not a grace key. */
+    healthBps: number;
+    at: Date;
+  }): Promise<{ delivered: boolean }>;
+}
+
+/**
+ * Honest default until real notify transport exists: never claims delivery.
+ * Grace must not start; seizure must not proceed "from grace" off this.
+ */
+export const stubMarginCallNotifier: MarginCallNotifier = {
+  async notifyMarginCall() {
+    return { delivered: false };
+  },
+};
+
+/**
+ * Prevent double-liquidation attempts for the same position+attempt key.
+ *
+ * `tryClaim` must be called BEFORE any ledger post. A store that only records
+ * success after posts (legacy `markDone`) leaves a multi-replica window where
+ * two workers both pass `isDone`, both post under *different* minute-bucket
+ * ids, and both apply a full loss. Claim-first + a stable id closes that.
+ *
+ * `tryClaim` returns false when another worker already owns the id (or the
+ * attempt already finished). Callers must not post when false.
+ */
 export interface LiquidationAttemptStore {
   isDone(liquidationId: string): Promise<boolean>;
+  /**
+   * Atomically reserve `liquidationId` before money moves.
+   * true = this worker owns the attempt; false = skip (busy or already done).
+   * Implementations that only have insert-once storage treat claim as the same
+   * row as done — a crash after claim and before post parks the position until
+   * an operator clears the attempt row (same class as any mid-flight crash).
+   * Prefer that park over a second full loss under a new id.
+   */
+  tryClaim(liquidationId: string): Promise<boolean>;
   markDone(liquidationId: string): Promise<void>;
+}
+
+/**
+ * Stable liquidation attempt id for one open position.
+ *
+ * WHY NOT `liq:{positionId}:{isoMinute}`: that format minted a NEW loss id every
+ * minute while a position stayed open. Crash after post / multi-replica race
+ * then applied a second full `futures.loss` because ledger keys differed.
+ * One position liquidates once — the key is the position, not the clock.
+ */
+export function defaultLiquidationId(positionId: string): string {
+  return `liq:${positionId}`;
 }
 
 export interface LiquidationTickDeps {
@@ -152,10 +219,19 @@ export interface LiquidationTickDeps {
   positions: LiquidationPositionLoader;
   closer: PositionCloser;
   attempts: LiquidationAttemptStore;
-  ledger: Pick<LedgerClient, 'post'>;
+  /**
+   * `post` moves money; `balance` is the insurance shortfall bound — read before
+   * any bankrupt rung that would credit `house:insurance-fund`. A ledger that
+   * can post but cannot answer balances is not enough for the money path.
+   */
+  ledger: Pick<LedgerClient, 'post' | 'balance'>;
   maintenanceBps?: number;
   now?: () => Date;
-  /** Build stable attempt id. Default: liq:{positionId}:{isoMinute} */
+  /**
+   * Build the attempt id used for ledger recipe keys and the attempt store.
+   * Default: {@link defaultLiquidationId} — stable per open position for the
+   * whole liquidation lifecycle (not wall-clock minutes).
+   */
   liquidationIdFor?: (row: LiquidationPositionRow, at: Date) => string;
   /** Gates a labelled mark must clear before it may close a position. */
   markPolicy?: MarkPolicy;
@@ -176,6 +252,15 @@ export interface LiquidationTickDeps {
    * full-close planner, unchanged. See the file header.
    */
   ladder?: LiquidationLadderDeps;
+  /**
+   * C15 transport for the `margin-call` rung. Defaults to
+   * `stubMarginCallNotifier` (delivered=false) so a forgotten wire stays
+   * honest. Production (`startFuturesJobs`) passes
+   * `durableMarginCallNotifier`. Real notify must return delivered=true
+   * before any future grace field may start; the tick never treats
+   * margin_call as grace-expired seizure while grace is unimplemented.
+   */
+  notifyMarginCall?: MarginCallNotifier;
 }
 
 export interface LiquidationTickItemResult {
@@ -184,14 +269,21 @@ export interface LiquidationTickItemResult {
     | 'skipped_no_mark'
     | 'skipped_mark_unusable'
     | 'skipped_no_depth'
+    | 'skipped_d3_unset'
     | 'skipped_healthy'
     | 'skipped_already'
+    | 'skipped_insurance_underfunded'
     | 'margin_call'
     | 'partially_liquidated'
     | 'liquidated'
     | 'invalid';
   reason: string;
   summary?: string;
+  /**
+   * Set when `outcome === 'margin_call'`: whether the notify port accepted
+   * delivery. Observable on the tick result; REST durability is the trader door.
+   */
+  delivered?: boolean;
 }
 
 export interface LiquidationTickResult {
@@ -207,35 +299,6 @@ export interface LiquidationTickResult {
 /**
  * "The source handed back something that is not a price."
  *
- * Distinct from `null`, which means "the source has no price right now". A
- * source that returns `"abc"` is broken, and a broken source is not the same
- * event as a quiet one — it used to reach `planLiquidation` and come back as
- * `invalid_mark`, having already skipped every gate on the way.
- */
-const UNREADABLE = Symbol('trade.mark_unreadable');
-
-/**
- * A source that predates `quote()` gives a price and nothing else. Read it as
- * `mid` observed now — what `markPrice` has always implied, and the same
- * reading `position-service.ts` gives it — rather than inventing a quality it
- * never claimed, or skipping the gates because it never claimed one.
- */
-async function legacyQuote(
-  marks: MarkSource,
-  row: LiquidationPositionRow,
-  at: Date,
-): Promise<FuturesQuotedMark | null | typeof UNREADABLE> {
-  const price = await marks.markPrice({ marketId: row.marketId, symbol: row.symbol, at });
-  if (price == null || price.trim() === '') return null;
-  let parsed: Amount;
-  try {
-    parsed = parseAmount(price);
-  } catch {
-    return UNREADABLE;
-  }
-  return { marketId: row.marketId, symbol: row.symbol, price: parsed, asOf: at, quality: 'mid' };
-}
-
 /**
  * Scan open positions once; liquidate those the planner says are underwater
  * given external marks only.
@@ -249,7 +312,7 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
   let marginCalls = 0;
 
   for (const row of open) {
-    const liquidationId = deps.liquidationIdFor?.(row, at) ?? `liq:${row.positionId}:${at.toISOString().slice(0, 16)}`;
+    const liquidationId = deps.liquidationIdFor?.(row, at) ?? defaultLiquidationId(row.positionId);
 
     if (await deps.attempts.isDone(liquidationId)) {
       items.push({ positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' });
@@ -259,36 +322,29 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
     /**
      * THE GATE, BEFORE ANYTHING IS SEIZED.
      *
-     * Every mark — labelled or legacy — is judged by `acceptableForLiquidation`:
-     * quality, the tighter liquidation staleness limit, and the deviation
-     * breaker. `last` never passes under the default policy, so a market with no
-     * two-sided quote cannot be liquidated at all: the position sits and an
-     * operator looks at it.
+     * Only a LABELLED quote enters the gate. Stamping bare `markPrice` as
+     * `quality: 'mid'` used to invent a liquidation quality and set `asOf: now`,
+     * disarming quality + staleness (Denon handoff §6). Missing `quote()` is
+     * darkness — skip, never invent.
      *
-     * THE LEGACY BRANCH GOES THROUGH THE SAME GATE. It used to hand
-     * `markPrice`'s bare string straight to the planner, which meant a
-     * `MarkSource` without `quote()` was seizing positions with no breaker at
-     * all — the same hole in a second costume. An unlabelled price is read as
-     * `mid` observed now, which is exactly what `markPrice` has always implied
-     * (`position-service.ts` reads it the same way), and then it is gated.
-     *
-     * Either way, ABSENT IS NOT ZERO. There is no branch below that turns a
-     * missing mark into a price — on a perp, valuing a missing mark at zero
-     * does not misprice one position, it liquidates every one of them.
+     * ABSENT IS NOT ZERO. There is no branch below that turns a missing mark
+     * into a price — on a perp, valuing a missing mark at zero does not
+     * misprice one position, it liquidates every one of them.
      */
-    const quoted = deps.marks.quote
-      ? await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at })
-      : await legacyQuote(deps.marks, row, at);
-
-    if (quoted === UNREADABLE) {
+    // W4 R5: pass position size so depth-backed marks apply the relative
+    // floor (authorisesSize). Omitting it re-opens the size-blind liq path
+    // that close already sealed — absolute dust floor alone is not enough.
+    const authorisesSize = parseAmount(row.size);
+    if (!deps.marks.quote) {
       items.push({
         positionId: row.positionId,
-        outcome: 'skipped_mark_unusable',
-        reason: MARK_INVALID,
-        summary: `${row.marketId}: mark source returned a value that is not a price`,
+        outcome: 'skipped_no_mark',
+        reason: 'no_labelled_quote',
+        summary: `${row.marketId}: mark source has no labelled quote() — refuse inventing quality from bare markPrice`,
       });
       continue;
     }
+    const quoted = await deps.marks.quote({ marketId: row.marketId, symbol: row.symbol, at, authorisesSize });
     if (!quoted) {
       items.push({ positionId: row.positionId, outcome: 'skipped_no_mark', reason: 'no_mark' });
       continue;
@@ -343,13 +399,47 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
       const outcome =
         decision.reason === 'invalid_mark' || decision.reason === 'invalid_maintenance_bps' || decision.reason === 'empty_position'
           ? 'invalid'
-          : 'skipped_healthy';
+          : decision.reason === 'maintenance_bps_unset'
+            ? 'skipped_d3_unset'
+            : 'skipped_healthy';
       items.push({
         positionId: row.positionId,
         outcome,
         reason: decision.reason,
         summary: summarizeLiquidation(decision),
       });
+      continue;
+    }
+
+    /**
+     * INSURANCE SHORTFALL BOUND. Planner may attribute loss beyond margin to
+     * insurance; that is arithmetic, not permission to invent cover. Check the
+     * named fund BEFORE any post. Underfunded → park (position stays open,
+     * attempt NOT marked done) so a later top-up can re-drive the rung.
+     */
+    const insurance = await checkInsuranceBound({
+      assetId: row.marginAsset,
+      fromInsurance: decision.fromInsurance,
+      balance: (ref) => deps.ledger.balance(ref),
+    });
+    if (!insurance.ok) {
+      items.push({
+        positionId: row.positionId,
+        outcome: 'skipped_insurance_underfunded',
+        reason: INSURANCE_UNDERFUNDED,
+        summary: insurance.reason,
+      });
+      continue;
+    }
+
+    /**
+     * CLAIM BEFORE POST. After every skip gate that leaves the position open for
+     * a later re-drive (no mark, healthy, underfunded insurance), reserve the
+     * attempt id so a second worker cannot post under the same lifecycle key.
+     * false → another worker already owns it (or finished).
+     */
+    if (!(await deps.attempts.tryClaim(liquidationId))) {
+      items.push({ positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' });
       continue;
     }
 
@@ -394,6 +484,15 @@ async function runLadderRung(
   markPrice: Amount,
   liquidationId: string,
 ): Promise<LiquidationTickItemResult> {
+  if (ladder.policy == null) {
+    return {
+      positionId: row.positionId,
+      outcome: 'skipped_d3_unset',
+      reason: 'trade.ladder_d3_unset',
+      summary: `${row.marketId}: D3 ladder numbers are owner-unset — will not rate or seize on placeholder rungs`,
+    };
+  }
+
   let depthNotional: Amount | null;
   try {
     depthNotional = await ladder.depth.depthNotional({ marketId: row.marketId, side: row.side, symbol: row.symbol });
@@ -426,7 +525,7 @@ async function runLadderRung(
       position: row,
       markPrice,
       depthNotional,
-      policy: ladder.policy ?? DEFAULT_FUTURES_LADDER_POLICY,
+      policy: ladder.policy,
     });
   } catch (err) {
     // An incoherent policy is an operator problem on every position, not a market
@@ -436,16 +535,92 @@ async function runLadderRung(
   }
 
   if (!decision.liquidate) {
+    if (decision.rung.action === 'margin-call') {
+      /**
+       * C15 — MARGIN CALL, NOT SEIZURE.
+       *
+       * Report the rung, attempt delivery, and STOP. Grace is not implemented
+       * on futures (no graceExpiresAt on the position); inventing a timer here
+       * would be D3. The seal `mayLiquidateFromExpiredMarginCallGrace` is the
+       * only lawful future path from "called" to "seize after grace", and with
+       * undelivered notice + null grace it always refuses. If a later change
+       * wrongly treats margin_call as grace-expired without delivery, that
+       * helper (and its tests) fail closed — do not liquidate from this branch.
+       */
+      const at = (deps.now ?? (() => new Date()))();
+      const notifier = deps.notifyMarginCall ?? stubMarginCallNotifier;
+      const delivery = await notifier.notifyMarginCall({
+        positionId: row.positionId,
+        userId: row.userId,
+        marketId: row.marketId,
+        healthBps: decision.rung.healthBps,
+        at,
+      });
+      // graceExpiresAt: null — no durable grace clock on futures today.
+      // Undelivered or no clock → never seize "from grace".
+      const seizeFromGrace = mayLiquidateFromExpiredMarginCallGrace({
+        delivered: delivery.delivered,
+        graceExpiresAt: null,
+        now: at,
+      });
+      if (seizeFromGrace) {
+        // Unreachable while graceExpiresAt is always null. Fail closed if a
+        // future edit breaks the seal without wiring real escalate-after-grace.
+        return {
+          positionId: row.positionId,
+          outcome: 'margin_call',
+          reason: 'margin_call_grace_not_wired',
+          summary: `${summarizeLadder(decision)}; refused seize-from-grace without durable grace state`,
+        };
+      }
+      return {
+        positionId: row.positionId,
+        outcome: 'margin_call',
+        reason: decision.reason,
+        summary: summarizeLadder(decision),
+        delivered: delivery.delivered,
+      };
+    }
+
     const outcome =
-      decision.rung.action === 'margin-call'
-        ? 'margin_call'
-        : decision.rung.action === 'refuse' &&
-            (decision.reason === 'invalid_mark' || decision.reason === 'empty_position' || decision.reason === 'invalid_margin')
+      decision.rung.action === 'refuse' &&
+      (decision.reason === 'invalid_mark' || decision.reason === 'empty_position' || decision.reason === 'invalid_margin')
+        ? 'invalid'
+        : decision.rung.action === 'refuse'
           ? 'invalid'
-          : decision.rung.action === 'refuse'
-            ? 'invalid'
-            : 'skipped_healthy';
+          : 'skipped_healthy';
     return { positionId: row.positionId, outcome, reason: decision.reason, summary: summarizeLadder(decision) };
+  }
+
+  /**
+   * Same insurance bound as the full-close path — bankrupt ladder rungs are the
+   * case that invents cover when the fund is empty. Partial rungs with
+   * `fromInsurance === 0` pass through without a balance read cost that matters.
+   */
+  const insurance = await checkInsuranceBound({
+    assetId: row.marginAsset,
+    fromInsurance: decision.fromInsurance,
+    balance: (ref) => deps.ledger.balance(ref),
+  });
+  if (!insurance.ok) {
+    return {
+      positionId: row.positionId,
+      outcome: 'skipped_insurance_underfunded',
+      reason: INSURANCE_UNDERFUNDED,
+      summary: insurance.reason,
+    };
+  }
+
+  /**
+   * Closing rungs claim the lifecycle id so a second worker cannot full-close
+   * twice. Partial rungs deliberately do NOT claim `liq:{positionId}` — the
+   * position stays open for the next rung, and recipe keys already include the
+   * closed size so two partials do not share a ledger id.
+   */
+  if (decision.closesPosition) {
+    if (!(await deps.attempts.tryClaim(liquidationId))) {
+      return { positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' };
+    }
   }
 
   for (const recipe of decision.recipes) {
@@ -454,6 +629,7 @@ async function runLadderRung(
 
   if (decision.closesPosition) {
     await deps.closer.markLiquidated(row.positionId, { liquidationId, reason: decision.reason });
+    await deps.attempts.markDone(liquidationId);
   } else {
     await ladder.reducer.reduce(row.positionId, {
       liquidationId,
@@ -462,7 +638,6 @@ async function runLadderRung(
       reason: decision.reason,
     });
   }
-  await deps.attempts.markDone(liquidationId);
 
   return {
     positionId: row.positionId,
@@ -477,6 +652,11 @@ export function memoryLiquidationAttemptStore(): LiquidationAttemptStore {
   return {
     async isDone(id) {
       return done.has(id);
+    },
+    async tryClaim(id) {
+      if (done.has(id)) return false;
+      done.add(id);
+      return true;
     },
     async markDone(id) {
       done.add(id);

@@ -52,6 +52,21 @@ export function wouldCreateCycle(parent: ReadonlyMap<string, string>, userId: st
   return false;
 }
 
+/**
+ * Post-insert / integrity: true if the upward chain from `start` revisits a node.
+ * Used after a durable edge write so concurrent races cannot leave a cycle committed.
+ */
+export function chainHasCycle(parent: ReadonlyMap<string, string>, start: string): boolean {
+  let cur: string | undefined = parent.get(start);
+  const seen = new Set<string>([start]);
+  while (cur) {
+    if (seen.has(cur)) return true;
+    seen.add(cur);
+    cur = parent.get(cur);
+  }
+  return false;
+}
+
 /** How many hops from user to root (0 if no parent). */
 export function chainDepth(parent: ReadonlyMap<string, string>, userId: string): number {
   let depth = 0;

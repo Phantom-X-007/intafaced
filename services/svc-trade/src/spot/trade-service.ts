@@ -16,7 +16,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
-import { queryCandlesFromFills } from './candles.js';
+import { queryCandlesFromFills, queryTakerVolumeFromFills } from './candles.js';
 import { fillPayAmounts, fillReceivablesSurviveFees, ratesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
 import {
@@ -24,18 +24,25 @@ import {
   assertNotional,
   assertPrice,
   assertQty,
+  assertSettlementRails,
   assertSpotSurface,
   assertTradable,
   holdFor,
   protectionPriceFor,
   requireSupportedType,
 } from './risk.js';
+import { resolveOptionsListing } from './options-listing.js';
+import { checkInsuranceFundedForListing } from '../futures/insurance-listing-gate.js';
+import { assertProductionUnsettledAssetClassListing } from './forex-settlement.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
 import type { RankPerksSource } from './rank-perks.js';
+import { fireAffiliateAccrue, affiliateLegsAfterFill, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
 import { isHouseMmAccount } from '../mm/seed-market.js';
+import { recoverMatchingAccountId } from '../mm/fill-account.js';
 import { HOUSE_MM_USER_UUID } from './ids.js';
 import {
   presentAlgoProgress,
@@ -47,6 +54,10 @@ import {
   type TwapParent,
   type TwapParentStore,
 } from '../algo/index.js';
+import { captureAlgoPlaceGrant, principalFromAlgoGrant } from '../algo/durable-principal.js';
+import { alignLookbackVolumes, sliceCount, timeframeForSliceInterval } from '../algo/volume-plan.js';
+import type { TwapParentRecord } from '../algo/parent-store.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import {
   TradeError,
   type Candle,
@@ -107,6 +118,23 @@ export interface TradeServiceOptions {
    */
   futuresEnabled?: boolean;
   /**
+   * Opaque D26-P0-05 settlement-asset-law stamp
+   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`).
+   *
+   * EMPTY BY DEFAULT. Presence only — never parsed for live set, settlement
+   * asset, or refuse matrix (SOCKET §13 `socket.options-settlement-asset-law`).
+   * Empty → listMarket refuses kind=options with `trade.options_settlement_law_unset`.
+   */
+  optionsSettlementAssetLaw?: string;
+  /**
+   * Opaque D7 settlement-fixing config (`TRADE_OPTIONS_SETTLEMENT_FIXING`).
+   *
+   * EMPTY BY DEFAULT. Presence is the only signal — never parsed for source,
+   * window, or payor account (those are owner law). Empty → listMarket refuses
+   * kind=options with `trade.options_fixing_unconfigured` (after P0-05 is set).
+   */
+  optionsSettlementFixing?: string;
+  /**
    * Seed/mm bot place path (SD-4 kill-switch). OFF refuses `seeded: true` places.
    * Default false — seed must be deliberately enabled.
    */
@@ -145,6 +173,17 @@ export interface TradeServiceOptions {
   subAccounts?: SubAccountOwnershipSource;
   /** Override TWAP durable store (tests inject MemoryTwapParentStore). */
   algoStore?: TwapParentStore;
+  /**
+   * D26-P1-O2: after a fill posts house fees, claim affiliate rows (best-effort).
+   * Default noop — tests stay hermetic; production injects the identity HTTP client.
+   */
+  affiliateAccrue?: AffiliateAccruePort;
+
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind the fill. Body is `{ feeEventId }` only.
+   */
+  affiliatePayout?: AffiliatePayoutPort;
 }
 
 export interface ConvertQuoteRequest {
@@ -176,7 +215,10 @@ export interface PlaceOrderInput {
   qty: Amount;
   price?: Amount | null;
   tif?: TimeInForce;
-  /** The retry key. Strongly recommended — without one, a retry opens a second order. */
+  /**
+   * The retry key. Required on money-path place — without one a timeout retry
+   * opens a second hold under a fresh order id.
+   */
   clientOrderId?: string;
   subAccountId?: string;
   /**
@@ -185,6 +227,13 @@ export interface PlaceOrderInput {
    * client maxAvgPrice binds execution, not only the pre-trade RFQ check.
    */
   maxProtectionPrice?: Amount | null;
+  /**
+   * Optional floor on a market-sell execution price (convert M-03 sell half).
+   * When set, the order is submitted as a marketable IOC *limit* at this price
+   * so the engine cannot fill below the bound the user already accepted on the
+   * re-quote. Without it, a market sell stays pure market (hold is base qty).
+   */
+  minProtectionPrice?: Amount | null;
   /**
    * Seed/mm honesty (SD-2). Only accepted when `seedPlaceEnabled` is on.
    * Flagged orders are excluded from public volume / tape (SD-3).
@@ -217,25 +266,45 @@ export interface ListMarketInput {
   /** Paper market — drills only; placeOrder never posts ledger holds. */
   paper?: boolean;
   /**
-   * `spot` (default) or `futures`. The column and its enum have existed since
-   * `0000_trade_init.sql`, whose own comment says "the kind enum already carries
-   * their values, so listing a futures market later is" additive — and this method
-   * hardcoded `'spot'` anyway, so the only way a futures row reached
-   * `trade.markets` was raw SQL in a test.
+   * `spot` (default), `futures`, or `options`. The column and its enum have
+   * existed since `0000_trade_init.sql`, whose own comment says "the kind enum
+   * already carries their values, so listing a futures market later is" additive
+   * — and this method hardcoded `'spot'` anyway, so the only way a futures row
+   * reached `trade.markets` was raw SQL in a test.
    *
    * LISTING IS NOT ENABLING, and the ADR is explicit that the two are different
    * acts: "modelling an instrument is always honest; listing one you cannot settle
    * never is" (`2026-08-04-instrument-enum-authority.md`). A futures row created
    * here is quotable and readable and takes no order at all unless
-   * `TRADE_FUTURES_ENABLED` is on. `options` is accepted by the column and refused
-   * by `assertTradable` on every path; nothing here changes that.
+   * `TRADE_FUTURES_ENABLED` is on. Real-money active futures also require a
+   * non-empty insurance fund for the quote asset (DIRECTION:33) — empty →
+   * `trade.insurance_fund_empty`; paper/pending remain allowed.
+   *
+   * `options` is refused until D26-P0-05 settlement asset law is stamped
+   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` / SOCKET §13) AND settlement fixing is
+   * configured (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European
+   * contract terms are supplied — half-listed options cannot exist (service + DB
+   * CHECK). Even when listed, `assertTradable` still refuses options orders by
+   * kind (no engine). Never invent live set / settlement asset / refuse matrix.
    */
   kind?: MarketKind;
+  /** Required when kind=options: call or put. */
+  optionType?: 'call' | 'put' | null;
+  /** v1 european only; defaults to european when kind=options. */
+  optionStyle?: 'european' | null;
+  /** Required when kind=options: strike > 0 in quote units. */
+  optionStrike?: Amount | null;
+  /** Required when kind=options: European expiry instant. */
+  optionExpiryAt?: Date | null;
 }
 
 export class TradeService {
   private readonly spotEnabled: boolean;
   private readonly futuresEnabled: boolean;
+  /** Opaque P0-05 ADR stamp; empty refuses options listing (SOCKET §13). */
+  private readonly optionsSettlementAssetLaw: string;
+  /** Opaque D7 fixing stamp; empty refuses options listing (after P0-05). */
+  private readonly optionsSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
   private readonly convertEnabled: boolean;
@@ -248,6 +317,10 @@ export class TradeService {
   private readonly algo: TwapEngine;
   /** Durable TWAP schedules — survives process restart (in-memory alone was residual). */
   private readonly algoStore: TwapParentStore;
+  /** Best-effort identity accrue after house fees post (never fails the fill). */
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  /** Best-effort identity payout after accrue (never fails the fill). */
+  private readonly affiliatePayout: AffiliatePayoutPort;
 
   constructor(
     private readonly sql: Sql,
@@ -261,6 +334,9 @@ export class TradeService {
     // `?? false`, and the asymmetry with the line above is the whole point: a
     // deploy that forgets to mention futures does not get futures.
     this.futuresEnabled = options.futuresEnabled ?? false;
+    // Empty defaults — P0-05 / D7 unset means refuse options listing, never invent law.
+    this.optionsSettlementAssetLaw = options.optionsSettlementAssetLaw ?? '';
+    this.optionsSettlementFixing = options.optionsSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
     this.convertEnabled = options.convertEnabled ?? true;
@@ -270,6 +346,8 @@ export class TradeService {
     this.now = options.now ?? (() => new Date());
     this.subAccounts = options.subAccounts ?? new NoSubAccounts();
     this.algoStore = options.algoStore ?? new SqlTwapParentStore(sql);
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
     this.algo = new TwapEngine(
       {
         now: () => this.now(),
@@ -280,27 +358,11 @@ export class TradeService {
           if (!parent) throw new TradeError(`algo ${req.parentId} not found`, 'trade.algo_not_found');
           const principal = this.algoPrincipals.get(parent.userId);
           if (!principal) {
-            // ── SOCKET §13 · `socket.algo-principal-durability` ─────────────
-            //
-            // `algoPrincipals` is in-process and only ever written by
-            // `createTwap`. `tickAllAlgos` rehydrates the PARENT from Postgres
-            // but cannot rehydrate the caller's authority, so after a restart
-            // every schedule that survived finds nothing here.
-            //
-            // The obvious fix — persist the principal with the parent — is not
-            // a refactor: it stores an authorisation grant that outlives the
-            // session that gave it, and how long a schedule may carry the right
-            // to trade on someone's behalf is owner law, not a default to pick.
-            // Minting a principal from the parent's userId is worse — that is
-            // the service granting itself authority the user never presented.
-            //
-            // Until that is decided the honest behaviour is to STOP. The engine
-            // halts on this code and leaves the schedule intact, so the user
-            // finds an order that stopped with a stated reason and can cancel
-            // or re-place it — rather than one that quietly ran to "completed"
-            // having placed nothing.
+            // Pre-migration rows, expired grant, or missing trade:write on
+            // stored claims. Creating a TWAP persists the presented grant
+            // (`grant_claims`); tick reinstalls it. Never mint from userId.
             throw new TradeError(
-              "this schedule outlived the session that authorised it — refusing to place on the caller's behalf (SOCKET §13 socket.algo-principal-durability)",
+              "this schedule has no durable place grant — refusing to place on the caller's behalf",
               'trade.algo_principal_unavailable',
             );
           }
@@ -326,10 +388,20 @@ export class TradeService {
         },
         cancelChild: async (orderId) => {
           const row = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} LIMIT 1`;
-          if (row[0] && (row[0].status === 'open' || row[0].status === 'pending')) {
-            const principal = this.algoPrincipals.get(row[0].user_id);
-            if (principal) await this.cancelOrder(principal, orderId);
+          if (!row[0]) return;
+          // Already terminal — nothing to cancel; silent success is honest.
+          if (row[0].status !== 'open' && row[0].status !== 'pending') return;
+          // A cancel that does not cancel is worse than a refused cancel.
+          // Open child without the live caller's principal must THROW so the
+          // parent stays non-cancelled (engine cancel collects failures first).
+          const principal = this.algoPrincipals.get(row[0].user_id);
+          if (!principal) {
+            throw new TradeError(
+              `cannot cancel open algo child ${orderId} without the caller's principal — install principal on cancelAlgo before engine.cancel (never mint from userId)`,
+              'trade.algo_principal_unavailable',
+            );
           }
+          await this.cancelOrder(principal, orderId);
         },
         bestOpposingPrice: async (marketId, side) => {
           const depth = await this.matching.depth(marketId, 1);
@@ -348,6 +420,7 @@ export class TradeService {
             quality: 'mid',
           };
         },
+        intervalTakerVolume: async (marketId, from, to) => queryTakerVolumeFromFills(this.sql, { marketId, from, to }),
       },
       {
         onChange: (parent, plan) => this.algoStore.save({ parent, plan }),
@@ -371,29 +444,55 @@ export class TradeService {
     const assetClass = input.assetClass ?? 'crypto';
     const paper = input.paper === true;
     const status = input.status ?? 'active';
-    // D-S-05 / instrument-enum ADR: modelling forex/commodities is honest;
-    // listing them for production trading without fiat settlement is the lie.
-    // paper=true (drills) and non-active status remain allowed.
-    if ((assetClass === 'forex' || assetClass === 'commodity') && status === 'active' && !paper) {
-      throw new TradeError(
-        `${assetClass} cannot be listed for production trading until fiat settlement rails exist — list as paper=true or status pending/halted (model is fine)`,
-        'trade.unsettled_asset_class_listing',
-      );
+    const kind = input.kind ?? 'spot';
+    // D26-P1-T7 / D-S-05: modelling forex/commodities is honest; production
+    // active listing without P0-05 + fiat settle rails is the lie (§13 socket.forex-settlement).
+    // paper=true (drills) and non-active status remain allowed. Never invent settlement.
+    assertProductionUnsettledAssetClassListing({ assetClass, status, paper });
+    // DIRECTION:33 — empty insurance fund → no real-money futures list.
+    // Target size/schedule stay owner-open; any positive balance passes.
+    const insuranceGate = await checkInsuranceFundedForListing({
+      kind,
+      status,
+      paper,
+      quoteAsset: input.quoteAsset,
+      balance: (ref) => this.ledger.balance(ref),
+    });
+    if (!insuranceGate.ok) {
+      throw new TradeError(insuranceGate.reason, insuranceGate.code);
     }
+    // trade.options: refuse kind=options until P0-05 law + D7 fixing; require
+    // complete European terms so half-listed options cannot exist.
+    // No IV surface, no pricing model, no invented settlement asset / matrix.
+    const optionTerms = resolveOptionsListing({
+      kind,
+      settlementAssetLawConfigured: this.optionsSettlementAssetLaw,
+      settlementFixingConfigured: this.optionsSettlementFixing,
+      optionType: input.optionType,
+      optionStyle: input.optionStyle,
+      strike: input.optionStrike,
+      expiryAt: input.optionExpiryAt,
+    });
     const rows = await this.sql<MarketRow[]>`
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-        asset_class, schedule, display_name, paper
+        asset_class, schedule, display_name, paper,
+        option_type, option_style, option_strike, option_expiry_at, settlement_fixing
       ) VALUES (
-        ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, ${input.kind ?? 'spot'},
+        ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, ${kind},
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
         ${formatAmount(input.minQty)}::numeric,
         ${input.maxQty == null ? null : formatAmount(input.maxQty)}::numeric,
         ${formatAmount(input.minNotional)}::numeric,
         ${status}, ${input.makerBps}, ${input.takerBps}, now(),
         ${assetClass}, ${input.schedule ?? 'crypto-24x7'},
-        ${input.displayName ?? input.symbol}, ${paper}
+        ${input.displayName ?? input.symbol}, ${paper},
+        ${optionTerms?.optionType ?? null},
+        ${optionTerms?.optionStyle ?? null},
+        ${optionTerms == null ? null : formatAmount(optionTerms.strike)}::numeric,
+        ${optionTerms?.expiryAt ?? null},
+        ${optionTerms?.settlementFixing ?? null}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
@@ -412,6 +511,32 @@ export class TradeService {
    * lets a user out of a market the operator has frozen.
    */
   async setMarketStatus(marketId: string, status: Market['status']): Promise<Market> {
+    // Load first: FX/commodity re-activate must not bypass socket.forex-settlement,
+    // and empty-fund futures enable-to-active must refuse (DIRECTION:33).
+    const existing = await this.sql<MarketRow[]>`
+      SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
+             min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
+             asset_class, schedule, paper
+        FROM trade.markets WHERE id = ${marketId}
+    `;
+    const current = existing[0];
+    if (!current) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
+    const currentMarket = toMarket(current);
+    assertProductionUnsettledAssetClassListing({
+      assetClass: current.asset_class,
+      status,
+      paper: currentMarket.paper,
+    });
+    const insuranceGate = await checkInsuranceFundedForListing({
+      kind: currentMarket.kind,
+      status,
+      paper: currentMarket.paper,
+      quoteAsset: currentMarket.quoteAsset,
+      balance: (ref) => this.ledger.balance(ref),
+    });
+    if (!insuranceGate.ok) {
+      throw new TradeError(insuranceGate.reason, insuranceGate.code);
+    }
     const rows = await this.sql<MarketRow[]>`
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
@@ -496,9 +621,12 @@ export class TradeService {
           qty: input.qty,
           tif: 'IOC',
           clientOrderId: `convert:${input.clientConvertId}`,
-          // Bind convert maxAvgPrice into funding/engine protection (M-03), not
-          // only the live re-quote gate above.
+          // Bind convert maxAvgPrice into the engine (M-03), not only the live
+          // re-quote gate above. Buy → ceiling; sell → floor. Without the sell
+          // half the engine can fill a pure market *below* the avg the user
+          // already accepted, between re-quote and match.
           maxProtectionPrice: input.side === 'buy' ? (input.maxAvgPrice ?? null) : null,
+          minProtectionPrice: input.side === 'sell' ? (input.maxAvgPrice ?? null) : null,
         });
         span.setAttribute('intafaced.order_id', order.id);
         span.setAttribute('intafaced.order_status', order.status);
@@ -521,6 +649,11 @@ export class TradeService {
     // `assertSpotSurface`.
     assertSpotSurface(market, 'convert');
     assertTradable(market);
+    assertSettlementRails(market);
+    // Same schedule gate as placeOrder / TWAP create — before qty or book walk.
+    // A quote for a shut / unrecognised venue is a lie (invented mid / weekend
+    // EUR/USD fundable quote while place refuses market_closed).
+    assertMarketOpen(market, this.now());
     assertQty(market, input.qty);
 
     const depth = await this.matching.depth(market.id, 50);
@@ -625,6 +758,20 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
     assertTradable(market, { futuresEnabled: this.futuresEnabled });
+    // W4 U1: seed FX/commodity stay active in DB; place must refuse before hold.
+    assertSettlementRails(market);
+
+    // Hours/schedule refuse BEFORE paper SQL, clientOrderId, or any hold.
+    // A closed or unrecognised venue must not take funds (weekend EUR/USD used
+    // to rest a funded order until Monday). Read the clock ONCE so this request
+    // cannot straddle a session boundary and get two answers.
+    assertMarketOpen(market, this.now());
+
+    // Retry key is load-bearing money law (live and paper). Optional used to
+    // mint a random id so a transport timeout double-posted `order.hold:<uuid>`.
+    if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
+      throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
+    }
 
     // Stage-1 paper isolation (academy.paper-trading): a paper market must never
     // post orderHold / tradeFill against real available balances. Live markets
@@ -633,14 +780,6 @@ export class TradeService {
       return this.placePaperOrderIsolated(principal, input, market);
     }
 
-    // Before any hold is taken. A closed venue cannot fill, so funding an order
-    // into one locks the user's balance behind a book nobody is matching until
-    // the session reopens.
-    //
-    // Read ONCE, here, and passed down. Calling the clock twice on one order
-    // could straddle a session boundary and decide two different things about
-    // the same request.
-    assertMarketOpen(market, this.now());
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
 
@@ -666,7 +805,9 @@ export class TradeService {
      *   · market buy — a protection price derived from the best ask, and the
      *                  order is submitted as a marketable IOC limit there, so
      *                  the engine cannot fill above what was held.
-     *   · market sell— none needed; the hold is base quantity, exactly.
+     *   · market sell— hold is base quantity (no funding price). Optional
+     *                  `minProtectionPrice` still becomes an engine floor so
+     *                  convert (M-03) cannot fill worse than the accepted avg.
      */
     let fundingPrice: Amount | null = null;
     let protectionPrice: Amount | null = null;
@@ -686,6 +827,14 @@ export class TradeService {
       }
       assertNotional(market, protectionPrice, input.qty);
       fundingPrice = protectionPrice;
+    } else if (input.minProtectionPrice != null) {
+      // Market sell with an execution floor (convert M-03). Hold stays base qty
+      // — fundingPrice remains null — but the engine path uses this floor.
+      if (input.minProtectionPrice <= 0n) {
+        throw new TradeError('minProtectionPrice must be positive', 'trade.invalid_price');
+      }
+      assertPrice(market, input.minProtectionPrice);
+      protectionPrice = input.minProtectionPrice;
     }
 
     // A market SELL holds base quantity, so `holdFor` ignores the price on that
@@ -709,7 +858,7 @@ export class TradeService {
     // hold posted against an order id that exists nowhere is money nobody can
     // find. This way there is always a row pointing at the money, in every
     // interleaving.
-    const orderId = input.clientOrderId ? orderIdFor(userId, market.id, input.clientOrderId) : crypto.randomUUID();
+    const orderId = orderIdFor(userId, market.id, input.clientOrderId);
 
     // THE RETRY. Same client id → same order id → same row → same
     // `order.hold:<orderId>` ledger key. A retry finds the original instead of
@@ -722,7 +871,7 @@ export class TradeService {
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
       ) VALUES (
-        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
+        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId},
         ${input.side}, ${orderType},
         ${input.price == null ? null : formatAmount(input.price)}::numeric,
         ${formatAmount(input.qty)}::numeric, 'pending', ${tif},
@@ -797,7 +946,7 @@ export class TradeService {
     if (input.subAccountId != null) {
       await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
     }
-    assertMarketOpen(market, this.now());
+    // Session already sealed in placeOrderInner (one clock). Do not re-read now().
     const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
     if (orderType === 'limit') {
@@ -808,7 +957,8 @@ export class TradeService {
     const tif: TimeInForce = input.tif ?? 'GTC';
     // Schema requires hold columns; paper posts zero amount and never ledger-posts.
     const holdAsset = input.side === 'buy' ? market.quoteAsset : market.baseAsset;
-    const orderId = input.clientOrderId ? orderIdFor(userId, market.id, input.clientOrderId) : crypto.randomUUID();
+    // Caller already required clientOrderId in placeOrder — never random here.
+    const orderId = orderIdFor(userId, market.id, input.clientOrderId as string);
     const existing = await this.findOrder(orderId);
     if (existing) return existing;
 
@@ -817,7 +967,7 @@ export class TradeService {
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
       ) VALUES (
-        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId ?? null},
+        ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId as string},
         ${input.side}, ${orderType},
         ${input.price == null ? null : formatAmount(input.price)}::numeric,
         ${formatAmount(input.qty)}::numeric, 'open', ${tif},
@@ -1274,6 +1424,25 @@ export class TradeService {
         }),
       );
 
+      await this.notifyAffiliateAccrue({
+        fillId: fillIdFor(market.id, fill.sequence),
+        makerUserId: HOUSE_MM_USER_UUID,
+        takerUserId: taker.userId,
+        makerFee,
+        takerFee,
+        makerFeeAsset,
+        takerFeeAsset,
+      });
+      await this.notifyAffiliatePayout({
+        fillId: fillIdFor(market.id, fill.sequence),
+        makerUserId: HOUSE_MM_USER_UUID,
+        takerUserId: taker.userId,
+        makerFee,
+        takerFee,
+        makerFeeAsset,
+        takerFeeAsset,
+      });
+
       await this.bus.publish(
         'fillSettled',
         {
@@ -1394,6 +1563,25 @@ export class TradeService {
       }),
     );
 
+    await this.notifyAffiliateAccrue({
+      fillId: fillIdFor(market.id, fill.sequence),
+      makerUserId: maker.userId,
+      takerUserId: taker.userId,
+      makerFee,
+      takerFee,
+      makerFeeAsset: takerBuys ? market.quoteAsset : market.baseAsset,
+      takerFeeAsset: takerBuys ? market.baseAsset : market.quoteAsset,
+    });
+    await this.notifyAffiliatePayout({
+      fillId: fillIdFor(market.id, fill.sequence),
+      makerUserId: maker.userId,
+      takerUserId: taker.userId,
+      makerFee,
+      takerFee,
+      makerFeeAsset: takerBuys ? market.quoteAsset : market.baseAsset,
+      takerFeeAsset: takerBuys ? market.baseAsset : market.quoteAsset,
+    });
+
     // User-visible fill + order snapshots for private WS (not money — ledger already moved).
     for (const leg of legs) {
       await this.bus.publish(
@@ -1419,6 +1607,35 @@ export class TradeService {
       const latest = await this.findOrder(leg.order.id);
       if (latest) await this.publishOrderUpdated(latest);
     }
+  }
+
+  /**
+   * After house fees posted. Identity accrue is best-effort (412 / down / timeout
+   * must not unwind the fill). Never invents commission rates.
+   */
+  private async notifyAffiliateAccrue(input: {
+    fillId: string;
+    makerUserId: string;
+    takerUserId: string;
+    makerFee: Amount;
+    takerFee: Amount;
+    makerFeeAsset: string;
+    takerFeeAsset: string;
+  }): Promise<void> {
+    await fireAffiliateAccrue(this.affiliateAccrue, affiliateLegsAfterFill({ ...input, houseMmUserId: HOUSE_MM_USER_UUID }));
+  }
+
+  /** Best-effort payout after accrue; never throws. Fill already committed. */
+  private async notifyAffiliatePayout(input: {
+    fillId: string;
+    makerUserId: string;
+    takerUserId: string;
+    makerFee: Amount;
+    takerFee: Amount;
+    makerFeeAsset: string;
+    takerFeeAsset: string;
+  }): Promise<void> {
+    await fireAffiliatePayout(this.affiliatePayout, affiliateLegsAfterFill({ ...input, houseMmUserId: HOUSE_MM_USER_UUID }));
   }
 
   // ── Holds: the only two things that can happen to one ─────────────────────
@@ -1625,10 +1842,11 @@ export class TradeService {
    * each other.
    *
    * `makerAccountId` / `takerAccountId` come from the matching event when the
-   * catalog carries them. House MM seed makers have no `trade.orders` row and
-   * are identified only by matching STP id `house:market-maker` — empty string
-   * must not invent that path. User makers may fall back to the order row's
-   * userId (matching uses user id as accountId for users).
+   * catalog carries them. House MM seed makers are matching STP
+   * `house:market-maker`. A recorded seed row uses HOUSE_MM_USER_UUID for
+   * bookkeeping — recovery rewrites that to the house STP id so the fill
+   * cannot look like an anonymous customer. Empty event + no house row must
+   * not invent house MM. User makers fall back to the order row's userId.
    */
   async settleFillEvent(input: {
     marketId: string;
@@ -1648,10 +1866,17 @@ export class TradeService {
     const taker = await this.findOrder(input.takerOrderId);
     if (!taker) throw new TradeError(`order ${input.takerOrderId} not found`, 'trade.order_not_found');
 
-    // Prefer event payload; then orders table for user legs. Never invent house MM.
+    // Prefer event payload; then orders table. House bookkeeping UUID → house STP id.
+    // Never invent house MM from an unknown maker (empty + no house row).
     const makerRow = await this.findOrder(input.makerOrderId);
-    const makerAccountId = (input.makerAccountId && input.makerAccountId.trim()) || (makerRow ? makerRow.userId : '') || '';
-    const takerAccountId = (input.takerAccountId && input.takerAccountId.trim()) || taker.userId;
+    const makerAccountId = recoverMatchingAccountId({
+      eventAccountId: input.makerAccountId,
+      orderUserId: makerRow?.userId,
+    });
+    const takerAccountId = recoverMatchingAccountId({
+      eventAccountId: input.takerAccountId,
+      orderUserId: taker.userId,
+    });
 
     await withMoneySpan(
       'trade.settleFillEvent',
@@ -1830,9 +2055,11 @@ export class TradeService {
    * | Case | Detection | Action |
    * | --- | --- | --- |
    * | orphan pending | `pending` + hold 0 | delete row (never held) |
-   * | open+hold no engine | `open` + hold > 0 + cancel miss | release remainder once |
+   * | open+hold no engine | `open` + hold > 0 + list miss | release remainder once |
    * | open+engine no hold | `open` + hold 0 | **fail closed** — do not invent hold; cancel free book risk if live |
    *
+   * Liveness is **list first** (`GET` engine orders). Cancel is repair, not probe
+   * (W6/W7 residual: cancel-as-probe emptied the book to ask if it was live).
    * Fail closed means: never mint a hold from this path; never mark filled without fills.
    */
   async reconcileOrder(orderId: string): Promise<ReconcileResult> {
@@ -1876,13 +2103,17 @@ export class TradeService {
         };
       }
 
+      // Non-destructive liveness: list before any cancel.
+      const listed = await this.matching.listOrders(order.marketId);
+      const engineLive = listed.orders.some((o) => o.orderId === orderId);
+
       // ── open (or pending-with-hold) + no ledger hold — FAIL CLOSED ────────
       // Spec: open+engine no hold. We treat any open/pending with zero hold as
-      // fail-closed: never invent a hold. Best-effort cancel removes free book
-      // risk if the engine still has the order.
+      // fail-closed: never invent a hold. Cancel only if list says live (free book risk).
       if (holdBal === 0n) {
-        const eng = await this.matching.cancel(order.marketId, orderId);
-        const engineLive = eng.cancelled;
+        if (engineLive) {
+          await this.matching.cancel(order.marketId, orderId);
+        }
         // Terminalize without release (remainder already 0). Do not invent money.
         await this.finalize(orderId, 'cancelled');
         return {
@@ -1892,14 +2123,15 @@ export class TradeService {
           holdBefore,
           engineLive,
           detail: engineLive
-            ? 'open/pending with zero hold while engine had the order — cancelled free book risk; NO hold invented'
-            : 'open/pending with zero hold and engine miss — terminalized; NO hold invented',
+            ? 'open/pending with zero hold while engine list had the order — cancelled free book risk; NO hold invented'
+            : 'open/pending with zero hold and engine list miss — terminalized; NO hold invented',
         };
       }
 
-      // ── open+hold: cancel probe then release remainder once ───────────────
-      const eng = await this.matching.cancel(order.marketId, orderId);
-      const engineLive = eng.cancelled;
+      // ── open+hold: list then cancel-if-live, release remainder once ────────
+      if (engineLive) {
+        await this.matching.cancel(order.marketId, orderId);
+      }
       await this.finalize(orderId, 'cancelled');
       return {
         orderId,
@@ -1908,8 +2140,8 @@ export class TradeService {
         holdBefore,
         engineLive,
         detail: engineLive
-          ? 'open+hold; engine cancelled; remainder released once'
-          : 'open+hold; engine miss (never live / already gone); remainder released once',
+          ? 'open+hold; engine list live then cancelled; remainder released once'
+          : 'open+hold; engine list miss; remainder released once',
       };
     });
   }
@@ -2023,8 +2255,9 @@ export class TradeService {
       limitPrice?: Amount | null;
       subAccountId?: string;
       clientAlgoId?: string;
-      /** Only `twap` in v1 — VWAP/POV refused by name. */
+      /** `twap` (default), `vwap` (lookback candles), `pov` (live tape × participationBps). */
       kind?: string;
+      participationBps?: number;
     },
   ): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
@@ -2035,9 +2268,9 @@ export class TradeService {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
     const kind = (input.kind ?? 'twap').toLowerCase();
-    if (kind !== 'twap') {
+    if (kind !== 'twap' && kind !== 'vwap' && kind !== 'pov') {
       throw new TradeError(
-        `algo kind "${kind}" is not available — v1 is TWAP only (VWAP/POV wait on a real volume series)`,
+        `algo kind "${kind}" is not available — v1 is TWAP / VWAP / POV (icebergs still out)`,
         'trade.algo_unsupported_kind',
       );
     }
@@ -2045,8 +2278,9 @@ export class TradeService {
     const market = await this.requireMarket(input);
     // TWAP is spot-only by name (see `assertSpotSurface`), not because
     // `assertTradable` happens to refuse the kind.
-    assertSpotSurface(market, 'TWAP');
+    assertSpotSurface(market, kind === 'twap' ? 'TWAP' : kind === 'vwap' ? 'VWAP' : 'POV');
     assertTradable(market);
+    assertSettlementRails(market);
     assertMarketOpen(market, this.now());
     assertQty(market, input.totalQty);
     if (input.subAccountId) {
@@ -2059,12 +2293,12 @@ export class TradeService {
     const ask = depth.asks[0] ? parseAmount(depth.asks[0][0]) : null;
     if (bid === null || ask === null) {
       throw new TradeError(
-        `${market.symbol}: no two-sided mark at creation — refusing TWAP rather than inventing a feed`,
+        `${market.symbol}: no two-sided mark at creation — refusing algo rather than inventing a feed`,
         'trade.algo_mark_missing',
       );
     }
 
-    const createInput: CreateTwapInput = {
+    let createInput: CreateTwapInput = {
       marketId: market.id,
       symbol: market.symbol,
       side: input.side,
@@ -2074,32 +2308,48 @@ export class TradeService {
       limitPrice: input.limitPrice ?? null,
       subAccountId: input.subAccountId ?? null,
       clientAlgoId: input.clientAlgoId,
+      kind,
     };
+
+    if (kind === 'vwap') {
+      const tf = timeframeForSliceInterval(input.sliceIntervalMs);
+      if (tf == null) {
+        throw new TradeError(
+          'VWAP sliceIntervalMs must match a listed OHLCV timeframe (1m, 5m, 1h, …) — refuse rather than invent a finer volume bucket',
+          'trade.algo_invalid_schedule',
+        );
+      }
+      const n = sliceCount(input.durationMs, input.sliceIntervalMs);
+      const nowMs = this.now().getTime();
+      const windowEndMs = Math.floor(nowMs / input.sliceIntervalMs) * input.sliceIntervalMs;
+      const candles = await queryCandlesFromFills(this.sql, {
+        marketId: market.id,
+        timeframe: tf,
+        limit: n + 2,
+        sinceMs: windowEndMs - n * input.sliceIntervalMs,
+      });
+      createInput = {
+        ...createInput,
+        volumeProfile: alignLookbackVolumes(candles, n, input.sliceIntervalMs, windowEndMs),
+      };
+    }
+
+    if (kind === 'pov') {
+      createInput = { ...createInput, participationBps: input.participationBps };
+    }
 
     // Store principal on a side map so child place uses the real caller scopes.
     this.algoPrincipals.set(principal.userId, principal);
 
     const parent = this.algo.create(principal.userId, createInput, market.lotSize);
-    // Await durable write so a crash between create and first onChange cannot lose the schedule.
     const plan = this.algo.planOf(parent.id) ?? [];
-    await this.algoStore.save({ parent, plan });
+    await this.algoStore.save({ parent, plan, grant: captureAlgoPlaceGrant(principal) });
     return parent;
   }
 
   async getAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:read');
-    let parent = this.algo.get(parentId);
-    if (!parent) {
-      const loaded = await this.algoStore.load(parentId);
-      if (loaded && loaded.parent.userId === principal.userId) {
-        this.algo.hydrate(loaded.parent, loaded.plan);
-        parent = loaded.parent;
-      }
-    }
-    if (!parent || parent.userId !== principal.userId) {
-      throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
-    }
-    return parent;
+    return hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
   }
 
   async algoProgress(principal: Principal, parentId: string): Promise<AlgoProgressView> {
@@ -2114,22 +2364,36 @@ export class TradeService {
 
   async pauseAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
-    return this.algo.pause(principal.userId, parentId);
+    await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+    return persistAlgoMutation(this.algo, this.algoStore, this.algo.pause(principal.userId, parentId));
   }
 
   async resumeAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
-    return this.algo.resume(principal.userId, parentId);
+    await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+    return persistAlgoMutation(this.algo, this.algoStore, this.algo.resume(principal.userId, parentId));
   }
 
   async cancelAlgo(principal: Principal, parentId: string): Promise<TwapParent> {
     requireScope(principal, 'trade:write');
-    return this.algo.cancel(principal.userId, parentId);
+    // Install the live caller's principal BEFORE engine.cancel so cancelChild
+    // can cancel open children after a process restart. Place still refuses
+    // without a durable principal grant (SOCKET §13) — cancel is different:
+    // the user is presenting authority right now.
+    this.algoPrincipals.set(principal.userId, principal);
+    await hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
+    return persistAlgoCancelAttempt(this.algo, this.algoStore, principal.userId, parentId);
   }
 
   /** Drive one parent's next due slice (job host / tests). */
   async tickAlgo(parentId: string) {
-    return this.algo.tick(parentId);
+    await hydrateAlgoFromStore(this.algo, this.algoStore, parentId);
+    const loaded = await this.algoStore.load(parentId);
+    if (loaded) this.installAlgoPlaceGrant(loaded);
+    const result = await this.algo.tick(parentId);
+    const live = this.algo.get(parentId);
+    if (live) await persistAlgoMutation(this.algo, this.algoStore, live);
+    return result;
   }
 
   /** Drive all active algos once. Hydrates durable active parents first. */
@@ -2139,8 +2403,32 @@ export class TradeService {
       if (!this.algo.get(rec.parent.id)) {
         this.algo.hydrate(rec.parent, rec.plan);
       }
+      this.installAlgoPlaceGrant(rec);
     }
-    return this.algo.tickAll();
+    await this.algo.tickAll();
+    for (const rec of active) {
+      const live = this.algo.get(rec.parent.id);
+      if (live) await persistAlgoMutation(this.algo, this.algoStore, live);
+    }
+  }
+
+  /**
+   * Reinstall the createTwap place grant after restart. Missing/expired grant
+   * leaves the in-memory map empty so placeChild still halts.
+   */
+  private installAlgoPlaceGrant(record: TwapParentRecord): void {
+    if (!record.grant) return;
+    try {
+      const restored = principalFromAlgoGrant({
+        userId: record.parent.userId,
+        grant: record.grant,
+        expiresAt: record.parent.projectedEndsAt,
+        now: this.now(),
+      });
+      this.algoPrincipals.set(restored.userId, restored);
+    } catch {
+      this.algoPrincipals.delete(record.parent.userId);
+    }
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
@@ -2170,14 +2458,18 @@ export class TradeService {
     // only ever matches funded orders" true for an order type that has no price
     // of its own. FOK is preserved because it is a different promise to the
     // caller, and the engine keeps it either way.
-    if (orderType === 'market' && input.side === 'buy') {
+    //
+    // A market SELL with `minProtectionPrice` is the convert M-03 sell half:
+    // same shape (marketable IOC limit), floor rather than ceiling, so the
+    // engine cannot print below the avg the user already accepted.
+    if (orderType === 'market' && protectionPrice != null) {
       return {
         orderId,
         accountId: userId,
         type: 'limit',
-        side: 'buy',
+        side: input.side,
         qty: formatAmount(input.qty),
-        price: formatAmount(protectionPrice as Amount),
+        price: formatAmount(protectionPrice),
         stopPrice: null,
         tif: tif === 'FOK' ? 'FOK' : 'IOC',
       };

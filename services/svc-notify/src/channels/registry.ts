@@ -8,6 +8,7 @@ import {
 } from './channel.js';
 import { InAppChannel, UnconfiguredChannel } from './gateway.js';
 import { EmailChannel, PushChannel, SmsChannel } from './adapters.js';
+import { socketIdForChannel, type NotifyChannelSocketId } from './mountain-vs-sockets.js';
 
 /**
  * WHICH CHANNELS EXIST, AND WHICH ONE CAN ACTUALLY REACH ANYONE.
@@ -134,6 +135,12 @@ export interface ChannelStatus {
   readonly requires: readonly string[];
   /** True when this deployment declared the channel must work. Never true for `inapp`. */
   readonly required: boolean;
+  /**
+   * Doctrine §13 tracker id for out-of-app channels (`socket.notify-*`).
+   * Null for `inapp` — that surface is the fan-out mountain (`ops.notifications`),
+   * not a credential socket (D26-P1-O5).
+   */
+  readonly socket: NotifyChannelSocketId | null;
 }
 
 export class ChannelRegistry {
@@ -209,6 +216,7 @@ export class ChannelRegistry {
         reason,
         requires,
         required: this.required.has(id),
+        socket: socketIdForChannel(id),
       };
     });
   }

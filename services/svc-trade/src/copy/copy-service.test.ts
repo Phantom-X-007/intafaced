@@ -31,6 +31,35 @@ describe('CopyService', () => {
     expect(s.feeSharePublished).toBe(false);
     expect(s.jurisdictionPublished).toBe(false);
     expect(s.residual).toContain('DIRECTION §8');
+    expect(s.residual).toContain('D26-P0-02');
+    expect(s.residual).toContain('D26-P0-15');
+    expect(s.residuals.rates).toContain('D26-P0-02');
+    expect(s.residuals.jurisdiction).toContain('D26-P0-15');
+    expect(s.sovereign).toEqual({
+      shape: 'sovereign',
+      custody: false,
+      feeModel: 'protocol_fee_share',
+      pnlFeeForbidden: true,
+      rankingForbidden: true,
+      killUnfollowReal: true,
+    });
+  });
+
+  it('published empty allowlist serves none — still refuse-closed (D26-P0-15)', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
   it('follow refuses when jurisdiction law blank — never invents allowlist', async () => {
@@ -67,6 +96,130 @@ describe('CopyService', () => {
     ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
+  it('published empty allowlist serves none — still refuse-closed (D26-P0-15)', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
+  });
+
+  it('listMyFollows and already-following never scan every follow in the store', async () => {
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    class SpyStore extends MemoryCopyFollowStore {
+      listFollowsCalls = 0;
+      override async listFollows() {
+        this.listFollowsCalls += 1;
+        return super.listFollows();
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    store.listFollowsCalls = 0;
+    expect(await svc.listMyFollows(principal)).toEqual([]);
+    const mine = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const listed = await svc.listMyFollows(principal);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.followId).toBe(mine.followId);
+    expect(listed[0]?.leaderId).toBe(LEADER);
+    expect(store.listFollowsCalls).toBe(0);
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.listFollowsCalls).toBe(0);
+  });
+
+  it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {
+    class RaceStore extends MemoryCopyFollowStore {
+      override async listFollowsByFollower() {
+        return [];
+      }
+    }
+    const store = new RaceStore();
+    const opts = { feeShareLaw: publishedFee, jurisdictionLaw: publishedJur, store };
+    const first = new CopyService(new MemoryLedger(), opts);
+    const second = new CopyService(new MemoryLedger(), opts);
+    await first.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      second.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+  });
+
+  it('follow maps a leaked Postgres unique_violation to already_following', async () => {
+    class PgLeakStore extends MemoryCopyFollowStore {
+      override async listFollowsByFollower() {
+        return [];
+      }
+      override async saveFollow(): Promise<void> {
+        throw Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+      }
+    }
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store: new PgLeakStore(),
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_already_following' });
+  });
+
   it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {
@@ -88,17 +241,26 @@ describe('CopyService', () => {
 
     const plan = await svc.planMirrorForFollow(principal, {
       followId: follow.followId,
+      fillId: 'fill-cap-1',
       marketId: 'BTC-USDT',
       side: 'buy',
       qty: '0.01',
       notional: '80',
     });
     expect(plan.notional).toBe('80');
+    expect(plan.fillId).toBe('fill-cap-1');
     expect(plan.reason).toBe('within_envelope');
+
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: plan.fillId, leaderPaper: false }),
+    ).rejects.toMatchObject({
+      code: 'trade.copy_place_disabled',
+    });
 
     await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-cap-2',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.01',
@@ -109,6 +271,7 @@ describe('CopyService', () => {
     await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-bad-mkt',
         marketId: 'ETH-USDT',
         side: 'buy',
         qty: '1',
@@ -120,12 +283,192 @@ describe('CopyService', () => {
     await expect(
       svc.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-expired',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.001',
         notional: '10',
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_key_expired' });
+  });
+
+  it('wired placeMirror uses follower placeOrder with plan qty/price — never invents a fill', async () => {
+    const placed: { qty: bigint; price: bigint; clientOrderId: string }[] = [];
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      inspectMarket: async () => ({ paper: false }),
+      placeFollowerOrder: async (_p, input) => {
+        placed.push({ qty: input.qty, price: input.price, clientOrderId: input.clientOrderId });
+        return { orderId: 'ord-1' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-place-1',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    const out = await svc.placeMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-place-1',
+      leaderPaper: false,
+    });
+    expect(out.orderId).toBe('ord-1');
+    expect(out.price).toBe('5000');
+    expect(placed).toHaveLength(1);
+    expect(placed[0]!.qty).toBe(parseAmount('0.01'));
+    expect(placed[0]!.price).toBe(parseAmount('5000'));
+    expect(svc.deskStatus().autoMirrorPlace.published).toBe(true);
+  });
+
+  it('placeMirror redelivery does not place a second order', async () => {
+    let places = 0;
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      inspectMarket: async () => ({ paper: false }),
+      placeFollowerOrder: async () => {
+        places += 1;
+        return { orderId: `ord-${places}` };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-once',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    const first = await svc.placeMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-once',
+      leaderPaper: false,
+    });
+    const second = await svc.placeMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-once',
+      leaderPaper: false,
+    });
+    expect(places).toBe(1);
+    expect(second.orderId).toBe(first.orderId);
+    expect(second.duplicate).toBe(true);
+  });
+
+  it('placeMirror refuses when the place flag is off even if the port is wired', async () => {
+    let places = 0;
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: false,
+      placeFollowerOrder: async () => {
+        places += 1;
+        return { orderId: 'ord-nope' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-flag-off',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-flag-off', leaderPaper: false }),
+    ).rejects.toMatchObject({ code: 'trade.copy_place_disabled' });
+    expect(places).toBe(0);
+  });
+
+  it('placeMirror refuses blank §8 fee-share — never invents leader_share_bps', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: UNPUBLISHED_COPY_FEE_SHARE_LAW,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      placeFollowerOrder: async () => ({ orderId: 'ord-nope' }),
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-blank-env',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-blank-env', leaderPaper: false }),
+    ).rejects.toMatchObject({ code: 'trade.copy_fee_share_blank' });
+  });
+
+  it('placeMirror refuses a paper leader fill onto a live market', async () => {
+    let places = 0;
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      inspectMarket: async () => ({ paper: false }),
+      placeFollowerOrder: async () => {
+        places += 1;
+        return { orderId: 'ord-live' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-paper',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-paper', leaderPaper: true }),
+    ).rejects.toMatchObject({ code: 'trade.copy_paper_live_forbidden' });
+    expect(places).toBe(0);
   });
 
   it('unfollow always works (unilateral revoke)', async () => {
@@ -248,6 +591,7 @@ describe('CopyService', () => {
     });
     await first.planMirrorForFollow(principal, {
       followId: follow.followId,
+      fillId: 'fill-restart-1',
       marketId: 'BTC-USDT',
       side: 'buy',
       qty: '0.01',
@@ -269,6 +613,7 @@ describe('CopyService', () => {
     await expect(
       second.planMirrorForFollow(principal, {
         followId: follow.followId,
+        fillId: 'fill-restart-2',
         marketId: 'BTC-USDT',
         side: 'buy',
         qty: '0.01',
@@ -305,8 +650,16 @@ describe('CopyService', () => {
       maxAggregateExposure: '250',
       expiresAt: futureExpiry,
     });
+    let fillSeq = 0;
     const mirror = (side: 'buy' | 'sell', notional: string, marketId = 'BTC-USDT') =>
-      svc.planMirrorForFollow(principal, { followId: follow.followId, marketId, side, qty: '0.01', notional });
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: `fill-side-${++fillSeq}`,
+        marketId,
+        side,
+        qty: '0.01',
+        notional,
+      });
 
     const bought = await mirror('buy', '100');
     expect(bought.nextExposure).toBe('100');
@@ -319,6 +672,127 @@ describe('CopyService', () => {
     // And alternating sides across permitted markets cannot evade the cap —
     // a net-position model would let this run forever.
     await expect(mirror('buy', '100', 'ETH-USDT')).rejects.toMatchObject({ code: 'trade.copy_cap_exceeded' });
+  });
+
+  /**
+   * Redelivered leader fills must not double-count exposure.
+   *
+   * Every other money path in svc-trade keys on fillId (ledger trade.fill,
+   * fee-share settle). Mirror used to plan from qty/notional alone — a journal
+   * redelivery of the same leader fill would spend the session budget twice.
+   */
+  it('a redelivered leader fill returns the prior plan and does not bump exposure twice', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+
+    const input = {
+      followId: follow.followId,
+      fillId: 'leader-fill-abc',
+      marketId: 'BTC-USDT' as const,
+      side: 'buy' as const,
+      qty: '0.01',
+      notional: '80',
+    };
+
+    const first = await svc.planMirrorForFollow(principal, input);
+    expect(first.fillId).toBe('leader-fill-abc');
+    expect(first.notional).toBe('80');
+    expect(first.nextExposure).toBe('80');
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('80');
+
+    // Same fillId again (redelivery) — prior plan, exposure unchanged.
+    const second = await svc.planMirrorForFollow(principal, input);
+    expect(second).toEqual(first);
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('80');
+
+    // Stored claim is the durable source of truth across restarts.
+    const claimed = await store.getMirroredFill(follow.followId, 'leader-fill-abc');
+    expect(claimed).not.toBeNull();
+    expect(formatAmount(claimed!.notional)).toBe('80');
+
+    // A different fill still spends budget (not a blanket freeze).
+    const third = await svc.planMirrorForFollow(principal, {
+      ...input,
+      fillId: 'leader-fill-def',
+      notional: '50',
+    });
+    expect(third.nextExposure).toBe('130');
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('130');
+  });
+
+  it('mirror refuses a blank fillId rather than inventing one', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: '   ',
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '10',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_envelope_invalid' });
+  });
+
+  it('concurrent redeliveries of the same fill claim exposure once', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    const input = {
+      followId: follow.followId,
+      fillId: 'leader-fill-race',
+      marketId: 'BTC-USDT' as const,
+      side: 'buy' as const,
+      qty: '0.01',
+      notional: '75',
+    };
+
+    const results = await Promise.all([
+      svc.planMirrorForFollow(principal, input),
+      svc.planMirrorForFollow(principal, input),
+      svc.planMirrorForFollow(principal, input),
+    ]);
+
+    for (const r of results) {
+      expect(r.fillId).toBe('leader-fill-race');
+      expect(r.notional).toBe('75');
+      expect(r.nextExposure).toBe('75');
+    }
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('75');
   });
 
   /**
@@ -352,5 +826,330 @@ describe('CopyService', () => {
     await svc.follow(principal, envelope);
 
     expect(await store.getPeriodStats(key)).toEqual({ earningsPaid: parseAmount('100'), roundTrips: 42 });
+  });
+
+  /**
+   * CONCURRENT settleFeeShare must not breach earningsCapPerFollower.
+   *
+   * Reachable break (pre-fix): two settlers both read earningsPaid=0, both
+   * attribute a full share under cap, both post (different fillIds → different
+   * ledger business keys → both move money), both write counters. Cap breached;
+   * ledger records the over-payment. Assertions are BALANCES, not response codes.
+   */
+  it('concurrent settleFeeShare never pays more than earningsCapPerFollower', async () => {
+    const cap = '1';
+    const tightCap: CopyFeeShareLaw = {
+      published: true,
+      leaderShareBps: 5_000,
+      earningsCapPerFollower: cap,
+      decayRoundTrips: 100,
+      decayShareBps: 1_000,
+    };
+    const ledger = new MemoryLedger();
+    // Seed enough house trade fees that a double-pay would succeed in the ledger
+    // if the counter race let both through (each intended share ≈ 5 under this
+    // notional; cap only admits 1 total).
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('1000'),
+        rail: 'test',
+        railRef: 'copy-race-seed',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'race-seed-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+      }),
+    );
+
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: tightCap,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    // notional 10000, fee 10 bps → protocol fee 10; share 50% → 5 intended each.
+    // Cap is 1 — without atomic reserve both concurrent settlers pay 1 → total 2.
+    const settle = (fillId: string) =>
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId,
+        assetId: 'USDT',
+        followerFillNotional: '10000',
+        protocolFeeBps: 10,
+      });
+
+    const results = await Promise.all([settle('fill-race-a'), settle('fill-race-b')]);
+    const settledCount = results.filter((r) => r.settled).length;
+    expect(settledCount).toBe(1);
+    expect(results.filter((r) => !r.settled).every((r) => r.skippedReason === 'cap_reached')).toBe(true);
+
+    const leaderBal = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+    expect(leaderBal).toBe(parseAmount(cap));
+    expect(leaderBal <= parseAmount(cap)).toBe(true);
+
+    const stats = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(stats.earningsPaid).toBe(parseAmount(cap));
+    // Both attempts count as round-trips (decay still advances on the skip).
+    expect(stats.roundTrips).toBe(2);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('eight concurrent settles still hold the earnings cap', async () => {
+    const cap = '1';
+    const tightCap: CopyFeeShareLaw = {
+      published: true,
+      leaderShareBps: 5_000,
+      earningsCapPerFollower: cap,
+      decayRoundTrips: 1000,
+      decayShareBps: 1_000,
+    };
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('5000'),
+        rail: 'test',
+        railRef: 'copy-race8-seed',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'race8-seed-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('500'),
+      }),
+    );
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: tightCap,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, (_, i) =>
+        svc.settleFeeShare(principal, {
+          followId: follow.followId,
+          fillId: `fill-race8-${i}`,
+          assetId: 'USDT',
+          followerFillNotional: '10000',
+          protocolFeeBps: 10,
+        }),
+      ),
+    );
+    expect(results.filter((r) => r.settled)).toHaveLength(1);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(parseAmount(cap));
+    expect((await store.getPeriodStats(`${LEADER}:${FOLLOWER}`)).earningsPaid).toBe(parseAmount(cap));
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('reserve rolls back when ledger post fails — cap headroom restored', async () => {
+    const cap = '10';
+    const feeLaw: CopyFeeShareLaw = {
+      published: true,
+      leaderShareBps: 5_000,
+      earningsCapPerFollower: cap,
+      decayRoundTrips: 100,
+      decayShareBps: 1_000,
+    };
+    // Empty house fees → sweep/payout fails; reservation must release.
+    const ledger = new MemoryLedger();
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: feeLaw,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: 'fill-ledger-fail',
+        assetId: 'USDT',
+        followerFillNotional: '10000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toBeTruthy();
+
+    const stats = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    // Round-trip still counted; earnings reservation released.
+    expect(stats.earningsPaid).toBe(0n);
+    expect(stats.roundTrips).toBe(1);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+  });
+
+  /**
+   * Concurrent mirrors near the aggregate cap must not both clear a stale read.
+   * maxAggregate=150; two concurrent notionals of 100 would overshoot to 200
+   * under read-modify-write setExposure — atomic add admits only one.
+   */
+  it('concurrent planMirrorForFollow never exceeds maxAggregateExposure', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT', 'ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '150',
+      expiresAt: futureExpiry,
+    });
+
+    const attempts = await Promise.allSettled([
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: 'fill-conc-btc',
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '100',
+      }),
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: 'fill-conc-eth',
+        marketId: 'ETH-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '100',
+      }),
+    ]);
+
+    const fulfilled = attempts.filter((a) => a.status === 'fulfilled');
+    const rejected = attempts.filter((a) => a.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'trade.copy_cap_exceeded' });
+
+    const exposure = await store.getExposure(follow.followId);
+    expect(exposure).toBe(parseAmount('100'));
+    expect(exposure <= parseAmount('150')).toBe(true);
+  });
+
+  /**
+   * Same fillId redelivery must not re-reserve earnings / re-bump round-trips.
+   * Mirror path already claims fillId (#1199); settle had only ledger keys —
+   * redelivery re-ran reserveEarnings and poisoned the period counters.
+   */
+  it('redelivered settleFeeShare does not re-bump period stats or double-pay', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+        rail: 'test',
+        railRef: 'copy-redeliver-seed',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'redeliver-seed-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('10'),
+      }),
+    );
+
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+
+    const input = {
+      followId: follow.followId,
+      fillId: 'fill-once-only',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    } as const;
+
+    const first = await svc.settleFeeShare(principal, input);
+    expect(first.settled).toBe(true);
+    expect(first.cappedLeaderShare).toBe('0.5');
+
+    const afterFirst = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(afterFirst.earningsPaid).toBe(parseAmount('0.5'));
+    expect(afterFirst.roundTrips).toBe(1);
+
+    const leaderAfterFirst = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+
+    // Redeliver the same fill — must be a no-op on counters and balances.
+    const second = await svc.settleFeeShare(principal, input);
+    expect(second.settled).toBe(true);
+    expect(second.cappedLeaderShare).toBe(first.cappedLeaderShare);
+    expect(second.fillId).toBe(first.fillId);
+
+    const afterSecond = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(afterSecond.earningsPaid).toBe(afterFirst.earningsPaid);
+    expect(afterSecond.roundTrips).toBe(1);
+
+    const leaderAfterSecond = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+    expect(leaderAfterSecond).toBe(leaderAfterFirst);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+
+    // Concurrent redelivery of the same fill must still hold.
+    const concurrent = await Promise.all([
+      svc.settleFeeShare(principal, input),
+      svc.settleFeeShare(principal, input),
+      svc.settleFeeShare(principal, input),
+    ]);
+    expect(concurrent.every((r) => r.settled && r.cappedLeaderShare === first.cappedLeaderShare)).toBe(true);
+    const afterConcurrent = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(afterConcurrent.roundTrips).toBe(1);
+    expect(afterConcurrent.earningsPaid).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(leaderAfterFirst);
   });
 });

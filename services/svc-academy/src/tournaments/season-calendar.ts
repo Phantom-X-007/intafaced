@@ -75,3 +75,21 @@ export function isSeasonCalendarEnded(season: SeasonRecord, at: Date = new Date(
   if (season.endsAt == null) return false;
   return at.getTime() >= season.endsAt.getTime();
 }
+
+/**
+ * Hot-path gate: scores write only when live AND inside [startsAt, endsAt).
+ * Status-only checks let a live season accept scores after calendar end.
+ * Reuses `academy.season_not_live` so clients already branch on "cannot score".
+ */
+export function assertScoreWindowOpen(season: SeasonRecord, at: Date = new Date()): void {
+  const w = seasonWindowAt(season, at);
+  if (!w.scoreWindowOpen) {
+    if (season.status !== 'live') {
+      throw new TournamentError(`Season is ${season.status} — scores only write while live`, 'academy.season_not_live');
+    }
+    throw new TournamentError(
+      'Season is live but outside the score calendar window — scores refuse after endsAt / before startsAt',
+      'academy.season_not_live',
+    );
+  }
+}

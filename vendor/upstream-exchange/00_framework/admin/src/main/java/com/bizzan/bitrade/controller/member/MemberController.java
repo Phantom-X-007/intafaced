@@ -127,54 +127,12 @@ public class MemberController extends BaseAdminController {
             @PathVariable("id") Long id,
             @RequestParam("status") CertifiedBusinessStatus status,
             @RequestParam("detail") String detail) {
-        Member member = memberService.findOne(id);
-        notNull(member, "validate id!");
-        //确认是审核中
-        isTrue(member.getCertifiedBusinessStatus() == AUDITING, "validate member certifiedBusinessStatus!");
-        //确认传入certifiedBusinessStatus值正确，审核通过或者不通过
-        isTrue(status == VERIFIED || status == FAILED, "validate certifiedBusinessStatus!");
-        //member.setCertifiedBusinessApplyTime(new Date());//time
-        List<BusinessAuthApply> businessAuthApplyList = businessAuthApplyService.findByMemberAndCertifiedBusinessStatus(member, AUDITING);
-        if (status == VERIFIED) {
-            //通过
-            member.setCertifiedBusinessStatus(VERIFIED);//已认证
-            member.setMemberLevel(IDENTIFICATION);//认证商家
-            if (businessAuthApplyList != null && businessAuthApplyList.size() > 0) {
-                BusinessAuthApply businessAuthApply = businessAuthApplyList.get(0);
-                businessAuthApply.setCertifiedBusinessStatus(VERIFIED);
-                //如果申请的时候选择了保证金策略
-                if (businessAuthApply.getBusinessAuthDeposit() != null) {
-                    //扣除保证金
-                    MemberWallet memberWallet = memberWalletService.findByCoinUnitAndMemberId(businessAuthApply.getBusinessAuthDeposit().getCoin().getUnit(), member.getId());
-                    memberWallet.setFrozenBalance(memberWallet.getFrozenBalance().subtract(businessAuthApply.getAmount()));
-                    DepositRecord depositRecord = new DepositRecord();
-                    depositRecord.setId(UUID.randomUUID().toString());
-                    depositRecord.setAmount(businessAuthApply.getAmount());
-                    depositRecord.setCoin(businessAuthApply.getBusinessAuthDeposit().getCoin());
-                    depositRecord.setMember(member);
-                    depositRecord.setStatus(DepositStatusEnum.PAY);
-                    depositRecordService.create(depositRecord);
-                    businessAuthApply.setDepositRecordId(depositRecord.getId());
-                }
-            }
-        } else {
-            //不通过
-            member.setCertifiedBusinessStatus(FAILED);//认证失败
-            if (businessAuthApplyList != null && businessAuthApplyList.size() > 0) {
-                BusinessAuthApply businessAuthApply = businessAuthApplyList.get(0);
-                businessAuthApply.setCertifiedBusinessStatus(FAILED);
-                businessAuthApply.setDetail(detail);
-                //申请商家认证时冻结的金额退回
-                if (businessAuthApply.getBusinessAuthDeposit() != null) {
-                    MemberWallet memberWallet = memberWalletService.findByCoinUnitAndMemberId(businessAuthApply.getBusinessAuthDeposit().getCoin().getUnit(), member.getId());
-                    memberWallet.setFrozenBalance(memberWallet.getFrozenBalance().subtract(businessAuthApply.getAmount()));
-                    memberWallet.setBalance(memberWallet.getBalance().add(businessAuthApply.getAmount()));
-                }
-            }
-        }
-        member.setCertifiedBusinessCheckTime(new Date());
-        memberService.save(member);
-        return success();
+        // Dual-book Option B — admin has no compose service, so the 410 door never
+        // executes. Approve burns frozen deposit; reject thaws frozen→available.
+        // ADR 2026-08-04: agents may throw where only a door stood.
+        // Queue if ever re-enabled: ledger recipes escrowRelease / escrow refund.
+        throw new IllegalStateException(
+                "admin business-auth audit is disabled: Java shell must not move balances (INTAFACED dual-book)");
     }
 
     @RequiresPermissions("member:page-query")

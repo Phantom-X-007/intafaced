@@ -21,6 +21,8 @@ import { requireCredentials, type VenueCredentials } from '@intafaced/venue-cont
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
+import { assertPayoutGradeBook } from '../payout-grade.js';
+import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
 
 /**
  * BINANCE SPOT — the first venue in the fabric, done properly.
@@ -135,6 +137,22 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
     this.grader = options.grader ?? new VenueLatencyGrader(VENUE.id);
   }
 
+  /**
+   * This adapter's `rest-round-trip` grade, from the calls it has actually made.
+   *
+   * Every REST read goes through `#get`, which records an observation on all
+   * four of its exits (ok / 429-reject / non-2xx / unreachable), so this is a
+   * measurement of real traffic and not a self-report. Before the first call it
+   * is UNGRADED — `grade: null`, not `'F'` — because we have not measured this
+   * venue, which is a different fact from having measured it and found it bad.
+   *
+   * Declared on `MarketDataAdapter` so a consumer holding the interface can read
+   * it; see that contract for why it is optional there.
+   */
+  latencyGrade(now: Date = new Date(this.#clock())): VenueLatencyGrade {
+    return this.grader.grade(now);
+  }
+
   async markets(): Promise<VenueMarket[]> {
     const body = await this.#get('/api/v3/exchangeInfo', 20);
     const symbols = (body as { symbols?: unknown }).symbols;
@@ -159,7 +177,9 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
       unknown
     >;
 
-    return {
+    // D26-P1-T8: a two-sided dust book is refused here, not only in svc-trade's
+    // mark gate. Empty / one-sided still pass through as honest absence.
+    return assertPayoutGradeBook({
       venueId: VENUE.id,
       symbol,
       bids: readLevels(body.bids, 'bids', VENUE.id),
@@ -169,7 +189,7 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
       // Our clock at the moment the read finished. A venue that has silently
       // stopped updating still returns a plausible timestamp of its own.
       observedAt: new Date(this.#clock()),
-    };
+    });
   }
 
   /**

@@ -91,7 +91,7 @@ export function totp(secretBase32: string, options: TotpOptions & { at?: Date } 
 }
 
 /**
- * Verify a submitted code.
+ * Match a submitted code to the TOTP counter that produced it.
  *
  * `window` accepts codes from adjacent steps to tolerate clock skew. One step
  * either side (±30s) is the standard compromise: it covers realistic device
@@ -99,26 +99,40 @@ export function totp(secretBase32: string, options: TotpOptions & { at?: Date } 
  *
  * Comparison is constant-time. A timing side channel on a 6-digit code is not
  * theoretical — it reduces the search space one digit at a time.
+ *
+ * Returns the matching counter (not a boolean) so callers can refuse a step that
+ * was already consumed — a captured code must not replay inside the validity
+ * window (login + step-up; README historically named this a known gap).
  */
-export function verifyTotp(secretBase32: string, code: string, options: TotpOptions & { at?: Date; window?: number } = {}): boolean {
+export function matchTotpStep(
+  secretBase32: string,
+  code: string,
+  options: TotpOptions & { at?: Date; window?: number } = {},
+): bigint | null {
   const { step } = { ...DEFAULTS, ...options };
   const window = options.window ?? 1;
 
   const submitted = code.replace(/\s/g, '');
-  if (!/^\d+$/.test(submitted)) return false;
+  if (!/^\d+$/.test(submitted)) return null;
 
   const secret = base32Decode(secretBase32);
   const seconds = Math.floor((options.at?.getTime() ?? Date.now()) / 1000);
   const counter = BigInt(Math.floor(seconds / step));
 
   for (let drift = -window; drift <= window; drift++) {
-    const candidate = hotp(secret, counter + BigInt(drift), options);
+    const candidateStep = counter + BigInt(drift);
+    const candidate = hotp(secret, candidateStep, options);
     if (candidate.length === submitted.length && timingSafeEqual(Buffer.from(candidate), Buffer.from(submitted))) {
-      return true;
+      return candidateStep;
     }
   }
 
-  return false;
+  return null;
+}
+
+/** Verify a submitted code (boolean wrapper over {@link matchTotpStep}). */
+export function verifyTotp(secretBase32: string, code: string, options: TotpOptions & { at?: Date; window?: number } = {}): boolean {
+  return matchTotpStep(secretBase32, code, options) !== null;
 }
 
 /** otpauth:// URI for an authenticator app QR code. */

@@ -412,7 +412,7 @@ export function runRailAdapterConformance(name: string, createHarness: () => Pro
         amount: amt('500'),
         assetId: 'USDT',
         window: '2026-07-27',
-        destination: harness.payoutDestination?.() ?? { kind: 'crypto', ref: '0xmerchant' },
+        destination: harness.payoutDestination?.() ?? { kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' },
         ...overrides,
       });
 

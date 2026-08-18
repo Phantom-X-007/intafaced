@@ -85,13 +85,10 @@
  * `pnpm verify` (after `tracker:check`, which it reads) and the `gates` job of
  * `.github/workflows/ci.yml`. That is how every other scan on `main` is wired.
  *
- * There is a `tooling/ci/gates.mjs` that unifies both lists into one array with
- * a GATES/NOT_GATES manifest, and this gate belongs in its GATES. It is not
- * used here because that file is not on `main`: it lives only on the stranded
- * branch `fix/verify-runs-doctrine-scans`, which has no PR and is twelve
- * commits behind. Whoever rescues it — the same rescue PR #425 did for
- * shell-i18n-scan — must add an entry for this file, and its own manifest check
- * will fail until they do.
+ * Wired through `tooling/ci/gates.mjs` (GATES entry `coverage`) and therefore
+ * through `pnpm gates` / the `gates` job of `.github/workflows/ci.yml`. The
+ * older note that said gates.mjs lived only on a stranded branch is obsolete —
+ * gates.mjs is on main and this scan is one of its rows.
  *
  * Usage:
  *   node tooling/ci/coverage-check.mjs            run every check

@@ -32,9 +32,26 @@ on:
       - INTAFACED_DEFINITIVE_BUILD.md
   workflow_dispatch:
 
+# CONCURRENCY — main vs PR (law 2026-08-09, Denon+Nitro greenlit)
+#
+# Group is still per-ref. That means concurrent runs on *different* PR branches
+# never cancel each other; only a new push to the *same* ref can.
+#
+# `cancel-in-progress` is **false on main**, true everywhere else:
+# - On `refs/heads/main`, a swarm merge burst used to cancel ~95% of trunk CI
+#   runs before they finished. Intermediate tips never got a real green/red
+#   signal; defects landed via cancelled post-merge checks (worked example:
+#   #1466 → cancelled main CI → brand-scan red tip → fleet freeze → #1471).
+#   Actions are free on this public repo — finishing every main run is the
+#   point of push:main, not a cost trade.
+# - On PR refs, still cancel: force-push / tip-bump on one branch supersedes
+#   the prior run. That is the only legitimate thrift leftover.
+#
+# Other workflows in this repo are pull_request-only (or deploy), so they keep
+# their own cancel settings. Only this file is the trunk signal.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   TURBO_TELEMETRY_DISABLED: 1
@@ -84,6 +101,9 @@ jobs:
       # run rather than one per push.
       - name: Doctrine gates (the same list `pnpm verify` runs)
         run: pnpm gates
+
+      - name: worktree-gc self-test
+        run: node tooling/scripts/worktree-gc.mjs --self-test
 
       # THE STAMP-MILL GATE, CODE HALF — and deliberately NOT inside gates.mjs.
       #
@@ -174,6 +194,7 @@ jobs:
       TEST_DATABASE_URL_BLUEPRINT: postgres://svc_blueprint:svc_blueprint@127.0.0.1:5432/intafaced_test
       TEST_DATABASE_URL_AGENTS: postgres://svc_agents:svc_agents@127.0.0.1:5432/intafaced_test
       TEST_DATABASE_URL_NOTIFY: postgres://svc_notify:svc_notify@127.0.0.1:5432/intafaced_test
+      TEST_DATABASE_URL_SUPPORT: postgres://svc_support:svc_support@127.0.0.1:5432/intafaced_test
       REDIS_URL: redis://127.0.0.1:6379
       NATS_URL: nats://127.0.0.1:4222
       # Same bargain as REQUIRE_POSTGRES, for the same reason. svc-protocol's
@@ -225,9 +246,9 @@ jobs:
         run: |
           # "Created but empty" was the real failure mode, and it is
           # indistinguishable from success unless something asserts on contents.
-          expected=13
+          expected=14
           count=$(psql -h localhost -U intafaced -d intafaced_test -tAc \
-            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol','notify');")
+            "SELECT count(*) FROM pg_namespace WHERE nspname IN ('identity','ledger','token','matching','trade','pay','p2p','blueprint','bank','agents','indexer','protocol','notify','support');")
           echo "service schemas in intafaced_test: $count / $expected"
           if [ "$count" -ne "$expected" ]; then
             echo "::error::intafaced_test missing service schemas ($count/$expected) — 02-intafaced-test-db.sh did not do its job"

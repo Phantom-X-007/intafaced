@@ -1,8 +1,8 @@
 {
-  "name": "bitrade",
+  "name": "intafaced-shell",
   "version": "1.0.0",
-  "description": "A Vue.js project",
-  "author": "bear <220806216@qq.com>",
+  "description": "INTAFACED trading desk shell",
+  "author": "INTAFACED",
   "private": true,
   "scripts": {
     "dev": "webpack-dev-server --inline --progress --config build/webpack.dev.conf.js",

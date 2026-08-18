@@ -748,3 +748,48 @@ that nothing in this repository entitles anyone to assume one.
     License: Apache-2.0
     Path: vendor/upstream-exchange/05_Web_Front/src/assets/js/market-chart/
     Source: https://github.com/tradingview/lightweight-charts
+
+
+================================================================================
+§11 · FRESHNESS (engineering tip check — D26-P3-04)
+================================================================================
+
+This section is not a re-audit and not legal advice. §§1–10 stay the 2026-07-29
+compile against commit 4311cff. `tooling/ci/notice-pin.mjs` fails if the vendor
+pin, the launch-list facts we can prove from the tree, or a named divergence
+below silently changes.
+
+Vendor pin (must match `vendor/upstream-exchange/NOTICE` and LICENSE, unmodified):
+
+  Source:     https://github.com/jammy928/CoinExchange_CryptoExchange_Java
+  Licence:    Apache License 2.0
+  Retrieved:  2026-07-28
+
+Named-divergent from the 2026-07-29 compile (reason, not a new licence grant):
+
+  NAMED-DIVERGENT · jars
+    Snapshot: 31 `.jar` files. Tip: 32 committed `.jar` files under
+    vendor/upstream-exchange/. Reason: ADR 2026-08-04 already recorded the
+    snapshot count as wrong; this gate pins the tip count so a 33rd jar cannot
+    land without this file moving.
+
+  NAMED-DIVERGENT · Charting Library working tree
+    Snapshot §3.1: 85 git-tracked files under charting_library/.
+    Tip: charting_library working-tree count: 0.
+    Reason: Path A executed (#106) — charts on lightweight-charts 3.8.0
+    (Apache-2.0) at the path above. History may still hold the blobs.
+    Licence purchase for Charting Library, if anyone wants it back, is Class X
+    (Nitro + counsel). This file does not apply for one.
+
+  NAMED-DIVERGENT · vendor compose Mongo image
+    Snapshot §9: mongo:6. Tip pin: mongo:4.4 in
+    vendor/upstream-exchange-compose.yml. Reason: the vendored-platform compose
+    file moved the tag; root docker-compose.yml never declared mongo/mysql.
+    mysql:8.0 remains in that vendor compose file.
+
+  Consistent (proved, not inferred):
+
+    grafana/grafana:11.4.0 and grafana/tempo:2.6.1 still declared in
+    docker-compose.yml (AGPL tags named in §9 — verified-at-tag then, not
+    re-fetched here).
+    vendor/upstream-exchange/LICENSE still begins "Apache License".

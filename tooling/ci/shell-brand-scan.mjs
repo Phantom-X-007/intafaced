@@ -102,11 +102,28 @@
  * Exit 0 = at or below the frozen baseline. Exit 1 = it grew, a row is stale,
  * or nothing was scanned.
  *
+ * ── D26-P2-14: JAVA CORS-ADJACENT COPY ──────────────────────────────────────
+ *
+ * #1742 taught `brand-scan.mjs` to INCLUDE-walk Vue shell projects and Java
+ * `src/main/resources` catalogues. That still skips `.java`. CORS filter /
+ * allowlist classes sit under `00_framework/**` — a sibling of the Vue project,
+ * not inside it — so this scan's Vue walk never opened them either. Partner
+ * names in comments, string literals, or error copy on those files would have
+ * shipped green. This scan now walks CORS-adjacent `.java` (filename matches
+ * cors, or ApplicationConfig/ContextConfig whose body mentions cors).
+ *
+ * Package and import lines stay unread: those are load-bearing groupIds, not
+ * copy, and renaming them is a Java rebrand mountain. A planted name in a
+ * comment on CorsConfig.java fails. `--self-test` (also run on every gate)
+ * plants that case in a throwaway tree so the hole cannot close itself.
+ *
  *   node tooling/ci/shell-brand-scan.mjs
+ *   node tooling/ci/shell-brand-scan.mjs --self-test
  */
-import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join, relative, dirname, sep } from 'node:path';
 import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 
 const ROOT = process.cwd();
 const REPO_SCAN = join('tooling', 'ci', 'brand-scan.mjs');
@@ -255,6 +272,167 @@ function* walk(dir) {
 }
 
 /**
+ * Java CORS surface: sibling of the Vue project, never inside it.
+ *
+ * Filename `/cors/i`, or Spring `ApplicationConfig` / `ContextConfig` whose
+ * body mentions cors (the files that actually register the filter). Unrelated
+ * `.java` stays unread — that is the vendor-java-money / dual-book mountain,
+ * not this gate.
+ */
+const CORS_JAVA_NAME = /cors/i;
+const CORS_CONFIG_CLASS = /^(ApplicationConfig|ContextConfig)\.java$/i;
+
+function collectCorsAdjacentJava(vendorRoot, out = [], depth = 0) {
+  if (depth > 16 || !existsSync(vendorRoot)) return out;
+  let entries;
+  try {
+    entries = readdirSync(vendorRoot);
+  } catch {
+    return out;
+  }
+  for (const name of entries) {
+    if (SKIP_DIRS.has(name)) continue;
+    const full = join(vendorRoot, name);
+    let stats;
+    try {
+      stats = statSync(full);
+    } catch {
+      continue;
+    }
+    if (stats.isDirectory()) {
+      collectCorsAdjacentJava(full, out, depth + 1);
+      continue;
+    }
+    if (!name.endsWith('.java')) continue;
+    if (CORS_JAVA_NAME.test(name)) {
+      out.push(full);
+      continue;
+    }
+    if (CORS_CONFIG_CLASS.test(name)) {
+      try {
+        if (/cors/i.test(readFileSync(full, 'utf8'))) out.push(full);
+      } catch {
+        /* unreadable */
+      }
+    }
+  }
+  return out;
+}
+
+/** Load-bearing groupId / type names — not user-facing copy. */
+function isJavaIdentityLine(line) {
+  return /^\s*(?:package|import)\s+/.test(line);
+}
+
+function scanFileHits(file, repoRoot, rules, { javaIdentity }) {
+  const reported = posix(relative(repoRoot, file));
+  const content = readFileSync(file, 'utf8');
+  const lines = content.split('\n');
+  const hits = [];
+  for (const { pattern, reason } of rules) {
+    if (!pattern.test(content)) continue;
+    const perLine = new RegExp(pattern.source, pattern.flags + 'g');
+    lines.forEach((line, i) => {
+      if (javaIdentity && isJavaIdentityLine(line)) return;
+      for (const match of line.matchAll(perLine)) {
+        hits.push({
+          key: reported,
+          reported,
+          line: i + 1,
+          text: match[0],
+          fp: fingerprint(match[0]),
+          reason,
+          context: line.trim().slice(0, 120),
+        });
+      }
+    });
+  }
+  return hits;
+}
+
+function plantToken(rules) {
+  for (const r of rules) {
+    const m = r.pattern.source.match(/[A-Za-z][A-Za-z0-9]{3,}/);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+/**
+ * Hermetic proof that a partner name in CORS Java (outside the Vue project
+ * walk) fails, and that a package-line identity does not force a rebrand.
+ */
+function selfTest(rules) {
+  const fails = [];
+  const assert = (c, m) => {
+    if (!c) fails.push(m);
+  };
+  const plant = plantToken(rules);
+  assert(Boolean(plant), 'could not derive a plant token from parsed forbidden names');
+
+  const tmp = mkdtempSync(join(tmpdir(), 'shell-brand-p214-'));
+  try {
+    const vendor = join(tmp, 'vendor');
+    const vueSrc = join(vendor, 'ex', '05_Web_Front', 'src');
+    const corsDir = join(vendor, 'ex', '00_framework', 'core', 'src', 'main', 'java', 'com', 'example', 'config');
+    const daoDir = join(vendor, 'ex', '00_framework', 'core', 'src', 'main', 'java', 'com', 'example', 'dao');
+    mkdirSync(vueSrc, { recursive: true });
+    mkdirSync(corsDir, { recursive: true });
+    mkdirSync(daoDir, { recursive: true });
+    writeFileSync(join(vueSrc, 'App.vue'), '<template><div>desk</div></template>\n');
+    writeFileSync(join(vueSrc, 'main.js'), 'new Vue({ el: "#app" })\n');
+    writeFileSync(
+      join(corsDir, 'CorsConfig.java'),
+      `package com.example.config;\n/** partner ${plant} must not hide in CORS copy */\npublic class CorsConfig {}\n`,
+    );
+    writeFileSync(
+      join(daoDir, 'WalletDao.java'),
+      `package com.example.dao;\n/** partner ${plant} in a non-CORS Java file */\npublic class WalletDao {}\n`,
+    );
+    writeFileSync(join(corsDir, 'CorsAllowlist.java'), `package com.${plant}.util;\npublic final class CorsAllowlist {}\n`);
+
+    const vueRoots = [...new Set(findShellRoots(vendor).map((src) => dirname(src)))];
+    const vueFiles = [];
+    for (const root of vueRoots) {
+      for (const f of walk(root)) vueFiles.push(f);
+    }
+    assert(
+      vueFiles.some((f) => f.endsWith('App.vue')),
+      'fixture Vue surface not walked',
+    );
+    assert(!vueFiles.some((f) => /CorsConfig\.java$/.test(f)), 'CORS Java must sit outside the Vue project walk (the skipped-today hole)');
+
+    const corsFiles = collectCorsAdjacentJava(vendor);
+    assert(
+      corsFiles.some((f) => f.endsWith('CorsConfig.java')),
+      'CORS-adjacent walk must include CorsConfig.java',
+    );
+    assert(
+      corsFiles.some((f) => f.endsWith('CorsAllowlist.java')),
+      'CORS-adjacent walk must include CorsAllowlist.java',
+    );
+    assert(!corsFiles.some((f) => f.endsWith('WalletDao.java')), 'CORS-adjacent walk must not swallow unrelated Java');
+
+    const corsHits = corsFiles.flatMap((file) => scanFileHits(file, tmp, rules, { javaIdentity: true }));
+    assert(
+      corsHits.some((h) => h.text.includes(plant) && /CorsConfig\.java$/.test(h.reported)),
+      'planted partner name in CORS Java must fail the scan',
+    );
+    assert(!corsHits.some((h) => /CorsAllowlist\.java$/.test(h.reported)), 'package/import identity lines must not force a Java rebrand');
+    assert(!corsHits.some((h) => /WalletDao\.java$/.test(h.reported)), 'planted name in non-CORS Java must remain out of this gate');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+
+  if (fails.length) {
+    console.error('\n✖ shell-brand-scan --self-test FAIL:');
+    for (const f of fails) console.error(`  · ${f}`);
+    console.error('');
+    process.exit(1);
+  }
+}
+
+/**
  * THE FROZEN QUEUE. Every forbidden name on the product surface today, by the
  * `sha256`-12 fingerprint of the exact text that matched. Frozen 2026-08-03 at
  * 4 files / 8 occurrences.
@@ -279,32 +457,9 @@ function* walk(dir) {
  *
  * @type {Record<string, { fp: string, note: string }[]>}
  */
-const BASELINE = {
-  // Two comments naming the dev-server's own container, which we named after
-  // the upstream. Ours to rename, and the cheapest row here to clear.
-  'config/index.js': [
-    { fp: '39116c6aa904', note: 'upstream vendor identity inside a container name we coined' },
-    { fp: '39116c6aa904', note: 'the same container name, second comment' },
-  ],
-  // The package manifest: the upstream module prefix as our package name, and
-  // the upstream author's contact address — which is itself separately banned,
-  // because support mail must never point at a stranger.
-  'package.json': [
-    { fp: '8ce4e4253be9', note: 'upstream module prefix, used as the package name' },
-    { fp: '92f3f711f238', note: 'upstream author contact address' },
-  ],
-  // The lockfile echoes the manifest name twice; it clears when the name does.
-  'package-lock.json': [
-    { fp: '8ce4e4253be9', note: 'upstream module prefix, echoed from the manifest' },
-    { fp: '8ce4e4253be9', note: 'the same, in the lockfile root package entry' },
-  ],
-  // The README title and its subtitle. The title is the occurrence the
-  // repo-wide `\b` anchors cannot see at all — see the header.
-  'README.md': [
-    { fp: 'd0f277dfe7b7', note: 'upstream project name in the README title' },
-    { fp: 'd0f277dfe7b7', note: 'upstream project name in the README subtitle' },
-  ],
-};
+/* Queue drained 2026-08-09 (L11 wave 5): package/README/config renames.
+   A new product-surface hit must be fixed, never re-frozen here. */
+const BASELINE = {};
 
 // ── Run ────────────────────────────────────────────────────────────────────
 
@@ -332,6 +487,13 @@ if (FORBIDDEN.length !== DECLARED) {
   process.exit(1);
 }
 
+selfTest(FORBIDDEN);
+if (process.argv.includes('--self-test')) {
+  console.log('✓ shell-brand-scan --self-test OK');
+  console.log('  planted partner name in CORS Java (outside Vue walk) fails; package identity skipped; unrelated Java unread');
+  process.exit(0);
+}
+
 if (projectRoots.length === 0) {
   console.error('\n✖ shell-brand-scan — no Vue shell root (App.vue beside main.js) found under vendor/. NOTHING WAS SCANNED.');
   console.error('  If the product surface still exists, discovery is broken — fix findShellRoots.');
@@ -341,6 +503,7 @@ if (projectRoots.length === 0) {
 
 const findings = [];
 let scanned = 0;
+const seenAbs = new Set();
 
 for (const root of projectRoots) {
   for (const file of walk(root)) {
@@ -350,6 +513,7 @@ for (const root of projectRoots) {
     const reported = posix(relative(ROOT, file));
     const content = readFileSync(file, 'utf8');
     scanned++;
+    seenAbs.add(file);
 
     const lines = content.split('\n');
     for (const { pattern, reason } of FORBIDDEN) {
@@ -369,6 +533,26 @@ for (const root of projectRoots) {
         }
       });
     }
+  }
+}
+
+const vendorRoot = join(ROOT, 'vendor');
+const corsFiles = collectCorsAdjacentJava(vendorRoot);
+if (existsSync(vendorRoot) && corsFiles.length === 0) {
+  console.error('\n✖ shell-brand-scan — vendor/ is present but 0 Java CORS-adjacent files were found.');
+  console.error('  D26-P2-14: CorsConfig / CorsAllowlist / CORS ApplicationConfig must be in scope.');
+  console.error('  Check collectCorsAdjacentJava() — discovery is blind.\n');
+  process.exit(1);
+}
+
+let corsScanned = 0;
+for (const file of corsFiles) {
+  if (seenAbs.has(file)) continue;
+  seenAbs.add(file);
+  scanned++;
+  corsScanned++;
+  for (const hit of scanFileHits(file, ROOT, FORBIDDEN, { javaIdentity: true })) {
+    findings.push(hit);
   }
 }
 
@@ -426,7 +610,7 @@ const frozenTotal = Object.values(BASELINE).reduce((n, rows) => n + rows.length,
 
 if (problems.length === 0) {
   console.log(
-    `✓ shell-brand-scan — ${scanned} product-surface file(s), ${FORBIDDEN.length} forbidden name(s) checked, all findings at the frozen baseline`,
+    `✓ shell-brand-scan — ${scanned} product-surface file(s) (incl. ${corsScanned} Java CORS-adjacent), ${FORBIDDEN.length} forbidden name(s) checked, all findings at the frozen baseline`,
   );
   for (const [key, rows] of Object.entries(BASELINE)) {
     const where = byFile.get(key)?.[0]?.reported ?? key;

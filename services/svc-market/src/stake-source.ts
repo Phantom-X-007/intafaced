@@ -41,12 +41,11 @@ import { MarketError } from './vendor-service.js';
  * it with `parseAmount` would read a stake 10^18 too large and admit everybody.
  * A field that is never read cannot be double-scaled.
  *
- * ── DEPENDS ON PR #1100 ─────────────────────────────────────────────────────
+ * ── PR #1100 (merged) ───────────────────────────────────────────────────────
  *
- * Until that merges, `/internal/stake/:userId` returns HTTP 500 to every caller:
- * `AccessTier.minStake` is a bigint and Fastify's `JSON.stringify` fallback
- * throws on one. The code below is correct either way — a 500 is a non-2xx and
- * refuses — but no slot can be claimed in an environment built before that fix.
+ * That fix stopped `/internal/stake/:userId` 500ing on bigint `minStake`. This
+ * client still fails closed on any non-2xx or unusable payload — a 500 remains
+ * `market.stake_unavailable`, never a guessed free capacity.
  */
 
 export interface SlotEntitlementSource {

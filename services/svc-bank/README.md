@@ -6,7 +6,7 @@
 
 **What this service is not:** it is not a wallet, it does not hold balances, and it does not price anything. It stores names, policies, instructions, and records of jobs that already ran. Every "how much" question is answered by `ledger.balance(...)` at the moment it is asked.
 
-Also here: **loans** (§8.1), the **ledger half of cards**, and the **crypto ledger half of ramps**. `bank.sovereign-card` is a separate tracker feature and is not started. The card **live rail** and the ramp **fiat leg** are §13 sockets — see [Cards](#cards-what-is-built-and-what-is-a-contract) and [Ramps](#ramps-crypto-ledger-half-vs-fiat-socket).
+Also here: **loans** (§8.1), the **ledger half of cards** (including **custodial JIT conversion** for a settlement asset that is not the funding asset — #1174 / `cards/conversion.ts`), and the **crypto ledger half of ramps**. The card **live rail**, the ramp **fiat leg**, and the **on-chain** half of sovereign-card remain §13 sockets / Shehzad — see [Cards](#cards-what-is-built-and-what-is-a-contract) and [Ramps](#ramps-crypto-ledger-half-vs-fiat-socket).
 
 ---
 
@@ -78,12 +78,26 @@ The occurrences that were written off are in the **response**, not merely in the
 
 ### `earn`
 
-| Procedure        | Scope        | Purpose                                |
-| ---------------- | ------------ | -------------------------------------- |
-| `earn.pools`     | `bank:read`  | Open flexible and fixed pools          |
-| `earn.deposit`   | `bank:write` | Open a position                        |
-| `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced |
-| `earn.positions` | `bank:read`  | The user's open positions              |
+| Procedure        | Scope        | Purpose                                                                                |
+| ---------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `earn.pools`     | `bank:read`  | Open flexible and fixed pools; refuses `bank.earn_rate_unset` when none are configured |
+| `earn.deposit`   | `bank:write` | Open a position                                                                        |
+| `earn.withdraw`  | `bank:write` | Close a position; fixed terms enforced                                                 |
+| `earn.positions` | `bank:read`  | The user's open positions                                                              |
+
+### `loans` — **built.** Collateralised borrow over the ledger (§8.1)
+
+| Procedure             | Scope        | Purpose                                                              |
+| --------------------- | ------------ | -------------------------------------------------------------------- |
+| `loans.products`      | `bank:read`  | Open products with APR, LTV, margin-call and liquidation thresholds  |
+| `loans.open`          | `bank:write` | Lock collateral and draw principal; `loanId` is client-supplied (§5) |
+| `loans.list`          | `bank:read`  | The user's loans with outstanding principal/interest derived at read |
+| `loans.health`        | `bank:read`  | Portfolio mark — LTV view only; never acts                           |
+| `loans.addCollateral` | `bank:write` | Top up collateral (the cheap way out of a margin call)               |
+| `loans.repay`         | `bank:write` | Pay interest first, then principal; may close the loan               |
+| `loans.close`         | `bank:write` | Release collateral when the loan owes nothing                        |
+
+Interest **capitalises** (raises debt, posts nothing). Mark / margin call / liquidation are the risk sweep under `ops`, not user procedures — a user who can choose when collateral is priced can game the staleness window.
 
 ### `cards` — **the ledger half. There is no card programme.**
 
@@ -107,7 +121,35 @@ The occurrences that were written off are in the **response**, not merely in the
 | ----------------- | ----------- | ----------------------------------------------------------- |
 | `analytics.spend` | `bank:read` | Outflow by category over a window, computed from the ledger |
 
-### `ramps` — **crypto ledger half. Fiat is a socket.**
+### `autoInvest` — **F-plane half. DCA refuses rates unset.**
+
+| Procedure                         | Scope        | What it does                                                                                                                |
+| --------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `autoInvest.list`                 | `bank:read`  | The user's rules. Rules hold **no balance** — instructions only                                                             |
+| `autoInvest.createThresholdSweep` | `bank:write` | Keep `threshold` in primary available; excess → earn pool (**same asset**, no rate)                                         |
+| `autoInvest.createRoundUp`        | `bank:write` | Spare change after card capture → same-asset earn pool. Cross-asset `buyAssetId` **refuses `bank.auto_invest_rate_unset`**  |
+| `autoInvest.createDca`            | `bank:write` | Scheduled cross-asset buy — **refuses `bank.auto_invest_rate_unset`** until a convert port is wired. Never invents §8 rates |
+| `autoInvest.pause` / `resume`     | `bank:write` | Hold a rule without cancelling; resume applies normal due rules (no multi-fire invent)                                      |
+| `autoInvest.cancel`               | `bank:write` | Stop future firings. Does not reverse past runs                                                                             |
+
+`ops.runAutoInvest` (`admin:treasury`) and `POST /internal/jobs/run-auto-invest` fire due **threshold / DCA** rules. Card round-ups fire on `ops.cardCapture`, not the runner. Kill switch: `AUTO_INVEST_ENABLED` — same code `bank.auto_invest_disabled` on HTTP, tRPC runner, **and the capture hook**. Sovereign allowance plane is not here — P-plane is `protocol.smart-accounts` (Shehzad). No APY is invented; the destination is an existing earn pool.
+
+### `business` — **maker/checker with ledger holds. Not full bank-biz.**
+
+| Procedure                    | Scope                 | What it does                                                                  |
+| ---------------------------- | --------------------- | ----------------------------------------------------------------------------- |
+| `business.list` / `create`   | `bank:read` / `write` | Corporate account + spend threshold                                           |
+| `business.addMember`         | `bank:write`          | admin/maker/checker roles                                                     |
+| `business.proposeTransfer`   | `bank:write`          | Under threshold posts; at/above → **purposed ledger hold** + pending approval |
+| `business.approve`           | `bank:write`          | Checker (not maker) settles hold → destination                                |
+| `business.reject` / `cancel` | `bank:write`          | Checker reject or maker/admin cancel — hold returns to debit pot              |
+| `business.pending`           | `bank:read`           | Open approvals (each carries `holdLedgerTxId` while pending)                  |
+
+KYB / payroll / invoicing / expense cards remain residual or §13 — not invented here.
+
+Honest residual: KYB (Lane B), expense cards, invoicing (`pay.gateway`), multi-recipient payroll atomicity, dedicated org principal — not invented here.
+
+### `ramps` — **crypto ledger half. Fiat via pay adapters (socket until live).**
 
 | Procedure         | Scope        | Purpose                                                                |
 | ----------------- | ------------ | ---------------------------------------------------------------------- |
@@ -116,7 +158,7 @@ The occurrences that were written off are in the **response**, not merely in the
 | `ramps.offramps`  | `bank:read`  | The user's off-ramps. Every row carries `simulated`                    |
 | `ramps.offramp`   | `bank:write` | Hold then settle to `bank-crypto-ledger`. Does **not** broadcast       |
 
-`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat always refuses `bank.fiat_ramp_socket` → `socket.psp-partners`.
+`ops.creditOnramp` (admin:treasury) is the inbound credit for the ledger half — same reason deposit.credit lives under ops in svc-pay: a user who credits themselves does not need a ramp. Fiat resolves a live svc-pay RailAdapter via `PayFiatRampPort` (D26-P1-B4) or refuses `bank.fiat_ramp_socket` → `socket.psp-partners`. Empty/sandbox/absent pay rails never launder into a bank fiat ramp. No second book — value still moves only through ledger-client deposit/withdraw recipes.
 
 ```bash
 BANK_RAMP_MODE=none            # default — every ramp money path refuses bank.no_ramp_rail
@@ -125,20 +167,40 @@ BANK_RAMP_MODE=crypto-ledger   # ledger half only; simulated: true always
 
 ### `ops` — operator only
 
-| Procedure             | Scope            | Purpose                                                             |
-| --------------------- | ---------------- | ------------------------------------------------------------------- |
-| `ops.runDueTransfers` | `admin:treasury` | Fire every due standing order                                       |
-| `ops.accrueInterest`  | `admin:treasury` | One day's interest, one pool or all                                 |
-| `ops.fundPool`        | `admin:treasury` | Move bank revenue into a pool's reserve                             |
-| `ops.cardAuthorize`   | `admin:treasury` | The authorisation "webhook" — decide, and hold if the answer is yes |
-| `ops.cardCapture`     | `admin:treasury` | The merchant took this much; the remainder of the hold goes back    |
-| `ops.cardReverse`     | `admin:treasury` | The authorisation expired or was voided; the whole hold goes back   |
-| `ops.fundCashbackPot` | `admin:treasury` | Sweep bank revenue into the pot cashback is paid from               |
-| `ops.creditOnramp`    | `admin:treasury` | Crypto ledger-half on-ramp credit (never user-callable)             |
+| Procedure                  | Scope            | Purpose                                                               |
+| -------------------------- | ---------------- | --------------------------------------------------------------------- |
+| `ops.runDueTransfers`      | `admin:treasury` | Fire every due standing order                                         |
+| `ops.accrueInterest`       | `admin:treasury` | One day's earn interest, one pool or all                              |
+| `ops.fundPool`             | `admin:treasury` | Move bank revenue into a pool's reserve                               |
+| `ops.fundLoanReserve`      | `admin:treasury` | Top up the debt-asset reserve loans draw from                         |
+| `ops.accrueLoanInterest`   | `admin:treasury` | Capitalise loan interest (no ledger post; unique per loan/day)        |
+| `ops.runRiskSweep`         | `admin:treasury` | Mark open loans; margin-call and liquidate past grace                 |
+| `ops.resumePendingLoans`   | `admin:treasury` | Re-drive loans stuck between collateral lock and principal draw       |
+| `ops.resumePendingEarn`    | `admin:treasury` | Re-drive earn deposits stuck pending after ledger post                |
+| `ops.abandonPendingLoan`   | `admin:treasury` | Give up on a pending loan and return collateral                       |
+| `ops.cardAuthorize`        | `admin:treasury` | The authorisation "webhook" — decide, and hold if the answer is yes   |
+| `ops.cardCapture`          | `admin:treasury` | The merchant took this much; the remainder of the hold goes back      |
+| `ops.cardReverse`          | `admin:treasury` | The authorisation expired or was voided; the whole hold goes back     |
+| `ops.cardResumeSettlement` | `admin:treasury` | Re-drive a claimed card capture/reversal that never reached ledger    |
+| `ops.fundCashbackPot`      | `admin:treasury` | Sweep bank revenue into the pot cashback is paid from                 |
+| `ops.creditOnramp`         | `admin:treasury` | Crypto ledger-half on-ramp credit (never user-callable)               |
+| `ops.runAutoInvest`        | `admin:treasury` | Fire due auto-invest rules (threshold sweeps; DCA when convert wired) |
 
-The two jobs are deliberately **not user-callable**: a user who can trigger "run every due transfer" is a user who can choose when other people's money moves. `admin:treasury` is interactive-only (§4.1), so it can never be held by a long-lived API key.
+These jobs are deliberately **not user-callable**: a user who can trigger "run every due transfer" or the risk sweep chooses when other people's money moves (or when their collateral is sold). `admin:treasury` is interactive-only (§4.1), so it can never be held by a long-lived API key.
 
-HTTP, for the external scheduler: `POST /internal/jobs/run-due-transfers`, `POST /internal/jobs/accrue-interest`, plus `/health` and `/ready`.
+HTTP, for the external scheduler (service credentials required; each money job has its own kill-switch where relevant):
+
+| Route                                      | What it runs                              |
+| ------------------------------------------ | ----------------------------------------- |
+| `POST /internal/jobs/run-due-transfers`    | standing orders                           |
+| `POST /internal/jobs/accrue-interest`      | earn pool daily interest                  |
+| `POST /internal/jobs/accrue-loan-interest` | loan interest capitalisation              |
+| `POST /internal/jobs/run-risk-sweep`       | mark / call / liquidate (default **off**) |
+| `POST /internal/jobs/resume-pending-loans` | crash recovery for pending loan opens     |
+| `POST /internal/jobs/resume-pending-earn`  | crash recovery for pending earn deposits  |
+| `POST /internal/jobs/run-auto-invest`      | auto-invest threshold sweeps / due DCA    |
+
+Plus `/health` and `/ready`. Card settlement resume is tRPC-only (`ops.cardResumeSettlement`) — no HTTP twin yet.
 
 ---
 
@@ -165,41 +227,60 @@ The subjects below are still unwritten, and go in an events PR before svc-bank p
 
 Until then, `transfers.executions` is the queryable record of every firing and every rejection, so nothing is unobservable — it is pull rather than push.
 
-**Consumes** — nothing. Loan interest revenue will fund the pool reserves once `bank.loans` lands; today `ops.fundPool` is an operator action.
+**Consumes** — nothing. Earn pool funding is still an operator action (`ops.fundPool`); loan interest **capitalises** onto the debt and does not auto-fund earn reserves. There is no automatic pipe from loan interest revenue into earn pools.
 
 ---
 
 ## Ledger
 
-Every recipe this service invokes, and what it touches:
+Every recipe this service invokes, and what it touches. Transfer/earn recipes live in `packages/ledger-client/src/recipes/bank.ts`; loan recipes in `packages/ledger-client/src/recipes/loans.ts`. Cards and ramps reuse the shared withdraw/deposit recipes — no second spelling of the same movement.
 
-| Recipe         | Reason code               | Accounts                                      |
-| -------------- | ------------------------- | --------------------------------------------- |
-| `bankTransfer` | `bank.transfer.manual`    | space account → space account                 |
-| `bankTransfer` | `bank.transfer.scheduled` | space account → space account                 |
-| `earnDeposit`  | `bank.earn.deposited`     | user available → user stake                   |
-| `earnWithdraw` | `bank.earn.withdrawn`     | user stake → user available                   |
-| `earnPoolFund` | `bank.earn.pool.funded`   | `houseFees('bank')` → `earnPoolReserve(pool)` |
-| `earnInterest` | `bank.earn.interest`      | `earnPoolReserve(pool)` → many user available |
+| Recipe                  | Reason code                | Accounts / effect                                             |
+| ----------------------- | -------------------------- | ------------------------------------------------------------- |
+| `bankTransfer`          | `bank.transfer.manual`     | space account → space account                                 |
+| `bankTransfer`          | `bank.transfer.scheduled`  | space account → space account                                 |
+| `earnDeposit`           | `bank.earn.deposited`      | user available → user stake                                   |
+| `earnWithdraw`          | `bank.earn.withdrawn`      | user stake → user available                                   |
+| `earnPoolFund`          | `bank.earn.pool.funded`    | `houseFees('bank')` → `earnPoolReserve(pool)`                 |
+| `earnInterest`          | `bank.earn.interest`       | `earnPoolReserve(pool)` → many user available                 |
+| `loanCollateralLock`    | `loan.collateral.locked`   | borrower available → purposed collateral (`loan:<id>`)        |
+| `loanCollateralRelease` | `loan.collateral.released` | purposed collateral → borrower available                      |
+| `loanDraw`              | `loan.drawn`               | `loanReserve(debtAsset)` → borrower available                 |
+| `loanRepay`             | `loan.repaid`              | available → reserve (principal) + house (interest)            |
+| `loanLiquidate`         | `loan.liquidated`          | collateral → buyer; buyer's cash → reserve + house + borrower |
+| `loanBadDebt`           | `loan.bad_debt.covered`    | insurance / house covers unrecovered debt                     |
+| `loanReserveFund`       | `loan.reserve.funded`      | fund the debt-asset reserve loans draw from                   |
+| `withdrawHold`          | (card auth)                | available → hold per authorisation                            |
+| `withdrawSettle`        | (card capture / offramp)   | hold → rail boundary                                          |
+| `withdrawReverse`       | (card reverse / remainder) | hold → available                                              |
+| `rewardPay`             | (card cashback)            | `rewardsEngine` → available                                   |
+| `deposit`               | (crypto on-ramp credit)    | rail boundary → user available                                |
 
-> ⚠ **This PR adds five recipes and one account constructor to `packages/ledger-client`** — `bankTransfer`, `earnDeposit`, `earnWithdraw`, `earnPoolFund`, `earnInterest`, and `earnPoolReserve()`. Strictly §15.2 says a shared-package change should be its own PR first — flagging it rather than burying it. They live in their own file, `packages/ledger-client/src/recipes/bank.ts`, so the shared diff is reviewable and revertable on its own. Nothing else in the package changed except the re-export and one new account constructor in `accounts.ts`.
->
-> They exist because §8.1's "views + rails" has no rails without them: an internal transfer, an earn deposit and withdrawal, funding a pool's yield reserve, and paying a day's interest are five value movements no existing recipe expresses. Everything §8.1 lists that is **not** here already existed — loans will use `collateralLock` / `collateralRelease` / `liquidate`, and native staking uses `stake` / `unstake` in svc-token.
+Native staking uses `stake` / `unstake` in svc-token, not here.
 
 ### Idempotency keys
 
 Business keys, never UUIDs, never clock readings (§5):
 
 ```
-bank.transfer:<scheduleId>:<occurrence>     one firing of one standing order
-bank.transfer:<transferId>:0                one-off transfer (a schedule that fires once)
-bank.earn.deposit:<positionId>              one position opening
-bank.earn.withdraw:<positionId>             one position closing
-bank.earn.fund:<poolId>:<fundingId>         one reserve top-up
-bank.interest:<poolId>:<date>               one day of one pool
+bank.transfer:<scheduleId>:<occurrence>              one firing of one standing order
+bank.transfer:<transferId>:0                         one-off transfer (a schedule that fires once)
+bank.earn.deposit:<positionId>                       one position opening
+bank.earn.withdraw:<positionId>                      one position closing
+bank.earn.fund:<poolId>:<fundingId>                  one reserve top-up
+bank.interest:<poolId>:<date>                        one day of one pool
+bank.loan.collateral.lock:<loanId>:<sequence>        one collateral lock / top-up
+bank.loan.collateral.release:<loanId>:<sequence>     one collateral release
+bank.loan.draw:<loanId>                              one principal draw
+bank.loan.repay:<loanId>:<sequence>                  one repayment
+bank.loan.liquidate:<loanId>:<tranche>               one liquidation tranche
+bank.loan.baddebt:<loanId>                           one bad-debt cover
+bank.loan.reserve.fund:<debtAssetId>:<fundingId>     one reserve top-up
 ```
 
 `occurrence` is derived from `(startsAt, cadence, n)` — never from a counter. Two workers, a retry, and a catch-up run after an outage all compute the same index for the same intended transfer.
+
+**A key that is already taken is a retry only if the terms match.** `positionId` and `loanId` are client-supplied, so the id alone cannot separate "the same request arriving twice" from "a different request wearing an id somebody has already used" — and `ON CONFLICT (id) DO NOTHING` silently keeps the first row while every guard runs on the new input. Both paths therefore compare before they proceed, and refuse on a mismatch: `bank.position_conflict`, `bank.loan_principal_mismatch`, `bank.loan_collateral_mismatch`, `bank.loan_borrower_mismatch`. Same id + same terms stays idempotent, which is the whole reason the id is the client's to choose.
 
 ---
 
@@ -253,7 +334,9 @@ Holding a database transaction open across the ledger call is a deliberate cost:
 
 **Earn deposit: ledger first, then the row** — same as svc-token's `stake`, same reason. The reverse order would let a position exist with nothing behind it: a position we would pay interest on that nobody funded.
 
-**Interest: claim the day, post, record.** If the reserve cannot cover the day, **nothing moves** and the claim rolls back so the day is re-runnable the moment the pool is funded. That is the loud failure §8.1 needs — a pool that cannot pay its advertised rate is an operator problem today, not a shortfall discovered at maturity.
+**Interest: claim the UTC day, post, record.** `YYYY-MM-DD` UTC is both the idempotency day and the eligibility boundary. A position must be open before `00:00:00.000Z` for that day; a scheduler running late cannot pay a full day to a position opened after midnight. If the reserve cannot cover the day, **nothing moves** and the claim rolls back so the day is re-runnable the moment the pool is funded. That is the loud failure §8.1 needs — a pool that cannot pay its advertised rate is an operator problem today, not a shortfall discovered at maturity.
+
+**No configured pool means no configured rate, not zero yield.** `earn.pools` and the all-pools accrual door refuse `bank.earn_rate_unset` instead of returning an empty success that makes an unconfigured deployment look live. Individual pool operations still resolve the named pool and use only its stored operator-set APR; svc-bank has no default APR and invents none.
 
 **Interest is paid to `available`, never added to the principal.** Compounding would mean writing a new principal figure every day, and a money column that changes daily is a running total wearing a different name.
 
@@ -305,14 +388,17 @@ The service checks these; the database enforces them regardless.
 
 ## What the schema stores — and deliberately does not
 
-| Table                 | Stores                                          | Deliberately absent                |
-| --------------------- | ----------------------------------------------- | ---------------------------------- |
-| `spaces`              | name, kind, savings **goal**, self-imposed lock | any balance                        |
-| `scheduled_transfers` | the **instruction**, immutable after insert     | a counter of firings               |
-| `transfer_executions` | one **record** per (schedule, occurrence)       | a running sum of transferred value |
-| `earn_pools`          | terms — APR, term length, minimum deposit       | `total_deposited`, `capacity_used` |
-| `earn_positions`      | the deposit **record**; principal never changes | accrued interest, current value    |
-| `interest_accruals`   | one **record** per (pool, day)                  | a lifetime interest total          |
+| Table                                                           | Stores                                                              | Deliberately absent                                |
+| --------------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
+| `spaces`                                                        | name, kind, savings **goal**, self-imposed lock                     | any balance                                        |
+| `scheduled_transfers`                                           | the **instruction**, immutable after insert                         | a counter of firings                               |
+| `transfer_executions`                                           | one **record** per (schedule, occurrence)                           | a running sum of transferred value                 |
+| `earn_pools`                                                    | terms — APR, term length, minimum deposit                           | `total_deposited`, `capacity_used`                 |
+| `earn_positions`                                                | the deposit **record**; principal never changes                     | accrued interest, current value                    |
+| `interest_accruals`                                             | one **record** per (pool, day)                                      | a lifetime interest total                          |
+| loan product / loan / collateral / accrual / margin-call tables | terms, status, write-once movements, call record                    | an `outstanding` balance column — derived at read  |
+| card / authorisation / settlement tables                        | programme row, every decision (approve **and** decline), claim rows | a real PAN, a live issuer id that is not simulated |
+| ramp on/off tables                                              | credits and holds with `simulated` always set                       | a fiat rail id that pretends to settle             |
 
 Editing a standing order cancels it and writes a new one, so the history of what a user actually authorised survives.
 
@@ -320,12 +406,24 @@ Editing a standing order cancels it and writes a new one, so the history of what
 
 ## Kill-switches
 
-| Variable                                                                    | Guards                                                                                                             |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `SCHEDULED_TRANSFERS_ENABLED`                                               | A bad deploy mis-computing occurrence indices would fire every schedule in the book, and the ledger is append-only |
-| `INTEREST_ACCRUAL_ENABLED`                                                  | A reserve drained by a runaway job cannot be un-paid without asking users to return money                          |
-| `TRANSFER_BATCH_SIZE`                                                       | Bounds the blast radius of a single bad pass                                                                       |
-| flags `bank.loans`, `bank.cards`, `bank.sovereignCard`, `bank.cardWaitlist` | Module kill-switch via `FLAG_REGISTRY` (§11)                                                                       |
+| Variable                                        | Guards                                                                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `SCHEDULED_TRANSFERS_ENABLED`                   | A bad deploy mis-computing occurrence indices would fire every schedule in the book, and the ledger is append-only |
+| `INTEREST_ACCRUAL_ENABLED`                      | A reserve drained by a runaway job cannot be un-paid without asking users to return money                          |
+| `LOAN_ACCRUAL_ENABLED`                          | Loan interest capitalisation is its own flag — stopping earn payout must not stop charging borrowers               |
+| `LOAN_RISK_SWEEP_ENABLED`                       | Defaults **off**. Sells people's collateral; a fresh deploy must not liquidate until a human has checked marks     |
+| `AUTO_INVEST_ENABLED`                           | Stops threshold/DCA runs **and** the card-capture round-up hook — same code `bank.auto_invest_disabled`            |
+| `BANK_LOANS_ENABLED`                            | Module kill for loans (`FLAG_REGISTRY` bank.loans) — OFF refuses new opens                                         |
+| `BANK_CARDS_ENABLED`                            | Module kill for cards ledger half (`bank.cards`) — OFF refuses issue and authorise                                 |
+| `TRANSFER_BATCH_SIZE` / `LOAN_SWEEP_BATCH_SIZE` | Bounds the blast radius of a single bad pass                                                                       |
+
+Each env job flag gates **both** the HTTP `/internal/jobs/*` endpoint **and** the matching `ops.*` tRPC mutation (same 503 / named code). tRPC is not a back door past an emergency stop.
+
+| Registry flag (`FLAG_REGISTRY`)           | What it is today                                                                                                                                                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bank.loans`                              | **Enforced** — `service-env` → `BANK_LOANS_ENABLED` on svc-bank. OFF refuses **new loan opens** (`bank.loans_disabled`). Accrual / risk-sweep stay on their own job flags. Restart required.  |
+| `bank.cards`                              | **Enforced** — `service-env` → `BANK_CARDS_ENABLED` on svc-bank. OFF refuses **issue and authorise** (`bank.cards_disabled`). Issuer setting still names the programme when the module is on. |
+| `bank.sovereignCard`, `bank.cardWaitlist` | **Named only** — `NOT_ENFORCED`. Sovereign card is §13 / Shehzad; waitlist has no money path.                                                                                                 |
 
 The scheduler is external (an endpoint, not a `setInterval`) so it can be paused, inspected and re-run by an operator. Duplicate firing is safe — that is the whole point of the idempotency work — but "safe when it happens" is not a reason to make it happen on every deploy.
 
@@ -341,11 +439,23 @@ pnpm --filter @intafaced/svc-bank test
 
 ## Tests
 
-**234 across six files** (`bank-service` 91 · `loans` 85 · `cards` 36 · `cards.reachable` 11 · `margin-call-publisher` 6 · `router.mount` 5), all against real Postgres with `MemoryLedger` as the ledger — the reference implementation the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Each file takes its **own database** rather than its own schema (#429), so concurrent worktrees do not truncate each other. The suite skips itself cleanly when Postgres is unavailable.
+**~300+ cases across eight files**, including loans, cards, and ramps suites — not a frozen exact count (it moves with craft PRs). Layout on tip (approximate, re-count with `rg -c '^\s*(it|test)\(' services/svc-bank --glob '*.test.ts'`):
 
-The 91 below are `bank-service.test.ts`'s.
+| File                                   | Covers                                            |
+| -------------------------------------- | ------------------------------------------------- |
+| `bank-service.test.ts`                 | spaces, transfers (incl. pause/resume), earn, ops |
+| `loans/loans.test.ts`                  | open / repay / LTV / liquidation ladder           |
+| `loans/margin-call-publisher.test.ts`  | `intafaced.bank.margin_call.created` publish      |
+| `cards/cards.test.ts`                  | issue / auth / capture / reverse / cashback / JIT |
+| `cards/cards.reachable.test.ts`        | composition-root reachability + scopes            |
+| `cards/sovereign-card-product.test.ts` | D26-P1-B3 mounted JIT refuse-invent / freeze seal |
+| `ramps/ramps.test.ts`                  | crypto ledger half + fiat refuse                  |
+| `ramps/ramps.reachable.test.ts`        | composition-root reachability                     |
+| `router.mount.test.ts`                 | mount boundary / unsigned principal               |
 
-Failure branches covered: insufficient funds on a one-off transfer and on a standing order, a cross-asset transfer, a debit from a user-locked space, a deposit larger than the user holds, a deposit below the pool minimum, an early withdrawal from a fixed term, a double withdrawal, eight concurrent withdrawals, eight concurrent job runs, a re-run of a rejected occurrence, an accrual from an unfunded pool (and its recovery once funded), a second accrual on the same day, six concurrent accruals, a position opened after the accrual moment, a schedule past its end date, a cancelled schedule, a native-asset earn pool, and a claim left stranded by a crashed run.
+All against real Postgres with `MemoryLedger` as the ledger — the reference implementation the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Each file takes its **own database** rather than its own schema (#429), so concurrent worktrees do not truncate each other. The suite skips itself cleanly when Postgres is unavailable.
+
+Failure branches covered (sample, not exhaustive): insufficient funds on a one-off transfer and on a standing order, a cross-asset transfer, a debit from a user-locked space, pause/resume skip rows that move nothing, a deposit larger than the user holds, a deposit below the pool minimum, an early withdrawal from a fixed term, a double withdrawal, concurrent withdrawals and job runs, a re-run of a rejected occurrence, an accrual from an unfunded pool (and its recovery once funded), a second accrual on the same day, a position opened after the accrual moment, a schedule past its end date, a cancelled schedule, a native-asset earn pool, a claim left stranded by a crashed run, plus loans / cards / ramps suites for their own refusal and recovery paths.
 
 ## Cards: what is built, and what is a contract
 
@@ -410,15 +520,26 @@ What `card-sim` **does** get you is the ledger half, end to end, over real posti
 ## Sockets (§13)
 
 - **`socket.live-issuer`** — a card programme needs a **card-scheme sponsor and an issuing BIN**. That is a licence and a commercial relationship, not code: no amount of engineering time produces one, which is precisely the §13 test. `CardIssuerAdapter` is written against the shape a live issuer would implement, and the only implementation in the tree is `cardSim()`, which says on every surface that it is a simulator. Pointing working code at real money is additionally Class X.
-- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. `bank.ramps` crypto ledger half does not claim this function; fiat refuses `bank.fiat_ramp_socket` by name.
+- **`socket.psp-partners`** — fiat on/off ramp needs a **bank/PSP partner and money-transmission permission**. Same §13 test. Code path is `PayFiatRampPort` (svc-pay `RailAdapter` plane): empty/sandbox/absent refuse `bank.fiat_ramp_socket` before any row; a live injected rail books only via ledger-client recipes against that pay rail id (no second book). Commercial partner + Class X remain the socket.
 - **`ledger.history`** — spend analytics needs a transaction-history read that svc-ledger does not expose yet. Declaring it is a `packages/contracts` + svc-ledger PR that must land first (§1). `createLedgerHistory()` is written against the shape and **fails loudly** rather than returning an empty answer: a spend view that silently reports zero is worse than one that is unavailable, because the user cannot tell "you spent nothing" from "we could not ask".
 - **Chunked interest keys** — one accrual is one ledger transaction per (pool, day). When a pool outgrows a single transaction the key gains a deterministic chunk index, `bank.interest:<poolId>:<date>:<chunk>`, which keeps the same property per chunk. The shape was chosen so that change is additive.
 
-## Ramps: crypto ledger half vs fiat socket
+## What is still Nitro-only (not agent craft)
 
-| Half       | Missing in the WORLD                                    | Verdict                                            |
-| ---------- | ------------------------------------------------------- | -------------------------------------------------- |
-| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`) |
-| **Fiat**   | A bank/PSP partner and money-transmission permission    | **§13 forever.** Lands on `socket.psp-partners`    |
+Code for loans, cards (ledger half), ramps (crypto half), and standing-order pause/resume is **on main**. What is not agent-finishable:
 
-`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.
+| Residual                                    | Why it is not craft                                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| **Fiat partner** (`socket.psp-partners`)    | Bank/PSP + money-transmission permission — commercial + regulatory          |
+| **Live card issuer** (`socket.live-issuer`) | Card-scheme sponsor + issuing BIN — licence; Class X to point at real money |
+
+`bank.sovereign-card` **custodial JIT half** is on main (#1174) and sealed at the mounted door (D26-P1-B3 / `sovereign-card-product.test.ts`): refuse invent FX (`bank.mark_missing`), freeze rate at auth, ledger-only funding asset. The **on-chain / smart-account funding half** remains Shehzad (`protocol.smart-accounts`); the live card rail remains `socket.live-issuer`.
+
+## Ramps: crypto ledger half vs fiat via pay adapters
+
+| Half       | Missing in the WORLD                                    | Verdict                                                              |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Crypto** | Nothing for the ledger half. Chain confirm/send is pay. | **Built** as ledger sandbox (`bank-crypto-ledger`)                   |
+| **Fiat**   | A bank/PSP partner and money-transmission permission    | **Code path Done (D26-P1-B4)** via `PayFiatRampPort`; partner is §13 |
+
+`BANK_RAMP_MODE=crypto-ledger` books deposits/withdrawals against rail `bank-crypto-ledger` — deliberately distinct from svc-pay's `crypto-native` boundary so an operator credit here cannot desync pay's chain reconciliation. `simulated: true` is never omitted. Fiat on/off with a live pay adapter uses the same ledger-client recipes against the pay rail id; `ramps-fiat-product.test.ts` enters through the mounted router. Live broadcast and inbound confirmation stay in svc-pay; Class X is pointing working code at real money.

@@ -1,3 +1,5 @@
+**Status: VOID — thrift deleted 2026-08-07. Not a hold.**
+
 # L3 free-TRK factory — hold LIFTED (2026-08-07)
 
 **Updated:** 2026-08-07  

@@ -1,9 +1,18 @@
 import { z } from 'zod';
-import { router, publicProcedure, scopedProcedure } from '@intafaced/contracts';
+import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { NotifyService } from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
+import { renderInboxCopy } from './channels/render.js';
+import type { AlertService } from './alerts/service.js';
+import {
+  AlertKindUnpublishedError,
+  AlertPortfolioUnpublishedError,
+  isUnpublishedAlertKind,
+  UNPUBLISHED_ALERT_KINDS,
+  type PriceAlert,
+} from './alerts/types.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -34,6 +43,10 @@ const notificationOutput = z.object({
   kind: z.string(),
   titleKey: z.string(),
   bodyKey: z.string(),
+  /** Catalog-resolved title. Unknown keys are the key string, never invented English. */
+  title: z.string(),
+  /** Catalog-resolved body. Unknown keys are the key string, never invented English. */
+  body: z.string(),
   params: z.record(z.unknown()),
   href: z.string().nullable(),
   severity: severitySchema,
@@ -54,6 +67,21 @@ const deliveryOutput = z.object({
   /** A code, never a sentence — the client renders copy from `@intafaced/i18n`. */
   refusalCode: z.string().nullable(),
 });
+
+/**
+ * Operator view includes notification id so ops can correlate without user scope.
+ * No address / detail / userId — those are not on the delivery row we return.
+ * Status vocabulary is the store's (`pending`/`accepted`/`refused`/`failed`/`abandoned`).
+ * There is no `delivered` stamp: in-app `accepted` is inbox write; OOA `accepted` is gateway accept.
+ */
+const operatorDeliveryOutput = deliveryOutput.extend({
+  id: z.string().uuid(),
+  notificationId: z.string().uuid(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const operatorDeliveriesInput = z.object({ limit: z.number().int().min(1).max(200).optional() }).optional();
 
 const targetOutput = z.object({
   channel: outOfAppChannelSchema,
@@ -89,12 +117,15 @@ const registerInput = z.discriminatedUnion('channel', [
 ]);
 
 function toWire(n: Notification) {
+  const copy = renderInboxCopy(n, 'en');
   return {
     id: n.id,
     userId: n.userId,
     kind: n.kind,
     titleKey: n.titleKey,
     bodyKey: n.bodyKey,
+    title: copy.title,
+    body: copy.body,
     params: n.params,
     href: n.href,
     severity: n.severity,
@@ -116,7 +147,71 @@ function deliveryToWire(d: DeliveryRecord) {
   };
 }
 
-export function createNotifyRouter(notify: NotifyService) {
+function operatorDeliveryToWire(d: DeliveryRecord) {
+  return {
+    id: d.id,
+    notificationId: d.notificationId,
+    ...deliveryToWire(d),
+    createdAt: d.createdAt.toISOString(),
+    updatedAt: d.updatedAt.toISOString(),
+  };
+}
+
+async function loadOperatorDeliveries(notify: NotifyService, limit: number | undefined) {
+  return (await notify.operatorDeliveryOutcomes(limit ?? 50)).map(operatorDeliveryToWire);
+}
+
+const priceAlertOutput = z.object({
+  id: z.string().uuid(),
+  userId: z.string(),
+  marketId: z.string(),
+  direction: z.enum(['above', 'below']),
+  targetPrice: z.string(),
+  status: z.enum(['active', 'fired', 'cancelled']),
+  firedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+/**
+ * WHETHER A WATCH CAN FIRE — returned with the watchlist and with every watch
+ * created, not parked behind a procedure a client might not call.
+ *
+ * D-S-13 done-bar item 6: reclassifying a promise-with-no-delivery requires the
+ * disclosure to exist in code at the surface a user reads. Somebody who has just
+ * created a price watch is exactly the person entitled to know that this
+ * deployment has no mark feed and therefore nothing will cross.
+ *
+ * Codes, never sentences — clients render copy from `@intafaced/i18n` (§9), and
+ * `canFire: true` is a statement about wiring, never an SLA (§8 item 9).
+ */
+const alertEvaluationOutput = z.object({
+  markSource: z.enum(['dark', 'live']),
+  canFire: z.boolean(),
+  code: z.enum(['alert.price_unavailable', 'channel.not_configured', 'channel.disabled']).nullable(),
+});
+
+/** The answer when this deployment has no alert service at all. */
+const NO_ALERT_SERVICE = { markSource: 'dark', canFire: false, code: 'alert.price_unavailable' } as const;
+
+function priceAlertToWire(row: PriceAlert) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    marketId: row.marketId,
+    direction: row.direction,
+    targetPrice: row.targetPrice,
+    status: row.status,
+    firedAt: row.firedAt ? row.firedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/**
+ * @param alerts Optional v22.alerts MVP service. When absent, alert procedures
+ * refuse with a clear shape rather than inventing a silent empty list that
+ * pretends the feature is live.
+ */
+export function createNotifyRouter(notify: NotifyService, alerts?: AlertService) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-notify'), fanoutEnabled: z.boolean() }))
@@ -177,6 +272,12 @@ export function createNotifyRouter(notify: NotifyService) {
        * the same person reads both surfaces, and a vaguer answer would send them
        * into the source to find out which key is absent. It names no provider,
        * only our own variable names (§0.7).
+       *
+       * `socket` is the Doctrine §13 tracker id for out-of-app channels
+       * (`socket.notify-email|push|sms`). Null for `inapp` — that is the
+       * fan-out mountain (`ops.notifications`), not a credential socket
+       * (D26-P1-O5). Closing a socket needs Class X credentials; refusing
+       * when unset is the honest state, not a half-built channel.
        */
       channels: scopedProcedure('notify:read', { module: 'notify' })
         .output(
@@ -186,6 +287,7 @@ export function createNotifyRouter(notify: NotifyService) {
               available: z.boolean(),
               reason: z.string().nullable(),
               requires: z.array(z.string()),
+              socket: z.string().nullable(),
             }),
           ),
         )
@@ -195,6 +297,7 @@ export function createNotifyRouter(notify: NotifyService) {
             available: s.available,
             reason: s.reason,
             requires: [...s.requires],
+            socket: s.socket,
           })),
         ),
 
@@ -245,13 +348,26 @@ export function createNotifyRouter(notify: NotifyService) {
           };
         }),
 
-      /** Confirm an address. Wrong, expired and already-spent codes are one answer. */
+      /**
+       * Confirm an address. Wrong, expired and already-spent codes are one
+       * answer (`verified: false`, `code: null`). Rate limit is a named refuse
+       * code so the client can render "try later" without inventing copy.
+       */
       verifyTarget: scopedProcedure('notify:write', { module: 'notify' })
         .input(z.object({ channel: outOfAppChannelSchema, code: z.string().regex(/^\d{6}$/) }))
-        .output(z.object({ verified: z.boolean() }))
-        .mutation(async ({ ctx, input }) => ({
-          verified: await notify.verifyTarget(ctx.principal.userId, input.channel, input.code),
-        })),
+        .output(
+          z.object({
+            verified: z.boolean(),
+            /** Set when the call was refused (rate limit). Null on success / wrong code. */
+            code: z.string().nullable(),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          const outcome = await notify.verifyTarget(ctx.principal.userId, input.channel, input.code);
+          if (outcome.status === 'verified') return { verified: true, code: null };
+          if (outcome.status === 'refused') return { verified: false, code: outcome.code };
+          return { verified: false, code: null };
+        }),
 
       removeTarget: scopedProcedure('notify:write', { module: 'notify' })
         .input(z.object({ channel: outOfAppChannelSchema }))
@@ -271,6 +387,25 @@ export function createNotifyRouter(notify: NotifyService) {
         .input(z.object({ notificationId: z.string().uuid() }))
         .output(z.array(deliveryOutput))
         .query(async ({ ctx, input }) => (await notify.deliveriesFor(ctx.principal.userId, input.notificationId)).map(deliveryToWire)),
+
+      /**
+       * Operator delivery-outcomes view (`ops.notifications` residual).
+       *
+       * Cross-user newest-first. `admin:read` only — never `notify:read`, which
+       * is self-scoped. `accepted` ≠ end-device delivered (mountain honesty).
+       * Bound limit (max 200). Canonical door: `notify.ops.deliveries`.
+       */
+      operatorDeliveries: scopedProcedure('admin:read', { module: 'notify' })
+        .input(operatorDeliveriesInput)
+        .output(z.array(operatorDeliveryOutput))
+        .query(async ({ input }) => loadOperatorDeliveries(notify, input?.limit)),
+
+      ops: router({
+        deliveries: scopedProcedure('admin:read', { module: 'notify' })
+          .input(operatorDeliveriesInput)
+          .output(z.array(operatorDeliveryOutput))
+          .query(async ({ input }) => loadOperatorDeliveries(notify, input?.limit)),
+      }),
 
       /** Out-of-app mute prefs. Critical severity never respects mute (dispatch law). */
       mutePrefs: scopedProcedure('notify:read', { module: 'notify' })
@@ -297,6 +432,180 @@ export function createNotifyRouter(notify: NotifyService) {
         .mutation(async ({ ctx, input }) => {
           await notify.setChannelMute(ctx.principal.userId, input.channel, input.muted);
           return notify.listMutePrefs(ctx.principal.userId);
+        }),
+
+      /**
+       * v22.alerts MVP — price watchlists.
+       *
+       * The user surface is create / list / cancel / evaluate. Sweep still
+       * runs (`AlertService.evaluateDueAlerts` in `index.ts`). `evaluateAlert`
+       * is the public door that must refuse dark/missing marks by name.
+       *
+       * `evaluation` rides with the list rather than sitting behind its own
+       * procedure: a client cannot render somebody's watchlist without also
+       * receiving the fact that no watch on it can currently cross.
+       */
+      alerts: scopedProcedure('notify:read', { module: 'notify' })
+        .output(z.object({ items: z.array(priceAlertOutput), evaluation: alertEvaluationOutput }))
+        .query(async ({ ctx }) => {
+          if (!alerts) return { items: [], evaluation: NO_ALERT_SERVICE };
+          return {
+            items: (await alerts.list(ctx.principal.userId)).map(priceAlertToWire),
+            evaluation: alerts.evaluationStatus(),
+          };
+        }),
+
+      createAlert: scopedProcedure('notify:write', { module: 'notify' })
+        .input(
+          z.union([
+            z.object({
+              kind: z.literal('price').optional(),
+              marketId: z.string().min(1).max(64),
+              direction: z.enum(['above', 'below']),
+              /** Decimal string — never a JSON number. */
+              targetPrice: z.string().min(1).max(64),
+            }),
+            z.object({
+              kind: z.enum(UNPUBLISHED_ALERT_KINDS),
+              marketId: z.string().min(1).max(64).optional(),
+              direction: z.enum(['above', 'below']).optional(),
+              targetPrice: z.string().min(1).max(64).optional(),
+            }),
+            z.object({
+              kind: z.literal('portfolio'),
+            }),
+          ]),
+        )
+        // The watch AND whether it can fire, in the same answer. A create that
+        // returned only `status: 'active'` is what let this surface promise
+        // delivery it had no path for.
+        .output(z.object({ alert: priceAlertOutput, evaluation: alertEvaluationOutput }))
+        .mutation(async ({ ctx, input }) => {
+          if (!alerts) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'alert.price_unavailable',
+            });
+          }
+          if (isUnpublishedAlertKind(input.kind)) {
+            try {
+              alerts.createUnpublishedKind({ kind: input.kind, userId: ctx.principal.userId });
+            } catch (err) {
+              if (err instanceof AlertKindUnpublishedError) {
+                throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: err.message,
+                  cause: err,
+                });
+              }
+              throw err;
+            }
+          }
+          if (input.kind === 'portfolio') {
+            try {
+              alerts.createPortfolio({ kind: 'portfolio', userId: ctx.principal.userId });
+            } catch (err) {
+              if (err instanceof AlertPortfolioUnpublishedError) {
+                throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: err.message,
+                  cause: err,
+                });
+              }
+              throw err;
+            }
+          }
+          if (!('marketId' in input) || input.marketId === undefined || input.direction === undefined || input.targetPrice === undefined) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'alert.portfolio_view_unpublished: ledger portfolio view unpublished — notify holds no balance',
+            });
+          }
+          const row = await alerts.create({
+            userId: ctx.principal.userId,
+            marketId: input.marketId,
+            direction: input.direction,
+            targetPrice: input.targetPrice,
+          });
+          return { alert: priceAlertToWire(row), evaluation: alerts.evaluationStatus() };
+        }),
+
+      cancelAlert: scopedProcedure('notify:write', { module: 'notify' })
+        .input(z.object({ id: z.string().uuid() }))
+        .output(z.object({ cancelled: z.boolean(), alert: priceAlertOutput.nullable() }))
+        .mutation(async ({ ctx, input }) => {
+          if (!alerts) return { cancelled: false, alert: null };
+          const row = await alerts.cancel(ctx.principal.userId, input.id);
+          if (!row) return { cancelled: false, alert: null };
+          return { cancelled: row.status === 'cancelled', alert: priceAlertToWire(row) };
+        }),
+
+      /**
+       * Condition eval against the sourced mark. Dark / missing MarkSource
+       * refuses `alert.price_unavailable` and never returns fired as live.
+       */
+      evaluateAlert: scopedProcedure('notify:write', { module: 'notify' })
+        .input(z.union([z.object({ id: z.string().uuid() }), z.object({ kind: z.enum(UNPUBLISHED_ALERT_KINDS) })]))
+        .output(
+          z.object({
+            alert: priceAlertOutput.nullable(),
+            outcome: z.discriminatedUnion('kind', [
+              z.object({ kind: z.literal('hold'), markPrice: z.string() }),
+              z.object({ kind: z.literal('fire'), markPrice: z.string() }),
+              z.object({
+                kind: z.literal('refuse'),
+                code: z.enum([
+                  'alert.price_unavailable',
+                  'alert.not_active',
+                  'alert.invalid_price',
+                  'alert.portfolio_view_unpublished',
+                  'alert.kind_unpublished',
+                  'channel.not_configured',
+                  'channel.disabled',
+                ]),
+                detail: z.string(),
+              }),
+            ]),
+            evaluation: alertEvaluationOutput,
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
+          if (!alerts) {
+            return {
+              alert: null,
+              outcome: {
+                kind: 'refuse' as const,
+                code: 'alert.price_unavailable' as const,
+                detail: 'mark source missing',
+              },
+              evaluation: NO_ALERT_SERVICE,
+            };
+          }
+          if ('kind' in input && isUnpublishedAlertKind(input.kind)) {
+            const outcome = alerts.evaluateUnpublishedKind(input.kind);
+            return {
+              alert: null,
+              outcome,
+              evaluation: alerts.evaluationStatus(),
+            };
+          }
+          if (!('id' in input)) {
+            return {
+              alert: null,
+              outcome: {
+                kind: 'refuse' as const,
+                code: 'alert.kind_unpublished' as const,
+                detail: 'unpublished kind has no sourced series',
+              },
+              evaluation: alerts.evaluationStatus(),
+            };
+          }
+          const report = await alerts.evaluateAlert(ctx.principal.userId, input.id);
+          return {
+            alert: report.alert ? priceAlertToWire(report.alert) : null,
+            outcome: report.outcome,
+            evaluation: report.evaluation,
+          };
         }),
     }),
   });

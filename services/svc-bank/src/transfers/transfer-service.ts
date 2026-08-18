@@ -88,7 +88,7 @@ function toSchedule(row: ScheduleRow): ScheduleRecord {
   };
 }
 
-export type FiringOutcome = 'settled' | 'rejected' | 'already-fired';
+export type FiringOutcome = 'settled' | 'rejected' | 'already-fired' | 'stopped';
 
 /**
  * What `rejection_code` says on an occurrence that was skipped.
@@ -130,6 +130,22 @@ export interface RunReport {
    * ledger never refused anything).
    */
   strandedSwept: number;
+  /**
+   * Schedules that threw mid-drive (network fault, frozen ledger module, …).
+   *
+   * Those occurrences are NOT consumed — `settle` rethrows so the claim rolls
+   * back and the next pass retries. Recording them here is what lets one bad
+   * schedule fail loudly without becoming a platform-wide stop: before isolation,
+   * the throw escaped `runDueTransfers` and every later schedule on the pass
+   * never ran.
+   *
+   * Isolation alone is not enough under `TRANSFER_BATCH_SIZE`: if the thrower
+   * never advances `next_run_at`, N permanently-failing schedules fill the due
+   * window forever and healthy schedules behind the limit never get selected.
+   * After a failure we bump `next_run_at` to the job's `now` so the poison sorts
+   * later than still-older healthy dues on the next pass — retry without starvation.
+   */
+  failures: Array<{ scheduleId: string; reason: string; code?: string }>;
 }
 
 export class TransferService {
@@ -196,7 +212,68 @@ export class TransferService {
     );
   }
 
+  async transferToUser(input: {
+    transferId: string;
+    fromSpaceId: string;
+    toUserId: string;
+    amount: Amount;
+    now?: Date;
+  }): Promise<TransferResult> {
+    const now = input.now ?? new Date();
+    return withMoneySpan(
+      'bank.transferToUser',
+      { operation: 'transfer', amount: formatAmount(input.amount), spaceId: input.fromSpaceId },
+      async () => {
+        const destUserId = input.toUserId.trim();
+        const from = await this.spaces.resolveForDebit(input.fromSpaceId, now);
+        const dest = destUserId ? await this.spaces.findPrimary(destUserId, from.assetId) : null;
+        if (!dest) {
+          throw new BankError(
+            `Dest user ${destUserId || '(empty)'} has no primary ${from.assetId} space — transfer refused`,
+            'bank.dest_user_missing',
+          );
+        }
+        return this.transfer({
+          transferId: input.transferId,
+          fromSpaceId: input.fromSpaceId,
+          toSpaceId: dest.id,
+          amount: input.amount,
+          now,
+        });
+      },
+    );
+  }
+
   // ── Standing orders ────────────────────────────────────────────────────────
+
+  async scheduleToUser(input: {
+    userId: string;
+    fromSpaceId: string;
+    toUserId: string;
+    amount: Amount;
+    cadence: Cadence;
+    startsAt: Date;
+    endsAt?: Date | null;
+  }): Promise<ScheduleRecord> {
+    const destUserId = input.toUserId.trim();
+    const from = await this.spaces.get(input.fromSpaceId);
+    const dest = destUserId ? await this.spaces.findPrimary(destUserId, from.assetId) : null;
+    if (!dest) {
+      throw new BankError(
+        `Dest user ${destUserId || '(empty)'} has no primary ${from.assetId} space — schedule refused`,
+        'bank.dest_user_missing',
+      );
+    }
+    return this.schedule({
+      userId: input.userId,
+      fromSpaceId: input.fromSpaceId,
+      toSpaceId: dest.id,
+      amount: input.amount,
+      cadence: input.cadence,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+    });
+  }
 
   async schedule(input: {
     userId: string;
@@ -527,21 +604,61 @@ export class TransferService {
       rejected: 0,
       alreadyFired: 0,
       strandedSwept: stranded.length,
+      failures: [],
     };
 
     const count = (outcomes: FiringOutcome[]) => {
       for (const outcome of outcomes) {
         if (outcome === 'settled') report.settled++;
         else if (outcome === 'rejected') report.rejected++;
-        else report.alreadyFired++;
+        else if (outcome === 'already-fired') report.alreadyFired++;
+        // 'stopped' — cancel/pause mid-drive; no counter, no claim.
       }
     };
 
+    const recordFailure = (scheduleId: string, err: unknown) => {
+      // One schedule's fault must not halt every other standing order on the
+      // platform. Same posture as `runRiskSweep`: report and continue. The
+      // occurrence itself is still un-consumed (rethrow inside settle rolls the
+      // claim back), so the next pass retries this one alone.
+      const reason = err instanceof Error ? err.message : String(err);
+      const code = err instanceof BankError || err instanceof LedgerError ? err.code : undefined;
+      report.failures.push({ scheduleId, reason, ...(code ? { code } : {}) });
+    };
+
+    /**
+     * Deprioritise a thrower so it cannot permanently occupy the oldest
+     * `next_run_at` slots under `LIMIT`. Setting to the job's `now` keeps the
+     * schedule due (still ≤ now on the next tick) but sorts it after any
+     * healthy schedule whose watermark is still older. Stranded claims are
+     * selected by a separate query and are not affected.
+     */
+    const deprioritiseAfterFailure = async (scheduleId: string) => {
+      await this.sql`
+        UPDATE bank.scheduled_transfers
+           SET next_run_at = ${now}, updated_at = now()
+         WHERE id = ${scheduleId} AND status = 'active'
+      `;
+    };
+
     for (const row of due) {
-      count(await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS));
+      try {
+        count(await this.driveSchedule(toSchedule(row), now, options.maxCatchUp ?? MAX_CATCH_UP_PER_PASS));
+      } catch (err) {
+        recordFailure(row.id, err);
+        await deprioritiseAfterFailure(row.id);
+      }
     }
     for (const row of stranded) {
-      count(await this.sweepStrandedClaims(toSchedule(row)));
+      try {
+        count(await this.sweepStrandedClaims(toSchedule(row), now));
+      } catch (err) {
+        recordFailure(row.id, err);
+        // Stranded rows are not ordered by next_run_at in the due window; still
+        // bump so a permanently-failing stranded schedule cannot re-enter the
+        // due set forever as the oldest active watermark if it later becomes due.
+        await deprioritiseAfterFailure(row.id);
+      }
     }
 
     return report;
@@ -555,7 +672,7 @@ export class TransferService {
    * before the process died finds the original transaction rather than moving
    * value a second time.
    */
-  private async sweepStrandedClaims(schedule: ScheduleRecord): Promise<FiringOutcome[]> {
+  private async sweepStrandedClaims(schedule: ScheduleRecord, now: Date = new Date()): Promise<FiringOutcome[]> {
     const stranded = await this.sql<Array<{ occurrence: number }>>`
       SELECT occurrence FROM bank.transfer_executions
        WHERE schedule_id = ${schedule.id} AND status = 'pending'
@@ -564,7 +681,7 @@ export class TransferService {
 
     const outcomes: FiringOutcome[] = [];
     for (const row of stranded) {
-      outcomes.push(await this.fireOccurrence(schedule, row.occurrence));
+      outcomes.push(await this.fireOccurrence(schedule, row.occurrence, now));
     }
     return outcomes;
   }
@@ -590,15 +707,24 @@ export class TransferService {
     // statement reads in the order the user's transfers were meant to happen.
     // `sweepStrandedClaims` is the same code the standalone sweep uses — one
     // definition of "finish what was started", not two that could drift.
-    const outcomes: FiringOutcome[] = await this.sweepStrandedClaims(schedule);
+    // Stranded claims still finish even if the schedule was cancelled/paused
+    // after the claim — cancel is not a reversal of a committed movement.
+    const outcomes: FiringOutcome[] = await this.sweepStrandedClaims(schedule, now);
     for (const occurrence of plan.occurrences) {
-      outcomes.push(await this.fireOccurrence(schedule, occurrence));
+      const outcome = await this.fireOccurrence(schedule, occurrence, now);
+      // Cancel/pause after this pass selected the schedule: stop planning new
+      // claims. Pending claims already swept above.
+      if (outcome === 'stopped') break;
+      outcomes.push(outcome);
     }
 
     // Advance the scheduling hint LAST. If this update is lost, the next pass
     // reconsiders occurrences that the executions table already owns and skips
     // them — wasted work, never a double transfer. The other order would let a
     // crash advance past an occurrence that never fired.
+    //
+    // `status = 'active'` in the WHERE means a concurrent cancel/pause leaves
+    // the watermark alone — correct: we did not finish the planned window.
     await this.sql`
       UPDATE bank.scheduled_transfers
          SET next_run_at = ${plan.nextRunAt},
@@ -634,7 +760,7 @@ export class TransferService {
    * no ledger transaction and no process left alive to make one — a transfer the
    * user was told would happen, that never will.
    */
-  private async fireOccurrence(schedule: ScheduleRecord, occurrence: number): Promise<FiringOutcome> {
+  private async fireOccurrence(schedule: ScheduleRecord, occurrence: number, now: Date = new Date()): Promise<FiringOutcome> {
     return withMoneySpan(
       'bank.transfer.scheduled',
       {
@@ -645,42 +771,102 @@ export class TransferService {
         assetId: schedule.assetId,
       },
       async (span) => {
-        const outcome = await this.fireOccurrenceInner(schedule, occurrence);
+        const outcome = await this.fireOccurrenceInner(schedule, occurrence, now);
         span.setAttribute('intafaced.outcome', outcome);
         return outcome;
       },
     );
   }
 
-  private async fireOccurrenceInner(schedule: ScheduleRecord, occurrence: number): Promise<FiringOutcome> {
-    const from = await this.spaces.get(schedule.fromSpaceId);
-    const to = await this.spaces.get(schedule.toSpaceId);
-
+  private async fireOccurrenceInner(schedule: ScheduleRecord, occurrence: number, now: Date): Promise<FiringOutcome> {
+    // Same product gates as a one-off transfer. A self-imposed lock or archive
+    // must stop the standing order too — bare `get` used to bypass them and
+    // drain a space the user had locked for rent.
+    //
+    // Resolve *inside* the claim transaction path so a locked debit still
+    // consumes the occurrence (reject + reason), matching insufficient funds:
+    // a locked March is a March transfer that did not run, not an infinite
+    // retry storm while the lock holds. Lock clock is the job's `now`, same as
+    // the due planner — not a separate wall-clock reading.
     return transaction(
       this.sql,
       async (tx) => {
-        const claimed = await tx<Array<{ id: string }>>`
-          INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
-          VALUES (${schedule.id}, ${occurrence}, ${formatAmount(schedule.amount)}::numeric, 'pending')
-          ON CONFLICT (schedule_id, occurrence) DO NOTHING
-          RETURNING id
+        // Re-check schedule status under the same transaction as the claim.
+        // The due query freezes `status=active` at pass start; without this,
+        // a concurrent cancel/pause still lets every remaining planned
+        // occurrence claim and settle inside this drive.
+        const live = await tx<Array<{ status: string }>>`
+          SELECT status FROM bank.scheduled_transfers WHERE id = ${schedule.id} FOR UPDATE
         `;
+        const isActive = live[0]?.status === 'active';
 
-        if (claimed.length === 0) {
-          // Another pass owns this occurrence. Almost always it is finished; a
-          // row still `pending` means a process died in a way that committed the
-          // claim without the post, so re-drive it — the ledger post is
-          // idempotent, which makes re-driving strictly safe.
+        let executionId: string;
+        if (isActive) {
+          const claimed = await tx<Array<{ id: string }>>`
+            INSERT INTO bank.transfer_executions (schedule_id, occurrence, amount, status)
+            VALUES (${schedule.id}, ${occurrence}, ${formatAmount(schedule.amount)}::numeric, 'pending')
+            ON CONFLICT (schedule_id, occurrence) DO NOTHING
+            RETURNING id
+          `;
+
+          if (claimed.length === 0) {
+            // Another pass owns this occurrence. Almost always it is finished; a
+            // row still `pending` means a process died in a way that committed the
+            // claim without the post, so re-drive it — the ledger post is
+            // idempotent, which makes re-driving strictly safe.
+            const existing = await tx<Array<{ id: string; status: string }>>`
+              SELECT id, status FROM bank.transfer_executions
+               WHERE schedule_id = ${schedule.id} AND occurrence = ${occurrence} FOR UPDATE
+            `;
+            const row = existing[0];
+            if (!row || row.status !== 'pending') return 'already-fired' as const;
+            executionId = row.id;
+          } else {
+            executionId = claimed[0]!.id;
+          }
+        } else {
+          // Cancel/pause is not a reversal: an already-pending claim still
+          // finishes. Unclaimed future firings must not start.
           const existing = await tx<Array<{ id: string; status: string }>>`
             SELECT id, status FROM bank.transfer_executions
              WHERE schedule_id = ${schedule.id} AND occurrence = ${occurrence} FOR UPDATE
           `;
           const row = existing[0];
-          if (!row || row.status !== 'pending') return 'already-fired' as const;
-          return this.settle(tx, row.id, schedule, from, to, occurrence);
+          if (!row || row.status !== 'pending') return 'stopped' as const;
+          executionId = row.id;
         }
 
-        return this.settle(tx, claimed[0]!.id, schedule, from, to, occurrence);
+        let from: Awaited<ReturnType<SpaceService['get']>>;
+        let to: Awaited<ReturnType<SpaceService['get']>>;
+        try {
+          from = await this.spaces.resolveForDebit(schedule.fromSpaceId, now);
+          to = await this.spaces.resolveForCredit(schedule.toSpaceId);
+        } catch (err) {
+          if (err instanceof BankError && (err.code === 'bank.space_locked' || err.code === 'bank.space_archived')) {
+            // Crash window: claim rolled back (or never committed settle) AFTER
+            // ledger.post already moved value under bank.transfer:<id>:<n>. A
+            // later lock must RECOVER that movement as settled — never mark
+            // rejected while the ledger already moved money.
+            const prior = await this.ledger.getTxByKey(`bank.transfer:${schedule.id}:${occurrence}`);
+            if (prior) {
+              await tx`
+                UPDATE bank.transfer_executions
+                   SET status = 'settled', ledger_tx_id = ${prior.id}, settled_at = now()
+                 WHERE id = ${executionId}
+              `;
+              return 'settled';
+            }
+            await tx`
+              UPDATE bank.transfer_executions
+                 SET status = 'rejected', rejection_code = ${err.code}
+               WHERE id = ${executionId}
+            `;
+            return 'rejected';
+          }
+          throw err;
+        }
+
+        return this.settle(tx, executionId, schedule, from, to, occurrence);
       },
       // `read committed` is correct here because the ordering between competing
       // runs is already established by the unique index on (schedule,

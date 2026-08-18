@@ -1,5 +1,7 @@
 # FREEZE-LIVE (generated)
 
+> **STALE SNAPSHOT — not cold-start law.** Generated content below is frozen at the tip SHA named in the first bullet. Re-derive before acting: `git fetch && git log -1 --oneline origin/main` then `pnpm swarm:freeze`. Numbers (free claims, Actions 24h, worktrees) go bad in hours. Thrift / “billing ceiling” lines are historical if present — thrift was deleted 2026-08-07; public Actions are free. Prefer live `pnpm wt:gc` over any apply line printed here.
+
 **Do not hand-edit.** Regenerate: `pnpm swarm:freeze`
 
 - **Tip:** `049a10d` — feat(agents): support Stage-1 money-tool refuse guardrail (#758)

@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { emptyScene } from './scene.js';
-import { decideHostSceneWrite, isHostSceneWriteConflict, isHostSceneWriteOk, sceneFingerprint } from './edit-policy.js';
+import { emptyScene, SCENE_MAX_BYTES } from './scene.js';
+import {
+  HOST_SCENE_REFUSE,
+  decideHostSceneWrite,
+  hasExpectedFingerprint,
+  hostSceneWriteRefuseName,
+  isHostSceneWriteConflict,
+  isHostSceneWriteOk,
+  sceneFingerprint,
+  sceneRequiresHostFingerprint,
+} from './edit-policy.js';
 
 describe('spatial concurrent host edit policy', () => {
   it('accepts first write without expectedFingerprint', () => {
     const current = emptyScene();
+    expect(sceneRequiresHostFingerprint(current)).toBe(false);
     const next = {
       version: 1 as const,
       stage: { width: 800, height: 600 },
@@ -24,6 +34,7 @@ describe('spatial concurrent host edit policy', () => {
       stage: { width: 100, height: 100 },
       avatars: [{ id: 'a1', participantId: 'seat-1', position: { x: 1, y: 1 } }],
     };
+    expect(sceneRequiresHostFingerprint(current)).toBe(true);
     const fp = sceneFingerprint(current);
     const next = {
       ...current,
@@ -34,7 +45,56 @@ describe('spatial concurrent host edit policy', () => {
     if (r.ok) expect(r.scene.avatars![0]!.position).toEqual({ x: 50, y: 50 });
   });
 
-  it('refuses stale fingerprint (concurrent host tab)', () => {
+  it('refuses omit fingerprint when current scene is non-empty (D26-P1-C6)', () => {
+    const current = {
+      version: 1 as const,
+      stage: { width: 100, height: 100 },
+      avatars: [{ id: 'a1', participantId: 'seat-1', position: { x: 1, y: 1 } }],
+    };
+    const r = decideHostSceneWrite({
+      current,
+      next: {
+        ...current,
+        avatars: [{ id: 'a1', participantId: 'seat-1', position: { x: 9, y: 9 } }],
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(isHostSceneWriteConflict(r)).toBe(true);
+    expect(hostSceneWriteRefuseName(r)).toBe(HOST_SCENE_REFUSE.fingerprint_required);
+    if (!r.ok) {
+      expect(r.reason).toBe('conflict');
+      expect(r.message).toContain('fingerprint required');
+      if (r.reason === 'conflict') expect(r.name).toBe('fingerprint_required');
+    }
+  });
+
+  it('refuses blank fingerprint as required (not silent overwrite)', () => {
+    const current = {
+      version: 1 as const,
+      stage: { width: 100, height: 100 },
+    };
+    expect(hasExpectedFingerprint('   ')).toBe(false);
+    const r = decideHostSceneWrite({
+      current,
+      next: { version: 1, stage: { width: 200, height: 200 } },
+      expectedFingerprint: '   ',
+    });
+    expect(hostSceneWriteRefuseName(r)).toBe(HOST_SCENE_REFUSE.fingerprint_required);
+  });
+
+  it('refuses omit fingerprint when only props make scene non-empty', () => {
+    const current = {
+      version: 1 as const,
+      props: [{ id: 'p1', kind: 'desk', position: { x: 0, y: 0 } }],
+    };
+    expect(sceneRequiresHostFingerprint(current)).toBe(true);
+    const r = decideHostSceneWrite({ current, next: { version: 1 } });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe('conflict');
+    expect(hostSceneWriteRefuseName(r)).toBe(HOST_SCENE_REFUSE.fingerprint_required);
+  });
+
+  it('refuses stale fingerprint (concurrent host tab) by name', () => {
     const current = emptyScene();
     const r = decideHostSceneWrite({
       current,
@@ -43,6 +103,7 @@ describe('spatial concurrent host edit policy', () => {
     });
     expect(r.ok).toBe(false);
     expect(isHostSceneWriteConflict(r)).toBe(true);
+    expect(hostSceneWriteRefuseName(r)).toBe(HOST_SCENE_REFUSE.fingerprint_mismatch);
     if (!r.ok) expect(r.reason).toBe('conflict');
   });
 
@@ -51,6 +112,21 @@ describe('spatial concurrent host edit policy', () => {
     const bad = decideHostSceneWrite({ current, next: { version: 99 } });
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.reason).toBe('invalid');
+    expect(hostSceneWriteRefuseName(bad)).toBeNull();
+
+    const huge = {
+      version: 1 as const,
+      props: [] as { id: string; kind: string; position: { x: number; y: number } }[],
+    };
+    let i = 0;
+    while (Buffer.byteLength(JSON.stringify(huge), 'utf8') <= SCENE_MAX_BYTES) {
+      huge.props.push({ id: `p${i}`, kind: 'block', position: { x: i, y: i } });
+      i += 1;
+      if (i > 50_000) break;
+    }
+    const over = decideHostSceneWrite({ current, next: huge });
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.reason).toBe('oversized');
   });
 
   it('refuses duplicate participantId (presence invariant)', () => {

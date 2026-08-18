@@ -5,11 +5,14 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { tradeConvertPort, usableTradeConvertUrl } from './auto-invest/trade-convert-port.js';
 import { cardIssuerFor } from './cards/issuer.js';
 import { rampProgrammeFor } from './ramps/rails.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { withSpan } from './tracing.js';
 import { verifyServiceHeaders } from '@intafaced/contracts';
@@ -83,6 +86,9 @@ const bank = createBankServices(sql, ledger, history, {
     // The half that was missing. Without this the risk sweep raises calls into
     // a database column and svc-notify's finished consumer never sees one.
     marginCalls: eventMarginCallSink(bus),
+    moduleEnabled: env.BANK_LOANS_ENABLED,
+    affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+    affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   },
   /**
    * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
@@ -97,13 +103,56 @@ const bank = createBankServices(sql, ledger, history, {
    * what a deployment gets by saying nothing. It just is no longer what a
    * deployment gets by SAYING ANYTHING.
    */
-  cards: { issuer: cardIssuerFor(env.BANK_CARD_ISSUER) },
+  cards: {
+    issuer: cardIssuerFor(env.BANK_CARD_ISSUER, { APP_ENV: env.APP_ENV, NODE_ENV: process.env.NODE_ENV }),
+    /**
+     * THE JIT CONVERSION RATE (§18), and what this wiring does NOT claim.
+     *
+     * The same read of svc-trade's public ticker the loan book marks against —
+     * reused rather than rebuilt, because a second rate interface meaning the
+     * same thing is how two subsystems come to disagree about what a stale price
+     * is. It is a CRYPTO BOOK. It can quote one listed asset in another, and it
+     * has nothing at all to say about a fiat settlement currency, because this
+     * platform has no FX source and never had one — the shell deleted the rate
+     * it had invented for exactly this reason.
+     *
+     * So a card whose settlement asset is fiat refuses every authorisation with
+     * `bank.mark_missing`, in production, today. That is the honest state and it
+     * is not a bug to be papered over with a hardcoded number: the missing piece
+     * is a rate counterparty, which lands on `socket.psp-partners` alongside the
+     * fiat ramp leg. Cards charged in the asset they draw on are unaffected —
+     * they consult no rate at all.
+     */
+    rates: tickerPriceSource({ baseUrl: env.TRADE_URL }),
+    moduleEnabled: env.BANK_CARDS_ENABLED,
+  },
+  /**
+   * AUTO-INVEST — threshold / round-up / refuse-closed DCA.
+   *
+   * `enabled` is the same flag as the HTTP/tRPC runner kill. The capture hook
+   * has no other door; without this a flipped AUTO_INVEST_ENABLED would still
+   * sweep spare change on every card capture.
+   *
+   * ConvertPort was the other missing half (same shape as cards / ramps):
+   * createDca already refused `bank.auto_invest_rate_unset` when convert was
+   * null, tests injected a stub, and `index.ts` never passed one — so every
+   * deployment stayed refuse-closed. `trade.convert` (quote + execute) is the
+   * rate counterparty. Unusable TRADE_URL keeps convert unwired. Convert
+   * failure still refuses — this service does not invent a §8 mid.
+   */
+  autoInvest: {
+    enabled: env.AUTO_INVEST_ENABLED,
+    ...(usableTradeConvertUrl(env.TRADE_URL)
+      ? { convert: tradeConvertPort({ baseUrl: env.TRADE_URL, edgeSecret: env.EDGE_PRINCIPAL_SECRET }) }
+      : {}),
+  },
   /**
    * RAMPS — same missing-wiring shape as cards.
    *
    * Silence is `none` (`BANK_RAMP_MODE` default). `crypto-ledger` turns on the
-   * crypto ledger half only; fiat remains `socket.psp-partners` and refuses by
-   * name. `simulated` is always true on this surface.
+   * crypto ledger half. Fiat resolves through PayFiatRampPort (svc-pay
+   * RailAdapter plane); boot default is empty → `bank.fiat_ramp_no_pay_adapter` until
+   * a live pay rail is injected at the edge. `simulated` is always true.
    */
   ramps: { programme: rampProgrammeFor(env.BANK_RAMP_MODE) },
 });
@@ -119,7 +168,13 @@ const bank = createBankServices(sql, ledger, history, {
 const cardProgramme = bank.cards.programme();
 const rampProgramme = bank.ramps.programmeInfo();
 
-export const appRouter = createBankRouter(bank);
+export const appRouter = createBankRouter(bank, {
+  scheduledTransfersEnabled: env.SCHEDULED_TRANSFERS_ENABLED,
+  interestAccrualEnabled: env.INTEREST_ACCRUAL_ENABLED,
+  loanAccrualEnabled: env.LOAN_ACCRUAL_ENABLED,
+  loanRiskSweepEnabled: env.LOAN_RISK_SWEEP_ENABLED,
+  autoInvestEnabled: env.AUTO_INVEST_ENABLED,
+});
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -137,6 +192,7 @@ app.get('/ready', async () => ({
   // Surfaced because "are we liquidating today" is the first question anyone
   // asks about this service, and it should not require reading an env file.
   loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
+  autoInvest: env.AUTO_INVEST_ENABLED,
   /**
    * WHETHER THIS DEPLOYMENT'S CARDS ARE REAL, ON THE READINESS ENDPOINT.
    *
@@ -165,6 +221,7 @@ app.get('/ready', async () => ({
     displayName: rampProgramme.displayName,
     cryptoRail: rampProgramme.cryptoRail,
     fiatLeg: rampProgramme.fiatLeg,
+    fiatVia: rampProgramme.fiatVia,
   },
 }));
 
@@ -215,11 +272,20 @@ app.post('/internal/jobs/accrue-interest', async (req, reply) => {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
   if (!env.INTEREST_ACCRUAL_ENABLED) {
-    return reply.code(503).send({ error: 'interest accrual is disabled', code: 'bank.accrual_disabled' });
+    // Same code string as ops.accrueInterest / BankErrorCode — alerts key on one name.
+    return reply.code(503).send({ error: 'interest accrual is disabled', code: 'bank.interest_accrual_disabled' });
   }
   return withSpan('bank.job.accrueInterest', async () => {
-    const results = await bank.earn.accrueAll();
-    return results.map((r) => ({ poolId: r.poolId, date: r.date, recipients: r.recipients, alreadyAccrued: r.alreadyAccrued }));
+    const report = await bank.earn.accrueAll();
+    return {
+      results: report.results.map((r) => ({
+        poolId: r.poolId,
+        date: r.date,
+        recipients: r.recipients,
+        alreadyAccrued: r.alreadyAccrued,
+      })),
+      failures: report.failures,
+    };
   });
 });
 
@@ -244,8 +310,11 @@ app.post('/internal/jobs/accrue-loan-interest', async (req, reply) => {
     return reply.code(503).send({ error: 'loan interest accrual is disabled', code: 'bank.loan_accrual_disabled' });
   }
   return withSpan('bank.job.accrueLoanInterest', async () => {
-    const results = await bank.loans.accrueAll();
-    return results.map((r) => ({ loanId: r.loanId, days: r.days }));
+    const report = await bank.loans.accrueAll();
+    return {
+      results: report.results.map((r) => ({ loanId: r.loanId, days: r.days })),
+      failures: report.failures,
+    };
   });
 });
 
@@ -264,7 +333,8 @@ app.post('/internal/jobs/run-risk-sweep', async (req, reply) => {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
   if (!env.LOAN_RISK_SWEEP_ENABLED) {
-    return reply.code(503).send({ error: 'the loan risk sweep is disabled', code: 'bank.risk_sweep_disabled' });
+    // Same code string as ops.runRiskSweep / BankErrorCode — alerts key on one name.
+    return reply.code(503).send({ error: 'the loan risk sweep is disabled', code: 'bank.loan_risk_sweep_disabled' });
   }
   return withSpan('bank.job.runRiskSweep', async () => bank.loans.runRiskSweep({ limit: env.LOAN_SWEEP_BATCH_SIZE }));
 });
@@ -282,6 +352,38 @@ app.post('/internal/jobs/resume-pending-loans', async (req, reply) => {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
   return withSpan('bank.job.resumePendingLoans', async () => bank.loans.resumePending());
+});
+
+/**
+ * Re-drive earn deposits stuck between the ledger post and activate.
+ *
+ * Mirror of resume-pending-loans for the earn claim window: row is `pending`,
+ * funds may already be staked under bank.earn.deposit:<positionId>. Idempotent
+ * re-post + activate; safe to fire on a schedule.
+ */
+app.post('/internal/jobs/resume-pending-earn', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  return withSpan('bank.job.resumePendingEarn', async () => bank.earn.resumePending());
+});
+
+/**
+ * AUTO-INVEST RUNNER — threshold sweeps and due DCA rules.
+ *
+ * Same external-scheduler shape as standing orders: an operator-visible POST
+ * with its own kill switch, not a setInterval inside the replica. tRPC
+ * `ops.runAutoInvest` and this route share `AUTO_INVEST_ENABLED` and the same
+ * refusal code `bank.auto_invest_disabled` so neither is a back door past stop.
+ */
+app.post('/internal/jobs/run-auto-invest', async (req, reply) => {
+  if (!requireService(req)) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
+  }
+  if (!env.AUTO_INVEST_ENABLED) {
+    return reply.code(503).send({ error: 'auto-invest is disabled', code: 'bank.auto_invest_disabled' });
+  }
+  return withSpan('bank.job.runAutoInvest', async () => bank.autoInvest.runDue({}));
 });
 
 await app.register(fastifyTRPCPlugin, {
@@ -302,6 +404,7 @@ app.log.info(
     port: env.HTTP_PORT,
     scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
     interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
+    autoInvest: env.AUTO_INVEST_ENABLED,
     // In the boot line, not only on `/ready`: the first place anyone looks after
     // a deploy is the log, and "this deployment is running a card SIMULATOR" is
     // exactly the fact that must not be discovered later from a support ticket.
@@ -310,6 +413,7 @@ app.log.info(
     rampProgramme: rampProgramme.id,
     rampProgrammeSimulated: rampProgramme.simulated,
     rampFiatLeg: rampProgramme.fiatLeg,
+    rampFiatVia: rampProgramme.fiatVia,
   },
   'svc-bank ready',
 );

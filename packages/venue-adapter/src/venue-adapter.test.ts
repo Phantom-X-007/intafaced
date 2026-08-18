@@ -3,7 +3,14 @@ import { parseAmount as amt, formatAmount } from '@intafaced/ledger-client';
 import type { OrderBook } from '@intafaced/exchange-contract';
 import type { LiquiditySource, QuoteRequest, VenueHealth } from './source.js';
 import { isRoutable } from './source.js';
-import { planRoute, effectivePrice, priceDriftBps, explainRoute } from './router.js';
+import {
+  planRoute,
+  effectivePrice,
+  priceDriftBps,
+  explainRoute,
+  ACCEPTED_INTERNAL_PREFERENCE_BPS,
+  capInternalPreferenceBps,
+} from './router.js';
 import { consolidateBook, topOfBook, isCrossed, sweepCost } from './consolidated-book.js';
 
 // ── Test doubles ─────────────────────────────────────────────────────────────
@@ -228,6 +235,59 @@ describe('internal-first preference', () => {
       venue({ id: 'internal', kind: 'internal', price: '90000', amount: '10', feeBps: 0 }),
     ]);
     expect(plan.legs[0]?.venueId).toBe('internal');
+  });
+});
+
+describe('D26-P2-06 one-book 5bps cap — D-S-06 residual', () => {
+  it('defaults internalPreferenceBps to the accepted 5 bps', () => {
+    expect(ACCEPTED_INTERNAL_PREFERENCE_BPS).toBe(5);
+    expect(capInternalPreferenceBps()).toBe(5);
+    expect(capInternalPreferenceBps(undefined)).toBe(5);
+  });
+
+  it('cannot silently raise the house thumb above 5 bps', async () => {
+    expect(capInternalPreferenceBps(500)).toBe(5);
+    expect(capInternalPreferenceBps(Number.POSITIVE_INFINITY)).toBe(5);
+    // Internal is 10 bps dearer. An uncapped 10_000 bps thumb would hide that.
+    // The cap keeps the accepted 5 bps, so the worse internal book still loses.
+    const plan = await planRoute(
+      buy('1'),
+      [
+        venue({ id: 'binance', kind: 'external-cex', price: '90000', amount: '10', feeBps: 0 }),
+        venue({ id: 'internal', kind: 'internal', price: '90090', amount: '10', feeBps: 0 }),
+      ],
+      { internalPreferenceBps: 10_000 },
+    );
+    expect(plan.legs[0]?.venueId).toBe('binance');
+  });
+
+  it('a worse internal book still loses under the default 5 bps', async () => {
+    const plan = await planRoute(buy('1'), [
+      venue({ id: 'binance', kind: 'external-cex', price: '90000', amount: '10', feeBps: 0 }),
+      venue({ id: 'internal', kind: 'internal', price: '90450', amount: '10', feeBps: 0 }),
+    ]);
+    expect(plan.legs[0]?.venueId).toBe('binance');
+  });
+
+  it('ranks internal vs external through one LiquiditySource interface', async () => {
+    const internal = venue({ id: 'book', kind: 'internal', price: '90100', amount: '10', feeBps: 0 });
+    const dex = venue({ id: 'pool', kind: 'external-dex', price: '90000', amount: '10', feeBps: 0 });
+    const amm = venue({ id: 'amm', kind: 'amm', price: '90050', amount: '10', feeBps: 0 });
+
+    const plan = await planRoute(buy('1'), [internal, dex, amm]);
+
+    expect(plan.legs[0]?.venueId).toBe('pool');
+    expect(plan.legs[0]?.kind).toBe(dex.kind);
+    expect(internal.quote).toBeTypeOf('function');
+    expect(dex.quote).toBeTypeOf('function');
+    expect(amm.quote).toBeTypeOf('function');
+    // Preference follows kind on the shared interface, not a parallel internal ranker.
+    const swapped = await planRoute(buy('1'), [
+      venue({ id: 'book', kind: 'external-cex', price: '90100', amount: '10', feeBps: 0 }),
+      venue({ id: 'pool', kind: 'internal', price: '90000', amount: '10', feeBps: 0 }),
+    ]);
+    expect(swapped.legs[0]?.venueId).toBe('pool');
+    expect(swapped.legs[0]?.kind).toBe('internal');
   });
 });
 

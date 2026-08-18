@@ -9,6 +9,7 @@ import {
   type KbArticleFixture,
   type TicketFixture,
 } from './data-tools.js';
+import { createFixtureSupportDesk } from './desk-port.js';
 import type { SupportTierLaw } from './tier-gate.js';
 
 const USER = 'user-1';
@@ -24,6 +25,8 @@ const ticket: TicketFixture = { ticketId: 'tkt-1', ownerUserId: USER, status: 'o
 
 const account: AccountProjectionFixture = { userId: USER, status: 'frozen', kycTier: 'tier-2' };
 
+const desk = createFixtureSupportDesk({ articles, tickets: [ticket], accounts: [account] });
+
 /** Everything an open call needs, so each test can vary exactly one thing. */
 function call(overrides: Partial<Parameters<typeof invokeSupportDataTool>[0]> = {}) {
   return invokeSupportDataTool({
@@ -32,6 +35,7 @@ function call(overrides: Partial<Parameters<typeof invokeSupportDataTool>[0]> = 
     requesterUserId: USER,
     tierLaw: law,
     userTier: 'free',
+    desk,
     articles,
     ticket,
     account,
@@ -40,9 +44,9 @@ function call(overrides: Partial<Parameters<typeof invokeSupportDataTool>[0]> = 
 }
 
 describe('support Stage-2 data tools — nothing is invented', () => {
-  it('refuses every money tool by name, before any plane or tier work', () => {
+  it('refuses every money tool by name, before any plane or tier work', async () => {
     for (const tool of SUPPORT_MONEY_TOOLS) {
-      expect(call({ tool }), tool).toEqual({
+      expect(await call({ tool }), tool).toEqual({
         status: 'refuse',
         tool,
         reason: 'money_tool',
@@ -51,47 +55,84 @@ describe('support Stage-2 data tools — nothing is invented', () => {
     }
   });
 
-  it('a dark desk plane refuses instead of answering from memory', () => {
-    expect(call({ plane: 'dark' })).toMatchObject({ reason: 'desk_plane_dark', userMessageKey: 'agents.support.unavailable' });
+  it('a dark desk plane refuses instead of answering from memory', async () => {
+    expect(await call({ plane: 'dark' })).toMatchObject({ reason: 'desk_plane_dark', userMessageKey: 'agents.support.unavailable' });
   });
 
-  it('blank tier law refuses closed — no default grant', () => {
-    expect(call({ tierLaw: null })).toMatchObject({ reason: 'tier_law_blank', userMessageKey: 'agents.support.tier_closed' });
-    expect(call({ userTier: '' })).toMatchObject({ reason: 'tier_not_granted' });
+  it('live without a desk port refuses — fixtures are not a live KB', async () => {
+    expect(await call({ desk: null })).toMatchObject({
+      reason: 'no_live_kb',
+      userMessageKey: 'agents.support.unavailable',
+    });
   });
 
-  it('an undeclared tool refuses even when the tier matrix names it', () => {
+  it('a dark KB plane refuses even when article fixtures are supplied', async () => {
+    expect(await call({ kbPlane: 'dark' })).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_empty',
+      userMessageKey: 'agents.support.unavailable',
+    });
+  });
+
+  it('blank tier law refuses closed — no default grant', async () => {
+    expect(await call({ tierLaw: null })).toMatchObject({ reason: 'tier_law_blank', userMessageKey: 'agents.support.tier_closed' });
+    expect(await call({ userTier: '' })).toMatchObject({ reason: 'tier_not_granted' });
+  });
+
+  it('an undeclared tool refuses even when the tier matrix names it', async () => {
     expect(
-      call({ tool: 'support.ticket.delete', tierLaw: { published: true, matrix: { free: ['support.ticket.delete'] } } }),
+      await call({ tool: 'support.ticket.delete', tierLaw: { published: true, matrix: { free: ['support.ticket.delete'] } } }),
     ).toMatchObject({ reason: 'tool_not_declared' });
   });
 
-  it('a declared tool outside the tier refuses as tier-closed', () => {
-    expect(call({ tool: 'support.ticket.read', tierLaw: { published: true, matrix: { free: ['support.kb.search'] } } })).toMatchObject({
+  it('a declared tool outside the tier refuses as tier-closed', async () => {
+    expect(
+      await call({ tool: 'support.ticket.read', tierLaw: { published: true, matrix: { free: ['support.kb.search'] } } }),
+    ).toMatchObject({
       reason: 'tool_not_in_tier',
       userMessageKey: 'agents.support.tier_closed',
     });
   });
 
-  it('refuses without a requester — the door is never optional', () => {
-    expect(call({ requesterUserId: '  ' })).toMatchObject({ reason: 'missing_requester' });
+  it('refuses without a requester — the door is never optional', async () => {
+    expect(await call({ requesterUserId: '  ' })).toMatchObject({ reason: 'missing_requester' });
   });
 });
 
 describe('support Stage-2 kb.search', () => {
-  it('echoes the caller article keys and invents none', () => {
-    const result = call();
+  it('echoes the port article keys and invents none', async () => {
+    const result = await call();
     expect(isSupportDataToolOk(result)).toBe(true);
     expect(result).toEqual({ status: 'ok', tool: 'support.kb.search', articles });
   });
 
-  it('no hit is a refusal, not an improvised answer', () => {
-    expect(call({ articles: [] })).toMatchObject({ reason: 'empty_results' });
-    expect(call({ articles: null })).toMatchObject({ reason: 'empty_results' });
+  it('live + port returns only what the port searched', async () => {
+    const portArticles: readonly KbArticleFixture[] = [
+      { articleKey: 'support.kb.account_access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+    ];
+    const result = await call({
+      desk: createFixtureSupportDesk({ articles: portArticles }),
+      articles: [{ articleKey: 'kb.caller.fixture', titleKey: 'kb.caller.fixture.title', bodyKey: 'kb.caller.fixture.body' }],
+    });
+    expect(result).toEqual({ status: 'ok', tool: 'support.kb.search', articles: portArticles });
   });
 
-  it('refuses rendered prose where an i18n key belongs', () => {
-    expect(call({ articles: [{ articleKey: 'Your withdrawal is delayed', titleKey: 'kb.a.title', bodyKey: 'kb.a.body' }] })).toMatchObject({
+  it('empty port KB is kb_empty, not invented copy', async () => {
+    expect(await call({ desk: createFixtureSupportDesk({ articles: [] }) })).toMatchObject({ reason: 'kb_empty' });
+  });
+
+  it('fixture desk still works in tests (test-only port)', async () => {
+    expect(await call({ desk, kbQuery: 'withdrawals' })).toEqual({ status: 'ok', tool: 'support.kb.search', articles });
+  });
+
+  it('refuses rendered prose where an i18n key belongs', async () => {
+    expect(
+      await call({
+        desk: createFixtureSupportDesk({
+          articles: [{ articleKey: 'Your withdrawal is delayed', titleKey: 'kb.a.title', bodyKey: 'kb.a.body' }],
+        }),
+      }),
+    ).toMatchObject({
       reason: 'incomplete_article',
     });
   });
@@ -100,26 +141,35 @@ describe('support Stage-2 kb.search', () => {
 describe('support Stage-2 ticket.read — ownership at the door', () => {
   const read = (o: Partial<Parameters<typeof invokeSupportDataTool>[0]> = {}) => call({ tool: 'support.ticket.read', ...o });
 
-  it('reads the requester’s own ticket', () => {
-    expect(read()).toEqual({ status: 'ok', tool: 'support.ticket.read', ticket });
+  it('reads the requester’s own ticket from the port', async () => {
+    expect(await read()).toEqual({ status: 'ok', tool: 'support.ticket.read', ticket });
   });
 
-  it('refuses another user’s ticket — a guessable id is not a grant', () => {
-    expect(read({ ticket: { ...ticket, ownerUserId: OTHER } })).toMatchObject({ reason: 'not_ticket_owner' });
+  it('refuses another user’s ticket — a guessable id is not a grant', async () => {
+    expect(
+      await read({
+        desk: createFixtureSupportDesk({ tickets: [{ ...ticket, ownerUserId: OTHER }] }),
+        ticket: { ...ticket, ownerUserId: OTHER },
+      }),
+    ).toMatchObject({ reason: 'not_ticket_owner' });
   });
 
-  it('refuses a missing or half-filled ticket', () => {
-    expect(read({ ticket: null })).toMatchObject({ reason: 'missing_fixture' });
-    expect(read({ ticket: { ...ticket, category: '' } })).toMatchObject({ reason: 'incomplete_ticket' });
-    expect(read({ ticket: { ...ticket, ownerUserId: '' } })).toMatchObject({ reason: 'incomplete_ticket' });
+  it('refuses a missing or half-filled ticket', async () => {
+    expect(await read({ ticket: null })).toMatchObject({ reason: 'missing_fixture' });
+    expect(
+      await read({
+        desk: createFixtureSupportDesk({ tickets: [{ ...ticket, category: '' }] }),
+        ticket,
+      }),
+    ).toMatchObject({ reason: 'incomplete_ticket' });
   });
 });
 
 describe('support Stage-2 account.read — status only, never a balance', () => {
   const read = (o: Partial<Parameters<typeof invokeSupportDataTool>[0]> = {}) => call({ tool: 'identity.account.read', ...o });
 
-  it('returns status and KYC tier and no other field', () => {
-    const result = read();
+  it('returns status and KYC tier and no other field', async () => {
+    const result = await read();
     expect(result).toEqual({ status: 'ok', tool: 'identity.account.read', account });
     expect(Object.keys(result.status === 'ok' && result.tool === 'identity.account.read' ? result.account : {})).toEqual([
       'userId',
@@ -128,42 +178,53 @@ describe('support Stage-2 account.read — status only, never a balance', () => 
     ]);
   });
 
-  it('refuses another user’s account projection', () => {
-    expect(read({ account: { ...account, userId: OTHER } })).toMatchObject({ reason: 'account_owner_mismatch' });
+  it('unread identity plane refuses rather than inventing that the account is fine', async () => {
+    expect(await read({ desk: createFixtureSupportDesk({ unreadAccounts: true }) })).toMatchObject({
+      reason: 'account_plane_dark',
+    });
   });
 
-  it('refuses a missing or half-filled projection', () => {
-    expect(read({ account: null })).toMatchObject({ reason: 'missing_fixture' });
-    expect(read({ account: { ...account, kycTier: '' } })).toMatchObject({ reason: 'incomplete_account' });
+  it('refuses another user’s account projection', async () => {
+    const mismatch = createFixtureSupportDesk({ accounts: [account] });
+    mismatch.readAccount = async () => ({ status: 'ok', account: { ...account, userId: OTHER } });
+    expect(await read({ desk: mismatch })).toMatchObject({
+      reason: 'account_owner_mismatch',
+    });
+  });
+
+  it('refuses a missing or half-filled projection', async () => {
+    expect(await read({ desk: createFixtureSupportDesk({ accounts: [{ ...account, kycTier: '' }] }) })).toMatchObject({
+      reason: 'incomplete_account',
+    });
   });
 });
 
 describe('support Stage-2 escalate path', () => {
-  it('answers only when the KB actually hit, citing what it read', () => {
-    expect(supportAnswerOrEscalate({ kbResult: call() })).toEqual({
+  it('answers only when the KB actually hit, citing what it read', async () => {
+    expect(supportAnswerOrEscalate({ kbResult: await call() })).toEqual({
       status: 'answer',
       citedArticleKeys: ['kb.withdrawals.delayed'],
     });
   });
 
-  it('an empty KB escalates to a person', () => {
-    expect(supportAnswerOrEscalate({ kbResult: call({ articles: [] }) })).toEqual({
+  it('an empty KB escalates to a person', async () => {
+    expect(supportAnswerOrEscalate({ kbResult: await call({ desk: createFixtureSupportDesk({ articles: [] }) }) })).toEqual({
       status: 'escalate',
       reason: 'kb_no_hit',
       userMessageKey: 'agents.support.escalated',
     });
   });
 
-  it('any other desk refusal escalates rather than guessing', () => {
-    expect(supportAnswerOrEscalate({ kbResult: call({ plane: 'dark' }) })).toMatchObject({ reason: 'desk_refused' });
+  it('any other desk refusal escalates rather than guessing', async () => {
+    expect(supportAnswerOrEscalate({ kbResult: await call({ plane: 'dark' }) })).toMatchObject({ reason: 'desk_refused' });
   });
 
-  it('a money request escalates even when the KB hit', () => {
-    expect(supportAnswerOrEscalate({ kbResult: call(), moneyRequest: true })).toMatchObject({ reason: 'money_request' });
+  it('a money request escalates even when the KB hit', async () => {
+    expect(supportAnswerOrEscalate({ kbResult: await call(), moneyRequest: true })).toMatchObject({ reason: 'money_request' });
   });
 
-  it('a non-KB read is never treated as an answer', () => {
-    expect(supportAnswerOrEscalate({ kbResult: call({ tool: 'identity.account.read' }) })).toMatchObject({
+  it('a non-KB read is never treated as an answer', async () => {
+    expect(supportAnswerOrEscalate({ kbResult: await call({ tool: 'identity.account.read' }) })).toMatchObject({
       reason: 'desk_refused',
     });
   });

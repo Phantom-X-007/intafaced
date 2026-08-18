@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-05  
 **Class:** N  
-**Status:** ship when thrift allows.
+**Status:** ship when the unit is done.
 
 ## Outcome
 

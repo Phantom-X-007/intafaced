@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { JetStreamEventBus, type Subscription } from '@intafaced/events';
 import { env } from './env.js';
+import { createBusLifecycle } from './bus-lifecycle.js';
 import { DepthHub } from './depth/hub.js';
 import { DepthPoller } from './depth/poller.js';
 import { HttpMarketRegistry, UnionMarketRegistry } from './depth/registry.js';
@@ -9,8 +10,10 @@ import { registerRoutes } from './routes.js';
 import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
-import { subscribePrivateFills, subscribePrivateOrders, subscribePrivatePositions } from './private/source.js';
+import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
+import { WS_COPY } from './copy.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
+import { HttpPrivateBookPort } from './private/book.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -111,6 +114,7 @@ const privateOrderHub = new PrivateOrderHub(
     highWaterBytes: env.WS_HIGH_WATER_BYTES,
     maxLagTicks: env.WS_MAX_LAG_TICKS,
     maxConnections: env.WS_MAX_CONNECTIONS,
+    maxConnectionsPerUser: env.WS_PRIVATE_MAX_CONNECTIONS_PER_USER,
   },
   app.log,
 );
@@ -128,6 +132,80 @@ const privateTokens =
 let enabled = env.WS_GATEWAY_ENABLED;
 const isEnabled = () => enabled;
 
+/**
+ * Bus lifecycle — declared before routes so /ready getters can read status.
+ * Connect/subscribe may fail at boot; the lifecycle retries with backoff so
+ * an empty tape is temporary, not "until process restart". If the tape lands
+ * and private does not, retryPrivate attaches the private half on the same
+ * connection — do not tear the public print to recover orders.
+ */
+const busLifecycle = createBusLifecycle({
+  log: app.log,
+  attempt: async () => {
+    const connected = await JetStreamEventBus.connect({
+      servers: env.NATS_URL,
+      producer: env.SERVICE_NAME,
+      streamPrefix: env.NATS_STREAM_PREFIX,
+      ownedStreams: [],
+    });
+    let tradeSub: Subscription | null = null;
+    let privateHalf: PrivateAttachments | null = null;
+    try {
+      // Public tape first and independently. A private-half failure must not
+      // tear the trade consumer — empty private is privateBus:false, not a dead tape.
+      tradeSub = await subscribeTradeTape({
+        bus: connected,
+        hub: tradeHub,
+        durable: env.WS_TRADES_DURABLE,
+        log: app.log,
+      });
+    } catch (err) {
+      await connected.close().catch(() => undefined);
+      throw err;
+    }
+
+    if (privateTokens) {
+      privateHalf = await tryAttachPrivate({
+        bus: connected,
+        hub: privateOrderHub,
+        durable: env.WS_PRIVATE_ORDERS_DURABLE,
+        log: app.log,
+      });
+      if (privateHalf) {
+        privateOrderHub.announceBus(true);
+      }
+    }
+
+    return {
+      tradesUp: tradeSub !== null,
+      privateUp: privateHalf !== null,
+      sessionLost: connected.whenClosed(),
+      retryPrivate: privateTokens
+        ? async () => {
+            privateHalf = await tryAttachPrivate({
+              bus: connected,
+              hub: privateOrderHub,
+              durable: env.WS_PRIVATE_ORDERS_DURABLE,
+              log: app.log,
+            });
+            if (privateHalf) {
+              privateOrderHub.announceBus(true);
+              return true;
+            }
+            return false;
+          }
+        : undefined,
+      close: async () => {
+        await tradeSub?.unsubscribe().catch(() => undefined);
+        await privateHalf?.orders.unsubscribe().catch(() => undefined);
+        await privateHalf?.fills.unsubscribe().catch(() => undefined);
+        await privateHalf?.positions.unsubscribe().catch(() => undefined);
+        await connected.close().catch(() => undefined);
+      },
+    };
+  },
+});
+
 const poller = new DepthPoller(
   source,
   hub,
@@ -138,11 +216,15 @@ const poller = new DepthPoller(
 registerRoutes(app, {
   hub,
   tradeHub,
+  privateHub: privateOrderHub,
   source,
   depthLimit: env.WS_DEPTH_LIMIT,
   serviceName: env.SERVICE_NAME,
   upstream: env.MATCHING_URL,
   enabled: isEnabled,
+  // Mutable getters: lifecycle flips these when reconnect lands.
+  tradesBus: busLifecycle.tradesBus,
+  privateBus: busLifecycle.privateBus,
 });
 
 /**
@@ -163,59 +245,11 @@ await hub.refreshMarkets().catch((err: unknown) => {
 });
 
 /**
- * Trade tape: subscribe to `orderFilled` if NATS is up. Depth must keep
- * working when the bus is down — a public book feed should not die because
- * JetStream hiccuped. `ownedStreams: []` — matching owns the stream.
+ * Trade tape + private fan-out: start bus lifecycle (non-blocking). Depth
+ * serves immediately; tape attaches when NATS is reachable, including after a
+ * boot-time outage. `ownedStreams: []` — matching owns the stream.
  */
-let bus: Awaited<ReturnType<typeof JetStreamEventBus.connect>> | null = null;
-let tradeSub: Subscription | null = null;
-let privateSub: Subscription | null = null;
-let privateFillSub: Subscription | null = null;
-let privatePositionSub: Subscription | null = null;
-try {
-  bus = await JetStreamEventBus.connect({
-    servers: env.NATS_URL,
-    producer: env.SERVICE_NAME,
-    streamPrefix: env.NATS_STREAM_PREFIX,
-    ownedStreams: [],
-  });
-  tradeSub = await subscribeTradeTape({
-    bus,
-    hub: tradeHub,
-    durable: env.WS_TRADES_DURABLE,
-    log: app.log,
-  });
-  if (privateTokens) {
-    privateSub = await subscribePrivateOrders({
-      bus,
-      hub: privateOrderHub,
-      durable: env.WS_PRIVATE_ORDERS_DURABLE,
-      log: app.log,
-    });
-    privateFillSub = await subscribePrivateFills({
-      bus,
-      hub: privateOrderHub,
-      durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-fills`,
-      log: app.log,
-    });
-    privatePositionSub = await subscribePrivatePositions({
-      bus,
-      hub: privateOrderHub,
-      durable: `${env.WS_PRIVATE_ORDERS_DURABLE}-positions`,
-      log: app.log,
-    });
-  }
-} catch (err) {
-  app.log.warn(
-    { err: String(err), nats: env.NATS_URL },
-    'svc-ws: trade tape bus unavailable — depth still serves; trades will be empty until reconnect',
-  );
-  bus = null;
-  tradeSub = null;
-  privateSub = null;
-  privateFillSub = null;
-  privatePositionSub = null;
-}
+busLifecycle.start();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
@@ -235,6 +269,8 @@ const privateGateway = createPrivateWebSocketGateway({
   log: app.log,
   enabled: isEnabled,
   tokens: privateTokens,
+  busAttached: busLifecycle.privateBus,
+  book: new HttpPrivateBookPort({ baseUrl: env.TRADE_URL }),
 });
 
 poller.start();
@@ -247,9 +283,9 @@ app.log.info(
     markets: hub.knownMarkets.length,
     depthLimit: env.WS_DEPTH_LIMIT,
     pollMs: env.WS_POLL_INTERVAL_MS,
-    trades: tradeSub !== null,
-    privateOrders: privateSub !== null && privateTokens !== null,
-    privatePositions: privatePositionSub !== null && privateTokens !== null,
+    trades: busLifecycle.tradesBus(),
+    privateOrders: busLifecycle.privateBus() && privateTokens !== null,
+    privatePositions: busLifecycle.privateBus() && privateTokens !== null,
     enabled,
   },
   'svc-ws ready — depth + trade tape + private orders/fills/positions',
@@ -262,13 +298,9 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       // socket that is mid-close, and tell every client why it is going.
       enabled = false;
       poller.stop();
-      if (tradeSub) await tradeSub.unsubscribe().catch(() => undefined);
-      if (privateSub) await privateSub.unsubscribe().catch(() => undefined);
-      if (privateFillSub) await privateFillSub.unsubscribe().catch(() => undefined);
-      if (privatePositionSub) await privatePositionSub.unsubscribe().catch(() => undefined);
-      if (bus) await bus.close().catch(() => undefined);
-      await gateway.close('gateway shutting down');
-      await privateGateway.close('gateway shutting down');
+      await busLifecycle.stop();
+      await gateway.close(WS_COPY.shuttingDown);
+      await privateGateway.close(WS_COPY.shuttingDown);
       await app.close();
       process.exit(0);
     })();

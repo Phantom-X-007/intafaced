@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseAmount as amt, type PostRequest } from '@intafaced/ledger-client';
+import { readFileSync } from 'node:fs';
+import { parseAmount as amt, type AccountRef, type Amount, type Balance, type PostRequest } from '@intafaced/ledger-client';
 import {
   memoryLiquidationAttemptStore,
   runLiquidationTick,
+  stubMarginCallNotifier,
   type LiquidationPositionRow,
   type MarkSource,
+  type MarginCallNotifier,
   type QuotedMarkSource,
 } from './liquidation-tick.js';
 import { DEFAULT_FUTURES_MARK_POLICY, type FuturesQuotedMark } from './mark-policy.js';
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
+import { INSURANCE_UNDERFUNDED } from './insurance-bound.js';
+import { type FuturesLadderPolicy } from './maintenance-ladder.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -36,8 +41,14 @@ function healthyLong(): LiquidationPositionRow {
   };
 }
 
-function recordingLedger() {
+/**
+ * Recording ledger for path tests. `insuranceAvailable` defaults to a large
+ * pot so existing "liquidates when underwater" controls still post; set to `0n`
+ * to prove the insurance shortfall bound parks without inventing cover.
+ */
+function recordingLedger(opts?: { insuranceAvailable?: Amount }) {
   const posts: PostRequest[] = [];
+  const insuranceAvailable = opts?.insuranceAvailable ?? amt('1000000');
   return {
     posts,
     ledger: {
@@ -45,11 +56,32 @@ function recordingLedger() {
         posts.push(req);
         return { id: `tx-${posts.length}`, idempotencyKey: req.idempotencyKey } as never;
       },
+      async balance(ref: AccountRef): Promise<Balance> {
+        const amount = ref.ownerType === 'house' && ref.ownerId === 'insurance-fund' ? insuranceAvailable : 0n;
+        return { account: ref, accountId: `${ref.ownerType}:${ref.ownerId}`, amount };
+      },
     },
   };
 }
 
-function fixedMark(price: string | null): MarkSource {
+/**
+ * Labelled mid quote for the suite's default money-path marks.
+ * Bare markPrice-only (no invent mid) is `markPriceOnly` below.
+ */
+function fixedMark(price: string | null): QuotedMarkSource {
+  return {
+    async markPrice() {
+      return price;
+    },
+    async quote({ marketId, symbol, at }) {
+      if (price == null || price.trim() === '') return null;
+      return { marketId, symbol, price: amt(price), asOf: at, quality: 'mid' };
+    },
+  };
+}
+
+/** Unlabelled source — money path must refuse inventing quality. */
+function markPriceOnly(price: string | null): MarkSource {
   return {
     async markPrice() {
       return price;
@@ -100,9 +132,34 @@ describe('runLiquidationTick', () => {
       attempts: memoryLiquidationAttemptStore(),
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
+      maintenanceBps: 5000, // fixture — not product law (D3)
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_healthy');
+    expect(posts).toHaveLength(0);
+  });
+
+  it('omitted maintenanceBps is skipped_d3_unset — not a silent healthy', async () => {
+    const { ledger, posts } = recordingLedger();
+    const result = await runLiquidationTick({
+      marks: fixedMark('100'),
+      positions: {
+        async listOpen() {
+          return [healthyLong()];
+        },
+      },
+      closer: {
+        async markLiquidated() {
+          throw new Error('should not close');
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+    });
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_d3_unset');
+    expect(result.items[0]!.reason).toBe('maintenance_bps_unset');
     expect(posts).toHaveLength(0);
   });
 
@@ -159,12 +216,21 @@ describe('runLiquidationTick', () => {
     expect(posts).toHaveLength(countAfterFirst);
   });
 
-  it('asks mark source with marketId + clock', async () => {
-    const markPrice = vi.fn(async () => '80');
+  it('asks labelled quote with marketId + clock + authorisesSize', async () => {
     const fixed = new Date('2026-07-31T12:00:00.000Z');
+    const quote = vi.fn(async ({ marketId, symbol }: { marketId: string; symbol?: string }) => ({
+      marketId,
+      symbol,
+      price: amt('80'),
+      asOf: fixed,
+      quality: 'mid' as const,
+    }));
     const { ledger } = recordingLedger();
     await runLiquidationTick({
-      marks: { markPrice },
+      marks: {
+        markPrice: async () => '80',
+        quote,
+      },
       positions: {
         async listOpen() {
           return [underwaterLong()];
@@ -176,11 +242,100 @@ describe('runLiquidationTick', () => {
       ledger,
       now: () => fixed,
     });
-    expect(markPrice).toHaveBeenCalledWith({
-      marketId: 'm1',
-      symbol: 'BTC/USDT-PERP',
-      at: fixed,
+    expect(quote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketId: 'm1',
+        symbol: 'BTC/USDT-PERP',
+        at: fixed,
+        authorisesSize: amt('1'),
+      }),
+    );
+  });
+
+  /**
+   * W5 — concurrent claim + stable lifecycle id.
+   *
+   * Two workers on the same underwater position must not both post a full loss.
+   * Default id is `liq:{positionId}` (not wall-clock minutes), and tryClaim
+   * reserves that id before any ledger post.
+   */
+  it('two concurrent ticks on one position: one liquidates, one skipped_already, one post set', async () => {
+    const { ledger, posts } = recordingLedger();
+    const attempts = memoryLiquidationAttemptStore();
+    const closed: string[] = [];
+    const deps = {
+      marks: fixedMark('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id: string) {
+          closed.push(id);
+        },
+      },
+      attempts,
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      liquidationIdFor: (row: { positionId: string }) => `liq:${row.positionId}`,
+    };
+
+    const [a, b] = await Promise.all([runLiquidationTick(deps), runLiquidationTick(deps)]);
+    const outcomes = [a.items[0]!.outcome, b.items[0]!.outcome].sort();
+    expect(outcomes).toEqual(['liquidated', 'skipped_already']);
+    expect(a.liquidated + b.liquidated).toBe(1);
+    expect(closed).toEqual(['pos-1']);
+    // Second worker posted nothing — bag size is exactly one liquidator's posts.
+    expect(posts.length).toBeGreaterThan(0);
+    const postsAfter = posts.length;
+    await runLiquidationTick(deps);
+    expect(posts).toHaveLength(postsAfter);
+    expect(await attempts.isDone('liq:pos-1')).toBe(true);
+  });
+
+  it('default liquidation id is stable per position (not minute-bucketed)', async () => {
+    const { defaultLiquidationId } = await import('./liquidation-tick.js');
+    expect(defaultLiquidationId('pos-1')).toBe('liq:pos-1');
+    expect(defaultLiquidationId('pos-1')).toBe(defaultLiquidationId('pos-1'));
+  });
+
+  /**
+   * UNIT 10 — insurance shortfall bound.
+   *
+   * underwaterLong at mark 80: loss 20, margin 10 → fromInsurance 10. Empty fund
+   * must NOT post, must NOT mark liquidated, must NOT mark the attempt done
+   * (park for re-drive after top-up). Position is not falsely clean.
+   */
+  it('empty insurance fund parks a bankrupt liquidation — no post, position stays open', async () => {
+    const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
+    const closed: string[] = [];
+    const attempts = memoryLiquidationAttemptStore();
+    const result = await runLiquidationTick({
+      marks: fixedMark('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts,
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      liquidationIdFor: () => 'liq-empty-insurance',
     });
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
+    expect(result.items[0]!.reason).toBe(INSURANCE_UNDERFUNDED);
+    expect(result.items[0]!.summary).toMatch(/refusing rather than overdrawing/);
+    expect(posts).toHaveLength(0);
+    expect(closed).toHaveLength(0);
+    // Attempt not done — a later tick after top-up may re-drive.
+    expect(await attempts.isDone('liq-empty-insurance')).toBe(false);
   });
 });
 
@@ -308,9 +463,252 @@ describe('runLiquidationTick — mark gates', () => {
     expect(posts).toEqual([]);
   });
 
-  it('a source with no quote() still works — the gate is added, nothing is removed', async () => {
-    const { result, posts } = await tick(fixedMark('80'));
-    expect(result.liquidated).toBe(1);
-    expect(posts.length).toBeGreaterThan(0);
+  it('a source with no quote() cannot liquidate — bare markPrice must not invent mid', async () => {
+    // Denon handoff §6: stamping quality:'mid' + asOf:now disarmed quality and
+    // staleness. Unlabelled markPrice is darkness on the money path.
+    const { result, posts } = await tick(markPriceOnly('80'));
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_no_mark');
+    expect(result.items[0]!.summary).toMatch(/no labelled quote/);
+    expect(posts).toEqual([]);
+  });
+});
+
+/**
+ * C15 / unit 9 — margin-call transport stub + grace non-start seal on the tick.
+ *
+ * Ladder may report `margin-call`; the tick must notify (port) and must NOT
+ * seize from "grace" while delivery is false or grace is unimplemented.
+ * Would fail if someone escalates margin_call → liquidate without delivery.
+ */
+describe('runLiquidationTick — C15 margin-call transport + grace non-start', () => {
+  const AT = new Date('2026-08-09T12:00:00.000Z');
+  /** Flat mm so health bands are hand-checkable; same shape as gap-series tests. */
+  const POLICY: FuturesLadderPolicy = {
+    tiers: [{ uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 500 }],
+    marginCallBps: 12_000,
+    targetBps: 15_000,
+    maxTrancheBps: 2_500,
+  };
+
+  /**
+   * Long 10 @ 100, margin 100 → notional 960 at mark 96, mm 500 bps → required 48,
+   * riskPnl −40, equity 60, health = 60/48 * 10_000 = 12_500 bps → still healthy.
+   * Mark 95 → equity 50, required 47.5, health ~10_526 → margin-call band.
+   */
+  function marginCallLong(): LiquidationPositionRow {
+    return {
+      positionId: 'pos-mc',
+      userId: USER,
+      side: 'long',
+      size: amt('10'),
+      entryPrice: amt('100'),
+      margin: amt('100'),
+      marginAsset: 'USDT',
+      marketId: 'm1',
+      symbol: 'BTC/USDT-PERP',
+    };
+  }
+
+  function quotedAt(price: string): QuotedMarkSource {
+    return {
+      async markPrice() {
+        return price;
+      },
+      async quote({ marketId, symbol }) {
+        return { marketId, symbol, price: amt(price), asOf: AT, quality: 'mid' };
+      },
+    };
+  }
+
+  it('undelivered margin call: notifies, never posts, never closes (not grace-expired)', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+    const reduced: string[] = [];
+    const notified: Array<{ positionId: string; delivered: boolean }> = [];
+
+    const notifier: MarginCallNotifier = {
+      async notifyMarginCall(input) {
+        notified.push({ positionId: input.positionId, delivered: false });
+        return { delivered: false };
+      },
+    };
+
+    const result = await runLiquidationTick({
+      marks: quotedAt('95'),
+      positions: {
+        async listOpen() {
+          return [marginCallLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      notifyMarginCall: notifier,
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: {
+          async reduce(id) {
+            reduced.push(id);
+          },
+        },
+        policy: POLICY,
+      },
+    });
+
+    expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.items[0]!.delivered).toBe(false);
+    expect(result.marginCalls).toBe(1);
+    expect(result.liquidated).toBe(0);
+    expect(result.partial).toBe(0);
+    expect(posts).toEqual([]);
+    expect(closed).toEqual([]);
+    expect(reduced).toEqual([]);
+    expect(notified).toEqual([{ positionId: 'pos-mc', delivered: false }]);
+  });
+
+  it('stub notifier (default transport): still margin_call, never seizes', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+
+    const result = await runLiquidationTick({
+      marks: quotedAt('95'),
+      positions: {
+        async listOpen() {
+          return [marginCallLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      // explicit stub — same as default; documents the honest undelivered path
+      notifyMarginCall: stubMarginCallNotifier,
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: {
+          async reduce() {
+            throw new Error('must not reduce on margin-call');
+          },
+        },
+        policy: POLICY,
+      },
+    });
+
+    expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.items[0]!.delivered).toBe(false);
+    expect(result.liquidated).toBe(0);
+    expect(posts).toEqual([]);
+    expect(closed).toEqual([]);
+  });
+
+  it('delivered=true still does not seize today — grace clock not implemented (D3)', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+    const notifier: MarginCallNotifier = {
+      async notifyMarginCall() {
+        return { delivered: true };
+      },
+    };
+
+    const result = await runLiquidationTick({
+      marks: quotedAt('95'),
+      positions: {
+        async listOpen() {
+          return [marginCallLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      notifyMarginCall: notifier,
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: {
+          async reduce() {
+            throw new Error('must not reduce — no grace escalate path yet');
+          },
+        },
+        policy: POLICY,
+      },
+    });
+
+    // Delivery accepted, but graceExpiresAt is still null on the tick path.
+    expect(result.items[0]!.outcome).toBe('margin_call');
+    expect(result.items[0]!.delivered).toBe(true);
+    expect(result.liquidated).toBe(0);
+    expect(posts).toEqual([]);
+    expect(closed).toEqual([]);
+  });
+
+  it('ladder without owner D3 policy skips — never seizes on DEFAULT placeholders', async () => {
+    const { ledger, posts } = recordingLedger();
+    const closed: string[] = [];
+    const depth = vi.fn(async () => amt('1000000'));
+    const result = await runLiquidationTick({
+      marks: fixedMark('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated(id) {
+          closed.push(id);
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      ladder: {
+        depth: { depthNotional: depth },
+        reducer: {
+          async reduce() {
+            throw new Error('must not reduce on unset D3');
+          },
+        },
+      },
+    });
+    expect(result.items[0]!.outcome).toBe('skipped_d3_unset');
+    expect(result.items[0]!.reason).toBe('trade.ladder_d3_unset');
+    expect(result.liquidated).toBe(0);
+    expect(result.partial).toBe(0);
+    expect(posts).toHaveLength(0);
+    expect(closed).toHaveLength(0);
+    expect(depth).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back to DEFAULT placeholder rungs when policy is omitted', () => {
+    const src = readFileSync(new URL('./liquidation-tick.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\?\?\s*DEFAULT_FUTURES_LADDER_POLICY/);
   });
 });

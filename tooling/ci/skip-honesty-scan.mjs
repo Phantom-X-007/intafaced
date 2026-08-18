@@ -47,22 +47,27 @@
  */
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { PRIVATE_PROBE as KNOWN_PRIVATE_PROBE } from './unreported-suites.mjs';
+import { PRIVATE_PROBE as KNOWN_PRIVATE_PROBE, UNJOURNALLED as KNOWN_UNJOURNALLED } from './unreported-suites.mjs';
 
 const ROOT = process.cwd();
 const ROOTS = ['services', 'packages', 'apps', 'tooling'];
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', '.turbo', 'coverage', '.git', 'vendor']);
 const TEST_FILE = /\.(test|spec)\.(ts|tsx|mts|js|mjs)$/;
 
-/** The file decides, at suite level, whether to execute. */
+/** The file decides, at suite or case level, whether to execute. Hard `it.skip` / `xit` stay out — those are pending, not a probe. */
 const CONDITIONAL_SKIP = [
   /describe\.skipIf\s*\(/,
   /describe\.runIf\s*\(/,
   /\bit\.runIf\s*\(/,
   /\btest\.runIf\s*\(/,
+  /\bit\.skipIf\s*\(/,
+  /\btest\.skipIf\s*\(/,
   /describe\.skip\s*\(/,
+  /\b(it|test|describe)\.concurrent\.skip(?:If)?\s*\(/,
   /=\s*[a-zA-Z]+\s*\?\s*describe\s*:\s*describe\.skip/,
   /=\s*[^;\n]*\?\s*describe\.skip\s*:\s*describe/,
+  /=\s*[a-zA-Z_][\w.]*\s*\?\s*(?:it|test)\s*:\s*(?:it|test)\.skip/,
+  /=\s*[^;\n]*\?\s*(?:it|test)\.skip\s*:\s*(?:it|test)\b/,
 ];
 
 /** The file opens its own connection to the thing it is deciding about. */
@@ -166,6 +171,45 @@ if (stale.length > 0) {
   console.error('  pruned stops being a record of debt and becomes blanket cover for whatever');
   console.error('  lands on that path next — which is the same invisibility this gate exists');
   console.error('  to remove, one level up.\n');
+  process.exit(1);
+}
+
+/**
+ * UNJOURNALLED half of the same debt register. skip-honesty only used to prune
+ * PRIVATE_PROBE, so half the register could rot forever while the file header
+ * claimed "it cannot go stale". Same two-way rule:
+ *   · entry names a missing file → fail (delete the entry)
+ *   · file no longer conditionally skips → fail (debt paid; delete the entry)
+ *   · file now journals via recordInfraProbe → fail (debt paid; delete the entry)
+ * We do not grow UNJOURNALLED here — growth of silent skips is a different gate.
+ */
+const unjStale = [];
+for (const entry of KNOWN_UNJOURNALLED) {
+  const full = join(ROOT, entry.file);
+  if (!existsSync(full)) {
+    unjStale.push(`${entry.file} does not exist any more.`);
+    continue;
+  }
+  let content;
+  try {
+    content = readFileSync(full, 'utf8');
+  } catch {
+    unjStale.push(`${entry.file} cannot be read.`);
+    continue;
+  }
+  if (!CONDITIONAL_SKIP.some((re) => re.test(content))) {
+    unjStale.push(`${entry.file} no longer conditionally skips — it has been fixed; delete the UNJOURNALLED entry.`);
+    continue;
+  }
+  if (/\brecordInfraProbe\b/.test(content)) {
+    unjStale.push(`${entry.file} now journals via recordInfraProbe — debt paid; delete the UNJOURNALLED entry.`);
+  }
+}
+if (unjStale.length > 0) {
+  console.error(`\n✖ SKIP HONESTY SCAN FAILED — ${unjStale.length} stale UNJOURNALLED entr(ies) in tooling/ci/unreported-suites.mjs\n`);
+  for (const s of unjStale) console.error(`  · ${s}`);
+  console.error('\n  Delete the entry from UNJOURNALLED. A register half that never prunes is');
+  console.error('  the same invisibility PRIVATE_PROBE already refused to tolerate.\n');
   process.exit(1);
 }
 

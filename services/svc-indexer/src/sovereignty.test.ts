@@ -123,6 +123,34 @@ describe('svc-indexer · §16.10 — the custody boundary, from inside', () => {
   });
 
   /**
+   * PublicClient-only is the production write-surface ban. Live tests may talk
+   * to anvil through script helpers; production `src/` (non-test) must never
+   * name a chain-write verb that would move a user's funds.
+   */
+  it('never sends a chain transaction from non-test source', () => {
+    const production = shipped.filter((f) => !f.path.endsWith('.test.ts'));
+    expect(production.length, 'expected production sources').toBeGreaterThan(5);
+    for (const { path, body } of production) {
+      expect(body, path).not.toMatch(/\b(sendTransaction|writeContract|sendRawTransaction|deployContract)\b/);
+    }
+  });
+
+  it('EVM adapter constructs a PublicClient and never a WalletClient', () => {
+    const source = readFileSync(join(serviceRoot, 'src', 'chain', 'evm', 'source.ts'), 'utf8');
+    expect(source).toMatch(/createPublicClient/);
+    expect(source).not.toMatch(/createWalletClient/);
+    // Comments may name WalletClient when explaining the ban — the import surface is the load-bearing check.
+    expect(source).not.toMatch(/from\s+['"]viem['"][^;]*WalletClient|import\s+type\s*\{[^}]*WalletClient/);
+  });
+
+  it('tsconfig ships only src/** so scripts/ keys cannot enter dist', () => {
+    const tsconfig = JSON.parse(readFileSync(join(serviceRoot, 'tsconfig.json'), 'utf8')) as {
+      include?: string[];
+    };
+    expect(tsconfig.include).toEqual(['src/**/*']);
+  });
+
+  /**
    * A read model has no business writing anywhere but its own schema (§2).
    * Every table this service touches is declared in its own migration.
    */

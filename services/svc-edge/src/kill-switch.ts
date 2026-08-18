@@ -305,6 +305,22 @@ export interface KillSwitchStateOptions {
   readonly statePath?: string;
 }
 
+/**
+ * Operator-visible durability of kill state — never invent multi-replica share.
+ *
+ * `multiReplicaShared` is always false today: a file is per process host, and
+ * memory is per process. The field exists so a future shared store must flip it
+ * deliberately rather than leaving the console assuming process-local is fleet-wide.
+ */
+export interface KillSwitchDurability {
+  /** `file` when EDGE_KILL_STATE_PATH is set; otherwise in-process only. */
+  readonly persistence: 'file' | 'memory';
+  /** Always false until a shared store exists (§13 residual — do not invent). */
+  readonly multiReplicaShared: false;
+  /** One sentence an operator can act on at 3am. */
+  readonly note: string;
+}
+
 export class KillSwitchState {
   private readonly killed = new Set<ModuleId>();
   private readonly reasons = new Map<ModuleId, string>();
@@ -324,6 +340,30 @@ export class KillSwitchState {
   constructor(options: KillSwitchStateOptions = {}) {
     this.statePath = options.statePath?.trim() || undefined;
     this.hydrateFromDisk();
+  }
+
+  /**
+   * What an operator can believe about whether a halt outlives this process.
+   *
+   * Exposed on `/admin/status` so the console never implies multi-replica
+   * durability that the edge deliberately does not have (SOCKET §13 residual —
+   * shared store invent without product law is fenced). File mode is
+   * single-process restart durability only: another replica with its own file
+   * (or none) still has its own switches.
+   */
+  durability(): KillSwitchDurability {
+    if (this.statePath) {
+      return {
+        persistence: 'file',
+        multiReplicaShared: false,
+        note: 'Single-process restart durability via EDGE_KILL_STATE_PATH. Other edge replicas do not share this file (SOCKET §13 multi-replica residual).',
+      };
+    }
+    return {
+      persistence: 'memory',
+      multiReplicaShared: false,
+      note: 'Memory only — process restart clears all kills. Multi-replica shared store is SOCKET §13 residual (not invented here).',
+    };
   }
 
   private hydrateFromDisk(): void {

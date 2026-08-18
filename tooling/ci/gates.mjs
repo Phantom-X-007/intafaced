@@ -36,7 +36,8 @@
  *   node tooling/ci/gates.mjs --list   print the gate ids, one per line
  */
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const ROOT = process.cwd();
@@ -77,6 +78,48 @@ export const GATES = [
       'holding it, which is precisely why deleting the entry has to be a visible act rather than a silent one.',
   },
   {
+    id: 'worktree-selftest',
+    script: 'tooling/scripts/worktree.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law, CONTRIBUTING.md §2',
+    why:
+      'every branch in this repo starts at whatever `pnpm wt` cut it from, so this script silently decides the base of ' +
+      'all work. It used to hand `git worktree add` a REF NAME (`origin/main`), which git resolves at the moment of the ' +
+      'add rather than at the moment we chose it — and it ran the fetch with stdio ignored and never read the exit ' +
+      'status, so an offline laptop or a credential expiry printed `· fetching main` and cut from whatever the last ' +
+      'successful fetch left behind. Neither showed on stdout: it printed the path and nothing about the base, so a ' +
+      'worktree cut 38 commits stale looked identical to a fresh one and was found by hand (2026-08-09) rather than by ' +
+      'a check. The cost is not theoretical — a branch abandoned the same day was 182 commits behind with 1,303 ' +
+      'insertions and 812 passing tests, because rebasing a money-path branch that far is how a subtle regression ' +
+      'lands with a green diff. The fix pins the start point to a 40-char object id once, after the fetch, and reports ' +
+      'it. These fixtures hold that: pass a ref name to the add again, resolve the ref twice, drop the fetch-status ' +
+      'check, drop the ancestry warning, or flatten the branch-name convention, and a named case goes red. Four of ' +
+      'them read this file’s own text above the self-test marker, because a revert can leave both pure functions ' +
+      'correct and re-resolve the ref at the call site instead. Pure fixtures — no git, no network, no disk — so it ' +
+      'sits next to worktree-gc-selftest. Lives in tooling/scripts/, so the manifest check below does not cover it and ' +
+      'this entry is the only thing holding it.',
+  },
+  {
+    id: 'path-collide-selftest',
+    script: 'tooling/scripts/path-collide.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law / claim-check honesty',
+    why:
+      'claim-check + swarm share touches() — a trailing-slash wall prefix used to false-clear ' +
+      'open PR collisions (L15 #1245). --self-test is pure fixtures, no gh/git. Pins the regression.',
+  },
+  {
+    id: 'claim-check-selftest',
+    script: 'tooling/ci/claim-check.mjs',
+    args: ['--self-test'],
+    doctrine: 'multi-dev law / claim-check honesty',
+    why:
+      'the interactive claim-check still needs gh + network and stays advisory, but the sealed honesty pack ' +
+      '(blank argv refuse, rename porcelain, PR list/files caps — #1414) lived only in prose until #1489 added ' +
+      'hermetic fixtures. Without this entry a quiet revert of those fixtures greens CI while agents get false ' +
+      'clears again — the same shape as path-collide before its self-test gate. --self-test exits before gh.',
+  },
+  {
     id: 'tracker',
     script: 'tooling/scripts/tracker.mjs',
     args: ['--check'],
@@ -108,28 +151,41 @@ export const GATES = [
       'reason, and that list may only shrink.',
   },
   {
+    id: 'notice-pin',
+    script: 'tooling/ci/notice-pin.mjs',
+    doctrine: 'D26-P3-04 / NOTICE freshness',
+    why:
+      'root NOTICE was compiled 2026-07-29 against 4311cff and can silently diverge from the vendor Apache pin, ' +
+      'compose image tags, jar count, and the Path A charting working tree. This gate fails on that silent drift; ' +
+      'named divergences must be written in NOTICE §11. It does not purchase licences and is not legal advice.',
+  },
+  {
     id: 'brand',
     script: 'tooling/ci/brand-scan.mjs',
     doctrine: '§0.7',
-    why: 'a partner or model-vendor name in user-facing copy',
+    why:
+      'a partner or model-vendor name in user-facing copy. D26-P2-14: also walks discovered vendor Vue shell ' +
+      'project roots (incl. `.vue`) and Java `src/main/resources` — bulk `vendor/` stays skipped so load-bearing ' +
+      'package/groupId lines do not drown the gate; partner names cannot hide in the product shell or Java resource catalogues.',
   },
   {
     id: 'shell-brand',
     script: 'tooling/ci/shell-brand-scan.mjs',
     doctrine: '§0.7',
     why:
-      'the same rule as `brand` above, over the one tree `brand` has never opened. brand-scan carries `vendor` in ' +
-      'SKIP_DIRS, so its "clean — N files" has never counted a single file of the product shell — which is now the ' +
-      'sole product surface, and therefore the surface most likely to show a partner name to a user. It also has no ' +
-      '`.vue` in EXTENSIONS, and the shell is 70 single-file components, so removing the skip would not have covered ' +
-      'it either. Takes its forbidden names by parsing brand-scan.mjs rather than restating them, so the two cannot ' +
-      'drift. Enforcing, at a frozen baseline of 8 named findings that can only shrink — see BASELINE in the scan.',
+      'relaxed-boundary ratchet over the Vue product shell (same FORBIDDEN list parsed from brand-scan.mjs). ' +
+      'brand-scan now includes the shell with `\\b`-anchored patterns (D26-P2-14); this gate still catches names ' +
+      'welded into identifiers where `\\b` cannot see them. Baseline drained to zero (L11 wave 5) — any new ' +
+      'product-surface hit fails until fixed; never re-freeze.',
   },
   {
     id: 'custody',
     script: 'tooling/ci/custody-scan.mjs',
     doctrine: '§16.10',
-    why: 'a Protocol Plane service importing a ledger write recipe. NOTE: walks 4 named services only — see the header of custody-scan.mjs',
+    why:
+      'a Protocol Plane service importing a ledger write recipe, plus D26-P2-08: Java money/custody surface is in ' +
+      'the scan object via vendor-java-money-scan successor (fail closed if unscanned). Dual-book rules stay in that ' +
+      'file — custody-scan composes it, it does not fork a third scanner. See the header of custody-scan.mjs',
   },
   {
     id: 'secrets',
@@ -173,8 +229,18 @@ export const GATES = [
       '(24 must fire, -24 must not)", and deleting the occurrence comparison used to exit 0 still printing "none ' +
       'gained a copy" over a tree that had just gained one: both numbers were read off source text, so removing the ' +
       'work left the claim standing. Every summary clause is now minted by the check that establishes it and ' +
-      'reconciled before printing; 10 deletions must each be detected, and a mutant whose anchor has moved fails ' +
+      'reconciled before printing; deletions must each be detected, and a mutant whose anchor has moved fails ' +
       'rather than skips.',
+  },
+  {
+    id: 'wallet-rpc-perimeter-refuse',
+    script: 'tooling/ci/wallet-rpc-perimeter-refuse.mjs',
+    doctrine: '§16 / D26-P2-09',
+    why:
+      'continuous perimeter regression for 01_wallet_rpc — mainnet / sign / width refuse classes must each keep ' +
+      'firing + silent probe halves, and chain-id / RPC / key-width / disclosed-secret-width axes must fail closed ' +
+      'independently. Deleting the class or axis register, counters, claim mint, a class rule binding, or a named ' +
+      'axis must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
   },
   {
     id: 'vendor-shell',
@@ -183,10 +249,48 @@ export const GATES = [
     why: 'mass-credit endpoints and CORS * inherited from the vendored shell',
   },
   {
+    id: 'lang-duplicate-key',
+    script: 'tooling/ci/lang-duplicate-key-scan.mjs',
+    doctrine: '§9',
+    why:
+      'a repeated key in the shell language literal is not an error and not a warning — the later block simply wins ' +
+      'and every key only the earlier one defined is gone. `intafaced.socket` was declared twice; the first block ' +
+      'defined `needs` alone, the second replaced it wholesale, and `IxSocketPage.vue` asks for exactly that key, so ' +
+      'it resolved to undefined and would render its own raw key to a user. `packages/i18n` makes a missing key a ' +
+      'COMPILE error; the vendored shell has no such type, and a 2,200-key literal edited by several agents at once ' +
+      'gets this instead.',
+  },
+  {
+    id: 'shell-i18n',
+    script: 'tooling/ci/shell-i18n-scan.mjs',
+    doctrine: '§9 / §14.4',
+    why:
+      'hardcoded user-facing strings in the Vue shell are the same class of §9 miss as the apps/ i18n scans. The tip ' +
+      'keying pass is done (scan returns 0 across the product .vue set); the old NOT_GATES reason claimed 200+ hits and ' +
+      'was stale. Blocking so a new hardcode cannot ship green.',
+  },
+  {
+    id: 'shell-golden',
+    script: 'tooling/ci/shell-golden-scan.mjs',
+    doctrine: '§14 / desk honesty',
+    why:
+      'the vendored desk keeps pure Node golden tests (depth feedLive, ix-money, book-honesty, hotkeys) next to the ' +
+      'code they protect. They only prove anything if CI runs them — a suite that only runs when an agent remembers ' +
+      'is how false Live and parseFloat regressions ship green.',
+  },
+  {
     id: 'vendor-java-money',
     script: 'tooling/ci/vendor-java-money-scan.mjs',
     doctrine: 'dual-book Option B',
     why: 'a Java money mutator is a second book, and there is only one book',
+  },
+  {
+    id: 'vendor-java-jar-truth',
+    script: 'tooling/ci/vendor-java-jar-truth.mjs',
+    doctrine: 'D-S-17 / D26-P2-07 jar truth',
+    why:
+      'Grade D ungated mints must stay deleted, a green source scan must not be read as runtime safety, and the ' +
+      'compose-jar rebuild path (tooling/scripts/vendor-java-rebuild.mjs + vendor-compile package job) must stay real.',
   },
   {
     id: 'fabricated-money',
@@ -195,7 +299,7 @@ export const GATES = [
     why:
       'a money figure on a surface that no service supplied. Was `apps/web/src/testing/fabricated-money.ts`, which had two ' +
       'consumers and dies with that app; the shell replacing it has one unit spec and no root script that runs it. ' +
-      'Enforcing, at a frozen baseline of 12 named findings that can only shrink — see BASELINE in the scan.',
+      'Enforcing with an empty BASELINE (ratchet closed) — new invented figures fail; BASELINE can only stay empty or shrink if debt is re-added honestly.',
   },
   {
     id: 'dual-book-door',
@@ -220,6 +324,24 @@ export const GATES = [
     script: 'tooling/ci/killswitch-reachability.mjs',
     doctrine: '§14.6',
     why: 'every route killable, enforced at the door, failing closed',
+  },
+  {
+    id: 'screening-content',
+    script: 'tooling/ci/screening-content-scan.mjs',
+    doctrine: '§24 Lane A / Class X',
+    why:
+      'sanctions list CONTENT is counsel + Nitro human (Class X). The screening mechanism ships empty; a populated ' +
+      'default in source, env examples, or compose would invent a legal control nobody signed. Unit tests already say ' +
+      '"ships empty" — this gate re-derives it on every verify so list content cannot land as a helpful default.',
+  },
+  {
+    id: 'marketing-language',
+    script: 'tooling/ci/marketing-language-scan.mjs',
+    doctrine: 'DIRECTION §8.9 / D26-P0-16',
+    why:
+      'product copy may not describe anything as audited, insured, or guaranteed without OWNER-SEAL(§8.9). Agents invent ' +
+      'those words as marketing; the gate re-derives the ban over locale catalogues and refuses empty denominators. Law ' +
+      'helpers live in packages/config/src/marketing-language.ts — Vue FE craft stays out of scope (nitro-frontend-all).',
   },
   {
     id: 'migrations',
@@ -256,6 +378,17 @@ export const GATES = [
       'remain on the register because they still skip invisibly — see the entries for what actually holds each.',
   },
   {
+    id: 'money-skip-honesty',
+    script: 'tooling/ci/money-skip-honesty-scan.mjs',
+    doctrine: '§14 / D26-P2-13',
+    why:
+      'skip-honesty forbids new private probes repo-wide; money still needed a sealed inventory so a new ' +
+      'conditional skip (or hard it.skip) under ledger/trade/pay/bank/p2p/matching/token/market/ws cannot ' +
+      'grow silently and look like coverage. tooling/ci/money-skip-inventory.mjs is the register — every ' +
+      'money-path skip is listed with a kind, or deleted. The list ratchets both ways. One private-probe ' +
+      'debt remains (svc-pay evm-chain.live); it stays coupled to unreported-suites PRIVATE_PROBE.',
+  },
+  {
     id: 'compose-secret-parity',
     script: 'tooling/ci/compose-secret-parity.mjs',
     doctrine: '§14',
@@ -265,6 +398,16 @@ export const GATES = [
       'never created at all (#442). It is silent in BOTH directions — a running container keeps the environment ' +
       'it started with, and a container nobody started writes no logs. Run against the commit before #431, this ' +
       'gate reproduces that bug and emits the exact fix that was applied.',
+  },
+  {
+    id: 'secret-rotation-readiness',
+    script: 'tooling/ci/secret-rotation-readiness-scan.mjs',
+    doctrine: '§16 / D26-P3-05',
+    why:
+      'rotation readiness is a runbook plus the gates that prove a disclosed or unwired secret is refused. ' +
+      'A missing inventory prints as nothing-to-rotate. This gate holds docs/SECRET-ROTATION-READINESS.md, ' +
+      'the OWNER-ACTIONS-WALLET-RPC-SECRETS.md citation (that file is not edited here), EctWithdrawSecretConfig, ' +
+      'and compose-secret-parity / wallet-rpc-auth / secrets remaining in GATES. It never reads secret values.',
   },
   {
     id: 'secret-scan-mutation',
@@ -298,6 +441,28 @@ export const GATES = [
       'which is precisely the drift this file exists to make impossible, arriving through its own merge.',
   },
   {
+    id: 'empty-denominator',
+    script: 'tooling/ci/empty-denominator-gate.mjs',
+    doctrine: '§14 / empty-denominator law',
+    why:
+      'a check that reports on nothing and gets read as evidence is this repo’s single most repeated defect, and until ' +
+      'this entry NOTHING enforced the rule against it. Seven gates had each learned it separately and hand-rolled a ' +
+      'guard — brand-scan’s `scanned === 0`, i18n-scan, i18n-bypass-scan ("walked zero un-allowlisted files and ' +
+      'printed"), wallet-rpc-mainnet-scan’s "every denominator non-zero", event-wiring, shell-brand-scan, ' +
+      'vendor-java-money-scan — which meant the EIGHTH gate anyone wrote would not have it, because nothing would ask. ' +
+      'This asks: it runs every gate in this list against a tree where its denominator is genuinely zero and asserts ' +
+      'what it actually did, rather than grepping for a guard’s source text — which would prove a string exists, not ' +
+      'that a gate refuses. Measured on arrival: 22 gates refuse, 3 are exempt because their subject travels with them ' +
+      'in fixtures, and 7 print CLEAN over nothing and are frozen as debt that may only shrink. The loudest of the ' +
+      'seven is fabricated-money, which prints "NOTHING WAS SCANNED … discovery is broken" and then exits 0 — while ' +
+      'shell-brand-scan prints that same sentence and exits 1. Ordered last because it is the most expensive gate here ' +
+      '(~5s, it spawns every other gate once) and because it depends on nothing above it. It classifies ITSELF, and ' +
+      'since it cannot run inside its own fixture without recursing, a self-proof runs on every invocation instead: ' +
+      'handed a substitute list of zero gates, or one unclassified gate, it must refuse. That is the worktree-gc ' +
+      '--self-test and RULE_PROBES precedent, and it is not optional here — a meta-gate about empty denominators is the ' +
+      'most obvious candidate in this repo to BE one.',
+  },
+  {
     id: 'i18n',
     script: 'tooling/ci/i18n-scan.mjs',
     doctrine: '§9, §14.4',
@@ -318,20 +483,21 @@ export const NOT_GATES = {
   'gates.mjs': 'this runner — it is the list, so it cannot be an entry in itself.',
   'dod-gate.mjs':
     'run by `pnpm gate`, separately and last — it walks every service and is the §14 Definition of Done, not a repo-wide scan. verify runs it after build/typecheck/test; CI runs it in the `dod` job, which needs [gates, build, test].',
-  'claim-check.mjs':
-    'advisory, interactive, and needs a working `gh` + network to list open PRs. Run it by hand (`pnpm claim:check`) before starting work, not as a build gate.',
+  // claim-check.mjs is in GATES as claim-check-selftest (--self-test only). The
+  // interactive full run still needs gh + network: `pnpm claim:check` by hand.
+
   'verify.mjs':
     'the verify runner itself — it CALLS this list. Listing it as a gate would make it invoke itself. It exists so the infrastructure verdict prints even when turbo halts early, which a `&&` chain cannot do.',
   'infra-verdict.mjs':
     'a reporter, not a gate: it prints which infrastructure-backed suites actually executed. It never fails a clean run — it exits 2 for "incomplete but permitted", which verify reports without failing. Run by verify.mjs after the test step.',
   'unreported-suites.mjs':
     'data, not a scan — the register of suites that still skip invisibly, each with the specific reason it was left and what lifts it. It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
+  'money-skip-inventory.mjs':
+    'data, not a scan — D26-P2-13 register of every money-path test file that may skip, each with kind + why. money-skip-honesty-scan.mjs imports it and fails if the list grows or goes stale; private-probe rows stay coupled to unreported-suites PRIVATE_PROBE.',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'dependency-audit.mjs':
     'the supply-chain ratchet (`pnpm scan:deps`), wired as its own workflow (.github/workflows/supply-chain.yml) on dependency-surface PRs plus a weekly cron. NOT a GATES entry for the same reason claim-check is not: it needs NETWORK — the advisory database is remote — and reddening a local `pnpm verify` on a train is how a security gate gets deleted. It is a ratchet, not a severity gate: 12 advisories were already in the tree when it landed (8 high, 2 on production paths — drizzle-orm direct and fast-uri under fastify), so `--audit-level=high` would have red-mained on day one, the trap shell-i18n-scan documents. NEW advisories fail; STALE frozen entries also fail, so the list can only shrink. When it reaches zero, replace the baseline with a plain `pnpm audit --audit-level=high` and delete this entry.',
-  'shell-i18n-scan.mjs':
-    'Vue-shell companion to i18n-scan. Deliberately NOT a gate until a fresh keying pass: tip currently has 200+ hardcoded user-facing strings across the shell, so wiring it as blocking would red main. Run by hand via `pnpm scan:shell-i18n` to drive that pass; promote to GATES (blocking) once the count is zero. Not advisory-GATES either — the scan exits 1 by design and its header claims it blocks; keep that contract for the day it is wired.',
   'value-gate.mjs':
     'stamp-mill detector for near-duplicate commits — the docs-only rule (Board-Delta trailer) AND, since 2026-08-06, the code rule (near-duplicate subject SERIES whose new symbols nothing outside them calls; Serial-Work trailer). Wired as an explicit STRICT step in BOTH workflows and in neither gate list: docs-format.yml, because ci.yml excludes docs/** and **/*.md so coordinator docs PRs never hit GATES; and the `gates` job of ci.yml, because docs-format only fires on markdown, so a code PR without a slice doc never met the gate at all — half of how #832–#876 landed. (ci.yml writes that exclusion as negated `paths:` rather than `paths-ignore`, because INTAFACED_DEFINITIVE_BUILD.md is law and coverage-check has to see it; the set of excluded docs is unchanged.) Still NOT a GATES entry: it needs a current `origin/main` plus >=11 ancestors, which a laptop `pnpm verify` cannot promise, and reddening a local verify over a stale fetch is how a gate gets deleted. Both checkouts now pin fetch-depth: 0 — under the actions/checkout default of 1 it compared an empty ancestor list against an empty ancestor list and printed OK. Local pre-flight: `pnpm value-gate:self-test` (20 fixtures).',
   'checkout-staleness.mjs':
@@ -380,76 +546,97 @@ function manifestCheck() {
 }
 
 // ── Run ────────────────────────────────────────────────────────────────────
-if (process.argv.includes('--list')) {
-  for (const gate of GATES) console.log(gate.id);
-  process.exit(0);
-}
+/**
+ * Guarded so this file can be IMPORTED as data without the import running 32
+ * gates as a side effect.
+ *
+ * `empty-denominator-gate.mjs` has to read the REAL `GATES` array to classify
+ * every entry in it and to assert its own classified count against
+ * `GATES.length`. Its alternative was to parse this file's source text — and a
+ * meta-gate whose census comes from a regex over source is the same species of
+ * defect it exists to police: it would prove a string appears in a file, not
+ * that a gate is in the list. So the array is the interface, and this guard is
+ * what makes reading it free.
+ *
+ * Behaviour when run directly (`node tooling/ci/gates.mjs`, `pnpm gates`, the
+ * `gates` job in ci.yml) is unchanged — `main()` is called immediately below.
+ */
+const RUN_AS_SCRIPT = process.argv[1] !== undefined && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-const manifestProblems = manifestCheck();
-if (manifestProblems.length > 0) {
-  console.error('\n✖ GATE MANIFEST BROKEN\n');
-  for (const p of manifestProblems) console.error(`  · ${p}\n`);
-  process.exit(1);
-}
+if (RUN_AS_SCRIPT) main();
 
-console.log(`\n══ DOCTRINE GATES (${GATES.length}) ══\n`);
-
-const failed = [];
-const advisoryNoise = [];
-let totalMs = 0;
-
-for (const gate of GATES) {
-  const started = process.hrtime.bigint();
-  let ok = true;
-  let output = '';
-
-  try {
-    output = execFileSync(process.execPath, [join(ROOT, gate.script), ...(gate.args ?? [])], {
-      encoding: 'utf8',
-      cwd: ROOT,
-    });
-  } catch (err) {
-    ok = false;
-    output = (err.stdout ?? '') + (err.stderr ?? '');
+function main() {
+  if (process.argv.includes('--list')) {
+    for (const gate of GATES) console.log(gate.id);
+    process.exit(0);
   }
 
-  const ms = Number((process.hrtime.bigint() - started) / 1000000n);
-  totalMs += ms;
+  const manifestProblems = manifestCheck();
+  if (manifestProblems.length > 0) {
+    console.error('\n✖ GATE MANIFEST BROKEN\n');
+    for (const p of manifestProblems) console.error(`  · ${p}\n`);
+    process.exit(1);
+  }
 
-  // Every gate is run. None is skipped because an earlier one failed — you
-  // should see every broken gate in one run, not discover them one push apart.
-  if (ok) {
-    const summary = output.trim().split('\n').filter(Boolean).pop() ?? '(no output)';
-    console.log(`  ✓ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
-    if (gate.advisory && output.includes('⚠')) {
-      advisoryNoise.push({ gate, output });
-      console.log(`      ⚠ advisory findings — printed below, not a failure`);
-    } else {
-      console.log(`      ${summary.trim()}`);
+  console.log(`\n══ DOCTRINE GATES (${GATES.length}) ══\n`);
+
+  const failed = [];
+  const advisoryNoise = [];
+  let totalMs = 0;
+
+  for (const gate of GATES) {
+    const started = process.hrtime.bigint();
+    let ok = true;
+    let output = '';
+
+    try {
+      output = execFileSync(process.execPath, [join(ROOT, gate.script), ...(gate.args ?? [])], {
+        encoding: 'utf8',
+        cwd: ROOT,
+      });
+    } catch (err) {
+      ok = false;
+      output = (err.stdout ?? '') + (err.stderr ?? '');
     }
-  } else if (gate.advisory) {
-    advisoryNoise.push({ gate, output });
-    console.log(`  ⚠ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine} (advisory)`);
-  } else {
-    failed.push({ gate, output });
-    console.log(`  ✖ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
+
+    const ms = Number((process.hrtime.bigint() - started) / 1000000n);
+    totalMs += ms;
+
+    // Every gate is run. None is skipped because an earlier one failed — you
+    // should see every broken gate in one run, not discover them one push apart.
+    if (ok) {
+      const summary = output.trim().split('\n').filter(Boolean).pop() ?? '(no output)';
+      console.log(`  ✓ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
+      if (gate.advisory && output.includes('⚠')) {
+        advisoryNoise.push({ gate, output });
+        console.log(`      ⚠ advisory findings — printed below, not a failure`);
+      } else {
+        console.log(`      ${summary.trim()}`);
+      }
+    } else if (gate.advisory) {
+      advisoryNoise.push({ gate, output });
+      console.log(`  ⚠ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine} (advisory)`);
+    } else {
+      failed.push({ gate, output });
+      console.log(`  ✖ ${gate.id.padEnd(22)} ${String(ms).padStart(5)}ms  ${gate.doctrine}`);
+    }
   }
-}
 
-for (const { gate, output } of advisoryNoise) {
-  console.log(`\n── ${gate.id} (advisory — does not fail the build) ──`);
-  console.log(output.trimEnd());
-}
-
-if (failed.length > 0) {
-  console.error(`\n✖ ${failed.length} of ${GATES.length} DOCTRINE GATE(S) FAILED\n`);
-  for (const { gate, output } of failed) {
-    console.error(`── ${gate.id} — ${gate.doctrine} ──`);
-    console.error(`   why this gate exists: ${gate.why}`);
-    console.error(output.trimEnd() + '\n');
+  for (const { gate, output } of advisoryNoise) {
+    console.log(`\n── ${gate.id} (advisory — does not fail the build) ──`);
+    console.log(output.trimEnd());
   }
-  console.error('  A red gate is not a discussion (AGENT_PROTOCOL §3).\n');
-  process.exit(1);
-}
 
-console.log(`\n✓ all ${GATES.length} doctrine gates passed — ${totalMs}ms total\n`);
+  if (failed.length > 0) {
+    console.error(`\n✖ ${failed.length} of ${GATES.length} DOCTRINE GATE(S) FAILED\n`);
+    for (const { gate, output } of failed) {
+      console.error(`── ${gate.id} — ${gate.doctrine} ──`);
+      console.error(`   why this gate exists: ${gate.why}`);
+      console.error(output.trimEnd() + '\n');
+    }
+    console.error('  A red gate is not a discussion (AGENT_PROTOCOL §3).\n');
+    process.exit(1);
+  }
+
+  console.log(`\n✓ all ${GATES.length} doctrine gates passed — ${totalMs}ms total\n`);
+}

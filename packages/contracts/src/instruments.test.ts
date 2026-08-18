@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkAccess } from '@intafaced/config';
 import {
+  ASSET_CLASSES,
   CATALOGUE_ASSETS,
   CME_GLOBEX,
   FX_GLOBAL,
@@ -9,9 +10,13 @@ import {
   instrumentSchema,
   instrumentsByClass,
   instrumentsForPlane,
+  isAssetClass,
   isInstrumentOpen,
+  isScheduleKey,
   isScheduleOpen,
   nextScheduleTransition,
+  SCHEDULE_KEYS,
+  scheduleKeySchema,
   TRADING_SCHEDULES,
   venueClock,
 } from './instruments.js';
@@ -23,6 +28,33 @@ import {
  * UTC in January and 21:00 UTC in July. A test written in UTC offsets would
  * encode the bug it is meant to catch.
  */
+
+describe('enum authority (D-S-05 / D26-P1-T9)', () => {
+  it('derives scheduleKeySchema from TRADING_SCHEDULES — no handwritten mirror list', () => {
+    expect([...SCHEDULE_KEYS].sort()).toEqual(Object.keys(TRADING_SCHEDULES).sort());
+    expect([...scheduleKeySchema.options].sort()).toEqual(Object.keys(TRADING_SCHEDULES).sort());
+  });
+
+  it('refuses an unknown schedule key rather than defaulting to continuous', () => {
+    expect(isScheduleKey('lse-equities')).toBe(false);
+    expect(isScheduleKey('crypto-24x7')).toBe(true);
+    expect(scheduleKeySchema.safeParse('lse-equities').success).toBe(false);
+  });
+
+  it('refuses an unknown asset_class, naming the permitted set as the sole authority', () => {
+    expect(isAssetClass('equity')).toBe(false);
+    expect(isAssetClass('crypto')).toBe(true);
+    expect([...ASSET_CLASSES]).toEqual(['crypto', 'commodity', 'forex']);
+  });
+
+  it('keeps every crypto spot listing continuous (additive bar — spot suite unchanged)', () => {
+    for (const i of instrumentsByClass(INSTRUMENTS, 'crypto')) {
+      expect(i.schedule).toBe('crypto-24x7');
+      expect(isInstrumentOpen(i, new Date('2026-01-10T12:00:00Z'))).toBe(true); // Saturday
+      expect(isInstrumentOpen(i, new Date('2026-01-14T12:00:00Z'))).toBe(true); // Wednesday
+    }
+  });
+});
 
 describe('the catalogue', () => {
   it('every listing satisfies the published schema', () => {

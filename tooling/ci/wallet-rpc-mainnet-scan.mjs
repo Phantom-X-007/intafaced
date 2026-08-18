@@ -19,7 +19,7 @@
  *
  *   · there is no Dockerfile anywhere in the tree,
  *   · no compose file defines a service that builds or runs any module,
- *   · no workflow builds it (there is no JDK step in CI at all),
+ *   · no workflow builds *this* tree (framework-only compile probe is separate; wallet_rpc stays unbuilt),
  *   · the reactor pom declares a module that is absent from disk, so `mvn`
  *     cannot even resolve the build,
  *   · and the `${...}` placeholders added by the auth/secrets work stop a
@@ -2616,7 +2616,17 @@ const workflowFiles = statSync(workflowDir, { throwIfNoEntry: false })?.isDirect
 
 for (const file of workflowFiles) {
   workflowsInspected++;
-  const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+  const text = readFileSync(file, 'utf8');
+  const lines = text.split(/\r?\n/);
+  // Axis C2 residual: framework-only compile probe is allowed. Wallet RPC must
+  // never be the reason a JDK/Maven step appears (security review still owner-gated).
+  // A workflow is framework-only when it never mentions this tree AND only runs
+  // under 00_framework (working-directory / path filters).
+  const frameworkOnlyCompileProbe =
+    /00_framework/.test(text) &&
+    !text.includes(TREE) &&
+    !/01_wallet_rpc/.test(text) &&
+    /working-directory:\s*vendor\/upstream-exchange\/00_framework/.test(text);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // A path mention is only a break if it is in a RUN step; this gate's own
@@ -2625,12 +2635,15 @@ for (const file of workflowFiles) {
       barrierBreaks.push({ id: 'M7', where: `${relPath(file)}:${i + 1}`, detail: `a workflow references ${TREE}` });
     }
     if (/\b(mvn|mvnw|maven)\b/.test(line) && !/^\s*#/.test(line)) {
+      if (frameworkOnlyCompileProbe) {
+        continue;
+      }
       barrierBreaks.push({
         id: 'M7',
         where: `${relPath(file)}:${i + 1}`,
         detail:
-          'a Maven invocation in CI. There is no JDK step in this repo by design — the vendored Java trees are ' +
-          'never compiled here, and the wallet RPC reactor must not become the reason one appears',
+          'a Maven invocation in CI that is not a framework-only compile probe. Wallet RPC must not gain a ' +
+          'build path — owner security review is the bar (docs/OWNER-ACTIONS-WALLET-RPC-SECRETS.md §A4)',
       });
     }
   }
@@ -2701,7 +2714,112 @@ if (emptyWalks.length > 0) {
 // signMessage is a rule that will be switched off within the week, and then the
 // real finding goes through it unnoticed — the precedent this gate's own header
 // cites about `prefer-ip-address` and `workspace-sync`.
+//
+// ── CONTINUOUS PERIMETER (D26-P2-09) ───────────────────────────────────────
+//
+// Three refuse classes must stay continuously proved, not merely present as
+// scattered rule ids. `runRuleProbes` mints claim('perimeter') only when each
+// class below has at least one firing probe AND one silent probe whose
+// assertion held this run — so deleting every MainNetParams / signMessage /
+// width fixture cannot leave a green summary that still says the class is
+// refused. The dedicated regression suite is `wallet-rpc-perimeter-refuse.mjs`.
+//
+// Classes are the board names (mainnet / sign / width). Axes are the four
+// fail-closed slices inside those classes that D26-P2-09's done-bar names:
+// chain-id, RPC, key-width, disclosed-secret-width. A green `width` class
+// over only address/topic fixtures must not count as proving key-width or
+// the disclosed-secret digest guard. Axes are counted from probe identity
+// (rule id + source shape), never from PERIMETER_AXES.length.
+const PERIMETER_CLASSES = [
+  {
+    id: 'mainnet',
+    label: 'mainnet reach',
+    rules: ['M1', 'M2', 'M4-address', 'M4-endpoint', 'M4-topic', 'M8'],
+  },
+  {
+    id: 'sign',
+    label: 'chain-id-less EVM signing',
+    rules: ['M3'],
+  },
+  {
+    id: 'width',
+    label: 'fixed-width hex',
+    // M11-known is the near-miss report shape of the same width rule.
+    rules: ['M11', 'M11-known'],
+  },
+];
+
+const PERIMETER_AXES = [
+  { id: 'chain-id', label: 'chain-id-less EVM signing' },
+  { id: 'rpc', label: 'hardcoded or defaulted RPC endpoint' },
+  { id: 'key-width', label: 'secp256k1 key hex width' },
+  { id: 'disclosed-secret-width', label: 'disclosed-secret digest width' },
+];
+
+/**
+ * Which fail-closed axis a probe feeds. Untagged address/topic/M1 fixtures
+ * still feed their class; they must not launder an axis that lost its own
+ * fixtures.
+ *
+ * @param {{ rule: string, source: string }} probe
+ * @returns {string[]}
+ */
+function axesForProbe(probe) {
+  /** @type {string[]} */
+  const ids = [];
+  if (probe.rule === 'M3') ids.push('chain-id');
+  if (probe.rule === 'M2' || probe.rule === 'M4-endpoint') ids.push('rpc');
+  if (probe.rule === 'M11' || probe.rule === 'M11-known') {
+    if (/DISCLOSED_DIGEST/i.test(probe.source)) ids.push('disclosed-secret-width');
+    if (/privateKey|publicKey|priv(?:ate)?_?key|pub(?:lic)?_?key/i.test(probe.source)) ids.push('key-width');
+  }
+  return ids;
+}
+
 const RULE_PROBES = [
+  // ── M1: mainnet network-parameter selectors (D26-P2-09) ─────────────────
+  //
+  // The tree freezes six MainNetParams sites, so M1 had proof-of-life from the
+  // baseline alone — until someone deleted the matcher and the freeze still
+  // printed clean over text that no longer meant anything. These fixtures are
+  // the continuous half: a NEW mainnet selector spelling, and the remediation
+  // spellings that must stay silent.
+  {
+    rule: 'M1',
+    kind: 'java',
+    fires: true,
+    source: 'class P { NetworkParameters n = MainNetParams.get(); }',
+    note: 'the class name the tree already freezes — probe proves the matcher, not merely that the string still appears in vendor/',
+  },
+  {
+    rule: 'M1',
+    kind: 'java',
+    fires: true,
+    source: 'class P { NetworkParameters n = NetworkParameters.prodNet(); }',
+    note: 'the older accessor — freeze coverage is MainNetParams-only, so this spelling had no baseline proof-of-life',
+  },
+  {
+    rule: 'M1',
+    kind: 'java',
+    fires: true,
+    source: 'class P { NetworkParameters n = NetworkParameters.fromID(ID_MAINNET); }',
+    note: 'selects mainnet by identifier constant — same gap as prodNet',
+  },
+  {
+    rule: 'M1',
+    kind: 'java',
+    fires: false,
+    source: 'class P { NetworkParameters n = TestNet3Params.get(); }',
+    note: 'testnet is the remediation — must NOT fire or the gate blocks pointing wallets at a non-mainnet network',
+  },
+  {
+    rule: 'M1',
+    kind: 'java',
+    fires: false,
+    source: 'class P { NetworkParameters n = RegTestParams.get(); }',
+    note: 'regtest likewise — a rule that cannot tell mainnet from regtest gets switched off',
+  },
+
   // ── M2: the scheme widening ────────────────────────────────────────────
   {
     rule: 'M2',
@@ -2861,6 +2979,20 @@ const RULE_PROBES = [
     fires: true,
     source: 'coin.rpc=${ETH_NODE_RPC_URL:https://mainnet.example-provider.io/v3/KEY}',
     note: 'a defaulted endpoint is the same bypass one rule sideways — M4-endpoint reads the value through the identical resolution, so it cannot be fixed in one place only',
+  },
+  {
+    rule: 'M4-endpoint',
+    kind: 'properties',
+    fires: false,
+    source: 'coin.rpc=${ETH_NODE_RPC_URL}',
+    note: 'an unresolved RPC placeholder is the environment’s decision — D26-P2-09 RPC axis must stay silent here or the gate blocks the remediation',
+  },
+  {
+    rule: 'M4-endpoint',
+    kind: 'properties',
+    fires: false,
+    source: 'coin.rpc=http://127.0.0.1:8545',
+    note: 'loopback RPC is not a mainnet reach — same silent half M2 already has in Java, now on the properties rule the RPC axis also counts',
   },
   {
     rule: 'M4-address',
@@ -3067,6 +3199,13 @@ const RULE_PROBES = [
   {
     rule: 'M11',
     kind: 'hex-java',
+    fires: false,
+    source: 'class P { private static final String DISCLOSED_DIGEST_SHA256 = "${ECT_GUARD_DIGEST}"; }',
+    note: 'D26-P2-09 disclosed-secret-width silent half — a digest identifier with no hex literal has no width to check; firing here would punish the form that does not pin a digest',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
     fires: true,
     verdict: 'TRANSCRIPTION',
     // Split across concatenation ON PURPOSE, and do not rejoin it — the same
@@ -3094,6 +3233,31 @@ const RULE_PROBES = [
     source: 'class P { /* "0xddf252ad1be2c89b69c2b068fc378daa952b7f163c4a11628f55a4df523b3ef" */ int x = 1; }',
     note: 'a constant quoted in a COMMENT is documentation — including the paragraphs in this very gate and in the review that quote the mangled values verbatim. Firing on those would make the finding its own finding',
   },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: true,
+    verdict: 'TRANSCRIPTION',
+    // 127 digits against the 128/130 public-key role. Built by repeat so
+    // secret-scan does not read a long hex literal in tooling/ as key material.
+    source: 'class P { String publicKey = "' + 'ab'.repeat(63) + 'c"; }',
+    note: 'the public-key role, 127/128 — §7.6 records no pubkey in this tree, so without this fixture the role dies silently the day someone deletes its name match',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: true,
+    verdict: 'WELL-FORMED',
+    source: 'class P { String publicKey = "' + 'ab'.repeat(64) + '"; }',
+    note: '128 digits is well-formed for the public-key role — proves the width arithmetic, not a permanent "malformed" answer',
+  },
+  {
+    rule: 'M11',
+    kind: 'hex-java',
+    fires: false,
+    source: 'class P { String privateKey = "${WITHDRAW_KEY}"; }',
+    note: 'D26-P2-09 key-width silent half — an unresolved private-key placeholder has no hex width; the environment decides it',
+  },
 ];
 
 /**
@@ -3119,6 +3283,10 @@ function runRuleProbes() {
   /** Distinct rule ids a probe actually exercised — printed, so a rule losing all its probes is visible. */
   const rules = new Set();
   const failures = [];
+  /** @type {Map<string, { fired: number, silent: number }>} */
+  const classHits = new Map(PERIMETER_CLASSES.map((c) => [c.id, { fired: 0, silent: 0 }]));
+  /** @type {Map<string, { fired: number, silent: number }>} */
+  const axisHits = new Map(PERIMETER_AXES.map((a) => [a.id, { fired: 0, silent: 0 }]));
 
   for (const probe of RULE_PROBES) {
     const findings =
@@ -3158,6 +3326,25 @@ function runRuleProbes() {
     // held, does this probe count towards either half of the sentence.
     if (found) fired++;
     else silent++;
+
+    // Continuous perimeter (D26-P2-09): count held assertions into the refuse
+    // class that owns this rule id. Class coverage is raised by work, never by
+    // reading PERIMETER_CLASSES.length.
+    for (const cls of PERIMETER_CLASSES) {
+      if (!cls.rules.includes(probe.rule)) continue;
+      const hit = classHits.get(cls.id);
+      if (found) hit.fired++;
+      else hit.silent++;
+    }
+    for (const axisId of axesForProbe(probe)) {
+      const hit = axisHits.get(axisId);
+      if (!hit) {
+        failures.push(`[${probe.rule}] probe names unknown perimeter axis ${axisId}`);
+        continue;
+      }
+      if (found) hit.fired++;
+      else hit.silent++;
+    }
 
     // Verdict assertions, where the probe states one. A width rule that fires but
     // always answers the same thing passes a fires/does-not-fire test and asserts
@@ -3207,6 +3394,68 @@ function runRuleProbes() {
       'harness exists to make impossible.',
     ]);
   }
+
+  // Each refuse class must have held at least one firing and one silent probe.
+  // A class that only fires has no proof it will stay quiet on remediation; a
+  // class that only stays silent has no proof it still catches the defect.
+  const requiredIds = ['mainnet', 'sign', 'width'];
+  const haveIds = PERIMETER_CLASSES.map((c) => c.id);
+  if (haveIds.length !== requiredIds.length || requiredIds.some((id, i) => haveIds[i] !== id)) {
+    die('the continuous perimeter register no longer names mainnet/sign/width', [
+      `required: ${requiredIds.join(', ')}`,
+      `present:  ${haveIds.join(', ') || '(empty)'}`,
+      '',
+      'D26-P2-09 freezes these three refuse classes by name. Renaming, reordering, or emptying the register',
+      'is how a green summary keeps saying "continuous refuse" about a different set of checks.',
+    ]);
+  }
+
+  const classParts = [];
+  for (const cls of PERIMETER_CLASSES) {
+    const hit = classHits.get(cls.id);
+    if (hit.fired < 1 || hit.silent < 1) {
+      die(`the ${cls.id} refuse class is no longer continuously proved`, [
+        `class: ${cls.id} (${cls.label})`,
+        `rules: ${cls.rules.join(', ')}`,
+        `held firing probes: ${hit.fired}`,
+        `held silent probes: ${hit.silent}`,
+        '',
+        'D26-P2-09: mainnet / sign / width must each keep both halves of a refuse proof — a defect that fires,',
+        'and a remediation that stays silent. Losing either half means the class is decoration.',
+      ]);
+    }
+    classParts.push(`${cls.id} ${hit.fired}f/${hit.silent}s`);
+  }
+
+  const requiredAxes = ['chain-id', 'rpc', 'key-width', 'disclosed-secret-width'];
+  const haveAxes = PERIMETER_AXES.map((a) => a.id);
+  if (haveAxes.length !== requiredAxes.length || requiredAxes.some((id, i) => haveAxes[i] !== id)) {
+    die('the continuous perimeter axes no longer name chain-id/rpc/key-width/disclosed-secret-width', [
+      `required: ${requiredAxes.join(', ')}`,
+      `present:  ${haveAxes.join(', ') || '(empty)'}`,
+      '',
+      'D26-P2-09 freezes these four fail-closed axes by name. A green width class over only',
+      'address fixtures must not count as proving key-width or disclosed-secret-width.',
+    ]);
+  }
+
+  const axisParts = [];
+  for (const axis of PERIMETER_AXES) {
+    const hit = axisHits.get(axis.id);
+    if (hit.fired < 1 || hit.silent < 1) {
+      die(`the ${axis.id} perimeter axis is no longer fail-closed`, [
+        `axis: ${axis.id} (${axis.label})`,
+        `held firing probes: ${hit.fired}`,
+        `held silent probes: ${hit.silent}`,
+        '',
+        'D26-P2-09: chain-id / RPC / key-width / disclosed-secret-width must each keep both halves',
+        'of a refuse proof. Losing either half means the axis is decoration inside a still-green class.',
+      ]);
+    }
+    axisParts.push(`${axis.id} ${hit.fired}f/${hit.silent}s`);
+  }
+
+  establish('perimeter', `continuous refuse held for mainnet/sign/width (${classParts.join(', ')}; axes ${axisParts.join(', ')})`);
 
   return (
     `${executed} rule probe(s) executed across ${rules.size} rule id(s) — ${fired} fired as required and ` +
@@ -3572,8 +3821,8 @@ if (problems.length > 0) {
 // reach a terminal.
 const summary =
   `✓ wallet-rpc-mainnet-scan clean — ${claim('walk')}. ${claim('frozen')}; ${claim('occurrences')}. ` +
-  `${claim('m11')}. ${claim('barriers')}. ${claim('probes')} — proof-of-life for the rules the tree gives ` +
-  'nothing to freeze.';
+  `${claim('m11')}. ${claim('barriers')}. ${claim('perimeter')}. ${claim('probes')} — proof-of-life for the ` +
+  'rules the tree gives nothing to freeze.';
 
 reconcileClaims();
 console.log(summary);

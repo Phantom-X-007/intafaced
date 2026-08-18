@@ -28,7 +28,7 @@ This is also why §5's rule about moderators falls out for free — the ruling _
 
 "Did the escrow lock post?" is answered by **calling `escrowLock` again**. Its business key `p2p.escrow.lock:<tradeId>` makes a retry return the original transaction if it did, and fail on `ledger.insufficient_funds` if it did not — because the ledger checks idempotency _before_ it checks funds.
 
-So a trade stuck in `created` is never ambiguous. This matters more than it looks: escrow is pooled per `(user, asset)`, so a refund posted against a lock that never happened would not fail — it would quietly pay the seller out of a **different trade's** escrow. The refund path is therefore unreachable from `created`, and `created` is the only state where the lock is not provably done.
+So a trade stuck in `created` is never ambiguous. This matters more than it looks: each lock lands in a **per-trade** escrow pot (`tradeEscrowAccount(seller, asset, tradeId)`), but a refund posted against a lock that never happened would still be wrong — it would invent a pot credit with no matching lock history, and the refund path is therefore unreachable from `created`. `created` is the only state where the lock is not provably done.
 
 ---
 
@@ -88,49 +88,60 @@ tRPC (`src/router.ts`). Money crosses the boundary as **decimal strings**, in an
 
 Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the scope _and_ runs the jurisdiction matrix (§7). P2P is custodial on the Fiat Plane, so §22 puts it behind tiered verification — and that follows from `module: 'p2p'`, not from a check written in this service.
 
-| Procedure                        | Scope                    | Purpose                                                                   |
-| -------------------------------- | ------------------------ | ------------------------------------------------------------------------- |
-| `fiat.list`                      | public                   | The enabled currency registry, straight from `packages/config`            |
-| `offers.create`                  | `p2p:write`              | Publish an offer, fixed or floating price                                 |
-| `offers.list`                    | `p2p:read`               | The board — active offers with liquidity left to take                     |
-| `offers.get` / `offers.close`    | `p2p:read` / `p2p:write` | Closing withdraws remaining liquidity; open trades continue               |
-| `trades.take`                    | `p2p:write`              | **→ `escrowLock`.** Bounds, liquidity **and destination** before any lock |
-| `trades.markFiatSent`            | `p2p:write`              | Buyer only                                                                |
-| `trades.confirmReceived`         | `p2p:write`              | Seller only. **→ `escrowRelease`**                                        |
-| `trades.cancel`                  | `p2p:write`              | **→ `escrowRefund`**, in full                                             |
-| `trades.get` / `trades.list`     | `p2p:read`               | Never carry a payment instrument — see below                              |
-| `trades.paymentInstrument`       | `p2p:read`               | **Where to send the money.** Party-or-moderator, live escrow only, logged |
-| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationReachable`           |
-| `disputes.appendEvidence`        | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove            |
-| `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                   |
-| `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse  |
-| `disputes.resolve`               | `p2p:read` + moderator   | **Moderator only** — release or refund; empty allowlist → unreachable     |
-| `reputation.get`                 | `p2p:read`               | Completion rate, average release time, disputes lost, badges              |
-| `instruments.methods.list`       | `p2p:read`               | What each method needs, per country. About methods, never about people    |
-| `instruments.methods.register`   | `admin:compliance`       | **Operator only** — declare a market's field requirements                 |
-| `instruments.methods.setEnabled` | `admin:compliance`       | Stop accepting new instruments for a method/country                       |
-| `instruments.create`             | `p2p:write`              | Register a destination                                                    |
-| `instruments.update`             | `p2p:write`              | Edit. Does not reach a trade already holding a snapshot                   |
-| `instruments.remove`             | `p2p:write`              | A state change, never a DELETE                                            |
-| `instruments.list`               | `p2p:read`               | The caller's own — **headers only, no field values, ever**                |
-| `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read          |
-| `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                          |
-| `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                 |
-| `data.erase`                     | `p2p:write`              | §0.9 — self-only. Refuses while escrow is live; names what it retained    |
+| Procedure                        | Scope                    | Purpose                                                                                                            |
+| -------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `fiat.list`                      | public                   | The enabled currency registry, straight from `packages/config`                                                     |
+| `offers.create`                  | `p2p:write`              | Publish an offer, fixed or floating price                                                                          |
+| `offers.list`                    | `p2p:read`               | The board — active offers with liquidity left to take                                                              |
+| `offers.get` / `offers.close`    | `p2p:read` / `p2p:write` | Closing withdraws remaining liquidity; open trades continue                                                        |
+| `offers.pause` / `offers.resume` | `p2p:write`              | Hide / restore remaining liquidity without cancelling open trades                                                  |
+| `trades.take`                    | `p2p:write`              | **→ `escrowLock`.** Bounds, liquidity **and destination** before any lock                                          |
+| `trades.markFiatSent`            | `p2p:write`              | Buyer only                                                                                                         |
+| `trades.confirmReceived`         | `p2p:write`              | Seller only. **→ `escrowRelease`**                                                                                 |
+| `trades.cancel`                  | `p2p:write`              | **→ `escrowRefund`**, in full                                                                                      |
+| `trades.get` / `trades.list`     | `p2p:read`               | Never carry a payment instrument — see below                                                                       |
+| `trades.paymentInstrument`       | `p2p:read`               | **Where to send the money.** Party-or-moderator, live escrow only, logged                                          |
+| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationReachable`                                                    |
+| `disputes.appendEvidence`        | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove                                                     |
+| `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                                                            |
+| `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse                                           |
+| `disputes.resolve`               | `p2p:read` + moderator   | **Moderator only** — release or refund; empty allowlist → unreachable                                              |
+| `reputation.get`                 | `p2p:read`               | Snapshot + derived badges + `merchant` vouch (false when frozen)                                                   |
+| `instruments.methods.list`       | `p2p:read`               | What each method needs, per country. About methods, never about people                                             |
+| `instruments.methods.register`   | `admin:compliance`       | **Operator only** — declare a market's field requirements                                                          |
+| `instruments.methods.setEnabled` | `admin:compliance`       | Stop accepting new instruments for a method/country                                                                |
+| `instruments.create`             | `p2p:write`              | Register a destination                                                                                             |
+| `instruments.update`             | `p2p:write`              | Edit. Does not reach a trade already holding a snapshot                                                            |
+| `instruments.remove`             | `p2p:write`              | A state change, never a DELETE                                                                                     |
+| `instruments.list`               | `p2p:read`               | The caller's own — **headers only, no field values, ever**                                                         |
+| `instruments.reveal`             | `p2p:write`              | The owner reads their own values. Logged like anyone else's read                                                   |
+| `instruments.accessLog`          | `p2p:read`               | "Who has looked at my account details, and when"                                                                   |
+| `merchants.me`                   | `p2p:read`               | Caller's merchant standing + history headers (Stage 1–2 programme)                                                 |
+| `merchants.apiAccess`            | `p2p:read`               | Current standing → API eligibility; names shared identity/edge planes; `disputeResolution: interactive_human_only` |
+| `merchants.offerLimits`          | `p2p:read`               | Deployment ceilings: `posture` unset / unlimited / configured; null max = no numeric cap                           |
+| `merchants.myOfferCeiling`       | `p2p:read`               | Ceiling that binds the caller now (band + standing + limitMode; null max = no numeric cap)                         |
+| `merchants.submitApplication`    | `p2p:write`              | Apply for merchant standing                                                                                        |
+| `merchants.withdraw`             | `p2p:write`              | Withdraw a pending application                                                                                     |
+| `merchants.decide`               | `admin:compliance`       | Operator approve / reject / freeze (`suspended`); approve and unfreeze re-check live reputation snapshot           |
+| `merchants.history`              | `admin:compliance`       | Audit trail of standing changes                                                                                    |
+| `ops.lateSettlements`            | `admin:compliance`       | Committed decisions with no ledger stamp yet (+ durable last settle error)                                         |
+| `data.export`                    | `p2p:read`               | §0.9 — everything this service holds about **the caller**                                                          |
+| `data.erase`                     | `p2p:write`              | §0.9 — self-only. Refuses while escrow is live; names what it retained                                             |
 
 HTTP (`src/index.ts`):
 
-| Route                              | Purpose                                                                                               |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GET /health`, `GET /ready`        | liveness / readiness                                                                                  |
-| `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's escrow view vs the ledger's. Non-zero drift returns 500 |
-| `GET /internal/reputation/:userId` | the hot path other modules read for `p2pLimitMultiplier`                                              |
-| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more   |
+| Route                              | Purpose                                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health`                      | liveness; discloses `moderationReachable` + `offerLimitsConfigured` + `offerLimitsPosture` (unset / unlimited / configured)      |
+| `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                    |
+| `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500   |
+| `GET /internal/reputation/:userId` | Same snapshot as `reputation.get`: counters, derived badges, `merchant` freeze. Not a `p2pLimitMultiplier` (identity owns rank). |
+| `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                              |
 
 Three background sweeps start before the HTTP listener. The first two are why escrow cannot strand; the third is why we do not keep personal data after we need it:
 
 - **timeout sweep** — resolves any trade whose deadline has passed
-- **settlement sweep** — posts any resolution that was decided but not yet acted on
+- **settlement sweep** — posts any resolution that was decided but not yet acted on. Failures stamp `last_settle_error` on the trade so `ops.lateSettlements` survives a process restart (not only process logs)
 - **retention sweep** — wipes the payment details off closed trades past `P2P_INSTRUMENT_RETENTION_DAYS`
 
 ---
@@ -225,6 +236,8 @@ The **number** is an operator decision, not an engineering one, and where a mark
 
 A taker who genuinely takes an offer becomes a counterparty and is entitled to the seller's destination. Someone willing to open small trades can therefore collect account details from many sellers. That is inherent to P2P — a buyer who cannot see where to pay cannot pay — and it is not solved here. What exists against it is the access log (every look attributed, visible to the seller), the minimum-amount bound on every offer, and the reputation record. It is named here so nobody assumes it was overlooked.
 
+**Sell offers only list methods with a live destination.** Create refuses methods the maker cannot be paid on; the board and `offers.get` project methods to live rails and drop a sell offer with none left. Buy offers are unchanged (seller is the taker). This closes the take-oracle residual named on the uniform take refusal.
+
 **Not encrypted at rest.** `details` is `jsonb` in Postgres. Envelope encryption is the right next step and it needs a key-management decision that is owner-gated (Class X, `AGENTS.md`); doing it with a key improvised in this service would be the appearance of the protection without the substance. §13 socket: **payment-instrument encryption at rest**.
 
 ---
@@ -282,7 +295,7 @@ Every publish carries a **business** idempotency key (`p2p.escrow.release:<trade
 
 **Consumes** — nothing yet. When svc-trade's mark-price surface lands it supplies the `ReferencePriceSource` that floating offers need; until then a floating offer is **refused** rather than priced from a stale number (§13 socket: cross-venue pricing).
 
-> **This PR adds seven events to `packages/events/src/catalog.ts`.** Strictly §15.2 says a shared-package change should be its own PR first — flagging it rather than burying it. The payloads are additive and no existing subject changed.
+Event subjects live in `packages/events` (catalog). Payloads are additive; business idempotency keys (not random uuids) are what make redelivery safe.
 
 ---
 
@@ -322,15 +335,39 @@ The remaining question is the one worth stating plainly: **funds can be late.** 
 
 _If it crashes exactly here, whose funds are stranded?_
 
-| Crash point                                        | Whose funds                 | Why not                                                                                                             |
-| -------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| after the inventory reserve, before `escrowLock`   | nobody's                    | nothing is locked; `created` expires in 2 min and voids                                                             |
-| after `escrowLock`, before the row says `escrowed` | nobody's, but non-obviously | the sweep re-calls `escrowLock`, which is idempotent, so the lock becomes a fact rather than a guess — then refunds |
-| after the resolution is recorded, before the post  | nobody's, but they are late | `sweepSettlements()` re-posts; the recipe key stops it doubling                                                     |
-| after the post, before `settled_at`                | nobody's                    | the re-post is idempotent and the stamp is retried                                                                  |
-| during a concurrent release/refund race            | nobody's                    | both take the trade's row lock; the loser sees a terminal status and posts nothing at all                           |
+| Crash point                                        | Whose funds                 | Why not                                                                                                                |
+| -------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| after the inventory reserve, before `escrowLock`   | nobody's                    | nothing is locked; `created` expires in 2 min and voids                                                                |
+| after `escrowLock`, before the row says `escrowed` | nobody's, but non-obviously | the sweep re-calls `escrowLock`, which is idempotent, so the lock becomes a fact rather than a guess — then refunds    |
+| after the resolution is recorded, before the post  | nobody's, but they are late | `sweepSettlements()` re-posts; the recipe key stops it doubling; `last_settle_error` names why if a post keeps failing |
+| after the post, before `settled_at`                | nobody's                    | the re-post is idempotent and the stamp is retried                                                                     |
+| during a concurrent release/refund race            | nobody's                    | both take the trade's row lock; the loser sees a terminal status and posts nothing at all                              |
+
+### Not built here (named so nobody invents them)
+
+| Socket                                    | Status                                                                                                                                                              |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `chat_thread_id` on `p2p_trades`          | Column exists for a future chat product. **No API field, no service method, no chat delivery.** A UI that shows "open trade chat" from this service alone is lying. |
+| Method registry seed content              | Operator-supplied. Empty on purpose — not this repo's knowledge of bank rails.                                                                                      |
+| Rank fee discounts / `p2pLimitMultiplier` | Identity owns rank; this service stamps `P2P_FEE_BPS` only (no per-take fee override). Multiplier apply is not invented here.                                       |
+| `p2p:moderate` who                        | Class X — allowlist / scope mint is Nitro. Empty allowlist honest-refuses.                                                                                          |
 
 ---
+
+## State × timeout matrix
+
+Source of truth: `src/state.ts` (`timeoutActionFor`, `assertTransition`) + `src/state.test.ts` (full graph).
+
+| Status      | Holds escrow?        | Timeout action                                       | Moves value?       | Who can terminal without clock                                              |
+| ----------- | -------------------- | ---------------------------------------------------- | ------------------ | --------------------------------------------------------------------------- |
+| `created`   | not yet / re-drive   | `settle_or_void` (re-lock, then refund or void)      | yes if lock posted | —                                                                           |
+| `escrowed`  | yes                  | `refund`                                             | yes                | seller cancel; buyer mark fiat sent                                         |
+| `fiat_sent` | yes                  | `open_dispute` (never auto-release)                  | no                 | seller confirm → release; either open dispute; cancel refused once disputed |
+| `disputed`  | yes                  | `escalate_dispute` (re-arm SLA; **no** machine rule) | no                 | natural-person moderator only                                               |
+| `released`  | no (posted)          | none                                                 | —                  | terminal                                                                    |
+| `cancelled` | no (refunded/voided) | none                                                 | —                  | terminal                                                                    |
+
+Value-moving timeout actions are only `settle_or_void` and `refund`. `fiat_sent` and `disputed` deliberately do **not** move value on a clock.
 
 ## Database constraints as a backstop
 
@@ -374,13 +411,15 @@ It deliberately does **not** stop release, refund, dispute resolution, or either
 
 ---
 
-## Out of scope
+## Out of scope / residual parks (do not invent)
 
-`p2p_merchants` (§6.2's fifth table — the merchant programme: badges, limits, API access) is tracker feature `p2p.merchants` and is not built here. No half-written table was left behind for it; it arrives with its own migration.
+**Merchants (built Stage 1–3; numeric policy still open).** The programme tables, apply/approve/suspend transitions, badge surface, offer-ceiling **mechanism**, honest limit API (`merchants.offerLimits` · `merchants.myOfferCeiling` · health `offerLimitsConfigured` / `offerLimitsPosture`), and programme-gated API access ship in this service. Identity remains the only named-key/scopes/revocation plane and the edge remains the only request-throttle plane; svc-p2p stores neither keys nor a second quota book. Every identity-issued P2P key request re-reads current standing, so only `approved` may proceed and suspension removes access immediately. Interactive sessions retain ordinary P2P access. API keys can never list, inspect as moderator, or resolve disputes: D-S-08 requires an interactive human session regardless of scopes. Default limit policy is **unset** (no numeric ceiling, same as pre-Stage-2) until an operator sets `P2P_OFFER_MAX_*` to a decimal or the literal `unlimited` — inventing magnitudes here is product law, not craft residual. Stage-3 erase/pseudonymise of settled trades is owner-gated.
 
 **The method registry is empty and stays empty until an operator fills it.** That is not a gap in the mechanism — it is where the mechanism ends and researched, jurisdictional content begins. Nobody can register a payment destination in a market until `instruments.methods.register` has been called for it, and any attempt to save that as engineering work by seeding a guess would produce destinations that validate and cannot be paid.
 
-**Not encrypted at rest** — §13 socket, see the payment-instruments section above.
+**Not encrypted at rest** — §13 socket, see the payment-instruments section above. KMS envelope encryption is Class X.
+
+**Also parked (not agent free craft):** `p2p:moderate` who / scope mint · auto-ruling (law forbids; escalate-and-hold) · rank fee discount / `p2pLimitMultiplier` apply (identity + product) · chat product (`chat_thread_id` column only) · floating mark-price wire (contracts first) · apps/admin dispute console (outside wall) · outbox (events plane). Engine side (queue, evidence, backlog, open-origin honesty, ruling notes on the wire, escalate-and-hold) is product code in this service — not refuse theater.
 
 ---
 
@@ -394,7 +433,7 @@ pnpm --filter @intafaced/svc-p2p test
 
 ## Tests
 
-**236 tests.** The state machine, pricing, reputation and instrument field validation are pure functions tested by enumeration without a database — every state, every edge, every timeout, plus graph properties (reachability of a terminal state from every state; acyclicity among live states) that are the machine-checkable form of "funds cannot be stranded".
+**Pure suite (no Postgres) + money suite (Postgres).** The state machine, pricing, reputation and instrument field validation are pure functions tested by enumeration without a database — every state, every edge, every timeout, plus graph properties (reachability of a terminal state from every state; acyclicity among live states) that are the machine-checkable form of "funds cannot be stranded". Re-count with `pnpm exec vitest run` in this package — do not pin a stale headcount in prose.
 
 The two Postgres suites are serialised by `vitest.config.ts` (`fileParallelism: false`) and bring the schema up under a shared advisory lock. Both truncate the same connected set of tables — an instrument is attached to a trade, which belongs to an offer — and vitest runs test files in parallel by default, which deletes one suite's rows out from under the other mid-assertion. It does not fail cleanly: it surfaces as "trade not found" immediately after a successful take, in tests that have nothing to do with the change being made.
 
@@ -422,6 +461,8 @@ The money paths run against real Postgres with the ledger's in-memory reference 
 - two disputes on one trade → rejected
 - a non-party cancelling, or a buyer cancelling after declaring payment → rejected
 - kill-switch on → new takes blocked, settlement unaffected
+- API key with P2P scope but no approved merchant standing → refused before P2P service work; approval enables it and suspension removes it on the next call
+- API key belonging to an allowlisted moderator, or carrying `admin:compliance` → never treated as the human required to rule on a dispute
 - a full mixed run across every branch → every trade terminal, every terminal trade settled, `escrowIntegrity()` and `reconcile()` clean, total value conserved to the unit
 
 **Payment-instrument disclosure covered:**

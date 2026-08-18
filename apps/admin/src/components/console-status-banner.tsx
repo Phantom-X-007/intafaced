@@ -1,4 +1,5 @@
 import { Chip } from '@/components/chip';
+import { consoleCopy } from '@/lib/console-copy';
 import { AUTHORITY_REACH, type ConsoleStatus } from '@/lib/console-status';
 
 /**
@@ -16,16 +17,18 @@ import { AUTHORITY_REACH, type ConsoleStatus } from '@/lib/console-status';
  * A safety control's inability to act is a property of the whole console, so it
  * is stated in the frame around every screen.
  *
- * ── It renders nothing when everything is configured ────────────────────────
+ * ── It renders nothing when fullyConfigured ─────────────────────────────────
  *
  * Deliberately. A banner that is always present is furniture, and furniture is
- * not read. The absence of this strip is the signal that both authorities are
- * wired; the presence of it is a fact about what is missing, in the operator's
- * own vocabulary ("cannot freeze the ledger") followed by the exact variable
- * name to set.
+ * not read. The absence of this strip is the only "all green" signal, and it
+ * fires only when EDGE_URL plus both operator and treasury tokens are set.
+ * Missing either token or the edge address keeps the strip up.
  *
  * Never renders a credential — `ConsoleStatus` carries booleans and variable
  * NAMES only, which is the property `console-status.ts` maintains.
+ *
+ * Operator-visible sentences resolve through `@intafaced/i18n`. A missing key
+ * renders the key name — never invented English.
  */
 
 export interface ConsoleStatusBannerProps {
@@ -33,24 +36,22 @@ export interface ConsoleStatusBannerProps {
 }
 
 export function ConsoleStatusBanner({ status }: ConsoleStatusBannerProps) {
-  if (status.module.configured && status.treasury.configured) return null;
+  if (status.fullyConfigured) return null;
 
   const blocked = [status.module, status.treasury].filter((a) => !a.configured);
 
   return (
     <div className="adm-alertstrip" data-severity={status.canHaltAnything ? 'partial' : 'none'} role="status">
       <Chip tone="danger" dot>
-        {status.canHaltAnything ? 'Partly unconfigured' : 'Cannot halt anything'}
+        {status.canHaltAnything ? consoleCopy('admin.console.banner.chip.partial') : consoleCopy('admin.console.banner.chip.none')}
       </Chip>
       <span className="adm-alertstrip__body">
         <strong>
-          {status.canHaltAnything
-            ? 'This console cannot reach every platform switch.'
-            : 'This console cannot halt anything. Every switch below is inert.'}
+          {status.canHaltAnything ? consoleCopy('admin.console.banner.title.partial') : consoleCopy('admin.console.banner.title.none')}
         </strong>{' '}
         {blocked.map((authority) => (
           <span key={authority.authority} className="adm-alertstrip__item">
-            Cannot {AUTHORITY_REACH[authority.authority]} — set{' '}
+            {consoleCopy('admin.console.banner.item.lead', { reach: AUTHORITY_REACH[authority.authority] })}{' '}
             {authority.missing.map((name, i) => (
               <span key={name}>
                 {i > 0 && ' + '}
@@ -60,8 +61,7 @@ export function ConsoleStatusBanner({ status }: ConsoleStatusBannerProps) {
             .{' '}
           </span>
         ))}{' '}
-        Nothing here is a value: these are variable names on the <code>admin</code> container. See{' '}
-        <code>docs/OWNER-OPS-CHECKLIST-2026-07-31.md</code> §7.
+        {consoleCopy('admin.console.banner.disclaimer')}
       </span>
     </div>
   );

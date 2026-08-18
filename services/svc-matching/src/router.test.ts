@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { registerRoutes } from './router.js';
+import { userCopy } from './user-copy.js';
 
 // ── Order writes are service-only ────────────────────────────────────────────
 //
@@ -148,7 +149,8 @@ describe('order writes require service credentials', () => {
     const res = await submit(app, headers, tampered);
 
     expect(res.statusCode).toBe(401);
-    expect(res.json().message).toMatch(/body-mismatch/);
+    expect(res.json().message).toBe(userCopy('matching.unauthenticated'));
+    expect(res.json().rejected).toBe('body-mismatch');
     expect(submitted).toBe(false);
     await app.close();
   });
@@ -191,7 +193,8 @@ describe('order writes require service credentials', () => {
     const res = await cancel(app, serviceAuthHeaders('svc-trade', SECRET));
 
     expect(res.statusCode).toBe(401);
-    expect(res.json().message).toMatch(/missing-body-digest/);
+    expect(res.json().message).toBe(userCopy('matching.unauthenticated'));
+    expect(res.json().rejected).toBe('missing-body-digest');
     await app.close();
   });
 
@@ -249,6 +252,35 @@ describe('depth does not allocate a book', () => {
     for (let i = 0; i < 500; i++) engine.depth(`PHANTOM-${i}`);
 
     expect(engine.markets).toHaveLength(0);
+  });
+});
+
+describe('cancel does not allocate a book', () => {
+  /**
+   * W7 residual — cancel used book() and invented never-traded markets.
+   * Depth was fixed earlier; the HTTP cancel door must show the same honesty.
+   */
+  it('returns 404 for an unknown market without creating one', async () => {
+    const { MatchingEngine } = await import('./engine/engine.js');
+    const SECRET = 'matching-internal-service-secret-32c';
+    const engine = new MatchingEngine({ journalPath: null } as never);
+    const app = Fastify({ logger: false });
+    registerRoutes(app, engine, SECRET, {});
+    await app.ready();
+
+    const ghost = 'NEVER-TRADED-VIA-HTTP';
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/markets/${ghost}/orders/00000000-0000-4000-8000-deadbeef0001`,
+      headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('OrderNotFound');
+    expect(res.json().message).toBe(userCopy('matching.order_not_found'));
+    expect(engine.hasMarket(ghost)).toBe(false);
+    expect(engine.markets).not.toContain(ghost);
+    await app.close();
   });
 });
 
@@ -339,6 +371,8 @@ describe('the reconciliation routes', () => {
     // A reconciler that cannot tell these apart reports a whole live book as
     // missing — or reports a deleted market as clean.
     expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().code).toBe('MarketNotFound');
+    expect(unknown.json().message).toBe(userCopy('matching.market_not_found'));
     expect(empty.statusCode).toBe(200);
     expect(empty.json().orders).toEqual([]);
     await app.close();

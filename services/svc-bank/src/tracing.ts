@@ -41,6 +41,8 @@ export interface MoneySpanAttributes {
   cardId?: string;
   /** The issuer's reference for one authorisation. */
   authorizationRef?: string;
+  /** §31 auto-invest rule id (instruction, not a balance). */
+  ruleId?: string;
 }
 
 export async function withMoneySpan<T>(name: string, attributes: MoneySpanAttributes, fn: (span: Span) => Promise<T>): Promise<T> {

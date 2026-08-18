@@ -36,6 +36,40 @@ const schema = serviceEnvSchema
        * Malformed → fail boot (parseAccrualTierLawJson throws). Never invent rates.
        */
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: z.string().optional().default(''),
+      /**
+       * 32-byte AES-256 key (base64 or 64-char hex) for §10 KYC document store.
+       * Blank = store refuses put/get (no improvised key). Vendor integration Class X.
+       */
+      IDENTITY_KYC_DOC_KEY: z.string().optional().default(''),
+      /**
+       * 32-byte AES-256 key (base64 or 64-char hex) for users.totp_secret at rest.
+       * Blank = TOTP enrol refuses (no plaintext write). Prod boot refuses if missing.
+       * Dual-read still accepts legacy unprefixed plaintext until re-enrol.
+       */
+      IDENTITY_TOTP_SECRET_KEY: z.string().optional().default(''),
+      /**
+       * svc-ledger base URL for the ONE money path this service has: the
+       * affiliate / IB commission fan-out (§0.6 — identity stores no balances).
+       *
+       * OPTIONAL AND UNDEFAULTED, unlike the sibling services that default to
+       * `http://localhost:4001`. A default here would have svc-identity claim a
+       * ledger connection in every deployment, including ones where affiliates
+       * are off — and the payout path would then fail at post time against a
+       * host that is not there, instead of refusing up front with
+       * `affiliate.payout.ledger_unwired`. Unset is a legible state, not a gap.
+       */
+      LEDGER_URL: z.string().url().optional(),
+      /**
+       * Owner-published max *live* (non-revoked) sub-accounts per identity
+       * (SPEC-SUBACCOUNTS §4 / §8). Default 25 — abuse bound, not a tier ladder.
+       */
+      IDENTITY_MAX_SUB_ACCOUNTS: z.coerce.number().int().min(1).max(10_000).default(25),
+      /**
+       * Optional pin for `waitlist.enabled` / `referral.queue` (packages/config
+       * `envVarNameFor`). Unset → drop clock. `off` refuse-closes capture.
+       */
+      INTAFACED_FLAG_WAITLIST_ENABLED: z.string().optional(),
+      INTAFACED_FLAG_REFERRAL_QUEUE: z.string().optional(),
     }),
   );
 

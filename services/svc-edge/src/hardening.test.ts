@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerCors, type OriginAllowlist } from './cors.js';
-import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
+import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 
 /**
  * THE THROTTLE, AND THE TWO WAYS IT COULD BE WORSE THAN NOTHING.
@@ -181,5 +181,40 @@ describe('rateLimitSummary', () => {
   it('is quiet only when the key actually identifies a caller', () => {
     const { level } = rateLimitSummary(base);
     expect(level).toBe('info');
+  });
+});
+
+/**
+ * `/ready` must not invent a shared throttle store, and must report whether
+ * the control is armed without requiring boot-log archaeology.
+ */
+describe('rateLimitReadiness', () => {
+  const base: RateLimitConfig = { enabled: true, max: 300, windowMs: 60_000, trustProxy: true };
+
+  it('never claims multi-replica share for in-process counters', () => {
+    expect(rateLimitReadiness(base).multiReplicaShared).toBe(false);
+    expect(rateLimitReadiness({ ...base, enabled: false }).multiReplicaShared).toBe(false);
+    expect(rateLimitReadiness({ ...base, trustProxy: false }).multiReplicaShared).toBe(false);
+  });
+
+  it('reports the armed budget when enabled', () => {
+    const r = rateLimitReadiness(base);
+    expect(r.enabled).toBe(true);
+    expect(r.max).toBe(300);
+    expect(r.windowMs).toBe(60_000);
+    expect(r.trustProxy).toBe(true);
+  });
+
+  it('reports null budget when disabled rather than a fake number', () => {
+    const r = rateLimitReadiness({ ...base, enabled: false });
+    expect(r.enabled).toBe(false);
+    expect(r.max).toBeNull();
+    expect(r.windowMs).toBeNull();
+    expect(r.note).toMatch(/off|nothing/i);
+  });
+
+  it('names the shared-bucket risk when trustProxy is unset', () => {
+    const r = rateLimitReadiness({ ...base, trustProxy: false });
+    expect(r.note).toMatch(/ONE bucket|EDGE_TRUST_PROXY/i);
   });
 });

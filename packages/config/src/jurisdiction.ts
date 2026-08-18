@@ -2,12 +2,18 @@ import { MODULES, type ModuleId, type Plane } from './modules.js';
 import {
   SANCTIONS_REGIONS_ENV,
   SANCTIONS_SOURCE_ENV,
+  SCREENING_REFUSE_FIXTURE,
+  SCREENING_REFUSE_UNCONFIGURED,
   SCREENING_REVIEWED_EMPTY,
+  ScreeningMoneyPostureError,
   envScreeningList,
+  evaluateScreeningMoneyPosture,
+  screeningMoneyGrade,
   type BlockAuthority,
   type ScreenedRegion,
   type ScreeningDeclaration,
   type ScreeningList,
+  type ScreeningMoneyGrade,
 } from './screening.js';
 
 /**
@@ -153,6 +159,8 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   token: OPEN_BASIC,
   matching: { status: 'open', minTier: 'none' },
   trade: OPEN_BASIC,
+  // Operator tenancy mechanism. No user custody; minTier none. Internal venue stays refused in product code.
+  execution: { status: 'open', minTier: 'none' },
   // Public market data. There is no user, no account and no asset behind a
   // depth frame, so there is nobody for a tier to be about — the same reasoning
   // that leaves `matching` at `none`. The jurisdiction STATUS still applies: a
@@ -366,15 +374,86 @@ export interface ScreeningProvenance {
   readonly blockedRegionCount: number;
   /** Where the list came from — governance record, env var name, or `unconfigured`. */
   readonly source: string;
+  /** Counsel vs fixture vs unset. Fixtures are configured and still not clean. */
+  readonly moneyGrade: ScreeningMoneyGrade;
+  /** True only when counsel-grade. Never true for unset or placeholder/test lists. */
+  readonly readsAsScreenedClean: boolean;
 }
 
 function provenanceOf(list: ScreeningList): ScreeningProvenance {
+  const moneyGrade = screeningMoneyGrade(list);
   return {
     listConfigured: list.configured,
     declaration: list.declaration,
     blockedRegionCount: list.regions.length,
     source: list.source,
+    moneyGrade,
+    readsAsScreenedClean: moneyGrade === 'counsel',
   };
+}
+
+/**
+ * Platform sentinel for "caller region was never resolved".
+ *
+ * svc-edge stamps `DEFAULT_REGION` (default `XX`) onto every principal until
+ * per-request geo resolution exists (§13 `socket.geo-region-resolution`). `XX`
+ * is not an ISO country we serve; it is the honest "unknown" marker.
+ *
+ * Historically every decision treated `XX` like any other code with no matrix
+ * entry — fall through to `DEFAULT_MODULE_RULES`, which is open for every
+ * module. Protocol boot still asserts that path under the fail-closed flag
+ * OFF (`allowed.permissionless`). What was missing: the decision object never
+ * said the region was unresolved, so logs/UI could not tell "we know you are
+ * in GB" from "we never looked".
+ */
+export const UNRESOLVED_REGION = 'XX';
+
+/**
+ * Process-wide fail-closed switch for an unresolved region.
+ *
+ * Default OFF so protocol/indexer sovereignty boot (`region: 'XX'` →
+ * `allowed.permissionless`) keeps working. When ON, `checkAccess` returns
+ * `denied.region_unknown` for the unresolved sentinel. Mechanism only — does
+ * not invent geo-IP, and does not populate sanctions content (Class X).
+ *
+ * Accepted truthy forms (case-insensitive): `1`, `true`, `yes`, `on`.
+ */
+export const REGION_FAIL_CLOSED_ENV = 'INTAFACED_REGION_FAIL_CLOSED';
+
+/**
+ * Process-wide fail-closed switch when the screening list is `unset`.
+ *
+ * Default OFF so local/dev and historical call sites keep the honesty-only
+ * path (`allowed` + `listConfigured: false`). When ON, `checkAccess` returns
+ * `denied.screening_unconfigured` — refuse hosted access rather than look
+ * screened-clean with no list. Mechanism seal (D26-P1-O1); does **not** invent
+ * sanctions list content (Class X / Nitro counsel).
+ *
+ * Accepted truthy forms (case-insensitive): `1`, `true`, `yes`, `on`.
+ */
+export const SCREENING_FAIL_CLOSED_ENV = 'INTAFACED_SCREENING_FAIL_CLOSED';
+
+/** True when `region` is not the platform unresolved sentinel. */
+export function isRegionResolved(region: RegionCode): boolean {
+  return region.toUpperCase() !== UNRESOLVED_REGION;
+}
+
+/**
+ * Read the fail-closed switch from an env map (defaults to `process.env`).
+ * Explicit `AccessQuery.regionFailClosed` always wins over this.
+ */
+export function regionFailClosedFromEnv(env: Record<string, string | undefined> = process.env): boolean {
+  const raw = env[REGION_FAIL_CLOSED_ENV]?.trim().toLowerCase() ?? '';
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
+
+/**
+ * Read the screening-list fail-closed switch from an env map.
+ * Explicit `AccessQuery.screeningFailClosed` always wins over this.
+ */
+export function screeningFailClosedFromEnv(env: Record<string, string | undefined> = process.env): boolean {
+  const raw = env[SCREENING_FAIL_CLOSED_ENV]?.trim().toLowerCase() ?? '';
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
 }
 
 export interface AccessQuery {
@@ -405,6 +484,25 @@ export interface AccessQuery {
    * Omitted — every production call site — means the shipped matrix.
    */
   readonly business?: readonly BusinessBlock[];
+  /**
+   * When true, refuse if `region` is the unresolved sentinel (`XX`).
+   *
+   * Omitted → `regionFailClosedFromEnv()`. Default env is OFF so existing boot
+   * invariants (protocol/indexer sovereignty with `region: 'XX'`) keep passing.
+   * Pass `true` in tests, or set `INTAFACED_REGION_FAIL_CLOSED`, when a surface
+   * must not serve under an unknown jurisdiction.
+   */
+  readonly regionFailClosed?: boolean;
+  /**
+   * When true, refuse if the screening list is `unset` (nobody supplied content).
+   *
+   * Omitted → `screeningFailClosedFromEnv()`. Default env is OFF so honesty-only
+   * surfaces keep returning `allowed` with `listConfigured: false`. Pass `true`
+   * in tests, or set `INTAFACED_SCREENING_FAIL_CLOSED`, when hosted access must
+   * not proceed without a counsel-supplied list (or attributed `none`).
+   * Does not invent list content — Class X stays outside this mechanism.
+   */
+  readonly screeningFailClosed?: boolean;
 }
 
 export interface AccessDecision {
@@ -414,6 +512,9 @@ export interface AccessDecision {
     | 'allowed'
     | 'allowed.permissionless'
     | 'denied.region_blocked'
+    | 'denied.region_unknown'
+    | 'denied.screening_unconfigured'
+    | 'denied.screening_fixture'
     | 'denied.module_blocked'
     | 'denied.kyc_required'
     | 'denied.plane_unsupported';
@@ -429,6 +530,19 @@ export interface AccessDecision {
    * nobody". This field can.
    */
   readonly screening: ScreeningProvenance;
+  /**
+   * Was the caller's jurisdiction actually resolved?
+   *
+   * Present on EVERY decision, allowed ones included — same honesty pattern as
+   * `screening.listConfigured`. `false` means the platform is operating on the
+   * unresolved sentinel (`XX`, typically stamped by svc-edge when no geo
+   * resolution exists). That is NOT the same as "region cleared screening",
+   * and until this field existed the two were indistinguishable on the wire.
+   *
+   * Does not invent geo-IP: it only reports whether the code we were given is
+   * the sentinel for "never resolved".
+   */
+  readonly regionResolved: boolean;
   /**
    * WHICH AUTHORITY refused the region, on a `denied.region_blocked`.
    *
@@ -499,11 +613,26 @@ export function unreviewedRegions(): RegionCode[] {
  * §22: zero-KYC follows custody. If the module cannot take custody on the
  * requested plane, access is permissionless and this returns immediately —
  * we never gate what we do not hold.
+ *
+ * Region honesty: every decision carries `regionResolved`. The unresolved
+ * sentinel (`XX`) is distinguishable from a real code even when the outcome is
+ * still `allowed` (fail-closed OFF, the default). Flip
+ * `INTAFACED_REGION_FAIL_CLOSED` (or pass `regionFailClosed: true`) to refuse
+ * with `denied.region_unknown` instead of falling open on defaults.
+ *
+ * Screening list honesty: every decision carries `screening.listConfigured`.
+ * Flip `INTAFACED_SCREENING_FAIL_CLOSED` (or pass `screeningFailClosed: true`)
+ * to refuse with `denied.screening_unconfigured` when the list is `unset`,
+ * or `denied.screening_fixture` when the list is a placeholder/test fixture.
+ * Counsel-grade `reviewed-empty` and `listed` do not refuse here.
  */
 export function checkAccess(q: AccessQuery): AccessDecision {
   const mod = MODULES[q.module];
   const screening = q.screening ?? activeScreeningList();
   const provenance = provenanceOf(screening);
+  const regionResolved = isRegionResolved(q.region);
+  const failClosed = q.regionFailClosed ?? regionFailClosedFromEnv();
+  const screeningFailClosed = q.screeningFailClosed ?? screeningFailClosedFromEnv();
 
   if (!mod.planes.includes(q.plane)) {
     return {
@@ -513,6 +642,64 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: `${q.module} does not operate on the ${q.plane} plane`,
       screening: provenance,
+      regionResolved,
+    };
+  }
+
+  // Screening-list fail-closed (D26-P1-O1 mechanism seal). Default OFF: call
+  // sites keep honesty-only (`allowed` + listConfigured:false). When ON, refuse
+  // before region/permissionless so "nobody supplied a list" cannot ride as a
+  // clean bill of health. Does not invent Class X list content — operators set
+  // INTAFACED_SANCTIONS_REGIONS (counsel) or attributed `none`.
+  if (screeningFailClosed && provenance.moneyGrade === 'unconfigured') {
+    return {
+      allowed: false,
+      code: SCREENING_REFUSE_UNCONFIGURED,
+      status: 'blocked',
+      limitMultiplier: 0,
+      reason:
+        `Sanctions screening list is unset — nothing was consulted. ` +
+        `Hosted access refuses under ${SCREENING_FAIL_CLOSED_ENV}. ` +
+        `Counsel/Nitro must supply ${SANCTIONS_REGIONS_ENV} (or attributed ` +
+        `"${SCREENING_REVIEWED_EMPTY}"); agents must not invent list content.`,
+      screening: provenance,
+      regionResolved,
+    };
+  }
+
+  if (screeningFailClosed && provenance.moneyGrade === 'fixture') {
+    return {
+      allowed: false,
+      code: SCREENING_REFUSE_FIXTURE,
+      status: 'blocked',
+      limitMultiplier: 0,
+      reason:
+        `Sanctions screening list is a placeholder/test fixture — not counsel. ` +
+        `Must not be read as screened clean. Hosted access refuses under ${SCREENING_FAIL_CLOSED_ENV}. ` +
+        `Replace fixture provenance with a governance record; agents must not invent country codes.`,
+      screening: provenance,
+      regionResolved,
+    };
+  }
+
+  // Unresolved-region fail-closed. Default OFF: protocol boot and every
+  // existing call site keep the historical "XX falls through to defaults"
+  // behaviour, but the decision now *says* the region was unresolved. When ON,
+  // refuse before screening/permissionless so an unknown jurisdiction cannot
+  // ride the open defaults. Not Class X content — mechanism only.
+  if (!regionResolved && failClosed) {
+    return {
+      allowed: false,
+      code: 'denied.region_unknown',
+      status: 'blocked',
+      limitMultiplier: 0,
+      reason:
+        `Caller region is unresolved (${UNRESOLVED_REGION}). ` +
+        `Hosted access refuses under ${REGION_FAIL_CLOSED_ENV}. ` +
+        `Set a real DEFAULT_REGION or close §13 socket.geo-region-resolution; ` +
+        `do not treat ${UNRESOLVED_REGION} as a restrictive jurisdiction — it is not.`,
+      screening: provenance,
+      regionResolved,
     };
   }
 
@@ -553,6 +740,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
         limitMultiplier: 0,
         reason: regionBlockReason ?? `Hosted access unavailable in ${q.region}`,
         screening: provenance,
+        regionResolved,
         blockedBy,
       };
     }
@@ -563,6 +751,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: rule.limitMultiplier ?? 1,
       reason: 'Non-custodial: no identity requirement (§22)',
       screening: provenance,
+      regionResolved,
     };
   }
 
@@ -575,6 +764,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: regionBlockReason ?? `Not served in ${q.region}`,
       screening: provenance,
+      regionResolved,
       blockedBy,
     };
   }
@@ -587,6 +777,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: rule.notes ?? `${q.module} is not offered in ${q.region}`,
       screening: provenance,
+      regionResolved,
     };
   }
 
@@ -599,6 +790,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
       limitMultiplier: 0,
       reason: `Verification tier "${rule.minTier}" required for ${q.module} in ${q.region}`,
       screening: provenance,
+      regionResolved,
     };
   }
 
@@ -609,6 +801,7 @@ export function checkAccess(q: AccessQuery): AccessDecision {
     limitMultiplier: rule.limitMultiplier ?? 1,
     reason: rule.notes ?? 'Permitted',
     screening: provenance,
+    regionResolved,
   };
 }
 
@@ -661,6 +854,9 @@ export interface ScreeningStatus {
    */
   readonly businessBlockedRegions: readonly RegionCode[];
   readonly source: string;
+  /** Counsel vs fixture vs unset — fixtures must not render as a clean tick. */
+  readonly moneyGrade: ScreeningMoneyGrade;
+  readonly readsAsScreenedClean: boolean;
   /** One line an operator can read in a log or on a dashboard. */
   readonly summary: string;
 }
@@ -691,17 +887,21 @@ export function screeningStatus(
       : ` (${businessBlockedRegions.length} region(s) [${businessBlockedRegions.join(', ')}] are blocked by ` +
         `${BUSINESS_BLOCK_SOURCE} for commercial/licensing reasons — that is business configuration, not screening.)`;
 
+  const moneyGrade = screeningMoneyGrade(screening);
   const summary =
-    screening.declaration === 'listed'
-      ? `sanctions screening: ${blockedRegions.length} region(s) blocked [${blockedRegions.join(', ')}] from ${screening.source}` +
+    moneyGrade === 'fixture'
+      ? `sanctions screening: FIXTURE / TEST LIST — not counsel. Must not be read as screened clean. Source ${screening.source}.` +
         businessNote
-      : screening.declaration === 'reviewed-empty'
-        ? `sanctions screening: REVIEWED, DELIBERATELY EMPTY — 0 regions screened out, on the authority of ` +
-          `${screening.source}. This is a recorded decision, not an unset default.` +
+      : screening.declaration === 'listed'
+        ? `sanctions screening: ${blockedRegions.length} region(s) blocked [${blockedRegions.join(', ')}] from ${screening.source}` +
           businessNote
-        : `sanctions screening: NOT CONFIGURED — 0 regions blocked because no list was consulted. ` +
-          `This is not "everywhere is clear"; nothing has been screened. Supply ${SANCTIONS_REGIONS_ENV}.` +
-          businessNote;
+        : screening.declaration === 'reviewed-empty'
+          ? `sanctions screening: REVIEWED, DELIBERATELY EMPTY — 0 regions screened out, on the authority of ` +
+            `${screening.source}. This is a recorded decision, not an unset default.` +
+            businessNote
+          : `sanctions screening: NOT CONFIGURED — 0 regions blocked because no list was consulted. ` +
+            `This is not "everywhere is clear"; nothing has been screened. Supply ${SANCTIONS_REGIONS_ENV}.` +
+            businessNote;
 
   return {
     configured: screening.configured,
@@ -709,17 +909,20 @@ export function screeningStatus(
     blockedRegions,
     businessBlockedRegions,
     source: screening.source,
+    moneyGrade,
+    readsAsScreenedClean: moneyGrade === 'counsel',
     summary,
   };
 }
 
 export class UnscreenedJurisdictionError extends Error {
+  readonly code = SCREENING_REFUSE_UNCONFIGURED;
   constructor(
     readonly appEnv: string,
     readonly businessBlockedRegions: readonly RegionCode[] = [],
   ) {
     super(
-      `SANCTIONS SCREENING IS NOT CONFIGURED (§24 Lane A) and APP_ENV=${appEnv}. Refusing to start.\n\n` +
+      `SANCTIONS SCREENING IS NOT CONFIGURED (§24 Lane A) and APP_ENV=${appEnv} (${SCREENING_REFUSE_UNCONFIGURED}). Refusing to start.\n\n` +
         `The screening MECHANISM works; it has no list to screen against, so every region resolves to ` +
         `allowed and no call site, log line or dashboard can tell that apart from a region that was ` +
         `checked and cleared. Serving traffic in that state means telling users they were screened when ` +
@@ -811,6 +1014,10 @@ export function assertScreeningConfigured(
   const enforced = (SCREENING_ENFORCED_ENVS as readonly string[]).includes(appEnv);
   if (enforced && list.declaration === 'unset') {
     throw new UnscreenedJurisdictionError(appEnv, status.businessBlockedRegions);
+  }
+  const posture = evaluateScreeningMoneyPosture(list, appEnv);
+  if (!posture.allowed) {
+    throw new ScreeningMoneyPostureError(appEnv, posture.code, posture.grade);
   }
   return status;
 }

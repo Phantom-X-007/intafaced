@@ -98,10 +98,38 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
-   * Production listing of forex/commodity without fiat settlement (D-S-05).
-   * Not a symbol to drop forever if the operator later enables rails — BadRequest.
+   * Schedule key not in `TRADING_SCHEDULES` — misconfiguration, not a weekend.
+   * BadRequest so bots do not retry Monday expecting the same key to work.
+   */
+  'trade.unknown_schedule': { ccxt: 'BadRequest', status: 400 },
+  /** `asset_class` outside the instrument-model authority. */
+  'trade.unknown_asset_class': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Production listing/place of forex/commodity refuse-closed at socket.forex-settlement
+   * (D26-P1-T7 / T9 — needs D26-P0-05 + fiat settle rails; never invent settlement).
+   * Not a symbol to drop forever if the owner later closes the socket — BadRequest.
    */
   'trade.unsettled_asset_class_listing': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Options listing refused: D26-P0-05 settlement asset law unset (SOCKET §13).
+   * BadRequest — operator publishes ADR then stamps TRADE_OPTIONS_SETTLEMENT_ASSET_LAW;
+   * not a symbol to drop. Never invent live set / settlement asset / refuse matrix.
+   */
+  'trade.options_settlement_law_unset': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Options listing refused: D7 settlement fixing not configured.
+   * BadRequest — operator sets TRADE_OPTIONS_SETTLEMENT_FIXING; not a symbol to drop.
+   */
+  'trade.options_fixing_unconfigured': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Options half-list (missing strike/type/expiry) or terms on non-options kind.
+   */
+  'trade.options_terms_incomplete': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Real-money futures list/enable refused: insurance fund empty (DIRECTION:33).
+   * BadRequest — operator must capitalise the fund; not a symbol to drop forever.
+   */
+  'trade.insurance_fund_empty': { ccxt: 'BadRequest', status: 400 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },
@@ -120,6 +148,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.otc_quote_expired': { ccxt: 'InvalidOrder', status: 409 },
   'trade.otc_last_look_forbidden': { ccxt: 'InvalidOrder', status: 409 },
   'trade.otc_quote_missing': { ccxt: 'OrderNotFound', status: 404 },
+  'trade.otc_already_settled': { ccxt: 'InvalidOrder', status: 409 },
 
   // ── The order itself is malformed: fix it, then resubmit ──────────────────
   'trade.order_type_unsupported': { ccxt: 'InvalidOrder', status: 400 },
@@ -128,6 +157,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.below_min_notional': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_missing_id': { ccxt: 'BadRequest', status: 400 },
+  /** Place without clientOrderId — permanent fix for the request shape. */
+  'trade.client_order_id_required': { ccxt: 'InvalidOrder', status: 400 },
   /**
    * Identity S2S ownership consult failed. Retryable — same posture as
    * `trade.perks_unavailable`: we will not guess ownership while identity is down.
@@ -194,15 +225,26 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.algo_duplicate_id': { ccxt: 'InvalidOrder', status: 409 },
   'trade.algo_bad_state': { ccxt: 'InvalidOrder', status: 409 },
   'trade.algo_no_liquidity': { ccxt: 'OrderNotFillable', status: 400 },
+  'trade.algo_no_volume': { ccxt: 'OrderNotFillable', status: 400 },
+  'trade.algo_volume_immature': { ccxt: 'OrderNotFillable', status: 400 },
   'trade.algo_price_band': { ccxt: 'InvalidOrder', status: 400 },
   'trade.algo_mark_unusable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_mark_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_insufficient_balance': { ccxt: 'InsufficientFunds', status: 400 },
   'trade.algo_child_refused': { ccxt: 'InvalidOrder', status: 400 },
+  /**
+   * Child cancel failed and the parent was left non-cancelled. Caller must
+   * retry cancel — not treat the algo as dead (a cancel that does not cancel
+   * is worse than a refused cancel).
+   */
+  'trade.algo_child_cancel_failed': { ccxt: 'InvalidOrder', status: 409 },
   // The schedule outlived the session that authorised it — the venue cannot act
   // on the caller's behalf, which is an availability answer, not a bad request.
   'trade.algo_principal_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.algo_market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /** ADR 2026-08-08: resume would more than double the order's own duration. */
+  'trade.algo_resume_extends_too_far': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.algo_cancel_incomplete': { ccxt: 'InvalidOrder', status: 409 },
 };
 
 /**

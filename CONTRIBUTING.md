@@ -18,10 +18,16 @@ main ─────●──────●──────●─────
             ●──●    ●──●                 short-lived feature branches
 ```
 
-- `main` is **always deployable**. If `main` is red, that is the only thing anyone works on.
+- `main` is **always deployable**. Green tip is the goal; red tip is a defect, not a mode of work.
+- **If `main` is red** (doctrine gates, typecheck, tests, money paths): **one heal lane**, not a fleet freeze.
+  - First free agent claims `main-heal` in [`docs/LIVE-LANES.md`](docs/LIVE-LANES.md) (or the `blocked-main` label) and opens **one** fix PR.
+  - Do **not** open competing fix PRs for the same red.
+  - Other agents may keep **path-disjoint craft** in existing worktrees (swarm width stays). They **must not merge to `main`** until tip is green again (the heal PR is the merge that clears the tip).
+  - Telegram Nitro only if the heal is blocked on Class X / a human ruling — not for every red.
 - Every change is a **short-lived branch → PR → merge**. No exceptions, including for "tiny" changes.
 - **No long-lived branches.** A branch older than ~2 days is a merge conflict waiting to happen. Split the work instead.
 - **No direct pushes to `main`.**
+- **Trunk CI finishes every merge.** `ci.yml` does **not** cancel in-progress runs on `main` (PR branches still cancel superseding pushes). Unlimited parallel ship stays; the trunk signal must not be sacrificed to a cancel storm.
 
 ### How "no direct pushes" is actually enforced
 
@@ -177,11 +183,11 @@ Run the same thing locally before pushing. It is **required** — not to save an
 pnpm verify    # build · typecheck · test · DoD gate
 ```
 
-**No CI budget, no throttle.** This repo is public and GitHub Actions on standard runners are free and unlimited for it. Open the PR when the unit is done; never sit on finished work to keep a run count down. There is no PR cap and no review gate on how many you open. (The old "Actions thrift" law was deleted 2026-08-07 — retirement note in [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).) Coordination-only PRs stay banned for noise, not cost.
+**No CI budget, no throttle.** This repo is public and GitHub Actions on standard runners are free and unlimited for it. Open the PR when the unit is done; never sit on finished work to keep a run count down. There is no PR cap and no review gate on how many you open. (Old Actions spend thrift deleted 2026-08-07 — [`docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).) Coordination-only PRs stay banned for noise, not cost.
 
 Because merging is not _blocked_ on CI (see §1), reading the checks before you approve is a real responsibility rather than a formality. A green tick you did not look at is the same as no CI at all.
 
-**If `main` goes red, fixing it is the highest priority work in the repo.** Not "after this PR". Now.
+**If `main` goes red, healing it is the highest-priority _merge_ work in the repo** — claimed as a single `main-heal` lane (see §1). Not five agents rewriting the same gate. Other path-disjoint craft may continue in worktrees; **no product merges onto a red tip.**
 
 ---
 

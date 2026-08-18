@@ -21,6 +21,17 @@ import {
 } from './auth/webauthn.js';
 
 /**
+ * Code for the next TOTP step (still inside the ±1 verify window).
+ * Enrol confirm burns the current step; subsequent login/step-up must use a
+ * later step without waiting a wall-clock 30s.
+ */
+function totpNext(secret: string): string {
+  const step = 30;
+  const counter = Math.floor(Math.floor(Date.now() / 1000) / step);
+  return totp(secret, { at: new Date((counter + 1) * step * 1000) });
+}
+
+/**
  * svc-identity against real Postgres.
  *
  * This file also carries the §4.4 Phase 1 exit criteria:
@@ -152,7 +163,9 @@ if (!available) {
 
   const bus = new MemoryEventBus('svc-identity');
   const rank = new RankService(db.sql, bus);
-  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig);
+  // 32-byte test key so confirmTotpEnrolment can seal secrets at rest.
+  const totpSecretKeyMaterial = randomBytes(32).toString('base64');
+  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
   await rank.seedTiers();
 
   let counter = 0;
@@ -302,13 +315,53 @@ if (!available) {
       const after = await db.sql<Array<{ totp_secret: string | null }>>`
         SELECT totp_secret FROM users WHERE id = ${session.userId}
       `;
-      expect(after[0]!.totp_secret).toBe(secret);
+      // Sealed at rest — never store base32 plaintext in the column.
+      expect(after[0]!.totp_secret).not.toBe(secret);
+      expect(after[0]!.totp_secret).toMatch(/^enc:v1:/);
+      expect(after[0]!.totp_secret).not.toContain(secret);
     });
 
     it('rejects a wrong confirmation code', async () => {
       const session = await register();
       const { secret } = await auth.startTotpEnrolment(session.userId);
       await expect(auth.confirmTotpEnrolment(session.userId, secret, '000000')).rejects.toMatchObject({ code: 'auth.mfa_invalid' });
+    });
+
+    it('completes enrolment when start and confirm hit different AuthService instances (multi-pod)', async () => {
+      // Two services share SQL + key — models two identity pods behind a LB.
+      const authB = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
+      const session = await register();
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+
+      // Pending must not live only in pod-A process memory.
+      await authB.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      const after = await db.sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM users WHERE id = ${session.userId}
+      `;
+      expect(after[0]!.totp_secret).toMatch(/^enc:v1:/);
+
+      // Pending is single-use — second confirm fails closed.
+      await expect(authB.confirmTotpEnrolment(session.userId, secret, totpNext(secret))).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+    });
+
+    it('wrong secret on confirm does not burn a legitimate pending enrolment', async () => {
+      const session = await register();
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+      const wrongSecret = secret === 'A'.repeat(32) ? 'B'.repeat(32) : 'A'.repeat(32);
+
+      await expect(auth.confirmTotpEnrolment(session.userId, wrongSecret, totp(wrongSecret))).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      // Real secret still works after the mismatch attempt.
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+      const after = await db.sql<Array<{ totp_secret: string | null }>>`
+        SELECT totp_secret FROM users WHERE id = ${session.userId}
+      `;
+      expect(after[0]!.totp_secret).toMatch(/^enc:v1:/);
     });
 
     it('then requires the code at login, and marks the session mfa', async () => {
@@ -325,9 +378,34 @@ if (!available) {
         code: 'auth.mfa_invalid',
       });
 
-      const withMfa = await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: totp(secret) });
+      // Confirm burned the enrol step — login needs the next window step.
+      const withMfa = await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: totpNext(secret) });
       const principal = await verifyAccessToken(withMfa.accessToken, tokenConfig);
       expect(principal.mfa).toBe(true);
+    });
+
+    it('refuses a TOTP code that was already consumed in this window (anti-replay)', async () => {
+      const handle = unique();
+      const session = await auth.register({ handle, email: `${handle}@example.com`, password: 'correct horse battery staple' });
+      const { secret } = await auth.startTotpEnrolment(session.userId);
+      await auth.confirmTotpEnrolment(session.userId, secret, totp(secret));
+
+      const code = totpNext(secret);
+      await auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: code });
+
+      // Same code must not buy a second session (or a step-up) inside the window.
+      await expect(auth.login({ identifier: handle, password: 'correct horse battery staple', totpCode: code })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      const live = await register();
+      const { secret: s2 } = await auth.startTotpEnrolment(live.userId);
+      await auth.confirmTotpEnrolment(live.userId, s2, totp(s2));
+      const stepCode = totpNext(s2);
+      await auth.stepUp({ userId: live.userId, sessionId: live.sessionId, totpCode: stepCode });
+      await expect(auth.stepUp({ userId: live.userId, sessionId: live.sessionId, totpCode: stepCode })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
     });
 
     it('stores hashed recovery codes on confirm and redeems once at login (ID-P1-1)', async () => {
@@ -374,11 +452,11 @@ if (!available) {
       `;
       expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length - 1);
 
-      // Live TOTP still works after a recovery login.
+      // Live TOTP still works after a recovery login (next step — enrol burned current).
       const withTotp = await auth.login({
         identifier: handle,
         password: 'correct horse battery staple',
-        totpCode: totp(secret),
+        totpCode: totpNext(secret),
       });
       expect((await verifyAccessToken(withTotp.accessToken, tokenConfig)).mfa).toBe(true);
     });
@@ -447,6 +525,28 @@ if (!available) {
       await expect(auth.confirmWebauthnAuthentication(handle, authenticator.assertionResponse(options.challenge))).rejects.toMatchObject({
         code: 'auth.webauthn_not_enrolled',
       });
+    });
+
+    it('removes an enrolled credential and will not let a stranger retire it', async () => {
+      const owner = await register();
+      const stranger = await register();
+      const authenticator = softAuthenticator();
+      const options = await auth.startWebauthnRegistration(owner.userId);
+      const enrolled = await auth.confirmWebauthnRegistration(owner.userId, authenticator.registrationResponse(options.challenge));
+
+      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(1);
+      // Foreign principal: same shape as apiKeys.revoke — false, no leak.
+      expect(await auth.removeWebauthnCredential(stranger.userId, enrolled.credentialId)).toBe(false);
+      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(1);
+
+      expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(true);
+      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(0);
+      expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(false);
+
+      // Assertion path is gone for that key.
+      const handle = (await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${owner.userId}`)[0]!.handle;
+      const authOptions = await auth.startWebauthnAuthentication(handle);
+      expect(authOptions.allowCredentials).toEqual([]);
     });
   });
 
@@ -549,6 +649,23 @@ if (!available) {
           VALUES (${session.userId}, 'x', ${'h' + Date.now()}, 'ifc_x', ARRAY['trade:withdraw'])
         `,
       ).rejects.toThrow(/api_keys_no_withdraw_ck/);
+
+      // pay:payout is interactive-only too (§9) — same CHECK must refuse it.
+      await expect(
+        auth.createApiKey({
+          userId: session.userId,
+          name: 'payout-bot',
+          scopes: ['pay:payout'],
+          grantorScopes: SESSION_SCOPES,
+        }),
+      ).rejects.toThrow(/interactive/);
+
+      await expect(
+        db.sql`
+          INSERT INTO api_keys (user_id, name, key_hash, key_prefix, scopes)
+          VALUES (${session.userId}, 'pay_x', ${'hp' + Date.now()}, 'ifc_p', ARRAY['pay:payout'])
+        `,
+      ).rejects.toThrow(/api_keys_no_withdraw_ck/);
     });
 
     it('stops accepting a revoked or expired key', async () => {
@@ -580,6 +697,65 @@ if (!available) {
       const { id } = await auth.createApiKey({ userId: owner.userId, name: 'mine', scopes: ['trade:read'], grantorScopes: SESSION_SCOPES });
 
       expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
+    });
+
+    it('freezeIdentity bulk-revokes API keys and stops exchange', async () => {
+      const session = await register();
+      const { key, id } = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      expect(await auth.verifyApiKey(key)).not.toBeNull();
+
+      const result = await auth.freezeIdentity(session.userId);
+      expect(result).toMatchObject({ userId: session.userId, status: 'frozen', apiKeysRevoked: 1 });
+
+      const listed = await auth.listApiKeys(session.userId);
+      expect(listed.find((k) => k.id === id)?.revoked).toBe(true);
+      expect(await auth.verifyApiKey(key)).toBeNull();
+      await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+    });
+
+    it('honours domain_whitelist on exchange (empty = open; foreign origin refused)', async () => {
+      const session = await register();
+
+      // Empty whitelist (server bots): exchange without origin still works.
+      const open = await auth.createApiKey({
+        userId: session.userId,
+        name: 'open-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      await expect(auth.exchangeApiKey(open.key)).resolves.toMatchObject({ userId: session.userId });
+      await expect(auth.exchangeApiKey(open.key, 'https://evil.example')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+
+      // Non-empty whitelist: allowed origin passes; foreign / missing refuse.
+      const locked = await auth.createApiKey({
+        userId: session.userId,
+        name: 'browser-key',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        domainWhitelist: ['app.example.com', 'https://partner.example'],
+      });
+      await expect(auth.exchangeApiKey(locked.key, 'https://app.example.com')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+      await expect(auth.exchangeApiKey(locked.key, 'https://partner.example/path')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+      await expect(auth.exchangeApiKey(locked.key, 'https://evil.example')).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+      await expect(auth.exchangeApiKey(locked.key)).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+      await expect(auth.exchangeApiKey(locked.key, null)).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
     });
   });
 
@@ -614,6 +790,23 @@ if (!available) {
       expect(rows[0]!.revoked).toBe(true);
     });
 
+    it('freezeIdentity soft-revokes every sub-account and does not un-revoke on thaw', async () => {
+      const session = await register();
+      const a = await auth.createSubAccount(session.userId, 'a');
+      const b = await auth.createSubAccount(session.userId, 'b');
+
+      const frozen = await auth.freezeIdentity(session.userId);
+      expect(frozen.subAccountsRevoked).toBe(2);
+      const listed = await auth.listSubAccounts(session.userId);
+      expect(listed.every((s) => s.revoked)).toBe(true);
+
+      await auth.unfreezeIdentity(session.userId);
+      const afterThaw = await auth.listSubAccounts(session.userId);
+      // Explicit reopen only — freeze cascade is not a soft toggle for books.
+      expect(afterThaw.find((s) => s.id === a.id)?.revoked).toBe(true);
+      expect(afterThaw.find((s) => s.id === b.id)?.revoked).toBe(true);
+    });
+
     it('will not let one user revoke another user’s sub-account', async () => {
       const owner = await register();
       const attacker = await register();
@@ -642,6 +835,48 @@ if (!available) {
       });
 
       await expect(auth.getSubAccountOwnership('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
+    });
+
+    describe('assertSubAccountOwned — single-row ownership at the door', () => {
+      it('accepts a live partition the caller owns', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'bot');
+        await expect(auth.assertSubAccountOwned(owner.userId, a.id)).resolves.toEqual({
+          id: a.id,
+          parentUserId: owner.userId,
+        });
+      });
+
+      it('refuses a missing id — never defaults to primary', async () => {
+        const owner = await register();
+        await expect(auth.assertSubAccountOwned(owner.userId, null)).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+        await expect(auth.assertSubAccountOwned(owner.userId, '')).rejects.toMatchObject({
+          code: 'auth.sub_account_required',
+        });
+      });
+
+      it('refuses foreign and missing with the same denied code', async () => {
+        const owner = await register();
+        const other = await register();
+        const theirs = await auth.createSubAccount(other.userId, 'theirs');
+        await expect(auth.assertSubAccountOwned(owner.userId, theirs.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_denied',
+        });
+        await expect(auth.assertSubAccountOwned(owner.userId, '00000000-0000-4000-8000-000000000099')).rejects.toMatchObject({
+          code: 'auth.sub_account_denied',
+        });
+      });
+
+      it('refuses a revoked partition', async () => {
+        const owner = await register();
+        const a = await auth.createSubAccount(owner.userId, 'dead');
+        await auth.revokeSubAccount(owner.userId, a.id);
+        await expect(auth.assertSubAccountOwned(owner.userId, a.id)).rejects.toMatchObject({
+          code: 'auth.sub_account_revoked',
+        });
+      });
     });
 
     describe('assertSubAccountTransferDoor — ownership at the door', () => {
@@ -704,6 +939,28 @@ if (!available) {
         });
       });
     });
+
+    it('refuses create past the owner-published live-partition max', async () => {
+      const capped = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial, undefined, undefined, 2);
+      const handle = unique();
+      const owner = await capped.register({
+        handle,
+        email: `${handle}@example.com`,
+        password: 'correct horse battery staple',
+      });
+      await capped.createSubAccount(owner.userId, 'a');
+      await capped.createSubAccount(owner.userId, 'b');
+      await expect(capped.createSubAccount(owner.userId, 'c')).rejects.toMatchObject({
+        code: 'auth.sub_account_limit',
+      });
+      // Revoke frees a slot — the bound is live partitions, not historical rows.
+      const listed = await capped.listSubAccounts(owner.userId);
+      const first = listed.find((r) => !r.revoked)!;
+      await capped.revokeSubAccount(owner.userId, first.id);
+      await expect(capped.createSubAccount(owner.userId, 'reuse-slot')).resolves.toMatchObject({
+        id: expect.any(String),
+      });
+    });
   });
 
   describe('KYC', () => {
@@ -764,6 +1021,32 @@ if (!available) {
       expect(approved.reviewedBy).toBe(operator.userId);
       expect(approved.reviewedAt).toBeInstanceOf(Date);
       expect(await auth.kycTier(session.userId)).toBe('basic');
+    });
+
+    it('refuses an agent principal writing reviewed_by — service or API-key kid', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      await expect(
+        auth.approveKycRecord({
+          recordId: submitted.id,
+          reviewerId: operator.userId,
+          service: 'svc-agents',
+        }),
+      ).rejects.toMatchObject({ code: 'auth.kyc_agent_refused' });
+
+      const second = await auth.submitKyc({ userId: session.userId, tier: 'full', jurisdiction: 'DE' });
+      await expect(
+        auth.rejectKycRecord({
+          recordId: second.id,
+          reviewerId: operator.userId,
+          kid: 'agent-key',
+        }),
+      ).rejects.toMatchObject({ code: 'auth.kyc_agent_refused' });
+
+      expect(await auth.kycTier(session.userId)).toBe('none');
+      expect((await auth.getKycRecord(submitted.id))?.reviewedBy).toBeNull();
     });
 
     it('unblocks the custodial matrix rule that was blocking every new account', async () => {
@@ -847,9 +1130,119 @@ if (!available) {
       expect(await auth.kycTier(session.userId)).toBe('none');
     });
 
+    it('reject writes the operator on the row and still grants nothing', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      const rejected = await auth.rejectKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+      expect(rejected.status).toBe('rejected');
+      expect(rejected.reviewedBy).toBe(operator.userId);
+      expect(rejected.reviewedAt).toBeInstanceOf(Date);
+      expect(await auth.kycTier(session.userId)).toBe('none');
+
+      // Re-reject is a no-op (same stamps), not a second write.
+      const again = await auth.rejectKycRecord({ recordId: submitted.id, reviewerId: 'other-op' });
+      expect(again.reviewedBy).toBe(operator.userId);
+      expect(again.reviewedAt?.getTime()).toBe(rejected.reviewedAt?.getTime());
+    });
+
+    it('after reject, a new submit can open a fresh pending without touching the old row', async () => {
+      const session = await register();
+      const operator = await register();
+      const first = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.rejectKycRecord({ recordId: first.id, reviewerId: operator.userId });
+
+      const second = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      expect(second.id).not.toBe(first.id);
+      expect(second.status).toBe('pending');
+      expect(await auth.kycTier(session.userId)).toBe('none');
+
+      const rows = await db.sql<Array<{ id: string; status: string }>>`
+        SELECT id, status FROM kyc_records WHERE user_id = ${session.userId} ORDER BY created_at
+      `;
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.status).sort()).toEqual(['pending', 'rejected']);
+    });
+
+    it('refuses to reject an already-approved record', async () => {
+      const session = await register();
+      const operator = await register();
+      const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+
+      await expect(auth.rejectKycRecord({ recordId: submitted.id, reviewerId: operator.userId })).rejects.toMatchObject({
+        code: 'auth.kyc_not_pending',
+      });
+      expect(await auth.kycTier(session.userId)).toBe('basic');
+    });
+
     it('refuses an unknown record rather than creating one', async () => {
       await expect(auth.approveKycRecord({ recordId: '00000000-0000-4000-8000-000000000000', reviewerId: 'op' })).rejects.toMatchObject({
         code: 'auth.not_found',
+      });
+    });
+
+    /**
+     * The projection svc-support reads to ground a ticket (`accountStateSchema`).
+     *
+     * `users.status` was read by nine call sites in this service and returned by
+     * none — so the support desk had no way to know an account was frozen, and
+     * the only alternative was for it to keep its own copy. These hold the two
+     * halves that matter: the fact is now reachable, and it is the ONLY thing
+     * that is.
+     */
+    describe('account state for another service to read', () => {
+      it('an unknown user is null, never an account in good standing', async () => {
+        // If this ever answers `{status:'active'}` for an id that does not exist,
+        // every support answer about a missing account is a false reassurance.
+        expect(await auth.accountState('00000000-0000-4000-8000-000000000000')).toBeNull();
+      });
+
+      it('reports a fresh account as active at tier none', async () => {
+        const session = await register();
+        expect(await auth.accountState(session.userId)).toEqual({
+          userId: session.userId,
+          status: 'active',
+          kycTier: 'none',
+        });
+      });
+
+      it('reports a freeze — the fact a desk exists to be able to see', async () => {
+        const session = await register();
+        await auth.freezeIdentity(session.userId);
+        expect(await auth.accountState(session.userId)).toMatchObject({ status: 'frozen' });
+        await auth.unfreezeIdentity(session.userId);
+        expect(await auth.accountState(session.userId)).toMatchObject({ status: 'active' });
+      });
+
+      it('tracks the approved tier, never a merely submitted one', async () => {
+        const session = await register();
+        const operator = await register();
+        const submitted = await auth.submitKyc({ userId: session.userId, tier: 'basic', jurisdiction: 'DE' });
+        // Same split as `kycTier`: a submission grants nothing, so an operator
+        // must not see a tier the user has not actually been given.
+        expect(await auth.accountState(session.userId)).toMatchObject({ kycTier: 'none' });
+
+        await auth.approveKycRecord({ recordId: submitted.id, reviewerId: operator.userId });
+        expect(await auth.accountState(session.userId)).toMatchObject({ kycTier: 'basic' });
+      });
+
+      it('carries no balance, no document and no name — three keys and no more', async () => {
+        const session = await register();
+        const state = await auth.accountState(session.userId);
+        // §10 PII isolation and §0.6 in one assertion. The encrypted KYC vault
+        // (a688e231) must not gain a second read path through the support desk,
+        // and the shortness of this object is what prevents it.
+        expect(Object.keys(state!).sort()).toEqual(['kycTier', 'status', 'userId']);
+      });
+
+      it('a closed account reads as closed, not as missing', async () => {
+        const session = await register();
+        await db.sql`UPDATE users SET status = 'closed' WHERE id = ${session.userId}`;
+        // Distinct from the null above: "this account is closed" is something a
+        // support operator can act on; "no such account" is not.
+        expect(await auth.accountState(session.userId)).toMatchObject({ status: 'closed' });
       });
     });
 
@@ -903,9 +1296,9 @@ if (!available) {
    */
   describe('step-up elevation', () => {
     const enrol = async (userId: string) => {
-      const { secret } = await auth.startTotpEnrolment(userId);
+      const { secret, recoveryCodes } = await auth.startTotpEnrolment(userId);
       await auth.confirmTotpEnrolment(userId, secret, totp(secret));
-      return secret;
+      return { secret, recoveryCodes };
     };
 
     it('a normal session does NOT carry trade:withdraw', async () => {
@@ -918,9 +1311,13 @@ if (!available) {
 
     it('a valid TOTP code buys a token that carries trade:withdraw with mfa set', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
 
-      const elevated = await auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) });
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: totpNext(secret),
+      });
       const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
 
       expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
@@ -931,9 +1328,13 @@ if (!available) {
 
     it('the elevated token expires far sooner than a normal one', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
 
-      const elevated = await auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) });
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: totpNext(secret),
+      });
       const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
 
       // Five minutes, not the 900s a normal access token gets. An elevation that
@@ -964,24 +1365,229 @@ if (!available) {
 
     it('refuses to elevate off a session that has been logged out', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
       await auth.logoutAll(session.userId);
 
       // Otherwise a logout could be undone by whoever still holds the old
       // access token, which is precisely the party a logout is aimed at.
-      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
-        code: 'auth.session_invalid',
-      });
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totpNext(secret) })).rejects.toMatchObject(
+        {
+          code: 'auth.session_invalid',
+        },
+      );
     });
 
     it('refuses a frozen account', async () => {
       const session = await register();
-      const secret = await enrol(session.userId);
+      const { secret } = await enrol(session.userId);
       await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
 
-      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totp(secret) })).rejects.toMatchObject({
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: totpNext(secret) })).rejects.toMatchObject(
+        {
+          code: 'auth.account_frozen',
+        },
+      );
+    });
+
+    // W6-L12: recovery codes are second-factor credentials. Lost authenticator
+    // must still unlock trade:withdraw without re-enrolling TOTP first (login
+    // already redeems them; step-up did not).
+    it('a recovery code buys trade:withdraw step-up, burns once, and refuses replay', async () => {
+      const session = await register();
+      const { secret, recoveryCodes } = await enrol(session.userId);
+      const code = recoveryCodes[0]!;
+      expect(code).toMatch(/^[0-9A-F]{5}-[0-9A-F]{5}$/);
+
+      const before = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      const hashesBefore = normalizeStringList(before[0]!.recovery_code_hashes);
+      expect(hashesBefore.length).toBe(recoveryCodes.length);
+
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: code,
+      });
+      const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
+      expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
+      expect(principal.mfa).toBe(true);
+      const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
+      expect(lifetimeSeconds).toBeLessThanOrEqual(300);
+      expect(lifetimeSeconds).toBeGreaterThan(240);
+
+      const after = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(normalizeStringList(after[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length - 1);
+
+      // Single-use: same recovery code cannot elevate again.
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: code })).rejects.toMatchObject({
+        code: 'auth.mfa_invalid',
+      });
+
+      // Valid TOTP still steps up after a recovery burn (next step — enrol burned current).
+      const again = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        totpCode: totpNext(secret),
+      });
+      expect(hasScope((await verifyAccessToken(again.accessToken, tokenConfig)).scopes, 'trade:withdraw')).toBe(true);
+    });
+
+    it('refuses a recovery-shaped code that was never issued', async () => {
+      const session = await register();
+      await enrol(session.userId);
+
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          totpCode: 'AAAAA-BBBBB',
+        }),
+      ).rejects.toMatchObject({ code: 'auth.mfa_invalid' });
+    });
+
+    it('refuses recovery step-up on a frozen account before burning the code', async () => {
+      const session = await register();
+      const { recoveryCodes } = await enrol(session.userId);
+      const code = recoveryCodes[0]!;
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
+
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: code })).rejects.toMatchObject({
         code: 'auth.account_frozen',
       });
+
+      // Freeze check is before redeem — code must still be available after thaw.
+      await db.sql`UPDATE users SET status = 'active' WHERE id = ${session.userId}`;
+      const remaining = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length);
+    });
+
+    it('refuses recovery step-up on a dead session without burning the code', async () => {
+      const session = await register();
+      const { recoveryCodes } = await enrol(session.userId);
+      const code = recoveryCodes[0]!;
+      await auth.logoutAll(session.userId);
+
+      await expect(auth.stepUp({ userId: session.userId, sessionId: session.sessionId, totpCode: code })).rejects.toMatchObject({
+        code: 'auth.session_invalid',
+      });
+
+      // Re-login would be a new session; here we only assert the hash survived.
+      const remaining = await db.sql<Array<{ recovery_code_hashes: unknown }>>`
+        SELECT recovery_code_hashes FROM users WHERE id = ${session.userId}
+      `;
+      expect(normalizeStringList(remaining[0]!.recovery_code_hashes)).toHaveLength(recoveryCodes.length);
+    });
+
+    // W9-L09: #1382 shipped passkey step-up; router tests only stub AuthService.
+    // Soft-auth E2E pins the real path (challenge kind `step-up`, counter advance,
+    // trade:withdraw) so a login assertion cannot be replayed into withdraw.
+    const enrolPasskey = async (userId: string) => {
+      const authenticator = softAuthenticator();
+      const options = await auth.startWebauthnRegistration(userId);
+      await auth.confirmWebauthnRegistration(userId, authenticator.registrationResponse(options.challenge));
+      return authenticator;
+    };
+
+    it('a passkey-only account buys trade:withdraw via step-up (soft auth E2E)', async () => {
+      const session = await register();
+      // No TOTP — passkey is the only second factor (#1382 passkey-only path).
+      const authenticator = await enrolPasskey(session.userId);
+
+      const options = await auth.startWebauthnStepUp(session.userId);
+      expect(options.challenge).toBeTruthy();
+      expect(options.allowCredentials).toHaveLength(1);
+
+      const elevated = await auth.stepUp({
+        userId: session.userId,
+        sessionId: session.sessionId,
+        webauthn: authenticator.assertionResponse(options.challenge),
+      });
+      const principal = await verifyAccessToken(elevated.accessToken, tokenConfig);
+      expect(hasScope(principal.scopes, 'trade:withdraw')).toBe(true);
+      expect(principal.mfa).toBe(true);
+      const lifetimeSeconds = (elevated.expiresAt.getTime() - Date.now()) / 1000;
+      expect(lifetimeSeconds).toBeLessThanOrEqual(300);
+      expect(lifetimeSeconds).toBeGreaterThan(240);
+
+      // Counter advanced (cloned-authenticator detection path is live).
+      const stored = await db.sql<Array<{ webauthn_creds: Array<{ counter: number }> }>>`
+        SELECT webauthn_creds FROM users WHERE id = ${session.userId}
+      `;
+      expect(stored[0]!.webauthn_creds[0]!.counter).toBeGreaterThan(0);
+
+      // Step-up challenge is single-use.
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse(options.challenge),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
+    });
+
+    it('refuses a login assertion for withdraw step-up (kind isolation)', async () => {
+      const session = await register();
+      const handle = (await db.sql<Array<{ handle: string }>>`SELECT handle FROM users WHERE id = ${session.userId}`)[0]!.handle;
+      const authenticator = await enrolPasskey(session.userId);
+
+      // Login ceremony challenge must not elevate withdraw.
+      const loginOptions = await auth.startWebauthnAuthentication(handle);
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse(loginOptions.challenge),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_invalid' });
+
+      // Symmetric: step-up challenge must not mint a login session.
+      // Login path uses auth.invalid_credentials on purpose (same code as a
+      // wrong password — no ceremony-kind oracle for account enumeration).
+      const stepOptions = await auth.startWebauthnStepUp(session.userId);
+      await expect(
+        auth.confirmWebauthnAuthentication(handle, authenticator.assertionResponse(stepOptions.challenge)),
+      ).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+    });
+
+    it('refuses passkey step-up when no security key is enrolled', async () => {
+      const session = await register();
+      await expect(auth.startWebauthnStepUp(session.userId)).rejects.toMatchObject({
+        code: 'auth.webauthn_not_enrolled',
+      });
+      const authenticator = softAuthenticator();
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse('no-ceremony'),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.webauthn_not_enrolled' });
+    });
+
+    it('refuses passkey step-up on a frozen account and a dead session', async () => {
+      const session = await register();
+      const authenticator = await enrolPasskey(session.userId);
+
+      await db.sql`UPDATE users SET status = 'frozen' WHERE id = ${session.userId}`;
+      await expect(auth.startWebauthnStepUp(session.userId)).rejects.toMatchObject({
+        code: 'auth.account_frozen',
+      });
+      await db.sql`UPDATE users SET status = 'active' WHERE id = ${session.userId}`;
+
+      const options = await auth.startWebauthnStepUp(session.userId);
+      await auth.logoutAll(session.userId);
+      await expect(
+        auth.stepUp({
+          userId: session.userId,
+          sessionId: session.sessionId,
+          webauthn: authenticator.assertionResponse(options.challenge),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.session_invalid' });
     });
   });
 
@@ -1132,11 +1738,11 @@ if (!available) {
       const { secret } = await auth.startTotpEnrolment(registered.userId);
       await auth.confirmTotpEnrolment(registered.userId, secret, totp(secret));
 
-      // 3 · log in with the second factor
+      // 3 · log in with the second factor (next step — confirm burned current)
       const loggedIn = await auth.login({
         identifier: handle,
         password: 'correct horse battery staple',
-        totpCode: totp(secret),
+        totpCode: totpNext(secret),
       });
       expect((await verifyAccessToken(loggedIn.accessToken, tokenConfig)).mfa).toBe(true);
 

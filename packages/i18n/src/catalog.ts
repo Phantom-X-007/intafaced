@@ -130,6 +130,8 @@ export const en = {
   // ── notify · in-app inbox (title + body per kind; keys stored on the row) ──
   'notify.trade.fill.title': 'Order filled',
   'notify.trade.fill.body': '{side} {qty} on {marketId} at {price}.',
+  'notify.trade.order.terminal.title': 'Order {status}',
+  'notify.trade.order.terminal.body': '{side} {qty} on {marketId} is {status}.',
   // Liquidation copy names only fields the payload guarantees are present.
   // Realised loss, mark price and liquidation price are all nullable on
   // `trade.position.updated`, so none of them appears here: a notification that
@@ -151,6 +153,10 @@ export const en = {
   'notify.identity.rank.updated.body': 'You moved from rank {previousRank} to rank {rank}.',
   'notify.token.stake.created.title': 'Stake locked',
   'notify.token.stake.created.body': '{amount} staked on the {tier} tier.',
+  'notify.agents.action.rejected.title': 'Agent action refused',
+  'notify.agents.action.rejected.body': 'A guardrail blocked {tool} ({refusalCode}).',
+  'notify.agents.action.completed.title': 'Agent action finished',
+  'notify.agents.action.completed.body': 'Your agent finished ({kind}).',
   'notify.bank.margin_call.title': 'Margin call on your loan',
   'notify.bank.margin_call.body':
     'Add {cureCollateralAmount} {collateralAssetId} before {graceExpiresAt} or part of your collateral may be sold.',
@@ -162,6 +168,9 @@ export const en = {
   'notify.channel.verify.title': 'Confirm this address',
   'notify.channel.verify.body': 'Your confirmation code is {code}. It expires in {minutes} minutes.',
   'notify.channel.footer': 'You are receiving this because you confirmed this address for account alerts.',
+  // v22.alerts — fire path uses these keys; missing catalog fell back to the key string.
+  'notify.alert.price.crossed.title': 'Price alert',
+  'notify.alert.price.crossed.body': '{marketId} crossed {direction} {targetPrice} (mark {markPrice}).',
 
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',
@@ -199,12 +208,61 @@ export const en = {
     'Paper drills never move real funds. Live orders do. Labels must stay honest — paper progress is never withdrawable balance.',
 
   // ── agents · grounded refuse copy ─────────────────────────────────────────
+  'agents.session.opened': 'Sovereign Intelligence session opened for {agent}.',
+  'agents.session.closed': 'Session closed. {steps} action(s) recorded.',
+  'agents.action.completed': 'The Neural Engine answered for “{task}”.',
+  'agents.action.executed': 'Ran {tool} inside your guardrails.',
+  'agents.usage.settled': 'Metered usage for this session settled: {amount} {asset}.',
+  'agents.usage.free': 'This session is on your included allowance — nothing was charged.',
+  'agents.refused.tool_not_declared': 'Refused: {tool} is not in this agent’s declared toolset, so it was not run.',
+  'agents.refused.task_not_allowed': 'Refused: “{task}” is not among this agent’s allowed tasks.',
+  'agents.refused.tool_call_limit': 'Refused: {tool} has already been used {limit} time(s) this session, which is its limit.',
+  'agents.refused.module_not_allowed': 'Refused: this agent is not permitted to act in {module}.',
+  'agents.refused.step_limit': 'Refused: this session has reached its limit of {limit} action(s).',
+  'agents.refused.spend_limit': 'Refused: this session has reached its spend limit of {limit} {asset}.',
+  'agents.refused.output_limit': 'Refused: the request asked for more output than this agent is allowed to produce.',
+  'agents.refused.approval_required': 'Held for your approval: {tool} needs you to confirm before it runs.',
+  'agents.refused.session_closed': 'Refused: this session is closed. Start a new one to continue.',
+  'agents.error.route_not_found': 'No Sovereign Intelligence route is configured for “{task}”.',
+  'agents.error.capability_unavailable': 'The Neural Engine cannot serve this kind of request right now.',
+  'agents.error.engine_unavailable': 'The Neural Engine is unavailable. Nothing was run and nothing was charged.',
+  'agents.error.window_sealed': 'This usage period is already settled.',
+  'agents.error.request_id_replay':
+    'That request was already processed for this session — start a new request rather than reusing the same id.',
+  'agents.scanner.empty': 'No markets were provided to rank.',
+  'agents.scanner.unavailable': 'Market signals are unavailable right now — quotes are missing or too old to trust.',
+  'agents.scanner.tier_closed':
+    'This Sovereign Intelligence scanner action is closed until product tier rules are published — nothing was invented or ranked.',
+  'agents.merchant.empty': 'No approval-rate samples were provided to watch.',
+  'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
+  'agents.copy_intel.empty': 'No leader performance samples were provided.',
+  'agents.copy_intel.unavailable': 'Leader stats are unavailable — samples are incomplete or the window is invalid.',
+  'agents.navigator.empty': 'Nothing was asked, so nothing was looked up and nothing was charged.',
   'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
-  'agents.scanner.empty': 'No markets to rank right now.',
-  'agents.scanner.unavailable': 'Market ranking is unavailable — quotes are missing, stale, or the market plane is dark.',
-  'agents.refused.tool_not_declared': 'That tool is not allowed for this agent.',
-  'agents.support.unavailable': 'Support desk data is unavailable — the agent will not invent answers.',
+  'agents.navigator.tier_closed':
+    'This Sovereign Intelligence navigator action is closed until product tier rules are published — nothing was invented or run.',
+  'agents.support.empty': 'Nothing was asked, so nothing was looked up and nothing was charged.',
+  'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
   'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',
+  'agents.support.tier_closed':
+    'This Sovereign Intelligence support action is closed until product tier rules are published — nothing was read or answered.',
+  'agents.support.escalated': 'This one goes to a person — a support ticket has the answer, and nothing was guessed here.',
+
+  // ── admin · operator console (status / kill-switch / banner) ──────────────
+  'admin.console.reach.module': 'halt a module (stop new commitments on one market)',
+  'admin.console.reach.treasury': 'freeze the ledger (stop ALL value movement platform-wide)',
+  'admin.console.unconfigured.one': 'This console cannot {reach} — {name} is not set on this app.',
+  'admin.console.unconfigured.many': 'This console cannot {reach} — {names} are not set on this app.',
+  'admin.console.banner.chip.none': 'Cannot halt anything',
+  'admin.console.banner.chip.partial': 'Partly unconfigured',
+  'admin.console.banner.title.none': 'This console cannot halt anything. Every switch below is inert.',
+  'admin.console.banner.title.partial': 'This console cannot reach every platform switch.',
+  'admin.console.banner.item.lead': 'Cannot {reach} — set',
+  'admin.console.banner.disclaimer':
+    'Nothing here is a value: these are variable names on the admin container. See docs/OWNER-OPS-CHECKLIST-2026-07-31.md §7.',
+  'admin.console.plane.reachable': 'Control plane: reachable',
+  'admin.console.plane.unconfigured': 'Control plane: not configured',
+  'admin.console.plane.unreachable': 'Control plane: unreachable',
 } as const;
 
 /** The English catalog's exact shape — the thing every other language is measured against. */

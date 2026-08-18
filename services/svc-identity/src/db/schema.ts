@@ -1,5 +1,25 @@
-import { bigint, bigserial, boolean, index, integer, jsonb, pgSchema, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  boolean,
+  customType,
+  index,
+  integer,
+  jsonb,
+  pgSchema,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { citext, createdAt, tstz, updatedAt } from '@intafaced/db';
+
+/** Postgres bytea ↔ Buffer (KYC document ciphertext / nonce). */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 /**
  * IDENTITY (§4.1).
@@ -31,6 +51,12 @@ export const users = identity.table(
      */
     totpSecret: text('totp_secret'),
     totpEnrolledAt: tstz('totp_enrolled_at'),
+    /**
+     * Last TOTP counter that successfully authenticated (login / step-up / enrol confirm).
+     * Null until first use. Replay of the same step is refused so a captured code
+     * cannot be reused inside the ±1-step validity window.
+     */
+    totpLastStep: bigint('totp_last_step', { mode: 'bigint' }),
     /** SHA-256 hashes of single-use recovery codes; plaintext never stored. */
     recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().default([]),
 
@@ -97,6 +123,67 @@ export const kycRecords = identity.table(
     /** The operator queue: every record waiting on a human, oldest first. */
     index('kyc_pending_idx').on(t.status, t.createdAt),
   ],
+);
+
+/**
+ * §10 encrypted document store — bytes never land on kyc_records.
+ * Opaque id may be stored as kyc_records.provider_ref by operator tooling.
+ */
+export const kycDocuments = identity.table(
+  'kyc_documents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    contentType: text('content_type').notNull(),
+    byteLength: integer('byte_length').notNull(),
+    ciphertext: bytea('ciphertext').notNull(),
+    nonce: bytea('nonce').notNull(),
+    keyId: text('key_id').notNull().default('v1'),
+    /**
+     * Operator (or tooling principal) who put the ciphertext.
+     * Text not FK — same reason as kyc_records.reviewed_by: admin console
+     * identities may not be platform users. Never holds document bytes.
+     */
+    storedBy: text('stored_by'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('kyc_documents_user_idx').on(t.userId, t.createdAt)],
+);
+
+/**
+ * WebAuthn ceremony challenges — durable multi-pod store.
+ * take() is single-use (DELETE). userId null when authentication target unknown.
+ */
+export const webauthnChallenges = identity.table(
+  'webauthn_challenges',
+  {
+    challenge: text('challenge').primaryKey(),
+    kind: text('kind').notNull(),
+    userId: uuid('user_id'),
+    expiresAt: tstz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('webauthn_challenges_expires_idx').on(t.expiresAt)],
+);
+
+/**
+ * Pending TOTP enrolment — durable multi-pod store (migration 0012).
+ * secret_hash only (never base32 secret). takeIfSecretHash is single-use.
+ */
+export const totpPendingEnrolments = identity.table(
+  'totp_pending_enrolments',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    secretHash: text('secret_hash').notNull(),
+    recoveryCodeHashes: jsonb('recovery_code_hashes').notNull().default([]),
+    expiresAt: tstz('expires_at').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('totp_pending_enrolments_expires_idx').on(t.expiresAt)],
 );
 
 /**
@@ -228,4 +315,27 @@ export const subAccounts = identity.table(
   (t) => [index('sub_accounts_parent_idx').on(t.parentUserId), index('sub_accounts_parent_revoked_idx').on(t.parentUserId, t.revoked)],
 );
 
-export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts };
+/**
+ * Drop 0 tease waitlist — email capture + FIFO referral queue.
+ * Not the affiliate tree (`referral_edges`). No rewards column on purpose.
+ */
+export const waitlistEntries = identity.table(
+  'waitlist_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: citext('email').notNull(),
+    referralCode: text('referral_code').notNull(),
+    referredBy: text('referred_by'),
+    position: bigserial('position', { mode: 'number' }).notNull(),
+    referredCount: integer('referred_count').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('waitlist_entries_email_idx').on(t.email),
+    uniqueIndex('waitlist_entries_code_idx').on(t.referralCode),
+    uniqueIndex('waitlist_entries_position_idx').on(t.position),
+    index('waitlist_entries_referred_by_idx').on(t.referredBy),
+  ],
+);
+
+export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts, waitlistEntries };

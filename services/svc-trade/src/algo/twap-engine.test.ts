@@ -297,9 +297,376 @@ describe('TwapEngine — D-S-04 done bar', () => {
   });
 });
 
-describe('refuse unsupported kinds at call sites', () => {
-  it('documents VWAP/POV out of v1', () => {
-    // Creation refusal lives on TradeService.createTwap — engine only accepts TWAP shape.
-    expect(baseInput().side).toBe('buy');
+/**
+ * ADR 2026-08-08 — the interval is the promise.
+ *
+ * Done bar items 1–6. Item 1 / the measured defect: a 10-slice one-per-minute
+ * TWAP paused 20 minutes and resumed placed 9 slices in ~8s on the unfixed
+ * engine. These tests must fail if due-time reverts to startedAt-only.
+ */
+describe('TwapEngine — ADR 2026-08-08 overdue re-space', () => {
+  const INTERVAL = 60_000;
+  const DURATION = 600_000; // 10 slices
+  const TOTAL = parseAmount('0.010'); // 10 lots of 0.001
+
+  function overdueInput(over: Partial<CreateTwapInput> = {}): CreateTwapInput {
+    return baseInput({
+      totalQty: TOTAL,
+      durationMs: DURATION,
+      sliceIntervalMs: INTERVAL,
+      ...over,
+    });
+  }
+
+  it('1+6: overdue resume never places two children less than sliceIntervalMs apart (fails on startedAt-only due)', async () => {
+    // Pause long enough that many slices are overdue under startedAt+index*interval
+    // (old engine burst) but under 2× duration so resume is still legal.
+    // ADR's 20-min pause on a 10-min order is refused by item 4 instead.
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, overdueInput(), LOT);
+    expect(parent.slicesPlanned).toBe(10);
+
+    await engine.tick(parent.id); // slice 0
+    expect(ports.placed).toHaveLength(1);
+
+    engine.pause(USER, parent.id);
+    ports.advance(5 * 60_000); // 5 minutes overdue — multi-interval, still ≤ 2×
+    const resumed = engine.resume(USER, parent.id);
+    expect(resumed.scheduleStretchReason).toBe('user_pause');
+
+    // Burst window: many ticks in ~8s of wall clock — unfixed engine placed all due.
+    for (let i = 0; i < 20; i++) {
+      await engine.tick(parent.id);
+      ports.advance(400);
+    }
+    // Exactly one more place (the resume instant), not a market-order burst.
+    expect(ports.placed).toHaveLength(2);
+
+    // After a full interval, one more is legal.
+    ports.advance(INTERVAL);
+    await engine.tick(parent.id);
+    expect(ports.placed).toHaveLength(3);
+
+    const children = engine.get(parent.id)!.children;
+    for (let i = 1; i < children.length; i++) {
+      const gap = children[i]!.placedAt.getTime() - children[i - 1]!.placedAt.getTime();
+      expect(gap).toBeGreaterThanOrEqual(INTERVAL);
+    }
+  });
+
+  it('2: overdue slices execute (not dropped) — full planned qty is still placed', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, overdueInput(), LOT);
+    const plan = engine.planOf(parent.id)!;
+    const plannedSum = plan.reduce((a, b) => a + b, 0n);
+
+    await engine.tick(parent.id);
+    engine.pause(USER, parent.id);
+    ports.advance(5 * 60_000);
+    engine.resume(USER, parent.id);
+
+    // Drive remaining schedule with correct spacing.
+    for (let i = 0; i < 30; i++) {
+      await engine.tick(parent.id);
+      ports.advance(INTERVAL);
+    }
+
+    const after = engine.get(parent.id)!;
+    expect(after.status).toBe('completed');
+    expect(after.children).toHaveLength(plan.length);
+    const placedQty = after.children.reduce((a, c) => a + c.qty, 0n);
+    expect(placedQty).toBe(plannedSum);
+    expect(placedQty).toBe(TOTAL); // no drop on this lot-aligned total
+  });
+
+  it('3: resume returns a new projectedEndsAt that differs from the original after a pause', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, overdueInput(), LOT);
+    const originalEnd = parent.projectedEndsAt.getTime();
+
+    await engine.tick(parent.id);
+    engine.pause(USER, parent.id);
+    ports.advance(5 * 60_000);
+    const resumed = engine.resume(USER, parent.id);
+
+    expect(resumed.projectedEndsAt.getTime()).toBeGreaterThan(originalEnd);
+    // Remaining 9 slices from resume instant: now + 9 * interval
+    const expected = ports.now().getTime() + 9 * INTERVAL;
+    expect(resumed.projectedEndsAt.getTime()).toBe(expected);
+  });
+
+  it('4: resume exceeding 2× original duration is refused; parent stays paused', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    // duration 60s, 2 slices @ 30s — pause long enough that remaining * interval from now
+    // makes span from startedAt > 2 * durationMs.
+    const parent = engine.create(
+      USER,
+      baseInput({
+        totalQty: parseAmount('0.002'),
+        durationMs: 60_000,
+        sliceIntervalMs: 30_000,
+      }),
+      LOT,
+    );
+    // Do not place any slices — remaining = 2.
+    // projectedEnd = now+pause + 2*30s; span = pause + 60s; need span > 120s → pause > 60s.
+    // Actually: startedAt = t0, pause at t0, advance 90s, resume at t0+90s.
+    // projectedEnd = t0+90s + 2*30s = t0+150s; span = 150s; 2*duration = 120s → refuse.
+    engine.pause(USER, parent.id);
+    ports.advance(90_000);
+
+    expect(() => engine.resume(USER, parent.id)).toThrow(TradeError);
+    try {
+      engine.resume(USER, parent.id);
+    } catch (err) {
+      expect(err).toBeInstanceOf(TradeError);
+      expect((err as TradeError).code).toBe('trade.algo_resume_extends_too_far');
+    }
+    expect(engine.get(parent.id)!.status).toBe('paused');
+  });
+
+  it('5: tick outage (no user pause) sets scheduleStretchReason tick_outage, not user_pause', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, overdueInput(), LOT);
+    await engine.tick(parent.id);
+    expect(engine.get(parent.id)!.scheduleStretchReason).toBeNull();
+
+    // Advance past nextDueAt by more than one interval while still active.
+    ports.advance(INTERVAL * 3 + 1_000);
+    await engine.tick(parent.id);
+
+    const after = engine.get(parent.id)!;
+    expect(after.scheduleStretchReason).toBe('tick_outage');
+    expect(after.children).toHaveLength(2);
+    // Re-spaced: next due is now+interval, not a burst of remaining slices.
+    const placedBefore = ports.placed.length;
+    await engine.tick(parent.id);
+    expect(ports.placed).toHaveLength(placedBefore);
+  });
+
+  it('6: due check uses nextDueAt — startedAt far past with future nextDueAt stays idle', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, overdueInput(), LOT);
+    const plan = engine.planOf(parent.id)!;
+    const now = ports.now();
+
+    // Simulate a hydrate that would place under startedAt-only formula
+    // (startedAt epoch + index*interval is long past) but nextDueAt is future.
+    engine.hydrate(
+      {
+        ...parent,
+        startedAt: new Date(0),
+        nextDueAt: new Date(now.getTime() + INTERVAL),
+        nextSliceIndex: 1,
+        children: [
+          {
+            sliceIndex: 0,
+            orderId: 'order-0',
+            clientOrderId: `algo:${parent.id}:0`,
+            qty: plan[0]!,
+            placedAt: now,
+          },
+        ],
+        projectedEndsAt: new Date(now.getTime() + 9 * INTERVAL),
+        scheduleStretchReason: null,
+      },
+      plan,
+    );
+
+    const tick = await engine.tick(parent.id);
+    expect(tick).toEqual({ kind: 'idle', reason: 'ahead_of_schedule' });
+    expect(ports.placed).toHaveLength(0);
+  });
+});
+
+describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
+  it('A: status stays non-cancelled when any child cancel throws; both cancels still attempted', async () => {
+    const attempted: string[] = [];
+    const ports = makePorts({
+      cancelChild: async (orderId) => {
+        attempted.push(orderId);
+        if (orderId === 'order-1') {
+          throw new TradeError('matching down mid-cancel', 'trade.algo_child_cancel_failed');
+        }
+      },
+    });
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), LOT);
+    await engine.tick(parent.id);
+    ports.advance(2_000);
+    await engine.tick(parent.id);
+    expect(engine.get(parent.id)!.children).toHaveLength(2);
+
+    await expect(engine.cancel(USER, parent.id)).rejects.toMatchObject({
+      code: 'trade.algo_child_cancel_failed',
+    });
+    expect(engine.get(parent.id)!.status).not.toBe('cancelled');
+    // W4 C1: partial cancel pauses so the next tick cannot place more children.
+    expect(engine.get(parent.id)!.status).not.toBe('active');
+    expect(engine.get(parent.id)!.status).toBe('paused');
+    expect(engine.get(parent.id)!.haltReason).toBe('cancel_incomplete');
+    // Collect-all: both children were asked before the flip decision.
+    expect(attempted.sort()).toEqual(['order-0', 'order-1']);
+
+    ports.advance(2_000);
+    const after = await engine.tick(parent.id);
+    expect(after).toEqual({ kind: 'idle', reason: 'paused' });
+    expect(ports.placed).toHaveLength(2); // no third child
+
+    // Resume refused until re-cancel succeeds (adversarial Class M).
+    try {
+      engine.resume(USER, parent.id);
+      throw new Error('expected resume refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TradeError);
+      expect((e as TradeError).code).toBe('trade.algo_cancel_incomplete');
+    }
+  });
+
+  it('cancel-fail does not look like the parent died: still gettable, children live, not cancelled', async () => {
+    let durable: { status: string; haltReason: string | null } | undefined;
+    const ports = makePorts({
+      cancelChild: async () => {
+        throw new TradeError('matching down mid-cancel', 'trade.algo_child_cancel_failed');
+      },
+    });
+    const engine = new TwapEngine(ports, {
+      onChange: async (parent) => {
+        await new Promise((r) => setTimeout(r, 15));
+        durable = { status: parent.status, haltReason: parent.haltReason };
+      },
+    });
+    const parent = engine.create(USER, baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), LOT);
+    await engine.tick(parent.id);
+    expect(engine.get(parent.id)!.children).toHaveLength(1);
+
+    await expect(engine.cancel(USER, parent.id)).rejects.toMatchObject({
+      code: 'trade.algo_child_cancel_failed',
+    });
+
+    const live = engine.get(parent.id);
+    expect(live).toBeDefined();
+    expect(live!.status).not.toBe('cancelled');
+    expect(live!.status).not.toBe('completed');
+    expect(live!.status).not.toBe('active');
+    expect(live!.children).toHaveLength(1);
+    // Awaited onChange: durable park landed before the refuse, so a job host
+    // cannot still list this parent as active after cancel failed.
+    expect(durable).toEqual({ status: 'paused', haltReason: 'cancel_incomplete' });
+  });
+
+  it('A: parent flips cancelled only after every child cancel succeeds', async () => {
+    const order: string[] = [];
+    const ports = makePorts({
+      cancelChild: async (orderId) => {
+        order.push(`cancel:${orderId}`);
+      },
+    });
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(USER, baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), LOT);
+    await engine.tick(parent.id);
+    ports.advance(2_000);
+    await engine.tick(parent.id);
+
+    const cancelled = await engine.cancel(USER, parent.id);
+    expect(cancelled.status).toBe('cancelled');
+    expect(order).toContain('cancel:order-0');
+    expect(order).toContain('cancel:order-1');
+  });
+});
+
+describe('TwapEngine — tickAll isolation (W4 C2)', () => {
+  it('one parent throw does not starve the next active parent', async () => {
+    let n = 0;
+    const ports = makePorts({
+      randomId: () => {
+        n += 1;
+        return `algo-${n}`;
+      },
+      markFor: async (marketId) => {
+        if (marketId === 'm-bad') throw new Error('mark feed down');
+        return {
+          marketId,
+          price: parseAmount('50'),
+          asOf: new Date(1_700_000_000_000),
+          quality: 'mid' as const,
+        };
+      },
+    });
+    const engine = new TwapEngine(ports);
+    engine.create(
+      USER,
+      baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000, marketId: 'm-bad', symbol: 'BAD/USDT' }),
+      LOT,
+    );
+    const good = engine.create(
+      USER,
+      baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000, marketId: 'm-good', symbol: 'GOOD/USDT' }),
+      LOT,
+    );
+    await engine.tickAll();
+    // Bad parent threw; good parent still placed one child.
+    expect(engine.get(good.id)!.children).toHaveLength(1);
+    expect(ports.placed.length).toBe(1);
+  });
+});
+
+describe('VWAP and POV engines', () => {
+  it('VWAP sizes children from observed volume, not equal TWAP slices', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(
+      USER,
+      baseInput({
+        kind: 'vwap',
+        volumeProfile: [parseAmount('1'), parseAmount('3'), parseAmount('1'), parseAmount('1'), parseAmount('0')],
+      }),
+      LOT,
+    );
+    expect(parent.kind).toBe('vwap');
+    const plan = engine.planOf(parent.id)!;
+    expect(plan[0]).not.toBe(plan[1]);
+    const first = await engine.tick(parent.id);
+    expect(first.kind).toBe('placed');
+    if (first.kind === 'placed') expect(first.child.qty).toBe(plan[0]);
+  });
+
+  it('VWAP refuses an all-zero lookback rather than inventing equal slices', () => {
+    const engine = new TwapEngine(makePorts());
+    expect(() => engine.create(USER, baseInput({ kind: 'vwap', volumeProfile: [0n, 0n, 0n, 0n, 0n] }), LOT)).toThrow(/immature/);
+  });
+
+  it('POV places participation of observed interval volume; zero tape is a miss', async () => {
+    const ports = makePorts({
+      intervalTakerVolume: async () => parseAmount('1'),
+    });
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(
+      USER,
+      baseInput({ kind: 'pov', participationBps: 1_000, durationMs: 10_000, sliceIntervalMs: 2_000 }),
+      LOT,
+    );
+    expect(parent.kind).toBe('pov');
+    expect(parent.participationBps).toBe(1_000);
+    const placed = await engine.tick(parent.id);
+    expect(placed.kind).toBe('placed');
+    if (placed.kind === 'placed') {
+      // 1.0 * 1000bps = 0.10, remaining 0.010 → 0.010
+      expect(placed.child.qty).toBe(parseAmount('0.010'));
+    }
+
+    const quiet = makePorts({ intervalTakerVolume: async () => 0n });
+    const quietEngine = new TwapEngine(quiet);
+    const quietParent = quietEngine.create(USER, baseInput({ kind: 'pov', participationBps: 1_000, clientAlgoId: 'quiet' }), LOT);
+    const miss = await quietEngine.tick(quietParent.id);
+    expect(miss.kind).toBe('miss');
+    if (miss.kind === 'miss') expect(miss.miss.code).toBe('trade.algo_no_volume');
+    expect(quiet.placed).toHaveLength(0);
   });
 });

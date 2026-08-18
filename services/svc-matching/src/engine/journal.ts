@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import type { BookState, EngineOrder, EngineOrderType, MarketId, OrderId, OrderSide, TimeInForce } from './types.js';
@@ -18,9 +18,14 @@ import type { BookState, EngineOrder, EngineOrderType, MarketId, OrderId, OrderS
  *      the state verifiable.
  *
  *   2. BEFORE PROCESSING. The record is durable before the book moves. A crash
- *      between the two costs a duplicate replay of one input, which is
- *      idempotent (the order id is already live → `duplicate_order_id`). A
- *      crash the other way round would cost a fill nobody can reconstruct.
+ *      between the two costs a **replay of that input into an empty book**
+ *      (recovery rebuilds once from the journal; it does not re-emit bus
+ *      events). Safety is **not** "duplicate_order_id on live re-submit" —
+ *      that guard only covers **still-live** resting/stop ids (README).
+ *      Never-rests markets and fully filled ids are reusable by design; a
+ *      second live submit of the same id after the order is gone is a new
+ *      trade-side concern, not journal crash safety. A crash the other way
+ *      (book moved before journal) would cost a fill nobody can reconstruct.
  *
  * Amounts are decimal strings on disk. A journal is read years after it is
  * written, by processes that may not share this build — a scaled bigint is our
@@ -154,13 +159,30 @@ export class FileJournal implements EngineJournal {
   private records: JournalRecord[];
 
   constructor(readonly path: string) {
+    /**
+     * Crash mid-write can leave a partial last NDJSON line. `decodeAll` skips
+     * that residue so recovery can boot (#1520). But the torn bytes still sit
+     * on disk — opening O_APPEND without rewriting would glue the next durable
+     * append onto the tear, so a later boot either drops a real record or
+     * throws mid-file corruption and refuses recovery. Rewrite the decoded
+     * records as the clean durable body before any further append.
+     */
     this.records = existsSync(path) ? decodeAll(readFileSync(path, 'utf8')) : [];
+    rewriteClean(path, this.records);
     this.fd = openSync(path, 'a');
   }
 
   append(command: JournalCommand): JournalRecord {
     const record = { ...command, seq: this.records.length + 1 } as JournalRecord;
-    writeSync(this.fd, `${encode(record)}\n`);
+    const line = `${encode(record)}\n`;
+    const expected = Buffer.byteLength(line, 'utf8');
+    const written = writeSync(this.fd, line);
+    if (written !== expected) {
+      // Do not push to memory: a short write is not durable and must not look
+      // like an admitted input. The process dies or the caller retries; either
+      // way the on-disk body stays a complete prefix.
+      throw new Error(`short journal write: wrote ${written} of ${expected} bytes at ${this.path}`);
+    }
     fsyncSync(this.fd);
     this.records.push(record);
     return record;
@@ -179,11 +201,52 @@ export class FileJournal implements EngineJournal {
   }
 }
 
-function decodeAll(contents: string): JournalRecord[] {
+/** Replace the file with exactly the durable records (no torn tail residue). */
+function rewriteClean(path: string, records: readonly JournalRecord[]): void {
+  const body = records.length === 0 ? '' : `${records.map((r) => encode(r)).join('\n')}\n`;
+  writeFileSync(path, body, 'utf8');
+  // writeFileSync does not fsync. Durability of the rewrite matters: if we
+  // crash after truncating-away the partial line but before the clean body is
+  // on stable storage, recovery still boots (empty or older complete prefix)
+  // — never from glued garbage.
+  const fd = openSync(path, 'r+');
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Decode an NDJSON journal body.
+ *
+ * A crash mid-write can leave a partial last line (write started, fsync never
+ * finished). That is not corruption of history — it is an input that never
+ * became durable, so recovery must skip it and boot. A broken line in the
+ * middle of the file is real corruption and still throws.
+ */
+export function decodeAll(contents: string): JournalRecord[] {
+  const lines = contents.split('\n');
   const records: JournalRecord[] = [];
-  for (const line of contents.split('\n')) {
+  // Last element of split is often '' after a trailing newline — track the
+  // last non-empty line index so we know when a parse failure is terminal residue.
+  let lastNonEmpty = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.trim().length > 0) lastNonEmpty = i;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
     if (line.trim().length === 0) continue;
-    records.push(JSON.parse(line) as JournalRecord);
+    try {
+      records.push(JSON.parse(line) as JournalRecord);
+    } catch (err) {
+      if (i === lastNonEmpty) {
+        // Truncated tail — durable records above stand; this input never landed.
+        continue;
+      }
+      throw err;
+    }
   }
   return records;
 }
@@ -210,8 +273,22 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
   };
 
   for (const record of records) {
-    if (record.kind === 'submit') bookFor(record.marketId).submit(fromWire(record.order));
-    else bookFor(record.marketId).cancel(record.orderId);
+    if (record.kind === 'submit') {
+      const book = bookFor(record.marketId);
+      book.submit(fromWire(record.order));
+      // Reject-only and IOC/market-remainder opens must not survive replay
+      // either — same honesty as live dropIfNeverTraded (print or rest, or drop).
+      if (book.isNeverPrintedEmpty) books.delete(record.marketId);
+      continue;
+    }
+    /**
+     * CANCEL MUST NOT OPEN A MARKET ON REPLAY. Live cancel no longer journals
+     * unknown markets, but journals written before that fix still contain
+     * cancel-only phantoms. Replaying those through bookFor re-invented empty
+     * markets forever. Cancel is a no-op when the market never submitted.
+     */
+    const existing = books.get(record.marketId);
+    if (existing) existing.cancel(record.orderId);
   }
 
   return books;
@@ -226,13 +303,19 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   const tail = records.filter((r) => r.seq > snapshot.journalSeq);
 
   for (const record of tail) {
-    let book = books.get(record.marketId);
-    if (!book) {
-      book = new OrderBook(record.marketId);
-      books.set(record.marketId, book);
+    if (record.kind === 'submit') {
+      let book = books.get(record.marketId);
+      if (!book) {
+        book = new OrderBook(record.marketId);
+        books.set(record.marketId, book);
+      }
+      book.submit(fromWire(record.order));
+      if (book.isNeverPrintedEmpty) books.delete(record.marketId);
+      continue;
     }
-    if (record.kind === 'submit') book.submit(fromWire(record.order));
-    else book.cancel(record.orderId);
+    // Same rule as full replay: cancel never invents a market.
+    const existing = books.get(record.marketId);
+    if (existing) existing.cancel(record.orderId);
   }
 
   return books;

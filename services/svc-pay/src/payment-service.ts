@@ -8,13 +8,33 @@ import {
   parseAmount,
   recipes,
   userAvailable,
+  withdrawalHoldAccount,
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import type { PaymentIntent, RailAdapter, RailEvent, RailResult, RailWebhookRequest } from './rails/rail-adapter.js';
 import type { RailRegistry } from './rails/registry.js';
-import { assertRailMayMoveValue, selectPublicCheckoutRail, type ValueMovementPolicy } from './rails/posture.js';
+import { assertRailMayMoveValue, PublicCheckoutUnavailable, type ValueMovementPolicy } from './rails/posture.js';
+import {
+  REFERENCE_RAIL_ROUTING_PROFILES,
+  selectSmartCheckoutRail,
+  SmartRoutingNoRailError,
+  toRoutingDecisionRecord,
+  type RailRoutingProfile,
+} from './routing/decide.js';
+import { RoutingInputError } from './routing-inputs.js';
+import { merchantKybMoneyGateRefusal } from './merchant-kyb-money-gate.js';
+import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
+import {
+  assertOnlyPayoutDestinations,
+  PayoutDestinationMissingError,
+  type MerchantPayoutDestinations,
+} from './merchant-payout-destination.js';
+import { settlementLedgerPlan } from './settlement-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
+import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
+import { affiliateLegAfterPaySettlement, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 
 /**
  * svc-pay — THE PAYMENTS CORE (§6.1).
@@ -68,11 +88,22 @@ export type PayErrorCode =
   | 'pay.merchant_not_found'
   /** The principal does not own this merchant. One rule, in merchant-ownership.ts. */
   | 'pay.merchant_forbidden'
+  /**
+   * Principal is in the subject's PayFac tree but lacks the named permission area.
+   * Distinct from merchant_forbidden so a parent that was never granted refund
+   * does not look like a stranger.
+   */
+  | 'pay.submerchant_permission_denied'
   | 'pay.merchant_inactive'
   | 'pay.merchant_pricing_invalid'
   /** KYB transition refused (wrong status, or stub decide blocked under live-only). */
   | 'pay.kyb_invalid'
   | 'pay.kyb_operator_required'
+  /**
+   * Live acquiring money door — merchant lacks approved KYB (D26-P1-P10 Layer B).
+   * Distinct from scope issuance (Layer A); never invents `pay:*`.
+   */
+  | 'pay.kyb_required'
   | 'pay.payment_not_found'
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
@@ -90,12 +121,34 @@ export type PayErrorCode =
   | 'pay.checkout_amount_required'
   /** Too many sessions open on one link. The cheap floor under an anonymous caller. */
   | 'pay.checkout_busy'
+  /** Public checkout rail list is empty — refuse by name, never a silent charge. */
+  | 'pay.checkout_rails_unset'
+  /** Card/PSP acquiring unset (`socket.psp-partners`) — refuse by name, never fake success. */
+  | 'pay.psp_unset'
+  /**
+   * Smart routing (D26-P1-P3) — a required geo/method/risk dim was blank.
+   * Never invent a country, method, risk band, or approval rate.
+   */
+  | 'pay.routing_input_missing'
+  /** Smart routing ran; no configured rail honestly accepts these dims. */
+  | 'pay.routing_no_rail'
   | 'pay.invalid_amount'
   | 'pay.invalid_transition'
   | 'pay.capture_exceeds_authorized'
   | 'pay.partial_capture_unsupported'
   | 'pay.refund_exceeds_captured'
+  /** Refund refused — nothing was captured. Before ledger-client posts. */
+  | 'pay.nothing_captured'
   | 'pay.refund_in_flight'
+  /**
+   * An explicit `refundId` already ran to `refund.reversed` (rail refused after
+   * the merchant was debited and the reverse posted). The ledger key
+   * `payment.refund:<paymentId>:<refundId>` is spent: a re-post is a silent
+   * no-op, so reusing the id would let the rail pay out while the book does not
+   * re-debit. Caller must supply a **new** business key for a genuine second attempt.
+   */
+  | 'pay.refund_id_spent'
+  | 'pay.refund_id_conflict'
   /**
    * A pending settlement window has already frozen this payment into its set.
    * Pre-settlement refunds would drain clearing under the frozen gross and let
@@ -109,6 +162,7 @@ export type PayErrorCode =
    * same settlement key would disagree with the ledger idempotency key.
    */
   | 'pay.settlement_desynced'
+  | 'pay.settlement_not_pending'
   | 'pay.rail_declined'
   | 'pay.rail_failed'
   | 'pay.rail_amount_mismatch'
@@ -118,6 +172,12 @@ export type PayErrorCode =
   /** Merchant outbound webhook endpoint URL refused (ADR §2.4). */
   | 'pay.webhook_url_invalid'
   | 'pay.webhook_endpoint_not_found'
+  /**
+   * Outbound merchant webhooks are not wired on this process (REST asked, no
+   * service) or a delivery has no signing secret. Named refuse — never HMAC
+   * with an empty key, never a Fastify 404 that looks like the surface is gone.
+   */
+  | 'pay.webhook_not_configured'
   | 'pay.nothing_to_settle'
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
@@ -138,8 +198,75 @@ export type PayErrorCode =
    * movement). ADR pay.public-api §2.5 / posture assertRailMayMoveValue.
    */
   | 'pay.sandbox_rail_refused'
+  /**
+   * A sandbox API key would have observed or returned a live-mode payment.
+   * Sandbox credentials must not look live (ADR §2.5).
+   */
+  | 'pay.sandbox_looks_live'
+  /**
+   * Payment has no rail id, so `mode` cannot be disclosed. Refusing is the
+   * safe direction — defaulting missing rail to `live` is the lie.
+   */
+  | 'pay.rail_mode_undisclosed'
   /** Request body failed a surface-level validation (missing railAdapter, …). */
-  | 'pay.validation_failed';
+  | 'pay.validation_failed'
+  /**
+   * Payout destination kind does not match the rail (e.g. IBAN on crypto-native).
+   * Refused BEFORE withdrawHold so no ledger row is left stranded.
+   */
+  | 'pay.destination_kind_mismatch'
+  | 'pay.invalid_destination_ref'
+  /** Crypto payout has no stored EVM dest — refused BEFORE withdrawHold. */
+  | 'pay.payout_destination_missing'
+  | 'pay.subscription_not_found'
+  | 'pay.mandate_not_found'
+  | 'pay.subscription_reconsent_required'
+  | 'pay.subscription_inactive'
+  | 'pay.mandate_inactive'
+  | 'pay.subscription_invalid'
+  | 'pay.subscription_driver_absent'
+  | 'pay.mandate_rail_absent'
+  /**
+   * Recurring pre-charge notify is unpublished (`socket.pay-precharge-notify`).
+   * Named refuse when a path would invent delivery or claim `notified: true`.
+   * Crypto invoice-and-watch still opens an invoice; it must carry this code
+   * on the cycle report so the gap is never a silent skip.
+   */
+  | 'pay.precharge_notify_unpublished'
+  | 'pay.subscription_notify_unwired'
+  | 'pay.subscription_notify_failed'
+  // ── Recurring charge cycle (`subscriptions/charge-cycle.ts`) ──
+  /**
+   * The charge is larger than the mandate authorises, or falls outside its
+   * window. Checked at the moment of the CHARGE, not the moment of the plan: a
+   * period claimed under one mandate reading can be retried after those terms
+   * were lowered or replaced. The mandate is the ceiling, in money and in time.
+   */
+  | 'pay.subscription_exceeds_mandate'
+  /**
+   * No fee rate is published for this merchant and no default is configured.
+   * Refuse-closed, per the standing ruling that an unset rate does not fall back
+   * to a source seed, a zero, or a "sensible default" — `fee-share-law.ts` is the
+   * reference. Refused BEFORE the period is claimed, so the period stays owed and
+   * no attempt is spent on an operator's configuration gap.
+   */
+  | 'pay.subscription_fee_unpublished'
+  /**
+   * An invoice for a period was still unpaid a full interval later. Not a
+   * caller's mistake — the code exists so an unsettled period is a named fact
+   * rather than a row that sits `invoiced` forever while the subscription
+   * reports itself healthy and collects nothing.
+   */
+  | 'pay.subscription_invoice_unpaid'
+  /**
+   * Resuming would re-space periods past the mandate's `endsAt`.
+   *
+   * `adr/2026-08-08-twap-overdue-slice-disposition.md` forbids compressing the
+   * schedule to fit and rejects silently dropping the tail. What is left is to
+   * refuse and say by how much, so the merchant re-consents with a new mandate —
+   * the same disposition that ADR gives a resume past 2× the original duration.
+   */
+  | 'pay.subscription_resume_exceeds_mandate';
 
 export class PayError extends Error {
   constructor(
@@ -281,6 +408,15 @@ export interface PayServiceOptions {
    */
   readonly checkoutRails?: readonly CheckoutRail[];
 
+  /**
+   * Operator-declared checkout risk band (D26-P1-P3). Blank = missing.
+   * Never invented. Public callers cannot set this — tests may pass `riskBand` on open.
+   */
+  readonly checkoutRiskBand?: string | null;
+
+  /** Eligibility profiles for smart checkout. Default is the v1 reference set. */
+  readonly routingProfiles?: readonly RailRoutingProfile[];
+
   /** How long a browser handoff stays open. Minutes. Never applied to the payment. */
   readonly checkoutSessionTtlSeconds?: number;
 
@@ -307,6 +443,24 @@ export interface PayServiceOptions {
     type: 'payment.authorized' | 'payment.captured' | 'payment.refunded' | 'payment.failed';
     payment: PaymentView;
   }) => void | Promise<void>;
+
+  /**
+   * D26-P1-O2 — identity affiliate accrue after house pay fees post.
+   * Default noop. Failures must not unwind settlement.
+   */
+  readonly affiliateAccrue?: AffiliateAccruePort;
+
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind settlement. Body is `{ feeEventId }` only.
+   */
+  readonly affiliatePayout?: AffiliatePayoutPort;
+
+  /**
+   * Persisted merchant payout destinations. Crypto-native payout requires a
+   * stored EVM dest before withdrawHold. Default refuses closed (no invented ref).
+   */
+  readonly payoutDestinations?: MerchantPayoutDestinations;
 }
 
 /** One entry in `checkoutRails`: which adapter, and what `payments.method` it writes. */
@@ -426,11 +580,28 @@ const TRANSITIONS: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
 /** The v1 public checkout estate: one rail, and the only one that can ever be live. */
 export const DEFAULT_CHECKOUT_RAILS: readonly CheckoutRail[] = [{ railId: 'crypto-native', method: 'crypto' }];
 
+function isCardishCheckoutRail(rail: CheckoutRail): boolean {
+  return rail.method.trim().toLowerCase() === 'card' || /card|psp|acquirer/i.test(rail.railId);
+}
+
+/**
+ * The public checkout list is entirely card/PSP, and none of those rails is a
+ * registered non-absent adapter. That is `socket.psp-partners` unset — not a
+ * missing geo field and not a sandbox that could still fake a capture.
+ */
+function checkoutRailsAreUnsetPsp(checkoutRails: readonly CheckoutRail[], rails: RailRegistry): boolean {
+  if (checkoutRails.length === 0) return false;
+  if (!checkoutRails.every(isCardishCheckoutRail)) return false;
+  return checkoutRails.every((r) => !rails.has(r.railId) || rails.get(r.railId).mode === 'absent');
+}
+
 export class PayService {
   private readonly defaultFeeBps: number | undefined;
   private readonly valueMovement: ValueMovementPolicy;
   private readonly publicCheckoutMovement: ValueMovementPolicy;
   private readonly checkoutRails: readonly CheckoutRail[];
+  private readonly checkoutRiskBand: string | undefined;
+  private readonly routingProfiles: readonly RailRoutingProfile[];
   private readonly checkoutSessionTtlSeconds: number;
   private readonly linkDefaultTtlDays: number;
   private readonly linkMaxTtlDays: number;
@@ -442,6 +613,9 @@ export class PayService {
         payment: PaymentView;
       }) => void | Promise<void>)
     | undefined;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
+  private readonly payoutDestinations: MerchantPayoutDestinations;
 
   constructor(
     private readonly sql: Sql,
@@ -453,12 +627,71 @@ export class PayService {
     this.valueMovement = options.valueMovement ?? 'allow-sandbox';
     this.publicCheckoutMovement = options.publicCheckoutMovement ?? this.valueMovement;
     this.checkoutRails = options.checkoutRails ?? DEFAULT_CHECKOUT_RAILS;
+    this.checkoutRiskBand = options.checkoutRiskBand?.trim() || undefined;
+    this.routingProfiles = options.routingProfiles ?? REFERENCE_RAIL_ROUTING_PROFILES;
     this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? 900;
     this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? 30;
     this.linkMaxTtlDays = options.linkMaxTtlDays ?? 365;
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
     this.now = options.now ?? (() => new Date());
     this.afterPaymentEvent = options.afterPaymentEvent;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
+    this.payoutDestinations = options.payoutDestinations ?? assertOnlyPayoutDestinations();
+  }
+
+  /**
+   * Unique method on the operator checkout list, if there is exactly one.
+   * Several methods with no caller method → missing (refuse, do not invent).
+   */
+  private uniqueCheckoutMethod(): string | undefined {
+    const methods = [...new Set(this.checkoutRails.map((r) => r.method.trim()).filter(Boolean))];
+    return methods.length === 1 ? methods[0] : undefined;
+  }
+
+  /** D26-P1-P3 — geo/method/risk rail pick. Payer never names a rail id. */
+  private selectCheckoutRail(input: { geoCountry?: string; method?: string; riskBand?: string }) {
+    // BEFORE smart routing. An empty list used to surface as
+    // `pay.routing_input_missing` (no unique method) — that names the payer's
+    // form, not the operator gap. Unset PSP used to surface as
+    // `pay.routing_no_rail`. Both are silent-adjacent: the public door must
+    // refuse by the name of what is missing, and must not open a session.
+    if (this.checkoutRails.length === 0) {
+      throw new PublicCheckoutUnavailable(null, 'none-configured');
+    }
+    if (checkoutRailsAreUnsetPsp(this.checkoutRails, this.rails)) {
+      throw new PublicCheckoutUnavailable(null, 'psp-unset');
+    }
+    try {
+      return selectSmartCheckoutRail({
+        inputs: {
+          geoCountry: input.geoCountry,
+          method: input.method ?? this.uniqueCheckoutMethod(),
+          riskBand: input.riskBand ?? this.checkoutRiskBand,
+        },
+        preference: this.checkoutRails.map((r) => r.railId),
+        profiles: this.routingProfiles,
+        rails: this.rails,
+        policy: this.publicCheckoutMovement,
+        now: this.now(),
+      });
+    } catch (e) {
+      if (e instanceof RoutingInputError) {
+        throw new PayError(e.message, 'pay.routing_input_missing', { missing: e.missing });
+      }
+      if (e instanceof SmartRoutingNoRailError) {
+        const posture = e.considered.filter((c) => c.reason === 'sandbox' || c.reason === 'absent' || c.reason === 'unhealthy');
+        const other = e.considered.filter(
+          (c) => c.outcome === 'skipped' && c.reason !== 'sandbox' && c.reason !== 'absent' && c.reason !== 'unhealthy',
+        );
+        if (posture.length > 0 && other.length === 0) {
+          const reason = posture[0]!.reason as 'sandbox' | 'absent' | 'unhealthy';
+          throw new PublicCheckoutUnavailable(posture[0]!.railId, reason);
+        }
+        throw new PayError(e.message, 'pay.routing_no_rail', { considered: e.considered });
+      }
+      throw e;
+    }
   }
 
   /** Fire-and-forget outbound notify — never throws into the money path. */
@@ -549,18 +782,31 @@ export class PayService {
   }
 
   /**
+   * Operator digital-KYB decide (`pay.psp`). Works under live-only.
+   * Writes `merchants.kyb_status` pending → approved|rejected.
+   * Does not invent a vendor webhook, fee bps, or `pay:*` scopes (Layer A).
+   */
+  async decideKyb(input: { merchantId: string; decision: 'approved' | 'rejected' }): Promise<MerchantRecord> {
+    return this.writeKybDecision(input.merchantId, input.decision);
+  }
+
+  /**
    * KYB stub decide — sandbox/dev path only under `allow-sandbox` valueMovement.
-   * Under live-only this refuses: a real operator / `pay.psp` path is required.
+   * Under live-only this refuses: use `merchant.decideKyb` (operator `admin:compliance`).
    * Never invents an external KYB vendor response.
    */
   async decideKybStub(input: { merchantId: string; decision: 'approved' | 'rejected' }): Promise<MerchantRecord> {
     if (this.valueMovement === 'live-only') {
       throw new PayError(
-        'KYB decide stub is disabled under live-only; use the digital KYB path (pay.psp) or an operator tool',
+        'KYB decide stub is disabled under live-only; use merchant.decideKyb (operator admin:compliance) or kyb.decide',
         'pay.kyb_operator_required',
       );
     }
-    const merchant = await this.getMerchant(input.merchantId);
+    return this.writeKybDecision(input.merchantId, input.decision);
+  }
+
+  private async writeKybDecision(merchantId: string, decision: 'approved' | 'rejected'): Promise<MerchantRecord> {
+    const merchant = await this.getMerchant(merchantId);
     if (merchant.kybStatus !== 'pending') {
       throw new PayError(`Merchant KYB must be pending to decide (is ${merchant.kybStatus})`, 'pay.kyb_invalid', {
         kybStatus: merchant.kybStatus,
@@ -568,10 +814,10 @@ export class PayService {
     }
     await this.sql`
       UPDATE pay.merchants
-         SET kyb_status = ${input.decision}, updated_at = now()
-       WHERE id = ${input.merchantId}
+         SET kyb_status = ${decision}, updated_at = now()
+       WHERE id = ${merchantId}
     `;
-    return this.getMerchant(input.merchantId);
+    return this.getMerchant(merchantId);
   }
 
   /**
@@ -937,19 +1183,30 @@ export class PayService {
     amount?: Amount;
     /** Honoured ONLY when the link fixes no currency. Otherwise the link wins. */
     assetId?: string;
+    /**
+     * ISO country the payer stated. Required for smart routing. Never invented.
+     * Not a rail id.
+     */
+    geoCountry?: string;
+    /**
+     * Payment method (`crypto` / `card`), never a rail adapter id.
+     * When omitted, the unique method on `checkoutRails` is used if there is exactly one.
+     */
+    method?: string;
+    /**
+     * Operator/test risk band. Public tRPC/HTML must not send this — use `checkoutRiskBand`.
+     */
+    riskBand?: string;
   }): Promise<{ sessionToken: string; session: CheckoutSessionView }> {
-    // Step 0. Before anything exists. A deployment with no rail that can
-    // honestly take a public payment refuses here, and the payer sees "this
-    // merchant cannot take payment right now" rather than a form that leads
-    // nowhere or, far worse, a fabricated receipt.
-    const adapter = selectPublicCheckoutRail(
-      this.rails,
-      this.checkoutRails.map((r) => r.railId),
-      // NOT `valueMovement`. The public surface follows the environment, and
-      // `PAY_ALLOW_SANDBOX_RAILS` does not relax it — see the option's comment.
-      this.publicCheckoutMovement,
-      this.now(),
-    );
+    // Step 0. Before anything exists. Smart routing (D26-P1-P3) replaces
+    // preference-only selection. Blank geo/method/risk refuses rather than invent.
+    // A payer still cannot name a rail adapter.
+    const decision = this.selectCheckoutRail({
+      geoCountry: input.geoCountry,
+      method: input.method,
+      riskBand: input.riskBand,
+    });
+    const adapter = decision.adapter;
     const method = this.checkoutRails.find((r) => r.railId === adapter.id)!.method;
 
     const opened = await transaction(
@@ -1003,6 +1260,10 @@ export class PayService {
           railAdapter: adapter.id,
           metadata: { source: 'checkout', linkId: link.id },
         });
+
+        // SPEC §5 — reason per decision. Taxonomy only (no cost/approval invent).
+        // Survives in payment_events so a later dispute can answer "why this rail".
+        await appendEvent(tx, payment.id, 'rail.selected', toRoutingDecisionRecord(decision));
 
         // Its own token, not the link's. A link is a MANY-payer capability and a
         // session is ONE payer's: addressing sessions by the link token would
@@ -1203,6 +1464,11 @@ export class PayService {
           }
           assertTransition(row, 'authorized');
 
+          // Suspension mid-flight: new progress stops. Already-terminal reads above
+          // stay idempotent. Refund is deliberately NOT gated here — returning
+          // money to a payer after cut-off is customer-protective.
+          this.assertMerchantActive(await this.getMerchant(row.merchant_id));
+
           const adapter = this.rails.require(row.rail_adapter, 'authorize');
 
           const intent: PaymentIntent = {
@@ -1306,6 +1572,10 @@ export class PayService {
           if (row.status === 'captured' || row.status === 'settled') return this.view(tx, row);
           assertTransition(row, 'captured');
 
+          // Same mid-flight suspend rule as authorize: no new money into clearing
+          // after cut-off. Idempotent re-read of already-captured stays above.
+          this.assertMerchantActive(await this.getMerchant(row.merchant_id));
+
           const authorized = parseAmount(row.amount);
 
           if (options.amount !== undefined) {
@@ -1396,6 +1666,11 @@ export class PayService {
   /**
    * Refund, in full or in part. THE OUTBOUND MONEY PATH.
    *
+   * Merchant refund of a captured payment through ledger-client
+   * (`recipes.paymentRefund`). Refuse `pay.nothing_captured` if nothing was
+   * captured — before the ledger posts. No PSP. No invented dest (crypto
+   * returns to the payer).
+   *
    * The ledger moves FIRST, in its own committed transaction, and only then is
    * the rail asked to send money out. That order is the whole design:
    *
@@ -1434,10 +1709,10 @@ export class PayService {
         const row = await lockPayment(tx, paymentId);
 
         if (row.status !== 'captured' && row.status !== 'settled') {
-          throw new PayError(
-            `Payment ${row.id} is ${row.status}; only a captured or settled payment can be refunded`,
-            'pay.invalid_transition',
-          );
+          throw new PayError(`Payment ${row.id} has nothing captured (status ${row.status}) — refund refused`, 'pay.nothing_captured', {
+            paymentId: row.id,
+            status: row.status,
+          });
         }
 
         // Pre-settlement only: a pending settlement freeze has claimed this
@@ -1465,6 +1740,83 @@ export class PayService {
         }
 
         const totals = await totalsFor(tx, row.id);
+        if (totals.captured <= 0n) {
+          throw new PayError(`Payment ${row.id} has nothing captured — refund refused`, 'pay.nothing_captured', { paymentId: row.id });
+        }
+
+        // A COMPLETED `refundId` IS A REPLAY, NOT A SECOND REFUND.
+        //
+        // `refundId` is a business key — it is what
+        // `payment.refund:<paymentId>:<refundId>` makes the ledger idempotent
+        // on. The ledger would therefore already dedupe a repeat and move
+        // nothing, but the EVENT LOG would not:
+        // `totalsFor` sums every `refunded` row, so appending a second one for
+        // the same business key leaves the book correct and the PROJECTION
+        // wrong — `refundedAmount` doubles, and refundable shrinks by a refund
+        // that never happened. That desync is worse to unpick than a refusal.
+        //
+        // So a caller who repeats a completed refund id gets the payment as it
+        // stands, having moved and recorded nothing. This is the same rule the
+        // authorize path already states as "an authorization that already
+        // happened is not an error", and it is what makes it safe for
+        // `public-rest.ts` to derive this id from the caller's Idempotency-Key.
+        //
+        // Checked BEFORE the refundable comparison deliberately: after a FULL
+        // refund the refundable balance is zero, so the refusal would otherwise
+        // win and report `pay.refund_exceeds_captured` for what is actually a
+        // retry of a refund that already succeeded.
+        //
+        // Only for an EXPLICIT id. The `${paymentId}:${sequence + 1}` default is
+        // a fresh ordinal by construction and can never be a replay of itself.
+        if (options.refundId !== undefined) {
+          // A COMPLETED refundId is one business event with ONE amount.
+          // Same id + same amount → replay (no second movement / event).
+          // Same id + different amount → conflict: silent 200 with the old
+          // amount would teach the merchant their second request succeeded.
+          const alreadyDone = await tx<Array<{ amount: string | null }>>`
+            SELECT payload->>'amount' AS amount
+              FROM pay.payment_events
+             WHERE payment_id = ${row.id}
+               AND event = 'refunded'
+               AND payload->>'refundId' = ${options.refundId}
+             LIMIT 1
+          `;
+          if (alreadyDone[0]) {
+            const prior = alreadyDone[0].amount;
+            if (prior !== null && prior !== formatAmount(amount)) {
+              throw new PayError(
+                `Refund id ${options.refundId} already completed for ${prior}; requested ${formatAmount(amount)} — use a new refundId for a different amount`,
+                'pay.refund_id_conflict',
+                {
+                  refundId: options.refundId,
+                  paymentId: row.id,
+                  completedAmount: prior,
+                  requested: formatAmount(amount),
+                },
+              );
+            }
+            return { replay: true as const, view: await this.view(tx, row) };
+          }
+
+          // Spent after reverse: ledger key will no-op; rail may still pay.
+          // A genuine re-attempt needs a new refundId (public REST: new
+          // Idempotency-Key → new restRefundId).
+          const spent = await tx<Array<{ n: string }>>`
+            SELECT COUNT(*)::text AS n
+              FROM pay.payment_events
+             WHERE payment_id = ${row.id}
+               AND event = 'refund.reversed'
+               AND payload->>'refundId' = ${options.refundId}
+          `;
+          if (Number.parseInt(spent[0]?.n ?? '0', 10) > 0) {
+            throw new PayError(
+              `Refund id ${options.refundId} was already used and reversed — supply a new refundId for a genuine re-attempt`,
+              'pay.refund_id_spent',
+              { refundId: options.refundId, paymentId: row.id },
+            );
+          }
+        }
+
         const refundable = totals.captured - totals.refunded;
         if (amount > refundable) {
           throw new PayError(
@@ -1527,10 +1879,14 @@ export class PayService {
           ledgerTxId: posted.id,
         });
 
-        return { row, refundId, source, merchant, captured: totals.captured, refunded: totals.refunded };
+        return { replay: false as const, row, refundId, source, merchant, captured: totals.captured, refunded: totals.refunded };
       },
       { isolation: 'read committed', maxAttempts: 5 },
     );
+
+    // A repeat of a completed refund id. Nothing moved, nothing was appended,
+    // and no rail was asked — the payment is returned exactly as it stands.
+    if (prepared.replay) return prepared.view;
 
     // ── Phase 2: send it. The book already says this money is on its way out.
     const adapter = this.rails.require(prepared.row.rail_adapter, 'refund');
@@ -1702,6 +2058,42 @@ export class PayService {
         // rail is confirming, both need a human decision — acting on either
         // automatically would move money on a rail's say-so alone.
         break;
+      case 'dispute.opened': {
+        // D26-P1-P5: case mechanism + settled→disputed writer. Ledger chargeback
+        // recipes refuse-closed via socket.pay-chargeback-ledger-wire — case only.
+        const disputeId = event.disputeId?.trim();
+        if (disputeId) {
+          let marked = false;
+          if (payment.status === 'settled') {
+            await this.markDisputed(payment.id, { disputeId, reasonCode: event.reasonCode ?? null });
+            marked = true;
+          }
+          const amount = event.amount === undefined ? formatAmount(parseAmount(payment.amount)) : formatAmount(event.amount);
+          defaultDisputeCaseStore.open({
+            disputeId,
+            paymentId: payment.id,
+            merchantId: payment.merchant_id,
+            amount,
+            assetId: event.assetId ?? payment.currency,
+            reasonCode: event.reasonCode ?? null,
+            paymentMarkedDisputed: marked,
+          });
+          applied = true;
+        }
+        break;
+      }
+      case 'dispute.won':
+      case 'dispute.lost':
+      case 'dispute.closed': {
+        const disputeId = event.disputeId?.trim();
+        if (disputeId && defaultDisputeCaseStore.get(disputeId)) {
+          if (event.type === 'dispute.won') defaultDisputeCaseStore.markWon(disputeId);
+          else if (event.type === 'dispute.lost') defaultDisputeCaseStore.markLost(disputeId);
+          else defaultDisputeCaseStore.accept(disputeId);
+          applied = true;
+        }
+        break;
+      }
     }
 
     // The dedupe marker, written last. `ON CONFLICT DO NOTHING` because two
@@ -1750,6 +2142,31 @@ export class PayService {
     if (view) this.notifyPaymentEvent('payment.failed', view);
   }
 
+  /**
+   * D26-P1-P5 — make `settled → disputed` reachable.
+   *
+   * Status transition only. Does **not** post ledger chargeback recipes —
+   * refuse-closed via `socket.pay-chargeback-ledger-wire`. Callers open a case.
+   */
+  async markDisputed(paymentId: string, meta: { disputeId: string; reasonCode?: string | null }): Promise<PaymentView> {
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const row = await lockPayment(tx, paymentId);
+        assertTransition(row, 'disputed');
+        await appendEvent(tx, row.id, 'disputed', {
+          disputeId: meta.disputeId,
+          reasonCode: meta.reasonCode ?? null,
+          ledgerWire: 'refused',
+          ledgerSocket: 'socket.pay-chargeback-ledger-wire',
+        });
+        await tx`UPDATE pay.payments SET status = 'disputed', updated_at = now() WHERE id = ${row.id}`;
+        return this.view(tx, { ...row, status: 'disputed' });
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
   // ── Settlement (§6.1) ──────────────────────────────────────────────────────
 
   /**
@@ -1791,89 +2208,139 @@ export class PayService {
       async (span) => {
         const prepared = await this.prepareSettlement(input);
         if (prepared.status !== 'pending') return prepared;
-
-        const merchant = await this.getMerchant(input.merchantId);
-        // About to post gross → merchant available. Suspension mid-freeze must
-        // not finish the move; captured volume stays in clearing until reopen.
-        this.assertMerchantActive(merchant);
-
-        return transaction(
-          this.sql,
-          async (tx) => {
-            const rows = await tx<SettlementRow[]>`
-              SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
-                FROM pay.settlements WHERE id = ${prepared.id} FOR UPDATE
-            `;
-            const row = rows[0]!;
-            if (row.status !== 'pending') return toSettlement(row);
-
-            const gross = parseAmount(row.gross);
-            const fees = parseAmount(row.fees);
-
-            const included = await tx<Array<{ payment_id: string }>>`
-              SELECT payment_id FROM pay.payment_events
-               WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
-               ORDER BY payment_id
-            `;
-
-            // Re-check live nets under payment row locks before the ledger
-            // moves. The freeze promised these numbers; if a concurrent path
-            // (or an operator) changed captured/refunded, posting the frozen
-            // gross would take someone else's clearing.
-            let liveGross = 0n;
-            for (const { payment_id } of included) {
-              await lockPayment(tx, payment_id);
-              const totals = await totalsFor(tx, payment_id);
-              const net = totals.captured - totals.refunded;
-              if (net > 0n) liveGross += net;
-            }
-            if (liveGross !== gross) {
-              throw new PayError(
-                `Settlement ${row.id} frozen gross ${formatAmount(gross)} no longer matches live captured−refunded ${formatAmount(liveGross)} — refusing to post`,
-                'pay.settlement_desynced',
-                {
-                  settlementId: row.id,
-                  frozenGross: formatAmount(gross),
-                  liveGross: formatAmount(liveGross),
-                },
-              );
-            }
-
-            await this.ledger.post(
-              recipes.merchantSettlement({
-                merchantId: row.merchant_id,
-                merchantUserId: merchant.userId,
-                window: row.window,
-                assetId: row.asset_id,
-                gross,
-                fee: fees,
-              }),
-            );
-
-            await tx`
-              UPDATE pay.settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
-               WHERE id = ${row.id}
-            `;
-
-            for (const { payment_id } of included) {
-              await appendEvent(tx, payment_id, 'settled', {
-                settlementId: row.id,
-                window: row.window,
-                assetId: row.asset_id,
-              });
-              await tx`
-                UPDATE pay.payments SET status = 'settled', updated_at = now()
-                 WHERE id = ${payment_id} AND status = 'captured'
-              `;
-            }
-
-            span.setAttribute('intafaced.amount', formatAmount(parseAmount(row.net)));
-            span.setAttribute('intafaced.payments', included.length);
-            return toSettlement({ ...row, status: 'posted', payout_method: 'ledger' });
-          },
-          { isolation: 'read committed', maxAttempts: 5 },
-        );
+        return this.postPendingSettlement(prepared.id, span);
       },
+    );
+  }
+
+  /**
+   * Phase 2 of settle — post ledger + project, keyed by settlement id.
+   * Used by settleWindow and by release heal (which must not re-parse window
+   * labels — custom windows need from/to that release does not have).
+   */
+  private async postPendingSettlement(
+    settlementId: string,
+    span?: { setAttribute: (k: string, v: string | number) => void },
+  ): Promise<SettlementRecord> {
+    const head = await this.sql<SettlementRow[]>`
+      SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+        FROM pay.settlements WHERE id = ${settlementId}
+    `;
+    const current = head[0];
+    if (!current) throw new PayError(`Settlement ${settlementId} not found`, 'pay.settlement_not_found');
+    if (current.status !== 'pending') return toSettlement(current);
+
+    const merchant = await this.getMerchant(current.merchant_id);
+    // About to post gross → merchant available. Suspension mid-freeze must
+    // not finish the move; captured volume stays in clearing until reopen.
+    this.assertMerchantActive(merchant);
+
+    const posted = await transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements WHERE id = ${settlementId} FOR UPDATE
+        `;
+        const row = rows[0]!;
+        if (row.status !== 'pending') return toSettlement(row);
+
+        const gross = parseAmount(row.gross);
+        const fees = parseAmount(row.fees);
+
+        const included = await tx<Array<{ payment_id: string }>>`
+          SELECT payment_id FROM pay.payment_events
+           WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
+           ORDER BY payment_id
+        `;
+
+        // Re-check live nets under payment row locks before the ledger
+        // moves. The freeze promised these numbers; if a concurrent path
+        // (or an operator) changed captured/refunded, posting the frozen
+        // gross would take someone else's clearing.
+        let liveGross = 0n;
+        for (const { payment_id } of included) {
+          await lockPayment(tx, payment_id);
+          const totals = await totalsFor(tx, payment_id);
+          const net = totals.captured - totals.refunded;
+          if (net > 0n) liveGross += net;
+        }
+        if (liveGross !== gross) {
+          throw new PayError(
+            `Settlement ${row.id} frozen gross ${formatAmount(gross)} no longer matches live captured−refunded ${formatAmount(liveGross)} — refusing to post`,
+            'pay.settlement_desynced',
+            {
+              settlementId: row.id,
+              frozenGross: formatAmount(gross),
+              liveGross: formatAmount(liveGross),
+            },
+          );
+        }
+
+        await this.ledger.post(
+          recipes.merchantSettlement({
+            merchantId: row.merchant_id,
+            merchantUserId: merchant.userId,
+            window: row.window,
+            assetId: row.asset_id,
+            gross,
+            fee: fees,
+          }),
+        );
+
+        await tx`
+          UPDATE pay.settlements SET status = 'posted', payout_method = 'ledger', updated_at = now()
+           WHERE id = ${row.id}
+        `;
+
+        for (const { payment_id } of included) {
+          await appendEvent(tx, payment_id, 'settled', {
+            settlementId: row.id,
+            window: row.window,
+            assetId: row.asset_id,
+          });
+          await tx`
+            UPDATE pay.payments SET status = 'settled', updated_at = now()
+             WHERE id = ${payment_id} AND status = 'captured'
+          `;
+        }
+
+        span?.setAttribute('intafaced.amount', formatAmount(parseAmount(row.net)));
+        span?.setAttribute('intafaced.payments', included.length);
+        return toSettlement({ ...row, status: 'posted', payout_method: 'ledger' });
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+    await this.notifyPayAffiliateAccrue(posted, merchant.userId);
+    await this.notifyPayAffiliatePayout(posted, merchant.userId);
+    return posted;
+  }
+
+  /** Best-effort; never throws. Settlement already committed. */
+  private async notifyPayAffiliateAccrue(posted: SettlementRecord, merchantUserId: string): Promise<void> {
+    if (posted.status !== 'posted') return;
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterPaySettlement({
+        settlementId: posted.id,
+        merchantUserId,
+        feeAmount: posted.fees,
+        feeAsset: posted.assetId,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. Settlement already committed. */
+  private async notifyPayAffiliatePayout(posted: SettlementRecord, merchantUserId: string): Promise<void> {
+    if (posted.status !== 'posted') return;
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterPaySettlement({
+        settlementId: posted.id,
+        merchantUserId,
+        feeAmount: posted.fees,
+        feeAsset: posted.assetId,
+      }),
     );
   }
 
@@ -1909,11 +2376,11 @@ export class PayService {
         // the same unsettled payments and freeze them into two settlements.
         // Re-read status under the lock so a suspend that races the getMerchant
         // above cannot slip a freeze through.
-        const locked = await tx<Array<{ status: MerchantRecord['status'] }>>`
-          SELECT status FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE
+        const locked = await tx<Array<{ status: MerchantRecord['status']; kyb_status: MerchantRecord['kybStatus'] }>>`
+          SELECT status, kyb_status FROM pay.merchants WHERE id = ${input.merchantId} FOR UPDATE
         `;
-        const lockedStatus = locked[0]?.status;
-        if (!lockedStatus) {
+        const lockedRow = locked[0];
+        if (!lockedRow) {
           throw new PayError(`Merchant ${input.merchantId} not found`, 'pay.merchant_not_found');
         }
 
@@ -1924,8 +2391,17 @@ export class PayService {
         `;
         if (existing[0]) return toSettlement(existing[0]);
 
-        if (lockedStatus !== 'active') {
-          throw new PayError(`Merchant ${input.merchantId} is ${lockedStatus}`, 'pay.merchant_inactive');
+        if (lockedRow.status !== 'active') {
+          throw new PayError(`Merchant ${input.merchantId} is ${lockedRow.status}`, 'pay.merchant_inactive');
+        }
+        const kybRefuse = merchantKybMoneyGateRefusal({
+          merchantId: input.merchantId,
+          status: lockedRow.status,
+          kybStatus: lockedRow.kyb_status,
+          valueMovement: this.valueMovement,
+        });
+        if (kybRefuse) {
+          throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
         }
 
         // Candidate ids only first — lock each payment FOR UPDATE before reading
@@ -1938,8 +2414,16 @@ export class PayService {
              AND p.currency = ${input.assetId}
              AND p.status = 'captured'
              AND NOT EXISTS (
+               -- Frozen into a settlement that has not been released. A released
+               -- inclusion (ops path after desync) is eligible for a later window.
                SELECT 1 FROM pay.payment_events s
                 WHERE s.payment_id = p.id AND s.event = 'settlement.included'
+                  AND NOT EXISTS (
+                    SELECT 1 FROM pay.payment_events r
+                     WHERE r.payment_id = s.payment_id
+                       AND r.event = 'settlement.released'
+                       AND r.payload->>'settlementId' = s.payload->>'settlementId'
+                  )
              )
              AND EXISTS (
                SELECT 1 FROM pay.payment_events c
@@ -2021,6 +2505,103 @@ export class PayService {
   }
 
   /**
+   * G3 — release a stuck `pending` settlement so its payments can re-enter a
+   * later window.
+   *
+   * After freeze, if post can never succeed (desync), payments stay marked
+   * `settlement.included` forever and no later freeze can pick them up. This is
+   * the honest ops path: mark the window `failed`, append `settlement.released`
+   * per included payment, move no ledger value.
+   *
+   * HEAL BEFORE RELEASE. Dual-book lag (ledger `merchantSettlement` posted, SQL
+   * txn rolled back) leaves the row `pending` while the merchant is already
+   * credited. Releasing then would free payments into a later window and
+   * double-credit under a new settlement key. Prefer `settleWindow` re-run —
+   * which is idempotent on `settlement:<merchant>:<window>:<asset>` — and only
+   * release when that re-run refuses as desynced (post truly cannot succeed).
+   *
+   * Only `pending` windows. Posted/paid_out/failed refuse (failed is idempotent).
+   */
+  async releasePendingSettlement(input: {
+    settlementId: string;
+    /** Free-text ops reason (journaled; required so silent cancels are impossible). */
+    reason: string;
+  }): Promise<SettlementRecord> {
+    const reason = input.reason?.trim() ?? '';
+    if (!reason) {
+      throw new PayError('releasePendingSettlement requires a non-empty reason', 'pay.invalid_transition');
+    }
+
+    const head = await this.sql<SettlementRow[]>`
+      SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+        FROM pay.settlements WHERE id = ${input.settlementId}
+    `;
+    const current = head[0];
+    if (!current) throw new PayError(`Settlement ${input.settlementId} not found`, 'pay.settlement_not_found');
+    if (current.status === 'failed') return toSettlement(current);
+    if (current.status !== 'pending') {
+      throw new PayError(
+        `Settlement ${current.id} is ${current.status}; only a pending settlement can be released`,
+        'pay.settlement_not_pending',
+        { settlementId: current.id, status: current.status },
+      );
+    }
+
+    // Prefer heal by settlement id (not settleWindow — custom window labels need
+    // from/to that release does not carry). Ledger re-post is idempotent on
+    // settlement:<merchant>:<window>:<asset>; projection catches up. Only
+    // desync falls through to release.
+    try {
+      const healed = await this.postPendingSettlement(current.id);
+      if (healed.status !== 'pending') return healed;
+    } catch (err) {
+      if (!(err instanceof PayError) || err.code !== 'pay.settlement_desynced') {
+        throw err;
+      }
+    }
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements WHERE id = ${input.settlementId} FOR UPDATE
+        `;
+        const row = rows[0];
+        if (!row) throw new PayError(`Settlement ${input.settlementId} not found`, 'pay.settlement_not_found');
+        if (row.status === 'failed') return toSettlement(row);
+        if (row.status !== 'pending') {
+          // Healed under us, or concurrent post finished.
+          return toSettlement(row);
+        }
+
+        const included = await tx<Array<{ payment_id: string }>>`
+          SELECT payment_id FROM pay.payment_events
+           WHERE event = 'settlement.included' AND payload->>'settlementId' = ${row.id}
+           ORDER BY payment_id
+        `;
+
+        for (const { payment_id } of included) {
+          await appendEvent(tx, payment_id, 'settlement.released', {
+            settlementId: row.id,
+            window: row.window,
+            assetId: row.asset_id,
+            reason,
+          });
+        }
+
+        await tx`
+          UPDATE pay.settlements SET status = 'failed', updated_at = now()
+           WHERE id = ${row.id}
+        `;
+
+        return toSettlement({ ...row, status: 'failed' });
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  /**
    * Pay a settled window out of the book, to a bank or a chain (§6.1 "payout to
    * bank/crypto via adapter `payout`").
    *
@@ -2038,7 +2619,7 @@ export class PayService {
   async payoutSettlement(input: {
     settlementId: string;
     railId: string;
-    destination: { kind: string; ref: string };
+    destination?: { kind: string; ref: string };
   }): Promise<SettlementRecord> {
     return withMoneySpan(
       'pay.payoutSettlement',
@@ -2061,27 +2642,44 @@ export class PayService {
         }
 
         const merchant = await this.getMerchant(settlement.merchantId);
-        // Money is about to leave the book for a bank or a chain. A suspended
-        // merchant keeps their posted settlement (funds stay in available) but
-        // cannot drain it while cut off — same code as createPayment.
-        this.assertMerchantActive(merchant);
+
+        // Crypto-native pays the stored EVM dest. Refuse if none stored —
+        // BEFORE withdrawHold. Caller dest is persisted first, then required.
+        // Other rails still take the caller dest. Does not live-wire bank-payout.
+        const destination = await this.resolvePayoutDestination(adapter.id, merchant.id, input.destination);
 
         // The attempt number is part of the hold's business key. A refused
         // payout releases the hold, so the next attempt must not reuse the key
         // — it would find the original hold, move nothing, and then try to
         // settle out of a hold that is no longer there. It advances only on
         // refusal, so a crash-and-resume reuses its key and stays idempotent.
-        const withdrawal = {
-          userId: merchant.userId,
+        const ledgerPlan = settlementLedgerPlan({
+          settlementId: settlement.id,
+          payoutAttempt: settlement.payoutAttempts,
+          merchantUserId: merchant.userId,
           assetId: settlement.assetId,
           amount: settlement.net,
-          rail: adapter.id,
-          withdrawalId: `${settlement.id}:${settlement.payoutAttempts}`,
-        };
+          railId: adapter.id,
+          destinationKind: destination.kind,
+        });
+
+        // G4: suspension must not open a NEW drain. But if withdrawHold already
+        // posted (crash between hold and rail/settle), money sits in the purpose
+        // hold — resume must finish via the same idempotent key. Refusing with
+        // merchant_inactive here strands the hold forever.
+        const openHold = (await this.ledger.balance(withdrawalHoldAccount(merchant.userId, settlement.assetId, ledgerPlan.withdrawalId)))
+          .amount;
+        if (openHold <= 0n) {
+          // Money is about to leave available for a bank or a chain. A suspended
+          // merchant keeps their posted settlement (funds stay in available) but
+          // cannot open a new hold while cut off — same code as createPayment.
+          this.assertMerchantActive(merchant);
+        }
 
         // Ledger first: outbound. The merchant's net leaves `available` and
-        // waits in `hold` while the rail works.
-        await this.ledger.post(recipes.withdrawHold(withdrawal));
+        // waits in `hold` while the rail works. Idempotent on withdrawalId when
+        // we are finishing an already-open hold after a crash.
+        await this.ledger.post(ledgerPlan.hold);
 
         const result = await withRailSpan(adapter.id, 'payout', async () =>
           adapter.payout({
@@ -2090,12 +2688,12 @@ export class PayService {
             amount: settlement.net,
             assetId: settlement.assetId,
             window: settlement.window,
-            destination: input.destination,
+            destination,
           }),
         );
 
         if (!result.ok) {
-          await this.ledger.post(recipes.withdrawReverse(withdrawal));
+          await this.ledger.post(ledgerPlan.reverse);
           await this.sql`
             UPDATE pay.settlements
                SET status = 'failed', payout_attempts = payout_attempts + 1, updated_at = now()
@@ -2107,7 +2705,7 @@ export class PayService {
           });
         }
 
-        await this.ledger.post(recipes.withdrawSettle(withdrawal));
+        await this.ledger.post(ledgerPlan.settle);
         await this.sql`
           UPDATE pay.settlements
              SET status = 'paid_out', payout_method = ${adapter.id}, payout_ref = ${result.railRef}, updated_at = now()
@@ -2119,6 +2717,57 @@ export class PayService {
     );
   }
 
+  /**
+   * Crypto-native: persist offered dest (if any), then require the stored EVM
+   * dest. Refuse closed if none stored. Other rails: caller dest + kind gate.
+   * Does not invent a PSP. Does not live-wire bank-payout.
+   */
+  private async resolvePayoutDestination(
+    railId: string,
+    merchantId: string,
+    offered?: { kind: string; ref: string },
+  ): Promise<{ kind: string; ref: string }> {
+    if (railId === 'crypto-native') {
+      try {
+        if (offered) {
+          await this.payoutDestinations.persist({
+            merchantId,
+            railId,
+            kind: offered.kind,
+            ref: offered.ref,
+          });
+        }
+        const stored = await this.payoutDestinations.require({ merchantId, railId });
+        assertPayoutDestinationKind(railId, stored);
+        return stored;
+      } catch (err) {
+        if (err instanceof PayoutDestinationMissingError) {
+          throw new PayError(err.message, 'pay.payout_destination_missing', { merchantId, railId });
+        }
+        if (err instanceof DestinationKindError) {
+          throw new PayError(err.message, err.code);
+        }
+        throw err;
+      }
+    }
+
+    if (!offered) {
+      throw new PayError(`Merchant ${merchantId} has no payout destination for rail ${railId}`, 'pay.payout_destination_missing', {
+        merchantId,
+        railId,
+      });
+    }
+    try {
+      assertPayoutDestinationKind(railId, offered);
+    } catch (err) {
+      if (err instanceof DestinationKindError) {
+        throw new PayError(err.message, err.code);
+      }
+      throw err;
+    }
+    return offered;
+  }
+
   async getSettlement(settlementId: string): Promise<SettlementRecord> {
     const rows = await this.sql<SettlementRow[]>`
       SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
@@ -2127,6 +2776,33 @@ export class PayService {
     const row = rows[0];
     if (!row) throw new PayError(`Settlement ${settlementId} not found`, 'pay.settlement_not_found');
     return toSettlement(row);
+  }
+
+  /**
+   * Merchant fleet list — settlements already stored; this only reads them.
+   * No freeze, no post, no payout. Caller fences merchant ownership / area.
+   */
+  async listSettlements(input: { merchantId: string; status?: SettlementStatus; limit?: number }): Promise<SettlementRecord[]> {
+    await this.getMerchant(input.merchantId);
+    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const rows = input.status
+      ? await this.sql<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net,
+                 payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements
+           WHERE merchant_id = ${input.merchantId} AND status = ${input.status}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `
+      : await this.sql<SettlementRow[]>`
+          SELECT id, merchant_id, "window", asset_id, gross, fees, net,
+                 payout_method, payout_ref, payout_attempts, status
+            FROM pay.settlements
+           WHERE merchant_id = ${input.merchantId}
+           ORDER BY created_at DESC
+           LIMIT ${limit}
+        `;
+    return rows.map(toSettlement);
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────
@@ -2175,17 +2851,27 @@ export class PayService {
   }
 
   /**
-   * One gate, one code, every money-moving surface that should refuse a
-   * non-active merchant: createPayment, openCheckout, createPaymentLink,
-   * settleWindow (post), prepareSettlement (new freeze), payoutSettlement.
+   * One gate, every money-moving surface that should refuse a non-active
+   * merchant: createPayment, openCheckout, createPaymentLink, authorize,
+   * capture, settleWindow (post), prepareSettlement (new freeze),
+   * payoutSettlement. Refund is intentionally not on this list (payer return).
    *
-   * `status` is the operational cut-off (`suspended` / `closed` / `pending`);
-   * `kybStatus` is a separate flag and is deliberately not read here — wiring
-   * KYB into the money gates is its own residual once a real approver exists.
+   * `status` is the operational cut-off (`suspended` / `closed` / `pending`).
+   * Layer B also reads `kybStatus`: `rejected` never pays; `live-only` requires
+   * approved KYB (`pay.kyb_required`). Does not invent `pay:*` scopes.
    */
   private assertMerchantActive(merchant: MerchantRecord): void {
     if (merchant.status !== 'active') {
       throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+    }
+    const kybRefuse = merchantKybMoneyGateRefusal({
+      merchantId: merchant.id,
+      status: merchant.status,
+      kybStatus: merchant.kybStatus,
+      valueMovement: this.valueMovement,
+    });
+    if (kybRefuse) {
+      throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
     }
   }
 }

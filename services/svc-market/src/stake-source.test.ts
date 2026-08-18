@@ -10,11 +10,9 @@ import { createStakeSource } from './stake-source.js';
  * mocked `fetch` would prove the branches and nothing about whether a real
  * non-2xx actually reaches them.
  *
- * The first case is not hypothetical. `GET /internal/stake/:userId` returns HTTP
- * 500 to every caller on `main` today — `AccessTier.minStake` is a bigint and
- * Fastify's `JSON.stringify` fallback throws on one — and the fix (PR #1100) is
- * green but unmerged. Until it lands, that first test is a description of
- * production.
+ * The first case stays: any 500 from svc-token must refuse closed, even though
+ * PR #1100 (merged) fixed the historic "bigint minStake always 500" bug. A
+ * fail-open path would still be wrong on a real outage.
  */
 
 const SECRET = 'a-market-stake-source-test-secret-long-enough';
@@ -41,7 +39,7 @@ async function serve(status: number, body: unknown): Promise<string> {
 const USER = '11111111-1111-4111-8111-111111111111';
 
 describe('createStakeSource — refuses rather than guessing', () => {
-  it('refuses when the endpoint 500s, which is what it does on main today', async () => {
+  it('refuses when the endpoint 500s rather than guessing capacity', async () => {
     const url = await serve(500, { statusCode: 500, message: 'Do not know how to serialize a BigInt' });
     await expect(createStakeSource(url, SECRET).entitlementOf(USER)).rejects.toMatchObject({ code: 'market.stake_unavailable' });
   });
@@ -72,6 +70,22 @@ describe('createStakeSource — refuses rather than guessing', () => {
   it('refuses a 200 whose payload has no vendorSlots', async () => {
     const url = await serve(200, { staked: '10000', tier: { name: 'Operator' }, feeDiscountBps: 2000 });
     await expect(createStakeSource(url, SECRET).entitlementOf(USER)).rejects.toMatchObject({ code: 'market.stake_unavailable' });
+  });
+
+  it('refuses unset owner slot magnitudes rather than inventing a count', async () => {
+    for (const body of [
+      { staked: '10000', tier: { name: 'Operator', minStake: '10000' } },
+      { staked: '10000', tier: { name: 'Operator', minStake: '10000', vendorSlots: undefined } },
+      { staked: '10000', tier: { name: 'Operator', minStake: '10000', vendorSlots: null } },
+      {},
+    ]) {
+      const url = await serve(200, body);
+      await expect(createStakeSource(url, SECRET).entitlementOf(USER)).rejects.toMatchObject({
+        code: 'market.stake_unavailable',
+      });
+      await new Promise<void>((resolve) => server!.close(() => resolve()));
+      server = undefined;
+    }
   });
 
   it('refuses a vendorSlots that is not a non-negative integer', async () => {

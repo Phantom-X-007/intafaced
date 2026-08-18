@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { userCopy } from './user-copy.js';
 
 /**
  * BROWSER ORIGINS — the door `apps/web` has been knocking on since it was built.
@@ -88,9 +89,12 @@ import type { FastifyInstance } from 'fastify';
  *     `principal-exchange.ts` removes it regardless; this is the same rule
  *     enforced one layer earlier, where the caller can see it.
  *   · `Access-Control-Expose-Headers` is unset. Clients read bodies, not headers.
- *   · `DELETE`/`PUT`/`PATCH` are not allowed methods. The only such route in the
- *     fleet is svc-matching's cancel, and svc-matching is deliberately absent
- *     from the route table — so a browser cannot even ask.
+ *   · `DELETE`/`PUT`/`PATCH` are not CORS-allowed methods. That is a browser
+ *     preflight rule, not a claim about the proxy. The edge DOES forward
+ *     `DELETE /api/v1/orders…` (CCXT cancel — kill-switch release path) for
+ *     non-browser clients that send no `Origin`. Browsers cancel via tRPC
+ *     `orders.cancel` (POST). svc-matching's DELETE surface is deliberately
+ *     absent from the route table entirely.
  *   · `http://localhost:8090` (the vendored shell) is not in the dev defaults. It
  *     is served same-origin through nginx and needs no CORS; listing it would
  *     grant a cross-origin capability to something that already works without one.
@@ -144,11 +148,16 @@ export const CORS_ENFORCED_ENVS = ['staging', 'prod'] as const;
 export const DEV_ORIGINS: readonly string[] = ['http://localhost:3100', 'http://127.0.0.1:3100'];
 
 /**
- * `GET, POST, OPTIONS` and nothing more.
+ * `GET, POST, OPTIONS` and nothing more — for browser CORS preflight only.
  *
- * tRPC uses GET for queries and POST for mutations; the CCXT REST contract on
- * `/api/v1` uses the same two. The fleet's only DELETE route belongs to
- * svc-matching, which has no entry in the route table on purpose.
+ * tRPC uses GET for queries and POST for mutations. Browsers that cancel orders
+ * use `orders.cancel` (POST). The CCXT REST contract also exposes DELETE
+ * cancels on `/api/v1/orders…` (see `ALWAYS_ALLOWED_REST` in kill-switch.ts);
+ * those are for bots/ccxt clients that do not send `Origin`, so CORS never
+ * applies. Advertising DELETE here would grant a cross-origin cancel surface
+ * to any allowed browser origin with no product need.
+ *
+ * Do not re-read this constant as "the edge has no DELETE routes."
  */
 export const ALLOWED_METHODS = 'GET, POST, OPTIONS';
 
@@ -425,7 +434,7 @@ export function registerCors(app: FastifyInstance, allowlist: OriginAllowlist): 
         // a bare 204 so a developer staring at devtools is told the origin was
         // the problem; it reveals nothing, because the decision was made before
         // anything about the path was looked at.
-        return reply.code(403).send({ error: 'origin not allowed', code: 'edge.origin_not_allowed' });
+        return reply.code(403).send({ error: userCopy('edge.origin_not_allowed'), code: 'edge.origin_not_allowed' });
       }
 
       return reply

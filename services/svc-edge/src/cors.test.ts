@@ -316,6 +316,19 @@ describe('preflight', () => {
     }
   });
 
+  /**
+   * Honesty residual: CORS methods are not a map of what the proxy forwards.
+   * DELETE cancels on `/api/v1/orders…` are real release paths for bots/ccxt
+   * (no Origin → no CORS). Browsers cancel via tRPC POST. Never re-read
+   * ALLOWED_METHODS as "edge has no DELETE routes."
+   */
+  it('excludes DELETE from CORS while kill-switch still names DELETE release routes', async () => {
+    const { ALWAYS_ALLOWED_REST } = await import('./kill-switch.js');
+    expect(ALLOWED_METHODS).toBe('GET, POST, OPTIONS');
+    expect(ALLOWED_METHODS).not.toMatch(/DELETE/i);
+    expect(ALWAYS_ALLOWED_REST.some((r) => r.method === 'DELETE')).toBe(true);
+  });
+
   it('a DISALLOWED origin gets no allow-origin header at all — not a 200 with a permissive one', async () => {
     const { app } = await edge();
     const res = await preflight(app, '/api/trade/trpc/orders.create', EVIL);

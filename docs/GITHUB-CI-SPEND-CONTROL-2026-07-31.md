@@ -41,10 +41,16 @@ prose in every law doc. `push: main` was restored on `ci.yml` the same day.
 
 ## The one legitimate concern, and what handles it now
 
-Thrift was right about exactly one thing: a push storm should not stack ten redundant runs
-of the same branch. That is already handled, and always was, by
-**`concurrency: … cancel-in-progress: true`** — which every workflow sets. A new push
-cancels the superseded run. No policy, no meter, no human judgement.
+Thrift was right about exactly one thing: a **PR** push storm should not stack ten redundant
+runs of the same branch. That is handled by
+**`concurrency: … cancel-in-progress: true` on pull_request refs** — a new push to the same
+PR cancels the superseded run. No policy, no meter, no human judgement.
+
+**Update 2026-08-09 (not thrift):** on `main`, `ci.yml` sets **`cancel-in-progress` false**.
+Under swarm merge bursts, cancelling unfinished trunk runs left almost no finished green/red
+signal on intermediate tips (measured ~95% cancelled). Actions are free on this public repo;
+finishing every main run is the point of `push:main`. See `ci.yml` concurrency comments and
+`CONTRIBUTING.md` §1.
 
 Two habits also survived thrift's deletion, for reasons that were never about money:
 

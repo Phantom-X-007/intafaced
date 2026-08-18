@@ -3,8 +3,10 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryProjectionStore } from './projection/memory-store.js';
 import { MemoryChainSource, NullChainSource } from './chain/memory-source.js';
+import { ChainUnavailableError } from './chain/evm/availability.js';
+import type { ChainBlock, ChainHead, ChainSource } from './chain/source.js';
 import { Indexer } from './indexer.js';
-import { createIndexerRouter } from './router.js';
+import { createIndexerRouter, type ChainProbe } from './router.js';
 import { CHAIN_ID } from './testing/conformance.js';
 
 /**
@@ -125,9 +127,65 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     expect(fills[0]).toMatchObject({ price: '100.5', quantity: '1.5', takerSide: 'buy' });
     // Strings, not numbers — a client that wants arithmetic parses them.
     expect(typeof fills[0]!.price).toBe('string');
+    expect(typeof fills[0]!.quantity).toBe('string');
 
     const positions = await caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
     expect(positions[0]).toMatchObject({ size: '-1.5', entryPrice: '100.5' });
+    expect(typeof positions[0]!.size).toBe('string');
+    expect(typeof positions[0]!.entryPrice).toBe('string');
+  });
+
+  /**
+   * README API table residual: `markets`, `accountFills`, singular `position`.
+   * Seed already carries a fill + position for 0xAA…; prove an anonymous
+   * caller gets them with money still as decimal strings, and that the
+   * account key is case-insensitive (checksummed vs lower hex).
+   */
+  it('serves markets, accountFills and singular position with no credentials', async () => {
+    const caller = (await seeded()).createCaller(anonymous());
+    // Seed applies uppercase 0xAA…; store normalises to lower (#1228).
+    const lowerAccount = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const emptyAccount = '0x0000000000000000000000000000000000000001';
+
+    const markets = await caller.markets();
+    expect(markets).toContain('IFC-USD');
+
+    // Mixed-case address must hit the same tape as the seed (case-insensitive).
+    // Stored addresses are lowercased (#1228) — assert the canonical form.
+    const accountFills = await caller.accountFills({ account: lowerAccount, limit: 10 });
+    expect(accountFills).toHaveLength(1);
+    expect(accountFills[0]).toMatchObject({
+      market: 'IFC-USD',
+      price: '100.5',
+      quantity: '1.5',
+      takerSide: 'buy',
+      // Wire normalises EVM addresses to lower hex (same case-insensitivity as the account key).
+      maker: lowerAccount,
+    });
+    expect(typeof accountFills[0]!.price).toBe('string');
+    expect(typeof accountFills[0]!.quantity).toBe('string');
+
+    const position = await caller.position({ market: 'IFC-USD', account: lowerAccount });
+    expect(position).toMatchObject({
+      market: 'IFC-USD',
+      size: '-1.5',
+      entryPrice: '100.5',
+    });
+    expect(typeof position!.size).toBe('string');
+    expect(typeof position!.entryPrice).toBe('string');
+
+    // No row for this address → null, not an empty object or a throw.
+    await expect(caller.position({ market: 'IFC-USD', account: emptyAccount })).resolves.toBeNull();
+  });
+
+  it('book level quantities are decimal strings, not numbers', async () => {
+    const view = await (await seeded()).createCaller(anonymous()).book({ market: 'IFC-USD', depth: 10 });
+    expect(view.bids[0]).toEqual(['100', '5']);
+    expect(view.asks[0]).toEqual(['101', '2']);
+    for (const [price, qty] of [...view.bids, ...view.asks]) {
+      expect(typeof price).toBe('string');
+      expect(typeof qty).toBe('string');
+    }
   });
 
   it('answers identically for every region, because there is nothing to gate', async () => {
@@ -157,8 +215,39 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
   });
 });
 
+/**
+ * Production's no-RPC probe shape (`src/index.ts` when INDEXER_RPC_URL is empty).
+ * Mounted hermetically so status honesty does not need a live node.
+ */
+function productionNullProbe(): () => Promise<ChainProbe> {
+  return async () => ({
+    kind: 'null',
+    rpcUrl: null,
+    venue: null,
+    reachable: false,
+    observedChainId: null,
+    chainHeight: null,
+    venueDeployed: false,
+    refusalCode: 'indexer.chain_not_configured',
+    reason:
+      'INDEXER_RPC_URL is not set, so this service is following no chain. Everything it serves is whatever ' +
+      'was projected before, and nothing is advancing it. (SOCKET §13 socket.evm-rpc)',
+  });
+}
+
+/** A source that throws a typed chain refusal — real Indexer path records lastError. */
+class UnreachableChainSource implements ChainSource {
+  constructor(readonly chainId: number) {}
+  async head(): Promise<ChainHead | null> {
+    throw new ChainUnavailableError('indexer.chain_unreachable', 'endpoint refused at hermetic mount test');
+  }
+  async blockAt(_height: number): Promise<ChainBlock | null> {
+    throw new ChainUnavailableError('indexer.chain_unreachable', 'endpoint refused at hermetic mount test');
+  }
+}
+
 describe('svc-indexer mount — status is honest', () => {
-  it('reports the null chain source and no head on a cold service', async () => {
+  it('behindBy is null (not zero) when no probe is wired and heights are unknown', async () => {
     const store = new MemoryProjectionStore(CHAIN_ID);
     const indexer = new Indexer({
       source: new NullChainSource(CHAIN_ID),
@@ -173,14 +262,175 @@ describe('svc-indexer mount — status is honest', () => {
       finalityDepth: 64,
       ingestEnabled: () => true,
       chainSource: 'null',
+      // no chainProbe — "nobody asked", never a quiet zero
     });
 
-    await expect(router.createCaller(anonymous()).status()).resolves.toMatchObject({
-      chainSource: 'null',
-      indexedHeight: null,
-      finalizedHeight: null,
-      halted: null,
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.chainSource).toBe('null');
+    expect(status.indexedHeight).toBeNull();
+    expect(status.finalizedHeight).toBeNull();
+    expect(status.halted).toBeNull();
+    expect(status.chain).toBeNull();
+    // Zero would read as "current". Unknown heights → null, never a default.
+    expect(status.behindBy).toBeNull();
+    expect(status.lastError).toBeNull();
+  });
+
+  it('behindBy is tip minus cursor when a probe reports both heights', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    // Cursor at 97 without walking 97 empty blocks.
+    await store.applyBlock({
+      chainId: CHAIN_ID,
+      height: 97,
+      hash: `0x${'a'.repeat(64)}`,
+      parentHash: `0x${'0'.repeat(64)}`,
+      timestamp: 1_700_000_000,
+      events: [],
     });
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: async () => ({
+        kind: 'evm',
+        rpcUrl: 'http://probe.test',
+        venue: `0x${'1'.repeat(40)}`,
+        reachable: true,
+        observedChainId: CHAIN_ID,
+        chainHeight: 100,
+        venueDeployed: true,
+        refusalCode: null,
+        reason: null,
+      }),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.indexedHeight).toBe(97);
+    expect(status.chain).toMatchObject({ kind: 'evm', chainHeight: 100, reachable: true });
+    expect(status.behindBy).toBe(3);
+  });
+
+  /**
+   * Tip can be below the cursor after a shortening reorg race (or a lagging
+   * probe). Zero-clamping would lie as "current". Pin the signed subtraction.
+   */
+  it('behindBy is negative when the probe tip is below the cursor', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    await store.applyBlock({
+      chainId: CHAIN_ID,
+      height: 97,
+      hash: `0x${'a'.repeat(64)}`,
+      parentHash: `0x${'0'.repeat(64)}`,
+      timestamp: 1_700_000_000,
+      events: [],
+    });
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: async () => ({
+        kind: 'evm',
+        rpcUrl: 'http://probe.test',
+        venue: `0x${'1'.repeat(40)}`,
+        reachable: true,
+        observedChainId: CHAIN_ID,
+        chainHeight: 90,
+        venueDeployed: true,
+        refusalCode: null,
+        reason: null,
+      }),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.indexedHeight).toBe(97);
+    expect(status.behindBy).toBe(-7);
+  });
+
+  it('dark chain: production-shaped null probe surfaces refusal, never a quiet zero lag', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'null',
+      chainProbe: productionNullProbe(),
+    });
+
+    const status = await router.createCaller(anonymous()).status();
+    expect(status.chain).toMatchObject({
+      kind: 'null',
+      reachable: false,
+      chainHeight: null,
+      venueDeployed: false,
+      refusalCode: 'indexer.chain_not_configured',
+    });
+    expect(status.behindBy).toBeNull();
+    expect(status.indexedHeight).toBeNull();
+    expect(status.lastError).toBeNull();
+  });
+
+  it('puts lastError on the wire when a sync pass fails with a typed code', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new UnreachableChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+    });
+    await expect(indexer.sync()).rejects.toMatchObject({ code: 'indexer.chain_unreachable' });
+    expect(indexer.lastError).toMatchObject({
+      code: 'indexer.chain_unreachable',
+      message: expect.stringContaining('hermetic mount test'),
+    });
+
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'evm',
+      chainProbe: productionNullProbe(),
+    });
+
+    const caller = router.createCaller(anonymous());
+    const status = await caller.status();
+    expect(status.lastError).not.toBeNull();
+    expect(status.lastError).toMatchObject({
+      code: 'indexer.chain_unreachable',
+      message: expect.stringContaining('hermetic mount test'),
+    });
+    expect(typeof status.lastError!.at).toBe('string');
+    // ISO timestamp, not a Date object on the wire.
+    expect(Number.isNaN(Date.parse(status.lastError!.at))).toBe(false);
+    // D26-P1-I3: chain-door lastError refuses data paths (no fake live book).
+    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('surfaces a halt, so a caller is told before it renders a price', async () => {
@@ -206,6 +456,58 @@ describe('svc-indexer mount — status is honest', () => {
     expect(status.halted).not.toBeNull();
     expect(status.halted!.reason).toMatch(/re-index/);
   });
+
+  it('refuses book/fills/positions when halted — status still answers', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const source = new MemoryChainSource(CHAIN_ID);
+    source.append([{ kind: 'book_level', logIndex: 0, market: 'IFC-USD', side: 'bid', price: '100', quantity: '5' }]);
+    for (let i = 0; i < 5; i++) source.append([]);
+
+    const indexer = new Indexer({ source, store, finalityDepth: 1, ingestEnabled: () => true, startHeight: 0 });
+    await indexer.sync();
+    // Book is still in the store after a deep halt — that is the trap: the
+    // projection was never unwound. Refusing the data path is what stops a
+    // client rendering a price from a branch that no longer exists.
+    expect((await store.book('IFC-USD', 10)).bids).toHaveLength(1);
+
+    source.reorg(0, [[], [], []]);
+    await expect(indexer.sync()).rejects.toThrow(/deeper than retained history/);
+
+    const caller = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 1,
+      ingestEnabled: () => true,
+      chainSource: 'memory',
+    }).createCaller(anonymous());
+
+    // status is the diagnostic surface — always answers.
+    await expect(caller.status()).resolves.toMatchObject({
+      halted: expect.objectContaining({ reason: expect.stringMatching(/re-index/) }),
+    });
+    // health is liveness — the process is up.
+    await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
+
+    // Every data procedure refuses. SERVICE_UNAVAILABLE, not a silent book.
+    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    // accountFills + singular position share assertServing — pin the matrix.
+    await expect(caller.accountFills({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await expect(caller.position({ market: 'IFC-USD', account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
+  });
 });
 
 describe('svc-indexer mount — health', () => {
@@ -217,5 +519,28 @@ describe('svc-indexer mount — health', () => {
       custodial: false,
       ingestEnabled: true,
     });
+  });
+});
+
+describe('svc-indexer mount — kill-switch is visible on the API', () => {
+  it('reports ingestEnabled false on health and status when the switch is off', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const indexer = new Indexer({
+      source: new NullChainSource(CHAIN_ID),
+      store,
+      finalityDepth: 64,
+      ingestEnabled: () => false,
+    });
+    const router = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => false,
+      chainSource: 'null',
+    });
+    const caller = router.createCaller(anonymous());
+    await expect(caller.health()).resolves.toMatchObject({ ingestEnabled: false, custodial: false });
+    await expect(caller.status()).resolves.toMatchObject({ ingestEnabled: false });
   });
 });

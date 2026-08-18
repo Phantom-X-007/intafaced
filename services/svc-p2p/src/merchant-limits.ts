@@ -1,4 +1,4 @@
-import { formatAmount, type Amount } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { isActiveMerchant, type MerchantStatus } from './merchant-programme.js';
 
 /**
@@ -19,12 +19,11 @@ import { isActiveMerchant, type MerchantStatus } from './merchant-programme.js';
  * live market, and the person who eventually sets the real figure would be
  * arguing against a status quo nobody chose.
  *
- * So the MECHANISM ships and the POLICY does not. Unset means unlimited, which
- * is exactly today's behaviour — this PR cannot change what any existing offer
- * is allowed to do. When an operator sets a figure it takes effect immediately
- * and merchants get the higher one. `describeLimits` exists so the deployment
- * says which of the two states it is in, rather than leaving an operator to
- * infer it from an offer that did or did not refuse.
+ * So the MECHANISM ships and the POLICY does not. Unset still refuses nothing
+ * (same as before Stage 2), but it is not the same claim as an owner writing
+ * the literal `unlimited`. Clients learn that three-way posture without a
+ * refuse-first probe. When an operator sets a figure it takes effect
+ * immediately and only `approved` standing earns the merchant slot.
  *
  * ── WHY A CAP AT ALL ─────────────────────────────────────────────────────
  *
@@ -35,6 +34,11 @@ import { isActiveMerchant, type MerchantStatus } from './merchant-programme.js';
  * and the badge are the same control seen from two sides.
  */
 
+export type OfferLimitMode = 'unset' | 'unlimited' | 'capped';
+
+/** Deployment-level posture. `configured` means at least one band is a number. */
+export type OfferLimitsPosture = 'unset' | 'unlimited' | 'configured';
+
 export interface OfferLimitPolicy {
   /**
    * Largest `maxAmt` an ordinary trader may offer, or `null` for no limit.
@@ -43,13 +47,61 @@ export interface OfferLimitPolicy {
   readonly standardMaxAmount: Amount | null;
   /** Largest `maxAmt` an APPROVED merchant may offer, or `null` for no limit. */
   readonly merchantMaxAmount: Amount | null;
+  /** When omitted, a null amount is treated as `unset` (not owner-confirmed unlimited). */
+  readonly standardMode?: OfferLimitMode;
+  readonly merchantMode?: OfferLimitMode;
 }
 
 /** No policy configured. Identical to the behaviour before Stage 2 existed. */
 export const NO_OFFER_LIMITS: OfferLimitPolicy = Object.freeze({
   standardMaxAmount: null,
   merchantMaxAmount: null,
+  standardMode: 'unset',
+  merchantMode: 'unset',
 });
+
+export function bandMode(amount: Amount | null, mode?: OfferLimitMode): OfferLimitMode {
+  if (mode) return mode;
+  return amount === null ? 'unset' : 'capped';
+}
+
+export function offerLimitsPosture(policy: OfferLimitPolicy): OfferLimitsPosture {
+  const standard = bandMode(policy.standardMaxAmount, policy.standardMode);
+  const merchant = bandMode(policy.merchantMaxAmount, policy.merchantMode);
+  if (standard === 'capped' || merchant === 'capped') return 'configured';
+  if (standard === 'unlimited' || merchant === 'unlimited') return 'unlimited';
+  return 'unset';
+}
+
+/**
+ * Owner env → policy. Unset / blank stays a null ceiling (`unset` mode).
+ *
+ * `P2P_OFFER_MAX_STANDARD` / `P2P_OFFER_MAX_MERCHANT` are product law. A
+ * default numeric max invented here would start refusing offers that an unset
+ * deployment allows today. Armed values are decimal strings; the literal
+ * `unlimited` is owner confirmation, not a magnitude.
+ */
+export function offerLimitsFromEnv(env: {
+  P2P_OFFER_MAX_STANDARD?: string | undefined;
+  P2P_OFFER_MAX_MERCHANT?: string | undefined;
+}): OfferLimitPolicy {
+  const standard = bandFromEnv(env.P2P_OFFER_MAX_STANDARD);
+  const merchant = bandFromEnv(env.P2P_OFFER_MAX_MERCHANT);
+  return {
+    standardMaxAmount: standard.maxAmount,
+    merchantMaxAmount: merchant.maxAmount,
+    standardMode: standard.mode,
+    merchantMode: merchant.mode,
+  };
+}
+
+function bandFromEnv(raw: string | undefined): { mode: OfferLimitMode; maxAmount: Amount | null } {
+  if (raw === undefined) return { mode: 'unset', maxAmount: null };
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return { mode: 'unset', maxAmount: null };
+  if (trimmed.toLowerCase() === 'unlimited') return { mode: 'unlimited', maxAmount: null };
+  return { mode: 'capped', maxAmount: parseAmount(trimmed) };
+}
 
 /**
  * The ceiling that applies to one maker, or `null` for none.
@@ -95,17 +147,94 @@ export function checkOfferLimit(input: {
   return { withinLimit: false, reason: `${over} for this account.${route}` };
 }
 
+/** True when at least one ceiling is a number. Mirror of `moderationReachable` for limits. */
+export function limitsConfigured(policy: OfferLimitPolicy): boolean {
+  return offerLimitsPosture(policy) === 'configured';
+}
+
+function bandLabel(amount: Amount | null, mode?: OfferLimitMode): string {
+  const resolved = bandMode(amount, mode);
+  if (resolved === 'capped' && amount !== null) return formatAmount(amount);
+  return resolved;
+}
+
+/**
+ * Deployment posture on the wire — decimal strings or null (no numeric cap).
+ *
+ * Boot logs already print this via `describeLimits`. The API must too: a client
+ * that only learns a ceiling exists by getting refused is not an honest surface,
+ * and an operator dashboard that scrapes process logs is not a product API.
+ * Numbers still come only from env; this never invents magnitudes.
+ * `posture` distinguishes unset vs owner-confirmed unlimited vs configured.
+ */
+export function limitsOnWire(policy: OfferLimitPolicy): {
+  standardMax: string | null;
+  merchantMax: string | null;
+  configured: boolean;
+  posture: OfferLimitsPosture;
+  standardMode: OfferLimitMode;
+  merchantMode: OfferLimitMode;
+  summary: string;
+} {
+  const described = describeLimits(policy);
+  return {
+    standardMax: policy.standardMaxAmount === null ? null : formatAmount(policy.standardMaxAmount),
+    merchantMax: policy.merchantMaxAmount === null ? null : formatAmount(policy.merchantMaxAmount),
+    configured: limitsConfigured(policy),
+    posture: offerLimitsPosture(policy),
+    standardMode: bandMode(policy.standardMaxAmount, policy.standardMode),
+    merchantMode: bandMode(policy.merchantMaxAmount, policy.merchantMode),
+    summary: described.summary,
+  };
+}
+
+/**
+ * The ceiling that binds THIS maker right now, as the client should show it.
+ *
+ * `band` is which policy slot applied — not a badge claim. An applicant still
+ * under review is on the standard band even though they have a merchant row.
+ */
+export function ceilingOnWire(
+  status: MerchantStatus | null,
+  policy: OfferLimitPolicy,
+): {
+  maxAmount: string | null;
+  band: 'standard' | 'merchant';
+  limitMode: OfferLimitMode;
+  merchantStatus: MerchantStatus | null;
+} {
+  const band: 'standard' | 'merchant' = status !== null && isActiveMerchant(status) ? 'merchant' : 'standard';
+  const ceiling = limitFor(status, policy);
+  const limitMode =
+    band === 'merchant' ? bandMode(policy.merchantMaxAmount, policy.merchantMode) : bandMode(policy.standardMaxAmount, policy.standardMode);
+  return {
+    maxAmount: ceiling === null ? null : formatAmount(ceiling),
+    band,
+    limitMode,
+    merchantStatus: status,
+  };
+}
+
 /** One line for the boot log, so a deployment states which posture it is in. */
 export function describeLimits(policy: OfferLimitPolicy): { level: 'info' | 'warn'; summary: string } {
-  if (policy.standardMaxAmount === null && policy.merchantMaxAmount === null) {
+  const posture = offerLimitsPosture(policy);
+  if (posture === 'unset') {
     return {
       level: 'warn',
       summary:
-        'p2p offer limits: NONE CONFIGURED — any account may offer any size, and the merchant badge buys nothing. ' +
-        'Set P2P_OFFER_MAX_STANDARD / P2P_OFFER_MAX_MERCHANT to arm this.',
+        'p2p offer limits: NONE CONFIGURED (unset) — any account may offer any size, and the merchant badge buys nothing. ' +
+        'Set P2P_OFFER_MAX_STANDARD / P2P_OFFER_MAX_MERCHANT to a decimal string to arm, or the literal unlimited to confirm no ceiling.',
     };
   }
-  const standard = policy.standardMaxAmount === null ? 'unlimited' : formatAmount(policy.standardMaxAmount);
-  const merchant = policy.merchantMaxAmount === null ? 'unlimited' : formatAmount(policy.merchantMaxAmount);
+  if (posture === 'unlimited') {
+    return {
+      level: 'info',
+      summary:
+        'p2p offer limits: UNLIMITED (owner-confirmed) — any account may offer any size. ' +
+        'The merchant badge buys no extra ceiling until a numeric P2P_OFFER_MAX_* is set.',
+    };
+  }
+  const standard = bandLabel(policy.standardMaxAmount, policy.standardMode);
+  const merchant = bandLabel(policy.merchantMaxAmount, policy.merchantMode);
   return { level: 'info', summary: `p2p offer limits: standard ${standard} · approved merchant ${merchant}` };
 }

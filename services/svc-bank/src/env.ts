@@ -19,6 +19,12 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
+       * svc-identity base for affiliate accrue/payout after loan house fees.
+       * Unset → noop port (loanRepay / loanLiquidate still post). No localhost default.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * The native asset. svc-bank refuses it in earn pools because native
        * staking lives in svc-token (§8.1) — one asset, one owner.
        *
@@ -98,6 +104,19 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
+       * Module kill for collateralised loans (`FLAG_REGISTRY` bank.loans).
+       *
+       * OFF refuses new loan opens (and product-facing money paths that mint
+       * debt). Accrual / risk-sweep keep their own flags — this is "stop the
+       * product", not "stop one job". Defaults ON so existing deploys keep
+       * working; flip to stop without inventing a console that never bit.
+       */
+      BANK_LOANS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
        * THE ONE THAT SELLS PEOPLE'S COLLATERAL.
        *
        * Defaults to OFF. Every other job in this service defaults on, because the
@@ -149,6 +168,18 @@ const schema = serviceEnvSchema
        */
       BANK_CARD_ISSUER: z.enum(CARD_ISSUER_SETTINGS).default('none'),
 
+      /**
+       * Module kill for the card ledger half (`FLAG_REGISTRY` bank.cards).
+       *
+       * OFF refuses issue and authorise. Issuer setting (`BANK_CARD_ISSUER`)
+       * still names which programme exists when the module is on; this flag is
+       * the emergency product stop, not a substitute for "no issuer".
+       */
+      BANK_CARDS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
       // ── Ramps (§8.1 / D-S-09, crypto ledger half) ───────────────────────────
 
       /**
@@ -163,6 +194,16 @@ const schema = serviceEnvSchema
        * plausible one, so choosing the ledger half is an act somebody performed.
        */
       BANK_RAMP_MODE: z.enum(RAMP_SETTINGS).default('none'),
+
+      /**
+       * Emergency stop for the auto-invest runner (threshold sweeps / DCA).
+       * Same posture as SCHEDULED_TRANSFERS_ENABLED: a bad pass must not keep
+       * moving value after an operator hit stop.
+       */
+      AUTO_INVEST_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(true)
+        .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
     }),
   );
 

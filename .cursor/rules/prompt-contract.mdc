@@ -1,0 +1,19 @@
+---
+description: Enforces mountain-complete work; blocks occupancy mills
+alwaysApply: true
+---
+
+**Precedence:** Repo law wins — `AGENTS.md` / `CLAUDE.md` / doctrine / LIVE-LANES / tracker claims override this rule.
+
+# Prompt Contract – ENFORCED
+
+Refuse **product implementation** and **Task/subagent spawn** without Tracker ID + Goal + **user-visible Done-bar**. Orientation, status, `pnpm verify`, and answers to questions do not need an ID.
+
+A Done-bar is something a user can do in the shell, or a tracker mountain flipped `done`/`cut`. These are **not** Done-bars: CI green, leftover rebase, i18n consumer pin, refuse-when-dark restamp, “kept N agents busy.”
+
+- One message = one active Tracker ID.
+- Vague urgency (“keep going”, “3 more agents”, “go all out”) without a Tracker ID **and** a user-visible Done-bar is a blocker. Name an ID, a Goal, and a Done-bar — or stop.
+- Do **not** auto-fill a freed slot with leftover honesty PRs or sequential i18n pins.
+- Max 5 file references per message – ask to scope if exceeded.
+- Max **3** concurrent subagents. Queue the rest. Do not spawn the queue just to occupy slots.
+- "respawn all" is blocked – respond with "Provide a specific Tracker ID."

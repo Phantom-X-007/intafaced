@@ -1,7 +1,8 @@
 # Security — when to do what (plain language)
 
 **For Nitro + every agent.** Full tool detail lives in [`BULLETPROOF-ARSENAL-2026-07-29.md`](./BULLETPROOF-ARSENAL-2026-07-29.md). Strix only: [`STRIX-ASSESSMENT-2026-07-29.md`](./STRIX-ASSESSMENT-2026-07-29.md).  
-**Post-audit status (Track A partial / product doors closed):** [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](./SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) · product scoreboard: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](./PEACE-OF-MIND-AUDIT-CURRENT.md).
+**Post-audit status (Track A partial / product doors closed):** [`SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md`](./SECURITY-FLOOR-AFTER-AUDIT-2026-07-29.md) · product scoreboard: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](./PEACE-OF-MIND-AUDIT-CURRENT.md).  
+**Current threat model (D26-P3-02 — judgment, not pentest):** [`THREAT-MODEL-CURRENT.md`](./THREAT-MODEL-CURRENT.md). July 29 `audit/2026-07-29/05-THREAT-MODEL.md` is archive.
 
 **One sentence:** We are **not** “only stress testing later.” We are building **layers of proof** that money cannot be stolen or broken — cheap automatic checks **now**, attack-style tests **when the product is running**, independent human check **before real customer money**.
 

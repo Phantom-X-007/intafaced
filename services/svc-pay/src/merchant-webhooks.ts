@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { PayError, type PaymentStatus, type PaymentView } from './payment-service.js';
+import { paymentModeFromRail } from './sandbox-key-routing.js';
 import { signPayload } from './rails/webhook-signature.js';
 
 /**
@@ -73,6 +74,16 @@ export interface MerchantWebhookRuntime {
 const DEFAULT_MAX_ATTEMPTS = 8;
 const DEFAULT_DISABLE_AFTER = 5;
 
+/**
+ * How long a worker owns a due row after `claimDue`.
+ *
+ * claimDue advances `next_attempt_at` into the future so a second replica
+ * (FOR UPDATE SKIP LOCKED) will not POST the same delivery while this one is
+ * in flight. Crash before markDelivered/markRetry: the lease expires and
+ * another worker retries — at-least-once, never silently dropped.
+ */
+export const WEBHOOK_CLAIM_LEASE_MS = 60_000;
+
 /** Backoff seconds by attempt index (0-based). Caps at last entry. */
 const BACKOFF_SECONDS = [60, 300, 1_800, 7_200, 43_200, 86_400, 86_400, 86_400] as const;
 
@@ -94,6 +105,7 @@ export function paymentStateBody(payment: PaymentView): Record<string, unknown> 
     railAdapter: payment.railAdapter,
     railRef: payment.railRef,
     status: payment.status as PaymentStatus,
+    mode: paymentModeFromRail(payment.railAdapter),
     capturedAmount: formatAmount(payment.capturedAmount as Amount),
     refundedAmount: formatAmount(payment.refundedAmount as Amount),
     createdAt: payment.createdAt.toISOString(),
@@ -297,6 +309,7 @@ export class MemoryMerchantWebhookStore implements MerchantWebhookStore {
   }
 
   async claimDue(limit: number, now: Date): Promise<Array<MerchantWebhookDelivery & { secret: string; url: string }>> {
+    const leaseUntil = new Date(now.getTime() + WEBHOOK_CLAIM_LEASE_MS);
     const due = [...this.deliveries.values()]
       .filter((d) => d.status === 'pending' || d.status === 'failed')
       .filter((d) => d.nextAttemptAt.getTime() <= now.getTime())
@@ -306,6 +319,8 @@ export class MemoryMerchantWebhookStore implements MerchantWebhookStore {
     for (const d of due) {
       const ep = this.endpoints.get(d.endpointId);
       if (!ep || ep.status !== 'active') continue;
+      // Lease: concurrent processDue in the same process will not re-select this row.
+      d.nextAttemptAt = leaseUntil;
       out.push({ ...d, secret: ep.secret, url: ep.url });
     }
     return out;
@@ -466,20 +481,41 @@ export class PostgresMerchantWebhookStore implements MerchantWebhookStore {
   }
 
   async claimDue(limit: number, now: Date): Promise<Array<MerchantWebhookDelivery & { secret: string; url: string }>> {
-    // At-least-once: concurrent workers may both see the same row. Merchants
-    // dedupe on event id. No FOR UPDATE here — keeps the store usable outside
-    // an explicit transaction with postgres.js tagged templates.
+    /**
+     * Multi-replica claim (ADR §2.4 at-least-once, never silently dropped).
+     *
+     * CTE selects due rows with FOR UPDATE SKIP LOCKED so two drainers never
+     * POST the same delivery concurrently. Advancing next_attempt_at leases the
+     * row for WEBHOOK_CLAIM_LEASE_MS; a crashed worker's lease expires and
+     * another replica retries. Merchants still dedupe on event id.
+     */
+    const leaseUntil = new Date(now.getTime() + WEBHOOK_CLAIM_LEASE_MS).toISOString();
+    const nowIso = now.toISOString();
     const rows = (await this.sql`
-      SELECT d.id, d.endpoint_id, d.merchant_id, d.event_id, d.event_type, d.payload, d.status,
-             d.attempts, d.next_attempt_at, d.last_status_code, d.last_error, d.created_at, d.delivered_at,
+      WITH due AS (
+        SELECT d.id
+          FROM pay.merchant_webhook_deliveries d
+          JOIN pay.merchant_webhook_endpoints e ON e.id = d.endpoint_id
+         WHERE e.status = 'active'
+           AND d.status IN ('pending', 'failed')
+           AND d.next_attempt_at <= ${nowIso}
+         ORDER BY d.next_attempt_at ASC
+         LIMIT ${limit}
+         FOR UPDATE OF d SKIP LOCKED
+      ),
+      claimed AS (
+        UPDATE pay.merchant_webhook_deliveries d
+           SET next_attempt_at = ${leaseUntil}
+          FROM due
+         WHERE d.id = due.id
+      RETURNING d.id, d.endpoint_id, d.merchant_id, d.event_id, d.event_type, d.payload, d.status,
+                d.attempts, d.next_attempt_at, d.last_status_code, d.last_error, d.created_at, d.delivered_at
+      )
+      SELECT c.id, c.endpoint_id, c.merchant_id, c.event_id, c.event_type, c.payload, c.status,
+             c.attempts, c.next_attempt_at, c.last_status_code, c.last_error, c.created_at, c.delivered_at,
              e.signing_secret, e.url
-        FROM pay.merchant_webhook_deliveries d
-        JOIN pay.merchant_webhook_endpoints e ON e.id = d.endpoint_id
-       WHERE e.status = 'active'
-         AND d.status IN ('pending', 'failed')
-         AND d.next_attempt_at <= ${now.toISOString()}
-       ORDER BY d.next_attempt_at ASC
-       LIMIT ${limit}
+        FROM claimed c
+        JOIN pay.merchant_webhook_endpoints e ON e.id = c.endpoint_id
     `) as ReadonlyArray<DeliveryRow & { signing_secret: string; url: string }>;
     return rows.map((r) => ({ ...mapDelivery(r), secret: r.signing_secret, url: r.url }));
   }
@@ -642,6 +678,25 @@ export class MerchantWebhookService {
   }
 
   /**
+   * Re-enable a disabled endpoint after the merchant fixes their receiver.
+   * ADR §2.4: permanently failing endpoints are disabled and surfaced — this
+   * is the product path back to active (failure counter resets).
+   */
+  async enableEndpoint(merchantId: string, endpointId: string): Promise<MerchantWebhookEndpoint> {
+    const ep = await this.store.getEndpoint(endpointId);
+    if (!ep || ep.merchantId !== merchantId) {
+      throw new PayError('Webhook endpoint not found', 'pay.webhook_endpoint_not_found');
+    }
+    await this.store.setEndpointStatus(endpointId, 'active', null, 0);
+    const refreshed = await this.store.getEndpoint(endpointId);
+    if (!refreshed) {
+      throw new PayError('Webhook endpoint not found', 'pay.webhook_endpoint_not_found');
+    }
+    const { secret: _secret, ...publicEp } = refreshed;
+    return publicEp;
+  }
+
+  /**
    * Enqueue one delivery per active endpoint for this merchant.
    * Dedup is (endpointId, eventId) — a re-notify of the same logical event is a no-op.
    */
@@ -693,6 +748,27 @@ export class MerchantWebhookService {
     let disabled = 0;
 
     for (const item of due) {
+      if (!item.secret || item.secret.trim().length < 32) {
+        const err = 'pay.webhook_not_configured';
+        const attempts = item.attempts + 1;
+        const dead = attempts >= this.maxAttempts;
+        const backoff = BACKOFF_SECONDS[Math.min(attempts - 1, BACKOFF_SECONDS.length - 1)] ?? 86_400;
+        const next = new Date(this.now().getTime() + backoff * 1000);
+        await this.store.markRetry(item.id, attempts, next, null, err, dead);
+        failed += 1;
+        const consecutive = await this.store.bumpEndpointFailure(item.endpointId);
+        if (consecutive >= this.disableAfter || dead) {
+          await this.store.setEndpointStatus(
+            item.endpointId,
+            'disabled',
+            dead ? 'delivery_exhausted' : 'consecutive_failures',
+            consecutive,
+          );
+          disabled += 1;
+        }
+        continue;
+      }
+
       const rawBody = JSON.stringify(item.payload);
       const timestamp = String(Math.floor(this.now().getTime() / 1000));
       const headers = buildSignedHeaders(item.secret, timestamp, rawBody);

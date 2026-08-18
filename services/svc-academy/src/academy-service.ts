@@ -3,7 +3,12 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
-import { assertScene } from './spatial/scene.js';
+import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
+import { assertCallerCannotLiePaperFlag, type PaperMarketFlagPort } from './paper/market-flag-verify.js';
+import { recordPaperCertItemProgress, type PaperCertProgressView } from './paper/cert-progress-hook.js';
+import { isDrillComplete, type DrillRun, type PaperMarketRef } from './paper/workbook-loop.js';
+import { emptyScene, parseScene } from './spatial/scene.js';
+import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
   assertFreezeReason,
   badgeOf,
@@ -21,6 +26,7 @@ import {
 } from './ambassadors/residency.js';
 import { certById, listCertCatalog } from './certs/catalog.js';
 import {
+  alreadyGrantedAfterInsert,
   CertError,
   certIdempotencyKey,
   decideGrant,
@@ -39,6 +45,13 @@ import {
   type CertXpPlaneStatus,
   type CertXpPublisher,
 } from './certs/xp-publish.js';
+import {
+  assertNoCertPerkMoneyAttachment,
+  certPerkPlaneStatus,
+  resolveCertPerkOutcome,
+  type CertPerkOutcome,
+  type CertPerkPlaneStatus,
+} from './certs/perk-plane.js';
 import { hasCurriculumSlug } from './curriculum/catalog.js';
 import {
   assertMayWriteScore,
@@ -51,6 +64,11 @@ import {
   type SeasonStatus,
   type StandingRecord,
 } from './tournaments/ladder.js';
+import { assertScoreWindowOpen } from './tournaments/season-calendar.js';
+import { freezeSeasonWithSnapshot, transitionSeason } from './tournaments/season-lifecycle.js';
+import { assertNoPrizeAttachment } from './tournaments/prize-refuse.js';
+import { validateBulkScoreWrite, type ScorePatch } from './tournaments/bulk-score.js';
+import type { FreezeStandingsSnapshot } from './tournaments/season-lifecycle.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
@@ -74,10 +92,10 @@ import { withAcademySpan } from './tracing.js';
  *   · FULL DERIV//DESK library (20 playbooks + 3 workbooks) is residual —
  *     proprietary content is not in this monorepo; the thin spine is platform-
  *     native so the list + content path is real rather than empty.
- *   · CERTIFICATIONS now track progress against that curriculum and publish the
- *     XP a grant is worth (`certs/xp-publish.ts`). What is still NOT here is the
- *     ladder: svc-identity is the only writer to `rank_state` and the only place
- *     a perk is decided, so a cert earns XP and nothing else (§4.1).
+ *   · CERTIFICATIONS track progress, publish XP (`certs/xp-publish.ts`), then
+ *     surface real identity perks or refuse invent perk money (`certs/perk-plane.ts`).
+ *     svc-identity remains the only writer to `rank_state` / perk SoT (§4.1) —
+ *     academy never maps cert → perk and never invents perk money.
  *   · AMBASSADOR PAY and lobby subscriptions MOVE VALUE. They need ledger
  *     recipes that do not exist, and a half-built pay path is worse than an
  *     absent one.
@@ -115,6 +133,11 @@ export interface SessionRecord {
   streamProvider: string | null;
   streamRoom: string | null;
   scene: Record<string, unknown>;
+  /**
+   * Optimistic concurrency token for host scene writes.
+   * Always present on read so clients can supply expectedFingerprint without re-hashing.
+   */
+  sceneFingerprint: string;
 }
 
 interface RoomRow {
@@ -152,18 +175,24 @@ const toRoom = (row: RoomRow): RoomRecord => ({
   hostId: row.host_id,
 });
 
-const toSession = (row: SessionRow): SessionRecord => ({
-  id: row.id,
-  roomId: row.room_id,
-  title: row.title,
-  hostId: row.host_id,
-  status: row.status,
-  startsAt: row.starts_at,
-  endsAt: row.ends_at,
-  streamProvider: row.stream_provider,
-  streamRoom: row.stream_room,
-  scene: row.scene,
-});
+const toSession = (row: SessionRow): SessionRecord => {
+  // Unreadable DB default `{}` → empty v1 fingerprint (same SoT as updateScene).
+  const parsed = parseScene(row.scene);
+  const scene = parsed.ok ? parsed.scene : emptyScene();
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    title: row.title,
+    hostId: row.host_id,
+    status: row.status,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    streamProvider: row.stream_provider,
+    streamRoom: row.stream_room,
+    scene: row.scene,
+    sceneFingerprint: sceneFingerprint(scene),
+  };
+};
 
 export interface AcademyServiceOptions {
   /** Operational ceiling on a room's own capacity — see env.ts. */
@@ -172,6 +201,12 @@ export interface AcademyServiceOptions {
   tournamentEnabled?: boolean;
   /** Stage-3 paper-trading ops kill-switch (`ACADEMY_PAPER_TRADING_ENABLED`). */
   paperTradingEnabled?: boolean;
+  /**
+   * Trade public-markets paper flag port. Undefined when TRADE_URL is unset —
+   * paper drills then refuse `academy.paper_flag_unverified` rather than
+   * trusting `paper: true` on the wire.
+   */
+  paperMarketFlagPort?: PaperMarketFlagPort;
 }
 
 export class AcademyService {
@@ -484,15 +519,40 @@ export class AcademyService {
    * not have, and half a merge is a room that renders differently for different
    * people.
    */
-  async updateScene(input: { sessionId: string; hostId: string; scene: Record<string, unknown> }): Promise<SessionRecord> {
+  async updateScene(input: {
+    sessionId: string;
+    hostId: string;
+    scene: Record<string, unknown>;
+    /** Optional optimistic concurrency token — must match server scene fingerprint. */
+    expectedFingerprint?: string;
+  }): Promise<SessionRecord & { sceneFingerprint: string }> {
     const session = await this.session(input.sessionId);
     this.assertHost(session.hostId, input.hostId, 'session');
-    const scene = assertScene(input.scene);
+
+    // DB default was historically `{}`, which is not Scene v1. Treat unreadable
+    // current state as empty v1 so reconnect/edit policy still has a SoT.
+    const currentParsed = parseScene(session.scene);
+    const current = currentParsed.ok ? currentParsed.scene : emptyScene();
+
+    const decision = decideHostSceneWrite({
+      current,
+      next: input.scene,
+      ...(input.expectedFingerprint !== undefined ? { expectedFingerprint: input.expectedFingerprint } : {}),
+    });
+    if (!decision.ok) {
+      if (decision.reason === 'conflict') {
+        throw new AcademyError(decision.message, 'academy.scene_conflict');
+      }
+      if (decision.reason === 'presence_collision') {
+        throw new AcademyError(decision.message, 'academy.scene_presence_collision');
+      }
+      throw new AcademyError(decision.message, 'academy.scene_invalid');
+    }
 
     const rows = await this.sql<SessionRow[]>`
-      UPDATE academy.sessions SET scene = ${this.sql.json(scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
+      UPDATE academy.sessions SET scene = ${this.sql.json(decision.scene as never)}, updated_at = now() WHERE id = ${session.id} RETURNING *
     `;
-    return toSession(rows[0]!);
+    return { ...toSession(rows[0]!), sceneFingerprint: decision.fingerprint };
   }
 
   // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ────────────────────────────
@@ -510,9 +570,70 @@ export class AcademyService {
     }
   }
 
+  /**
+   * D26-P1-C4 — claimed `paper: true` must match trade's public listing.
+   * Unset port (no TRADE_URL) refuses by name rather than trusting the caller.
+   */
+  async assertCallerPaperFlagVerified(market: PaperMarketRef | null): Promise<void> {
+    await assertCallerCannotLiePaperFlag(this.options.paperMarketFlagPort, market);
+  }
+
   /** Stage-3 — ops status snapshot (live trade always unaffected). */
   paperOpsStatus(): PaperOpsStatus {
-    return paperOpsStatus(this.options.paperTradingEnabled);
+    const status = paperOpsStatus(this.options.paperTradingEnabled);
+    assertPaperNeverReadableAsRealMoney(status);
+    return status;
+  }
+
+  /**
+   * After a sealed paper drill: record cert *item* completion when the workbook
+   * is bound to a catalog cert. Unbound → `progress: 'unbound'`. Never grantCert,
+   * never invent XP, never perk-map, never ledger.
+   */
+  async recordPaperDrillCertProgress(input: { userId: string; run: DrillRun }): Promise<PaperCertProgressView> {
+    this.assertPaperTradingEnabled();
+    const certs = listCertCatalog();
+    const drillComplete = isDrillComplete(input.run);
+    let existing: ItemCompletionRecord | null = null;
+    if (drillComplete) {
+      const slug = input.run.workbookSlug.trim();
+      const existingRows = await this.sql<Array<{ user_id: string; item_slug: string; completed_at: Date }>>`
+        SELECT user_id, item_slug, completed_at FROM academy.cert_item_completions
+         WHERE user_id = ${input.userId} AND item_slug = ${slug}
+      `;
+      existing = existingRows[0]
+        ? {
+            userId: existingRows[0].user_id,
+            itemSlug: existingRows[0].item_slug,
+            completedAt: existingRows[0].completed_at,
+          }
+        : null;
+    }
+
+    const pending: { record: ItemCompletionRecord | null } = { record: null };
+    const view = recordPaperCertItemProgress({
+      userId: input.userId,
+      run: input.run,
+      certs,
+      existing,
+      persist: (record) => {
+        pending.record = record;
+      },
+    });
+    if (view.progress === 'recorded' && pending.record) {
+      const row = await this.markCurriculumComplete({
+        userId: input.userId,
+        itemSlug: view.itemSlug,
+      });
+      const recorded: PaperCertProgressView = {
+        ...view,
+        completedAt: row.completedAt,
+      };
+      assertPaperNeverReadableAsRealMoney(recorded);
+      return recorded;
+    }
+    assertPaperNeverReadableAsRealMoney(view);
+    return view;
   }
 
   private mapTournamentErr(err: unknown): never {
@@ -563,6 +684,19 @@ export class AcademyService {
     }
     if (rules.length < 8 || rules.length > 4000) {
       throw new AcademyError('Rules summary 8–4000 characters', 'academy.season_invalid');
+    }
+    // Refuse prize-shaped fields if a caller ever spreads invent payload into season shape.
+    try {
+      assertNoPrizeAttachment({
+        slug,
+        title,
+        rulesSummary: rules,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt ?? null,
+        status: 'scheduled',
+      });
+    } catch (e) {
+      this.mapTournamentErr(e);
     }
     const rows = await this.sql<
       Array<{
@@ -636,7 +770,110 @@ export class AcademyService {
 
   async setSeasonStatus(input: { seasonId: string; status: SeasonStatus }): Promise<SeasonRecord> {
     this.assertTournamentEnabled();
-    await this.season(input.seasonId);
+    const current = await this.season(input.seasonId);
+    // Pure lifecycle owns legal edges — raw SQL used to allow scheduled→frozen etc.
+    try {
+      assertNoPrizeAttachment(current);
+      transitionSeason(current, input.status);
+    } catch (e) {
+      this.mapTournamentErr(e);
+    }
+
+    // live→frozen: snapshot + status flip MUST be one transaction.
+    // Split writes left a crash hole: snapshot exists while status stays live
+    // (scores still write; later freeze ON CONFLICT DO NOTHING keeps the old
+    // snapshot — re-rank under a "frozen" audit that is not the real board).
+    if (current.status === 'live' && input.status === 'frozen') {
+      return transaction(
+        this.sql,
+        async (tx) => {
+          const locked = await tx<
+            Array<{
+              id: string;
+              slug: string;
+              title: string;
+              status: SeasonStatus;
+              rules_summary: string;
+              starts_at: Date;
+              ends_at: Date | null;
+            }>
+          >`
+            SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+              FROM academy.tournament_seasons
+             WHERE id = ${input.seasonId}
+             FOR UPDATE
+          `;
+          if (!locked[0]) throw new AcademyError(`Season ${input.seasonId} not found`, 'academy.season_not_found');
+          const lockedSeason = this.toSeason(locked[0]);
+          try {
+            assertNoPrizeAttachment(lockedSeason);
+            transitionSeason(lockedSeason, 'frozen');
+          } catch (e) {
+            this.mapTournamentErr(e);
+          }
+          if (lockedSeason.status !== 'live') {
+            throw new AcademyError(
+              `Season ${input.seasonId} is ${lockedSeason.status} — cannot freeze (concurrent transition)`,
+              'academy.season_invalid',
+            );
+          }
+
+          const standingRows = await tx<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+            SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
+             WHERE season_id = ${input.seasonId}
+          `;
+          let snapshot: FreezeStandingsSnapshot;
+          try {
+            const frozen = freezeSeasonWithSnapshot(
+              lockedSeason,
+              standingRows.map((r) => ({
+                seasonId: r.season_id,
+                userId: r.user_id,
+                score: r.score,
+                updatedAt: r.updated_at,
+              })),
+            );
+            snapshot = frozen.snapshot;
+          } catch (e) {
+            this.mapTournamentErr(e);
+          }
+          const standingsJson = snapshot.standings.map((s) => ({
+            rank: s.rank,
+            userId: s.userId,
+            score: s.score,
+            updatedAt: s.updatedAt.toISOString(),
+          }));
+          await tx`
+            INSERT INTO academy.tournament_freeze_snapshots (season_id, frozen_at, standings)
+            VALUES (${input.seasonId}, ${snapshot.frozenAt}, ${tx.json(standingsJson as never)})
+            ON CONFLICT (season_id) DO NOTHING
+          `;
+          const rows = await tx<
+            Array<{
+              id: string;
+              slug: string;
+              title: string;
+              status: SeasonStatus;
+              rules_summary: string;
+              starts_at: Date;
+              ends_at: Date | null;
+            }>
+          >`
+            UPDATE academy.tournament_seasons
+               SET status = 'frozen', updated_at = now()
+             WHERE id = ${input.seasonId}
+               AND status = 'live'
+             RETURNING id, slug, title, status, rules_summary, starts_at, ends_at
+          `;
+          if (!rows[0]) {
+            throw new AcademyError(`Season ${input.seasonId} left live during freeze (concurrent transition)`, 'academy.season_invalid');
+          }
+          return this.toSeason(rows[0]);
+        },
+        { isolation: 'read committed' },
+      );
+    }
+
     const rows = await this.sql<
       Array<{
         id: string;
@@ -656,10 +893,34 @@ export class AcademyService {
     return this.toSeason(rows[0]!);
   }
 
-  async setStanding(input: { seasonId: string; userId: string; score: number }): Promise<StandingRecord> {
+  /** Read durable freeze audit snapshot (null when season never frozen on this path). */
+  async freezeSnapshot(seasonId: string): Promise<{
+    seasonId: string;
+    frozenAt: Date;
+    standings: { rank: number; userId: string; score: number; updatedAt: string }[];
+  } | null> {
+    this.assertTournamentEnabled();
+    await this.season(seasonId);
+    const rows = await this.sql<Array<{ season_id: string; frozen_at: Date; standings: unknown }>>`
+      SELECT season_id, frozen_at, standings FROM academy.tournament_freeze_snapshots
+       WHERE season_id = ${seasonId}
+    `;
+    const r = rows[0];
+    if (!r) return null;
+    const standings = r.standings as { rank: number; userId: string; score: number; updatedAt: string }[];
+    return {
+      seasonId: r.season_id,
+      frozenAt: r.frozen_at,
+      standings: [...standings],
+    };
+  }
+
+  async setStanding(input: { seasonId: string; userId: string; score: number; now?: Date }): Promise<StandingRecord> {
     this.assertTournamentEnabled();
     const season = await this.season(input.seasonId);
     try {
+      // Live status alone is not enough — calendar window must still be open.
+      assertScoreWindowOpen(season, input.now ?? new Date());
       assertMayWriteScore(season.status);
       assertScore(input.score);
     } catch (e) {
@@ -673,6 +934,96 @@ export class AcademyService {
     `;
     const r = rows[0]!;
     return { seasonId: r.season_id, userId: r.user_id, score: r.score, updatedAt: r.updated_at };
+  }
+
+  /**
+   * Operator bulk score write — Stage-2 L3 residual on the wire.
+   * Pure `validateBulkScoreWrite` owns refuse rules (live-only, no empty, no
+   * dup user, score bounds). Accepted patches upsert in ONE transaction under
+   * a season-row lock so freeze cannot interleave a partial board, and a
+   * mid-batch crash cannot leave half the patch set durable.
+   * No prize fields, no invent scores.
+   */
+  async bulkSetStandings(input: {
+    seasonId: string;
+    patches: readonly ScorePatch[];
+  }): Promise<
+    { ok: true; accepted: number; standings: StandingRecord[] } | { ok: false; reason: string; message: string; badUserId?: string }
+  > {
+    this.assertTournamentEnabled();
+    const season = await this.season(input.seasonId);
+    const gate = validateBulkScoreWrite({
+      seasonStatus: season.status,
+      seasonId: input.seasonId,
+      patches: input.patches,
+      // Same calendar gate as setStanding — refuse bulk before any partial upserts.
+      startsAt: season.startsAt,
+      endsAt: season.endsAt,
+    });
+    if (gate.status === 'refuse') {
+      return {
+        ok: false,
+        reason: gate.reason,
+        message: gate.message,
+        ...(gate.badUserId !== undefined ? { badUserId: gate.badUserId } : {}),
+      };
+    }
+
+    const now = new Date();
+    return transaction(
+      this.sql,
+      async (tx) => {
+        // Total order vs freeze: lock season before re-check + multi-row upsert.
+        const locked = await tx<
+          Array<{
+            id: string;
+            slug: string;
+            title: string;
+            status: SeasonStatus;
+            rules_summary: string;
+            starts_at: Date;
+            ends_at: Date | null;
+          }>
+        >`
+          SELECT id, slug, title, status, rules_summary, starts_at, ends_at
+            FROM academy.tournament_seasons
+           WHERE id = ${input.seasonId}
+           FOR UPDATE
+        `;
+        if (!locked[0]) throw new AcademyError(`Season ${input.seasonId} not found`, 'academy.season_not_found');
+        const lockedSeason = this.toSeason(locked[0]);
+        const reGate = validateBulkScoreWrite({
+          seasonStatus: lockedSeason.status,
+          seasonId: input.seasonId,
+          patches: input.patches,
+          startsAt: lockedSeason.startsAt,
+          endsAt: lockedSeason.endsAt,
+          now,
+        });
+        if (reGate.status === 'refuse') {
+          return {
+            ok: false as const,
+            reason: reGate.reason,
+            message: reGate.message,
+            ...(reGate.badUserId !== undefined ? { badUserId: reGate.badUserId } : {}),
+          };
+        }
+
+        const standings: StandingRecord[] = [];
+        for (const p of reGate.patches) {
+          const rows = await tx<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
+            INSERT INTO academy.tournament_standings (season_id, user_id, score, updated_at)
+            VALUES (${input.seasonId}, ${p.userId}, ${p.score}, now())
+            ON CONFLICT (season_id, user_id) DO UPDATE SET score = EXCLUDED.score, updated_at = now()
+            RETURNING season_id, user_id, score, updated_at
+          `;
+          const r = rows[0]!;
+          standings.push({ seasonId: r.season_id, userId: r.user_id, score: r.score, updatedAt: r.updated_at });
+        }
+        return { ok: true as const, accepted: standings.length, standings };
+      },
+      { isolation: 'read committed' },
+    );
   }
 
   async standings(seasonId: string): Promise<RankedStanding[]> {
@@ -778,13 +1129,20 @@ export class AcademyService {
   }
 
   /**
-   * Operator appoint. Idempotent re-appoint of a frozen row reactivates.
+   * Operator appoint. New row only, or refuse.
    * Already-active is refused so double-click does not rewrite appointed_by silently.
+   * Frozen is refused so freeze audit is not erased — use unfreezeAmbassador.
    */
   async appointAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
     const existing = await this.ambassadorOf(input.userId);
     if (existing?.status === 'active') {
       throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+    }
+    if (existing?.status === 'frozen') {
+      throw new AcademyError(
+        `Ambassador ${input.userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+        'academy.ambassador_already_frozen',
+      );
     }
 
     const rows = await this.sql<
@@ -808,8 +1166,24 @@ export class AcademyService {
         frozen_by = NULL,
         freeze_reason = NULL,
         updated_at = now()
+      WHERE academy.ambassadors.status IS DISTINCT FROM 'frozen'
+        AND academy.ambassadors.status IS DISTINCT FROM 'active'
       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
     `;
+    if (!rows[0]) {
+      // Concurrent freeze/active won the race — re-read and refuse honestly.
+      const again = await this.ambassadorOf(input.userId);
+      if (again?.status === 'frozen') {
+        throw new AcademyError(
+          `Ambassador ${input.userId} is frozen — unfreeze to restore the badge (re-appoint would erase freeze audit)`,
+          'academy.ambassador_already_frozen',
+        );
+      }
+      if (again?.status === 'active') {
+        throw new AcademyError(`User ${input.userId} is already an active ambassador`, 'academy.ambassador_already_active');
+      }
+      throw new AcademyError(`Could not appoint ambassador ${input.userId}`, 'academy.ambassador_invalid');
+    }
     return this.toAmbassador(rows[0]!);
   }
 
@@ -847,9 +1221,50 @@ export class AcademyService {
              freeze_reason = ${reason},
              updated_at = now()
        WHERE user_id = ${input.userId}
+         AND status = 'active'
        RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
     `;
+    if (rows.length === 0) {
+      // Concurrent freeze won the race — do not overwrite freeze_reason/by.
+      throw new AcademyError(`Ambassador ${input.userId} is already frozen`, 'academy.ambassador_already_frozen');
+    }
     return this.toAmbassador(rows[0]!);
+  }
+
+  async unfreezeAmbassador(input: { userId: string; operatorId: string }): Promise<AmbassadorRecord> {
+    const existing = await this.ambassadorOf(input.userId);
+    if (!existing) {
+      throw new AcademyError(`Ambassador ${input.userId} not found`, 'academy.ambassador_not_found');
+    }
+    if (existing.status !== 'frozen') {
+      throw new AcademyError(`Ambassador ${input.userId} is not frozen`, 'academy.ambassador_invalid');
+    }
+    const rows = await this.sql<
+      Array<{
+        user_id: string;
+        status: AmbassadorStatus;
+        appointed_by: string;
+        appointed_at: Date;
+        frozen_at: Date | null;
+        frozen_by: string | null;
+        freeze_reason: string | null;
+      }>
+    >`
+      UPDATE academy.ambassadors
+         SET status = 'active',
+             frozen_at = NULL,
+             frozen_by = NULL,
+             freeze_reason = NULL,
+             updated_at = now()
+       WHERE user_id = ${input.userId} AND status = 'frozen'
+       RETURNING user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
+    `;
+    if (!rows[0]) {
+      throw new AcademyError(`Ambassador ${input.userId} not found`, 'academy.ambassador_not_found');
+    }
+    // operatorId is audit context for future event emission — required for admin write symmetry.
+    void input.operatorId;
+    return this.toAmbassador(rows[0]);
   }
 
   // ── Residency applications (Stage-1 durable — NO PAY) ─────────────────────
@@ -1085,8 +1500,11 @@ export class AcademyService {
 
   async enrollCertPath(input: { userId: string; pathSlug: string }): Promise<EnrollmentRecord> {
     const pathSlug = input.pathSlug.trim().toLowerCase();
-    if (!pathSlug || pathSlug.length > 64) {
-      throw new AcademyError('Invalid path slug', 'academy.cert_invalid');
+    // Blueprint paths only — enroll is a bookmark, not a grant gate, but any
+    // free-text pathSlug would invent a fourth curriculum axis on the wire.
+    const BLUEPRINT_PATHS = new Set(['foundations', 'markets', 'builder', 'sovereign']);
+    if (!pathSlug || pathSlug.length > 64 || !BLUEPRINT_PATHS.has(pathSlug)) {
+      throw new AcademyError('pathSlug must be one of foundations | markets | builder | sovereign', 'academy.cert_invalid');
     }
     const rows = await this.sql<Array<{ user_id: string; path_slug: string; enrolled_at: Date }>>`
       INSERT INTO academy.cert_enrollments (user_id, path_slug, enrolled_at)
@@ -1173,7 +1591,15 @@ export class AcademyService {
   }
 
   /**
-   * Grant a certification, then publish the XP it is worth.
+   * D26-P1-C1 — perk plane honesty: identity SoT for real perks; invent money refuse-closed.
+   */
+  certPerkPlane(): CertPerkPlaneStatus {
+    return certPerkPlaneStatus();
+  }
+
+  /**
+   * Grant a certification, publish the XP it is worth, then surface real
+   * identity perks (or refuse when the SoT is unreadable / invent is requested).
    *
    * TWO THINGS ABOUT THE ORDER, both deliberate:
    *
@@ -1188,11 +1614,16 @@ export class AcademyService {
    * NOTHING` drops the repeat. It is instead the recovery path: a grant whose
    * emit failed heals the next time anyone asks for that cert, with no outbox
    * table and no sweep.
+   *
+   * Perks are read AFTER XP publish and never invented: svc-identity is SoT.
+   * Unpriced certs (`no_policy`) refuse the perk readout so the grant cannot
+   * look like a granted perk or perk money.
    */
   async grantCert(input: {
     userId: string;
     certId: string;
-  }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean; xp: CertXpEmitResult }> {
+  }): Promise<{ grant: CertGrantRecord; alreadyGranted: boolean; xp: CertXpEmitResult; perks: CertPerkOutcome }> {
+    assertNoCertPerkMoneyAttachment(input);
     const cert = certById(input.certId);
     const completed = await this.completedSlugs(input.userId);
     const existing = await this.existingGrant(input.userId, input.certId);
@@ -1208,21 +1639,46 @@ export class AcademyService {
       this.mapCertErr(err);
     }
     if (decision.alreadyGranted) {
-      return { ...decision, xp: await this.certXp.publishCertXp(decision.grant) };
+      const xp = await this.certXp.publishCertXp(decision.grant);
+      const perks = await resolveCertPerkOutcome({ userId: input.userId, hostRights: this.hostRights, xp });
+      return { ...decision, xp, perks };
     }
+    // ON CONFLICT DO NOTHING — concurrent second writer must not hardcode
+    // alreadyGranted:false (UI would fire "just earned" twice; XP still safe).
     const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
       INSERT INTO academy.cert_grants (user_id, cert_id, granted_at, idempotency_key)
       VALUES (${decision.grant.userId}, ${decision.grant.certId}, ${decision.grant.grantedAt}, ${decision.grant.idempotencyKey})
-      ON CONFLICT (user_id, cert_id) DO UPDATE SET cert_id = EXCLUDED.cert_id
+      ON CONFLICT (user_id, cert_id) DO NOTHING
       RETURNING user_id, cert_id, granted_at, idempotency_key
     `;
+    if (rows.length === 0) {
+      const raced = await this.existingGrant(input.userId, input.certId);
+      if (!raced) {
+        throw new AcademyError(`Grant race left no cert row for ${input.certId}`, 'academy.cert_invalid');
+      }
+      const xp = await this.certXp.publishCertXp(raced);
+      const perks = await resolveCertPerkOutcome({ userId: input.userId, hostRights: this.hostRights, xp });
+      return {
+        grant: raced,
+        alreadyGranted: alreadyGrantedAfterInsert(false),
+        xp,
+        perks,
+      };
+    }
     const grant: CertGrantRecord = {
       userId: rows[0]!.user_id,
       certId: rows[0]!.cert_id,
       grantedAt: rows[0]!.granted_at,
       idempotencyKey: rows[0]!.idempotency_key,
     };
-    return { alreadyGranted: false, grant, xp: await this.certXp.publishCertXp(grant) };
+    const xp = await this.certXp.publishCertXp(grant);
+    const perks = await resolveCertPerkOutcome({ userId: input.userId, hostRights: this.hostRights, xp });
+    return {
+      alreadyGranted: alreadyGrantedAfterInsert(true),
+      grant,
+      xp,
+      perks,
+    };
   }
 
   async myCertGrants(userId: string): Promise<CertGrantRecord[]> {

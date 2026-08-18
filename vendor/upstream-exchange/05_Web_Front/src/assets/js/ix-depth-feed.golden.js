@@ -53,6 +53,102 @@ assert(Array.isArray(plate.bids) && plate.bids[0][0] === '99', 'plate bids');
 assert(feed.streamUrl('abc').indexOf('/ws/stream?market=abc') !== -1, 'stream url');
 assert(feed.resnapshotUrl('abc') === '/ws/markets/abc/depth', 'resnapshot url');
 
+/* ── feedLive honesty: Live only after snapshot, never bare onopen ───── */
+
+function MockWS(url) {
+  this.url = url;
+  this.readyState = 0;
+  MockWS.last = this;
+}
+MockWS.last = null;
+MockWS.prototype = {
+  close: function () {
+    this.readyState = 3;
+    if (typeof this.onclose === 'function') this.onclose({});
+  }
+};
+
+var liveFlags = [];
+var statuses = [];
+var handle = feed.createDepthFeed({
+  marketId: 'm-live',
+  onBook: function () {},
+  onLive: function (v) {
+    liveFlags.push(!!v);
+  },
+  onStatus: function (s) {
+    statuses.push(s);
+  },
+  WebSocketImpl: MockWS,
+  fetchImpl: function () {
+    return Promise.reject(new Error('no fetch in golden'));
+  }
+});
+
+assert(MockWS.last != null, 'socket constructed');
+/* Open TCP — must NOT claim live. */
+if (typeof MockWS.last.onopen === 'function') MockWS.last.onopen({});
+assert(liveFlags.indexOf(true) === -1, 'onopen alone never sets live');
+assert(statuses.indexOf('open') !== -1, 'onopen records open status');
+
+/* First snapshot → live. */
+if (typeof MockWS.last.onmessage === 'function') {
+  MockWS.last.onmessage({
+    data: JSON.stringify({
+      type: 'snapshot',
+      marketId: 'm-live',
+      sequence: 1,
+      bids: [['10', '1']],
+      asks: [['11', '1']]
+    })
+  });
+}
+assert(liveFlags[liveFlags.length - 1] === true, 'snapshot sets live');
+
+/* Close → not live. */
+if (typeof MockWS.last.onclose === 'function') MockWS.last.onclose({});
+assert(liveFlags[liveFlags.length - 1] === false, 'close clears live');
+
+handle.stop();
+assert(liveFlags[liveFlags.length - 1] === false, 'stop clears live');
+
+/* JSON number levels must not become book prints (same law as REST accept). */
+var cold = feed.bookFromSnapshot({
+  type: 'snapshot',
+  marketId: 'm1',
+  sequence: 1,
+  bids: [
+    [100, 2],
+    ['99', '1']
+  ],
+  asks: [['101', 3]]
+});
+assert(Object.keys(cold.bids).length === 1 && cold.bids['99'] === '1', 'number bid dropped');
+
+assert(Object.keys(cold.asks).length === 0, 'number ask dropped');
+
+/* Delta applySide must refuse JSON numbers too (not only snapshots). */
+var base = feed.bookFromSnapshot({
+  type: 'snapshot',
+  marketId: 'm-d',
+  sequence: 1,
+  bids: [['10', '1']],
+  asks: [['20', '1']]
+});
+var d = feed.applyDelta(base, {
+  type: 'delta',
+  marketId: 'm-d',
+  fromSequence: 1,
+  sequence: 2,
+  bids: [[11, 5], ['12', '3']],
+  asks: []
+});
+assert(d.ok === true, 'delta with mixed types still applies string rows');
+assert(d.book.bids['12'] === '3', 'string delta bid kept');
+assert(d.book.bids['11'] === undefined, 'number delta bid refused');
+assert(d.book.bids['10'] === '1', 'prior string level preserved');
+
+
 if (failed) {
   console.error(failed + ' failed');
   process.exit(1);

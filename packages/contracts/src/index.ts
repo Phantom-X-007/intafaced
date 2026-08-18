@@ -9,6 +9,7 @@ export * from './edge.js';
 export * from './service-auth.js';
 export * from './raw-body.js';
 export * from './identity.js';
+export * from './academy-cert-perks.js';
 export * from './instruments.js';
 export * from './blueprint.js';
 export * from './example-router.js';

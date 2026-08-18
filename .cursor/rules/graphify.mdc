@@ -1,0 +1,28 @@
+---
+description: graphify knowledge graph context
+alwaysApply: true
+---
+
+This project may have a graphify knowledge graph at `graphify-out/`.
+
+**Precedence:** Repo law wins - `AGENTS.md` / `CLAUDE.md` / doctrine / LIVE-LANES / tracker claims override this rule. Graphify is an orientation accelerator, not a second process authority.
+
+**When `graphify-out/graph.json` exists**, prefer graphify before broad codebase exploration:
+
+- `graphify query "<question>"` - scoped subgraph for architecture / "where does X live?"
+- `graphify path "<A>" "<B>"` - dependency path between two symbols
+- `graphify explain "<concept>"` - neighbors of a concept
+
+Use Read / Grep / Glob directly when:
+
+1. Graphify already oriented you and you need specific lines to edit or debug
+2. `graphify-out/graph.json` does not exist yet
+3. You are on a claimed mountain with a known path (tracker / LIVE-LANES / PR) and are not exploring cold
+4. Repo law already names the file or command to run
+
+Also:
+
+- If `graphify-out/wiki/index.md` exists, navigate it before dumping large raw trees
+- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review when query/path/explain are not enough
+- After meaningful code edits, run `graphify update .` (AST-only, no API cost) to refresh the graph
+- Never commit `graphify-out/` - it is gitignored local cache

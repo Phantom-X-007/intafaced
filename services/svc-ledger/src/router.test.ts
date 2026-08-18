@@ -12,6 +12,7 @@ import {
 } from '@intafaced/ledger-client';
 import { createLedgerRouter } from './router.js';
 import type { LedgerService } from './service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * The tRPC surface.
@@ -147,6 +148,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
+      message: userCopy('ledger.insufficient_funds'),
     });
   });
 
@@ -165,6 +167,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: userCopy('ledger.frozen'),
     });
   });
 
@@ -180,6 +183,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
+      message: userCopy('ledger.unbalanced'),
     });
   });
 
@@ -195,6 +199,7 @@ describe('post — error mapping', () => {
         .post(validPost),
     ).rejects.toMatchObject({
       code: 'INTERNAL_SERVER_ERROR',
+      message: userCopy('ledger.invalid_entry'),
     });
   });
 
@@ -228,6 +233,29 @@ describe('balances — authorisation', () => {
     const caller = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
     await expect(caller.balances({ ownerType: 'user', ownerId: OTHER })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(caller.balances({ ownerType: 'user', ownerId: USER })).resolves.toHaveLength(1);
+  });
+
+  it('serves a portfolio view of own balances with indexer named absent', async () => {
+    const caller = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
+    await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
+      ownerId: USER,
+      custodial: [{ amount: '100', assetId: 'USDT' }],
+      indexer: { status: 'absent', reason: 'indexer.readmodels_unbuilt' },
+    });
+  });
+
+  it('refuses another user’s portfolio, and does not invent chain zeros on an empty book', async () => {
+    const caller = createLedgerRouter(
+      stubService({
+        balances: async () => [],
+      }),
+    ).createCaller(await ctx(['ledger:read']));
+
+    await expect(caller.portfolio({ ownerType: 'user', ownerId: OTHER })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
+      custodial: [],
+      indexer: { status: 'absent', reason: 'indexer.readmodels_unbuilt' },
+    });
   });
 
   it('rejects an anonymous caller', async () => {
@@ -281,12 +309,64 @@ describe('operator controls', () => {
     await expect(caller.freeze({ reason: '' })).rejects.toThrow();
   });
 
+  it('demands a usable reason (≥12 chars), same floor as the operator HTTP door', async () => {
+    // "testing" is 7 characters. The old min(1) accepted it; the next operator
+    // reading posting_freeze.reason would learn nothing. Align with operator-http.
+    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'too short' })).rejects.toThrow();
+    expect(frozenWith).toBeNull();
+
+    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).resolves.toMatchObject({
+      postingEnabled: false,
+      frozenReason: 'suspected drift in USDT',
+    });
+    expect(frozenWith).toEqual({ reason: 'suspected drift in USDT', actor: USER });
+  });
+
+  it('maps freeze_attributed to CONFLICT — not a silent soft success', async () => {
+    const conflicted = stubService({
+      freeze: async () => {
+        throw new LedgerError('Ledger already frozen by recon: reconciliation mismatch — refusing overwrite', 'ledger.freeze_attributed');
+      },
+    });
+    const caller = createLedgerRouter(conflicted).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'operator: suspected USDT drift' })).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: userCopy('ledger.freeze_attributed'),
+    });
+  });
+
   it('gates reconcile behind admin:treasury and reports the run', async () => {
     const open = createLedgerRouter(stubService()).createCaller(await ctx(['admin:treasury'], true));
     await expect(open.reconcile()).resolves.toMatchObject({ ok: true, accountsChecked: 3, chainLength: 7 });
 
     const denied = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
     await expect(denied.reconcile()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('on a broken chain reports length-so-far, never invents green zero', async () => {
+    // The previous shape collapsed a failed chain to chainLength: 0. An empty
+    // book and a book that broke at tx 5 are not the same fact.
+    const open = createLedgerRouter(
+      stubService({
+        reconcile: async () => ({
+          ok: false,
+          ranAt: new Date('2026-08-09T00:00:00Z'),
+          balances: { ok: true, accountsChecked: 2 },
+          chain: { ok: false, brokenAt: 'tx-broken', length: 5 },
+          totals: { USDT: '0' },
+          unbalancedAssets: [],
+        }),
+      }),
+    ).createCaller(await ctx(['admin:treasury'], true));
+
+    await expect(open.reconcile()).resolves.toMatchObject({
+      ok: false,
+      accountsChecked: 2,
+      chainLength: 5,
+      chainBrokenAt: 'tx-broken',
+      unbalancedAssets: [],
+    });
   });
 });
 

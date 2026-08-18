@@ -437,6 +437,11 @@ export function planLiquidation(input: LadderInput): LadderRung {
   if (collateral <= 0n) {
     // Nothing left to sell. The shortfall is bad debt and belongs to
     // `loanBadDebt`, not to another rung of a ladder with no rungs left.
+    //
+    // IMPORTANT for callers: this is the SAME action string as a healthy loan
+    // (`none`), but the LTV is unsecured (MAX). It is NOT a cure. See
+    // `isMarginCallCured` — zero collateral with residual debt must never
+    // clear a margin call to healthy `active`.
     return { action: 'none', ltvBps: ltv };
   }
 
@@ -475,6 +480,38 @@ export function planLiquidation(input: LadderInput): LadderRung {
     expectedProceeds: mul(collateralToSell, input.collateralMark.price, 'floor'),
     closesPosition: collateralToSell >= collateral,
   };
+}
+
+/**
+ * Whether a margin call may be CLEARED to healthy `active`.
+ *
+ * `planLiquidation` returns `action: 'none'` for two opposite situations:
+ *   1. LTV recovered below the margin-call threshold (real cure — market moved,
+ *      borrower posted collateral, or borrower repaid).
+ *   2. Collateral is gone and there is nothing left to sell — residual debt
+ *      (often unpaid interest after a full sale; principal shortfall is meant
+ *      for `loanBadDebt`) is still a real claim.
+ *
+ * Treating (2) as a cure writes status=`active` with zero collateral and
+ * outstanding interest — an unsecured position reported as healthy. That lie
+ * is the residual this function exists to close.
+ *
+ * Choice (b) of the honesty residual: keep the loan non-active until residual
+ * interest/debt is resolved (borrower repay). Interest is not folded into
+ * `loanBadDebt` — that recipe restores the lending reserve, and interest never
+ * sat on the reserve (it capitalises in bank rows until paid to house fees).
+ */
+export function isMarginCallCured(input: {
+  readonly ladderAction: LadderRung['action'];
+  readonly debt: Amount;
+  readonly collateral: Amount;
+  readonly marginCalledAt: Date | null;
+}): boolean {
+  if (input.ladderAction !== 'none') return false;
+  if (input.marginCalledAt === null) return false;
+  // Exhausted collateral with residual debt is NOT a cure.
+  if (input.debt > 0n && input.collateral <= 0n) return false;
+  return true;
 }
 
 export interface ProceedsSplit {

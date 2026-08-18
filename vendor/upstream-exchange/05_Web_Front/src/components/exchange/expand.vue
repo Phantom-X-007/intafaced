@@ -28,33 +28,38 @@
                 <span class="expand-key">{{$t('exchange.expand.fee')}}</span>
             </Col>
         </Row>
-        <Row v-for="(row, index) in rows" key="index">
+        <Row v-for="(row, index) in rows" :key="'fill-' + index">
             <Col span="8">
                 <span class="expand-value">{{ row.time|dateFormat }}</span>
             </Col>
             <Col span="4">
-                <span class="expand-value">{{ row.price|toFloor}}</span>
+                <span class="expand-value">{{ moneyText(row.price) }}</span>
             </Col>
             <Col span="4">
-                <span class="expand-value">{{ row.amount|toFloor}}</span>
+                <span class="expand-value">{{ moneyText(row.amount) }}</span>
             </Col>
             <Col span="4">
-            <span class="expand-value">{{ row.turnover|toFloor}}</span>
+            <span class="expand-value">{{ moneyText(row.turnover) }}</span>
             </Col>
             <Col span="4">
-                <span class="expand-value">{{ row.fee|toFloor}}</span>
+                <span class="expand-value">{{ moneyText(row.fee) }}</span>
             </Col>
         </Row>
     </div>
 </template>
 <script>
+    /* Fill expand used toFloor (Number + substring). That invents digits on
+       long fees/qtys. Print the venue decimal string verbatim instead. */
     export default {
         props: {
             skin:String,
             rows: Array
         },
-        created(){
-            // console.log(this.skin)
+        methods: {
+            moneyText(value) {
+                if (value === null || value === undefined || value === '') return '—';
+                return String(value);
+            }
         }
     };
 </script>

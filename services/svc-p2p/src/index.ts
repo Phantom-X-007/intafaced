@@ -6,10 +6,12 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
-import { parseAmount } from '@intafaced/ledger-client';
+import { describeLimits, limitsConfigured, offerLimitsFromEnv, offerLimitsPosture } from './merchant-limits.js';
 import { createLedgerClient } from './ledger-client.js';
-import { describeLimits } from './merchant-limits.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import type { MerchantStatus } from './merchant-programme.js';
+import { programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 import { parseModeratorUserIds } from './moderation-auth.js';
@@ -36,13 +38,17 @@ registerProcessHooks(
  * Two things start here that are not optional, and both are the same promise
  * from different ends:
  *
- *   · the TIMEOUT sweep, which resolves any trade whose deadline has passed;
+ *   · the TIMEOUT sweep, which acts on any trade whose deadline has passed
+ *     (re-drive / refund / open dispute / escalate-and-rearm — never auto-rule
+ *     a disputed release; that holds until a human moderator decides);
  *   · the SETTLEMENT sweep, which posts any resolution that was decided but
- *     not yet acted on.
+ *     not yet acted on (decide-then-post; late is OK, unexecuted is not).
  *
- * Between them, no trade can sit in escrow indefinitely and no decision can go
- * unexecuted. If this process does not run the sweeps, escrow eventually
- * strands — so they are started before the HTTP listener, not after.
+ * Together they keep funds from stranding without a path: every non-disputed
+ * live clock eventually disposes or re-drives; every committed decision is
+ * re-posted until stamped. Disputed escrow is held on purpose until a natural
+ * person rules. If this process does not run the sweeps, the other states can
+ * strand — so they are started before the HTTP listener, not after.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -75,16 +81,13 @@ const instruments = new InstrumentService(sql, { retentionDays: env.P2P_INSTRUME
 /**
  * Offer ceilings by merchant standing (TRK-p2p.merchants Stage 2).
  *
- * Unset means unlimited, which is the behaviour before Stage 2 — the numbers
- * are open product law and `merchant-limits.ts` argues why they are not
- * invented here. `limitPosture` below says which posture this deployment is in,
- * rather than leaving an operator to infer it from an offer that did or did
- * not refuse.
+ * Unset still refuses nothing (pre-Stage-2 behaviour). The literal `unlimited`
+ * is owner confirmation of that choice. Numbers are open product law and are
+ * not invented here. `limitPosture` below says which of unset / unlimited /
+ * configured this deployment is in, rather than leaving a client to infer it
+ * from an offer that did or did not refuse.
  */
-const offerLimits = {
-  standardMaxAmount: env.P2P_OFFER_MAX_STANDARD ? parseAmount(env.P2P_OFFER_MAX_STANDARD) : null,
-  merchantMaxAmount: env.P2P_OFFER_MAX_MERCHANT ? parseAmount(env.P2P_OFFER_MAX_MERCHANT) : null,
-};
+const offerLimits = offerLimitsFromEnv(env);
 const limitPosture = describeLimits(offerLimits);
 
 const p2p: P2pService = new P2pService(sql, ledger, bus, {
@@ -102,6 +105,8 @@ const p2p: P2pService = new P2pService(sql, ledger, bus, {
    * time this process boots.
    */
   merchantStatusOf: async (userId: string): Promise<MerchantStatus | null> => (await merchants.get(userId))?.status ?? null,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   deadlines: {
     escrowSeconds: env.P2P_ESCROW_DEADLINE_SECONDS,
     paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
@@ -130,7 +135,7 @@ const moderatorUserIds = parseModeratorUserIds(env.P2P_MODERATOR_USER_IDS);
  */
 const merchants: MerchantService = new MerchantService(sql, p2p);
 
-export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds }, merchants);
+export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds, offerLimits }, merchants);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -143,16 +148,21 @@ app.get('/health', async () => ({
   ok: true,
   service: env.SERVICE_NAME,
   moderationReachable: moderatorUserIds.length > 0,
+  /** False until env ceilings arm Stage 2 — badge must not imply a higher limit when none is set. */
+  offerLimitsConfigured: limitsConfigured(offerLimits),
+  offerLimitsPosture: offerLimitsPosture(offerLimits),
 }));
 app.get('/ready', async () => ({
   ready: true,
   tradingEnabled: env.P2P_TRADING_ENABLED,
   moderationReachable: moderatorUserIds.length > 0,
+  offerLimitsConfigured: limitsConfigured(offerLimits),
+  offerLimitsPosture: offerLimitsPosture(offerLimits),
 }));
 
 /**
  * Doctrine §0.6, as an endpoint. Compares this service's view of what is in
- * escrow against the ledger's, per (seller, asset). Drift here is an operator
+ * escrow against the ledger's, per trade. Drift here is an operator
  * alarm, not a metric — it means a trade's terms and its value disagree.
  */
 app.get('/internal/escrow-integrity', async (req, reply) => {
@@ -185,7 +195,10 @@ app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (r
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
   }
   const snapshot = await p2p.reputationOf(req.params.userId);
-  return { ...snapshot, badges: [...snapshot.badges] };
+  const record = await merchants.get(req.params.userId);
+  // Same door tRPC reputation.get uses: derived badges + freeze, never a
+  // second scorecard and never an invented p2pLimitMultiplier.
+  return reputationOnPublicDoor(snapshot, programmeVouch(record?.status, true));
 });
 
 // ── The sweeps ───────────────────────────────────────────────────────────────

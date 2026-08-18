@@ -8,7 +8,6 @@ module.exports = {
         logintip: 'please log in first',
         expect: 'Look forward to expectation!',
         delete: 'Are you confirm to delete?',
-        nodata: 'No Data',
         set: 'Set',
         update: 'Modify',
         slogan: "Exchange The Best",
@@ -121,9 +120,6 @@ module.exports = {
             empty: "The endpoint answered, and there is nothing in it yet.",
             refresh: "Refresh"
         },
-        socket: {
-            needs: "What would have to be built"
-        },
         reason: {
             unreachable: {
                 title: "svc-edge did not answer",
@@ -168,6 +164,10 @@ module.exports = {
             no_surface: {
                 title: "This is not built yet",
                 body: "The screen exists because it came with the shell. The platform has no service behind it, so there is nothing to read and nothing to show. It is not loading, it is not empty, and it is not broken — it was never built. What is missing is stated below."
+            },
+            invalid_response: {
+                title: "The answer was the wrong shape",
+                body: "The service answered, but a field failed the desk's shape check. That is not an empty book and not a transport failure — the payload cannot be trusted, so nothing from it is shown. The field path is named where the desk can print it."
             }
         },
         trade: {
@@ -199,8 +199,8 @@ module.exports = {
 
                `snapshotSource` is provenance the reader can go and check, and
                it is also the refusal to call this feed live. The table is one
-               REST read on load: startWebsock is gone, this shell has no
-               websocket, and Exchange.vue hardcodes feedLive: false. */
+               REST read on load (not the Exchange depth stream). Exchange.vue
+               sets feedLive only after a valid depth snapshot — never bare TCP open. */
             notTraded: "Not traded",
             noneTraded: "No listed market has traded yet, so there is no last price to show.",
             snapshotSource: "Snapshot · svc-trade /api/v1/tickers",
@@ -239,6 +239,11 @@ module.exports = {
             badge: "Not built",
             missing: "What is missing",
             needed: "What would have to be built",
+            /* IxSocketPage.vue asks for `needs`; IxNoSurface.vue asks for
+               `needed`. Both render the same heading and both must resolve —
+               a second `socket:` block used to define `needs` alone, and being
+               declared first it was silently discarded by this one. */
+            needs: "What would have to be built",
             tracker: "Tracker row",
             noTracker: "None — no row plans this",
             wasCalling: "This screen used to call",
@@ -1141,9 +1146,14 @@ module.exports = {
             high24h: "24h High",
             low24h: "24h Low",
             volume24h: "24h Volume",
-            feedConnected: "Market feed connected",
-            feedDownTitle: "Market feed is down — numbers are not live",
-            feedLive: "Live",
+            feedConnected: "Depth book is live (snapshot received)",
+            feedDownTitle: "Depth book is not live — last/24h are a REST snapshot, not a live ticker",
+            feedLive: "Depth live",
+            impactBookUnknown: "book unknown",
+            impactNoDepth: "no depth",
+            impactAvg: "avg",
+            impactPartial: "partial",
+            impactPartialBook: "partial book",
             feedDown: "No feed · not live prices",
 
             searchMarket: "Search market",
@@ -1209,6 +1219,8 @@ module.exports = {
             available: "Available",
             orderValue: "Order value",
             feeEst: "Fee (est.)",
+            feeUnknown: "unknown · the venue published no fee for this pair (not free)",
+            feeTakerSchedule: "{pct}% taker · venue schedule for this pair",
             placing: "Placing…",
             or: "or",
             register: "register",
@@ -2433,7 +2445,6 @@ module.exports = {
         bzzx: 'Help',
         xsrm: " A beginner's course",
         czzn: 'Recharge Guide',
-        jyzn: 'Trade Guide',
         ptsm: 'Explain',
         fysm: 'Fees',
         fwtk: 'Service Policy',

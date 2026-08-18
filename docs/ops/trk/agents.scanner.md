@@ -86,7 +86,7 @@ Flip only when ranked signals use real allowlisted data in env — mock rank alo
 
 ## 5 · Open questions
 
-1. Signal types v1 (momentum, liquidity, funding)?
+1. ~~Signal types v1~~ — **closed by D26-P0-11** [`docs/adr/2026-08-12-scanner-signal-inputs-law.md`](../../adr/2026-08-12-scanner-signal-inputs-law.md): v1 ranks `abs_change_x_log_volume` on `last` / `volume24h` / `change24hBps` only; refuse when missing.
 2. Can scanner ever place orders?
 3. Tier map (rank perks)?
 4. Latency SLO?

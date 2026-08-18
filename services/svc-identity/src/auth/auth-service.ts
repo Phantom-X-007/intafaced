@@ -1,13 +1,17 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
+import type { AccountState } from '@intafaced/contracts';
 import { assertDelegatableScopes, issueAccessToken, SESSION_SCOPES, type Scope, type TokenConfig } from '@intafaced/auth';
 import type { EventBus } from '@intafaced/events';
 import { dummyPasswordHash, generateApiKey, generateToken, hashPassword, hashToken, needsRehash, verifyPassword } from './passwords.js';
-import { generateRecoveryCodes, generateSecret, totpUri, verifyTotp } from './totp.js';
+import { generateRecoveryCodes, generateSecret, matchTotpStep, totpUri } from './totp.js';
+import { encryptTotpSecret, materializeTotpSecret, parseTotpSecretKey } from './totp-crypto.js';
+import { apiKeyOriginAllowed } from './api-key-origin.js';
+import { SqlPendingTotpEnrolmentStore, type PendingTotpEnrolmentStore } from './pending-totp-store.js';
 import {
   b64urlDecode,
   b64urlEncode,
-  ChallengeStore,
+  SqlChallengeStore,
   createAuthenticationOptions,
   createRegistrationOptions,
   generateChallenge,
@@ -18,6 +22,7 @@ import {
 import type {
   AuthenticationOptionsJSON,
   AuthenticationResponseJSON,
+  ChallengeStorePort,
   RegistrationOptionsJSON,
   RegistrationResponseJSON,
   StoredWebAuthnCredential,
@@ -53,6 +58,11 @@ export class AuthError extends Error {
       | 'auth.not_found'
       /** A KYC record exists but is not in a state an operator can act on. */
       | 'auth.kyc_not_pending'
+      /**
+       * KYC approve/reject tried to write `reviewed_by` from an agent principal
+       * (service caller or API-key token). Approval is an operator action.
+       */
+      | 'auth.kyc_agent_refused'
       /** Step-up asked for on an account with no second factor to step up with. */
       | 'auth.mfa_not_enrolled'
       /** WebAuthn ceremony failed (bad signature, origin, challenge, counter). */
@@ -60,16 +70,31 @@ export class AuthError extends Error {
       /** Account has no registered WebAuthn credential for assertion. */
       | 'auth.webauthn_not_enrolled'
       /**
-       * Transfer door: a sub-account id was missing or empty.
+       * API key has a domain whitelist and the request origin is missing or
+       * not on it. Empty whitelist stays open (server bots).
+       */
+      | 'auth.domain_not_allowed'
+      /**
+       * Ownership / transfer door: a sub-account id was missing or empty.
        * SPEC-SUBACCOUNTS §2 — never default to primary.
        */
       | 'auth.sub_account_required'
-      /** Transfer door: caller does not own the named partition. */
+      /** Ownership / transfer door: caller does not own the named partition. */
       | 'auth.sub_account_denied'
-      /** Transfer door: partition is soft-revoked. */
+      /** Ownership / transfer door: partition is soft-revoked. */
       | 'auth.sub_account_revoked'
       /** Transfer door: from and to name the same partition. */
-      | 'auth.sub_account_same',
+      | 'auth.sub_account_same'
+      /**
+       * Create refused — live partitions already at the owner-published max
+       * (SPEC-SUBACCOUNTS §4 / §8). Unbounded books are an abuse surface.
+       */
+      | 'auth.sub_account_limit'
+      /**
+       * TOTP encrypt-at-rest key missing/invalid. Enrol refuses rather than
+       * writing base32 plaintext to users.totp_secret (IDENTITY_TOTP_SECRET_KEY).
+       */
+      | 'auth.totp_key_missing',
   ) {
     super(message);
     this.name = 'AuthError';
@@ -77,6 +102,17 @@ export class AuthError extends Error {
 }
 
 export type { WebAuthnConfig, StoredWebAuthnCredential };
+
+/**
+ * Pin: `reviewed_by` is an operator name. A service caller (`svc-agents`) or
+ * an API-key principal (`kid`) is an agent, not a compliance operator — refuse
+ * before the UPDATE. Interactive operator sessions omit both.
+ */
+export function assertOperatorKycReview(input: { service?: string | null; kid?: string | null }): void {
+  if (input.service || input.kid) {
+    throw new AuthError('KYC review is an operator action — an agent must never write reviewed_by', 'auth.kyc_agent_refused');
+  }
+}
 
 export type KycTier = 'none' | 'basic' | 'full' | 'institutional';
 export type SubmittableKycTier = Exclude<KycTier, 'none'>;
@@ -162,12 +198,28 @@ const DEFAULT_WEBAUTHN: WebAuthnConfig = {
   origin: 'http://localhost:3000',
 };
 
-export class AuthService {
-  /** Pending TOTP secret + recovery hashes until confirm (ID-P1-1). */
-  private readonly pendingTotpEnrolment = new Map<string, { secret: string; recoveryHashes: string[] }>();
+/** Conservative live-partition cap until owner publishes IDENTITY_MAX_SUB_ACCOUNTS. */
+export const DEFAULT_MAX_SUB_ACCOUNTS = 25;
 
-  private readonly challenges = new ChallengeStore();
+export class AuthService {
+  /**
+   * Pending TOTP enrolment (secret_hash + recovery hashes) until confirm (ID-P1-1).
+   * Production: Postgres so multi-pod start/confirm works. Injectable for pure unit tests.
+   */
+  private readonly pendingTotp: PendingTotpEnrolmentStore;
+
+  /** Durable when sql is present (production); injectable for pure unit tests. */
+  private readonly challenges: ChallengeStorePort;
   private readonly webauthn: WebAuthnConfig;
+  /** 32-byte AES key for totp_secret at rest; null if IDENTITY_TOTP_SECRET_KEY unset/invalid. */
+  private readonly totpSecretKey: Buffer | null;
+
+  /**
+   * Owner-published live sub-account cap (SPEC-SUBACCOUNTS §4 / §8).
+   * Counts non-revoked rows only. Default keeps abuse bounded without inventing
+   * a product-tier ladder — ops override via IDENTITY_MAX_SUB_ACCOUNTS.
+   */
+  private readonly maxSubAccounts: number;
 
   constructor(
     private readonly sql: Sql,
@@ -175,8 +227,35 @@ export class AuthService {
     private readonly rank: RankService,
     private readonly tokens: TokenConfig & { refreshTtlSeconds: number },
     webauthn: WebAuthnConfig = DEFAULT_WEBAUTHN,
+    /**
+     * Raw env material for TOTP secret encrypt-at-rest (base64 or 64-char hex).
+     * Optional so unit/router mocks stay thin; production passes env.IDENTITY_TOTP_SECRET_KEY.
+     */
+    totpSecretKeyMaterial?: string,
+    challenges?: ChallengeStorePort,
+    pendingTotp?: PendingTotpEnrolmentStore,
+    maxSubAccounts: number = DEFAULT_MAX_SUB_ACCOUNTS,
   ) {
     this.webauthn = webauthn;
+    this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
+    // Production path: Postgres-backed so multi-pod ceremonies complete.
+    // Tests may pass ChallengeStore (in-memory) when they do not need durability.
+    this.challenges = challenges ?? new SqlChallengeStore(sql, webauthn.challengeTtlMs);
+    this.pendingTotp = pendingTotp ?? new SqlPendingTotpEnrolmentStore(sql);
+    this.maxSubAccounts = Number.isFinite(maxSubAccounts) && maxSubAccounts >= 1 ? Math.floor(maxSubAccounts) : DEFAULT_MAX_SUB_ACCOUNTS;
+  }
+
+  /**
+   * Resolve column value to base32 for verifyTotp.
+   * Dual-read: enc:v1: decrypts; unprefixed = legacy plaintext (one release).
+   */
+  private openTotpSecretColumn(stored: string): string {
+    try {
+      return materializeTotpSecret(this.totpSecretKey, stored);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'TOTP secret unreadable';
+      throw new AuthError(msg, 'auth.mfa_invalid');
+    }
   }
 
   // ── Registration ───────────────────────────────────────────────────────────
@@ -249,11 +328,15 @@ export class AuthService {
     let mfa = false;
     if (user.totp_secret) {
       if (!input.totpCode) throw new AuthError('Two-factor code required', 'auth.mfa_required');
-      if (verifyTotp(user.totp_secret, input.totpCode)) {
+      // Prefer TOTP (and burn the step). Only when the code is not a valid TOTP
+      // do we try a recovery code — so a live TOTP never burns a recovery hash.
+      // Column may be enc:v1: — open before matching.
+      const secret = this.openTotpSecretColumn(user.totp_secret);
+      const totpMatch = matchTotpStep(secret, input.totpCode);
+      if (totpMatch !== null) {
+        await this.consumeTotpCode(user.id, secret, input.totpCode);
         mfa = true;
       } else {
-        // Single-use recovery code path (ID-P1-1). Totp first so a valid TOTP
-        // never burns a recovery code.
         const redeemed = await this.tryRedeemRecoveryCode(user.id, input.totpCode);
         if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
         mfa = true;
@@ -437,7 +520,47 @@ export class AuthService {
     });
   }
 
+  /**
+   * Verify a TOTP code and burn its counter step so it cannot be replayed.
+   *
+   * Under FOR UPDATE so two concurrent uses of the same code cannot both pass.
+   * Same shape as recovery-code redeem: match → refuse if step ≤ last → advance.
+   */
+  private async consumeTotpCode(userId: string, secret: string, code: string, at?: Date): Promise<void> {
+    const matched = matchTotpStep(secret, code, at ? { at } : {});
+    if (matched === null) {
+      throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    }
+
+    await transaction(this.sql, async (tx) => {
+      const rows = await tx<Array<{ totp_last_step: string | number | bigint | null }>>`
+        SELECT totp_last_step FROM users WHERE id = ${userId} FOR UPDATE
+      `;
+      if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
+
+      const lastRaw = rows[0].totp_last_step;
+      const lastStep = lastRaw === null || lastRaw === undefined ? null : BigInt(lastRaw);
+      if (lastStep !== null && matched <= lastStep) {
+        throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      }
+
+      await tx`
+        UPDATE users
+           SET totp_last_step = ${matched.toString()}, updated_at = now()
+         WHERE id = ${userId}
+      `;
+    });
+  }
+
   async startTotpEnrolment(userId: string): Promise<{ secret: string; uri: string; recoveryCodes: string[] }> {
+    // Refuse before inventing a secret the confirm path cannot seal.
+    if (!this.totpSecretKey) {
+      throw new AuthError(
+        'IDENTITY_TOTP_SECRET_KEY is not set to a 32-byte key (base64 or hex) — cannot enrol TOTP',
+        'auth.totp_key_missing',
+      );
+    }
+
     const rows = await this.sql<Array<{ email: string; totp_secret: string | null }>>`
       SELECT email, totp_secret FROM users WHERE id = ${userId}
     `;
@@ -447,36 +570,52 @@ export class AuthService {
 
     const secret = generateSecret();
     const recoveryCodes = generateRecoveryCodes();
-    // Hold secret + recovery hashes until confirm. Plaintext codes return once;
-    // hashes persist only after a valid TOTP proves enrolment (ID-P1-1).
-    this.pendingTotpEnrolment.set(userId, {
-      secret,
-      recoveryHashes: recoveryCodes.map((c) => hashToken(c)),
-    });
+    // Hold secret_hash + recovery hashes until confirm (durable multi-pod store).
+    // Plaintext codes return once; hashes land on the user only after a valid TOTP
+    // proves enrolment (ID-P1-1). Base32 secret is never stored pending — only hashed.
+    await this.pendingTotp.put(
+      userId,
+      hashToken(secret),
+      recoveryCodes.map((c) => hashToken(c)),
+    );
 
-    // The secret is NOT persisted yet — only a confirmed code proves the user
-    // actually scanned it. Storing it now would lock out anyone who abandoned
-    // enrolment halfway.
+    // The secret is NOT written to users.totp_secret yet — only a confirmed code
+    // proves the user actually scanned it. Storing it now would lock out anyone
+    // who abandoned enrolment halfway.
     return { secret, uri: totpUri(secret, user.email), recoveryCodes };
   }
 
   async confirmTotpEnrolment(userId: string, secret: string, code: string): Promise<void> {
-    if (!verifyTotp(secret, code)) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+    const matched = matchTotpStep(secret, code);
+    if (matched === null) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
 
-    const pending = this.pendingTotpEnrolment.get(userId);
-    if (!pending || pending.secret !== secret) {
-      throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
+    // Never write base32 plaintext to totp_secret — refuse enrol if key missing
+    // (before take so a missing key does not burn a valid pending session).
+    if (!this.totpSecretKey) {
+      throw new AuthError(
+        'IDENTITY_TOTP_SECRET_KEY is not set to a 32-byte key (base64 or hex) — cannot enrol TOTP',
+        'auth.totp_key_missing',
+      );
     }
 
+    // Single-use take across pods; wrong secret leaves the row for a real confirm.
+    const pending = await this.pendingTotp.takeIfSecretHash(userId, hashToken(secret));
+    if (!pending) {
+      throw new AuthError('TOTP enrolment session expired or secret mismatch — start enrolment again', 'auth.mfa_invalid');
+    }
+    const sealed = encryptTotpSecret(this.totpSecretKey, secret);
+
+    // Seed totp_last_step with the confirm code so that same code cannot be
+    // immediately reused for login / step-up inside the same window.
     await this.sql`
       UPDATE users
-         SET totp_secret = ${secret},
+         SET totp_secret = ${sealed},
              totp_enrolled_at = now(),
+             totp_last_step = ${matched.toString()},
              recovery_code_hashes = ${this.sql.json(pending.recoveryHashes as never)},
              updated_at = now()
        WHERE id = ${userId} AND totp_secret IS NULL
     `;
-    this.pendingTotpEnrolment.delete(userId);
 
     await this.rank.awardXp({
       userId,
@@ -492,9 +631,10 @@ export class AuthService {
   /**
    * Step 1 of enrolment: options for `navigator.credentials.create()`.
    *
-   * The challenge is held in-process until `confirmWebauthnRegistration`
-   * consumes it. Mirrors TOTP — nothing is persisted until the ceremony proves
-   * the authenticator holds the private key.
+   * The challenge is held in the durable challenge store until
+   * `confirmWebauthnRegistration` consumes it (single-use, TTL). Mirrors TOTP —
+   * nothing is persisted on the user until the ceremony proves the authenticator
+   * holds the private key. Multi-pod: put/take share Postgres.
    */
   async startWebauthnRegistration(userId: string): Promise<RegistrationOptionsJSON> {
     const rows = await this.sql<Array<{ email: string; handle: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
@@ -505,7 +645,7 @@ export class AuthService {
 
     const existing = asCredentialList(user.webauthn_creds);
     const challenge = generateChallenge();
-    this.challenges.put('registration', challenge, userId);
+    await this.challenges.put('registration', challenge, userId);
 
     return createRegistrationOptions(this.webauthn, { id: userId, name: user.email, displayName: user.handle }, existing, challenge);
   }
@@ -524,7 +664,7 @@ export class AuthService {
     const clientChallenge = readClientChallenge(response.response.clientDataJSON);
     if (!clientChallenge) throw new AuthError('Invalid WebAuthn response', 'auth.webauthn_invalid');
 
-    const held = this.challenges.take(clientChallenge, 'registration');
+    const held = await this.challenges.take(clientChallenge, 'registration');
     if (!held || held.userId !== userId) {
       throw new AuthError('WebAuthn challenge expired or already used', 'auth.webauthn_invalid');
     }
@@ -579,8 +719,9 @@ export class AuthService {
     const creds = user && user.status === 'active' ? asCredentialList(user.webauthn_creds) : [];
 
     // Challenge is bound to the user when we found one; otherwise it is stored
-    // against null and can never issue a session.
-    this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
+    // against null and can never issue a session. Durable store so another pod
+    // can complete the assertion.
+    await this.challenges.put('authentication', challenge, user?.status === 'active' ? user.id : null);
 
     return createAuthenticationOptions(this.webauthn, creds, challenge);
   }
@@ -607,7 +748,7 @@ export class AuthService {
     const clientChallenge = readClientChallenge(response.response.clientDataJSON);
     if (!clientChallenge) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
 
-    const held = this.challenges.take(clientChallenge, 'authentication');
+    const held = await this.challenges.take(clientChallenge, 'authentication');
     if (!held || held.userId !== user.id) {
       throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
     }
@@ -650,6 +791,51 @@ export class AuthService {
       createdAt: c.createdAt,
       ...(c.transports ? { transports: c.transports } : {}),
     }));
+  }
+
+  /**
+   * Drop one enrolled authenticator. Self-only; missing id → false (same shape
+   * as revokeApiKey — never confirm whether a foreign id existed).
+   *
+   * Lost/stolen keys had no retire path; listing alone is not a lifecycle.
+   */
+  async removeWebauthnCredential(userId: string, credentialId: string): Promise<boolean> {
+    const target = normalizeCredId(credentialId);
+    return transaction(this.sql, async (tx) => {
+      const rows = await tx<Array<{ webauthn_creds: unknown }>>`
+        SELECT webauthn_creds FROM users WHERE id = ${userId} FOR UPDATE
+      `;
+      if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
+      const creds = asCredentialList(rows[0].webauthn_creds);
+      const next = creds.filter((c) => c.credentialId !== target);
+      if (next.length === creds.length) return false;
+      await tx`
+        UPDATE users
+           SET webauthn_creds = ${tx.json(next as never)}, updated_at = now()
+         WHERE id = ${userId}
+      `;
+      return true;
+    });
+  }
+
+  /**
+   * WebAuthn ceremony for step-up (withdraw elevation). Bound to the live user;
+   * challenge kind is `step-up` so a login assertion cannot be replayed here.
+   */
+  async startWebauthnStepUp(userId: string) {
+    const rows = await this.sql<Array<{ id: string; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT id, status, webauthn_creds FROM users WHERE id = ${userId}
+    `;
+    const user = rows[0];
+    if (!user) throw new AuthError('User not found', 'auth.not_found');
+    if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
+    const creds = asCredentialList(user.webauthn_creds);
+    if (creds.length === 0) {
+      throw new AuthError('No security key enrolled', 'auth.webauthn_not_enrolled');
+    }
+    const challenge = generateChallenge();
+    await this.challenges.put('step-up', challenge, userId);
+    return createAuthenticationOptions(this.webauthn, creds, challenge);
   }
 
   // ── API keys ───────────────────────────────────────────────────────────────
@@ -696,9 +882,24 @@ export class AuthService {
     return { id: rows[0]!.id, key, prefix, mode };
   }
 
-  async verifyApiKey(key: string): Promise<{ userId: string; scopes: string[]; keyId: string; mode: 'live' | 'sandbox' } | null> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; scopes: string[]; expires_at: Date | null; mode: string | null }>>`
-      SELECT id, user_id, scopes, expires_at, mode FROM api_keys
+  async verifyApiKey(key: string): Promise<{
+    userId: string;
+    scopes: string[];
+    keyId: string;
+    mode: 'live' | 'sandbox';
+    domainWhitelist: string[];
+  } | null> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        scopes: string[];
+        expires_at: Date | null;
+        mode: string | null;
+        domain_whitelist: string[] | null;
+      }>
+    >`
+      SELECT id, user_id, scopes, expires_at, mode, domain_whitelist FROM api_keys
        WHERE key_hash = ${hashToken(key)} AND revoked = false
     `;
     const row = rows[0];
@@ -707,7 +908,13 @@ export class AuthService {
 
     await this.sql`UPDATE api_keys SET last_used_at = now() WHERE id = ${row.id}`;
     const mode: 'live' | 'sandbox' = row.mode === 'sandbox' ? 'sandbox' : 'live';
-    return { userId: row.user_id, scopes: row.scopes, keyId: row.id, mode };
+    return {
+      userId: row.user_id,
+      scopes: row.scopes,
+      keyId: row.id,
+      mode,
+      domainWhitelist: row.domain_whitelist ?? [],
+    };
   }
 
   /**
@@ -725,7 +932,14 @@ export class AuthService {
    * someone smuggled them into the key row (create already refuses them via
    * assertDelegatableScopes + INTERACTIVE_ONLY).
    */
-  async exchangeApiKey(key: string): Promise<{
+  async exchangeApiKey(
+    key: string,
+    /**
+     * Browser `Origin` (or edge-forwarded equivalent). Required when the key
+     * carries a non-empty domain_whitelist. Server bots leave the list empty.
+     */
+    requestOrigin?: string | null,
+  ): Promise<{
     accessToken: string;
     expiresAt: Date;
     userId: string;
@@ -735,6 +949,10 @@ export class AuthService {
   }> {
     const verified = await this.verifyApiKey(key);
     if (!verified) throw new AuthError('Invalid credentials', 'auth.invalid_credentials');
+
+    if (!apiKeyOriginAllowed(verified.domainWhitelist, requestOrigin)) {
+      throw new AuthError('API key is not allowed from this origin', 'auth.domain_not_allowed');
+    }
 
     const users = await this.sql<Array<{ status: string }>>`
       SELECT status FROM users WHERE id = ${verified.userId}
@@ -809,6 +1027,35 @@ export class AuthService {
       if (best === 'none' || order[row.tier] > order[best as 'basic' | 'full' | 'institutional']) best = row.tier;
     }
     return best;
+  }
+
+  /**
+   * ACCOUNT STATE for another service to READ (`accountStateSchema`).
+   *
+   * `users.status` has been read internally by nine call sites in this file
+   * since the beginning and returned by none of them. That is why the support
+   * desk had no way to know an account was frozen: the fact existed, was
+   * authoritative, and was not reachable from outside this service — so the only
+   * way for another service to have it was to keep a copy, which is the thing
+   * that must not happen for a fact this consequential.
+   *
+   * THREE FIELDS, AND THE SHORTNESS IS THE POINT. `status` and the derived KYC
+   * tier answer "can this person use the platform" and "how far are they
+   * verified". Nothing else is returned, so this cannot become the seam through
+   * which the encrypted KYC vault (a688e231) or a legal name leaks into a
+   * support ticket. §10 keeps documents in one place; this keeps that true by
+   * having nowhere to put one.
+   *
+   * `null` for an unknown user — the caller renders that as "not read", never as
+   * an account in good standing.
+   */
+  async accountState(userId: string): Promise<AccountState | null> {
+    const rows = await this.sql<Array<{ id: string; status: 'active' | 'frozen' | 'closed' }>>`
+      SELECT id, status FROM users WHERE id = ${userId} LIMIT 1
+    `;
+    const user = rows[0];
+    if (!user) return null;
+    return { userId: user.id, status: user.status, kycTier: await this.kycTier(user.id) };
   }
 
   /**
@@ -894,7 +1141,14 @@ export class AuthService {
    * Idempotent: approving an already-approved record returns it and re-announces
    * nothing new, because both the event and the XP award carry business keys.
    */
-  async approveKycRecord(input: { recordId: string; reviewerId: string; expiresAt?: Date | null }): Promise<KycRecordView> {
+  async approveKycRecord(input: {
+    recordId: string;
+    reviewerId: string;
+    expiresAt?: Date | null;
+    service?: string | null;
+    kid?: string | null;
+  }): Promise<KycRecordView> {
+    assertOperatorKycReview({ service: input.service, kid: input.kid });
     const outcome = await transaction(this.sql, async (tx) => {
       const rows = await tx<KycRow[]>`
         SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${input.recordId} FOR UPDATE
@@ -926,7 +1180,13 @@ export class AuthService {
   }
 
   /** Reject a pending record. No tier is granted, nothing is announced. */
-  async rejectKycRecord(input: { recordId: string; reviewerId: string }): Promise<KycRecordView> {
+  async rejectKycRecord(input: {
+    recordId: string;
+    reviewerId: string;
+    service?: string | null;
+    kid?: string | null;
+  }): Promise<KycRecordView> {
+    assertOperatorKycReview({ service: input.service, kid: input.kid });
     return transaction(this.sql, async (tx) => {
       const rows = await tx<KycRow[]>`
         SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE id = ${input.recordId} FOR UPDATE
@@ -986,8 +1246,8 @@ export class AuthService {
   // ── Step-up ────────────────────────────────────────────────────────────────
 
   /**
-   * Trade a live session plus a fresh TOTP code for a SHORT-LIVED token that
-   * carries `trade:withdraw`.
+   * Trade a live session plus a fresh TOTP (or single-use recovery) code for a
+   * SHORT-LIVED token that carries `trade:withdraw`.
    *
    * This exists because `defaultScopes()` deliberately withholds
    * `trade:withdraw` — "added only after a step-up challenge" — and until now
@@ -998,27 +1258,29 @@ export class AuthService {
    * Three things make the elevated token weaker than a normal one, and all three
    * matter: it lasts five minutes, it is bound to the session that asked for it,
    * and it is only issued to an account that actually has a second factor.
+   *
+   * Recovery codes (XXXXX-XXXXX) are accepted on the same `totpCode` field as
+   * login: TOTP first so a live authenticator never burns a recovery hash;
+   * else single-use redeem. Lost authenticator can still elevate withdraw.
    */
-  async stepUp(input: { userId: string; sessionId: string; totpCode: string }): Promise<{
+  async stepUp(input: { userId: string; sessionId: string; totpCode?: string; webauthn?: AuthenticationResponseJSON }): Promise<{
     accessToken: string;
     expiresAt: Date;
     scopes: Scope[];
   }> {
-    const users = await this.sql<Array<{ totp_secret: string | null; status: string }>>`
-      SELECT totp_secret, status FROM users WHERE id = ${input.userId}
+    const hasTotp = typeof input.totpCode === 'string' && input.totpCode.length > 0;
+    const hasWebauthn = input.webauthn !== undefined && input.webauthn !== null;
+    if (hasTotp === hasWebauthn) {
+      // Exactly one factor proof per call — never both, never neither.
+      throw new AuthError('Provide either a TOTP code or a WebAuthn assertion', 'auth.mfa_invalid');
+    }
+
+    const users = await this.sql<Array<{ totp_secret: string | null; status: string; webauthn_creds: StoredWebAuthnCredential[] }>>`
+      SELECT totp_secret, status, webauthn_creds FROM users WHERE id = ${input.userId}
     `;
     const user = users[0];
     if (!user) throw new AuthError('User not found', 'auth.not_found');
     if (user.status !== 'active') throw new AuthError(`Account is ${user.status}`, 'auth.account_frozen');
-
-    // §9: moving value off the platform requires a second factor. An account
-    // with none cannot be elevated — not "is elevated without one".
-    if (!user.totp_secret) {
-      throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
-    }
-    if (!verifyTotp(user.totp_secret, input.totpCode)) {
-      throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
-    }
 
     // The session must still be live. Elevating off a revoked session would let
     // a logout be undone by whoever still holds the old access token.
@@ -1027,6 +1289,51 @@ export class AuthService {
        WHERE id = ${input.sessionId} AND user_id = ${input.userId} AND revoked = false AND expires_at > now()
     `;
     if (!sessions[0]) throw new AuthError('Session is no longer valid', 'auth.session_invalid');
+
+    if (hasTotp) {
+      // §9: moving value off the platform requires a second factor.
+      if (!user.totp_secret) {
+        throw new AuthError('Enrol two-factor authentication before withdrawing', 'auth.mfa_not_enrolled');
+      }
+      // Same order as login: open enc:v1: → TOTP burn first, else recovery redeem.
+      // Recovery never mints trade:withdraw without burning a second-factor proof.
+      const secret = this.openTotpSecretColumn(user.totp_secret!);
+      const matched = matchTotpStep(secret, input.totpCode!);
+      if (matched !== null) {
+        await this.consumeTotpCode(input.userId, secret, input.totpCode!);
+      } else {
+        const redeemed = await this.tryRedeemRecoveryCode(input.userId, input.totpCode!);
+        if (!redeemed) throw new AuthError('Invalid two-factor code', 'auth.mfa_invalid');
+      }
+    } else {
+      const creds = asCredentialList(user.webauthn_creds);
+      if (creds.length === 0) {
+        throw new AuthError('Enrol a security key before withdrawing with passkey step-up', 'auth.webauthn_not_enrolled');
+      }
+      const response = input.webauthn!;
+      const clientChallenge = readClientChallenge(response.response.clientDataJSON);
+      if (!clientChallenge) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+      const held = await this.challenges.take(clientChallenge, 'step-up');
+      if (!held || held.userId !== input.userId) {
+        throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+      }
+      const responseId = normalizeCredId(response.id);
+      const credential = creds.find((c) => c.credentialId === responseId);
+      if (!credential) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+      let newCounter: number;
+      try {
+        ({ newCounter } = verifyAuthenticationResponse(this.webauthn, held.challenge, credential, response));
+      } catch (err) {
+        if (err instanceof WebAuthnError) throw new AuthError('Invalid two-factor assertion', 'auth.webauthn_invalid');
+        throw err;
+      }
+      const next = creds.map((c) => (c.credentialId === credential.credentialId ? { ...c, counter: newCounter } : c));
+      await this.sql`
+        UPDATE users
+           SET webauthn_creds = ${this.sql.json(next as never)}, updated_at = now()
+         WHERE id = ${input.userId}
+      `;
+    }
 
     const scopes: Scope[] = [...this.defaultScopes(), ...STEP_UP_SCOPES];
     const tier = await this.kycTier(input.userId);
@@ -1042,11 +1349,16 @@ export class AuthService {
   // ── Sub-accounts ───────────────────────────────────────────────────────────
 
   /**
-   * Freeze identity + cascade revoke every sub-account (SPEC-SUBACCOUNTS §3).
+   * Freeze identity + cascade revoke every sub-account and every API key
+   * (SPEC-SUBACCOUNTS §3 + key kill-switch).
+   *
    * Sub-accounts are bookkeeping partitions, not compliance boundaries —
    * freeze must not leave a live partition under a frozen parent.
+   * API keys exchange already refuses non-active users, but bulk-revoking them
+   * makes freeze visible on list/revoke surfaces and closes any path that only
+   * checked `revoked` without re-reading user status.
    */
-  async freezeIdentity(userId: string): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number }> {
+  async freezeIdentity(userId: string): Promise<{ userId: string; status: 'frozen'; subAccountsRevoked: number; apiKeysRevoked: number }> {
     return transaction(this.sql, async (tx) => {
       const users = await tx<Array<{ id: string; status: string }>>`
         SELECT id, status FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE
@@ -1062,7 +1374,17 @@ export class AuthService {
          WHERE parent_user_id = ${userId} AND revoked = false
         RETURNING id
       `;
-      return { userId, status: 'frozen' as const, subAccountsRevoked: revokedRows.length };
+      const revokedKeys = await tx<Array<{ id: string }>>`
+        UPDATE api_keys SET revoked = true
+         WHERE user_id = ${userId} AND revoked = false
+        RETURNING id
+      `;
+      return {
+        userId,
+        status: 'frozen' as const,
+        subAccountsRevoked: revokedRows.length,
+        apiKeysRevoked: revokedKeys.length,
+      };
     });
   }
 
@@ -1092,12 +1414,35 @@ export class AuthService {
     if (users[0].status !== 'active') {
       throw new AuthError(`Account is ${users[0].status}`, 'auth.account_frozen');
     }
-    const rows = await this.sql<Array<{ id: string }>>`
-      INSERT INTO sub_accounts (parent_user_id, label, purpose)
-      VALUES (${userId}, ${label}, ${purpose ?? null})
-      RETURNING id
-    `;
-    return rows[0]!;
+
+    // Bound live partitions (SPEC-SUBACCOUNTS §4). Revoked rows do not count —
+    // retirement frees a slot; freeze-cascade revokes without inventing a second cap.
+    return transaction(this.sql, async (tx) => {
+      // Serialize creates under one identity (user row lock) so two pods cannot
+      // both read count=N-1 and insert past the owner-published max.
+      const locked = await tx<Array<{ id: string }>>`
+        SELECT id FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE
+      `;
+      if (!locked[0]) throw new AuthError('User not found', 'auth.not_found');
+
+      const live = await tx<Array<{ n: string }>>`
+        SELECT count(*)::text AS n FROM sub_accounts
+         WHERE parent_user_id = ${userId} AND revoked = false
+      `;
+      const count = Number(live[0]?.n ?? '0');
+      if (count >= this.maxSubAccounts) {
+        throw new AuthError(
+          `Sub-account limit reached (${this.maxSubAccounts}). Retire a live partition or raise IDENTITY_MAX_SUB_ACCOUNTS.`,
+          'auth.sub_account_limit',
+        );
+      }
+      const rows = await tx<Array<{ id: string }>>`
+        INSERT INTO sub_accounts (parent_user_id, label, purpose)
+        VALUES (${userId}, ${label}, ${purpose ?? null})
+        RETURNING id
+      `;
+      return rows[0]!;
+    });
   }
 
   async listSubAccounts(
@@ -1160,18 +1505,48 @@ export class AuthService {
   }
 
   /**
+   * OWNERSHIP-AT-THE-DOOR for one sub-account (SPEC-SUBACCOUNTS §2).
+   *
+   * Money / trade ops that name a partition must call this (or the S2S snapshot
+   * + the same checks) before acting. A valid scope says *what*; this says
+   * *whose row*. Fail-closed:
+   *   - missing / empty id → refuse (never invent primary)
+   *   - unknown id → denied (same answer as foreign — no existence oracle)
+   *   - parent_user_id ≠ caller → denied
+   *   - revoked → revoked
+   *
+   * Does not post to the ledger. Identity holds no balances.
+   */
+  async assertSubAccountOwned(userId: string, subAccountId: string | null | undefined): Promise<{ id: string; parentUserId: string }> {
+    const id = typeof subAccountId === 'string' ? subAccountId.trim() : '';
+    if (!id) {
+      throw new AuthError(
+        'Sub-account id is required — a missing id is a refusal, never a default to primary',
+        'auth.sub_account_required',
+      );
+    }
+
+    const row = await this.getSubAccountOwnership(id);
+    // Unknown and foreign both refuse as denied — do not confirm which.
+    if (!row || row.parentUserId !== userId) {
+      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
+    }
+    if (row.revoked) {
+      throw new AuthError('Sub-account is revoked', 'auth.sub_account_revoked');
+    }
+
+    return { id: row.id, parentUserId: row.parentUserId };
+  }
+
+  /**
    * OWNERSHIP-AT-THE-DOOR for a sub-account transfer (SPEC-SUBACCOUNTS §1–§2).
    *
    * The ledger recipe (`recipes.subAccountTransfer`) is pure and does not know
    * who owns which partition. Every money service that posts that recipe MUST
    * call this first — a valid scope is not ownership of a specific row.
    *
-   * Fail-closed rules:
-   *   - missing / empty from or to → refuse (never invent primary)
-   *   - same id twice → refuse
-   *   - unknown id → denied (same answer as foreign — no existence oracle)
-   *   - parent_user_id ≠ caller → denied
-   *   - either side revoked → revoked
+   * Composes {@link assertSubAccountOwned} on both legs so the single-row gate
+   * and the transfer gate cannot drift. Same-id refuses before the second look-up.
    *
    * Does not post to the ledger. Identity holds no balances.
    */
@@ -1193,20 +1568,8 @@ export class AuthService {
       throw new AuthError('A transfer needs two different sub-accounts', 'auth.sub_account_same');
     }
 
-    const from = await this.getSubAccountOwnership(fromId);
-    const to = await this.getSubAccountOwnership(toId);
-
-    // Unknown and foreign both refuse as denied — do not confirm which.
-    if (!from || from.parentUserId !== userId) {
-      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
-    }
-    if (!to || to.parentUserId !== userId) {
-      throw new AuthError('Sub-account not found or not owned by caller', 'auth.sub_account_denied');
-    }
-    if (from.revoked || to.revoked) {
-      throw new AuthError('Sub-account is revoked', 'auth.sub_account_revoked');
-    }
-
+    const from = await this.assertSubAccountOwned(userId, fromId);
+    const to = await this.assertSubAccountOwned(userId, toId);
     return { fromId: from.id, toId: to.id };
   }
 

@@ -12,7 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import { accrualDate, planAccrual } from './interest.js';
+import { accrualBoundary, accrualDate, planAccrual } from './interest.js';
 import { withMoneySpan } from '../tracing.js';
 
 /**
@@ -53,7 +53,8 @@ export interface PositionRecord {
   principal: Amount;
   openedAt: Date;
   maturesAt: Date | null;
-  status: 'active' | 'closed';
+  /** `pending` is the claim before activate — not interest-eligible, not listable as open. */
+  status: 'pending' | 'active' | 'closed';
 }
 
 interface PoolRow {
@@ -75,7 +76,7 @@ interface PositionRow {
   principal: string;
   opened_at: Date;
   matures_at: Date | null;
-  status: 'active' | 'closed';
+  status: 'pending' | 'active' | 'closed';
 }
 
 function toPool(row: PoolRow): PoolRecord {
@@ -117,6 +118,15 @@ export interface AccrualResult {
   /** Null when nothing was owed — a real, recorded outcome, not a failure. */
   ledgerTxId: string | null;
   alreadyAccrued: boolean;
+}
+
+/**
+ * Job report for `accrueAll`: successes plus per-pool failures that did not
+ * abort the rest of the pass.
+ */
+export interface AccrueAllReport {
+  results: AccrualResult[];
+  failures: Array<{ poolId: string; reason: string; code?: string }>;
 }
 
 export class EarnService {
@@ -174,6 +184,9 @@ export class EarnService {
           SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
             FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
         `;
+    if (rows.length === 0) {
+      throw new BankError(assetId ? `No earn rate is configured for ${assetId}` : 'No earn rates are configured', 'bank.earn_rate_unset');
+    }
     return rows.map(toPool);
   }
 
@@ -232,7 +245,8 @@ export class EarnService {
    * L3-3 ordering: **claim `pending` → ledger post → activate** (same as
    * svc-token stake). `pending` is not interest-eligible; if the ledger
    * refuses we delete the claim so nothing is left to accrue against.
-   * Ledger post is idempotent on `positionId` for crash recovery.
+   * Ledger post is idempotent on `positionId` for crash recovery — see
+   * `resumePending` when the process dies after the post and before activate.
    */
   async deposit(input: { poolId: string; userId: string; amount: Amount; positionId?: string; now?: Date }): Promise<PositionRecord> {
     const positionId = input.positionId ?? crypto.randomUUID();
@@ -261,23 +275,31 @@ export class EarnService {
         const maturesAt =
           pool.kind === 'fixed' && pool.termDays !== null ? new Date(now.getTime() + pool.termDays * 24 * 60 * 60 * 1000) : null;
 
-        await this.sql`
+        const claimed = await this.sql<Array<{ id: string }>>`
           INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
           VALUES (${positionId}, ${pool.id}, ${input.userId}, ${pool.assetId},
                   ${formatAmount(input.amount)}::numeric, ${now}, ${maturesAt}, 'pending')
           ON CONFLICT (id) DO NOTHING
+          RETURNING id
         `;
 
+        if (claimed.length === 0) {
+          const finished = await this.reuseOrRefuse(positionId, input.userId, pool.id, input.amount);
+          if (finished) return finished;
+        }
+
         try {
-          await this.ledger.post(
-            recipes.earnDeposit({
-              positionId,
-              poolId: pool.id,
-              userId: input.userId,
-              assetId: pool.assetId,
-              amount: input.amount,
-            }),
-          );
+          // Post alone is in the try: if it fails, funds never left available and
+          // deleting the claim is safe. If the process dies *after* a successful
+          // post and before activate, the row stays `pending` for resumePending —
+          // never delete a staked claim.
+          await this.postEarnDeposit({
+            positionId,
+            poolId: pool.id,
+            userId: input.userId,
+            assetId: pool.assetId,
+            amount: input.amount,
+          });
         } catch (err) {
           await this.sql`
             DELETE FROM bank.earn_positions WHERE id = ${positionId} AND status = 'pending'
@@ -285,13 +307,137 @@ export class EarnService {
           throw err;
         }
 
-        await this.sql`
-          UPDATE bank.earn_positions SET status = 'active' WHERE id = ${positionId} AND status = 'pending'
-        `;
-
+        await this.activatePending(positionId);
         return this.position(positionId);
       },
     );
+  }
+
+  /**
+   * A `positionId` that is already taken: the same deposit arriving twice, or a
+   * DIFFERENT deposit wearing an id somebody else already used.
+   *
+   * Only the first is a retry, and `ON CONFLICT (id) DO NOTHING` cannot tell
+   * them apart on its own. Without this check the second one ran the whole
+   * deposit path against the first one's row: the ledger post moved the SECOND
+   * caller's value into a stake pot keyed by their own id, the `UPDATE … status
+   * = 'active'` landed on the FIRST caller's row, and the two halves of this
+   * service's own reconciliation — `principalOf()` from the table and
+   * `stakedOf()` from the ledger — stopped agreeing. The second caller was told
+   * their deposit was earning while their money sat in a pot no `withdraw` of
+   * theirs could reach, because `withdraw` resolves the owner from the row.
+   *
+   * The check svc-token's `claimStakePending` already makes, and the same
+   * reasoning `bank.loan_principal_mismatch` makes for loans: a retry that asks
+   * for different terms is a different request.
+   *
+   * Returns the existing position when the retry is genuine and already
+   * finished — nothing left to post — and null when it is genuine but still
+   * `pending`, which re-drives (the ledger post is idempotent on the id).
+   */
+  private async reuseOrRefuse(positionId: string, userId: string, poolId: string, amount: Amount): Promise<PositionRecord | null> {
+    const rows = await this.sql<Array<{ user_id: string; pool_id: string; principal: string; status: string }>>`
+      SELECT user_id, pool_id, principal, status FROM bank.earn_positions WHERE id = ${positionId}
+    `;
+    const existing = rows[0];
+    if (!existing) throw new BankError(`Position ${positionId} disappeared after a conflict`, 'bank.position_not_found');
+
+    if (existing.user_id !== userId || existing.pool_id !== poolId || parseAmount(existing.principal) !== amount) {
+      throw new BankError(
+        `Position ${positionId} already exists on different terms — a deposit that is not a retry of that one needs a new position id`,
+        'bank.position_conflict',
+      );
+    }
+
+    return existing.status === 'pending' ? null : this.position(positionId);
+  }
+
+  /** Idempotent deposit post — key `bank.earn.deposit:<positionId>`. */
+  private async postEarnDeposit(input: {
+    positionId: string;
+    poolId: string;
+    userId: string;
+    assetId: string;
+    amount: Amount;
+  }): Promise<void> {
+    await this.ledger.post(
+      recipes.earnDeposit({
+        positionId: input.positionId,
+        poolId: input.poolId,
+        userId: input.userId,
+        assetId: input.assetId,
+        amount: input.amount,
+      }),
+    );
+  }
+
+  private async activatePending(positionId: string): Promise<void> {
+    await this.sql`
+      UPDATE bank.earn_positions SET status = 'active'
+       WHERE id = ${positionId} AND status = 'pending'
+    `;
+  }
+
+  /**
+   * Ledger post + activate for a row already claimed as `pending`.
+   *
+   * Used by `resumePending`. Idempotent on `bank.earn.deposit:<positionId>`, so
+   * a re-drive after a crash between the post and the activate does not stake
+   * twice. Failures leave the row pending for the next attempt (no delete).
+   */
+  private async drivePendingToActive(input: {
+    positionId: string;
+    poolId: string;
+    userId: string;
+    assetId: string;
+    amount: Amount;
+  }): Promise<void> {
+    await this.postEarnDeposit(input);
+    await this.activatePending(input.positionId);
+  }
+
+  /**
+   * Re-drive every `pending` earn deposit. The recovery path for "the process
+   * died after the ledger post and before activate".
+   *
+   * Safe to run at any time and any number of times: the deposit recipe is
+   * idempotent on `positionId`, and activate is conditional on `pending`. A
+   * second pass finds nothing left to do.
+   *
+   * Unlike `deposit`, a failed re-drive does **not** delete the row — the claim
+   * stays pending for the next attempt (or for ops to inspect).
+   */
+  async resumePending(limit = 100): Promise<Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+    const rows = await this.sql<PositionRow[]>`
+      SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
+        FROM bank.earn_positions
+       WHERE status = 'pending'
+       ORDER BY opened_at ASC
+       LIMIT ${limit}
+    `;
+
+    const out: Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }> = [];
+
+    for (const row of rows) {
+      try {
+        await this.drivePendingToActive({
+          positionId: row.id,
+          poolId: row.pool_id,
+          userId: row.user_id,
+          assetId: row.asset_id,
+          amount: parseAmount(row.principal),
+        });
+        out.push({ positionId: row.id, outcome: 'completed' });
+      } catch (err) {
+        out.push({
+          positionId: row.id,
+          outcome: 'failed',
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    return out;
   }
 
   async position(positionId: string): Promise<PositionRecord> {
@@ -360,6 +506,12 @@ export class EarnService {
         const row = rows[0];
         if (!row) throw new BankError(`Position ${positionId} not found`, 'bank.position_not_found');
         if (row.status === 'closed') throw new BankError('Position is already closed', 'bank.position_closed');
+        if (row.status === 'pending') {
+          // Resume first. Closing a pending claim would hide a half-open deposit
+          // (funds may already be staked) under a user withdraw, and would race
+          // the recovery job that is supposed to finish the claim.
+          throw new BankError(`Position ${positionId} is still pending — resume the deposit before withdrawing`, 'bank.position_pending');
+        }
         if (row.matures_at && row.matures_at > now) {
           throw new BankError(`Fixed-term position is locked until ${row.matures_at.toISOString()}`, 'bank.position_locked');
         }
@@ -412,9 +564,10 @@ export class EarnService {
   async accrue(input: { poolId: string; at?: Date; daysPerYear?: number }): Promise<AccrualResult> {
     const at = input.at ?? new Date();
     const date = accrualDate(at);
+    const boundary = accrualBoundary(at);
 
     return withMoneySpan('bank.earn.accrue', { operation: 'interest-accrual', poolId: input.poolId, date }, async (span) => {
-      const result = await this.accrueInner(input.poolId, date, at, input.daysPerYear);
+      const result = await this.accrueInner(input.poolId, date, boundary, input.daysPerYear);
       span.setAttribute('intafaced.recipients', result.recipients);
       span.setAttribute('intafaced.paid', formatAmount(result.paid));
       span.setAttribute('intafaced.already_accrued', result.alreadyAccrued);
@@ -422,7 +575,7 @@ export class EarnService {
     });
   }
 
-  private async accrueInner(poolId: string, date: string, at: Date, daysPerYear?: number): Promise<AccrualResult> {
+  private async accrueInner(poolId: string, date: string, boundary: Date, daysPerYear?: number): Promise<AccrualResult> {
     const pool = await this.pool(poolId);
 
     return transaction(
@@ -454,11 +607,13 @@ export class EarnService {
 
         const accrualId = claimed[0]!.id;
 
-        // Positions opened later than the accrual day earn nothing for it — a
-        // deposit made this afternoon has not been in the pool for a day.
+        // The UTC day boundary is the eligibility cutoff, regardless of when
+        // the scheduler happens to run. A position opened at or after midnight
+        // starts earning on the next day; a late cron cannot grant it a full
+        // day's yield.
         const positions = await tx<Array<{ id: string; user_id: string; principal: string }>>`
           SELECT id, user_id, principal FROM bank.earn_positions
-           WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at <= ${at}
+           WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at < ${boundary}
            ORDER BY id ASC
         `;
 
@@ -513,14 +668,28 @@ export class EarnService {
     );
   }
 
-  /** Every open pool accrues for the day. The job's entry point. */
-  async accrueAll(at: Date = new Date(), daysPerYear?: number): Promise<AccrualResult[]> {
+  /**
+   * Every open pool accrues for the day. The job's entry point.
+   *
+   * Isolation is deliberate: an underfunded pool is a loud operator problem for
+   * THAT pool (`bank.pool_underfunded` still throws from `accrue` when called
+   * alone), but it must not withhold every other pool's advertised yield for the
+   * day. Failures are returned, not swallowed — ops see which pool blocked.
+   */
+  async accrueAll(at: Date = new Date(), daysPerYear?: number): Promise<AccrueAllReport> {
     const pools = await this.listPools();
     const results: AccrualResult[] = [];
+    const failures: AccrueAllReport['failures'] = [];
     for (const pool of pools) {
-      results.push(await this.accrue({ poolId: pool.id, at, ...(daysPerYear === undefined ? {} : { daysPerYear }) }));
+      try {
+        results.push(await this.accrue({ poolId: pool.id, at, ...(daysPerYear === undefined ? {} : { daysPerYear }) }));
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        const code = err instanceof BankError ? err.code : undefined;
+        failures.push({ poolId: pool.id, reason, ...(code ? { code } : {}) });
+      }
     }
-    return results;
+    return { results, failures };
   }
 
   /**

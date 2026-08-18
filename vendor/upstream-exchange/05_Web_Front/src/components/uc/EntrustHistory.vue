@@ -313,9 +313,15 @@ export default {
           this.ordersError = this.refusalCopy(res);
           return;
         }
+        const gate = ixTrade.accept(ixTrade.schemas.orders, res.data);
+        if (!gate.ok) {
+          this.ordersError =
+            gate.message || "The closed-orders payload failed the shape check.";
+          return;
+        }
         // A 200 with [] is the venue saying "you have none" — a real answer.
         this.ordersReachable = true;
-        this.orders = this.applyFilters(ixTrade.toDeskOrders(res.data));
+        this.orders = this.applyFilters(ixTrade.toDeskOrders(gate.data));
         this.total = this.orders.length;
         const maxPage = Math.max(1, Math.ceil(this.total / this.pageSize));
         if (this.pageNo > maxPage) this.pageNo = maxPage;
@@ -356,13 +362,20 @@ export default {
     /** Symbols come from the venue's own listing table. */
     getSymbol() {
       rest("/markets").then(res => {
-        if (!res.ok || !Array.isArray(res.data)) {
+        if (!res.ok) {
           if (!this.symbol || !this.symbol.length) {
             this.$Message.error(this.$t('shellResidual.marketsUnavailableSymbols'));
           }
           return;
         }
-        this.symbol = res.data.map(m => ({ symbol: m.symbol }));
+        const gate = ixTrade.accept(ixTrade.schemas.markets, res.data);
+        if (!gate.ok) {
+          if (!this.symbol || !this.symbol.length) {
+            this.$Message.error(gate.message || this.$t('shellResidual.marketsUnavailableSymbols'));
+          }
+          return;
+        }
+        this.symbol = gate.data.map(m => ({ symbol: m.symbol }));
       });
     },
     updateLangData(){

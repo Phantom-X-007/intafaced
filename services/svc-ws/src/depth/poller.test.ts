@@ -88,10 +88,15 @@ describe('DepthPoller', () => {
     source.failNext = true;
     await poller.tick();
 
-    // No teardown, no close: the client's book is still valid as of its last
-    // sequence, and the next tick either advances it or the socket dies itself.
-    expect(sink.frames.length).toBe(before);
+    // Socket stays up; last proven book is not replaced with seq-0 empty.
+    // Engine-down is named once on the control frame.
     expect(hub.connections).toBe(1);
+    expect(hub.matchingAvailable).toBe(false);
+    expect(JSON.parse(sink.frames.at(-1)!)).toMatchObject({
+      type: 'status',
+      code: 'depth.engine_unavailable',
+      marketId: MARKET,
+    });
     expect(log.warn).toHaveBeenCalled();
 
     await poller.tick();

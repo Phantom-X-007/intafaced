@@ -28,6 +28,10 @@ export type AcademyErrorCode =
   | 'academy.curriculum_not_found'
   /** Spatial scene failed Stage-1 schema / size gate. */
   | 'academy.scene_invalid'
+  /** Concurrent host write — stale fingerprint. */
+  | 'academy.scene_conflict'
+  /** Duplicate avatar / participant / prop id in scene write. */
+  | 'academy.scene_presence_collision'
   /** Ambassador programme Stage-1. */
   | 'academy.ambassador_not_found'
   | 'academy.ambassador_already_active'
@@ -54,6 +58,22 @@ export type AcademyErrorCode =
    * one, which is the single failure this row exists to prevent.
    */
   | 'academy.paper_result_unlabelled'
+  /**
+   * A paper success payload claimed real custody (banned key) or flipped a
+   * seal bit to true. D26-P1-C4: paper flag must never be readable as real money.
+   */
+  | 'academy.paper_looks_like_real_money'
+  /**
+   * TRADE_URL unset — academy cannot ask trade whether the market is paper.
+   * Trusting `paper: true` on the wire would be a live drill with a paper label.
+   */
+  | 'academy.paper_flag_unverified'
+  /** Caller claimed paper; trade's public listing says otherwise (or identity mismatch). */
+  | 'academy.paper_flag_mismatch'
+  /** Claimed market id/symbol is not on trade's public listing. */
+  | 'academy.paper_market_unlisted'
+  /** TRADE_URL is set but the markets listing could not be read. Fail closed. */
+  | 'academy.paper_flag_unavailable'
   /** Residency applications Stage-1 (no pay). */
   | 'academy.residency_invalid'
   | 'academy.residency_not_found'
@@ -90,6 +110,8 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.host_rights_unavailable',
   'academy.curriculum_not_found',
   'academy.scene_invalid',
+  'academy.scene_conflict',
+  'academy.scene_presence_collision',
   'academy.ambassador_not_found',
   'academy.ambassador_already_active',
   'academy.ambassador_already_frozen',
@@ -102,6 +124,11 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.paper_trading_disabled',
   'academy.paper_price_unavailable',
   'academy.paper_result_unlabelled',
+  'academy.paper_looks_like_real_money',
+  'academy.paper_flag_unverified',
+  'academy.paper_flag_mismatch',
+  'academy.paper_market_unlisted',
+  'academy.paper_flag_unavailable',
   'academy.residency_invalid',
   'academy.residency_not_found',
   'academy.residency_already_open',

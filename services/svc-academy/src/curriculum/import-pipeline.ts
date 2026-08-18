@@ -13,12 +13,25 @@
  * Stage-3 extends import status:
  *   5. Workbook bodies must not paint fake market prices as live quotes
  *   6. Operator stage status (pipeline / catalog / polish) for honest residual
+ *
+ * D26-P1-C5 (substance):
+ *   7. Named import refuses for empty / whitespace / length-padded junk, plus
+ *      structured substance (sections / steps / objectives) — not char-count theater.
  */
 
 import type { CurriculumItem, CurriculumKind, CurriculumPath } from './catalog.js';
-import { CURRICULUM_PATHS, listCurriculum } from './catalog.js';
+import { CURRICULUM_MIN_BODY_CHARS, CURRICULUM_PATHS, getCurriculumItem, listCurriculum } from './catalog.js';
 import { curriculumDeepLinksVerified } from './deep-links.js';
 import { curriculumI18nStrategyHonest } from './i18n-strategy.js';
+import {
+  CURRICULUM_IMPORT_REFUSE,
+  classifyEmptyBody,
+  lessonSubstanceChecklist,
+  type CurriculumImportRefuseCode,
+} from './lesson-substance.js';
+
+export { CURRICULUM_IMPORT_REFUSE, classifyEmptyBody, lessonSubstanceChecklist, lessonSubstanceOk } from './lesson-substance.js';
+export type { CurriculumImportRefuseCode, LessonSubstanceIssue } from './lesson-substance.js';
 
 /** Tracker title promise (academy.curriculum). */
 export const CURRICULUM_TITLE_PLAYBOOKS = 20;
@@ -41,9 +54,15 @@ export interface CurriculumImportRecord {
   order: number;
   summary: string;
   body: string;
+  /** Checkable teaching objectives — required for an accepted import (D26-P1-C5). */
+  objectives?: readonly string[];
 }
 
-export type ImportValidationIssue = { field: string; code: 'missing' | 'invalid' | 'brand' | 'path'; message: string };
+export type ImportValidationIssue = {
+  field: string;
+  code: 'missing' | 'invalid' | 'brand' | 'path' | CurriculumImportRefuseCode;
+  message: string;
+};
 
 export interface ImportValidationResult {
   ok: boolean;
@@ -68,7 +87,7 @@ export function workbookLiveQuoteChecklist(
     issues.push({
       field: 'body',
       code: 'invalid',
-      message: 'Workbook must not claim a live quote/ticker — paper outlines only until trade paper path',
+      message: 'Workbook must not claim a live quote/ticker — paper drills use trade paper flags, never painted live quotes',
     });
   }
   // bid/ask/last/mid followed by a numeric price looks like a painted feed
@@ -94,10 +113,11 @@ export function workbookLiveQuoteChecklist(
  *
  * Does NOT list forbidden vendor strings in source (brand scanner would trip on
  * the test/file). Checks structural honesty only; full brand scan remains
- * `pnpm scan:brand` / DoD gate.
+ * `pnpm scan:brand` / DoD gate. After the depth floor, D26-P1-C5 substance runs
+ * so a padded 900-character wall cannot re-enter.
  */
 export function brandChecklist(
-  record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body'> & { kind?: CurriculumKind },
+  record: Pick<CurriculumImportRecord, 'title' | 'summary' | 'body' | 'objectives'> & { kind?: CurriculumKind },
 ): ImportValidationIssue[] {
   const issues: ImportValidationIssue[] = [];
   const blob = `${record.title}\n${record.summary}\n${record.body}`;
@@ -124,12 +144,33 @@ export function brandChecklist(
       message: 'Title required; summary min 12 characters (no empty stubs painted complete)',
     });
   }
-  if (record.body.trim().length < 40 || !record.body.trimStart().startsWith('#')) {
+  const emptyCode = classifyEmptyBody(record.body);
+  if (emptyCode === CURRICULUM_IMPORT_REFUSE.empty) {
+    issues.push({
+      field: 'body',
+      code: emptyCode,
+      message: 'Import body is empty — refuse academy.curriculum_empty',
+    });
+  } else if (emptyCode === CURRICULUM_IMPORT_REFUSE.whitespace) {
+    issues.push({
+      field: 'body',
+      code: emptyCode,
+      message: 'Import body is whitespace-only — refuse academy.curriculum_whitespace',
+    });
+  } else if (!record.body.trimStart().startsWith('#')) {
     issues.push({
       field: 'body',
       code: 'invalid',
-      message: 'Body must be real markdown (≥40 chars, starts with # heading)',
+      message: 'Body must be real markdown (starts with # heading)',
     });
+  } else if (record.body.trim().length < CURRICULUM_MIN_BODY_CHARS) {
+    issues.push({
+      field: 'body',
+      code: 'invalid',
+      message: `Body must clear depth floor (≥${CURRICULUM_MIN_BODY_CHARS} chars) — the old 40-char import bar let stubs re-enter`,
+    });
+  } else {
+    issues.push(...lessonSubstanceChecklist(record.body, { objectives: record.objectives }));
   }
   if (record.kind === 'workbook') {
     issues.push(...workbookLiveQuoteChecklist({ kind: 'workbook', title: record.title, summary: record.summary, body: record.body }));
@@ -174,6 +215,7 @@ export function validateImportRecord(raw: unknown): ImportValidationResult {
         title: r.title as string,
         summary: r.summary as string,
         body: r.body as string,
+        objectives: Array.isArray(r.objectives) ? (r.objectives as string[]) : undefined,
       }),
     );
   }
@@ -360,6 +402,41 @@ export function importRejectedAtMost(summary: ImportBatchSummary, n: number): bo
 }
 
 /**
+ * Spine substance inventory (D26-P1-C5).
+ *
+ * Runs the same import substance gate against every catalog body so a padded
+ * wall cannot hide behind title counts. Names theater slugs rather than
+ * asserting silence.
+ */
+export type CurriculumSubstanceReport = {
+  readonly total: number;
+  readonly substanceOk: number;
+  readonly theater: number;
+  readonly theaterSlugs: string[];
+  /** True only when every spine body clears lessonSubstanceChecklist. */
+  readonly substanceBarMet: boolean;
+};
+
+export function curriculumSubstanceReport(): CurriculumSubstanceReport {
+  const all = listCurriculum();
+  const failing: string[] = [];
+  for (const summary of all) {
+    const item = getCurriculumItem(summary.slug);
+    if (!item || lessonSubstanceChecklist(item.body, { objectives: item.objectives }).length > 0) {
+      failing.push(summary.slug);
+    }
+  }
+  failing.sort();
+  return {
+    total: all.length,
+    substanceOk: all.length - failing.length,
+    theater: failing.length,
+    theaterSlugs: failing,
+    substanceBarMet: failing.length === 0,
+  };
+}
+
+/**
  * Stage-3 operator status for the import/catalog/polish DoD.
  * Honest flags only — does not invent licensed library content.
  */
@@ -378,12 +455,19 @@ export type CurriculumImportStageStatus = {
     readonly i18nStrategyHonest: boolean;
     readonly ready: boolean;
   };
+  /**
+   * D26-P1-C5 — import bar met with real lesson substance (not char-count theater).
+   * Independent of title counts: a 20+3 spine of padded walls fails this.
+   */
+  readonly substanceBarMet: boolean;
+  readonly theaterSlugs: string[];
 };
 
 export function curriculumImportStageStatus(): CurriculumImportStageStatus {
   const inv = curriculumInventory();
   const deepLinksVerified = curriculumDeepLinksVerified();
   const i18nStrategyHonest = curriculumI18nStrategyHonest();
+  const substance = curriculumSubstanceReport();
   return {
     contentSource: inv.contentSource,
     titlePromiseMet: inv.titlePromiseMet,
@@ -396,6 +480,8 @@ export function curriculumImportStageStatus(): CurriculumImportStageStatus {
       i18nStrategyHonest,
       ready: deepLinksVerified && i18nStrategyHonest,
     },
+    substanceBarMet: substance.substanceBarMet,
+    theaterSlugs: substance.theaterSlugs,
   };
 }
 
@@ -408,5 +494,7 @@ export function curriculumImportStageStatusLine(): string {
     `residualPb=${s.residualPlaybooks}`,
     `residualWb=${s.residualWorkbooks}`,
     `stage3=${s.stage3Polish.ready ? '1' : '0'}`,
+    `substance=${s.substanceBarMet ? '1' : '0'}`,
+    `theater=${s.theaterSlugs.length}`,
   ].join(' ');
 }

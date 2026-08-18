@@ -6,6 +6,7 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import {
+  LedgerError,
   MemoryLedger,
   earnPoolReserve,
   formatAmount,
@@ -15,6 +16,7 @@ import {
   subAccountAvailable,
   userAvailable,
   userStake,
+  type LedgerClient,
 } from '@intafaced/ledger-client';
 import { createBankServices, type BankServices } from './bank-service.js';
 import { createBankRouter } from './router.js';
@@ -133,16 +135,18 @@ if (!available) {
 
   beforeEach(async () => {
     await sql`
-      TRUNCATE bank.interest_accruals, bank.earn_positions, bank.earn_pools,
+      TRUNCATE bank.business_approvals, bank.business_members, bank.business_accounts,
+               bank.auto_invest_runs, bank.auto_invest_rules,
+               bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
                bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards,
-               bank.ramp_offramps, bank.ramp_onramps
+               bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
     router = createBankRouter(bank);
-  });
+  }, 30_000);
 
   /**
    * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
@@ -319,6 +323,40 @@ if (!available) {
       expect(await availableOf(USER_B, 'USDT')).toBe('80');
       expect(ledger.totalsByAsset().USDT).toBe('0');
     });
+
+    it('refuses user-to-user transfer when dest user is missing — nothing posted', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_A, 'USDT', '50');
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+      await expect(
+        bank.transfers.transferToUser({
+          transferId: 'user-transfer-missing',
+          fromSpaceId: a.id,
+          toUserId: USER_C,
+          amount: amt('10'),
+        }),
+      ).rejects.toMatchObject({ code: 'bank.dest_user_missing' });
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(await availableOf(USER_A, 'USDT')).toBe('50');
+    });
+
+    it('transfers to the dest user through ledger-client', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      await fund(USER_A, 'USDT', '25');
+      const moved = await bank.transfers.transferToUser({
+        transferId: 'user-transfer-stored',
+        fromSpaceId: a.id,
+        toUserId: USER_B,
+        amount: amt('25'),
+      });
+      expect(moved.amount).toBe('25');
+      expect(moved.ledgerTxId).toBeTruthy();
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.includes('user-transfer-stored'))).toBe(true);
+      expect(await availableOf(USER_A, 'USDT')).toBe('0');
+      expect(await availableOf(USER_B, 'USDT')).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
   });
 
   // ══ Scheduled transfers ═══════════════════════════════════════════════════
@@ -341,6 +379,47 @@ if (!available) {
       });
       return { primary, rent, schedule };
     }
+
+    it('refuses standing order to a dest user with no primary — no row, nothing posted', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_A, 'USDT', '50');
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+      await expect(
+        bank.transfers.scheduleToUser({
+          userId: USER_A,
+          fromSpaceId: a.id,
+          toUserId: USER_C,
+          amount: amt('10'),
+          cadence: 'monthly',
+          startsAt: new Date('2026-01-01T09:00:00Z'),
+        }),
+      ).rejects.toMatchObject({ code: 'bank.dest_user_missing' });
+      const rows = await sql`SELECT id FROM bank.scheduled_transfers`;
+      expect(rows).toHaveLength(0);
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(await availableOf(USER_A, 'USDT')).toBe('50');
+    });
+
+    it('schedules to the dest user and fires through ledger-client', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      await fund(USER_A, 'USDT', '100');
+      const schedule = await bank.transfers.scheduleToUser({
+        userId: USER_A,
+        fromSpaceId: a.id,
+        toUserId: USER_B,
+        amount: amt('25'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+      const now = new Date('2026-01-01T10:00:00Z');
+      const report = await bank.transfers.runDueTransfers({ now });
+      expect(report.settled).toBe(1);
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.includes(schedule.id))).toBe(true);
+      expect(await availableOf(USER_A, 'USDT')).toBe('75');
+      expect(await availableOf(USER_B, 'USDT')).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
 
     it('fires ONCE even when the job runs twice', async () => {
       const { rent, schedule } = await standingOrder('100');
@@ -370,6 +449,187 @@ if (!available) {
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
+    }, 20_000);
+
+    /**
+     * Isolation residual (audit B-3 class): a mid-drive throw (frozen ledger,
+     * network fault) used to escape `runDueTransfers` and stop every later
+     * schedule on the pass — and the thrower stayed first forever because its
+     * `next_run_at` never advanced. One user's incident is not a platform stop.
+     */
+    it('one schedule that throws mid-drive does not stop every other standing order on the pass', async () => {
+      const primaryA = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rentA = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent A' });
+      const primaryB = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const rentB = await bank.spaces.create({ userId: USER_B, assetId: 'USDT', name: 'Rent B' });
+      await fund(USER_A, 'USDT', '500');
+      await fund(USER_B, 'USDT', '500');
+
+      const scheduleA = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primaryA.id,
+        toSpaceId: rentA.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+      const scheduleB = await bank.transfers.schedule({
+        userId: USER_B,
+        fromSpaceId: primaryB.id,
+        toSpaceId: rentB.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      // ORDER BY next_run_at ASC, then id implicitly by insert — poison A so
+      // if isolation is missing B never settles when A throws first.
+      const poisonPrefix = `bank.transfer:${scheduleA.id}:`;
+      const real = ledger;
+      const isolating: LedgerClient = {
+        post: async (request) => {
+          if (request.idempotencyKey.startsWith(poisonPrefix)) {
+            throw new LedgerError('Ledger posting is frozen: isolation residual test', 'ledger.frozen');
+          }
+          return real.post(request);
+        },
+        balance: (ref) => real.balance(ref),
+        balances: (ownerType, ownerId) => real.balances(ownerType, ownerId),
+        getTx: (txId) => real.getTx(txId),
+        getTxByKey: (key) => real.getTxByKey(key),
+      };
+      bank = createBankServices(sql, isolating, memoryLedgerHistory(real), { nativeAssetId: 'IFC' });
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+
+      expect(report.failures).toEqual(
+        expect.arrayContaining([expect.objectContaining({ scheduleId: scheduleA.id, code: 'ledger.frozen' })]),
+      );
+      expect(report.settled).toBe(1);
+      expect(formatAmount(await bank.spaces.balanceOf(rentB))).toBe('100');
+      // A: occurrence not consumed — claim rolled back on rethrow.
+      expect(await bank.transfers.executions(scheduleA.id)).toHaveLength(0);
+      expect(await availableOf(USER_A, 'USDT')).toBe('500');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    /**
+     * Batch-fairness residual after #1491: isolation continues peers *on the
+     * same pass*, but a permanently-failing schedule never advanced
+     * `next_run_at`, so N poison rows with the oldest watermark permanently
+     * filled `LIMIT` and healthy schedules never got selected.
+     */
+    it('permanently failing schedules cannot starve healthy ones under the batch limit', async () => {
+      const primaryA = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rentA = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Poison rent' });
+      const primaryB = await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      const rentB = await bank.spaces.create({ userId: USER_B, assetId: 'USDT', name: 'Healthy rent' });
+      await fund(USER_A, 'USDT', '500');
+      await fund(USER_B, 'USDT', '500');
+
+      // Poison starts earlier so ORDER BY next_run_at picks it first.
+      const poison = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primaryA.id,
+        toSpaceId: rentA.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T08:00:00Z'),
+      });
+      const healthy = await bank.transfers.schedule({
+        userId: USER_B,
+        fromSpaceId: primaryB.id,
+        toSpaceId: rentB.id,
+        amount: amt('100'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      const poisonPrefix = `bank.transfer:${poison.id}:`;
+      const real = ledger;
+      const isolating: LedgerClient = {
+        post: async (request) => {
+          if (request.idempotencyKey.startsWith(poisonPrefix)) {
+            throw new LedgerError('Ledger posting is frozen: batch fairness residual', 'ledger.frozen');
+          }
+          return real.post(request);
+        },
+        balance: (ref) => real.balance(ref),
+        balances: (ownerType, ownerId) => real.balances(ownerType, ownerId),
+        getTx: (txId) => real.getTx(txId),
+        getTxByKey: (key) => real.getTxByKey(key),
+      };
+      bank = createBankServices(sql, isolating, memoryLedgerHistory(real), { nativeAssetId: 'IFC' });
+
+      const jobNow = new Date('2026-01-01T10:00:00Z');
+      // Pass 1: limit=1 only sees poison (oldest). Isolation records failure;
+      // fairness bumps poison next_run_at to jobNow so healthy sorts first next.
+      const first = await bank.transfers.runDueTransfers({ now: jobNow, limit: 1 });
+      expect(first.failures).toEqual(expect.arrayContaining([expect.objectContaining({ scheduleId: poison.id, code: 'ledger.frozen' })]));
+      expect(first.settled).toBe(0);
+
+      // Pass 2: healthy must settle even though poison is still due and failing.
+      const second = await bank.transfers.runDueTransfers({ now: jobNow, limit: 1 });
+      expect(second.settled).toBe(1);
+      expect(formatAmount(await bank.spaces.balanceOf(rentB))).toBe('100');
+      expect(await bank.transfers.executions(healthy.id)).toHaveLength(1);
+      // Poison still not consumed.
+      expect(await bank.transfers.executions(poison.id)).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    /**
+     * Cancel mid-drive residual: due select freezes status=active. Without a
+     * re-check before each claim, multi-occurrence catch-up still posts every
+     * planned firing after cancel.
+     *
+     * Cancel runs after the first fire returns (claim tx committed) so it does
+     * not deadlock on schedule FOR UPDATE. Private method access is test-only
+     * (TS private is erase-only).
+     */
+    it('cancel during a multi-occurrence catch-up stops unclaimed firings', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent mid-cancel' });
+      await fund(USER_A, 'USDT', '1000');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('10'),
+        cadence: 'daily',
+        startsAt: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      const transfers = bank.transfers as unknown as {
+        fireOccurrenceInner: (
+          schedule: unknown,
+          occurrence: number,
+          now: Date,
+        ) => Promise<'settled' | 'rejected' | 'already-fired' | 'stopped'>;
+      };
+      const original = transfers.fireOccurrenceInner.bind(bank.transfers);
+      let fired = 0;
+      transfers.fireOccurrenceInner = async (sched, occurrence, now) => {
+        const outcome = await original(sched, occurrence, now);
+        fired += 1;
+        if (fired === 1) {
+          await bank.transfers.cancelSchedule(schedule.id);
+        }
+        return outcome;
+      };
+
+      const report = await bank.transfers.runDueTransfers({
+        now: new Date('2026-01-10T00:00:00Z'),
+        maxCatchUp: 10,
+      });
+
+      expect(report.settled).toBe(1);
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions).toHaveLength(1);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
     it('records a rejection and moves nothing when the space is empty', async () => {
@@ -386,6 +646,116 @@ if (!available) {
       const executions = await bank.transfers.executions(schedule.id);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'ledger.insufficient_funds' });
       expect(ledger.totalsByAsset().USDT ?? '0').toBe('0');
+    });
+
+    it('refuses a standing debit from a locked space — same gate as a one-off, no silent drain', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const locked = await bank.spaces.create({
+        userId: USER_A,
+        assetId: 'USDT',
+        name: 'Locked rent pot',
+        lockedUntil: new Date('2027-01-01T00:00:00Z'),
+      });
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent due' });
+      await fund(USER_A, 'USDT', '500');
+      await bank.transfers.transfer({
+        transferId: 'seed-locked-so-1',
+        fromSpaceId: primary.id,
+        toSpaceId: locked.id,
+        amount: amt('200'),
+      });
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: locked.id,
+        toSpaceId: rent.id,
+        amount: amt('50'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+
+      expect(report.rejected).toBe(1);
+      expect(report.settled).toBe(0);
+      expect(formatAmount(await bank.spaces.balanceOf(locked))).toBe('200');
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
+
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'bank.space_locked' });
+      // Occurrence is consumed — a later run with the lock still on does not retry March.
+      await bank.transfers.runDueTransfers({ now: new Date('2026-01-15T10:00:00Z') });
+      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('recovers a post-then-lock crash as settled, never rejected-with-money-moved', async () => {
+      // Adversarial: claim rolls back after ledger.post succeeds; user then locks
+      // the debit space. Re-drive must mark settled from the existing key — not
+      // reject while value already left the pot.
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent due' });
+      await fund(USER_A, 'USDT', '500');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: rent.id,
+        amount: amt('50'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+
+      // Simulate external ledger success without a bank execution row (crash after post).
+      const from = await bank.spaces.get(primary.id);
+      const to = await bank.spaces.get(rent.id);
+      await ledger.post(
+        recipes.bankTransfer({
+          transferId: schedule.id,
+          occurrence: 0,
+          from: accountForSpace(from),
+          to: accountForSpace(to),
+          amount: amt('50'),
+          kind: 'scheduled',
+        }),
+      );
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('50');
+
+      // No public setLock — lock lands the way a concurrent user/session would.
+      await sql`UPDATE bank.spaces SET locked_until = ${new Date('2027-01-01T00:00:00Z')} WHERE id = ${primary.id}`;
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+      expect(report.settled).toBe(1);
+      expect(report.rejected).toBe(0);
+      expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('50');
+      expect(formatAmount(await bank.spaces.balanceOf(primary))).toBe('450');
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('refuses a standing credit into an archived space and moves nothing', async () => {
+      const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      const archiveMe = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Old jar' });
+      await fund(USER_A, 'USDT', '300');
+
+      const schedule = await bank.transfers.schedule({
+        userId: USER_A,
+        fromSpaceId: primary.id,
+        toSpaceId: archiveMe.id,
+        amount: amt('40'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+      await bank.spaces.archive(archiveMe.id);
+
+      const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z') });
+
+      expect(report.rejected).toBe(1);
+      expect(report.settled).toBe(0);
+      expect(await availableOf(USER_A, 'USDT')).toBe('300');
+      const executions = await bank.transfers.executions(schedule.id);
+      expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'bank.space_archived' });
     });
 
     it('does not retry an occurrence that was rejected — a missed March is not made up in April', async () => {
@@ -1046,6 +1416,72 @@ if (!available) {
       expect(await stakedOf(USER_A, 'USDT')).toBe('0');
     });
 
+    /**
+     * THE REUSED REQUEST ID.
+     *
+     * `positionId` is caller-supplied so a retried HTTP request is the same
+     * deposit. Nothing checked that a taken id belonged to the SAME deposit,
+     * and `ON CONFLICT (id) DO NOTHING` cannot tell the two apart: the second
+     * caller's value went into a stake pot keyed by their own id, the
+     * `status = 'active'` update landed on the FIRST caller's row, and the
+     * service's two answers to "how much is staked" — its table and the ledger —
+     * stopped agreeing. The second caller was told their deposit was earning.
+     */
+    it('refuses a deposit that reuses another user position id, and moves none of their money', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+      await fund(USER_B, 'USDT', '1000');
+
+      const shared = '7f000000-0000-4000-8000-00000000aaaa';
+      await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId: shared });
+
+      await expect(bank.earn.deposit({ poolId: pool.id, userId: USER_B, amount: amt('300'), positionId: shared })).rejects.toMatchObject({
+        code: 'bank.position_conflict',
+      });
+
+      // B kept every unit, and holds nothing in a pot no withdrawal of theirs
+      // could ever reach.
+      expect(await availableOf(USER_B, 'USDT')).toBe('1000');
+      expect(await stakedOf(USER_B, 'USDT')).toBe('0');
+
+      // A's position is untouched, and the two halves of the reconciliation
+      // still agree — which is the invariant this whole service rests on.
+      expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('400');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+    });
+
+    it('refuses a deposit that reuses one of the caller own position ids for a different amount', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+
+      const shared = '7f000000-0000-4000-8000-00000000bbbb';
+      await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('100'), positionId: shared });
+
+      await expect(bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('500'), positionId: shared })).rejects.toMatchObject({
+        code: 'bank.position_conflict',
+      });
+
+      // The refusal is the point: without it this answered "your 500 is
+      // earning" while 100 was staked and 900 sat in available.
+      expect(await stakedOf(USER_A, 'USDT')).toBe('100');
+      expect(await availableOf(USER_A, 'USDT')).toBe('900');
+    });
+
+    it('still treats a genuine retry of the same deposit as one deposit', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+
+      const positionId = '7f000000-0000-4000-8000-00000000cccc';
+      const first = await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
+      const retry = await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
+
+      expect(retry.id).toBe(first.id);
+      expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+      expect(await availableOf(USER_A, 'USDT')).toBe('600');
+      expect(formatAmount(await bank.earn.poolSize(pool.id))).toBe('400');
+    });
+
     it('computes pool size from positions, with no stored total', async () => {
       const pool = await openPool();
       for (const user of [USER_A, USER_B, USER_C]) {
@@ -1149,6 +1585,47 @@ if (!available) {
       expect(formatAmount(rescued.paid)).toBe('1');
     });
 
+    /**
+     * Isolation residual (audit B-4 class): one underfunded pool used to throw
+     * out of `accrueAll` and leave every later pool unpaid for the day.
+     * Single-pool `accrue` stays loud; the job entry point must continue.
+     */
+    it('one underfunded pool does not withhold every other pool’s yield for the day', async () => {
+      // Empty pool first by name/asset sort: asset_id ASC then apr DESC —
+      // both USDT; give empty a higher APR so it is first in listPools.
+      const empty = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Empty first', aprBps: 5000 });
+      const healthy = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Healthy', aprBps: 3650 });
+      await fund(USER_A, 'USDT', '1000');
+      await fund(USER_B, 'USDT', '1000');
+      await bank.earn.deposit({
+        poolId: empty.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
+      await bank.earn.deposit({
+        poolId: healthy.id,
+        userId: USER_B,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
+      await accrueBankFees('USDT', '10000');
+      await bank.earn.fundPool({ poolId: healthy.id, fundingId: 'healthy-seed', amount: amt('10000') });
+      // empty stays unfunded
+
+      const report = await bank.earn.accrueAll(new Date('2026-03-02T00:00:00Z'));
+
+      expect(report.failures).toEqual(
+        expect.arrayContaining([expect.objectContaining({ poolId: empty.id, code: 'bank.pool_underfunded' })]),
+      );
+      expect(report.results.some((r) => r.poolId === healthy.id && formatAmount(r.paid) === '1')).toBe(true);
+      expect(await availableOf(USER_B, 'USDT')).toBe('1');
+      // Empty day not consumed.
+      const emptyRows = await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${empty.id}`;
+      expect(emptyRows).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('does not pay interest on a position opened after the accrual moment', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
@@ -1202,6 +1679,122 @@ if (!available) {
       expect(after[0]!.principal).toBe(before[0]!.principal);
       expect(await stakedOf(USER_A, 'USDT')).toBe('1000');
       expect(await availableOf(USER_A, 'USDT')).toBe('1');
+    });
+
+    /**
+     * ═══════════════════════════════════════════════════════════════════════════
+     * IF THE PROCESS DIES AFTER THE LEDGER POST AND BEFORE ACTIVATE, WHOSE FUNDS?
+     * ═══════════════════════════════════════════════════════════════════════════
+     *
+     * The deposit order is claim `pending` → ledger post → UPDATE `active`.
+     * A crash in that window leaves principal staked on the ledger while the
+     * row stays `pending` — invisible to positionsOf / principalOf / stakedOf
+     * (all filter active) and with no job to finish the claim. Loans already
+     * have resumePending; earn must too.
+     *
+     * Recovery re-posts (idempotent on bank.earn.deposit:<positionId>) and
+     * activates. Double-resume is a no-op. Withdraw refuses pending so a user
+     * cannot close a half-open claim under their feet — resume first.
+     */
+    describe('the crash window between earn deposit ledger post and activate', () => {
+      const POSITION_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+      async function openFlexiblePool() {
+        return bank.earn.createPool({
+          assetId: 'USDT',
+          kind: 'flexible',
+          name: 'Crash-window USDT',
+          aprBps: 1000,
+        });
+      }
+
+      /**
+       * Simulate the crash: row is pending, funds already moved into the
+       * position's stake pot. Mirrors "process died after post, before UPDATE".
+       */
+      async function strandAfterPost(poolId: string, amount: string = '400') {
+        await fund(USER_A, 'USDT', '1000');
+        const now = new Date('2026-03-01T00:00:00Z');
+        await sql`
+          INSERT INTO bank.earn_positions (id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status)
+          VALUES (${POSITION_ID}, ${poolId}, ${USER_A}, 'USDT', ${amount}::numeric, ${now}, ${null}, 'pending')
+        `;
+        await ledger.post(
+          recipes.earnDeposit({
+            positionId: POSITION_ID,
+            poolId,
+            userId: USER_A,
+            assetId: 'USDT',
+            amount: amt(amount),
+          }),
+        );
+      }
+
+      it('leaves funds staked but invisible to principalOf / positions while pending', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+
+        // Ledger has the stake; product views that only count active do not.
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        expect(await availableOf(USER_A, 'USDT')).toBe('600');
+        expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('0');
+        expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('0');
+        expect(await bank.earn.positionsOf(USER_A)).toHaveLength(0);
+
+        const row = await sql<Array<{ status: string }>>`
+          SELECT status FROM bank.earn_positions WHERE id = ${POSITION_ID}
+        `;
+        expect(row[0]!.status).toBe('pending');
+      });
+
+      it('resumePending activates once, reconciles principalOf/stakedOf, and is double-safe', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+
+        const first = await bank.earn.resumePending();
+        expect(first).toHaveLength(1);
+        expect(first[0]).toMatchObject({ positionId: POSITION_ID, outcome: 'completed' });
+
+        const pos = await bank.earn.position(POSITION_ID);
+        expect(pos.status).toBe('active');
+        expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
+        expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('400');
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        expect(await availableOf(USER_A, 'USDT')).toBe('600');
+        expect(await bank.earn.positionsOf(USER_A)).toHaveLength(1);
+
+        // Second pass: nothing left pending, ledger did not double-stake.
+        const second = await bank.earn.resumePending();
+        expect(second).toHaveLength(0);
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
+      });
+
+      it('refuses withdraw while the position is still pending', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+
+        await expect(bank.earn.withdraw(POSITION_ID)).rejects.toMatchObject({
+          code: 'bank.position_pending',
+        });
+        // Funds still staked; claim still pending.
+        expect(await stakedOf(USER_A, 'USDT')).toBe('400');
+        const row = await sql<Array<{ status: string }>>`
+          SELECT status FROM bank.earn_positions WHERE id = ${POSITION_ID}
+        `;
+        expect(row[0]!.status).toBe('pending');
+      });
+
+      it('after resume, withdraw returns the principal exactly once', async () => {
+        const pool = await openFlexiblePool();
+        await strandAfterPost(pool.id);
+        await bank.earn.resumePending();
+
+        await bank.earn.withdraw(POSITION_ID);
+        expect(await availableOf(USER_A, 'USDT')).toBe('1000');
+        expect(await stakedOf(USER_A, 'USDT')).toBe('0');
+        await expect(bank.earn.withdraw(POSITION_ID)).rejects.toMatchObject({ code: 'bank.position_closed' });
+      });
     });
   });
 
@@ -1487,8 +2080,11 @@ if (!available) {
         // rule.
         'loan_products.min_principal': 'a POLICY floor on a single draw; no money path writes it',
         'loans.principal': 'the amount DRAWN at open; recorded once, never revised — interest lives in its own table',
+        'loans.opening_collateral':
+          'the opening PLEDGE amount at open — a TERM for id-reuse compares, write-once; live holdings are ledger + collateral events',
         'loans.last_mark_price': 'a PRICE, not a holding — what one unit of collateral was worth at the last accepted mark',
         'loan_collateral_events.amount': 'a RECORD of one completed lock or release; written once with its ledger tx id',
+        'loan_reserve_fundings.amount': 'a RECORD of one successful reserve fund post; the independent half of reconcileReserve (B-02)',
         'loan_interest_accruals.principal_basis': 'the debt one day was computed against; a SNAPSHOT so that day is re-derivable',
         'loan_interest_accruals.interest_amount': "a RECORD of one day's charge; summing the table is the lifetime figure",
         'loan_repayments.interest_amount': 'a RECORD of one completed repayment; written once',
@@ -1517,9 +2113,22 @@ if (!available) {
         // payment goes through at a till.
         'cards.per_authorization_limit':
           'a POLICY ceiling on ONE authorisation; it does not fall as the card is used and no money path writes it',
-        'card_authorizations.amount': 'a RECORD of one authorisation request; written once',
+        'card_authorizations.amount': 'a RECORD of one authorisation request, in the funding asset; written once',
         'card_settlements.amount': 'a RECORD of one completed capture or reversal; written once with its ledger tx id',
         'card_cashback.amount': 'a RECORD of one reward; summing the table is the lifetime figure',
+
+        // ── JIT conversion (§18) ─────────────────────────────────────────────
+        //
+        // A frozen QUOTE, not a rate table and not a second book. Note what is
+        // NOT here: no `cards.rate`, no `bank.rates`, nothing a future spend
+        // could be priced off. Every figure below is a record of what one feed
+        // said at one named instant, written once beside the decision it
+        // produced — and a deployment with no rate adapter cannot write one at
+        // all, because there is no FX source in this platform to invent one from.
+        'card_conversions.settlement_amount': 'a RECORD of what the merchant charged, in their currency; written once',
+        'card_conversions.funding_amount': 'a RECORD of what that converted to, and what the hold moved; written once',
+        'card_conversions.rate':
+          'the RATE one authorisation was quoted at, frozen so a capture cannot re-quote; written once and never revised',
 
         // ── Ramps (§8.1 / D-S-09, crypto ledger half) ────────────────────────
         //
@@ -1528,6 +2137,14 @@ if (!available) {
         // only place "how much is available" is answered.
         'ramp_onramps.amount': 'a RECORD of one on-ramp credit; written once with its ledger tx id',
         'ramp_offramps.amount': 'a RECORD of one off-ramp instruction; written once with hold+settle tx ids',
+
+        // ── Auto-invest (§31:805 F-plane) ────────────────────────────────────
+        // Rules are instructions; runs are write-once records. No running balance.
+        'auto_invest_rules.threshold': 'a POLICY keep-amount for a threshold sweep; instruction, not a holding',
+        'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule, or round-up granularity; instruction, not a holding',
+        'auto_invest_runs.amount': 'a RECORD of one run (settled or rejected); written once',
+        'business_accounts.spend_threshold': 'a POLICY dual-control floor; instruction, not a holding',
+        'business_approvals.amount': 'a RECORD of one proposed/approved transfer; written once',
       };
 
       const moneyColumns = columns

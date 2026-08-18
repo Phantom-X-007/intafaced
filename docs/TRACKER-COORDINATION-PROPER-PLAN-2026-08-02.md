@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Historical text below may still _mention_ thrift as what was once believed.
+
 # Tracker coordination — proper framing, diagnosis, plan
 
 **Status:** **PROGRAM FINISHED** 2026-08-02 — E1–E4 + entry-chain seal. Finish audit: [`COORDINATION-FINISH-AUDIT-2026-08-02.md`](COORDINATION-FINISH-AUDIT-2026-08-02.md).  
@@ -193,15 +195,15 @@ Use as design smell checks — not as “install Linear.”
 
 ### 5.1 Hard rejects (do not build)
 
-| ID  | Idea                                                | Why rejected                           |
-| --- | --------------------------------------------------- | -------------------------------------- |
-| R1  | Required CODEOWNERS approval on all agent paths     | Limits autonomy; asymmetric review law |
-| R2  | Max open PRs / serialize agents                     | Limits speed + parallel                |
-| R3  | New GitHub Project / external PM as product SoT     | Dual tracking                          |
-| R4  | Undo thrift as primary fix                          | Wrong cause; costs $                   |
-| R5  | Nitro manual board updates                          | Violates no-manual                     |
-| R6  | CI: any code file change requires features.mjs diff | Over-fit literal Denon; false fails    |
-| R7  | Another permanent scoreboard file                   | Worsens F6                             |
+| ID  | Idea                                                | Why rejected                                                                       |
+| --- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| R1  | Required CODEOWNERS approval on all agent paths     | Limits autonomy; asymmetric review law                                             |
+| R2  | Max open PRs / serialize agents                     | Limits speed + parallel                                                            |
+| R3  | New GitHub Project / external PM as product SoT     | Dual tracking                                                                      |
+| R4  | Undo thrift as primary fix                          | Done 2026-08-07 for the right reason (public/free Actions); not a coordination fix |
+| R5  | Nitro manual board updates                          | Violates no-manual                                                                 |
+| R6  | CI: any code file change requires features.mjs diff | Over-fit literal Denon; false fails                                                |
+| R7  | Another permanent scoreboard file                   | Worsens F6                                                                         |
 
 ### 5.2 Plausible solution families (evaluate later; not implement now)
 
@@ -220,7 +222,7 @@ Use as design smell checks — not as “install Linear.”
 
 **Preferred shape if P6 acceptance is met:** **S0 + S1 + S2 + S3**, optional **S6** once.  
 **Avoid:** S7 unless F1/F4 still dominate after clarify+agent contract.  
-**Keep thrift.** Keep parallel. Keep asymmetric merge.
+**Thrift is deleted (2026-08-07).** Keep parallel. Keep asymmetric merge. Public repo = no Actions spend meter.
 
 This satisfies Denon’s _intent_ (truth DB for product context + less conflict) without literal micro-PR registry spam.
 
@@ -232,18 +234,18 @@ A solution is **good enough** only if all of these are true:
 
 ### 6.1 Outcomes
 
-| #   | Acceptance test                                                                       | Who checks                |
-| --- | ------------------------------------------------------------------------------------- | ------------------------- |
-| A1  | Cold agent can answer in ≤2 minutes: free mountains, human-locked, session-busy paths | Agent                     |
-| A2  | Dual-build rate on same paths drops (no two live PRs same files without handoff)      | `gh pr` ritual / log      |
-| A3  | Human M1–M7 never agent-implemented                                                   | PR audit                  |
-| A4  | Tracker `done` still cannot lie (existing CI)                                         | CI                        |
-| A5  | Denon can read product ownership without reading Board Clear novel                    | features.mjs / TRACKER    |
-| A6  | **Zero new Nitro steps**                                                              | Nitro never opens a board |
-| A7  | **No new human Approve gate** for agent Class N/P/M under existing ownership law      | AGENTS.md still true      |
-| A8  | Parallel agent count not capped by policy                                             | Law text                  |
-| A9  | Thrift law unchanged (local verify, no push storms, docs path-ignore)                 | AGENTS thrift             |
-| A10 | No second permanent product board created                                             | Doc inventory             |
+| #   | Acceptance test                                                                                 | Who checks                          |
+| --- | ----------------------------------------------------------------------------------------------- | ----------------------------------- |
+| A1  | Cold agent can answer in ≤2 minutes: free mountains, human-locked, session-busy paths           | Agent                               |
+| A2  | Dual-build rate on same paths drops (no two live PRs same files without handoff)                | `gh pr` ritual / log                |
+| A3  | Human M1–M7 never agent-implemented                                                             | PR audit                            |
+| A4  | Tracker `done` still cannot lie (existing CI)                                                   | CI                                  |
+| A5  | Denon can read product ownership without reading Board Clear novel                              | features.mjs / TRACKER              |
+| A6  | **Zero new Nitro steps**                                                                        | Nitro never opens a board           |
+| A7  | **No new human Approve gate** for agent Class N/P/M under existing ownership law                | AGENTS.md still true                |
+| A8  | Parallel agent count not capped by policy                                                       | Law text                            |
+| A9  | ~~Thrift law~~ **Deleted 2026-08-07.** Keep local verify + one-concern PRs (quality, not spend) | retirement: GITHUB-CI-SPEND-CONTROL |
+| A10 | No second permanent product board created                                                       | Doc inventory                       |
 
 ### 6.2 Non-goals
 

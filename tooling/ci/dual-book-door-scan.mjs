@@ -2,8 +2,8 @@
 /**
  * Dual-book door-kill registration scan (Plan P2-4 · Spec DB-2 · Architect A1).
  *
- * Proves the Spring money-door interceptor exists and is registered on the four
- * money-facing ApplicationConfig modules (admin, ucenter-api, otc-api, exchange-api).
+ * Proves the Spring money-door interceptor exists and is registered on the five
+ * money-facing ApplicationConfig modules (admin, ucenter-api, otc-api, exchange-api, exchange).
  *
  * Does not prove a running JVM — that is residual until a Spring boot smoke exists.
  * Combined with DAO no-ops + service throws + vendor-java-money-scan, this is the
@@ -111,13 +111,32 @@ const REQUIRED_CONFIG_MARKERS = [
   { id: 'ucenter-api', pathIncludes: ['ucenter-api', 'ApplicationConfig.java'] },
   { id: 'otc-api', pathIncludes: ['otc-api', 'ApplicationConfig.java'] },
   { id: 'exchange-api', pathIncludes: ['exchange-api', 'ApplicationConfig.java'] },
+  // Matching process hosts MonitorController paths that publish settlement Kafka.
+  // Path must not match exchange-api: use the module directory boundary.
+  // Segments stay OS-agnostic — Windows worktrees use `\` and must not miss the door.
+  { id: 'exchange', pathIncludes: ['00_framework', 'exchange', 'ApplicationConfig.java'] },
 ];
+
+/** Normalize for segment matching so Linux CI and Windows worktrees agree. */
+function pathSegs(p) {
+  return p.split(/[/\\]+/);
+}
+
+function pathHasOrderedSegments(p, segs) {
+  const parts = pathSegs(p);
+  // Require `exchange` as its own segment (not a prefix of `exchange-api`).
+  return segs.every((seg) => {
+    if (seg === 'ApplicationConfig.java') return parts[parts.length - 1] === seg;
+    if (seg === 'exchange') return parts.includes('exchange') && !parts.includes('exchange-api');
+    return parts.includes(seg);
+  });
+}
 
 const appConfigs = walk(VENDOR, (name, p) => name === 'ApplicationConfig.java');
 const failures = [];
 
 for (const marker of REQUIRED_CONFIG_MARKERS) {
-  const match = appConfigs.find((p) => marker.pathIncludes.every((seg) => p.includes(seg)));
+  const match = appConfigs.find((p) => pathHasOrderedSegments(p, marker.pathIncludes));
   if (!match) {
     failures.push(`no ApplicationConfig.java found for ${marker.id}`);
     continue;
@@ -125,7 +144,7 @@ for (const marker of REQUIRED_CONFIG_MARKERS) {
   const text = stripComments(readFileSync(match, 'utf8'));
   if (!REGISTRATION.test(text)) {
     failures.push(
-      `${relative(ROOT, match)} does not REGISTER DualBookMoneyDoorInterceptor ` +
+      `${relative(ROOT, match).replace(/\\/g, '/')} does not REGISTER DualBookMoneyDoorInterceptor ` +
         `(need registry.addInterceptor(new DualBookMoneyDoorInterceptor()).addPathPatterns("/**"))`,
     );
   }

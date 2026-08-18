@@ -9,6 +9,11 @@
  * Gap → caller resnapshots REST WITHOUT tearing down the socket.
  * Empty book (sequence 0, empty sides) is success, not an error.
  *
+ * HONESTY — feedLive is NOT "WebSocket TCP open".
+ * onLive(true) only after a valid depth snapshot for this marketId has been
+ * applied (WS snapshot or REST resnapshot). A socket that is open but silent
+ * must stay not-live so the desk never paints "Live" over a cold book.
+ *
  * CommonJS for golden tests + webpack require, matching ix-trade.js.
  */
 'use strict';
@@ -23,8 +28,11 @@ function sideFromWire(levels) {
   for (var i = 0; i < levels.length; i++) {
     var row = levels[i];
     if (!row || row.length < 2) continue;
-    var price = String(row[0]);
-    var qty = String(row[1]);
+    /* JSON numbers are not venue decimals — String(42.5) invents a print path.
+       Same law as ix-wire.decimal / REST accept: refuse, do not coerce. */
+    if (typeof row[0] !== 'string' || typeof row[1] !== 'string') continue;
+    var price = row[0].trim();
+    var qty = row[1].trim();
     if (!price || qty === '0' || qty === '0.0' || qty === '0.00') continue;
     /* Reject non-positive quantity without inventing. */
     if (qty.charAt(0) === '-') continue;
@@ -52,8 +60,11 @@ function applySide(current, levels) {
   for (var i = 0; i < levels.length; i++) {
     var row = levels[i];
     if (!row || row.length < 2) continue;
-    var price = String(row[0]);
-    var qty = String(row[1]);
+    /* Same refuse as sideFromWire: JSON numbers never enter the book. */
+    if (typeof row[0] !== 'string' || typeof row[1] !== 'string') continue;
+    var price = row[0].trim();
+    var qty = row[1].trim();
+    if (!price) continue;
     if (qty === '0' || qty === '0.0' || qty === '0.00') {
       delete next[price];
     } else if (qty.charAt(0) !== '-') {
@@ -160,6 +171,8 @@ function createDepthFeed(opts) {
 
   function applySnapshotMsg(msg) {
     book = bookFromSnapshot(msg);
+    /* First honest live edge: we have venue depth data for this market. */
+    setLive(true);
     publish();
   }
 
@@ -234,7 +247,7 @@ function createDepthFeed(opts) {
     }
     socket.onopen = function () {
       if (closed) return;
-      setLive(true);
+      /* TCP open alone is not live data — wait for snapshot. */
       status('open');
     };
     socket.onmessage = onMessage;

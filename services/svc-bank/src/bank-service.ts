@@ -8,6 +8,8 @@ import { LoanService, type LoanServiceOptions } from './loans/loan-service.js';
 import { fixedPriceSource } from './loans/prices.js';
 import { CardService, type CardServiceOptions } from './cards/card-service.js';
 import { RampService, type RampServiceOptions } from './ramps/ramp-service.js';
+import { AutoInvestService, type AutoInvestServiceOptions } from './auto-invest/auto-invest-service.js';
+import { BusinessService } from './business/business-service.js';
 import type { LedgerHistory } from './analytics/ledger-history.js';
 
 /**
@@ -32,6 +34,8 @@ export interface BankServices {
   readonly loans: LoanService;
   readonly cards: CardService;
   readonly ramps: RampService;
+  readonly autoInvest: AutoInvestService;
+  readonly business: BusinessService;
 }
 
 export interface BankServiceOptions {
@@ -65,10 +69,18 @@ export interface BankServiceOptions {
    * Ramp wiring: crypto ledger half, if any.
    *
    * Not defaulted to crypto-ledger. Silence is no programme; every ramp money
-   * path refuses `bank.no_ramp_rail`. Fiat is never selectable — see
-   * `ramps/rails.ts` and `bank.fiat_ramp_socket`.
+   * path refuses `bank.no_ramp_rail`. Fiat reuses svc-pay adapters only —
+   * empty/sandbox/absent refuse `bank.fiat_ramp_no_pay_adapter`.
    */
   ramps?: RampServiceOptions;
+  /**
+   * Auto-invest wiring: optional convert port for DCA.
+   *
+   * Not defaulted. Absent convert = every DCA create/run refuses
+   * `bank.auto_invest_rate_unset` rather than inventing a §8 rate. Threshold
+   * sweeps need no convert (same-asset earn deposit).
+   */
+  autoInvest?: AutoInvestServiceOptions;
 }
 
 export function createBankServices(sql: Sql, ledger: LedgerClient, history: LedgerHistory, options: BankServiceOptions = {}): BankServices {
@@ -80,16 +92,34 @@ export function createBankServices(sql: Sql, ledger: LedgerClient, history: Ledg
   // fails with `bank.mark_missing`. The correct posture for a deployment that has
   // not decided where its prices come from.
   const loans = new LoanService(sql, ledger, options.loans ?? { priceSource: fixedPriceSource({}) });
+  // No convert port = DCA refuses rates-unset; threshold sweeps still work.
+  // Constructed before cards so the capture hook can call applyRoundUp without
+  // a setter or a circular constructor.
+  const autoInvest = new AutoInvestService(sql, ledger, earn, spaces, options.autoInvest ?? {});
   // No issuer configured = no card programme, and every card procedure refuses
   // by name rather than simulating one. See `cards/issuer.ts`.
-  const cards = new CardService(sql, ledger, options.cards ?? {});
+  const cards = new CardService(sql, ledger, {
+    ...(options.cards ?? {}),
+    onCaptureSettled: options.cards?.onCaptureSettled ?? ((event) => autoInvest.applyRoundUp(event)),
+  });
   // No ramp programme = every ramp procedure refuses `bank.no_ramp_rail`.
   const ramps = new RampService(sql, ledger, options.ramps ?? {});
+  const business = new BusinessService(sql, ledger, spaces, transfers);
 
-  return { spaces, transfers, earn, analytics, loans, cards, ramps };
+  return { spaces, transfers, earn, analytics, loans, cards, ramps, autoInvest, business };
 }
 
-export { SpaceService, TransferService, EarnService, SpendAnalytics, LoanService, CardService, RampService };
+export {
+  SpaceService,
+  TransferService,
+  EarnService,
+  SpendAnalytics,
+  LoanService,
+  CardService,
+  RampService,
+  AutoInvestService,
+  BusinessService,
+};
 export { BankError, type BankErrorCode } from './errors.js';
 export { accountForSpace, type SpaceRecord, type SpaceView } from './spaces/space-service.js';
 export { planDue, occurrenceStart, dueOccurrence, type Cadence } from './transfers/schedule.js';
@@ -147,7 +177,17 @@ export {
   type CardServiceOptions,
   type CaptureResult,
   type CashbackOutcome,
+  type ConversionRecord,
+  type RoundUpOutcome,
 } from './cards/card-service.js';
+export {
+  DEFAULT_CARD_CONVERSION_POLICY,
+  fundingFor,
+  noConversionRates,
+  quoteConversion,
+  type CardConversionPolicy,
+  type ConversionQuote,
+} from './cards/conversion.js';
 export { rampProgrammeFor, BANK_CRYPTO_LEDGER_RAIL, RAMP_SETTINGS, type RampProgramme, type RampSetting } from './ramps/rails.js';
 export { type OnrampRecord, type OfframpRecord, type RampKind, type RampServiceOptions } from './ramps/ramp-service.js';
 export { categorise, SPEND_CATEGORIES, type SpendCategory, type SpendSummary } from './analytics/spend.js';

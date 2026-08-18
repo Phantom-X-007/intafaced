@@ -50,7 +50,7 @@ runRailAdapterConformance('card-sandbox', async (): Promise<RailHarness> => {
       ),
     signRaw,
     failNext: () => cardAdapter.failNext(),
-    payoutDestination: () => ({ kind: 'bank', ref: 'GB00TESTBANK0000' }),
+    payoutDestination: () => ({ kind: 'bank', ref: 'GB82WEST12345698765432' }),
   };
 });
 
@@ -93,7 +93,7 @@ runRailAdapterConformance('crypto-native', async (): Promise<RailHarness> => {
       ),
     signRaw,
     failNext: () => chain.failNextCall(),
-    payoutDestination: () => ({ kind: 'crypto', ref: '0xmerchantpayout' }),
+    payoutDestination: () => ({ kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' }),
   };
 });
 
@@ -255,7 +255,7 @@ describe('crypto-native — finality is the whole rail', () => {
       amount: amt('500'),
       assetId: 'USDT',
       window: '2026-07-27',
-      destination: { kind: 'crypto', ref: '0xmerchant' },
+      destination: { kind: 'crypto', ref: '0x000000000000000000000000000000000000dEaD' },
     };
 
     await adapter.payout(instruction);

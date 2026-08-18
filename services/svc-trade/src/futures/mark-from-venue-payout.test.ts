@@ -40,6 +40,7 @@ import { markSourceFromDepth } from './mark-from-depth.js';
 import { markSourceFromVenuePublicBook, markSourcePrefer } from './mark-from-venue.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 
 /**
  * A PER-RUN DATABASE, created and dropped by this suite — the same posture as
@@ -139,6 +140,7 @@ if (!available) {
         resolveSymbol: () => 'BTC/USDT',
       }),
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus,
       now: () => NOW,
     });
@@ -217,7 +219,14 @@ if (!available) {
       let book = venueSnap([['1999', '10']], [['2001', '10']]);
       const svc = onVenue(async () => book);
 
-      const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+      const pos = await svc.open({
+        clientOpenId: 't-open-mark-from-venue-payout.test-1',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('10'),
+        leverage: amt('1'),
+      });
       expect(pos.entryPrice).toBe('2000');
       const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
@@ -246,7 +255,14 @@ if (!available) {
       await fundProfitSource('10000');
       let book = venueSnap([['1999', '10']], [['2001', '10']]);
       const svc = onVenue(async () => book);
-      const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+      const pos = await svc.open({
+        clientOpenId: 't-open-mark-from-venue-payout.test-2',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('10'),
+        leverage: amt('1'),
+      });
 
       book = venueSnap([['2199', '10']], [['2201', '10']]);
       const outcome = await settle(() => svc.close(ALICE, pos.id!));
@@ -267,7 +283,14 @@ if (!available) {
       const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
       const outcome = await settle(() =>
-        svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') }),
+        svc.open({
+          clientOpenId: 't-open-mark-from-venue-payout.test-3',
+          userId: ALICE,
+          symbol: 'BTC/USDT-PERP',
+          side: 'long',
+          size: amt('10'),
+          leverage: amt('1'),
+        }),
       );
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
@@ -303,11 +326,19 @@ if (!available) {
           markSourceFromDepth(async () => depth),
         ),
         profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+        maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
         bus,
         now: () => NOW,
       });
 
-      const pos = await svc.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('10'), leverage: amt('1') });
+      const pos = await svc.open({
+        clientOpenId: 't-open-mark-from-venue-payout.test-4',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('10'),
+        leverage: amt('1'),
+      });
       expect(pos.entryPrice).toBe('2000');
 
       // The venue goes to dust at a wild price; our own book is fine, and 10% up.

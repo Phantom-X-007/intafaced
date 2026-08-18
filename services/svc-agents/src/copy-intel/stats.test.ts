@@ -52,6 +52,15 @@ describe('copy-intel buildLeaderStats (Stage-1 fixtures)', () => {
     expect(r.audit[0]!.source).toBe('trade.copy.fixture');
   });
 
+  it('D26-P1-A5: never reorders by realised PnL (no marketing board)', () => {
+    const r = buildLeaderStats([row({ leaderId: 'weak', realisedPnl: '-10' }), row({ leaderId: 'strong', realisedPnl: '1000' })], {
+      now: NOW,
+    });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.stats.map((s) => s.leaderId)).toEqual(['weak', 'strong']);
+  });
+
   it('refuses invent path when all rows incomplete', () => {
     const r = buildLeaderStats([row({ leaderId: 'L1', realisedPnl: null, closedTrades: null, winningTrades: null })], {
       now: NOW,
@@ -81,6 +90,15 @@ describe('copy-intel buildLeaderStats (Stage-1 fixtures)', () => {
 
   it('Stage-2: copy plane dark → refuse invent PnL', () => {
     const r = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW, copyPlane: 'dark' });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.copy_intel.unavailable',
+      reason: 'copy_plane_dark',
+    });
+  });
+
+  it('Stage-2: copy plane live without sealed allowlist → still dark (no invent leaders)', () => {
+    const r = buildLeaderStats([row({ leaderId: 'L1' })], { now: NOW, copyPlane: 'live', leaderAllowlist: ['L1'] });
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.copy_intel.unavailable',

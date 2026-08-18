@@ -42,4 +42,5 @@ export * from './market.js';
 export * from './book.js';
 export * from './rates.js';
 export * from './account.js';
+export * from './latency.js';
 export * from './adapter.js';

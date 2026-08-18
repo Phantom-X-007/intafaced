@@ -52,11 +52,9 @@ export const DROP_NAMES: Readonly<Record<Drop, string>> = {
  * `isEnabled()` answers a question about the REGISTRY. For most of this file's
  * life the admin console read that answer and rendered it as a question about
  * the PLATFORM — "protocol.amm: Dark" — and those are not the same question.
- * No file under `services/*` imports `isEnabled`, `resolveAll` or
- * `FLAG_REGISTRY`. Nothing resolves a flag on a request path. So at
- * `LAUNCH_DROP=0` (the default in `env.ts`) the console reported
- * `academy.inviteLobbies`, `protocol.amm` and `edge.gateway` as off while every
- * one of those procedures answered normally.
+ * Most services still do not import `isEnabled` / `resolveAll` / `FLAG_REGISTRY`.
+ * The exception is waitlist capture on svc-identity: `WaitlistService` calls
+ * `assertEnabled` so off / wrong drop / kill is a named refuse, not a silent open.
  *
  * That is the mirror image of the bug `svc-edge/src/routes.ts` was written to
  * prevent. There, a service was reachable that the route table did not know
@@ -96,7 +94,14 @@ export type FlagEnforcement =
    * plus a durable `posting_freeze` row an operator can set through
    * `/admin/ledger/*` without a deploy.
    */
-  | { readonly kind: 'operator-api'; readonly service: string; readonly envVar: string; readonly surface: string };
+  | { readonly kind: 'operator-api'; readonly service: string; readonly envVar: string; readonly surface: string }
+  /**
+   * Enforced on the request path via `assertEnabled(key)` in `service`.
+   * Follows this registry + `LAUNCH_DROP` + `INTAFACED_FLAG_*` + module kill.
+   * `envVar` is the pin name the resolver already honours (not a boot-time
+   * default-on mirror). `surface` is the HTTP path that refuses.
+   */
+  | { readonly kind: 'request-path'; readonly service: string; readonly envVar: string; readonly surface: string };
 
 /** Nothing enforces this flag. Its state is a plan, not a control. */
 export const NOT_ENFORCED: FlagEnforcement = { kind: 'none' };
@@ -109,6 +114,11 @@ function serviceEnv(service: string, envVar: string): FlagEnforcement {
 /** Boot-time env var AND a live operator endpoint. */
 function operatorApi(service: string, envVar: string, surface: string): FlagEnforcement {
   return { kind: 'operator-api', service, envVar, surface };
+}
+
+/** Request-path `assertEnabled` gate — follows the drop clock. */
+function requestPath(service: string, envVar: string, surface: string): FlagEnforcement {
+  return { kind: 'request-path', service, envVar, surface };
 }
 
 export interface FlagDef {
@@ -139,8 +149,20 @@ function def(key: string, module: ModuleId, drop: Drop | null, description: stri
  */
 export const FLAG_REGISTRY: readonly FlagDef[] = [
   // Drop 0 · Tease
-  def('waitlist.enabled', 'core-ops', '0', 'Waitlist capture + referral queue', NOT_ENFORCED),
-  def('referral.queue', 'core-ops', '0', 'Referral position mechanics', NOT_ENFORCED),
+  def(
+    'waitlist.enabled',
+    'core-ops',
+    '0',
+    'Waitlist capture + referral queue',
+    requestPath('svc-identity', 'INTAFACED_FLAG_WAITLIST_ENABLED', 'requireWaitlist().enroll'),
+  ),
+  def(
+    'referral.queue',
+    'core-ops',
+    '0',
+    'Referral position mechanics',
+    requestPath('svc-identity', 'INTAFACED_FLAG_REFERRAL_QUEUE', 'requireWaitlist().position'),
+  ),
   def('mining.testnet', 'mining-pool', '0', 'PoW pool in testnet mode', NOT_ENFORCED),
 
   // Drop I · Blueprint
@@ -221,8 +243,12 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('pay.payfac', 'pay', null, 'PayFac sub-merchant trees', NOT_ENFORCED),
   def('pay.laneA', 'pay', null, 'Permissionless crypto rails (§24 Lane A)', NOT_ENFORCED),
   def('p2p.sovereignEscrow', 'p2p', null, 'Contract escrow (Protocol Plane)', NOT_ENFORCED),
-  def('bank.loans', 'bank', null, 'Collateralised loans', NOT_ENFORCED),
-  def('bank.cards', 'bank', null, 'Card issuance', NOT_ENFORCED),
+  // Boot-time module kills on svc-bank — OFF refuses open/issue (and card auth).
+  // Job-level stops (accrual, risk sweep) stay separate env vars; these flags are
+  // the product module switches the admin console used to paint as controls while
+  // nothing read them (NOT_ENFORCED honesty residual, wave 13 L03).
+  def('bank.loans', 'bank', null, 'Collateralised loans', serviceEnv('svc-bank', 'BANK_LOANS_ENABLED')),
+  def('bank.cards', 'bank', null, 'Card issuance (ledger half)', serviceEnv('svc-bank', 'BANK_CARDS_ENABLED')),
   def('bank.sovereignCard', 'bank', null, 'Self-custody funded card (§18)', NOT_ENFORCED),
   def('protocol.smartAccounts', 'protocol', null, 'Passkey smart accounts (§17.4)', serviceEnv('svc-protocol', 'PROTOCOL_RELAY_ENABLED')),
   // `protocol.amm`: `router.ts` mounts `amm.quoteExactIn`, `amm.quoteFromPool`,
@@ -255,6 +281,9 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   // Support desk Stage-1. NOT_ENFORCED: edge kill-switch is the live control;
   // flag is rollout plan only (same honesty pattern as other surfaces).
   def('support.desk', 'support', 'V', 'Support tickets + KB desk', NOT_ENFORCED),
+  // House tenant mechanism. Live control is edge kill of module `execution` plus
+  // tRPC `execution.tenant.kill` (in-process). Flag is rollout plan only.
+  def('execution.houseTenant', 'execution', 'II', 'Sealed house-desk tenancy mechanism (external venues only)', NOT_ENFORCED),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);
@@ -316,6 +345,8 @@ export function enforcementNote(key: string): string {
       return `Enforced by ${e.envVar} on ${e.service}, read once at boot and defaulting to on. It does not follow LAUNCH_DROP or this registry — changing it needs a restart of ${e.service}.`;
     case 'operator-api':
       return `Enforced by ${e.envVar} on ${e.service} at boot, and reachable while running through ${e.surface}. This is the only flag whose capability an operator can stop without a deploy.`;
+    case 'request-path':
+      return `Enforced on the request path: ${e.service} ${e.surface} calls assertEnabled. Follows LAUNCH_DROP, ${e.envVar}, and the module kill-switch. Off is a named refuse, not a silent open.`;
   }
 }
 
@@ -348,6 +379,34 @@ export class UnknownFlagError extends Error {
 }
 
 /**
+ * Thrown by `assertEnabled` when a flag is off.
+ *
+ * This is the product refuse path for drop-gated surfaces (waitlist, referral
+ * queue, and every other registry key). Services call it on the request path;
+ * the registry alone answering `isEnabled === false` never stopped traffic.
+ *
+ * `code` is stable for callers to map to HTTP/tRPC:
+ *   - `flag.<key>.drop_pending`  — drop clock has not reached the flag
+ *   - `flag.<key>.disabled`      — override, env pin, kill-switch, or phase-gate
+ */
+export class FlagDisabledError extends Error {
+  readonly code: string;
+  readonly key: string;
+  readonly source: FlagSource;
+  readonly reason: string;
+
+  constructor(key: string, explanation: FlagExplanation) {
+    const code = explanation.source === 'drop-pending' ? `flag.${key}.drop_pending` : `flag.${key}.disabled`;
+    super(`${key} is off (${explanation.source}): ${explanation.reason}`);
+    this.name = 'FlagDisabledError';
+    this.code = code;
+    this.key = key;
+    this.source = explanation.source;
+    this.reason = explanation.reason;
+  }
+}
+
+/**
  * Resolve one flag. Unknown keys throw — there are no ad-hoc flags, because an
  * undeclared flag is an undocumented launch dependency.
  */
@@ -366,6 +425,34 @@ export function isEnabled(key: string, ctx: FlagContext): boolean {
 
   if (flag.drop === null) return false;
   return DROP_ORDER[ctx.drop] >= DROP_ORDER[flag.drop];
+}
+
+/**
+ * Waitlist capture + referral queue — the switch mountain (`infra.drop-flags`).
+ *
+ * Callers must `assertEnabled` these keys. When OFF they are refuse-closed
+ * (`FlagDisabledError`) and `offReadiness` is `overridden` / `killed` (built
+ * request-path control), never a silent open. Founding-badge mint is
+ * `launch.nft` (chain), not this list.
+ */
+export const WAITLIST_REFERRAL_FLAGS = ['waitlist.enabled', 'referral.queue'] as const;
+
+/**
+ * Refuse when the flag is off — the product Done bar for drop phases.
+ *
+ * `isEnabled` is a read. This is a gate. Waitlist capture, referral queue
+ * position, and every other drop-mapped surface call this (or an equivalent
+ * service-env check) before doing work; wrong phase → throw, not silent serve.
+ *
+ * OFF is refuse-closed, not ready: a false `isEnabled` without a throw is a
+ * missed gate. `WAITLIST_REFERRAL_FLAGS` pin that contract in tests.
+ *
+ * Returns void on success so call sites read as a precondition, not a branch.
+ */
+export function assertEnabled(key: string, ctx: FlagContext): void {
+  const explanation = explain(key, ctx);
+  if (explanation.enabled) return;
+  throw new FlagDisabledError(key, explanation);
 }
 
 /** Snapshot of every flag — what apps/admin renders, and what CI asserts against. */
@@ -471,4 +558,53 @@ export function flagsForModule(module: ModuleId): FlagDef[] {
 
 export function flagDef(key: string): FlagDef | undefined {
   return BY_KEY.get(key);
+}
+
+/**
+ * Does anything real refuse when this flag is off?
+ *
+ * Tracker Done bar for `infra.drop-flags` (coverage core.drop-flags): a flag
+ * whose feature does not exist must read as OFF-and-unbuilt, not OFF-and-ready.
+ * Enforced flags (service-env / operator-api / request-path) have a live refuse
+ * path → built control. `NOT_ENFORCED` is a launch-plan row → unbuilt / plan-only.
+ */
+export function isCapabilityBuilt(key: string): boolean {
+  return isEnforced(key);
+}
+
+/**
+ * Why an OFF flag is off, at the altitude the tracker Done bar cares about.
+ *
+ * Returns `null` when the flag is on. When off:
+ *   - `unbuilt`      — plan row, no live refuse path (not "ready to flip")
+ *   - `drop-pending` — built control waiting on the drop clock
+ *   - `overridden`   — explicit or env pin holding it off
+ *   - `killed`       — module kill-switch
+ *   - `phase-gated`  — drop:null, never opens by clock alone
+ *
+ * Waitlist / referral (`WAITLIST_REFERRAL_FLAGS`) stay `unbuilt` while OFF.
+ * `null` here would mean ON — never treat OFF as ready.
+ */
+export type OffReadiness = 'unbuilt' | 'drop-pending' | 'overridden' | 'killed' | 'phase-gated';
+
+export function offReadiness(key: string, ctx: FlagContext): OffReadiness | null {
+  const explanation = explain(key, ctx);
+  if (explanation.enabled) return null;
+
+  if (!isCapabilityBuilt(key)) return 'unbuilt';
+
+  switch (explanation.source) {
+    case 'drop-pending':
+      return 'drop-pending';
+    case 'kill-switch':
+      return 'killed';
+    case 'phase-gated':
+      return 'phase-gated';
+    case 'override':
+    case 'env':
+      return 'overridden';
+    case 'drop':
+      // enabled:false with source drop is unreachable (drop source is always on)
+      return 'drop-pending';
+  }
 }

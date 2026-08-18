@@ -1,5 +1,6 @@
 import { isUsable, supports, type ModelProvider } from './providers/provider.js';
 import type { RoutingTable } from './gateway/routing.js';
+import { meteringPublicCard, type MeteringPublicMode } from './metering/product-law.js';
 
 /**
  * HONEST READINESS FOR svc-agents (Board Clear A-P5-AGENTS).
@@ -27,11 +28,26 @@ import type { RoutingTable } from './gateway/routing.js';
 
 export type ProviderMode = 'mock' | 'upstream';
 
+/** Honest fleet mount inventory on `/ready` — never invents product agents. */
+export interface FleetReadinessCard {
+  readonly agents: number;
+  readonly withRunSession: number;
+  readonly bootRegistered: number;
+  readonly tasksMissingRoute: number;
+}
+
 export interface AgentsReadinessInput {
   readonly providerMode: ProviderMode;
   readonly providers: readonly ModelProvider[];
   readonly table: RoutingTable;
   readonly meteringEnabled: boolean;
+  /** Count of product agents upserted at boot into agent_definitions (0 = residual). */
+  readonly productAgentsRegistered?: number;
+  /**
+   * Fleet matrix board card (Stage-1 factories + runSession mounts + boot flag).
+   * When omitted, `/ready` reports zeros — never invents a five-agent fleet.
+   */
+  readonly fleet?: FleetReadinessCard;
   readonly now?: Date;
 }
 
@@ -65,7 +81,18 @@ export interface AgentsReadiness {
   readonly providerMode: ProviderMode;
   readonly providers: readonly ProviderReadiness[];
   readonly meteringEnabled: boolean;
+  /** D26-P1-A6: `audit_only` when the kill-switch is off — never silent feeCharge. */
+  readonly meteringMode: MeteringPublicMode;
+  /** Forever false while metering is off. */
+  readonly meteringAllowsFeeCharge: boolean;
   readonly tasks: readonly string[];
+  /** Product guardrails written at boot — not the same as live inference. */
+  readonly productAgentsRegistered: number;
+  /**
+   * Stage-1 fleet matrix snapshot. Zeros mean "not supplied" / residual, not
+   * "five agents are live". Mount honesty stays in `fleet/matrix.ts` tests.
+   */
+  readonly fleet: FleetReadinessCard;
   readonly usefulPath: UsefulPathStatus;
 }
 
@@ -113,22 +140,40 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     residual = input.table.routes.length === 0 ? 'no routes configured' : 'no completion route is currently servable';
   }
 
+  const productAgentsRegistered = input.productAgentsRegistered ?? 0;
+  const fleet: FleetReadinessCard = input.fleet ?? {
+    agents: 0,
+    withRunSession: 0,
+    bootRegistered: 0,
+    tasksMissingRoute: 0,
+  };
+
   // Mock mode always carries an honesty residual even when the path works: the
   // engine answers, but it is not production inference. Upstream mode drops
   // that residual once a real completion is servable.
   if (usefulTask !== null) {
-    residual =
-      input.providerMode === 'mock'
-        ? 'engine is the deterministic mock — not production inference; product agents are not registered by this service'
-        : null;
+    if (input.providerMode === 'mock') {
+      residual =
+        productAgentsRegistered > 0
+          ? `engine is the deterministic mock — not production inference; ${productAgentsRegistered} product agent(s) registered at boot`
+          : 'engine is the deterministic mock — not production inference; product agents are not registered by this service';
+    } else {
+      residual = null;
+    }
   }
+
+  const metering = meteringPublicCard(input.meteringEnabled);
 
   return {
     ready: true,
     providerMode: input.providerMode,
     providers,
-    meteringEnabled: input.meteringEnabled,
+    meteringEnabled: metering.meteringEnabled,
+    meteringMode: metering.meteringMode,
+    meteringAllowsFeeCharge: metering.meteringAllowsFeeCharge,
     tasks,
+    productAgentsRegistered,
+    fleet,
     usefulPath: {
       available: usefulTask !== null,
       task: usefulTask,

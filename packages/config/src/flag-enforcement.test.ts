@@ -2,7 +2,18 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FLAG_REGISTRY, NOT_ENFORCED, enforcedFlags, enforcementOf, isEnabled, isEnforced, unenforcedFlags } from './flags.js';
+import {
+  FLAG_REGISTRY,
+  NOT_ENFORCED,
+  WAITLIST_REFERRAL_FLAGS,
+  assertEnabled,
+  enforcedFlags,
+  enforcementOf,
+  FlagDisabledError,
+  isEnabled,
+  isEnforced,
+  unenforcedFlags,
+} from './flags.js';
 
 /**
  * DOES THE REGISTRY'S ENFORCEMENT CLAIM SURVIVE CONTACT WITH THE SERVICES?
@@ -64,7 +75,7 @@ describe('the enforcement field is answered for every flag', () => {
   it('leaves no flag undeclared', () => {
     for (const flag of FLAG_REGISTRY) {
       expect(flag.enforcement, `${flag.key} has no enforcement declaration`).toBeDefined();
-      expect(['none', 'service-env', 'operator-api']).toContain(flag.enforcement.kind);
+      expect(['none', 'service-env', 'operator-api', 'request-path']).toContain(flag.enforcement.kind);
     }
   });
 
@@ -83,6 +94,17 @@ describe('a declared gate exists in the service that is said to hold it', () => 
    */
   it.each(enforcedFlags().map((f) => [f.key, f.enforcement] as const))('%s', (key, enforcement) => {
     if (enforcement.kind === 'none') throw new Error('unreachable — enforcedFlags() excludes none');
+
+    if (enforcement.kind === 'request-path') {
+      const service = join(SERVICES_DIR, enforcement.service, 'src', 'waitlist', 'waitlist-service.ts');
+      const source = readFileSync(service, 'utf8');
+      expect(source, `${key} claims assertEnabled on ${enforcement.service}`).toContain(`assertEnabled('${key}'`);
+      const envFile = readFileSync(join(SERVICES_DIR, enforcement.service, 'src', 'env.ts'), 'utf8');
+      expect(envFile, `${key} pin ${enforcement.envVar}`).toContain(enforcement.envVar);
+      const router = readFileSync(join(SERVICES_DIR, enforcement.service, 'src', 'router.ts'), 'utf8');
+      expect(router, `${key} surface ${enforcement.surface}`).toContain(enforcement.surface);
+      return;
+    }
 
     const envFile = join(SERVICES_DIR, enforcement.service, 'src', 'env.ts');
     const source = readFileSync(envFile, 'utf8');
@@ -109,10 +131,11 @@ describe('no flag is enforced through this registry', () => {
    * the file that does it — do not delete the check, or the next `NOT_ENFORCED`
    * becomes unfalsifiable again.
    */
-  const RESOLVERS = ['isEnabled', 'resolveAll', 'explainAll', 'FLAG_REGISTRY', 'flagsForModule', 'flagDef'];
+  const RESOLVERS = ['isEnabled', 'resolveAll', 'explainAll', 'FLAG_REGISTRY', 'flagsForModule', 'flagDef', 'assertEnabled'];
 
-  it('no services/*/src file imports a flag resolver from @intafaced/config', () => {
+  it('no services/*/src file imports a flag resolver from @intafaced/config except named request-path gates', { timeout: 20_000 }, () => {
     const offenders: string[] = [];
+    const allowedAssertEnabled = new Set(['waitlist-service.ts']);
 
     for (const file of SERVICE_FILES) {
       const source = readFileSync(file, 'utf8');
@@ -127,7 +150,9 @@ describe('no flag is enforced through this registry', () => {
               ?.trim() ?? '',
         );
         const found = named.filter((n) => RESOLVERS.includes(n));
-        if (found.length > 0) offenders.push(`${file.slice(REPO_ROOT.length)} imports ${found.join(', ')}`);
+        const allowed =
+          found.every((n) => n === 'assertEnabled') && allowedAssertEnabled.has(file.replace(/\\/g, '/').split('/').pop() ?? '');
+        if (found.length > 0 && !allowed) offenders.push(`${file.slice(REPO_ROOT.length)} imports ${found.join(', ')}`);
       }
     }
 
@@ -260,5 +285,38 @@ describe('the specific capabilities the audit found flagged off and serving', ()
 
     expect(isEnabled('indexer.ingest', { drop: CURRENT_DROP })).toBe(false);
     expect(enforcementOf('indexer.ingest')).toEqual({ kind: 'service-env', service: 'svc-indexer', envVar: 'INDEXER_INGEST_ENABLED' });
+  });
+});
+
+/**
+ * Pin: waitlist / referral stay refuse-closed when the switch is OFF.
+ * `isEnabled === false` is not enough — `assertEnabled` must throw
+ * `FlagDisabledError`. Do not treat OFF as ready.
+ */
+describe('waitlist / referral stay refuse-closed when OFF', () => {
+  it.each(WAITLIST_REFERRAL_FLAGS)('%s: assertEnabled throws FlagDisabledError when overridden off', (key) => {
+    expect(isEnabled(key, { drop: '0', overrides: { [key]: false } })).toBe(false);
+    expect(() => assertEnabled(key, { drop: '0', overrides: { [key]: false } })).toThrow(FlagDisabledError);
+    expect(() => assertEnabled(key, { drop: 'V', overrides: { [key]: false } })).toThrow(FlagDisabledError);
+  });
+
+  it('waitlist.enabled: env pin off is FlagDisabledError, not silent serve', () => {
+    const ctx = { drop: '0' as const, env: { INTAFACED_FLAG_WAITLIST_ENABLED: 'off' } };
+    expect(isEnabled('waitlist.enabled', ctx)).toBe(false);
+    try {
+      assertEnabled('waitlist.enabled', ctx);
+      expect.unreachable('must refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(FlagDisabledError);
+      const e = err as FlagDisabledError;
+      expect(e.code).toBe('flag.waitlist.enabled.disabled');
+      expect(e.key).toBe('waitlist.enabled');
+    }
+  });
+
+  it('referral.queue: env pin off is FlagDisabledError, not silent serve', () => {
+    const ctx = { drop: '0' as const, env: { INTAFACED_FLAG_REFERRAL_QUEUE: 'off' } };
+    expect(isEnabled('referral.queue', ctx)).toBe(false);
+    expect(() => assertEnabled('referral.queue', ctx)).toThrow(FlagDisabledError);
   });
 });

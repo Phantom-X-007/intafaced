@@ -10,29 +10,45 @@ Owns accounts, credentials, sessions, KYC state, and the rank graph. It is the *
 
 ## API
 
-| Procedure                                     | Scope                     | Notes                                                       |
-| --------------------------------------------- | ------------------------- | ----------------------------------------------------------- |
-| `auth.register`                               | —                         | Creates user, profile, rank row; awards 50 XP               |
-| `auth.login`                                  | —                         | Handle or email; requires TOTP once enrolled                |
-| `auth.refresh`                                | —                         | Rotates the refresh token                                   |
-| `auth.logout` / `auth.logoutAll`              | — / session               | Revokes one or all sessions                                 |
-| `auth.stepUp`                                 | session                   | **TOTP → 5-minute token carrying `trade:withdraw`**         |
-| `totp.enrol` / `totp.confirm`                 | session                   | Two-step; secret persists only on confirm                   |
-| `webauthn.registerOptions` / `registerVerify` | session                   | Enrol a passkey/security key; ES256, attestation `none`     |
-| `webauthn.authOptions` / `authVerify`         | —                         | Passwordless login; issues same session tokens, `mfa: true` |
-| `webauthn.list`                               | session                   | Credential ids only — public keys never leave the server    |
-| `kyc.submit`                                  | `identity:write`          | Own record only; **grants nothing**                         |
-| `kyc.status`                                  | `identity:read`           | Own records + effective tier                                |
-| `kyc.pending`                                 | `admin:compliance`        | Operator review queue, oldest first                         |
-| `kyc.approve` / `kyc.reject`                  | `admin:compliance` + MFA  | **Approval grants custodial access**                        |
-| `rank.get`                                    | `identity:read`           | Rank, XP, XP to next tier                                   |
-| `rank.perks`                                  | `identity:read`           | **The hot path** — every module calls this                  |
-| `rank.awardXp`                                | service                   | Modules award XP here, never by writing `rank_state`        |
-| `apiKeys.exchange`                            | public                    | Long-lived key → short-lived access JWT (edge-usable)       |
-| `apiKeys.create` / `list` / `revoke`          | `identity:write` / `read` | Key returned once, never retrievable                        |
-| `subAccounts.create` / `list` / `revoke`      | `identity:write` / `read` | Ledger-visible; soft-disable only (no balance sweep)        |
+| Procedure                                              | Scope                     | Notes                                                                                                                                                                                         |
+| ------------------------------------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.register`                                        | —                         | Creates user, profile, rank row; awards 50 XP; optional `referrerId`                                                                                                                          |
+| `auth.login`                                           | —                         | Handle or email; requires TOTP once enrolled; recovery codes redeem once                                                                                                                      |
+| `auth.refresh`                                         | —                         | Rotates the refresh token; reuse revokes **every** session                                                                                                                                    |
+| `auth.logout` / `auth.logoutAll`                       | — / session               | Revokes one or all sessions                                                                                                                                                                   |
+| `auth.stepUpOptions`                                   | session                   | WebAuthn challenge for withdraw step-up (kind `step-up`, not login)                                                                                                                           |
+| `auth.stepUp`                                          | session                   | **TOTP, recovery code, or passkey → 5-minute `trade:withdraw` token**                                                                                                                         |
+| `totp.enrol` / `totp.confirm`                          | session                   | Two-step; secret + recovery hashes persist only on confirm                                                                                                                                    |
+| `webauthn.registerOptions` / `registerVerify`          | session                   | Enrol a passkey/security key; ES256, attestation `none`                                                                                                                                       |
+| `webauthn.authOptions` / `authVerify`                  | —                         | Passwordless login; same session tokens, `mfa: true`                                                                                                                                          |
+| `webauthn.list` / `remove`                             | session                   | Ids only; remove retires a lost/stolen authenticator                                                                                                                                          |
+| `kyc.submit`                                           | `identity:write`          | Own record only; **grants nothing**; no client `providerRef`                                                                                                                                  |
+| `kyc.status`                                           | `identity:read`           | Own records + effective tier; never `providerRef` / `reviewedBy`                                                                                                                              |
+| `kyc.pending`                                          | `admin:compliance`        | Operator review queue, oldest first                                                                                                                                                           |
+| `kyc.approve` / `kyc.reject`                           | `admin:compliance` + MFA  | **Approval grants custodial access**                                                                                                                                                          |
+| `kyc.storeDocument`                                    | `admin:compliance` + MFA  | Encrypted vault put; **meta only** on wire; needs `IDENTITY_KYC_DOC_KEY`                                                                                                                      |
+| `kyc.listDocuments`                                    | `admin:compliance`        | Meta list for one subject — **never bytes**                                                                                                                                                   |
+| `kyc.bindDocument`                                     | `admin:compliance` + MFA  | Opaque vault id → pending `provider_ref` (same-user only)                                                                                                                                     |
+| `rank.get`                                             | `identity:read`           | Rank, XP, XP to next tier                                                                                                                                                                     |
+| `rank.perks`                                           | `identity:read`           | **The hot path** — every module calls this                                                                                                                                                    |
+| `rank.awardXp`                                         | service                   | Modules award XP here, never by writing `rank_state`                                                                                                                                          |
+| `apiKeys.exchange`                                     | public                    | Long-lived key → short JWT; non-empty `domain_whitelist` binds Origin                                                                                                                         |
+| `apiKeys.create` / `list` / `revoke`                   | `identity:write` / `read` | Key returned once, never retrievable                                                                                                                                                          |
+| `compliance.freezeIdentity`                            | `admin:compliance`        | Freeze user + revoke sessions + sub-accounts + API keys                                                                                                                                       |
+| `compliance.unfreezeIdentity`                          | `admin:compliance`        | Thaw user only — does **not** un-revoke keys or books                                                                                                                                         |
+| `subAccounts.create` / `list` / `revoke`               | `identity:write` / `read` | Soft-disable only (no balance sweep)                                                                                                                                                          |
+| `subAccounts.assertTransferDoor`                       | `identity:write`          | Ownership-at-the-door for transfer (no default to primary)                                                                                                                                    |
+| `affiliates.attribute`                                 | `identity:write`          | Referral edge; cycle/self/depth refused                                                                                                                                                       |
+| `affiliates.myReferrer` / `myAncestors` / `myAccruals` | `identity:read`           | Self-only tree + durable accruals                                                                                                                                                             |
+| `affiliates.freeze` / `unfreeze` / `freezes`           | `admin:write` / `read`    | Freeze ledger honesty (no pay)                                                                                                                                                                |
+| `affiliates.treeStatus` / `node` / `members`           | `admin:read`              | Admin tree structure + roster; `treeStatus` adds rate-authority published flag (no rate invent)                                                                                               |
+| `affiliates.accrueDryRun` / `accrue`                   | `admin:read` / `write`    | Accrual tree under rate authority (D26-P1-O2); **no ledger**; durable accrue = owner-published tiers only (per-call invent refused); dry-run may simulate; optional `sourceModule` (fee pool) |
+| `affiliates.payout`                                    | `admin:write`             | Pays when §8 rates + ledger wired; refuse-closed otherwise; sweeps row `sourceModule` fee pool                                                                                                |
+| `waitlist.enroll`                                      | —                         | Drop 0 email capture; optional `referralCode`. Flag off / unwired → named refuse, no silent enroll. **No rewards.**                                                                           |
+| `waitlist.position`                                    | —                         | Place in FIFO line + referred count by code. Gated by `referral.queue`.                                                                                                                       |
+| `waitlist.list`                                        | `admin:read`              | Operator FIFO list (includes email). Gated by `waitlist.enabled`.                                                                                                                             |
 
-HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active).
+HTTP: `GET /health` · `GET /ready` (reports whether argon2id is active) · S2S sub-account ownership on internal HTTP.
 
 ### KYC — what it gates, and what it must never gate
 
@@ -52,13 +68,19 @@ These procedures exist for the **custodial** side only — the modules whose `JU
 
 There is **no verification-provider integration** here. Approval is an operator action against `kyc_records`. A provider webhook can land later as one more way to move a record off `pending`, without changing what approval means.
 
+**`provider_ref` is never client-written.** `kyc.submit` accepts only `tier` + `jurisdiction`. A free-text `providerRef` from the user was a PII side-channel into the pointer column (§10: pointer never holds name/DOB/docs). Opaque refs are minted by the encrypted document store (or operator tools) when that store lands; until then the column stays null and `kyc.status` never returns it.
+
+**Encrypted document store (mechanism):** table `identity.kyc_documents` holds AES-256-GCM ciphertext under `IDENTITY_KYC_DOC_KEY`. Opaque ids are what `provider_ref` may point at. No user-facing procedure returns document bytes. Reads are **principal-bound** (`getFor` owner|compliance) — there is no free get-by-id (cross-user PII read is refused as not-found). Operator procedures: `kyc.storeDocument` / `listDocuments` / `bindDocument`. Boot without the key leaves the vault unwired and those procedures refuse closed. Live vendor webhook remains Class X.
+
+**TOTP secret at rest:** `users.totp_secret` is AES-256-GCM sealed (`enc:v1:…`) under `IDENTITY_TOTP_SECRET_KEY` (32-byte base64 or 64-char hex). Enrol refuses without the key; prod boot refuses if missing. Dual-read still accepts legacy unprefixed plaintext until re-enrol.
+
 ### Step-up
 
 `defaultScopes()` deliberately withholds `trade:withdraw` — "added only after a step-up challenge". `auth.stepUp` **is** that challenge, and before it existed no session in the OS could reach a withdrawal endpoint at all.
 
-A live session plus a fresh TOTP code buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no TOTP is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
+A live session plus a fresh TOTP code, a single-use recovery code, **or** a WebAuthn step-up assertion (after `auth.stepUpOptions`) buys an access token that is weaker than a normal one in three ways, all of which matter: it lasts **five minutes**, it is bound to the session that asked for it, and it is only issued to an account that actually has a second factor. An account with no second factor is refused with `auth.mfa_not_enrolled` — `FORBIDDEN`, not `UNAUTHORIZED`, because retrying with a code cannot help and the client needs to send the user to enrolment instead.
 
-> **Known gap, not introduced here:** a TOTP code is accepted anywhere in its validity window, so a captured code can be replayed within it. That is true of `auth.login` too and is platform-wide; fixing it means tracking a last-used counter per user and belongs in its own PR rather than being solved on one endpoint.
+**TOTP anti-replay:** each successful TOTP use (enrol confirm, login, step-up) records the matched counter in `users.totp_last_step`. A second attempt with the same or earlier step is refused as `auth.mfa_invalid`, so a captured code cannot be replayed inside the ±1-step window.
 
 ---
 
@@ -84,9 +106,11 @@ Modules may still call `rank.awardXp` directly — it is a `serviceProcedure` on
 
 ## Ledger
 
-**This service holds no balances and posts no ledger transactions.**
+**This service holds no balances of its own.** Sub-account revoke still soft-disables only — never posts, never sweeps (same rule as bank space archive). `sub_accounts.id` is what the ledger's `subaccount` owner type keys on.
 
-It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ one. The only connection to money is that `sub_accounts.id` is what the ledger's `subaccount` owner type keys on. `subAccounts.revoke` soft-disables only — it never posts a ledger transaction and never sweeps balances (same rule as bank space archive).
+**Affiliate payout is the one ledger write path.** When `LEDGER_URL` is set and the owner has published fee-share tiers (`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` — D26-P0-02 hops 0–2 at 0.10/0.05/0.02 in `.env.example`), `affiliates.payout` posts through existing ledger recipes (`sweepFeesToRewards` → `rewardPay`). No recipe is invented here. Without a ledger client the procedure refuse-closes (`affiliate.payout.ledger_unwired`) and moves nothing. Compose wires `LEDGER_URL: http://svc-ledger:4001` (same pattern as svc-market); the schema stays optional with no localhost default so a host that omits the URL still refuses up front.
+
+**D26-P1-O2 accrual authority:** durable `affiliates.accrue` walks the referral tree only under owner-published law — unset → `affiliate.accrual.rates_unset`; per-call tiers → `affiliate.accrual.invent_refused`. Dry-run may simulate tiers. No second money book.
 
 ---
 
@@ -102,9 +126,9 @@ It is one of the three shared systems (Doctrine §0.3) but it is the _identity_ 
 
 **TOTP — RFC 6238, implemented here.** ~60 lines of well-specified arithmetic, which lets the tests run the RFC's own published vectors. A dependency in the authentication path we cannot check against the spec is one we would be trusting blind. Constant-time comparison; ±1 step drift window.
 
-**Enrolment is two-step.** The secret is not persisted until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out.
+**Enrolment is two-step.** The secret is not written to `users.totp_secret` until a valid code proves the user actually scanned it — otherwise abandoning enrolment halfway locks you out. Pending state (secret hash + recovery hashes, 15-minute TTL, single-use take) lives in Postgres (`identity.totp_pending_enrolments`) so multi-pod start/confirm works; the base32 secret is never stored pending.
 
-**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in-process with a five-minute TTL — multi-instance identity needs a shared store later; the ceremony does not.
+**WebAuthn — ES256 only, attestation `none`, implemented here.** Same rationale as TOTP: the authentication path is not a place for an opaque dependency. Registration stores `{credentialId, publicKey, counter, transports}` in `users.webauthn_creds`. Assertion verifies the signature, advances the counter (cloned-authenticator detection), and issues a normal session with `mfa: true`. Challenges live in Postgres (`identity.webauthn_challenges`, five-minute TTL, single-use take) so multi-pod ceremonies complete when options were issued on another instance. In-memory `ChallengeStore` remains for pure unit tests without SQL.
 
 Kill-switch: `WEBAUTHN_ENABLED=false`. Relying party: `WEBAUTHN_RP_ID`, `WEBAUTHN_RP_NAME`, `WEBAUTHN_ORIGIN` (comma-separated origins).
 
@@ -112,7 +136,7 @@ Kill-switch: `WEBAUTHN_ENABLED=false`. Relying party: `WEBAUTHN_RP_ID`, `WEBAUTH
 
 > The revocation is committed in a _separate_ statement, outside the transaction that detected it. Throwing from inside would roll it back, and the thief's replay would revoke nothing. There is a test for exactly this.
 
-**API keys cannot withdraw.** `trade:withdraw`, `admin:treasury`, and `bank:card` are refused on key creation by the service **and** by a database CHECK constraint. A leaked bot key must not be able to move value off the platform (§9).
+**API keys cannot withdraw.** `trade:withdraw`, `admin:treasury`, `bank:card`, and `pay:payout` are refused on key creation by the service **and** by a database CHECK constraint (`INTERACTIVE_ONLY_SCOPES`). A leaked bot key must not be able to move value off the platform (§9).
 
 **Handles are citext.** `Handle` and `handle` are the same account. Impersonation by casing is a real attack.
 

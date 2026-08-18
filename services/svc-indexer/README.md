@@ -48,7 +48,9 @@ HTTP: `GET /health` (liveness) · `GET /ready`.
 
 `chain` is deliberately live rather than a copy of what the last sync saw: the question is "how stale is this _right now_", and a cached answer to that is a contradiction. `book` still carries `asOfHeight`/`asOfHash`, so a client holding both knows exactly which chain state the ladder in front of it describes.
 
-**`/ready` returns 503 when the indexer is halted**, not only when the database is down. A halted indexer has hit a reorg deeper than its retained history: it knows its book is wrong and cannot repair it. Leaving the rotation is the correct response — being unreachable costs a user nothing they cannot get from any node, and a wrong price costs them a trade.
+**`/ready` returns 503 when the book cannot be trusted as live** — a deep-reorg halt, a serving-refuse `lastError` (chain door or startHeight), or a down database. `/health` stays liveness. A load balancer that probes `/ready` must not keep sending traffic at procedures that all 503. Compose healthchecks currently probe `/health`; do not read that as "ready is optional."
+
+**Data procedures refuse on the same signals.** `/ready` only protects callers that go through a load balancer that actually probes readiness. So `book` / `fills` / `accountFills` / `position` / `positions` / `markets` return `SERVICE_UNAVAILABLE` while `status` and `health` keep answering — `status.halted` / `status.lastError` is how a caller learns why. A client that only hits `book` cannot silently render a dead-branch price or an empty book that is really "we never indexed." Transient `indexer.parent_unlink` does **not** refuse: the last canonical projection is still that block.
 
 **Money is a decimal string on the wire and a scaled bigint in memory**, everywhere. `formatAmount` is the only thing in the router that renders a price. Nothing constructs a `number` from an amount: an order book is nothing but sums, and a float sums `0.1 + 0.2` to something that is not `0.3`. There is a test that round-trips 18 decimal places through Postgres and back.
 
@@ -197,7 +199,7 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 
 ## Tests
 
-`pnpm --filter @intafaced/svc-indexer test` — **132 tests.** 79 need nothing at all; 27 need Postgres; 26 need a chain. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true.
+`pnpm --filter @intafaced/svc-indexer test` — hermetic suite every run (memory store + mount + sovereignty + always-on chain refusals); Postgres and live-chain suites add more when their deps answer. Every dependency-backed suite skips cleanly when its dependency is unreachable, and **hard-fails on CI**, where `REQUIRE_POSTGRES` and `REQUIRE_EVM_CHAIN` are set. A silently skipped proof is how "we tested the reorg" quietly stops being true. Do not treat a stale headcount in this paragraph as the Done bar — re-run the suite.
 
 | File                                | Covers                                                                                                                                                  |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -207,9 +209,14 @@ Reversal: `drizzle/0000_indexer_init.down.sql`. It strands nothing — every row
 | `chain/source.test.ts`              | Port validation — malformed hashes, duplicate log indexes, lossy prices, negative entry prices — and that `MemoryChainSource` hashes deterministically  |
 | `chain/evm/decode.test.ts`          | **The money arithmetic, hermetically.** uint256-is-the-Amount, eighteen nines, 10^30, the `numeric(38,18)` bound, market decoding, unknown topics       |
 | `chain/evm/abi.test.ts`             | The hand-written ABI against the compiled artefact — signature, topic0, **and the `indexed` flags topic0 agreement does not imply**; artefact integrity |
+| `chain/evm/availability.test.ts`    | **Always-on classifiers** — nested `ECONNREFUSED`, `isBlockNotFound`, zero address — no RPC required                                                    |
+| `chain/evm/source.unit.test.ts`     | **Always-on refusals** — empty RPC / zero venue refuse construct; dead endpoint `head()` throws `chain_unreachable`, never null                         |
 | `chain/evm/source.live.test.ts`     | The adapter on a real chain: parent links, real logs, 18 decimals end to end, address filtering, and every refusal — including the by-block-hash fetch  |
 | `chain/evm/reorg.live.test.ts`      | **A real chain, really forked**, on both stores: orphaned rows gone, tip-replacement caught, idempotent restart, deep-fork halt, `behindBy` staleness   |
 | `router.mount.test.ts`              | The mount boundary over real `createEdgeContext` headers: anonymous reads succeed, a forged principal confers nothing, `status` surfaces a halt         |
+| `d26-p1-i3-done-bar.test.ts`        | **Fastify door** — `GET /ready` 503 with named halt/lastError reason; `GET /trpc/*` refuses dead-branch books (not helper-only)                         |
+| `indexer.parent-unlink.test.ts`     | Mid-read parent unlink throws once (`indexer.parent_unlink`) — never burns a green batch with a frozen cursor                                           |
+| `ready.test.ts`                     | `/ready` leaves rotation on halt **and** serving-refuse lastError; parent-unlink stays ready                                                            |
 | `sovereignty.test.ts`               | §22 for every region × tier with a custodial control, and the §16.10 custody assertions listed under **Ledger**                                         |
 
 **Two implementations is the point.** A single implementation tested against itself proves the tests match the code, not that the code matches the design. The memory store is short enough to check by eye; `unwindTo` is a `DELETE` and `prune` is a `DELETE` with a correlated subquery — the kind of SQL that looks right and is off by one row.
@@ -242,7 +249,9 @@ That last mutation is the point of doing this at all. The by-block-hash fetch is
 
 ## Kill-switch
 
-`indexer.ingest` in the admin console, or `INDEXER_INGEST_ENABLED=false`.
+`INDEXER_INGEST_ENABLED=false` at process boot (or a future admin path that calls the in-process `setIngestEnabled` export).
+
+**Honesty note (2026-08-09):** the admin console registry lists `indexer.ingest`, but today that flag is **env-at-boot only** — flipping a chip in admin does not reach the running process. `setIngestEnabled` is exported for that wire; edge/admin have not called it yet. Do not claim a live console toggle until that wire exists.
 
 **Effect when off:** the ingest loop stops advancing; `status.ingestEnabled` reports it. Every read keeps serving what is already projected.
 

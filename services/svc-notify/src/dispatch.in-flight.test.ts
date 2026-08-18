@@ -92,7 +92,7 @@ describe('a lease held by another replica keeps the message alive', () => {
     const held = await deliveries.claim(note.id, 'inapp', 3);
     expect(held.claimed).toBe(true);
     if (!held.claimed) return;
-    await deliveries.settle({ id: held.id, status: 'accepted', attempted: true, reference: 'inapp-1' });
+    await deliveries.settle({ id: held.id, attempt: held.attempt, status: 'accepted', attempted: true, reference: 'inapp-1' });
 
     const report = await dispatcherOver(deliveries).dispatch(note);
 

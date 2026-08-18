@@ -32,6 +32,68 @@ export class ReorgTooDeepError extends Error {
   }
 }
 
+/**
+ * Head is still on the chain, but the next block does not parent-link to it.
+ * Usually a mid-read reorg race (header and successor observed from different
+ * branches). Never a silent batch spin.
+ */
+export class ParentUnlinkError extends Error {
+  readonly code = 'indexer.parent_unlink' as const;
+
+  constructor(
+    readonly headHeight: number,
+    readonly headHash: string,
+    readonly nextHeight: number,
+    readonly nextParentHash: string,
+  ) {
+    super(
+      `Block at height ${nextHeight} does not parent-link to our head ${headHeight} (${headHash.slice(0, 10)}…): ` +
+        `observed parent ${nextParentHash.slice(0, 10)}…. Will not project it; next pass will re-probe.`,
+    );
+    this.name = 'ParentUnlinkError';
+  }
+}
+
+/**
+ * Cold start configured past the live tip. An empty projection that claims
+ * caught-up is a lie — refuse with a typed error so status/lastError name it.
+ */
+export class StartHeightAboveTipError extends Error {
+  readonly code = 'indexer.start_height_above_tip' as const;
+
+  constructor(
+    readonly startHeight: number,
+    readonly tipHeight: number,
+  ) {
+    super(
+      `startHeight ${startHeight} is above chain tip ${tipHeight} — empty projection would look healthy; ` +
+        `lower INDEXER_START_HEIGHT or wait for the chain.`,
+    );
+    this.name = 'StartHeightAboveTipError';
+  }
+}
+
+/**
+ * Cold start cannot read the configured start block even though the tip is at
+ * or above that height. Common shapes: non-archive RPC pruned history, or
+ * INDEXER_START_HEIGHT below the chain's real first height (MemoryChainSource
+ * with a non-zero start). Silent `caughtUp` + empty store would look healthy.
+ */
+export class StartHeightUnavailableError extends Error {
+  readonly code = 'indexer.start_height_unavailable' as const;
+
+  constructor(
+    readonly startHeight: number,
+    readonly tipHeight: number,
+  ) {
+    super(
+      `startHeight ${startHeight} is at or below chain tip ${tipHeight}, but blockAt(${startHeight}) returned nothing — ` +
+        `empty projection would look healthy; raise INDEXER_START_HEIGHT to a height the node still serves, or use an archive endpoint.`,
+    );
+    this.name = 'StartHeightUnavailableError';
+  }
+}
+
 export interface IndexerDeps {
   readonly source: ChainSource;
   readonly store: ProjectionStore;
@@ -116,8 +178,11 @@ export class Indexer {
   /**
    * Why the last pass did not get anywhere, if it did not.
    *
-   * Cleared by the next pass that completes, so it describes the present rather
-   * than an incident from an hour ago that has since resolved itself.
+   * Cleared by the next pass that completes *without* being halted, so it
+   * describes the present rather than an incident from an hour ago that has
+   * since resolved itself. A pass that returns `idle: 'halted'` does NOT clear
+   * it: the deep-reorg (or other throw) that set the halt is still why the
+   * cursor is frozen, and wiping it left `status` with halt but no failure.
    */
   get lastError(): SyncFailure | null {
     return this.#lastError;
@@ -140,7 +205,11 @@ export class Indexer {
   async sync(): Promise<SyncResult> {
     try {
       const result = await this.#sync();
-      this.#lastError = null;
+      // Idle-halted is a successful return from #sync, not recovery. Keep the
+      // throw that put us here so status.lastError still names it.
+      if (result.idle !== 'halted') {
+        this.#lastError = null;
+      }
       return result;
     } catch (err) {
       const code = typeof (err as { code?: unknown }).code === 'string' ? (err as { code: string }).code : null;
@@ -164,14 +233,36 @@ export class Indexer {
     let caughtUp = false;
 
     for (let step = 0; step < batchSize; step++) {
+      // Re-check kill mid-batch so a flip during a long catch-up does not finish
+      // applying the remaining steps of this pass (full-blocks only, not mid-block).
+      if (!this.deps.ingestEnabled()) {
+        const h = await store.head();
+        return {
+          blocksApplied,
+          blocksOrphaned,
+          reorgs,
+          head: h,
+          caughtUp,
+          idle: 'disabled',
+        };
+      }
+
       const head = await store.head();
 
       // Cold start.
       if (!head) {
         const first = await source.blockAt(startHeight);
         if (!first) {
-          caughtUp = true;
-          break;
+          // startHeight above the live tip must not look "caught up + healthy empty".
+          // chainHead was read at pass start; if it sits below startHeight the
+          // operator misconfigured INDEXER_START_HEIGHT (or the RPC is truncated).
+          if (chainHead.height < startHeight) {
+            throw new StartHeightAboveTipError(startHeight, chainHead.height);
+          }
+          // Dual lie: tip is at/above startHeight but the start block itself is
+          // missing (pruned node, or startHeight below the source's first height).
+          // Do not claim caught-up with an empty store.
+          throw new StartHeightUnavailableError(startHeight, chainHead.height);
         }
         await store.applyBlock(first);
         blocksApplied++;
@@ -200,8 +291,17 @@ export class Indexer {
       // chain reorged between the two reads, or the adapter is inconsistent.
       // Both are handled the same way and neither is projected: find the fork.
       if (next.parentHash !== head.hash) {
-        blocksOrphaned += await this.#repair(head);
+        const orphaned = await this.#repair(head);
+        blocksOrphaned += orphaned;
         reorgs++;
+        // When head is still canonical, repair orphans nothing. Spinning the
+        // rest of the batch would re-read the same pair, count phantom reorgs,
+        // clear lastError on a "successful" pass, and leave /ready green while
+        // the cursor freezes. Stop this pass and surface a typed failure so the
+        // next poll retries once the mid-read race (or bad adapter) clears.
+        if (orphaned === 0) {
+          throw new ParentUnlinkError(head.height, head.hash, next.height, next.parentHash);
+        }
         continue;
       }
 
@@ -281,8 +381,27 @@ export class Indexer {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = null;
   }
+
+  /**
+   * Stop the poll timer and wait until the in-flight sync (if any) finishes.
+   * SIGTERM must call this before `db.close()` — otherwise a mid-pass apply can
+   * see the connection drop under it.
+   */
+  async stopAndDrain(timeoutMs = 30_000): Promise<void> {
+    this.stop();
+    const deadline = Date.now() + timeoutMs;
+    while (this.#running) {
+      if (Date.now() >= deadline) {
+        throw new Error(`indexer still running after ${timeoutMs}ms drain`);
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  }
 }
 
 function idleResult(idle: 'disabled' | 'no-chain' | 'halted', head: StoredBlock | null): SyncResult {
-  return { blocksApplied: 0, blocksOrphaned: 0, reorgs: 0, head, caughtUp: true, idle };
+  // no-chain: nothing to catch up to. disabled/halted: do not claim caught-up —
+  // the cursor may still lag the tip (mid-batch kill already returns local caughtUp).
+  const caughtUp = idle === 'no-chain';
+  return { blocksApplied: 0, blocksOrphaned: 0, reorgs: 0, head, caughtUp, idle };
 }

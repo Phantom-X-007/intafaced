@@ -58,7 +58,10 @@ var schemas = {
   ohlcv: wire.ohlcv,
   order: wire.order,
   orders: wire.orders,
-  balances: wire.balances
+  balances: wire.balances,
+  /* Protocol-plane health: custodial must be literal false (sovereignty). */
+  dexHealth: wire.dexHealth,
+  protocolHealth: wire.protocolHealth
 };
 
 /**

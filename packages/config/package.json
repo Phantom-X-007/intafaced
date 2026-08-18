@@ -33,6 +33,26 @@
     "./fiat": {
       "types": "./dist/fiat.d.ts",
       "default": "./dist/fiat.js"
+    },
+    "./network-signal": {
+      "types": "./dist/network-signal.d.ts",
+      "default": "./dist/network-signal.js"
+    },
+    "./compliance-queue": {
+      "types": "./dist/compliance-queue.d.ts",
+      "default": "./dist/compliance-queue.js"
+    },
+    "./freeze-authority": {
+      "types": "./dist/freeze-authority.d.ts",
+      "default": "./dist/freeze-authority.js"
+    },
+    "./money-kill-surface": {
+      "types": "./dist/money-kill-surface.d.ts",
+      "default": "./dist/money-kill-surface.js"
+    },
+    "./marketing-language": {
+      "types": "./dist/marketing-language.d.ts",
+      "default": "./dist/marketing-language.js"
     }
   },
   "scripts": {

@@ -26,6 +26,18 @@ export class CommissionError extends Error {
   }
 }
 
+/**
+ * Which module's houseFees pool the fee landed in (ledger `module` slug).
+ *
+ * Required on every durable accrual so Slice C payout sweeps the pool that
+ * actually holds the fee — not a hardcoded identity default. See payout-engine
+ * AFFILIATE_PAYOUT_SOURCE_MODULE residual note (tracker ops.affiliates).
+ */
+export const AFFILIATE_FEE_SOURCE_MODULE_RE = /^[a-z][a-z0-9_-]{0,31}$/;
+
+/** Fallback only for rows written before source_module existed. Prefer explicit. */
+export const DEFAULT_AFFILIATE_FEE_SOURCE_MODULE = 'identity';
+
 /** One fee event that may generate commission (already settled elsewhere). */
 export type FeeEvent = {
   readonly feeEventId: string;
@@ -34,6 +46,11 @@ export type FeeEvent = {
   readonly feeAmount: string;
   readonly asset: string;
   readonly at: Date;
+  /**
+   * Module fee pool that received this fee (e.g. "trade", "pay").
+   * Omitted → DEFAULT_AFFILIATE_FEE_SOURCE_MODULE (legacy operator path only).
+   */
+  readonly sourceModule?: string;
 };
 
 export type TierRate = {
@@ -53,7 +70,24 @@ export type CommissionRow = {
   readonly commissionAmount: string;
   readonly asset: string;
   readonly accruedAt: Date;
+  /** Module fee pool to sweep at payout (ledger houseFees module). */
+  readonly sourceModule: string;
 };
+
+/** Validate + normalise a producer module slug. Never invent a fee pool. */
+export function assertAffiliateSourceModule(raw: string | null | undefined): string {
+  const t = (raw ?? '').trim();
+  if (!t) {
+    throw new CommissionError('sourceModule is required — name the module fee pool that holds this fee', 'commission.invalid');
+  }
+  if (!AFFILIATE_FEE_SOURCE_MODULE_RE.test(t)) {
+    throw new CommissionError(
+      `sourceModule "${t}" must match ${AFFILIATE_FEE_SOURCE_MODULE_RE} (ledger module slug)`,
+      'commission.invalid',
+    );
+  }
+  return t;
+}
 
 const AMOUNT_RE = /^(0|[1-9]\d*)(\.\d{1,18})?$/;
 const RATE_RE = /^(0(\.\d{1,18})?|1(\.0{1,18})?)$/;
@@ -119,6 +153,9 @@ export function accrueCommission(input: {
   }
   const maxDepth = input.maxDepth ?? DEFAULT_MAX_REFERRAL_DEPTH;
   const chain = ancestors(input.parent, input.fee.userId, maxDepth);
+  // Pool provenance: prefer the fee event's producer module; never invent rates,
+  // and never leave the column blank (payout would sweep the wrong pot).
+  const sourceModule = assertAffiliateSourceModule(input.fee.sourceModule ?? DEFAULT_AFFILIATE_FEE_SOURCE_MODULE);
   const rows: CommissionRow[] = [];
   for (const tier of input.tiers) {
     if (!Number.isInteger(tier.hop) || tier.hop < 0) {
@@ -140,6 +177,7 @@ export function accrueCommission(input: {
       commissionAmount,
       asset: input.fee.asset,
       accruedAt: input.fee.at,
+      sourceModule,
     });
   }
   return rows;

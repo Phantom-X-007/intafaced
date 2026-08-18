@@ -25,6 +25,7 @@ describe('funding-settlement planner', () => {
       periodId: 'm1:t0',
       marketId: 'm1',
       rate: '0.0001',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [pos('L1', 'long'), pos('L2', 'long'), pos('S1', 'short', B), pos('S2', 'short', B)],
     });
     expect(legs).toHaveLength(4);
@@ -35,7 +36,7 @@ describe('funding-settlement planner', () => {
     // `opened_at` is not unique, so two positions opened in one tick had no
     // stable order between queries. Under the old loop-counter key that alone
     // re-posted the entire plan on a replay.
-    const input = { periodId: 'm1:t0', marketId: 'm1', rate: '0.0001' };
+    const input = { periodId: 'm1:t0', marketId: 'm1', rate: '0.0001', maxAbsRate: '1' };
     const forward = planFundingSettlement({ ...input, positions: [pos('L1', 'long'), pos('S1', 'short', B), pos('S2', 'short', B)] });
     const reversed = planFundingSettlement({ ...input, positions: [pos('S2', 'short', B), pos('S1', 'short', B), pos('L1', 'long')] });
 
@@ -52,6 +53,7 @@ describe('funding-settlement planner', () => {
         periodId: 'm1:t0',
         marketId: 'm1',
         rate: '0.0001',
+        maxAbsRate: '1', // test fixture only — not product law (D2)
         positions: [pos('L1', 'long'), pos('S1', 'short', B), pos('S1', 'short', B)],
       }),
     ).toThrow(/distinct ledger keys/);
@@ -64,27 +66,24 @@ describe('funding-settlement planner', () => {
   });
 
   /**
-   * KNOWN RESIDUAL (funding period membership) — prove, do not fix.
-   *
-   * The loader returns positions open *now*, not as of the period. A position
-   * opened between a failed tick and its replay is a new pair with a new key,
-   * so the ledger posts an extra leg. applyFundingNets is idempotent on
-   * (position, period) and records only the first net for the original payer —
-   * ledger-vs-margin divergence. Product law needed for membership; this test
-   * freezes the arithmetic of the residual so a silent "fix" cannot land.
+   * Planner honesty: handed a larger book, it plans more legs. Membership is
+   * the tick's job (`freezeMembership`); this pure function must not invent a
+   * filter, and must not silently drop ids it was given.
    */
-  it('documents membership residual: a new position mid-period adds a new ledger key for the same period', () => {
+  it('plans every position it is handed — membership filtering is not this module', () => {
     const periodId = 'm1:period-membership';
     const first = planFundingSettlement({
       periodId,
       marketId: 'm1',
       rate: '0.0001',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [pos('L1', 'long'), pos('S1', 'short', B)],
     });
     const afterOpen = planFundingSettlement({
       periodId,
       marketId: 'm1',
       rate: '0.0001',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [pos('L1', 'long'), pos('L_new', 'long'), pos('S1', 'short', B)],
     });
     expect(first).toHaveLength(1);
@@ -103,6 +102,7 @@ describe('funding-settlement planner', () => {
       periodId: 'm1:t0',
       marketId: 'm1',
       rate: '0',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [
         {
           positionId: 'p1',
@@ -130,6 +130,7 @@ describe('funding-settlement planner', () => {
       periodId: 'm1:2026-07-31T00:00:00Z',
       marketId: 'm1',
       rate: '0.0001',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [
         {
           positionId: 'plong',
@@ -162,6 +163,7 @@ describe('funding-settlement planner', () => {
       periodId: 'm1:t1',
       marketId: 'm1',
       rate: '-0.0001',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [
         {
           positionId: 'plong',
@@ -190,6 +192,7 @@ describe('funding-settlement planner', () => {
       periodId: 'm1:t2',
       marketId: 'm1',
       rate: '0.0001',
+      maxAbsRate: '1', // test fixture only — not product law (D2)
       positions: [
         {
           positionId: 'plong',
@@ -202,5 +205,32 @@ describe('funding-settlement planner', () => {
       ],
     });
     expect(legs).toEqual([]);
+  });
+  /**
+   * C12 / BUILD-STOP D2 done bar: absurd rate cannot charge.
+   * Fixture max is NOT product law — only proves refuse-before-legs.
+   */
+  it('rate 1000000 refuses plan — no legs (would have been 1e6 × notional)', () => {
+    expect(() =>
+      planFundingSettlement({
+        periodId: 'm1:absurd',
+        marketId: 'm1',
+        rate: '1000000',
+        maxAbsRate: '1',
+        positions: [pos('L1', 'long'), pos('S1', 'short', B)],
+      }),
+    ).toThrow(expect.objectContaining({ code: 'trade.funding_rate_exceeds_max' }));
+  });
+
+  it('unset maxAbsRate refuses any non-zero rate (fail-closed)', () => {
+    expect(() =>
+      planFundingSettlement({
+        periodId: 'm1:unbound',
+        marketId: 'm1',
+        rate: '0.0001',
+        maxAbsRate: null,
+        positions: [pos('L1', 'long'), pos('S1', 'short', B)],
+      }),
+    ).toThrow(expect.objectContaining({ code: 'trade.funding_rate_bound_unconfigured' }));
   });
 });

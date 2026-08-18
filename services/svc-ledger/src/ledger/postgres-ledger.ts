@@ -269,9 +269,9 @@ export class PostgresLedger implements LedgerClient {
         ownerId: r.owner_id,
         assetId: r.asset_id,
         kind: r.kind as AccountRef['kind'],
-        // Round-trips the sub-identity, so a caller listing balances can tell a
-        // withdrawal hold from an order's reservation.
-        ...(r.purpose ? { purpose: r.purpose } : {}),
+        // Empty string for unpurposed available — never omit, or two holds
+        // keyed without purpose collapse into one wire identity.
+        purpose: r.purpose,
       },
       accountId: r.id,
       amount: parseAmount(r.balance),

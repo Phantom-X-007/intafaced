@@ -69,6 +69,7 @@ import {
   type SessionFixture,
 } from './data-tools.js';
 import type { TradeDataPlane } from './grounded.js';
+import { navigatorDeclaredTools } from './guardrail.js';
 import { navigatorTierGate, type NavigatorTierLaw } from './tier-gate.js';
 
 /** The agent id the navigator guardrail is registered under. */
@@ -128,7 +129,8 @@ export type NavigatorRunMetering = {
   readonly settlements: readonly NavigatorRunSettlement[];
 };
 
-export type NavigatorRunRefuseReason = 'trade_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'no_grounded_answer';
+export type NavigatorRunRefuseReason =
+  'trade_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'tool_not_declared' | 'no_grounded_answer';
 
 export type NavigatorRunOk = {
   readonly status: 'ok';
@@ -255,6 +257,21 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
     };
   }
 
+  // Product allowlist is Stage-1 law. A caller-published tier matrix that names
+  // undeclared tools must not open a metered session to discover the guardrail
+  // will refuse every ask. Mixed runs (one allowlisted ask + off-list noise)
+  // still reach `runtime.act` so the undeclared attempt is audited (#1114).
+  const allowlisted = new Set(navigatorDeclaredTools());
+  if (!input.asks.some((ask) => allowlisted.has(ask.tool.trim()))) {
+    return {
+      status: 'refuse',
+      reason: 'tool_not_declared',
+      userMessageKey: 'agents.navigator.unavailable',
+      unanswered: [],
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
   // If the tier grants none of the asked tools, every ask would refuse inside
   // the session for a reason already knowable outside it. Refuse closed, free.
   const granted = new Set(tier.allowedTools);
@@ -292,6 +309,7 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
               plane: input.plane,
               tierLaw: input.tierLaw,
               userTier: input.userTier,
+              requesterUserId: input.userId,
               now,
               quote: ask.quote ?? null,
               markets: ask.markets ?? null,

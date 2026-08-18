@@ -13,9 +13,16 @@ import type { OrderSide } from '../spot/types.js';
  * `progressPct` field on the parent. Those would be the fabrication surface.
  */
 
-export type AlgoKind = 'twap';
+export type AlgoKind = 'twap' | 'vwap' | 'pov';
 
 export type AlgoStatus = 'active' | 'paused' | 'cancelled' | 'completed' | 'halted';
+
+/**
+ * Why the wall schedule was stretched past the original plan from `startedAt`.
+ * User pause and tick outage share the same re-space mechanics; the trader is
+ * owed the distinction (ADR 2026-08-08).
+ */
+export type AlgoScheduleStretchReason = 'user_pause' | 'tick_outage';
 
 /** Why a slice did not become a fill — surfaced, never silent. */
 export type AlgoMissCode =
@@ -26,7 +33,8 @@ export type AlgoMissCode =
   | 'trade.algo_insufficient_balance'
   | 'trade.algo_market_closed'
   | 'trade.algo_principal_unavailable'
-  | 'trade.algo_child_refused';
+  | 'trade.algo_child_refused'
+  | 'trade.algo_no_volume';
 
 export interface AlgoChildRef {
   readonly sliceIndex: number;
@@ -54,7 +62,7 @@ export interface TwapParent {
   readonly marketId: string;
   readonly symbol: string;
   readonly side: OrderSide;
-  readonly kind: 'twap';
+  readonly kind: AlgoKind;
   /** Total quantity the schedule intends to emit across all slices. Not a balance. */
   readonly totalQty: Amount;
   readonly durationMs: number;
@@ -67,9 +75,35 @@ export interface TwapParent {
   readonly limitPrice: Amount | null;
   readonly status: AlgoStatus;
   readonly createdAt: Date;
+  /** Immutable original start. Never re-derived as a due-time basis after stretch. */
   readonly startedAt: Date;
+  /**
+   * Earliest instant the next slice may be placed.
+   * Re-spaced from the actual place/miss/resume/outage event — not from
+   * `startedAt + index * interval` (ADR 2026-08-08: the interval is the promise).
+   */
+  readonly nextDueAt: Date;
+  /**
+   * Projected wall-clock end of the remaining schedule after last re-space.
+   * Updated on create, resume, place, miss, and tick-outage stretch.
+   */
+  readonly projectedEndsAt: Date;
+  /**
+   * Last reason the schedule was stretched past wall-clock from `startedAt`.
+   * Null until the first pause-resume or tick outage.
+   */
+  readonly scheduleStretchReason: AlgoScheduleStretchReason | null;
   readonly pausedAt: Date | null;
   readonly haltReason: string | null;
+  /**
+   * Market lot at create — POV snaps live qty to this. Null on pre-VWAP rows.
+   */
+  readonly lotSize: Amount | null;
+  /**
+   * POV only — caller-published bps of observed interval volume.
+   * Null on TWAP/VWAP. Never a product default.
+   */
+  readonly participationBps: number | null;
   readonly slicesPlanned: number;
   /** Next slice index to emit (0-based). Resume does not rewind elapsed slices. */
   readonly nextSliceIndex: number;
@@ -104,6 +138,11 @@ export interface CreateTwapInput {
   readonly limitPrice: Amount | null;
   readonly subAccountId: string | null;
   readonly clientAlgoId?: string;
+  readonly kind?: AlgoKind;
+  /** Observed lookback volumes for VWAP (same length as slice count). */
+  readonly volumeProfile?: readonly Amount[];
+  /** Required for POV. Integer 1..10000. */
+  readonly participationBps?: number;
 }
 
 /** Mark feed for algo halt gates — same vocabulary as prices.ts / futures mark-policy. */

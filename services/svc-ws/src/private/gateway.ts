@@ -2,8 +2,10 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
+import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
-import type { PrivateOrderHub } from './hub.js';
+import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
+import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
 
 /**
  * Authenticated private stream (orders, fills, positions).
@@ -12,12 +14,27 @@ import type { PrivateOrderHub } from './hub.js';
  * credential. Token is `?access_token=` on the upgrade URL (browsers cannot
  * set Authorization on WebSocket upgrades reliably).
  *
+ * `?channel=orders|fills|positions` selects one catalog. Omitted (or empty)
+ * announces and fans all three — back-compat. Unknown channel is HTTP 400.
+ * Positions updates still only arrive when `trade.futures` publishes
+ * `positionUpdated`; a positions ready frame is not a fabricated book.
+ *
  * When `tokens` is null the private path is disabled (403 on upgrade).
- * Positions updates only arrive when `trade.futures` publishes `positionUpdated`;
- * the channel still announces ready so clients do not invent a second socket.
  */
 
 export const PRIVATE_STREAM_PATH = '/private/stream';
+
+const PRIVATE_CHANNELS: readonly PrivateStreamChannel[] = ['orders', 'fills', 'positions'];
+
+/**
+ * `null` = unknown (caller 400s). `'all'` = omitted/empty query (three frames).
+ * Mirrors public `parseChannel` shape, with a different default.
+ */
+function parsePrivateChannel(raw: string | null): PrivateStreamChannel | 'all' | null {
+  if (raw === null || raw === '') return 'all';
+  if (raw === 'orders' || raw === 'fills' || raw === 'positions') return raw;
+  return null;
+}
 
 export interface PrivateWebSocketGatewayOptions {
   readonly server: Server;
@@ -27,6 +44,18 @@ export interface PrivateWebSocketGatewayOptions {
   readonly enabled: () => boolean;
   /** Null ⇒ private path refuses all upgrades. */
   readonly tokens: TokenConfig | null;
+  /**
+   * Whether private bus consumers are attached. Ready frames include `bus: true|false`
+   * so a client can tell "quiet market" from "unsubscribed — will miss updates".
+   * Defaults to true when omitted (unit tests that do not wire a bus).
+   */
+  readonly busAttached?: () => boolean;
+  /**
+   * Current open orders (and positions). Tests inject a fake; production uses
+   * `HttpPrivateBookPort` against svc-trade `GET /api/v1/orders/open`.
+   * Omitted → honest empty snapshot (`orders: []`), not omitted frames.
+   */
+  readonly book?: PrivateBookPort;
 }
 
 export interface PrivateWebSocketGateway {
@@ -35,7 +64,8 @@ export interface PrivateWebSocketGateway {
 }
 
 function closeReason(reason: string): string {
-  return reason.length <= 120 ? reason : `${reason.slice(0, 117)}...`;
+  const copy = resolveWsCopy(reason);
+  return copy.length <= 120 ? copy : `${copy.slice(0, 117)}...`;
 }
 
 function sinkFor(socket: WebSocket): DepthSink {
@@ -66,18 +96,77 @@ function tokenFrom(url: URL, headers: IncomingMessage['headers']): string | null
   return m?.[1] ?? null;
 }
 
-export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOptions): PrivateWebSocketGateway {
-  const { server, hub, heartbeatMs, log, enabled, tokens } = options;
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024 });
-  let live = 0;
-
-  server.on('upgrade', (req, socket, head) => {
-    void (async () => {
+async function hydratePrivateBook(input: {
+  hub: PrivateOrderHub;
+  book: PrivateBookPort;
+  sink: DepthSink;
+  userId: string;
+  accessToken: string;
+  channelSel: PrivateStreamChannel | 'all';
+  log: HubLogger;
+}): Promise<void> {
+  const { hub, book, sink, userId, accessToken, channelSel, log } = input;
+  const wantOrders = channelSel === 'all' || channelSel === 'orders';
+  const wantPositions = channelSel === 'all' || channelSel === 'positions';
+  try {
+    if (wantOrders) {
+      let orders: Awaited<ReturnType<PrivateBookPort['listOpenOrders']>> = [];
       try {
-        const host = req.headers.host ?? 'localhost';
-        const url = new URL(req.url ?? '/', `http://${host}`);
-        if (url.pathname !== PRIVATE_STREAM_PATH) return;
+        orders = await book.listOpenOrders({ accessToken, userId });
+      } catch (err) {
+        log.warn({ userId, err: String(err) }, 'ws-private: open-orders snapshot read failed — empty list');
+      }
+      hub.sendOrdersSnapshot(sink, userId, orders);
+    }
+    if (wantPositions) {
+      let positions: Awaited<ReturnType<PrivateBookPort['listOpenPositions']>> = [];
+      try {
+        positions = await book.listOpenPositions({ accessToken, userId });
+      } catch (err) {
+        log.warn({ userId, err: String(err) }, 'ws-private: open-positions snapshot read failed — empty list');
+      }
+      hub.sendPositionsSnapshot(sink, userId, positions);
+    }
+  } finally {
+    hub.releaseSnapshot(sink);
+  }
+}
 
+export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOptions): PrivateWebSocketGateway {
+  const { server, hub, heartbeatMs, log, enabled, tokens, busAttached = () => true, book = EMPTY_PRIVATE_BOOK } = options;
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
+
+  /**
+   * Sockets that have not answered the last ping. Same contract as the public
+   * gateway: a client that stops ponging is not a subscriber, it is hub work
+   * for nobody — TCP will not tell us for minutes, so we terminate.
+   */
+  const alive = new WeakSet<WebSocket>();
+
+  const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
+    void (async () => {
+      // Fixed base — never Host. Path+query live on `req.url`. A Host-derived
+      // base can throw (e.g. `Host: a b`) *before* the private-path check; the
+      // catch below would then HTTP-500/destroy a socket the public gateway
+      // already upgraded on the same server. That is a co-mount isolation break.
+      let url: URL;
+      try {
+        url = new URL(req.url ?? '/', 'http://gateway.invalid');
+      } catch (err) {
+        // Destroy the socket — a bare return leaves the TCP upgrade hung until
+        // the client times out, and on co-mount a public-path parse throw used
+        // to abort this listener before we could even get here.
+        log.warn({ err: String(err) }, 'ws-private: unreadable upgrade URL');
+        try {
+          reject(socket, 400, 'Bad Request');
+        } catch {
+          /* already gone */
+        }
+        return;
+      }
+      if (url.pathname !== PRIVATE_STREAM_PATH) return;
+
+      try {
         if (!enabled()) {
           reject(socket, 503, 'Service Unavailable');
           return;
@@ -110,42 +199,53 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           return;
         }
 
+        const channelSel = parsePrivateChannel(url.searchParams.get('channel'));
+        if (channelSel === null) {
+          reject(socket, 400, 'Bad Request');
+          return;
+        }
+
         wss.handleUpgrade(req, socket, head, (ws) => {
-          const detach = hub.attach(userId, sinkFor(ws));
+          const attachChannel = channelSel === 'all' ? null : channelSel;
+          const sink = sinkFor(ws);
+          const detach = hub.attach(userId, sink, attachChannel, { holdUntilSnapshot: true });
           // Capacity refuse closes the sink inside attach — never announce ready
           // for a subscription the hub did not take (fail-closed, no false start).
           if (!detach) {
+            // sink.close may race the client open; terminate so the client always
+            // sees a hard end and does not sit half-open with zero ready frames.
+            try {
+              ws.terminate();
+            } catch {
+              /* ignore */
+            }
             return;
           }
 
-          live++;
-          let cleaned = false;
-          const heartbeat = setInterval(() => {
-            if (ws.readyState === ws.OPEN) ws.ping();
-          }, heartbeatMs);
-          const cleanup = () => {
-            if (cleaned) return;
-            cleaned = true;
-            clearInterval(heartbeat);
-            detach();
-            live = Math.max(0, live - 1);
-          };
-
-          ws.on('close', cleanup);
-          ws.on('error', cleanup);
+          alive.add(ws);
+          ws.on('pong', () => alive.add(ws));
           // Inbound frames are ignored — private stream is push-only, same as public.
           ws.on('message', () => undefined);
+          ws.on('error', () => ws.terminate());
+          // terminate() still emits close — free the hub seat.
+          ws.on('close', detach);
 
           try {
-            ws.send(JSON.stringify({ channel: 'orders', type: 'ready', userId }));
-            ws.send(JSON.stringify({ channel: 'fills', type: 'ready', userId }));
-            ws.send(JSON.stringify({ channel: 'positions', type: 'ready', userId }));
+            // `bus` is honesty, not a second auth: false means the process has no
+            // private consumer yet (or it failed), so silence is unsubscribed not quiet.
+            const bus = busAttached();
+            const announced = channelSel === 'all' ? PRIVATE_CHANNELS : [channelSel];
+            for (const channel of announced) {
+              ws.send(JSON.stringify({ channel, type: 'ready', userId, bus }));
+            }
           } catch {
             /* ignore */
           }
           log.info({ userId }, 'ws-private: client connected');
+          void hydratePrivateBook({ hub, book, sink, userId, accessToken: raw, channelSel, log });
         });
       } catch (err) {
+        // Only runs for PRIVATE_STREAM_PATH after the early return above.
         log.warn({ err: String(err) }, 'ws-private: upgrade failed');
         try {
           reject(socket, 500, 'Internal Server Error');
@@ -154,17 +254,45 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         }
       }
     })();
-  });
+  };
+
+  server.on('upgrade', onUpgrade);
+
+  /**
+   * A socket that stopped answering is not a private subscriber — it still holds
+   * a hub seat and keeps the process computing frames for nobody. Mirror public
+   * `/stream`: miss one pong window → terminate.
+   */
+  const heartbeat = setInterval(() => {
+    // Quiet lag: free seats held by slow consumers even when no events publish.
+    hub.sweepLag();
+    for (const ws of wss.clients) {
+      if (!alive.has(ws)) {
+        ws.terminate();
+        continue;
+      }
+      alive.delete(ws);
+      try {
+        ws.ping();
+      } catch {
+        ws.terminate();
+      }
+    }
+  }, heartbeatMs);
+  heartbeat.unref?.();
 
   return {
     get connections() {
-      return live;
+      return wss.clients.size;
     },
     async close(reason: string) {
-      await hub.close(reason);
+      clearInterval(heartbeat);
+      server.off('upgrade', onUpgrade);
+      const copy = resolveWsCopy(reason);
+      await hub.close(copy);
       for (const client of wss.clients) {
         try {
-          client.close(CLOSE_GOING_AWAY, closeReason(reason));
+          client.close(CLOSE_GOING_AWAY, closeReason(copy));
         } catch {
           /* ignore */
         }

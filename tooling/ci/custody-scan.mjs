@@ -7,48 +7,63 @@
  *    contract grants platform keys withdrawal power over user funds.
  *    Provably non-custodial or it doesn't merge."
  *
- * Two checks:
+ * Three checks:
  *   1. No Protocol Plane service imports the ledger's write surface. Reading
  *      balances is fine; posting transactions is what custody looks like.
  *   2. No contract under a Protocol Plane service exposes a platform-callable
  *      path that can move user funds (a heuristic scan over Solidity sources,
  *      reported as a hard failure so a human has to look).
+ *   3. Vendor Java **runtime risk surface** is in the scan object (D26-P2-08).
+ *      Dual-book rules are NOT restated here — this gate **composes**
+ *      `vendor-java-money-scan.mjs` as the DB-4 successor and fails closed if
+ *      that successor is missing, red, or reports zero Java files. Money-plane
+ *      `src/main/java` plus committed classpath `*.jar` must still be openable
+ *      (presence), or the object is unscanned theater.
  *
- * Exit 0 = provably non-custodial. Exit 1 = the boundary moved.
+ * Exit 0 = provably non-custodial / runtime Java surface scanned. Exit 1 = the
+ * boundary moved or Java was never opened.
  *
  * ── WHAT THIS GATE IS, AND WHAT IT IS NOT (read this before citing it) ─────
  *
- * This is a PROTOCOL PLANE gate. It is routinely cited as if it were a
- * repo-wide custody check. It is not one, and both vendored-exchange ADRs turn
- * on knowing the difference.
+ * Checks 1–2 are a PROTOCOL PLANE gate. They are routinely cited as if they
+ * were a repo-wide custody check. They are not: they assert non-custody only
+ * where non-custody is promised.
  *
- * COVERED: the services whose `planes` is exactly ['protocol'] and whose
- * `custodial` is false — DERIVED from packages/config/src/modules.ts, see
- * below — plus every .sol file underneath them and a root contracts/.
- * Measured 2026-08-03: svc-chain, svc-dex, svc-indexer, svc-protocol are
- * registered; svc-chain has no directory yet, so three are walked — svc-dex
- * (17 .ts/.tsx), svc-indexer (27 + 1 .sol), svc-protocol (44 + 9 .sol).
+ * COVERED (checks 1–2): the services whose `planes` is exactly ['protocol'] and
+ * whose `custodial` is false — DERIVED from packages/config/src/modules.ts —
+ * plus every .sol file underneath them and a root contracts/.
+ *
+ * COVERED (check 3 — D26-P2-08): the **runtime risk surface** in vendor Java.
+ * Scan object = money-plane module `src/main/java` (can move value if they
+ * boot) + committed classpath jars (presence) + the successor scan actually
+ * executed. Dual-book SQL / DAO / JPA ratchet lives only in
+ * `vendor-java-money-scan.mjs`. Forking those rules here is a third scanner
+ * and is forbidden. Test sources, docs, and gitignored `target/*.jar` stay
+ * outside this object — a source scan of unbuilt trees is not a runtime claim
+ * (ADR 2026-08-04).
  *
  * NOT COVERED, deliberately:
- *   · The other 14 services under services/, including every custodial one.
+ *   · The other services under services/, including every custodial one.
  *     svc-ledger, svc-pay, svc-bank and svc-trade hold value ON PURPOSE, as
- *     svc-bridge will (§17.3). This gate asserts non-custody only where
+ *     svc-bridge will (§17.3). Checks 1–2 assert non-custody only where
  *     non-custody is promised; asserting it everywhere would assert a
  *     falsehood.
- *   · packages/ and apps/ — 170 .ts/.tsx files, walked by neither check.
- *   · Any Java. All 882 files under vendor/ are outside this gate. The
- *     dual-book question there belongs to `vendor-java-money-scan.mjs` and
- *     `dual-book-door-scan.mjs` — different gates, different rules, both
- *     already in CI and in the DoD gate. "Extend custody-scan to Java" would
- *     extend the WRONG GATE: it would put vendor rules on a Protocol Plane
- *     check, and the two have no rule, no path and no failure mode in common.
- *     Both ADRs said it; both were corrected. Do not re-do it here.
+ *   · packages/ and apps/ — walked by neither Protocol Plane check.
+ *   · Restating the dual-book call-site ratchet — that is the successor file.
+ *
+ * History: an earlier WIP bolted the full dual-book ratchet onto this file and
+ * was correctly split out (DB-4 successor). #1748 re-opened Java here by
+ * copying live-write regexes — a third scanner. This file now composes the
+ * successor instead, so `pnpm scan:custody` cannot print clean while Java
+ * money/custody is unscanned, and cannot drift from vendor-java-money-scan.
  */
+import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const SERVICES = join(ROOT, 'services');
+const VENDOR = join(ROOT, 'vendor');
 const MODULES_TS = join(ROOT, 'packages', 'config', 'src', 'modules.ts');
 
 /**
@@ -130,7 +145,17 @@ const CONTRACT_RISKS = [
   { pattern: /\bselfdestruct\s*\(/i, reason: 'selfdestruct can strand or redirect user funds' },
 ];
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', '.next', 'coverage', 'drizzle']);
+/**
+ * Maven module directory names that can move value if they boot.
+ * Keys are directory basenames only — never a vendor package path (brand-scan).
+ * Source: vendor Java money-plane map (D26-P2-02 / D26-P2-08 done bar).
+ */
+const RUNTIME_RISK_MODULES = ['admin', 'ucenter-api', 'otc-api', 'exchange-api', 'market', 'wallet', 'exchange', 'core'];
+
+/** DB-4 successor — the only dual-book Java scanner. Do not fork its rules here. */
+const JAVA_SUCCESSOR = join(ROOT, 'tooling', 'ci', 'vendor-java-money-scan.mjs');
+
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.turbo', '.next', 'coverage', 'drizzle', 'target', '.git']);
 
 function* walk(dir, extensions) {
   if (!existsSync(dir)) return;
@@ -142,8 +167,37 @@ function* walk(dir, extensions) {
   }
 }
 
+/** Repo-relative path with forward slashes. */
+const relPath = (file) => relative(ROOT, file).split(sep).join('/');
+
+/** Find Maven module roots named `module` that carry src/main/java. */
+function findRuntimeModuleRoots(module) {
+  const found = [];
+  function visit(dir) {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      if (SKIP_DIRS.has(name)) continue;
+      const full = join(dir, name);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue;
+      }
+      if (!st.isDirectory()) continue;
+      if (name === module && existsSync(join(full, 'src', 'main', 'java'))) found.push(full);
+      visit(full);
+    }
+  }
+  visit(VENDOR);
+  return found;
+}
+
 const violations = [];
 let filesScanned = 0;
+let javaFilesScanned = 0;
+let jarsScanned = 0;
+let successorJavaScanned = 0;
 
 // ── Check 1: no ledger writes on the Protocol Plane ─────────────────────────
 for (const service of PROTOCOL_PLANE_SERVICES) {
@@ -196,6 +250,109 @@ for (const dir of contractDirs) {
   }
 }
 
+// ── Check 3: vendor Java runtime risk surface (D26-P2-08) ───────────────────
+//
+// Scan object = money-plane src/main/java (openable) + committed jars (openable)
+// + vendor-java-money-scan successor actually run. Dual-book rules stay in the
+// successor — composing it is the point; copying its regexes is a third scanner.
+if (!existsSync(VENDOR) || !statSync(VENDOR).isDirectory()) {
+  console.error('\n✖ CUSTODY SCAN FAILED — vendor/ tree missing; cannot open the Java runtime risk surface (D26-P2-08)\n');
+  process.exit(1);
+}
+
+const resolvedModules = [];
+for (const module of RUNTIME_RISK_MODULES) {
+  const roots = findRuntimeModuleRoots(module);
+  if (roots.length === 0) {
+    violations.push({
+      check: 'java-runtime-risk-surface',
+      file: `vendor/**/${module}/src/main/java`,
+      reason: `runtime risk module "${module}" not found under vendor/`,
+      detail: 'D26-P2-08 scan object is the money-plane runtime surface — a missing module is a hole, not a pass',
+    });
+    continue;
+  }
+  if (roots.length > 1) {
+    violations.push({
+      check: 'java-runtime-risk-surface',
+      file: roots.map(relPath).join(', '),
+      reason: `runtime risk module "${module}" resolved to ${roots.length} roots — key must be unique`,
+      detail: 'Ambiguous module identity would let a second tree carry live writes unseen',
+    });
+    continue;
+  }
+  resolvedModules.push({ module, root: roots[0] });
+}
+
+for (const { module, root } of resolvedModules) {
+  const mainJava = join(root, 'src', 'main', 'java');
+  let moduleFiles = 0;
+  for (const _file of walk(mainJava, ['.java'])) {
+    moduleFiles++;
+    javaFilesScanned++;
+    filesScanned++;
+  }
+  if (moduleFiles === 0) {
+    violations.push({
+      check: 'java-runtime-risk-surface',
+      file: relPath(mainJava),
+      reason: `runtime risk module "${module}" has zero .java under src/main/java`,
+      detail: 'Fail closed — an empty walk is not coverage of the runtime risk surface',
+    });
+  }
+}
+
+if (javaFilesScanned === 0) {
+  console.error('\n✖ CUSTODY SCAN FAILED — opened vendor/ but scanned 0 Java files on the runtime risk surface (D26-P2-08)\n');
+  console.error('  Green-over-empty is the failure mode this check exists to prevent.\n');
+  process.exit(1);
+}
+
+for (const _jar of walk(VENDOR, ['.jar'])) {
+  jarsScanned++;
+  filesScanned++;
+}
+
+if (jarsScanned === 0) {
+  violations.push({
+    check: 'java-runtime-jar',
+    file: 'vendor/**/*.jar',
+    reason: 'no committed classpath jars found under vendor/',
+    detail: 'Fail closed — the jar half of the runtime risk surface must be openable',
+  });
+}
+
+if (!existsSync(JAVA_SUCCESSOR)) {
+  console.error('\n✖ CUSTODY SCAN FAILED — vendor-java-money-scan.mjs missing; Java money/custody surface unscanned (D26-P2-08)\n');
+  console.error('  Compose the DB-4 successor; do not fork a third scanner into this file.\n');
+  process.exit(1);
+}
+
+const successor = spawnSync(process.execPath, [JAVA_SUCCESSOR], {
+  cwd: ROOT,
+  encoding: 'utf8',
+  maxBuffer: 32 * 1024 * 1024,
+});
+if (successor.stdout) process.stdout.write(successor.stdout);
+if (successor.stderr) process.stderr.write(successor.stderr);
+if (successor.error) {
+  console.error('\n✖ CUSTODY SCAN FAILED — could not run vendor-java-money-scan successor (D26-P2-08)\n');
+  console.error(`  ${successor.error.message}\n`);
+  process.exit(1);
+}
+if (successor.status !== 0) {
+  console.error('\n✖ CUSTODY SCAN FAILED — Java money/custody successor is red (vendor-java-money-scan)\n');
+  process.exit(1);
+}
+const successorText = `${successor.stdout ?? ''}\n${successor.stderr ?? ''}`;
+const successorMatch = successorText.match(/(\d+)\s+Java file\(s\)/);
+successorJavaScanned = successorMatch ? Number(successorMatch[1]) : 0;
+if (!Number.isFinite(successorJavaScanned) || successorJavaScanned === 0) {
+  console.error('\n✖ CUSTODY SCAN FAILED — successor printed clean without scanning Java files (D26-P2-08)\n');
+  console.error('  The Java money/custody surface was unscanned. Green here would be TS-only theater.\n');
+  process.exit(1);
+}
+
 if (violations.length > 0) {
   console.error(`\n✖ CUSTODY SCAN FAILED — ${violations.length} boundary violation(s)\n`);
   for (const v of violations) {
@@ -215,5 +372,6 @@ const pending = PROTOCOL_PLANE_SERVICES.filter((s) => !existsSync(join(SERVICES,
 console.log(
   `✓ custody-scan clean — ${filesScanned} files across ${scanned.length} Protocol Plane service(s) derived from modules.ts` +
     `${scanned.length === 0 ? ' (none built yet — check re-arms automatically when the first one lands)' : ''}` +
-    `${pending.length > 0 ? `; ${pending.join(', ')} registered but not built yet — arms automatically` : ''}`,
+    `${pending.length > 0 ? `; ${pending.join(', ')} registered but not built yet — arms automatically` : ''}` +
+    `; Java runtime risk surface ${javaFilesScanned} src/main .java + ${jarsScanned} jar(s); successor vendor-java-money-scan walked ${successorJavaScanned} Java file(s) (D26-P2-08)`,
 );

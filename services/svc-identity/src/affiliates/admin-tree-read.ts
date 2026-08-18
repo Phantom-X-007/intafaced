@@ -32,7 +32,31 @@ export type AffiliateNodeStatus = {
   readonly attributedAt: string | null;
 };
 
-export type AffiliatePayoutRefuseCode = 'affiliate.payout.rates_unset' | 'affiliate.payout.class_m';
+export type AffiliatePayoutRefuseCode =
+  | 'affiliate.payout.rates_unset'
+  | 'affiliate.payout.class_m'
+  /** Row accrued at a rate the owner has not published (operator-supplied tiers). */
+  | 'affiliate.payout.rate_unpublished'
+  /** Row hop is past MAX_PAYOUT_TIER_DEPTH. */
+  | 'affiliate.payout.depth_exceeded'
+  /** Beneficiary is the fee payer. */
+  | 'affiliate.payout.self_referral'
+  /** Operator froze the beneficiary after accrual. */
+  | 'affiliate.payout.beneficiary_frozen'
+  /** Fan-out spans more than one asset — sum-to-zero is per asset. */
+  | 'affiliate.payout.mixed_asset'
+  /**
+   * Fan-out names more than one fee pool for one fee event.
+   * One fee lands in one houseFees(module); mixed pools is corruption, not multi-module pay.
+   */
+  | 'affiliate.payout.mixed_source_module'
+  /** Legs do not sum to the reported total. */
+  | 'affiliate.payout.plan_unbalanced'
+  /** No durable accrual rows — refuse rather than report a paid zero. */
+  | 'affiliate.payout.nothing_accrued'
+  /** No ledger client wired into this deployment — §0.6 forbids moving value without one. */
+  | 'affiliate.payout.ledger_unwired'
+  | 'affiliate.payout.invalid';
 
 /**
  * Named refuse for payout automation until owner-published rates + ledger recipe.
@@ -49,9 +73,40 @@ export class AffiliatePayoutRefuseError extends Error {
   }
 }
 
-/** Stable residual string operators / audits can grep. */
+/**
+ * Stable residual string operators / audits can grep.
+ *
+ * UPDATED when payout-engine.ts landed: the old text said "Class M ledger
+ * recipe not wired", and that half is no longer true — the engine posts through
+ * the existing `sweepFeesToRewards` + `rewardPay` recipes and invents none. The
+ * ONE remaining gap is the rate itself, which is owner-only. Leaving the old
+ * wording would have understated how complete the mechanism is and misdirected
+ * the next reader to go wire a recipe that is already wired.
+ */
 export const AFFILIATE_PAYOUT_RESIDUAL =
-  'DIRECTION §8 fee-share / IB rates are owner-only; Class M ledger recipe not wired — refuse-closed';
+  'DIRECTION §8 fee-share / IB tier rates are owner-only — payout refuse-closed until published (mechanism is wired; the rate is not ours to choose)';
+
+/**
+ * How many freeze ids sit on a tree participant (child or parent of an edge).
+ *
+ * Freezes of users who never appear in the attribution graph are still durable
+ * operator state, but they must not inflate the TREE board's frozenCount —
+ * that card is "this multi-tier graph", not the global freeze ledger.
+ * Matches members roster honesty (`frozenInList` among listed edges only).
+ */
+export function countFrozenTreeParticipants(parent: ReadonlyMap<string, string>, frozenIds?: ReadonlySet<string> | null): number {
+  if (!frozenIds || frozenIds.size === 0 || parent.size === 0) return 0;
+  const participants = new Set<string>();
+  for (const [userId, referrerId] of parent.entries()) {
+    participants.add(userId);
+    participants.add(referrerId);
+  }
+  let n = 0;
+  for (const id of frozenIds) {
+    if (participants.has(id)) n += 1;
+  }
+  return n;
+}
 
 /**
  * Build tree board from parent map + freeze set.
@@ -73,7 +128,7 @@ export function buildAffiliateTreeBoard(input: {
     edges: input.parent.size,
     referrers: referrers.size,
     maxDepth,
-    frozenCount: input.frozenIds?.size ?? 0,
+    frozenCount: countFrozenTreeParticipants(input.parent, input.frozenIds),
     maxDepthCap,
   };
 }
@@ -128,19 +183,27 @@ export function buildAffiliateNodeStatus(input: {
 }
 
 /**
- * Always refuse payout. Named residual — do not invent rates or post ledger.
+ * Named refuse for the rates_unset case (test/audit helper).
+ * Production mount uses planAffiliatePayout / postAffiliatePayout; this helper
+ * never invents rates and does not post ledger.
  */
 export function refuseAffiliatePayout(): never {
   throw new AffiliatePayoutRefuseError(
-    'Affiliate payout automation is refuse-closed until owner-published fee-share rates and a ledger recipe exist',
+    'Affiliate payout is refuse-closed until the owner publishes DIRECTION §8 fee-share / IB tier rates',
     'affiliate.payout.rates_unset',
     AFFILIATE_PAYOUT_RESIDUAL,
   );
 }
 
-/** True when residual names DIRECTION §8 (honesty guard for tests / audits). */
+/**
+ * True when residual names DIRECTION §8 and says the rate is owner-only
+ * (honesty guard for tests / audits).
+ *
+ * No longer checks for "Class M": the ledger path is wired, so requiring that
+ * phrase would force the residual to keep claiming a gap that closed.
+ */
 export function affiliatePayoutResidualNamesDirectionLaw(residual: string = AFFILIATE_PAYOUT_RESIDUAL): boolean {
-  return residual.includes('DIRECTION §8') && residual.includes('Class M');
+  return residual.includes('DIRECTION §8') && residual.includes('owner-only');
 }
 
 /** One attributed member row for admin roster (structure + freeze only). */

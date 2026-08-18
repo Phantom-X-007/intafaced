@@ -65,15 +65,20 @@ export const SIMULATED_DISCLAIMER =
   'Simulated result from a paper trading drill. No value moved, no ledger entry exists, and nothing here is withdrawable.';
 
 /**
- * The seal. Four independent assertions rather than one boolean, because each
+ * The seal. Five independent assertions rather than one boolean, because each
  * answers a different question a reader actually has, and a client that checks
  * only one still cannot mistake this for real money.
+ *
+ * `realMoney: false` is the D26-P1-C4 harden: even if a reader ignores
+ * `realLedger` / `withdrawable`, the payload still says out loud that nothing
+ * here is real money.
  */
 export type SimulatedSeal = {
   readonly simulated: true;
   readonly venue: typeof SIMULATED_VENUE;
   readonly realLedger: false;
   readonly withdrawable: false;
+  readonly realMoney: false;
   readonly disclaimer: string;
 };
 
@@ -82,6 +87,7 @@ export const SIMULATED_SEAL: SimulatedSeal = {
   venue: SIMULATED_VENUE,
   realLedger: false,
   withdrawable: false,
+  realMoney: false,
   disclaimer: SIMULATED_DISCLAIMER,
 };
 
@@ -102,6 +108,7 @@ export function isSealedSimulated(value: unknown): value is Sealed<unknown> {
     v['venue'] === SIMULATED_VENUE &&
     v['realLedger'] === false &&
     v['withdrawable'] === false &&
+    v['realMoney'] === false &&
     typeof v['disclaimer'] === 'string' &&
     (v['disclaimer'] as string).length > 0 &&
     'result' in v
@@ -125,7 +132,7 @@ export function assertSealedSimulated<T>(value: Sealed<T>): Sealed<T> {
 
 /** One-line label for logs, exports and operator boards. */
 export function simulatedLabelLine(): string {
-  return `simulated=1 venue=${SIMULATED_VENUE} realLedger=0 withdrawable=0`;
+  return `simulated=1 venue=${SIMULATED_VENUE} realLedger=0 withdrawable=0 realMoney=0`;
 }
 
 // ── Trade-published fills ───────────────────────────────────────────────────
@@ -174,7 +181,7 @@ function publishedAmount(raw: unknown, field: string, fillId: string): Amount {
  * Valuation of a drill. Every figure is a decimal string; `unrealised` and
  * `total` are `null` rather than a guess when the mark is unknown.
  */
-export type SimulatedValuation = {
+export type SimulatedValuation = SimulatedSeal & {
   readonly fillCount: number;
   readonly boughtSize: string;
   readonly soldSize: string;
@@ -189,6 +196,33 @@ export type SimulatedValuation = {
 };
 
 /**
+ * Collapse fills by fillId. Same body twice → once. Conflicting body for the
+ * same id → refuse (never average two lies into a "practice" PnL).
+ *
+ * @throws AcademyError `academy.paper_price_unavailable` on conflict — same
+ *   family as other unpublishable price shapes; the figure is not trustworthy.
+ */
+export function uniquePublishedFills(fills: readonly PublishedFill[]): PublishedFill[] {
+  const byId = new Map<string, PublishedFill>();
+  for (const fill of fills) {
+    const id = fill?.fillId?.trim() ?? '';
+    if (!id) {
+      refusePrice('A fill with no fillId cannot be valued');
+    }
+    const prior = byId.get(id);
+    if (!prior) {
+      byId.set(id, fill);
+      continue;
+    }
+    if (prior.marketId !== fill.marketId || prior.side !== fill.side || prior.price !== fill.price || prior.size !== fill.size) {
+      refusePrice(`Fill ${id} was published twice with conflicting trade data — refusing to invent a merged paper PnL`);
+    }
+    // identical re-send: keep first
+  }
+  return [...byId.values()];
+}
+
+/**
  * Value a drill from trade-published fills, and optionally a trade-published
  * mark for whatever is still open.
  *
@@ -197,16 +231,19 @@ export type SimulatedValuation = {
  * conservative reading and the only one that needs no mark, which matters
  * because the mark is precisely what may be missing.
  *
+ * Duplicate fillIds with the same body count once; conflicting re-sends refuse.
+ *
  * @throws AcademyError `academy.paper_price_unavailable` when a fill carries no
- *   readable published price or size.
+ *   readable published price or size, or when the same fillId conflicts.
  */
 export function valueSimulatedDrill(fills: readonly PublishedFill[], markPrice: string | null = null): SimulatedValuation {
+  const unique = uniquePublishedFills(fills);
   let cost = 0n;
   let proceeds = 0n;
   let bought = 0n;
   let sold = 0n;
 
-  for (const fill of fills) {
+  for (const fill of unique) {
     const id = fill?.fillId ?? '(unnamed fill)';
     if (fill?.side !== 'buy' && fill?.side !== 'sell') {
       refusePrice(`Fill ${id} has no side, so it cannot be valued`);
@@ -252,8 +289,11 @@ export function valueSimulatedDrill(fills: readonly PublishedFill[], markPrice: 
     }
   }
 
+  // Nested seal: a client that peels parent.result and reads valuation alone
+  // still sees simulated / realLedger / withdrawable — never bare PnL strings.
   return {
-    fillCount: fills.length,
+    ...SIMULATED_SEAL,
+    fillCount: unique.length,
     boughtSize: formatAmount(bought),
     soldSize: formatAmount(sold),
     openSize: formatAmount(open),

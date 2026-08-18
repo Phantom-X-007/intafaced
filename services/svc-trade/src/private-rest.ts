@@ -18,6 +18,12 @@ import type { Position } from '@intafaced/exchange-contract';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
+import { presentFuturesErrorWire } from './futures/futures-error-wire.js';
+import type { MarginCallWire } from './futures/margin-call-transport.js';
+import type { AdlDisclosureWire } from './futures/adl-disclosure.js';
+import type { AdlActionDisclosureWire } from './futures/adl-last-resort.js';
+import { AdlDisclosureError } from './futures/adl-disclosure.js';
+import { refuseArmById } from './ccxt-capability-matrix.js';
 
 /**
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
@@ -33,6 +39,10 @@ import { FuturesError } from './futures/position-service.js';
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
+ *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
+ *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
+ *   POST   /api/v1/futures/adl-disclosure/ack scope: trade:write (ack before open)
+ *   GET    /api/v1/futures/adl-events         scope: trade:read  (disclosure-before-action)
  *   POST   /api/v1/positions       scope: trade:write (open funded position — F3)
  *   DELETE /api/v1/positions/:id   scope: trade:write (close + release margin — F3)
  *
@@ -105,10 +115,28 @@ export interface PrivateRestDeps {
        * a value the type system cannot express.
        */
       marginMode?: 'isolated';
+      /** Required retry key — same as spot clientOrderId; see positionIdFor. */
+      clientOpenId: string;
     },
   ): Promise<Position>;
   /** Close at the current mark. No price parameter, for the same reason. */
   closePosition(principal: Principal, positionId: string): Promise<Position>;
+  /**
+   * Open delivered margin call for a position owned by the principal.
+   * Null → 404 (no call, or not theirs). Never invents a call.
+   */
+  getOpenMarginCall(principal: Principal, positionId: string): Promise<MarginCallWire | null>;
+  /**
+   * DIRECTION:34 — current ADL disclosure copy + whether this principal has ack'd.
+   */
+  getAdlDisclosure(principal: Principal): Promise<AdlDisclosureWire>;
+  /** Record ack for the current disclosure version (required before open). */
+  ackAdlDisclosure(principal: Principal): Promise<AdlDisclosureWire>;
+  /**
+   * Observable ADL disclosure-before-action events for this principal
+   * (candidate side). Empty [] when none — never invents events.
+   */
+  listAdlDisclosureEvents(principal: Principal): Promise<AdlActionDisclosureWire[]>;
 }
 
 /**
@@ -727,7 +755,16 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = typeof body.symbol === 'string' ? body.symbol : '';
       const side = body.side === 'long' || body.side === 'short' ? body.side : null;
       const size = typeof body.size === 'string' ? body.size : typeof body.contracts === 'string' ? body.contracts : '';
-      const leverage = typeof body.leverage === 'string' ? body.leverage : '1';
+      const leverageRaw = typeof body.leverage === 'string' ? body.leverage.trim() : '';
+      if (!leverageRaw) {
+        // Isolated entry does not default to 1×. DIRECTION §1 states a ceiling
+        // (10×), not a silent substitute when the caller omitted the field.
+        // A JSON number here is also refused — parseAmount is for a named string.
+        return reply.code(400).send({
+          ...badRequest('leverage is required on open — isolated entry does not default to 1x', 'trade.leverage_required').body,
+        });
+      }
+      const leverage = leverageRaw;
 
       const marginRefusal = crossMarginRefusal(body.marginMode);
       if (marginRefusal) {
@@ -740,18 +777,114 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
           ...badRequest('symbol, side, size|contracts required', 'trade.bad_request').body,
         });
       }
+      const clientOpenIdRaw =
+        typeof body.clientOpenId === 'string' ? body.clientOpenId : typeof body.clientPositionId === 'string' ? body.clientPositionId : '';
+      const clientOpenId = clientOpenIdRaw.trim();
+      if (!clientOpenId || clientOpenId.length > 64) {
+        return reply.code(400).send({
+          ...badRequest('clientOpenId is required (1–64 chars) — omit would double-lock margin on retry', 'trade.client_open_id_required')
+            .body,
+        });
+      }
+
       const pos = await deps.openPosition(principal, {
         symbol,
         side,
         size,
         leverage,
         marginMode,
+        clientOpenId,
       });
       return reply.code(200).send(pos);
     } catch (err) {
-      if (err instanceof FuturesError) {
+      if (err instanceof AdlDisclosureError) {
         return reply.code(err.status).send({ error: err.code, message: err.message });
       }
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * DIRECTION:34 — in-product ADL disclosure (copy + ack state).
+   * Open is refused until POST …/ack for the current version.
+   */
+  app.get('/api/v1/futures/adl-disclosure', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const wire = await deps.getAdlDisclosure(principal);
+      return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.post('/api/v1/futures/adl-disclosure/ack', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+      const wire = await deps.ackAdlDisclosure(principal);
+      return reply.code(200).send(wire);
+    } catch (err) {
+      if (err instanceof AdlDisclosureError) {
+        return reply.code(err.status).send({ error: err.code, message: err.message });
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.get('/api/v1/futures/adl-events', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const rows = await deps.listAdlDisclosureEvents(principal);
+      return reply.code(200).send(rows);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * Delivered margin call for one position (D26-P1-T1b / DIRECTION MVP-2).
+   *
+   * The liquidation tick raises + delivers into the durable store; this door
+   * is how the trader observes it. 404 when none is open (or not theirs) —
+   * never a fabricated healthy "no call" body that could be confused with a
+   * delivered warning. Undelivered attempts are not exposed here.
+   */
+  app.get<{ Params: { id: string } }>('/api/v1/positions/:id/margin-call', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const call = await deps.getOpenMarginCall(principal, req.params.id);
+      if (!call) {
+        return reply.code(404).send({
+          error: 'trade.margin_call_not_found',
+          message: 'No delivered margin call is open for this position.',
+        });
+      }
+      return reply.code(200).send(call);
+    } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
       throw err;
@@ -781,7 +914,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {
-        return reply.code(err.status).send({ error: err.code, message: err.message });
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
       }
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
@@ -809,8 +942,20 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open; live re-leverage not built`, intafacedCode));
     };
 
-  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', 'trade.leverage_unsupported'));
-  app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', 'trade.margin_mode_unsupported'));
+  const setLeverageArm = refuseArmById('setLeverage');
+  const setMarginModeArm = refuseArmById('setMarginMode');
+  if (
+    !setLeverageArm ||
+    !setMarginModeArm ||
+    setLeverageArm.httpStatus !== 501 ||
+    setMarginModeArm.httpStatus !== 501 ||
+    setLeverageArm.ccxtCode !== 'NotSupported' ||
+    setMarginModeArm.ccxtCode !== 'NotSupported'
+  ) {
+    throw new Error('ccxt matrix setLeverage/setMarginMode must stay 501 NotSupported — never invent leverage');
+  }
+  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', setLeverageArm.intafacedCode));
+  app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', setMarginModeArm.intafacedCode));
 
   // ── Create (money path) ───────────────────────────────────────────────────
 

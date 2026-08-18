@@ -1,6 +1,6 @@
-# BIZZAN_web_front
+# INTAFACED trading shell
 
-> BIZZAN数字资产交易所之web端
+> Product web front for the INTAFACED exchange desk
 
 ## Install Prerequisites
 The following dependencies are required to run an instance:

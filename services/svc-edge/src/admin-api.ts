@@ -1,8 +1,42 @@
 import { z } from 'zod';
 import { AuthError, bearerToken, requireMfa, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
-import { MODULE_IDS, isModuleId, type ModuleId } from '@intafaced/config';
-import type { KillSwitchAuditEntry, KillSwitchState } from './kill-switch.js';
+import {
+  MODULE_IDS,
+  enforcementOf,
+  isModuleId,
+  type ComplianceQueueDispositionRequest,
+  type ComplianceQueueDispositionResult,
+  type ComplianceQueueItem,
+  type ModuleId,
+} from '@intafaced/config';
+import {
+  queryWarehouseSurface,
+  resolveWarehouseReplicaConfig,
+  warehouseSurfaceStatusLine,
+  type LagSource,
+  type WarehouseLagProbe,
+  type WarehouseSurfaceResult,
+} from '@intafaced/contracts';
+import { createEdgeWarehouseLagProbe, warehouseLagProbeEnabled } from './analytics-lag-probe.js';
+import { EdgeComplianceQueue, edgeComplianceHonesty, type EdgeComplianceHonesty } from './compliance-honesty.js';
+import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
+
+export type WarehouseDoorSnapshot = {
+  readonly replicaConfigured: boolean;
+  readonly replicaCount: number;
+  readonly refuse: string | null;
+  readonly surfaceStatus: WarehouseSurfaceResult['status'];
+  readonly mayLabelLive: boolean;
+  readonly statusLine: string;
+  readonly etlWatermark: EdgeComplianceHonesty['analytics']['etlWatermark'];
+  readonly etlWatermarkAt: string | null;
+  readonly etlNote: string;
+  readonly surface: WarehouseSurfaceResult;
+  readonly lagSource: LagSource;
+  readonly lagSeconds: number | null;
+  readonly lagMeasuredAt: number | null;
+};
 
 /**
  * THE OPERATOR CONTROL SURFACE (§14.6) — what `apps/admin` reaches.
@@ -117,6 +151,49 @@ export interface KillSwitchSnapshot {
   readonly audit: readonly KillSwitchAuditEntry[];
 }
 
+/**
+ * What the registry says about `edge.gateway` — never invent that the flag gates
+ * the proxy when it is still `NOT_ENFORCED`.
+ *
+ * Live kill is `POST /admin/kill-switches` + the `onRequest` guard. Flipping the
+ * flag in a console that only reads `isEnabled` does not stop traffic.
+ */
+export interface FlagEdgeGatewayHonesty {
+  readonly key: 'edge.gateway';
+  /**
+   * Always false while `enforcementOf('edge.gateway').kind === 'none'`.
+   * When a deliberate enforcement PR lands, this flips from the registry —
+   * status must never hard-code "enforced".
+   */
+  readonly enforced: boolean;
+  /** One sentence an operator can act on at 3am. */
+  readonly note: string;
+}
+
+/**
+ * Control-plane honesty fields the console needs so a green status is never
+ * mistaken for a closed market-data socket or a fleet-wide kill.
+ */
+export interface ControlPlaneHonesty {
+  /**
+   * Modules the control plane will refuse to arm, with the reason the operator
+   * must act on instead. `ws` is the load-bearing entry: svc-ws is outside this
+   * edge (SOCKET §13 socket.ws-behind-the-edge).
+   */
+  readonly outsideTheDoor: Readonly<Record<string, string>>;
+  /** Modules this edge can actually refuse traffic for (route-table-derived). */
+  readonly enforceableModules: readonly ModuleId[];
+  /** Process-local durability — multi-replica share is always false today. */
+  readonly killState: KillSwitchDurability;
+  /**
+   * Live control surface name — not a feature-flag key.
+   * Operators who only know `edge.gateway` must not invent a green halt.
+   */
+  readonly liveKillControl: 'operator-kill-switch';
+  /** Registry honesty for the drop-I flag that still does not gate the proxy. */
+  readonly flagEdgeGateway: FlagEdgeGatewayHonesty;
+}
+
 export interface FreezeSnapshot {
   readonly frozen: boolean;
   readonly reason: string | null;
@@ -146,6 +223,13 @@ export interface AdminApi {
   authenticateTreasury(header: string | undefined): Promise<Principal>;
   /** Current kill-switch state and its audit trail, as the console renders it. */
   read(): KillSwitchSnapshot;
+  /**
+   * What the door cannot enforce, and how durable a kill is on this process.
+   *
+   * Used by `/admin/status` so an operator never reads "halted" for market data
+   * that still streams on 4014, and never assumes a second replica saw the flip.
+   */
+  honesty(): ControlPlaneHonesty;
   /** Apply one module toggle. Returns the new state. */
   apply(body: unknown, operator: Principal): KillSwitchSnapshot & { changed: boolean };
   /**
@@ -160,6 +244,22 @@ export interface AdminApi {
   readFreeze(header: string): Promise<{ status: number; body: unknown }>;
   /** Freeze or thaw the ledger. Attribution and durability are svc-ledger's. */
   setFreeze(frozen: boolean, body: unknown, header: string): Promise<{ status: number; body: unknown }>;
+  /**
+   * Ops honesty residual (VPN/network, freeze invent, compliance queue, analytics dark).
+   * Reads env at call time so tests can inject without rebooting the process.
+   */
+  opsHonesty(): EdgeComplianceHonesty;
+  /** In-memory compliance queue snapshot (honest empty when nothing pending). */
+  complianceQueueSnapshot(): ReturnType<EdgeComplianceQueue['snapshot']>;
+  /** Open a case — never auto-invented. */
+  openComplianceCase(item: ComplianceQueueItem): ReturnType<EdgeComplianceQueue['snapshot']>;
+  /** Dispose a case — partner_cleared refuses without screening partner. */
+  disposeComplianceCase(itemId: string, request: ComplianceQueueDispositionRequest): ComplianceQueueDispositionResult;
+  /**
+   * Analytics warehouse door with a real replica lag probe when URLs are set.
+   * Absent URL / probe off / connect fail → unknown, never invented live.
+   */
+  probeWarehouse(): Promise<WarehouseDoorSnapshot>;
 }
 
 export interface AdminApiDeps {
@@ -172,6 +272,11 @@ export interface AdminApiDeps {
    * operator who believes the platform is halted when it is not.
    */
   readonly ledger: LedgerOperatorCall | null;
+  /**
+   * Injected replica lag probe (tests). Production uses createEdgeWarehouseLagProbe
+   * unless ANALYTICS_REPLICA_PROBE=off or VITEST (no sockets in unit tests).
+   */
+  readonly warehouseLagProbe?: WarehouseLagProbe | null;
 }
 
 export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): AdminApi {
@@ -190,6 +295,9 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
 
   const unreachable = { status: 503, body: { error: 'This edge is not configured to reach svc-ledger', code: 'edge.ledger_unreachable' } };
 
+  /** Process-local queue — mechanism only; full case product residual. */
+  const complianceQueue = new EdgeComplianceQueue(() => process.env);
+
   return {
     async authenticate(header) {
       const principal = await verify(header);
@@ -207,6 +315,27 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
     },
 
     read: snapshot,
+
+    honesty(): ControlPlaneHonesty {
+      // Read enforcement from the registry — never hard-code "not enforced" so a
+      // future deliberate wiring of edge.gateway cannot leave this surface lying.
+      const gatewayEnforcement = enforcementOf('edge.gateway');
+      const gatewayEnforced = gatewayEnforcement.kind !== 'none';
+      return {
+        outsideTheDoor: { ...OUTSIDE_THE_DOOR },
+        // MODULE_IDS order so the status payload is stable across processes.
+        enforceableModules: MODULE_IDS.filter((id) => ENFORCEABLE_MODULES.has(id)),
+        killState: state.durability(),
+        liveKillControl: 'operator-kill-switch',
+        flagEdgeGateway: {
+          key: 'edge.gateway',
+          enforced: gatewayEnforced,
+          note: gatewayEnforced
+            ? 'edge.gateway is enforced in FLAG_REGISTRY — confirm the edge process actually consults it before trusting a flag-only halt.'
+            : 'edge.gateway is NOT_ENFORCED — flipping the flag does not stop the proxy. Live kill is POST /admin/kill-switches (admin:write + MFA).',
+        },
+      };
+    },
 
     apply(body, operator) {
       /**
@@ -251,7 +380,81 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
       const payload = frozen ? freezeSchema.parse(body) : undefined;
       return deps.ledger(frozen ? '/operator/freeze' : '/operator/unfreeze', 'POST', header, payload);
     },
+
+    opsHonesty: () =>
+      edgeComplianceHonesty(process.env, {
+        queueItems: complianceQueue.snapshot().items,
+      }),
+
+    complianceQueueSnapshot: () => complianceQueue.snapshot(),
+
+    openComplianceCase: (item) => complianceQueue.open(item),
+
+    disposeComplianceCase: (itemId, request) => complianceQueue.dispose(itemId, request),
+
+    async probeWarehouse() {
+      const honesty = edgeComplianceHonesty(process.env, {
+        queueItems: complianceQueue.snapshot().items,
+      });
+      const etl = {
+        etlWatermark: honesty.analytics.etlWatermark,
+        etlWatermarkAt: honesty.analytics.etlWatermarkAt,
+        etlNote: honesty.analytics.etlNote,
+      };
+
+      const probe = resolveDoorLagProbe(deps);
+      const resolved = await resolveWarehouseReplicaConfig({
+        env: process.env,
+        probe,
+      });
+
+      if (resolved.status === 'refuse') {
+        const surface = queryWarehouseSurface({ replicaConfigured: false, lagSeconds: null, facts: [] });
+        return {
+          replicaConfigured: false,
+          replicaCount: 0,
+          refuse: resolved.reason,
+          surfaceStatus: surface.status,
+          mayLabelLive: false,
+          statusLine: `status=refuse reason=writer_or_bad_role live=0`,
+          ...etl,
+          surface,
+          lagSource: 'unknown',
+          lagSeconds: null,
+          lagMeasuredAt: null,
+        };
+      }
+
+      const surface = queryWarehouseSurface({
+        replicaConfigured: resolved.replicaConfigured,
+        lagSeconds: resolved.lagSeconds,
+        lagMeasuredAt: resolved.lagMeasuredAt,
+        lagSource: resolved.lagSource,
+        facts: [],
+      });
+      return {
+        replicaConfigured: resolved.replicaConfigured,
+        replicaCount: resolved.endpoints.length,
+        refuse: null,
+        surfaceStatus: surface.status,
+        mayLabelLive: surface.mayLabelLive,
+        statusLine: warehouseSurfaceStatusLine(surface),
+        ...etl,
+        surface,
+        lagSource: resolved.lagSource,
+        lagSeconds: resolved.lagSeconds,
+        lagMeasuredAt: resolved.lagMeasuredAt,
+      };
+    },
   };
+}
+
+function resolveDoorLagProbe(deps: AdminApiDeps): WarehouseLagProbe | null {
+  if (deps.warehouseLagProbe !== undefined) return deps.warehouseLagProbe;
+  if (!warehouseLagProbeEnabled(process.env)) return null;
+  // Vitest must not open sockets when a leftover ANALYTICS_REPLICA_*_URL is set.
+  if (process.env.VITEST === 'true') return null;
+  return createEdgeWarehouseLagProbe();
 }
 
 /** Map an `AuthError` to the status an operator console can branch on. */

@@ -222,8 +222,10 @@ export default {
     /** The symbol filter is populated from the venue's own listing table. */
     getMarkets() {
       rest("/markets").then(res => {
-        if (!res.ok || !Array.isArray(res.data)) return;
-        this.marketList = res.data.map(m => ({ symbol: m.symbol }));
+        if (!res.ok) return;
+        const gate = ixTrade.accept(ixTrade.schemas.markets, res.data);
+        if (!gate.ok) return;
+        this.marketList = gate.data.map(m => ({ symbol: m.symbol }));
       });
     },
 
@@ -248,9 +250,19 @@ export default {
           });
           return;
         }
+        const gate = ixTrade.accept(ixTrade.schemas.trades, res.data);
+        if (!gate.ok) {
+          this.listError =
+            gate.message || "The fills payload failed the shape check.";
+          this.$nextTick(() => {
+            const el = this.$refs.listError;
+            if (el && typeof el.focus === "function") el.focus();
+          });
+          return;
+        }
         // A 200 with [] is the venue saying "you have none" — a real answer.
         this.listReachable = true;
-        this.tableRecord = this.applyEndFilter(ixTrade.toDeskFills(res.data));
+        this.tableRecord = this.applyEndFilter(ixTrade.toDeskFills(gate.data));
         this.total = this.tableRecord.length;
         const maxPage = Math.max(1, Math.ceil(this.total / this.pageSize));
         if (this.page > maxPage) this.page = maxPage;

@@ -1,0 +1,207 @@
+/**
+ * D26-P2-11 — Ledger recipe matrix closed for live paths.
+ *
+ * Done bar: every money path → named recipe or explicit §13.
+ *
+ * The registry (`export const recipes`) is the product surface. This module is
+ * the inventory a test can execute: every registry key is partitioned into
+ * `live` (a production service posts it) or `socket` (deliberate §13 — recipe
+ * exists so the path can be honest later; nothing wires it today).
+ *
+ * Do not invent recipes here. Add a row only when the registry already has the
+ * function, and classify it from evidence (service call site or named socket).
+ */
+
+import { recipes, type RecipeName } from './index.js';
+
+/** How a registry recipe is accounted for against live money paths. */
+export type RecipeDisposition =
+  | {
+      readonly kind: 'live';
+      /** Owning module label (matches RECIPES.md Module column). */
+      readonly module: string;
+      /** One production call-site path (services/…), for review. */
+      readonly proof: string;
+    }
+  | {
+      readonly kind: 'socket';
+      /** Always §13 — deliberate not-in-v1 / parked wire. */
+      readonly socket: '§13';
+      readonly reason: string;
+    };
+
+/**
+ * Closed matrix: every `RecipeName` appears exactly once.
+ *
+ * Live proofs are the first production (non-test) call site found on tip when
+ * this inventory landed. Socket reasons cite the ADR / park that keeps them
+ * unwired — not a ticket to invent a caller.
+ */
+export const RECIPE_MATRIX = {
+  deposit: { kind: 'live', module: 'ledger', proof: 'services/svc-pay/src/user-money-service.ts' },
+  marketMakerSeedFund: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — recipe funds the house MM pot from a named rail; trade.mm-bot seed jobs consume a pre-funded pot and do not post this. Ops/treasury seed door is not a service writer on tip (package + test seed only).',
+  },
+  withdrawHold: { kind: 'live', module: 'ledger', proof: 'services/svc-pay/src/user-money-service.ts' },
+  withdrawSettle: { kind: 'live', module: 'ledger', proof: 'services/svc-pay/src/user-money-service.ts' },
+  withdrawReverse: { kind: 'live', module: 'ledger', proof: 'services/svc-pay/src/user-money-service.ts' },
+  tradeFill: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
+  orderHold: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
+  orderHoldRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
+  marketMakerOrderHold: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/mm/seed-market.ts' },
+  marketMakerOrderHoldRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/mm/seed-market.ts' },
+  marketMakerMakerFill: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
+  futuresMarginLock: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/position-service.ts' },
+  futuresMarginAdd: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — recipe for isolated-margin top-up on an open position; no production door posts it on tip (open locks via futuresMarginLock; add path parked until a public/admin top-up writer lands).',
+  },
+  futuresMarginRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/close-planner.ts' },
+  futuresRealizeLoss: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/liquidation-planner.ts' },
+  futuresRealizeProfit: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/close-planner.ts' },
+  futuresFundingPay: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/funding-settlement.ts' },
+  futuresInsuranceTopup: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — recipe seeds insurance from house trade fees; liquidation draws via futuresRealizeLoss({ fromInsurance }). No admin/ops top-up writer on tip (package + test fund only).',
+  },
+  escrowLock: { kind: 'live', module: 'p2p', proof: 'services/svc-p2p/src/p2p-service.ts' },
+  escrowRelease: { kind: 'live', module: 'p2p', proof: 'services/svc-p2p/src/p2p-service.ts' },
+  escrowRefund: { kind: 'live', module: 'p2p', proof: 'services/svc-p2p/src/p2p-service.ts' },
+  paymentCapture: { kind: 'live', module: 'pay', proof: 'services/svc-pay/src/payment-service.ts' },
+  merchantSettlement: { kind: 'live', module: 'pay', proof: 'services/svc-pay/src/payment-service.ts' },
+  paymentRefund: { kind: 'live', module: 'pay', proof: 'services/svc-pay/src/payment-service.ts' },
+  paymentRefundReverse: { kind: 'live', module: 'pay', proof: 'services/svc-pay/src/payment-service.ts' },
+  chargebackOpen: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — pay.rails ADR 2026-08-04 clause 3: chargeback recipes exist before any rail reports a dispute; owner Class M sign-off; deliberately unwired from svc-pay (see chargeback.ts banner).',
+  },
+  chargebackShortfall: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: shortfall leg parked with open/won/recovered; no svc-pay writer until owner signs the four debit questions.',
+  },
+  chargebackWon: {
+    kind: 'socket',
+    socket: '§13',
+    reason: '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: won recovery unwired with the open path; no dispute writer on tip.',
+  },
+  chargebackShortfallRecovered: {
+    kind: 'socket',
+    socket: '§13',
+    reason: '§13 — pay.rails ADR 2026-08-04 / chargeback.ts: insurance recovery unwired with the shortfall path; no dispute writer on tip.',
+  },
+  stake: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  unstake: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  mintEmission: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  burn: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  feeCharge: { kind: 'live', module: 'token', proof: 'services/svc-agents/src/metering/meter.ts' },
+  sweepFeesToRewards: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  rewardPay: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  loanCollateralLock: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  loanCollateralRelease: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  loanDraw: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  loanRepay: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  loanLiquidate: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  loanBadDebt: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  loanReserveFund: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/loans/loan-service.ts' },
+  bankTransfer: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/transfers/transfer-service.ts' },
+  earnDeposit: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/earn/earn-service.ts' },
+  earnWithdraw: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/earn/earn-service.ts' },
+  earnPoolFund: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/earn/earn-service.ts' },
+  earnInterest: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/earn/earn-service.ts' },
+  businessApprovalHold: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
+  businessApprovalRelease: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
+  businessApprovalSettle: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
+  subAccountTransfer: { kind: 'live', module: 'identity', proof: 'services/svc-identity/src/auth/auth-service.ts' },
+  marketPurchase: { kind: 'live', module: 'market', proof: 'services/svc-market/src/commerce/commerce-service.ts' },
+  marketListingFee: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — D26-P1-M2 vendor listing fee recipe; amount required (no invent rates). Deliberately unwired from svc-market: VendorService moves no value; commerce listing writer is M1 residual.',
+  },
+  marketPremiumPlacement: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — D26-P1-M2 premium placement fee recipe; amount required (no invent rates). Ranking/featured order stays owner residual; no svc-market writer posts this on tip.',
+  },
+} as const satisfies Record<RecipeName, RecipeDisposition>;
+
+export type MatrixRecipeName = keyof typeof RECIPE_MATRIX;
+
+export interface RecipeMatrixRow {
+  readonly name: RecipeName;
+  readonly disposition: RecipeDisposition;
+}
+
+export interface RecipeMatrixInventory {
+  /** Registry keys, sorted. */
+  readonly recipes: readonly RecipeName[];
+  /** One row per registry recipe. */
+  readonly rows: readonly RecipeMatrixRow[];
+  readonly live: readonly RecipeName[];
+  readonly sockets: readonly RecipeName[];
+  /**
+   * Registry keys missing from RECIPE_MATRIX, or matrix keys missing from the
+   * registry — either is a broken promise (matrix lied).
+   */
+  readonly brokenPromises: readonly string[];
+}
+
+/**
+ * Build the closed live-path inventory from the registry + RECIPE_MATRIX.
+ * Pure data — no filesystem. Safe to call from unit tests.
+ */
+export function buildRecipeMatrixInventory(): RecipeMatrixInventory {
+  const registry = Object.keys(recipes) as RecipeName[];
+  const matrixKeys = Object.keys(RECIPE_MATRIX) as RecipeName[];
+  const registrySet = new Set<string>(registry);
+  const matrixSet = new Set<string>(matrixKeys);
+
+  const brokenPromises = [
+    ...registry.filter((name) => !matrixSet.has(name)).map((name) => `registry-without-matrix:${name}`),
+    ...matrixKeys.filter((name) => !registrySet.has(name)).map((name) => `matrix-without-registry:${name}`),
+  ].sort();
+
+  const rows: RecipeMatrixRow[] = registry
+    .slice()
+    .sort()
+    .map((name) => ({
+      name,
+      disposition: RECIPE_MATRIX[name] as RecipeDisposition,
+    }));
+
+  const live = rows.filter((r) => r.disposition.kind === 'live').map((r) => r.name);
+  const sockets = rows.filter((r) => r.disposition.kind === 'socket').map((r) => r.name);
+
+  return {
+    recipes: registry.slice().sort() as RecipeName[],
+    rows,
+    live,
+    sockets,
+    brokenPromises,
+  };
+}
+
+export function liveRecipeKeys(inventory = buildRecipeMatrixInventory()): readonly string[] {
+  return inventory.live.slice();
+}
+
+export function socketRecipeKeys(inventory = buildRecipeMatrixInventory()): readonly string[] {
+  return inventory.sockets.slice();
+}
+
+export function countByKind(inventory = buildRecipeMatrixInventory()): { live: number; socket: number } {
+  return { live: inventory.live.length, socket: inventory.sockets.length };
+}

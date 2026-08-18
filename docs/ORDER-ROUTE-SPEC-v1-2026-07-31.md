@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md). Historical text below may still _mention_ thrift as what was once believed.
+
 # SPEC v1 — Order-route / DEX–CEX money-path harden
 
 **Status:** SPEC STANDS · contract for Build  
@@ -72,7 +74,7 @@ INTAFACED’s spot CEX order path and DEX quote plane exist and are partially st
 | **GC-3**  | Class M merge: green CI + self-audit + adversarial; **carve-outs stay Denon** — external value out, scope grants, **new/changed ledger recipes**, posture/kill/custody scan changes.                                                                           |
 | **GC-4**  | Denon §8 never agent-closed: go-live, secrets, prod RPC, listing policy, fee recipes invent, sanctions content, leverage params beyond defaults, “audited/insured” claims.                                                                                     |
 | **GC-5**  | Engine product order: **seed/mm → multi-asset → futures → OTC → TWAP**. Futures engine not started as a program mountain until seed + multi-asset bars in this Spec. Futures **recipes** already on main are OK; **engine MVP** is not this Spec’s early path. |
-| **GC-6**  | Worktree only; never main checkout; one concern per PR; `pnpm verify` real; CI thrift (local green before push storms).                                                                                                                                        |
+| **GC-6**  | Worktree only; never main checkout; one concern per PR; `pnpm verify` real; local green before push (Actions thrift deleted 2026-08-07).                                                                                                                       |
 | **GC-7**  | Builder never grades own work — Verify/Review fresh session or fresh agent.                                                                                                                                                                                    |
 | **GC-8**  | Stream A shell craft: coordinate LIVE-LANES; do not steal Wave A UI PRs for unrelated polish.                                                                                                                                                                  |
 | **GC-9**  | Tracker honesty: never `done` without reachable + tested + unpropped.                                                                                                                                                                                          |

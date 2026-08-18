@@ -28,6 +28,7 @@
    ========================================================================== */
 
 var $ = require('jquery');
+var klineOhlcv = require('../kline-ohlcv.js');
 /* Vendored Apache-2.0 standalone build — see LICENSE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var createChart = window.LightweightCharts.createChart;
@@ -226,37 +227,10 @@ KlineChart.prototype._loadHistory = function () {
           return;
         }
         var data = Array.isArray(response) ? response : [];
-        var bars = [];
-        for (var i = 0; i < data.length; i++) {
-          var item = data[i];
-          if (!item || item.length < 5) continue;
-          // Wire: [timestampMs, open, high, low, close, volume]. The timestamp
-          // is the bucket's OPEN time (CCXT convention) — labelling a candle
-          // with its close time shifts the whole series by one bar.
-          var t = item[0];
-          if (t > 1e12) t = Math.floor(t / 1000);
-          // OHLC arrive as decimal strings. lightweight-charts is a pixel
-          // renderer and needs numbers; this is the last possible moment and
-          // the value is never sent back anywhere.
-          bars.push({
-            time: t,
-            open: parseFloat(item[1]),
-            high: parseFloat(item[2]),
-            low: parseFloat(item[3]),
-            close: parseFloat(item[4])
-          });
-        }
-        bars.sort(function (a, b) {
-          return a.time - b.time;
-        });
-        // lightweight-charts requires unique ascending times
-        var deduped = [];
-        var lastT = -1;
-        for (var j = 0; j < bars.length; j++) {
-          if (bars[j].time === lastT) continue;
-          deduped.push(bars[j]);
-          lastT = bars[j].time;
-        }
+        // Wire: [timestampMs, open, high, low, close, volume]. OHLC must be
+        // decimal STRINGS (ix-wire.candle law). JSON numbers refused in kline-ohlcv.
+        // lightweight-charts needs numbers only after the string gate.
+        var deduped = klineOhlcv.barsFromHistory(data);
         self._series.setData(deduped);
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
         if (self._chart) self._chart.timeScale().fitContent();

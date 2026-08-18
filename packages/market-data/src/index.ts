@@ -10,3 +10,4 @@
  */
 export * from './depth.js';
 export * from './trade.js';
+export { CaptureLog, bookLevelsFromCapture, classifyBookObservation, isAbsentCapture, isMeasuredBook } from '@intafaced/connect-data-lake';

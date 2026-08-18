@@ -1,7 +1,25 @@
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { bookFromSnapshot, diffDepth, type DepthBook, type DepthDelta, type DepthSnapshot, type WireLevel } from '@intafaced/market-data';
+import {
+  bookFromSnapshot,
+  diffDepth,
+  type DepthBook,
+  type DepthDelta,
+  type DepthSide,
+  type DepthSnapshot,
+  type WireLevel,
+} from '@intafaced/market-data';
+import { resolveWsCopy, WS_COPY } from '../copy.js';
 import type { MarketRegistry } from './registry.js';
-import type { DepthSource } from './source.js';
+import { DepthNoBookError, type DepthSource } from './source.js';
+
+/** True when both sides have the same prices with the same quantities. */
+function sidesEqual(a: DepthSide, b: DepthSide): boolean {
+  if (a.size !== b.size) return false;
+  for (const [price, qty] of a) {
+    if (b.get(price) !== qty) return false;
+  }
+  return true;
+}
 
 /**
  * THE FAN-OUT (§5.2 ws.gateway).
@@ -73,6 +91,25 @@ export const CLOSE_POLICY = 1008;
 export const CLOSE_TRY_LATER = 1013;
 export const CLOSE_GOING_AWAY = 1001;
 
+/**
+ * Named unavailability on a public door — NOT a `DepthMessage` field.
+ * Matching-down / seed-fail must not look like a live empty book (seq-0 snapshot).
+ * Control frame `{ type: 'status', code }` sits beside snapshot/delta; the
+ * market-data package still forbids extending `DepthMessage`.
+ */
+export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
+
+export interface DepthEngineStatusFrame {
+  readonly type: 'status';
+  readonly code: typeof DEPTH_ENGINE_UNAVAILABLE;
+  readonly marketId: string;
+}
+
+export function depthEngineUnavailableFrame(marketId: string): string {
+  const frame: DepthEngineStatusFrame = { type: 'status', code: DEPTH_ENGINE_UNAVAILABLE, marketId };
+  return JSON.stringify(frame);
+}
+
 export interface DepthHubOptions {
   readonly depthLimit: number;
   readonly highWaterBytes: number;
@@ -126,6 +163,16 @@ export function toSnapshot(book: DepthBook): DepthSnapshot {
   return { type: 'snapshot', marketId: book.marketId, sequence: book.sequence, bids: side(book.bids), asks: side(book.asks) };
 }
 
+/** Resting depth on either side. Empty sides are absence, not a live zero book. */
+export function snapshotHasRestingDepth(snapshot: DepthSnapshot): boolean {
+  const book = bookFromSnapshot(snapshot);
+  return book.bids.size > 0 || book.asks.size > 0;
+}
+
+function bookHasRestingDepth(book: DepthBook): boolean {
+  return book.bids.size > 0 || book.asks.size > 0;
+}
+
 const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 
 export class DepthHub {
@@ -141,12 +188,24 @@ export class DepthHub {
 
   #knownMarkets: ReadonlySet<string> = new Set();
   #marketsFetchedAt = 0;
+  /**
+   * Last time a miss on the known-market list triggered a refresh.
+   * Separate from `#marketsFetchedAt` (timer / successful list load) so a
+   * freshly listed market still gets one refetch per window even when the
+   * cache was warmed moments ago by a different path.
+   */
+  #missRefreshAt = 0;
   #marketsInFlight: Promise<void> | null = null;
 
   /** Counters, surfaced on `/ready` so a flaky client is visible to an operator. */
   #droppedFrames = 0;
   #evictions = 0;
   #repairs = 0;
+  /**
+   * Markets whose last depth read failed (matching down / seed-fail / 5xx).
+   * Distinct from a listed never-traded book (honest empty at sequence 0).
+   */
+  readonly #unavailable = new Set<string>();
 
   constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
     const { registry, ...rest } = options;
@@ -160,6 +219,11 @@ export class DepthHub {
     return this.#subscriptions.size;
   }
 
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
+  get maxConnections(): number {
+    return this.#options.maxConnections;
+  }
+
   /** Markets with at least one subscriber — exactly what the poller should poll. */
   get activeMarkets(): string[] {
     const active = new Set<string>();
@@ -167,13 +231,35 @@ export class DepthHub {
     return [...active];
   }
 
-  get stats(): { connections: number; books: number; droppedFrames: number; evictions: number; repairs: number } {
+  get matchingAvailable(): boolean {
+    return this.#unavailable.size === 0;
+  }
+
+  get engineCode(): typeof DEPTH_ENGINE_UNAVAILABLE | null {
+    return this.matchingAvailable ? null : DEPTH_ENGINE_UNAVAILABLE;
+  }
+
+  isEngineUnavailable(marketId: string): boolean {
+    return this.#unavailable.has(marketId);
+  }
+
+  get stats(): {
+    connections: number;
+    books: number;
+    droppedFrames: number;
+    evictions: number;
+    repairs: number;
+    matchingAvailable: boolean;
+    code: typeof DEPTH_ENGINE_UNAVAILABLE | null;
+  } {
     return {
       connections: this.#subscriptions.size,
       books: this.#books.size,
       droppedFrames: this.#droppedFrames,
       evictions: this.#evictions,
       repairs: this.#repairs,
+      matchingAvailable: this.matchingAvailable,
+      code: this.engineCode,
     };
   }
 
@@ -190,10 +276,15 @@ export class DepthHub {
    * not have to await anything before it can wire up `close`. The snapshot is
    * produced on a later turn, and the buffering above is what makes that safe.
    */
-  attach(marketId: string, sink: DepthSink): () => void {
+  /**
+   * Register a sink. Returns detach, or `null` when at capacity (sink already
+   * closed with 1013). Callers that open real sockets must terminate on null —
+   * same fail-closed shape as the private hub (no half-open with zero frames).
+   */
+  attach(marketId: string, sink: DepthSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
-      sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
-      return () => undefined;
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
+      return null;
     }
 
     const sub: Subscription = { marketId, sink, pending: [], lagTicks: 0, lagging: false, closed: false };
@@ -210,10 +301,10 @@ export class DepthHub {
   async #open(sub: Subscription): Promise<void> {
     try {
       if (!(await this.ensureKnownMarket(sub.marketId))) {
-        // Not listed anywhere. This is the only case that earns `unknown
-        // market` — a LISTED market the engine has never traded is a legitimate
-        // subscription that opens on an empty book (`HttpDepthSource.snapshot`).
-        this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
+        // Not listed anywhere. Typed close — never a fabricated empty ladder.
+        // A LISTED market with no book stays open with no snapshot until
+        // matching has resting depth (empty ≠ zero).
+        this.#evict(sub, CLOSE_POLICY, resolveWsCopy(WS_COPY.unknownMarket));
         return;
       }
       if (sub.closed) return;
@@ -226,7 +317,17 @@ export class DepthHub {
         return;
       }
 
-      this.#flush(sub);
+      if (!this.#books.has(sub.marketId)) {
+        // Listed, no proven book. Never-traded (404 / empty ingest) stays
+        // silent absence. Engine-down is named so a terminal cannot confuse
+        // the two.
+        if (this.isEngineUnavailable(sub.marketId)) {
+          this.#write(sub, depthEngineUnavailableFrame(sub.marketId));
+        }
+        return;
+      }
+
+      if (sub.pending !== null) this.#flush(sub);
     } catch (err) {
       this.#evict(sub, CLOSE_TRY_LATER, err instanceof Error ? err.message : 'depth unavailable');
     }
@@ -238,14 +339,44 @@ export class DepthHub {
    * The cached list is refreshed lazily on a miss, at most once per refresh
    * window, so a market listed a moment ago works without waiting for the timer
    * and a flood of junk ids costs at most one upstream call per window.
+   *
+   * Miss-refresh is gated on `#missRefreshAt`, not on the last successful list
+   * load: a timer-driven or first-connect refresh must not block a miss for a
+   * market that was listed after that load.
    */
   async ensureKnownMarket(marketId: string): Promise<boolean> {
     if (this.#knownMarkets.has(marketId)) return true;
 
-    const now = this.#options.clock();
-    if (this.#marketsFetchedAt !== 0 && now - this.#marketsFetchedAt < this.#options.marketsRefreshMs) return false;
+    // Join an in-flight list load first. Concurrent misses must share that
+    // refresh — otherwise the second caller hits the budget path and gets a
+    // false "unknown market" while the first is still fetching a list that
+    // already includes the id.
+    if (this.#marketsInFlight) {
+      await this.#marketsInFlight;
+      if (this.#knownMarkets.has(marketId)) return true;
+    }
 
-    await this.refreshMarkets();
+    const now = this.#options.clock();
+    // Already spent this window's miss-refresh budget. `marketsRefreshMs: 0`
+    // never holds (now - t < 0 is false), so every miss still refetches.
+    // If a refresh is somehow still in flight, join it rather than refuse.
+    if (this.#missRefreshAt !== 0 && now - this.#missRefreshAt < this.#options.marketsRefreshMs) {
+      if (this.#marketsInFlight) {
+        await this.#marketsInFlight;
+        return this.#knownMarkets.has(marketId);
+      }
+      return false;
+    }
+
+    this.#missRefreshAt = now;
+    try {
+      await this.refreshMarkets();
+    } catch (err) {
+      // A failed list load is not "we checked and it is not a market" — clear
+      // the budget so the next miss can retry instead of lying for the window.
+      this.#missRefreshAt = 0;
+      throw err;
+    }
     return this.#knownMarkets.has(marketId);
   }
 
@@ -275,7 +406,29 @@ export class DepthHub {
     const run = (async () => {
       try {
         const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
+        // Poll may have already written a newer book while the seed round-trip
+        // was in flight. A seed must never regress that book.
+        const existing = this.#books.get(marketId);
+        if (existing !== undefined && existing.sequence > snapshot.sequence) {
+          this.#log.warn(
+            { marketId, seedSequence: snapshot.sequence, bookSequence: existing.sequence },
+            'ws: seed snapshot older than current book — skipped',
+          );
+          return;
+        }
         this.ingest(snapshot);
+      } catch (err) {
+        // Listed, but matching has no book or is down. Do not invent
+        // `{ bids: [], asks: [], sequence: 0 }` — that is a live zero book.
+        // 404 / DepthNoBookError = honest absence. Anything else = engine-down,
+        // named on the socket + `/ready` so it is not silent.
+        if (!(err instanceof DepthNoBookError)) this.#noteEngineDown(marketId);
+        this.#log.warn(
+          { marketId, err: err instanceof Error ? err.message : String(err) },
+          err instanceof DepthNoBookError
+            ? 'ws: depth seed — matching holds no book (absence, not engine-down)'
+            : 'ws: depth seed failed — disclosing depth.engine_unavailable; poll will replace when matching recovers',
+        );
       } finally {
         this.#seeding.delete(marketId);
       }
@@ -303,8 +456,13 @@ export class DepthHub {
    * Returns the delta that was broadcast, or `null` when there was none.
    */
   ingest(snapshot: DepthSnapshot): DepthDelta | null {
+    this.#noteEngineUp(snapshot.marketId);
     const previous = this.#books.get(snapshot.marketId);
     const next = bookFromSnapshot(snapshot);
+    if (!previous && !bookHasRestingDepth(next)) {
+      // No prior book and no resting depth: absent, not a priced empty book.
+      return null;
+    }
     this.#books.set(snapshot.marketId, next);
 
     if (!previous) {
@@ -323,11 +481,28 @@ export class DepthHub {
       return null;
     }
 
+    if (next.sequence === previous.sequence) {
+      // Same sequence, different levels: the book we hold is wrong and a
+      // continuous delta cannot fix it (fromSequence would equal sequence).
+      // Force a repair snapshot so clients do not silently drift. Identical
+      // levels still fan out null so the lag-repair sweep still runs.
+      if (!sidesEqual(previous.bids, next.bids) || !sidesEqual(previous.asks, next.asks)) {
+        this.#log.warn(
+          { marketId: snapshot.marketId, sequence: next.sequence },
+          'ws: same-sequence level change — forcing snapshot repair',
+        );
+        this.#fanOut(next, null, true);
+      } else {
+        this.#fanOut(next, null);
+      }
+      return null;
+    }
+
     // A sequence that advanced with no visible level change still gets a delta.
     // Skipping it would leave every client behind the engine, and the NEXT real
     // delta would then gap and cost everyone a resnapshot. An empty delta is a
     // few bytes; a fleet-wide resnapshot is not.
-    const delta = next.sequence > previous.sequence ? diffDepth(previous, next) : null;
+    const delta = diffDepth(previous, next);
     this.#fanOut(next, delta);
     return delta;
   }
@@ -342,6 +517,7 @@ export class DepthHub {
 
       if (sub.pending !== null) {
         if (delta !== null) this.#queue(sub, delta);
+        if (bookHasRestingDepth(book)) this.#flush(sub);
         continue;
       }
 
@@ -391,9 +567,11 @@ export class DepthHub {
 
   /** Send the snapshot, then whatever the stream sent while we were producing it. */
   #flush(sub: Subscription): void {
+    if (sub.closed || sub.pending === null) return;
     const book = this.#books.get(sub.marketId);
-    if (!book) {
-      this.#evict(sub, CLOSE_TRY_LATER, 'no book for this market');
+    if (!book || !bookHasRestingDepth(book)) {
+      // Listed, no live book yet. Stay open with no frames — do not emit []
+      // and do not close as unknown. Poll / a later ingest flushes for real.
       return;
     }
 
@@ -447,5 +625,34 @@ export class DepthHub {
   /** The current book for a market, if one is being maintained. */
   bookFor(marketId: string): DepthBook | undefined {
     return this.#books.get(marketId);
+  }
+
+  /** Matching answered (including 404 no-book). Clears engine-down for this id. */
+  noteMatchingReachable(marketId: string): void {
+    this.#noteEngineUp(marketId);
+  }
+
+  /**
+   * Matching could not be read (timeout / 5xx / unreachable). Named disclosure
+   * to current subscribers once per down-edge; `/ready` stays red until a
+   * successful ingest.
+   */
+  markEngineUnavailable(marketId: string): void {
+    const first = !this.#unavailable.has(marketId);
+    this.#noteEngineDown(marketId);
+    if (!first) return;
+    const frame = depthEngineUnavailableFrame(marketId);
+    for (const sub of [...this.#subscriptions]) {
+      if (sub.closed || sub.marketId !== marketId) continue;
+      this.#write(sub, frame);
+    }
+  }
+
+  #noteEngineDown(marketId: string): void {
+    this.#unavailable.add(marketId);
+  }
+
+  #noteEngineUp(marketId: string): void {
+    this.#unavailable.delete(marketId);
   }
 }

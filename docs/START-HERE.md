@@ -22,6 +22,7 @@ Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURR
 - **Send to Denon / partner agent:** [`INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md`](INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md) — full context pack, no compromise.
 - **Post-Denon close-out (2026-08-05):** [`POST-DENON-REUSE-CLOSEOUT-2026-08-05.md`](POST-DENON-REUSE-CLOSEOUT-2026-08-05.md) — law aligned; what remains Denon vs Nitro residual.
 - **You do not manage this day-to-day.** Agents load it from `AGENTS.md`; CI fails if that chain is removed.
+- **Agents find code via Graphify** (not by re-reading the repo): `graphify query "…"`. The map is **in git** (`graphify-out/graph.json`) so a GitHub clone already has it. You do not run this. Later check: say **graphify peace** — [`GRAPHIFY-PEACE-CHECK.md`](GRAPHIFY-PEACE-CHECK.md).
 
 ## What we are building (one breath)
 
@@ -74,7 +75,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Product UI (law):** vendored exchange shell → http://localhost:8090 (`vendor/*/05_Web_Front`). **`apps/web` is not the product** (retire ADR: [`adr/2026-08-03-retire-apps-web-port-to-vue-shell.md`](adr/2026-08-03-retire-apps-web-port-to-vue-shell.md); port map: [`REDUNDANT-VS-PORT-2026-08-03.md`](REDUNDANT-VS-PORT-2026-08-03.md)).
 - **Denon same-day product queue (build this):** [`REGROUP-2026-08-03.md`](REGROUP-2026-08-03.md) — shell money/landing/wire queue + WS integrity blocker.
 - **Insane parallel / swarms (agents):** [`SWARM-ALL-OUT-ORIENT-2026-08-03.md`](SWARM-ALL-OUT-ORIENT-2026-08-03.md) — discovery ritual, free matrix, anti-negatives, GO paste.
-- **Denon hard board (platform/money — not shell craft):** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) — mega judgment + **D-S-\*** product-law spec factory — what Nitro agents leave for Denon while AFK-swarming free shell.
+- **Denon hard board (platform/money — not shell craft):** **live** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 IDs · LIVE-LANES `denon-hard-parallel`) · D-S-\* factory **done** [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md) · historical mega board [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md). Agents residual only — do not take his invent-risk engines.
 - **Three-way distribution (BINDING):** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) — Denon hard · Shehzad chain only · Nitro agents rest.
 - **Shehzad Protocol Plane + INTACHAIN board:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) — sole chain runway; not shell/pay/bank.
 - **Custody honesty:** some money screens may be **CustodyNotBuilt** until wallet-RPC security review — do not re-paint fake withdraw/recharge UI over that.
@@ -85,6 +86,7 @@ Phase 3+ Pay/P2P/…   ██████░░░░ mounted; rails/sandbox sti
 - **Latest wave archive:** [`audit/2026-07-29-wave/`](audit/2026-07-29-wave/)
 - **Next product gates:** dual-book discipline + real rails/chain → not another full audit
 - **Denon handover (2026-07-29):** [`HANDOVER-NITRO-BRANCHES.md`](HANDOVER-NITRO-BRANCHES.md) · owner decisions closed: [`OWNER-DECISIONS-OPEN.md`](OWNER-DECISIONS-OPEN.md)
+- **Open owner rulings (tip packet):** [`OWNER-DECISION-PACKET-2026-08-09.md`](OWNER-DECISION-PACKET-2026-08-09.md) · part two [`OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md`](OWNER-DECISION-PACKET-PART-TWO-2026-08-09.md) · machine index [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json)
 - - **Denon return board (2026-07-29):** [`DENON-RETURN-GITHUB-STATE-2026-07-29.md`](DENON-RETURN-GITHUB-STATE-2026-07-29.md) — what Nitro agents landed; do not rebuild
 - **Nitro’s product lane (Stream A):** trader shell — claim + checklist in [`NITRO-STREAM-A-CLAIM.md`](NITRO-STREAM-A-CLAIM.md) · issue **#83**. Frontend lock: [`FRONTEND-STATE-OF-TRUTH-2026-07-31.md`](FRONTEND-STATE-OF-TRUTH-2026-07-31.md) when present on tip. **AFK drain (no continue):** [`FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md`](FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md) + `pnpm frontend:residual` / `node tooling/frontend/residual-print.mjs afk`.
 - **BOARD CLEAR CAMPAIGN (active):** after compact open **[`BOARD-CLEAR-NEXT.md`](BOARD-CLEAR-NEXT.md) first** for _campaign sequence_ · parallel [`BOARD-CLEAR-PARALLEL-SESSIONS.md`](BOARD-CLEAR-PARALLEL-SESSIONS.md) · AFK [`BOARD-CLEAR-AFK-CONTRACT.md`](BOARD-CLEAR-AFK-CONTRACT.md) · GO [`BOARD-CLEAR-AUTONOMOUS-RUN.md`](BOARD-CLEAR-AUTONOMOUS-RUN.md). **NEXT is not the product ownership map** — free/human-owned still = tracker + LIVE-LANES ([`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)).

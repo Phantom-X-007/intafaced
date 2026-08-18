@@ -56,6 +56,21 @@ Four channels, one interface (`NotificationChannel`, Doctrine §0.4).
 | `push`  | authenticated POST to a configured URL | `NOTIFY_PUSH_GATEWAY_URL` + `NOTIFY_PUSH_GATEWAY_TOKEN`   |
 | `sms`   | authenticated POST to a configured URL | `NOTIFY_SMS_GATEWAY_URL` + `NOTIFY_SMS_GATEWAY_TOKEN`     |
 
+### Mountain vs §13 sockets (D26-P1-O5)
+
+| Tracker id            | Plane                 | What it means                                                                                                                               |
+| --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ops.notifications`   | **Fan-out mountain**  | Bus → inbox → delivery rows. In-app **delivers**. Status stays `ready`, not `done`, while every out-of-app channel refuses in real deploys. |
+| `socket.notify-email` | §13 credential socket | Adapter shipped; refuse `channel.not_configured` until Class X credentials.                                                                 |
+| `socket.notify-push`  | §13 credential socket | Same.                                                                                                                                       |
+| `socket.notify-sms`   | §13 credential socket | Same.                                                                                                                                       |
+
+`notify.channels` and `GET /ready` carry `socket` on each channel status: `null`
+for `inapp` (mountain surface), `socket.notify-*` for the three out-of-app
+channels. Machine matrix: `src/channels/mountain-vs-sockets.ts`. Closing a
+socket is owner work — [`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`](../../docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md)
+— never inventing a provider name in code (§0.7).
+
 **A channel with no credentials is registered, not omitted.** It refuses every
 message with `channel.not_configured`, the refusal lands on the delivery row, and
 `GET /ready` and `notify.channels` both name the environment variables that are
@@ -150,21 +165,34 @@ rather than a green tick over silence.
 
 ## API
 
-| Procedure               | Scope          | Input                              | Output                                  |
-| ----------------------- | -------------- | ---------------------------------- | --------------------------------------- |
-| `health`                | public         | —                                  | `{ ok, service, fanoutEnabled }`        |
-| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }` | `{ items, nextCursor }`                 |
-| `notify.unreadCount`    | `notify:read`  | —                                  | `{ count }`                             |
-| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                  | `{ marked }`                            |
-| `notify.markAllRead`    | `notify:write` | —                                  | `{ marked }`                            |
-| `notify.channels`       | `notify:read`  | —                                  | per-channel availability + missing env  |
-| `notify.targets`        | `notify:read`  | —                                  | the caller's registered addresses       |
-| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`    | `{ status, channel, code, expiresAt }`  |
-| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                | `{ verified }`                          |
-| `notify.removeTarget`   | `notify:write` | `{ channel }`                      | `{ removed }`                           |
-| `notify.deliveries`     | `notify:read`  | `{ notificationId }`               | per-channel attempt + outcome           |
-| `notify.mutePrefs`      | `notify:read`  | —                                  | per-channel mute flags (email/push/sms) |
-| `notify.setMute`        | `notify:write` | `{ channel, muted }`               | updated mute flags                      |
+| Procedure               | Scope          | Input                                  | Output                                                                                  |
+| ----------------------- | -------------- | -------------------------------------- | --------------------------------------------------------------------------------------- |
+| `health`                | public         | —                                      | `{ ok, service, fanoutEnabled }`                                                        |
+| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }`     | `{ items, nextCursor }`                                                                 |
+| `notify.unreadCount`    | `notify:read`  | —                                      | `{ count }`                                                                             |
+| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                      | `{ marked }`                                                                            |
+| `notify.markAllRead`    | `notify:write` | —                                      | `{ marked }`                                                                            |
+| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env + §13 `socket` id (null for in-app)              |
+| `notify.targets`        | `notify:read`  | —                                      | the caller's registered addresses                                                       |
+| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`        | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
+| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                    | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |
+| `notify.removeTarget`   | `notify:write` | `{ channel }`                          | `{ removed }`                                                                           |
+| `notify.deliveries`     | `notify:read`  | `{ notificationId }`                   | per-channel attempt + outcome                                                           |
+| `notify.mutePrefs`      | `notify:read`  | —                                      | per-channel mute flags (email/push/sms)                                                 |
+| `notify.setMute`        | `notify:write` | `{ channel, muted }`                   | updated mute flags                                                                      |
+| `notify.alerts`         | `notify:read`  | —                                      | caller's price watches (v22.alerts MVP)                                                 |
+| `notify.createAlert`    | `notify:write` | `{ marketId, direction, targetPrice }` | active watch; price is a decimal string                                                 |
+| `notify.cancelAlert`    | `notify:write` | `{ id }`                               | cancel an active watch                                                                  |
+
+**Mounted, and proven mounted.** `router.mount.test.ts` proves authorisation
+through `createCaller`, which is the right tool for that job and blind to a
+different one: it invokes procedures in-process, so it stays green on a service
+whose HTTP mount was never registered, sits at the wrong prefix, or was wired to a
+context factory that ignores the edge signature.
+`mount.reachable.test.ts` assembles the mount the way `index.ts` does — same
+plugin, same prefix, same context factory — **listens on a real socket** and asks
+over the wire. This service's own history is a complete consumer nobody wired, so
+"is it reachable" is asked by a request, not by reading code.
 
 Every procedure is self-only via `principal.userId`. Title/body are i18n keys
 (`title_key` / `body_key`); clients render copy from `@intafaced/i18n`
@@ -197,18 +225,21 @@ _None._
 
 **Consumes**
 
-| Subject                              | Consumer (durable)           | Effect                                                     |
-| ------------------------------------ | ---------------------------- | ---------------------------------------------------------- |
-| `intafaced.trade.fill.settled`       | `notify-fill-settled`        | Inbox row for the fill owner                               |
-| `intafaced.trade.position.updated`   | `notify-position-updated`    | **Critical** inbox row + fan-out on liquidation only       |
-| `intafaced.p2p.escrow.locked`        | `notify-p2p-escrow-locked`   | Inbox rows for seller and buyer                            |
-| `intafaced.p2p.escrow.released`      | `notify-p2p-escrow-released` | Inbox rows when escrow releases to buyer                   |
-| `intafaced.p2p.escrow.refunded`      | `notify-p2p-escrow-refunded` | Inbox rows when escrow returns to seller                   |
-| `intafaced.p2p.trade.disputed`       | `notify-p2p-trade-disputed`  | Inbox row for the opener only (no counterparty on payload) |
-| `intafaced.identity.kyc.approved`    | `notify-kyc-approved`        | Inbox row when verification tier is granted                |
-| `intafaced.identity.rank.updated`    | `notify-rank-updated`        | Inbox row when rank changes                                |
-| `intafaced.token.stake.created`      | `notify-stake-created`       | Inbox row when a stake is locked                           |
-| `intafaced.bank.margin_call.created` | `notify-bank-margin-called`  | **Critical** inbox row + fan-out when a loan is called     |
+| Subject                              | Consumer (durable)              | Effect                                                     |
+| ------------------------------------ | ------------------------------- | ---------------------------------------------------------- |
+| `intafaced.trade.fill.settled`       | `notify-fill-settled`           | Inbox row for the fill owner                               |
+| `intafaced.trade.order.updated`      | `notify-order-updated`          | Inbox row on cancelled / rejected / expired only           |
+| `intafaced.trade.position.updated`   | `notify-position-updated`       | **Critical** inbox row + fan-out on liquidation only       |
+| `intafaced.p2p.escrow.locked`        | `notify-p2p-escrow-locked`      | Inbox rows for seller and buyer                            |
+| `intafaced.p2p.escrow.released`      | `notify-p2p-escrow-released`    | Inbox rows when escrow releases to buyer                   |
+| `intafaced.p2p.escrow.refunded`      | `notify-p2p-escrow-refunded`    | Inbox rows when escrow returns to seller                   |
+| `intafaced.p2p.trade.disputed`       | `notify-p2p-trade-disputed`     | Inbox row for the opener only (no counterparty on payload) |
+| `intafaced.identity.kyc.approved`    | `notify-kyc-approved`           | Inbox row when verification tier is granted                |
+| `intafaced.identity.rank.updated`    | `notify-rank-updated`           | Inbox row when rank changes                                |
+| `intafaced.token.stake.created`      | `notify-stake-created`          | Inbox row when a stake is locked                           |
+| `intafaced.bank.margin_call.created` | `notify-bank-margin-called`     | **Critical** inbox row + fan-out when a loan is called     |
+| `intafaced.agents.action.rejected`   | `notify-agent-action-rejected`  | Inbox row when a guardrail refuses an agent action         |
+| `intafaced.agents.action.completed`  | `notify-agent-action-completed` | Inbox row on completion / session_close only               |
 
 ### Idempotency and backpressure
 
@@ -229,13 +260,68 @@ true.** The claim retires a spent row when a later redelivery arrives — but a
 message that reaches the attempt ceiling and `max_deliver` together is parked by
 JetStream, and no later redelivery arrives. A one-minute sweep
 (`reapExhausted`, wired in `index.ts`) retires those rows on the same predicate
-the claim uses, so a row nobody is retrying stops reading as `pending` whether or
-not the bus ever comes back. It writes only a failure — never an attempt, never
-an acceptance — and never touches a row whose claim lease is still live.
+the claim uses, **and** retires stuck-`pending` rows whose claim lease has been
+dead longer than the bus redelivery window (`STUCK_PENDING_GRACE_MS` =
+maxDeliver × ack_wait). That second arm closes the hole where `in_flight` naks
+burn `max_deliver` without raising `attempts`, so the attempts-ceiling arm never
+fires and the row would otherwise sit `pending` forever. It writes only a failure
+— never an attempt, never an acceptance — and never touches a row whose claim
+lease is still live. The refusal code names which arm fired:
+`channel.attempts_exhausted` when the attempt budget was spent, and
+`channel.delivery_stuck` when the bus window elapsed with attempts still left
+(so a row with attempts 1 of 3 never pretends the budget was exhausted).
+
+**Register / verify rate limits.** Per `userId`+channel, default 3 registers /
+10 verifies per 15 minutes. Named refuse codes, not silent drops. Production
+uses a **fixed** window in Postgres (`notify.target_rate_windows`, migration
+`0005`) claimed with `SELECT … FOR UPDATE`, so two replicas share one budget
+rather than each holding an N× in-process counter. Unit tests may inject the
+memory limiter, which is a true sliding window — prod is fixed so the shared
+row stays simple; a burst exactly on the reset edge can spend up to ~2× max
+across two adjacent windows, not N× per pod.
+
+**Consent footer.** Out-of-app bodies from `renderNotification` append
+`notify.channel.footer` (catalog). Verification messages do not (address is still
+unconfirmed).
+
+### Refusal codes (the wire vocabulary)
+
+Codes, not sentences — clients render copy from `@intafaced/i18n`. Every code a
+row can carry is listed in `allRefusalCodes()` (`channels/channel.ts`); a pin
+test fails if production writes a string missing from that list.
+
+| Code                            | Means                                                                    |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `channel.not_configured`        | No gateway credentials for this channel                                  |
+| `channel.no_target`             | User has no address on this channel                                      |
+| `channel.target_unverified`     | Address on file but never confirmed (critical records this, not silence) |
+| `channel.target_unroutable`     | Address shape unusable (not E.164, bad mailbox, etc.)                    |
+| `channel.disabled`              | Operator kill-switch `NOTIFY_OUT_OF_APP_ENABLED=false`                   |
+| `channel.muted`                 | User muted non-critical traffic on this channel                          |
+| `channel.attempts_exhausted`    | Attempt budget spent — abandoned after max attempts                      |
+| `channel.transport_rejected`    | Permanent gateway 4xx — abandoned with a name, not retried as "failed"   |
+| `channel.delivery_stuck`        | Reaper arm 2 — claim lease dead past the bus window; attempts may remain |
+| `channel.register_rate_limited` | Too many address registrations in the window                             |
+| `channel.verify_rate_limited`   | Too many verification guesses in the window                              |
+
+The table is the tip wire vocabulary — a pin test fails if it drifts from
+`allRefusalCodes()`.
 
 `intafaced.bank.margin_call.created` is keyed `<loanId>:<sequence>`, not
 `<loanId>` — a loan can be called, cured and called again, and the second call is
 a different fact.
+
+### `trade.order.updated` — terminal statuses only
+
+That subject is published on every order row change (pending / open / filled /
+cancelled / rejected / expired). Fills already have `fill.settled`. Pending and
+open are things the trader just did, and the private WS already fans the live
+row. The inbox consumer writes only on **cancelled**, **rejected**, and
+**expired** — the cases that can complete while the app is closed.
+
+Which other statuses deserve a message is product law. It lives in
+`DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY` (`src/events.ts`). Severity is `info`
+(mute may apply). The key is `<orderId>:<status>`; `ts` is not part of it.
 
 ### `trade.position.updated` — one transition of four
 
@@ -278,6 +364,73 @@ boot.
 owns the bank stream and publishes margin calls. The consumer attaches when the
 stream is present — pending is no longer the steady state for that subject.
 
+## Price alerts (v22.alerts MVP)
+
+Watchlists live here: a user sets `marketId` + `above|below` + decimal-string
+`targetPrice`. Evaluation rides the same fan-out as every other notification
+(`NotifyService.create` → inbox + channels). There is no second delivery path.
+
+| Procedure            | Scope          | Effect                                            |
+| -------------------- | -------------- | ------------------------------------------------- |
+| `notify.alerts`      | `notify:read`  | the caller's watches **+ whether one can fire**   |
+| `notify.createAlert` | `notify:write` | create a watch, returned with the same disclosure |
+| `notify.cancelAlert` | `notify:write` | cancel an active watch                            |
+
+**Evaluation is a mounted sweep, and it used to be nothing at all.**
+`evaluateMarket` shipped complete and tested with **no caller**: this file and
+`router.ts` both called it "an internal job path" and there was no job. A user
+created a watch, got `status: 'active'`, and nothing ever looked at the row again
+— D-S-13 Class B, the same shape as `bankMarginCalled` parking with a finished
+consumer. `AlertService.evaluateDueAlerts` now fans in from `activeMarkets()` (so
+a watch on a market nobody enumerated is still evaluated) and `index.ts` drives it
+every `ALERT_SWEEP_INTERVAL_MS`, clearing it on shutdown. The last pass is on
+`/ready`; a null `lastAt` means the driver never ran.
+
+**Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
+injected mark port. `acceptAlertMark` is the accepted-mark gate: a `kind: 'dark'`
+source cannot fire even if `quote()` invents `{ kind: 'ok' }`, and an absent
+quote is refused rather than treated as zero. A live `{ kind: 'ok' }` whose
+`at` is older than 300s (same ticker window bank uses for loan marks) or dated
+more than 30s in the future is `stale` / `refused` — a one-shot must not fire
+on a memory. When the accepted mark is unavailable (dark / stale / refused),
+the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
+
+**Out-of-app required.** If this deployment listed a channel in
+`NOTIFY_REQUIRED_CHANNELS` and that channel cannot deliver, a crossing watch
+refuses `channel.not_configured` / `channel.disabled` by name — it does not
+silently drop the device leg and mark the watch fired. Inbox-only (nothing
+required) remains the honest fallback; sockets stay open (tracker `ready`).
+
+**Live mark when `TRADE_URL` is set.** Production injects
+`createTradeHttpMarkSource` against svc-trade's public REST — the same
+`GET /api/v1/markets` + `GET /api/v1/ticker/:symbol` surface svc-bank already
+uses for loan marks (mid when two-sided, else last; decimal strings only).
+Unset / blank `TRADE_URL` keeps the dark port: CRUD still works; fire does not
+lie. `kind: 'live'` is claimed only by that factory, never hardcoded in the
+entrypoint to look finished.
+
+`MarkSource.kind` (`dark` | `live`) is **required**, because an optional field
+with a default is how a dark source silently reads as a live one. It describes
+wiring, not weather: a `live` feed may still answer `unavailable` on any given
+quote.
+
+**The disclosure rides with the data.** Both read and create return
+`evaluation: { markSource, canFire, code }`, so a client cannot render somebody's
+watchlist — or confirm a watch they just created — without also receiving the fact
+that nothing on it can currently cross. `canFire: true` says the wiring is not
+missing and **nothing more**: delivery is best-effort on every channel (§8) and
+there is no SLA here.
+
+**One-shot.** Crossing inserts one notification keyed `<alertId>:<markPrice>`,
+then marks the row `fired`. Order is deliberate: mark-before-notify used to burn
+a watch under fan-out kill or a crash mid-create (status `fired`, empty inbox,
+no retry). Notify first; only retire the watch when create produced or recovered
+a row. A redelivery reuses the same key and cannot double-send.
+
+Out of scope for this residual (tracker + §31): funding / liquidation-proximity
+alerts, whale-flow intelligence tiers, mobile watchlist sync, owner gateway
+credentials (Class X — same as every out-of-app channel).
+
 ## Ledger
 
 This service holds no balances and posts no ledger transactions.
@@ -298,15 +451,16 @@ schema refuses it.
 
 ## Environment
 
-| Variable                                | Default | Notes                                                                  |
-| --------------------------------------- | ------- | ---------------------------------------------------------------------- |
-| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                  |
-| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay. |
-| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**  |
-| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call.                                           |
-| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                 |
-| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                    |
-| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                  |
+| Variable                                | Default | Notes                                                                                                    |
+| --------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                                                    |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay.                                   |
+| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**                                    |
+| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call. Max **25000** (claim-lease ceiling) so a lease always outlasts one attempt. |
+| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                                                   |
+| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                                                      |
+| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                                                    |
+| `TRADE_URL`                             | —       | Unset ⇒ alert marks stay dark. Set ⇒ public ticker mark source (live wiring).                            |
 
 An empty string is treated as absent, because that is what `docker compose`
 interpolates an unset variable to — otherwise an unwired gateway would fail
@@ -315,15 +469,16 @@ honestly unconfigured.
 
 ## §13 sockets
 
-| Socket | State                                                                                                                                            |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Email  | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message. |
-| Push   | Same. Device tokens register and confirm per user; no push credentials configured.                                                               |
-| SMS    | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                           |
+| Socket    | State                                                                                                                                                                                                                                                                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Email     | Adapter shipped and tested against a real HTTP server. **Waiting on credentials the owner must obtain.** Unconfigured, it refuses every message.                                                                                                                                                                                               |
+| Push      | Same. Device tokens register and confirm per user; no push credentials configured.                                                                                                                                                                                                                                                             |
+| SMS       | Same. Addresses are E.164, text is composed and capped; no SMS credentials configured.                                                                                                                                                                                                                                                         |
+| Mark feed | Sweep **mounted and running**. With `TRADE_URL` set, marks read trade's public ticker (live wiring; empty book still refuses). Without it the port is `dark` and every evaluation refuses `alert.price_unavailable` with disclosure on both alert procedures. Class **C** when dark — the gap is named where a user could otherwise be misled. |
 
-None of these is a code gap. Each is a URL and a token away from working, and
-until then the in-app inbox carries every notification and the record says why
-nothing else did. The owner's list of what to obtain and where to put it:
+Email/push/SMS each need a URL and a token before they leave the platform; until
+then the in-app inbox carries every notification and the record says why nothing
+else did. The owner's list of what to obtain and where to put it:
 [`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`](../../docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md).
 
 ## Port

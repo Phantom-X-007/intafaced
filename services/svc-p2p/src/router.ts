@@ -15,12 +15,25 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
-import { isActiveMerchant } from './merchant-programme.js';
+import {
+  ceilingOnWire,
+  limitsConfigured,
+  limitsOnWire,
+  NO_OFFER_LIMITS,
+  offerLimitsPosture,
+  type OfferLimitPolicy,
+} from './merchant-limits.js';
+import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
 export type P2pRouterOptions = {
   /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
   moderatorUserIds?: readonly string[];
+  /**
+   * Offer ceilings by merchant standing (TRK-p2p.merchants Stage 2).
+   * Unset / empty = unlimited = pre-Stage-2 behaviour. Never invent magnitudes.
+   */
+  offerLimits?: OfferLimitPolicy;
 };
 
 /**
@@ -31,11 +44,12 @@ export type P2pRouterOptions = {
  * between. A JS number never touches a P2P amount — including the fiat leg,
  * where a rounding error is a payment the counterparty can refuse.
  *
- * Every mutating procedure is `scopedProcedure('p2p:write', { module: 'p2p' })`,
- * which checks the scope AND runs the jurisdiction matrix (§7). P2P is
- * custodial on the Fiat Plane — the platform holds the escrowed asset — so §22
- * puts it behind tiered verification, and that follows from `module: 'p2p'`
- * rather than from a check written here.
+ * Every P2P procedure starts with `scopedProcedure(..., { module: 'p2p' })`,
+ * which checks the scope AND runs the jurisdiction matrix (§7). The router
+ * then applies the merchant API gate to identity-issued key traffic: sessions
+ * keep ordinary P2P access, while a key must belong to an approved merchant.
+ * P2P is custodial on the Fiat Plane — the platform holds the escrowed asset —
+ * so §22 puts it behind tiered verification.
  */
 
 /** Decimal string on the wire. Rejects anything a float could have mangled. */
@@ -105,10 +119,22 @@ const disputeOutput = z.object({
   id: z.string().uuid(),
   tradeId: z.string().uuid(),
   openedBy: z.string(),
+  /**
+   * How the dispute was opened. `timeout` means the fiat_sent clock filed it;
+   * `openedBy` is then the party of interest (buyer), not a claim they pressed
+   * "open dispute". Same honesty class as evidence going write-only.
+   */
+  openedVia: z.enum(['party', 'timeout']),
   reason: z.string(),
   status: z.enum(['open', 'resolved']),
   moderatorId: z.string().nullable(),
   resolution: z.enum(['release', 'refund']).nullable(),
+  /**
+   * Moderator notes on the ruling. Accepted by `disputes.resolve`, stored, and
+   * previously never serialised — the same write-only trap evidence had.
+   * Reviewable afterwards is half of ADR D-S-08's "recorded and reviewable".
+   */
+  resolutionNotes: z.string().nullable(),
   deadlineAt: z.string(),
   openedAt: z.string(),
   resolvedAt: z.string().nullable(),
@@ -154,6 +180,12 @@ type TradeOut = z.infer<typeof tradeOutput>;
  * timed-out call needs to be able to tell those apart.
  */
 function toTrpcError(err: unknown): TRPCError {
+  // Procedures throw TRPCError deliberately (L2-7 party filter on trades.get /
+  // disputes.get → NOT_FOUND, not FORBIDDEN). `guard` funnels every throw
+  // through this mapper; re-wrapping those would turn a clean NOT_FOUND into
+  // INTERNAL_SERVER_ERROR and undo the IDOR shape the caller is meant to see.
+  if (err instanceof TRPCError) return err;
+
   if (err instanceof InstrumentError) {
     switch (err.code) {
       case 'p2p.instrument_not_found':
@@ -226,6 +258,9 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.offer_not_active':
       case 'p2p.offer_method_unsupported':
+      case 'p2p.offer_limit_exceeded':
+      case 'p2p.invalid_fee_bps':
+      case 'p2p.release_unpostable':
       case 'p2p.dispute_evidence_rejected':
       // The caller can fix it — by being a person. Reachable only from a
       // principal whose user id is not a canonical UUID, which is a wiring
@@ -341,6 +376,7 @@ export function createP2pRouter(
   merchants?: MerchantService,
 ) {
   const moderatorUserIds = options.moderatorUserIds ?? [];
+  const offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
 
   /**
    * The programme, or an honest refusal.
@@ -375,6 +411,70 @@ export function createP2pRouter(
     decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
   });
   const moderationReachable = isModerationConfigured(moderatorUserIds);
+  const offerLimitsConfigured = limitsConfigured(offerLimits);
+  const offerLimitsPostureValue = offerLimitsPosture(offerLimits);
+
+  /**
+   * Programme-gated P2P API procedure.
+   *
+   * `kid` comes from identity's verified API-key exchange. We do not mint,
+   * store, revoke or rate-limit keys here: identity owns credentials and the
+   * edge owns request throttling. This service owns the product entitlement.
+   *
+   * Standing is read on every key request, so an operator suspension removes
+   * access immediately rather than waiting for a token to expire. Interactive
+   * sessions remain ordinary P2P users and are not made merchant-only.
+   */
+  const merchantApiProcedure = (scope: 'p2p:read' | 'p2p:write') =>
+    scopedProcedure(scope, { module: 'p2p' }).use(async ({ ctx, next }) => {
+      if (!ctx.principal.kid) return next({ ctx });
+
+      const record = await requireMerchants().get(ctx.principal.userId);
+      if (!record || !isActiveMerchant(record.status)) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'P2P API-key access requires current approved merchant standing. Use an interactive session to review or apply.',
+        });
+      }
+      return next({ ctx });
+    });
+
+  const offerLimitsOutput = z.object({
+    /** Largest ordinary maxAmt, or null when no numeric cap. Decimal string. */
+    standardMax: z.string().nullable(),
+    /** Largest approved-merchant maxAmt, or null when no numeric cap. Decimal string. */
+    merchantMax: z.string().nullable(),
+    /** True when at least one band is a number. */
+    configured: z.boolean(),
+    /** unset = env absent; unlimited = owner confirmed; configured = at least one number. */
+    posture: z.enum(['unset', 'unlimited', 'configured']),
+    standardMode: z.enum(['unset', 'unlimited', 'capped']),
+    merchantMode: z.enum(['unset', 'unlimited', 'capped']),
+    /** Same sentence the boot log prints — operator-readable posture. */
+    summary: z.string(),
+  });
+
+  const myOfferCeilingOutput = z.object({
+    /** Ceiling that binds this caller right now, or null when no numeric cap. */
+    maxAmount: z.string().nullable(),
+    /** Which policy slot applied — applicant/suspended stay on standard. */
+    band: z.enum(['standard', 'merchant']),
+    /** unset vs owner-confirmed unlimited vs capped for the binding band. */
+    limitMode: z.enum(['unset', 'unlimited', 'capped']),
+    merchantStatus: z.enum(['applied', 'approved', 'rejected', 'suspended', 'withdrawn']).nullable(),
+  });
+
+  const merchantApiAccessOutput = z.object({
+    /** Derived from current standing; never a second stored entitlement. */
+    eligible: z.boolean(),
+    credential: z.enum(['session', 'api_key']),
+    merchantStatus: z.enum(['applied', 'approved', 'rejected', 'suspended', 'withdrawn']).nullable(),
+    /** Existing shared planes consumed by this service, not rebuilt here. */
+    keyPlane: z.literal('identity'),
+    rateLimitPlane: z.literal('edge'),
+    /** D-S-08: no key, bot or timer may decide a disputed escrow. */
+    disputeResolution: z.literal('interactive_human_only'),
+  });
 
   /**
    * The owner's own instruments, mapped for the wire.
@@ -403,12 +503,22 @@ export function createP2pRouter(
           service: z.literal('svc-p2p'),
           /** False until `P2P_MODERATOR_USER_IDS` names at least one person. */
           moderationReachable: z.boolean(),
+          /**
+           * False until `P2P_OFFER_MAX_STANDARD` / `P2P_OFFER_MAX_MERCHANT` arms
+           * a ceiling. Same honesty pattern as moderationReachable: clients must
+           * not imply the merchant badge buys a higher limit when none is set.
+           */
+          offerLimitsConfigured: z.boolean(),
+          /** Public three-way posture so probes never need a scoped refuse-first read. */
+          offerLimitsPosture: z.enum(['unset', 'unlimited', 'configured']),
         }),
       )
       .query(() => ({
         ok: true,
         service: 'svc-p2p' as const,
         moderationReachable,
+        offerLimitsConfigured,
+        offerLimitsPosture: offerLimitsPostureValue,
       })),
 
     /**
@@ -424,7 +534,7 @@ export function createP2pRouter(
     }),
 
     offers: router({
-      create: scopedProcedure('p2p:write', { module: 'p2p' })
+      create: merchantApiProcedure('p2p:write')
         .input(
           z.object({
             side: z.enum(['buy', 'sell']),
@@ -441,8 +551,12 @@ export function createP2pRouter(
              * is the seller's instrument set — a clean per-method probe of the
              * maker. The service refuses it too; this is the message a client
              * can act on rather than a 400 from deeper down.
+             *
+             * Each entry is a method id (string) or `{ id }` — not `{}` / null /
+             * numbers. `methodAllowed` only matches those shapes; junk would
+             * board an offer that can never be taken.
              */
-            methods: z.array(z.unknown()).min(1),
+            methods: z.array(z.union([z.string().min(1).max(64), z.object({ id: z.string().min(1).max(64) })])).min(1),
             terms: z.string().max(4000).optional(),
           }),
         )
@@ -467,7 +581,7 @@ export function createP2pRouter(
           ),
         ),
 
-      list: scopedProcedure('p2p:read', { module: 'p2p' })
+      list: merchantApiProcedure('p2p:read')
         .input(
           z
             .object({
@@ -481,20 +595,30 @@ export function createP2pRouter(
         .output(z.array(offerOutput))
         .query(async ({ input }) => guard(async () => (await p2p.listOffers(input ?? {})).map(toOfferOut))),
 
-      get: scopedProcedure('p2p:read', { module: 'p2p' })
+      get: merchantApiProcedure('p2p:read')
         .input(z.object({ offerId: z.string().uuid() }))
         .output(offerOutput)
         .query(async ({ input }) => guard(async () => toOfferOut(await p2p.getOffer(input.offerId)))),
 
-      close: scopedProcedure('p2p:write', { module: 'p2p' })
+      close: merchantApiProcedure('p2p:write')
         .input(z.object({ offerId: z.string().uuid() }))
         .output(offerOutput)
         .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.closeOffer(input.offerId, ctx.principal.userId)))),
+
+      pause: merchantApiProcedure('p2p:write')
+        .input(z.object({ offerId: z.string().uuid() }))
+        .output(offerOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.pauseOffer(input.offerId, ctx.principal.userId)))),
+
+      resume: merchantApiProcedure('p2p:write')
+        .input(z.object({ offerId: z.string().uuid() }))
+        .output(offerOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => toOfferOut(await p2p.resumeOffer(input.offerId, ctx.principal.userId)))),
     }),
 
     trades: router({
       /** Take an offer → `escrowLock`. The first money path in this router. */
-      take: scopedProcedure('p2p:write', { module: 'p2p' })
+      take: merchantApiProcedure('p2p:write')
         .input(
           z.object({
             offerId: z.string().uuid(),
@@ -516,13 +640,13 @@ export function createP2pRouter(
           ),
         ),
 
-      markFiatSent: scopedProcedure('p2p:write', { module: 'p2p' })
+      markFiatSent: merchantApiProcedure('p2p:write')
         .input(z.object({ tradeId: z.string().uuid() }))
         .output(tradeOutput)
         .mutation(async ({ ctx, input }) => guard(async () => toTradeOut(await p2p.markFiatSent(input.tradeId, ctx.principal.userId)))),
 
       /** Seller confirms the fiat landed → `escrowRelease`. */
-      confirmReceived: scopedProcedure('p2p:write', { module: 'p2p' })
+      confirmReceived: merchantApiProcedure('p2p:write')
         .input(z.object({ tradeId: z.string().uuid() }))
         .output(tradeOutput)
         .mutation(async ({ ctx, input }) =>
@@ -530,14 +654,14 @@ export function createP2pRouter(
         ),
 
       /** Cancel → `escrowRefund`, in full, to the seller. */
-      cancel: scopedProcedure('p2p:write', { module: 'p2p' })
+      cancel: merchantApiProcedure('p2p:write')
         .input(z.object({ tradeId: z.string().uuid(), reason: z.string().max(200).optional() }))
         .output(tradeOutput)
         .mutation(async ({ ctx, input }) =>
           guard(async () => toTradeOut(await p2p.cancelTrade(input.tradeId, ctx.principal.userId, input.reason ?? 'cancelled'))),
         ),
 
-      get: scopedProcedure('p2p:read', { module: 'p2p' })
+      get: merchantApiProcedure('p2p:read')
         .input(z.object({ tradeId: z.string().uuid() }))
         .output(tradeOutput)
         .query(async ({ ctx, input }) =>
@@ -551,7 +675,7 @@ export function createP2pRouter(
           }),
         ),
 
-      list: scopedProcedure('p2p:read', { module: 'p2p' })
+      list: merchantApiProcedure('p2p:read')
         .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
         .output(z.array(tradeOutput))
         .query(async ({ ctx, input }) => guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit)).map(toTradeOut))),
@@ -576,7 +700,7 @@ export function createP2pRouter(
        * what protects this; being a party (or an allowlisted / compliance
        * moderator) to a live disputed trade is.
        */
-      paymentInstrument: scopedProcedure('p2p:read', { module: 'p2p' })
+      paymentInstrument: merchantApiProcedure('p2p:read')
         .input(z.object({ tradeId: z.string().uuid() }))
         .output(
           z.object({
@@ -635,7 +759,7 @@ export function createP2pRouter(
          * do, that market refuses instruments. A seeded guess would be a wrong
          * answer that looks like a right one.
          */
-        list: scopedProcedure('p2p:read', { module: 'p2p' })
+        list: merchantApiProcedure('p2p:read')
           .input(z.object({ country: z.string().length(2).optional(), methodId: z.string().max(64).optional() }).optional())
           .output(z.array(methodSchemaOutput))
           .query(async ({ input }) =>
@@ -692,7 +816,7 @@ export function createP2pRouter(
           ),
       }),
 
-      create: scopedProcedure('p2p:write', { module: 'p2p' })
+      create: merchantApiProcedure('p2p:write')
         .input(
           z.object({
             methodId: z.string().min(1).max(64),
@@ -723,7 +847,7 @@ export function createP2pRouter(
        * Edit. Does NOT reach any trade already holding a snapshot — that is the
        * point of the snapshot, not a limitation of this call.
        */
-      update: scopedProcedure('p2p:write', { module: 'p2p' })
+      update: merchantApiProcedure('p2p:write')
         .input(
           z.object({
             instrumentId: z.string().uuid(),
@@ -746,7 +870,7 @@ export function createP2pRouter(
         ),
 
       /** Removal is a state change. An in-flight trade keeps working. */
-      remove: scopedProcedure('p2p:write', { module: 'p2p' })
+      remove: merchantApiProcedure('p2p:write')
         .input(z.object({ instrumentId: z.string().uuid() }))
         .output(instrumentHeaderOutput)
         .mutation(async ({ ctx, input }) =>
@@ -756,7 +880,7 @@ export function createP2pRouter(
         ),
 
       /** The caller's own instruments. Headers only — no field values, ever. */
-      list: scopedProcedure('p2p:read', { module: 'p2p' })
+      list: merchantApiProcedure('p2p:read')
         .input(z.object({ includeRemoved: z.boolean().optional() }).optional())
         .output(z.array(instrumentHeaderOutput))
         .query(async ({ ctx, input }) =>
@@ -775,7 +899,7 @@ export function createP2pRouter(
        * scope IS the whole gate, so making it the stronger one costs nothing
        * and stops a read-only API key dumping a user's stored bank details.
        */
-      reveal: scopedProcedure('p2p:write', { module: 'p2p' })
+      reveal: merchantApiProcedure('p2p:write')
         .input(z.object({ instrumentId: z.string().uuid() }))
         .output(instrumentHeaderOutput.extend({ details: instrumentDetailsOutput }))
         .mutation(async ({ ctx, input }) =>
@@ -792,7 +916,7 @@ export function createP2pRouter(
        * log the person whose data it is cannot use — and they are the one who
        * knows whether a look was expected.
        */
-      accessLog: scopedProcedure('p2p:read', { module: 'p2p' })
+      accessLog: merchantApiProcedure('p2p:read')
         .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
         .output(
           z.array(
@@ -825,7 +949,7 @@ export function createP2pRouter(
     }),
 
     disputes: router({
-      open: scopedProcedure('p2p:write', { module: 'p2p' })
+      open: merchantApiProcedure('p2p:write')
         .input(
           z.object({
             tradeId: z.string().uuid(),
@@ -881,7 +1005,7 @@ export function createP2pRouter(
        * but the shape of the thing. A dispute record whose earlier entries can
        * change is a record whose last writer decides what was said.
        */
-      appendEvidence: scopedProcedure('p2p:write', { module: 'p2p' })
+      appendEvidence: merchantApiProcedure('p2p:write')
         .input(
           z.object({
             tradeId: z.string().uuid(),
@@ -906,7 +1030,7 @@ export function createP2pRouter(
           }),
         ),
 
-      get: scopedProcedure('p2p:read', { module: 'p2p' })
+      get: merchantApiProcedure('p2p:read')
         .input(z.object({ tradeId: z.string().uuid() }))
         .output(disputeOutput)
         .query(async ({ ctx, input }) =>
@@ -943,7 +1067,7 @@ export function createP2pRouter(
        * `P2P_MODERATOR_USER_IDS`. An empty allowlist honest-refuses with
        * `p2p.moderation_unreachable` — mounted is not the same as reachable.
        */
-      list: scopedProcedure('p2p:read', { module: 'p2p' })
+      list: merchantApiProcedure('p2p:read')
         .input(
           z
             .object({
@@ -982,7 +1106,7 @@ export function createP2pRouter(
        * escalates and re-arms; the database refuses a terminal write on a
        * disputed trade without an attributed human ruling behind it.
        */
-      resolve: scopedProcedure('p2p:read', { module: 'p2p' })
+      resolve: merchantApiProcedure('p2p:read')
         .input(
           z.object({
             tradeId: z.string().uuid(),
@@ -994,14 +1118,58 @@ export function createP2pRouter(
         .mutation(async ({ ctx, input }) =>
           guard(async () => {
             assertModerator(ctx.principal, moderatorUserIds);
-            return toTradeOut(
-              await p2p.resolveDispute({
+            const trade = await p2p.resolveDispute({
+              tradeId: input.tradeId,
+              moderatorId: ctx.principal.userId,
+              resolution: input.resolution,
+              ...(input.notes ? { notes: input.notes } : {}),
+            });
+
+            /**
+             * D26-P1-I2 / D-S-08: a moderated loss must pull the merchant badge.
+             * Escrow already moved in `resolveDispute`; this only revises
+             * standing so API keys and offer ceilings stop vouching for the loser.
+             * release → seller lost; refund → buyer lost (same attribution as reputation).
+             */
+            if (merchants) {
+              const loserId = input.resolution === 'release' ? trade.sellerId : trade.buyerId;
+              const dispute = await p2p.getDispute(input.tradeId);
+              await merchants.suspendIfStandingBrokenByDisputeLaw({
+                userId: loserId,
                 tradeId: input.tradeId,
-                moderatorId: ctx.principal.userId,
-                resolution: input.resolution,
-                ...(input.notes ? { notes: input.notes } : {}),
-              }),
-            );
+                disputeId: dispute.id,
+                actorId: ctx.principal.userId,
+                actorScope: ctx.principal.scopes.includes('admin:compliance') ? 'admin:compliance' : 'p2p:read',
+              });
+            }
+
+            return toTradeOut(trade);
+          }),
+        ),
+
+      /**
+       * OPERATOR COUNTS for the queue — open / overdue / escalated / neverSeen.
+       *
+       * `/internal/moderation-backlog` already serves this to service callers.
+       * Without a tRPC surface, an allowlisted moderator with ordinary
+       * `p2p:read` could list rows but not see the SLA shape of the backlog
+       * (the number that grows when nobody is on shift). Same gate as `list`.
+       */
+      backlog: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(
+          z.object({
+            open: z.number().int().nonnegative(),
+            overdue: z.number().int().nonnegative(),
+            escalated: z.number().int().nonnegative(),
+            neverSeen: z.number().int().nonnegative(),
+            moderationReachable: z.boolean(),
+          }),
+        )
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            assertModerator(ctx.principal, moderatorUserIds);
+            const backlog = await p2p.moderationBacklog();
+            return { ...backlog, moderationReachable };
           }),
         ),
     }),
@@ -1027,6 +1195,8 @@ export function createP2pRouter(
                 resolutionReason: z.string().nullable(),
                 resolvedAt: z.string(),
                 ageSeconds: z.number().int().nonnegative(),
+                lastSettleError: z.string().nullable(),
+                lastSettleErrorAt: z.string().nullable(),
               }),
             ),
           }),
@@ -1042,6 +1212,8 @@ export function createP2pRouter(
                 resolutionReason: r.resolutionReason,
                 resolvedAt: r.resolvedAt.toISOString(),
                 ageSeconds: r.ageSeconds,
+                lastSettleError: r.lastSettleError,
+                lastSettleErrorAt: r.lastSettleErrorAt?.toISOString() ?? null,
               })),
             };
           }),
@@ -1060,7 +1232,7 @@ export function createP2pRouter(
      * wrong reason.
      */
     data: router({
-      export: scopedProcedure('p2p:read', { module: 'p2p' })
+      export: merchantApiProcedure('p2p:read')
         .output(
           z.object({
             userId: z.string(),
@@ -1087,7 +1259,7 @@ export function createP2pRouter(
           }),
         ),
 
-      erase: scopedProcedure('p2p:write', { module: 'p2p' })
+      erase: merchantApiProcedure('p2p:write')
         .output(
           z.object({
             userId: z.string(),
@@ -1120,25 +1292,14 @@ export function createP2pRouter(
        * you, and the same numbers that feed the XP graph raising limits
        * everywhere else.
        */
-      get: scopedProcedure('p2p:read', { module: 'p2p' })
+      get: merchantApiProcedure('p2p:read')
         .input(z.object({ userId: z.string().uuid() }))
         .output(reputationOutput)
         .query(async ({ input }) =>
           guard(async () => {
             const r = await p2p.reputationOf(input.userId);
-            // Absent programme → null, not false. See `merchant` in the schema.
-            const standing = merchants ? isActiveMerchant((await merchants.get(input.userId))?.status ?? 'withdrawn') : null;
-            return {
-              merchant: standing,
-              tradesTotal: r.tradesTotal,
-              completed: r.completed,
-              cancelled: r.cancelled,
-              disputed: r.disputed,
-              disputesLost: r.disputesLost,
-              completionRate: r.completionRate,
-              avgReleaseSecs: r.avgReleaseSecs,
-              badges: [...r.badges],
-            };
+            const record = merchants ? await merchants.get(input.userId) : null;
+            return reputationOnPublicDoor(r, programmeVouch(record?.status, Boolean(merchants)));
           }),
         ),
     }),
@@ -1155,13 +1316,63 @@ export function createP2pRouter(
      * empty — the same shape `moderationReachable` uses above.
      */
     merchants: router({
+      /**
+       * Check whether current standing unlocks the merchant API.
+       *
+       * This procedure deliberately uses the base scoped guard, not the
+       * merchant API guard, so a suspended key can learn why it was refused.
+       */
+      apiAccess: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(merchantApiAccessOutput)
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            const record = await requireMerchants().get(requireUser(ctx));
+            return {
+              eligible: record !== null && isActiveMerchant(record.status),
+              credential: ctx.principal.kid ? ('api_key' as const) : ('session' as const),
+              merchantStatus: record?.status ?? null,
+              keyPlane: 'identity' as const,
+              rateLimitPlane: 'edge' as const,
+              disputeResolution: 'interactive_human_only' as const,
+            };
+          }),
+        ),
+
       /** Your own standing. Null means never applied — not "rejected". */
-      me: scopedProcedure('p2p:read', { module: 'p2p' })
+      me: merchantApiProcedure('p2p:read')
         .output(merchantOutput.nullable())
         .query(async ({ ctx }) =>
           guard(async () => {
             const record = await requireMerchants().get(requireUser(ctx));
             return record ? toMerchantOut(record) : null;
+          }),
+        ),
+
+      /**
+       * Deployment offer ceilings (TRK-p2p.merchants Stage 2 honest API).
+       *
+       * Policy, not standing: any reader with `p2p:read` can see what the
+       * house has armed. Null maxes mean unlimited — the badge buys nothing
+       * until an operator sets env. Magnitudes are never invented here.
+       */
+      offerLimits: merchantApiProcedure('p2p:read')
+        .output(offerLimitsOutput)
+        .query(() => limitsOnWire(offerLimits)),
+
+      /**
+       * The ceiling that binds the CALLER right now.
+       *
+       * Combines standing (from the programme) with the deployment policy so
+       * a maker can show "you may offer up to X" before they type a size that
+       * will refuse. Never applied → standard band; approved → merchant band.
+       */
+      myOfferCeiling: merchantApiProcedure('p2p:read')
+        .output(myOfferCeilingOutput)
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            const userId = requireUser(ctx);
+            const record = await requireMerchants().get(userId);
+            return ceilingOnWire(record?.status ?? null, offerLimits);
           }),
         ),
 
@@ -1172,12 +1383,12 @@ export function createP2pRouter(
        */
       // `submitApplication`, not `apply` — tRPC reserves that name because it
       // collides with Function.prototype.apply on the router object.
-      submitApplication: scopedProcedure('p2p:write', { module: 'p2p' })
+      submitApplication: merchantApiProcedure('p2p:write')
         .output(merchantOutput)
         .mutation(async ({ ctx }) => guard(async () => toMerchantOut(await requireMerchants().apply(requireUser(ctx), 'p2p:write')))),
 
       /** Leave the programme. Self-service, and terminal — re-entry is a new application. */
-      withdraw: scopedProcedure('p2p:write', { module: 'p2p' })
+      withdraw: merchantApiProcedure('p2p:write')
         .input(z.object({ reason: z.string().min(1) }))
         .output(merchantOutput)
         .mutation(async ({ ctx, input }) =>
@@ -1197,9 +1408,11 @@ export function createP2pRouter(
         ),
 
       /**
-       * Operator decision. `admin:compliance` rather than `p2p:write`: granting
-       * or revoking a badge a stranger relies on is not a trading action, and a
-       * merchant holding `p2p:write` must not be able to reach it.
+       * Operator freeze / restore / reject. `admin:compliance` rather than
+       * `p2p:write` or a minted `p2p:moderate`: granting or revoking programme
+       * privileges a stranger relies on is not a trading action, and a merchant
+       * holding `p2p:write` must not be able to reach it. First approval and
+       * unfreeze re-check the live reputation snapshot; they do not stamp badges.
        */
       decide: scopedProcedure('admin:compliance', { module: 'p2p' })
         .input(
@@ -1303,10 +1516,12 @@ function toDisputeOut(d: DisputeRecord, viewerId: string | null): z.infer<typeof
     id: d.id,
     tradeId: d.tradeId,
     openedBy: d.openedBy,
+    openedVia: d.openedVia,
     reason: d.reason,
     status: d.status,
     moderatorId: d.moderatorId,
     resolution: d.resolution,
+    resolutionNotes: d.resolutionNotes,
     deadlineAt: d.deadlineAt.toISOString(),
     openedAt: d.openedAt.toISOString(),
     resolvedAt: d.resolvedAt?.toISOString() ?? null,

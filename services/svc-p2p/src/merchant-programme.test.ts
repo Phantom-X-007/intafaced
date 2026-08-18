@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   canTransition,
   checkEligibility,
   DEFAULT_ELIGIBILITY,
+  describeReputationSnapshot,
   isActiveMerchant,
+  mayGrantProgrammePrivileges,
+  mayRestoreProgrammePrivileges,
+  MERCHANT_API_KEY_PLANE,
+  programmeVouch,
+  reputationOnPublicDoor,
+  standingBrokenByDisputeLaw,
   TRANSITIONS,
   type MerchantStatus,
 } from './merchant-programme.js';
@@ -89,6 +99,71 @@ describe('eligibility — a fresh account cannot borrow merchant trust', () => {
   });
 });
 
+describe('dispute law — approved standing cannot outlive a moderated loss', () => {
+  it('flags an approved merchant whose reputation now fails eligibility', () => {
+    const broken = standingBrokenByDisputeLaw('approved', snapshotOf(counters({ disputed: 1, disputesLost: 1 })));
+    expect(broken.broken).toBe(true);
+    expect(broken.broken === true && broken.reason).toContain('dispute');
+  });
+
+  it('leaves non-approved rows alone (operator reinstate / apply paths own those)', () => {
+    const lost = snapshotOf(counters({ disputed: 1, disputesLost: 1 }));
+    for (const status of ['applied', 'suspended', 'rejected', 'withdrawn'] as const) {
+      expect(standingBrokenByDisputeLaw(status, lost).broken).toBe(false);
+    }
+  });
+
+  it('does not invent a break when the approved record still meets policy', () => {
+    expect(standingBrokenByDisputeLaw('approved', snapshotOf(counters())).broken).toBe(false);
+  });
+});
+
+describe('operator freeze / restore — same snapshot badges use', () => {
+  it('names the counters and derived badges so a freeze is checkable later', () => {
+    const snap = snapshotOf(counters());
+    expect(describeReputationSnapshot(snap)).toContain('20 escrowed trades');
+    expect(describeReputationSnapshot(snap)).toContain('derived badges:');
+    expect(describeReputationSnapshot(snap)).toContain('reliable');
+    expect(describeReputationSnapshot(snap)).not.toContain('spotless');
+  });
+
+  it('refuses unfreeze when live reputation would fail apply', () => {
+    const lost = snapshotOf(counters({ disputed: 1, disputesLost: 1 }));
+    const verdict = mayRestoreProgrammePrivileges(lost);
+    expect(verdict.eligible).toBe(false);
+    expect(verdict.eligible === false && verdict.reason).toContain('dispute');
+  });
+
+  it('allows unfreeze only when the current snapshot still meets programme rules', () => {
+    expect(mayRestoreProgrammePrivileges(snapshotOf(counters())).eligible).toBe(true);
+  });
+
+  it('refuses first approval on the same live snapshot unfreeze uses', () => {
+    // applied → approved used to skip this check. An applicant who was clean
+    // at apply, then lost a dispute while waiting, could still be stamped.
+    const lost = snapshotOf(counters({ disputed: 1, disputesLost: 1 }));
+    const verdict = mayGrantProgrammePrivileges(lost);
+    expect(verdict.eligible).toBe(false);
+    expect(verdict.eligible === false && verdict.reason).toContain('dispute');
+    expect(mayGrantProgrammePrivileges(lost)).toEqual(mayRestoreProgrammePrivileges(lost));
+    expect(mayGrantProgrammePrivileges(snapshotOf(counters())).eligible).toBe(true);
+  });
+
+  it('puts freeze on the public reputation door without minting a badge', () => {
+    const snap = snapshotOf(counters());
+    const frozen = reputationOnPublicDoor(snap, programmeVouch('suspended', true));
+    expect(frozen.merchant).toBe(false);
+    expect(frozen.badges).toEqual(snap.badges);
+    expect(frozen).not.toHaveProperty('p2pLimitMultiplier');
+
+    const restored = reputationOnPublicDoor(snap, programmeVouch('approved', true));
+    expect(restored.merchant).toBe(true);
+    expect(restored.badges).toEqual(snap.badges);
+
+    expect(programmeVouch('approved', false)).toBeNull();
+  });
+});
+
 describe('the state machine', () => {
   it('lets an operator approve or reject an application', () => {
     expect(canTransition('applied', 'approved', 'operator').allowed).toBe(true);
@@ -144,5 +219,20 @@ describe('the state machine', () => {
     for (const other of ['applied', 'rejected', 'suspended', 'withdrawn'] as const) {
       expect(isActiveMerchant(other)).toBe(false);
     }
+  });
+});
+
+describe('Stage 3 merchant API-key plane stays cut', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const programmeSource = readFileSync(join(here, 'merchant-programme.ts'), 'utf8');
+
+  it('names identity.apikeys as the only key plane — no dual mint in svc-p2p', () => {
+    expect(MERCHANT_API_KEY_PLANE).toBe('identity.apikeys');
+  });
+
+  it('does not grow a second key table, mint, or revoke API in this module', () => {
+    expect(programmeSource).not.toMatch(/p2p_merchant_api_keys/i);
+    expect(programmeSource).not.toMatch(/createApiKey|mintApiKey|revokeApiKey|issueApiKey/);
+    expect(programmeSource).not.toMatch(/api_secret|hashedSecret|key_prefix/);
   });
 });

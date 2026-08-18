@@ -76,4 +76,27 @@ describe('support Stage-2 operator queue', () => {
       reason: 'not_found',
     });
   });
+
+  /**
+   * Fair claim: exclusive ownership is useless if the shared queue keeps
+   * advertising the ticket. Two operators both "next" the same claimed row,
+   * thrash on already_claimed, and the real free work sits underneath.
+   * Shared queue = unassigned open/pending only. Assigned work is listAll/get.
+   */
+  it('shared queue and next skip tickets already claimed', () => {
+    const free = t({ id: 'free', category: 'other', createdAt: '2026-08-05T10:00:00.000Z' });
+    const owned = t({
+      id: 'owned',
+      category: 'deposit_withdraw',
+      createdAt: '2026-08-04T12:00:00.000Z',
+      status: 'pending',
+      assigneeId: 'op-1',
+    });
+    const q = buildOperatorQueue([free, owned], { now: NOW });
+    expect(q.status).toBe('ok');
+    if (q.status !== 'ok') return;
+    expect(q.entries.map((e) => e.ticketId)).toEqual(['free']);
+    expect(assignNext([free, owned], { now: NOW })?.ticketId).toBe('free');
+    expect(assignNext([owned], { now: NOW })).toBeNull();
+  });
 });

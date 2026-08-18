@@ -89,6 +89,28 @@ describe('PrivateOrderHub', () => {
     expect(hub.connections).toBe(1);
   });
 
+  it('refuses a user past per-user cap while another user still attaches', () => {
+    const hub = new PrivateOrderHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 100,
+      maxConnectionsPerUser: 2,
+    });
+    const a1 = sink();
+    const a2 = sink();
+    const a3 = sink();
+    const b1 = sink();
+    expect(hub.attach('user-a', a1)).not.toBeNull();
+    expect(hub.attach('user-a', a2)).not.toBeNull();
+    expect(hub.attach('user-a', a3)).toBeNull();
+    expect(a3.closed?.code).toBe(1013);
+    expect(a3.closed?.reason).toBe('ws.close.private_user_limit');
+    expect(hub.connections).toBe(2);
+
+    expect(hub.attach('user-b', b1)).not.toBeNull();
+    expect(hub.connections).toBe(3);
+  });
+
   it('reconnect after detach gets no replay of past orders (push-only)', () => {
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
     const first = sink();
@@ -124,8 +146,34 @@ describe('PrivateOrderHub', () => {
     hub.attach('user-a', lagging);
     hub.publish(update('user-a'));
     hub.publish(update('user-a'));
-    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.closed?.code).toBe(1013);
+    expect(lagging.closed?.reason).toMatch(/slow consumer/i);
     expect(lagging.sent).toHaveLength(0);
+  });
+
+  it('evicts a quiet lagging seat without any publish (heartbeat sweep path)', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10 });
+    const lagging = {
+      sent: [] as string[],
+      get bufferedBytes() {
+        return 100;
+      },
+      send() {
+        throw new Error('should not send');
+      },
+      closed: null as { code: number; reason: string } | null,
+      close(code: number, reason: string) {
+        this.closed = { code, reason };
+      },
+    };
+    expect(hub.attach('user-a', lagging)).not.toBeNull();
+    expect(hub.connections).toBe(1);
+    // No publish — only quiet sweeps (gateway heartbeat).
+    hub.sweepLag();
+    expect(lagging.closed).toBeNull();
+    hub.sweepLag();
+    expect(lagging.closed?.code).toBe(1013);
+    expect(hub.connections).toBe(0);
   });
 
   it('fans positions only to the owning user on channel positions', () => {
@@ -207,8 +255,55 @@ describe('PrivateOrderHub', () => {
     hub.publishPosition(position);
     hub.publishPosition(position);
 
-    expect(lagging.closed?.code).toBe(1008);
+    expect(lagging.closed?.code).toBe(1013);
+    expect(lagging.closed?.reason).toMatch(/slow consumer/i);
     expect(healthy.sent).toHaveLength(2);
     expect(JSON.parse(healthy.sent[0]!).channel).toBe('positions');
+  });
+
+  it('re-announces ready+bus to every live seat when private half attaches late', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    const bob = sink();
+    hub.attach('user-a', alice);
+    hub.attach('user-b', bob);
+
+    hub.announceBus(true);
+
+    expect(alice.sent).toHaveLength(3);
+    expect(bob.sent).toHaveLength(3);
+    expect(alice.sent.map((s) => JSON.parse(s).channel)).toEqual(['orders', 'fills', 'positions']);
+    for (const raw of alice.sent) {
+      const frame = JSON.parse(raw);
+      expect(frame.type).toBe('ready');
+      expect(frame.bus).toBe(true);
+      expect(frame.userId).toBe('user-a');
+    }
+    for (const raw of bob.sent) {
+      expect(JSON.parse(raw).userId).toBe('user-b');
+    }
+    // Honesty only — no invented order/fill/position payload.
+    expect(alice.sent.some((s) => 'orderId' in JSON.parse(s))).toBe(false);
+  });
+
+  it('does not announce to a detached seat', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    const detach = hub.attach('user-a', alice);
+    detach!();
+    hub.announceBus(true);
+    expect(alice.sent).toHaveLength(0);
+  });
+
+  it('holds live frames until releaseSnapshot so snapshot stays first', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach('user-a', alice, null, { holdUntilSnapshot: true });
+    hub.publish(update('user-a'));
+    expect(alice.sent).toHaveLength(0);
+    hub.sendOrdersSnapshot(alice, 'user-a', []);
+    hub.releaseSnapshot(alice);
+    expect(JSON.parse(alice.sent[0]!).type).toBe('snapshot');
+    expect(JSON.parse(alice.sent[1]!).orderId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
   });
 });

@@ -161,6 +161,7 @@ function stubService(): Stub {
     getMerchant: record('getMerchant', merchant),
     getMerchantByUserId: record('getMerchantByUserId', merchant),
     submitKyb: record('submitKyb', () => ({ ...merchant(), kybStatus: 'pending' as const, kybRef: 'dossier-1' })),
+    decideKyb: record('decideKyb', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
     decideKybStub: record('decideKybStub', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
     listPayments: record('listPayments', () => [paymentView({ status: 'captured', capturedAmount: amt('100') })]),
     createProfile: record('createProfile', () => ({ id: SETTLEMENT, merchantId: MERCHANT })),
@@ -175,10 +176,12 @@ function stubService(): Stub {
       { id: PAYMENT, event: 'created', payload: { amount: '100' }, railEventId: null, ts: new Date('2026-07-27T12:00:00.000Z') },
     ]),
     settleWindow: record('settleWindow', () => settlementRecord()),
+    releasePendingSettlement: record('releasePendingSettlement', () => settlementRecord({ status: 'failed' })),
     payoutSettlement: record('payoutSettlement', () =>
       settlementRecord({ status: 'paid_out', payoutMethod: 'card-sandbox', payoutRef: 'po_1' }),
     ),
     getSettlement: record('getSettlement', () => settlementRecord()),
+    listSettlements: record('listSettlements', () => [settlementRecord()]),
     createPaymentLink: record('createPaymentLink', () => ({
       id: LINK,
       token: 'pl_generated_token',
@@ -264,7 +267,7 @@ function stubUserMoney(): MoneyStub {
     assetId: 'USDT',
     amount: amt('40'),
     rail: 'card-sandbox',
-    destination: { kind: 'bank', ref: 'DE00 1234' },
+    destination: { kind: 'bank', ref: 'DE89370400440532013000' },
     clientRef: 'w-1',
     railRef: 'po_1',
     attempts: 0,
@@ -452,6 +455,7 @@ describe('a caller can tell the failures apart', () => {
   it('maps an over-refund and a double-spend guard to CONFLICT', async () => {
     for (const code of [
       'pay.refund_exceeds_captured',
+      'pay.nothing_captured',
       'pay.refund_in_flight',
       'pay.settlement_in_flight',
       'pay.settlement_desynced',
@@ -530,8 +534,62 @@ describe('authority', () => {
   it('does not let a refunder move a settlement out of the book', async () => {
     const api = await caller(['pay:refund']);
     await expect(
-      api.settlement.payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } }),
+      api.settlement.payout({
+        settlementId: SETTLEMENT,
+        railId: 'card-sandbox',
+        destination: { kind: 'bank', ref: 'GB82WEST12345698765432' },
+      }),
     ).rejects.toThrow(/pay:payout/);
+  });
+
+  it('REQUIRES MFA on settlement.payout — pay:payout is INTERACTIVE_ONLY', async () => {
+    // Engine C: the scope table marks pay:payout interactive-only; until this
+    // endpoint is pinned, a stolen single-factor session could drain settlements.
+    const api = await caller(['pay:payout'], { mfa: false });
+    const err = await api.settlement
+      .payout({
+        settlementId: SETTLEMENT,
+        railId: 'card-sandbox',
+        destination: { kind: 'bank', ref: 'X' },
+      })
+      .catch((e: unknown) => e);
+
+    expect((err as { code?: string }).code).toBe('UNAUTHORIZED');
+    expect((err as Error).message).toMatch(/two-factor/i);
+    expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
+    expect(INTERACTIVE_ONLY_SCOPES).toContain('pay:payout');
+    expect(() => assertKeyScopesAllowed(['pay:payout'])).toThrow(/interactive/i);
+  });
+
+  it('REFUSES default SESSION_SCOPES on merchant money procedures', async () => {
+    // pay:* are WITHHELD_FROM_SESSION — a normal login must never capture/refund/payout.
+    // Do not invent a grant path here; only lock the refuse.
+    const sessionScopes = [...SESSION_SCOPES];
+    expect(sessionScopes).not.toEqual(expect.arrayContaining(['pay:read', 'pay:write', 'pay:refund', 'pay:payout']));
+
+    for (const scope of sessionScopes) {
+      const api = await caller([scope]);
+      await expect(
+        api.payment.create({
+          merchantId: MERCHANT,
+          amount: '1',
+          assetId: 'USDT',
+          method: 'card',
+          railAdapter: 'card-sandbox',
+        }),
+      ).rejects.toThrow(/pay:write/);
+      await expect(api.payment.refund({ paymentId: PAYMENT, amount: '1' })).rejects.toThrow(/pay:refund/);
+      await expect(
+        api.settlement.payout({
+          settlementId: SETTLEMENT,
+          railId: 'card-sandbox',
+          destination: { kind: 'bank', ref: 'X' },
+        }),
+      ).rejects.toThrow(/pay:payout/);
+    }
+    expect(stub.calls.filter((c) => c.method === 'createPayment')).toHaveLength(0);
+    expect(stub.calls.filter((c) => c.method === 'refund')).toHaveLength(0);
+    expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
   });
 
   it('lets each write scope read, because seeing what you changed is implied', async () => {
@@ -644,6 +702,102 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     });
   });
 
+  it('owner can list settlements for a merchant', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.settlement.list({ merchantId: MERCHANT, status: 'posted' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.gross).toBe('100');
+    expect(rows[0]!.net).toBe('97.5');
+    expect(stub.calls.filter((c) => c.method === 'listSettlements')).toHaveLength(1);
+  });
+
+  it('refuses settlement.list on another merchant, and never lists', async () => {
+    stub.ownedBy(ANOTHER_USER);
+    const api = await caller(['pay:read']);
+    const err = await api.settlement.list({ merchantId: MERCHANT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method === 'listSettlements')).toHaveLength(0);
+  });
+
+  it('routing.assertInputs refuses missing geo without inventing a country', async () => {
+    const api = await caller([]);
+    const err = await api.routing.assertInputs({ required: ['geo'], method: 'card', riskBand: 'low' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_input_missing/);
+  });
+
+  it('routing.assertInputs passes when required dimensions are present', async () => {
+    const api = await caller([]);
+    await expect(
+      api.routing.assertInputs({
+        required: ['geo', 'method', 'risk'],
+        geoCountry: 'DE',
+        method: 'crypto',
+        riskBand: 'external:ok',
+      }),
+    ).resolves.toEqual({ ok: true });
+  });
+
+  it('routing.select refuses missing geo/method/risk on the public door', async () => {
+    const api = await caller([]);
+    const err = await api.routing.select({ preference: ['card-sandbox'], method: 'card', riskBand: 'low' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_input_missing/);
+  });
+
+  it('routing.select chooses card-sandbox for card + eligible geo/risk', async () => {
+    const api = await caller([]);
+    const out = await api.routing.select({
+      preference: ['crypto-native', 'card-sandbox'],
+      geoCountry: 'DE',
+      method: 'card',
+      riskBand: 'low',
+      policy: 'allow-sandbox',
+    });
+    expect(out.chosenRailId).toBe('card-sandbox');
+    expect(out.inputs).toEqual({ geoCountry: 'DE', method: 'card', riskBand: 'low' });
+    expect(out.decision.kind).toBe('pay.routing.decision');
+    expect(out.decision).not.toHaveProperty('approvalRate');
+    expect(out.decision).not.toHaveProperty('costBps');
+    const cryptoSkip = out.considered.find((e: { railId: string }) => e.railId === 'crypto-native');
+    expect(cryptoSkip).toMatchObject({ outcome: 'skipped', reason: 'method-mismatch' });
+  });
+
+  it('routing.select returns PRECONDITION_FAILED when no rail matches', async () => {
+    const api = await caller([]);
+    const err = await api.routing
+      .select({
+        preference: ['card-sandbox'],
+        geoCountry: 'DE',
+        method: 'card',
+        riskBand: 'high',
+        policy: 'allow-sandbox',
+        profiles: [{ railId: 'card-sandbox', methods: ['card'], countries: ['*'], riskBands: ['low'] }],
+      })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_no_rail/);
+  });
+
+  it('fraud.evaluate declines a blocklisted IP with a reason', async () => {
+    const api = await caller([]);
+    const d = await api.fraud.evaluate({
+      merchantId: MERCHANT,
+      amount: '10',
+      assetId: 'USDT',
+      ip: '203.0.113.9',
+      blocklists: { ips: ['203.0.113.9'] },
+    });
+    expect(d.outcome).toBe('decline');
+    expect(d.reasons.length).toBeGreaterThan(0);
+    expect(d.reasons[0]!.ruleId).toBe('blocklist_ip');
+  });
+
+  it('plugins.publicBase exposes the public API path for integrators', async () => {
+    const api = await caller([]);
+    await expect(api.plugins.publicBase()).resolves.toEqual({ base: '/api/pay/v1' });
+  });
+
   it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:read']);
@@ -673,7 +827,7 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:payout'], { mfa: true });
     const err = await api.settlement
-      .payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'X' } })
+      .payout({ settlementId: SETTLEMENT, railId: 'card-sandbox', destination: { kind: 'bank', ref: 'GB82WEST12345698765432' } })
       .catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
     expect(stub.calls.filter((c) => c.method === 'payoutSettlement')).toHaveLength(0);
@@ -685,6 +839,21 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     const call = stub.calls.find((c) => c.method === 'createMerchant');
     expect(call).toBeDefined();
     expect((call!.args[0] as { userId: string }).userId).toBe(USER);
+  });
+
+  it('merchant.decideKyb is operator admin:compliance, not merchant pay:write', async () => {
+    const merchantApi = await caller(['pay:write']);
+    const merchantErr = await merchantApi.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' }).catch((e: unknown) => e);
+    expect(codeOf(merchantErr)).toBe('FORBIDDEN');
+    expect(String((merchantErr as Error).message)).toMatch(/admin:compliance/);
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
+
+    const ops = await caller(['admin:compliance']);
+    const out = await ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' });
+    expect(out).toMatchObject({ id: MERCHANT, kybStatus: 'approved' });
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(1);
+    // Operator is not fenced as the merchant owner.
+    expect(stub.calls.filter((c) => c.method === 'getMerchant')).toHaveLength(0);
   });
 });
 
@@ -833,7 +1002,7 @@ describe('withdrawal.create is the interactive, 2FA-backed path off the platform
     assetId: 'USDT',
     amount: '40',
     railId: 'card-sandbox',
-    destination: { kind: 'bank', ref: 'DE00 1234' },
+    destination: { kind: 'bank', ref: 'DE89370400440532013000' },
     clientRef: 'w-1',
   };
 
@@ -924,7 +1093,7 @@ describe('withdrawal.create is the interactive, 2FA-backed path off the platform
   it('requires a destination with somewhere to send to', async () => {
     const api = await caller(['trade:withdraw'], { tier: 'basic' });
     await expect(api.withdrawal.create({ ...body, destination: { kind: 'bank', ref: '' } })).rejects.toThrow();
-    await expect(api.withdrawal.create({ ...body, destination: { kind: '', ref: 'X' } })).rejects.toThrow();
+    await expect(api.withdrawal.create({ ...body, destination: { kind: '', ref: 'GB82WEST12345698765432' } })).rejects.toThrow();
     expect(money.calls).toHaveLength(0);
   });
 
@@ -1032,7 +1201,13 @@ describe('hosted checkout is public, and safe because of its shape', () => {
     await api.checkout.open({ token: 'pl_a_link_token_value', railAdapter: 'card-sandbox' } as never);
 
     const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
-    expect(call.args[0]).toEqual({ linkToken: 'pl_a_link_token_value', amount: undefined, assetId: undefined });
+    expect(call.args[0]).toEqual({
+      linkToken: 'pl_a_link_token_value',
+      amount: undefined,
+      assetId: undefined,
+      geoCountry: undefined,
+      method: undefined,
+    });
     expect(JSON.stringify(call.args[0])).not.toContain('card-sandbox');
   });
 
@@ -1042,6 +1217,14 @@ describe('hosted checkout is public, and safe because of its shape', () => {
 
     const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
     expect(call.args[0]).toMatchObject({ amount: amt('7.25'), assetId: 'USDT' });
+  });
+
+  it('D26-P1-P3: forwards payer country and never a risk band from the public door', async () => {
+    const api = await caller([]);
+    await api.checkout.open({ token: 'pl_a_link_token_value', geoCountry: 'DE', riskBand: 'low' } as never);
+    const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
+    expect(call.args[0]).toMatchObject({ geoCountry: 'DE' });
+    expect(JSON.stringify(call.args[0])).not.toContain('riskBand');
   });
 
   it('refuses a JSON number for an amount, on the public surface as everywhere else', async () => {
@@ -1076,6 +1259,20 @@ describe('hosted checkout is public, and safe because of its shape', () => {
     const api = await caller([]);
     const err = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('SERVICE_UNAVAILABLE');
+  });
+
+  it('maps unset rails and unset PSP to SERVICE_UNAVAILABLE by their typed codes', async () => {
+    const api = await caller([]);
+
+    stub.fail(new PublicCheckoutUnavailable(null, 'none-configured'));
+    const railsUnset = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(railsUnset)).toBe('SERVICE_UNAVAILABLE');
+    expect(String((railsUnset as Error).message)).toContain('pay.checkout_rails_unset');
+
+    stub.fail(new PublicCheckoutUnavailable(null, 'psp-unset'));
+    const pspUnset = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(pspUnset)).toBe('SERVICE_UNAVAILABLE');
+    expect(String((pspUnset as Error).message)).toContain('pay.psp_unset');
   });
 
   it('maps an exhausted link to CONFLICT and a busy one to TOO_MANY_REQUESTS', async () => {

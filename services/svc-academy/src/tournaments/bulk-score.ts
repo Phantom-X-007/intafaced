@@ -5,7 +5,8 @@
  * without inventing scores. Season must be live for any write.
  */
 
-import { assertMayWriteScore, assertScore, TournamentError, type SeasonStatus, type StandingRecord } from './ladder.js';
+import { assertMayWriteScore, assertScore, TournamentError, type SeasonRecord, type SeasonStatus, type StandingRecord } from './ladder.js';
+import { assertScoreWindowOpen } from './season-calendar.js';
 
 export type ScorePatch = {
   readonly userId: string;
@@ -29,17 +30,41 @@ export type BulkScoreResult = BulkScoreOk | BulkScoreRefuse;
 /**
  * Validate a bulk score patch list for a live season.
  * Does not write DB — caller applies after ok.
+ *
+ * When `startsAt`/`endsAt` are provided (or a full season-shaped record), the
+ * calendar window is enforced the same way as single-score writes.
  */
 export function validateBulkScoreWrite(input: {
   seasonStatus: SeasonStatus;
   seasonId: string;
   patches: readonly ScorePatch[];
+  /** Optional calendar bounds — when set, live-after-endsAt refuses. */
+  startsAt?: Date;
+  endsAt?: Date | null;
+  now?: Date;
 }): BulkScoreResult {
   try {
     assertMayWriteScore(input.seasonStatus);
   } catch (e) {
     const msg = e instanceof TournamentError ? e.message : 'Season not live';
     return { status: 'refuse', reason: 'season_not_live', message: msg };
+  }
+  if (input.startsAt !== undefined) {
+    try {
+      const season: SeasonRecord = {
+        id: input.seasonId,
+        slug: 'bulk-gate',
+        title: 'bulk-gate',
+        status: input.seasonStatus,
+        rulesSummary: '',
+        startsAt: input.startsAt,
+        endsAt: input.endsAt ?? null,
+      };
+      assertScoreWindowOpen(season, input.now ?? new Date());
+    } catch (e) {
+      const msg = e instanceof TournamentError ? e.message : 'Season score window closed';
+      return { status: 'refuse', reason: 'season_not_live', message: msg };
+    }
   }
   if (!input.patches.length) {
     return { status: 'refuse', reason: 'empty', message: 'No score patches — refuse invent empty bulk write' };

@@ -264,6 +264,128 @@ describe('INVARIANT 2 — available never goes negative', () => {
     ).toThrow(/no purpose/);
   });
 
+  it('refuses a lock purpose stamped legacy: — migration stamp is not a claim', () => {
+    // DB 0008 refuses purpose LIKE 'legacy:%'. Pure guards must match so the
+    // in-memory reference cannot accept what Postgres will reject.
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'legacy-purpose-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('1') },
+          {
+            account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'collateral', purpose: `legacy:${USER_A}` },
+            direction: 'debit',
+            amount: amt('1'),
+          },
+        ],
+      }),
+    ).toThrow(/legacy:/);
+  });
+
+  it('refuses a whitespace-only lock purpose — same failure class as empty', () => {
+    // Spaces are truthy and length > 0, but they name no claim. Two holds with
+    // purpose "   " share one identity and re-commingle (P0-3).
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'whitespace-purpose-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('1') },
+          {
+            account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'collateral', purpose: '   ' },
+            direction: 'debit',
+            amount: amt('1'),
+          },
+        ],
+      }),
+    ).toThrow(/no purpose/);
+  });
+
+  it('refuses purpose on available — available stays fungible', () => {
+    // A purposed available opens a second pot beside the real one; recon still
+    // greens while the user has two balances and can only see one.
+    expect(() =>
+      assertValidPost({
+        idempotencyKey: 'available-purpose-test',
+        module: 'test',
+        reason: 'test',
+        entries: [
+          {
+            account: { ownerType: 'user', ownerId: USER_A, assetId: 'USDT', kind: 'available', purpose: 'split' },
+            direction: 'credit',
+            amount: amt('1'),
+          },
+          {
+            account: { ownerType: 'module', ownerId: 'treasury', assetId: 'USDT', kind: 'available' },
+            direction: 'debit',
+            amount: amt('1'),
+          },
+        ],
+      }),
+    ).toThrow(/must not carry purpose/);
+  });
+
+  it('normalises purpose so padded and bare claim strings share one pot', async () => {
+    // accountPurpose trims. Without that, purpose "order:x " and "order:x" are
+    // two accounts; adapters assembling AccountRef inline skip constructors.
+    // Space pads were the 0011 class; tab/NBSP are the 0012 dual-book class
+    // (DB bare btrim was space-only until 0012).
+    const { accountKey } = await import('./client.js');
+    const { accountPurpose } = await import('./types.js');
+    const bare = { ownerType: 'user' as const, ownerId: USER_A, assetId: 'USDT', kind: 'hold' as const, purpose: 'order:x' };
+    const padded = { ...bare, purpose: '  order:x  ' };
+    const tabPadded = { ...bare, purpose: 'order:x\t' };
+    const nbspPadded = { ...bare, purpose: 'order:x\u00a0' };
+    expect(accountPurpose(padded)).toBe('order:x');
+    expect(accountPurpose(tabPadded)).toBe('order:x');
+    expect(accountPurpose(nbspPadded)).toBe('order:x');
+    expect(accountKey(padded)).toBe(accountKey(bare));
+    expect(accountKey(tabPadded)).toBe(accountKey(bare));
+    expect(accountKey(nbspPadded)).toBe(accountKey(bare));
+
+    // Whitespace-only purpose on available collapses to the real available pot
+    // rather than opening a second balance recon cannot tell from a dual book.
+    const spacesAvailable = {
+      ownerType: 'user' as const,
+      ownerId: USER_A,
+      assetId: 'USDT',
+      kind: 'available' as const,
+      purpose: '   ',
+    };
+    const tabsAvailable = { ...spacesAvailable, purpose: '\t\t\t' };
+    const realAvailable = { ownerType: 'user' as const, ownerId: USER_A, assetId: 'USDT', kind: 'available' as const };
+    expect(accountPurpose(spacesAvailable)).toBe('');
+    expect(accountPurpose(tabsAvailable)).toBe('');
+    expect(accountKey(spacesAvailable)).toBe(accountKey(realAvailable));
+    expect(accountKey(tabsAvailable)).toBe(accountKey(realAvailable));
+
+    // Engine path: padded hold posts into the same pot as the bare purpose.
+    await fund(USER_A, 'USDT', '10');
+    await ledger.post({
+      idempotencyKey: 'purpose-pad-hold-1',
+      module: 'test',
+      reason: 'test',
+      entries: [
+        { account: userAvailable(USER_A, 'USDT'), direction: 'credit', amount: amt('3') },
+        { account: padded, direction: 'debit', amount: amt('3') },
+      ],
+    });
+    await ledger.post({
+      idempotencyKey: 'purpose-pad-release-1',
+      module: 'test',
+      reason: 'test',
+      entries: [
+        { account: bare, direction: 'credit', amount: amt('3') },
+        { account: userAvailable(USER_A, 'USDT'), direction: 'debit', amount: amt('3') },
+      ],
+    });
+    expect(await balanceOf(USER_A, 'USDT', 'hold', 'order:x')).toBe('0');
+    expect(await balanceOf(USER_A, 'USDT')).toBe('10');
+  });
+
   it('leaves the book untouched when a post is rejected', async () => {
     await fund(USER_A, 'USDT', '10');
     const before = ledger.journal().length;

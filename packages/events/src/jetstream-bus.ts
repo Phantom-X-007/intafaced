@@ -77,7 +77,7 @@ export class JetStreamEventBus implements EventBus {
     const def = EVENT_CATALOG[name] as EventDef;
     const stream = streamName(def.service, this.opts.streamPrefix);
 
-    const maxDeliver = opts.maxDeliver ?? 5;
+    const maxDeliver = opts.maxDeliver ?? DEFAULT_MAX_DELIVER;
 
     await ensureConsumer(this.jsm, stream, {
       durable_name: opts.durable,
@@ -138,6 +138,15 @@ export class JetStreamEventBus implements EventBus {
   async close(): Promise<void> {
     await Promise.all(this.subs.map((s) => s.unsubscribe()));
     await this.nc.drain();
+  }
+
+  /**
+   * Resolves when this NATS connection is gone for good (drain, close, or
+   * server drop). Used by svc-ws to drop `/ready` bus flags and re-attach
+   * without a process restart. Not a liveness probe while TCP reconnects.
+   */
+  whenClosed(): Promise<void> {
+    return this.nc.closed().then(() => undefined);
   }
 }
 
@@ -216,14 +225,32 @@ export function nakBackoffMs(redeliveryCount: number): number {
 }
 
 /**
+ * Default redelivery budget for a durable consumer.
+ *
+ * Named (not a bare `5`) because other packages reason against it — svc-notify
+ * pins `NOTIFY_MAX_DELIVERY_ATTEMPTS` at or below this, and stuck-pending grace
+ * is `DEFAULT_MAX_DELIVER × ACK_WAIT_MS`. A bound computed against a number
+ * nobody exports is a bound that drifts in silence.
+ */
+export const DEFAULT_MAX_DELIVER = 5;
+
+/**
+ * The bus `ack_wait`, in milliseconds. 30s.
+ *
+ * Same law as `ACK_WAIT_NS` — milliseconds for callers that compute leases
+ * without inventing a second copy of "30 seconds".
+ */
+export const ACK_WAIT_MS = 30_000;
+
+/**
  * The bus `ack_wait`, in nanoseconds. 30s.
  *
  * Named because other packages reason against it: `svc-notify`'s claim lease
  * must outlast one gateway attempt and stay UNDER this, and its docstring cites
  * the number. A bound computed against a constant that has drifted is not a
- * bound.
+ * bound. Derived from `ACK_WAIT_MS` so the two cannot disagree.
  */
-export const ACK_WAIT_NS = 30_000_000_000;
+export const ACK_WAIT_NS = ACK_WAIT_MS * 1_000_000;
 
 /**
  * Idempotent consumer creation — and, unlike before, idempotent RECONCILIATION.

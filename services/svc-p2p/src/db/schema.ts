@@ -165,6 +165,13 @@ export const p2pTrades = p2p.table(
      * self-healing because every recipe is keyed on the trade id.
      */
     settledAt: tstz('settled_at'),
+    /**
+     * Last failure from `settle()` while still late. Survives process restart
+     * so operators do not need grepped logs (ADR surface permanent fail).
+     * Cleared when `settled_at` is stamped.
+     */
+    lastSettleError: text('last_settle_error'),
+    lastSettleErrorAt: tstz('last_settle_error_at'),
   },
   (t) => [
     /** The sweeper: what is overdue, oldest first. */
@@ -191,6 +198,13 @@ export const p2pDisputes = p2p.table(
       .notNull()
       .references(() => p2pTrades.id),
     openedBy: text('opened_by').notNull(),
+    /**
+     * Who filed the dispute. `party` = a buyer/seller called `disputes.open`.
+     * `timeout` = the fiat_sent clock opened it. `opened_by` is still the party
+     * of interest (the buyer who marked fiat sent on a timeout open) — never a
+     * system principal — so this column is what stops the audit trail lying.
+     */
+    openedVia: text('opened_via').notNull().default('party'),
     reason: text('reason').notNull().default(''),
     /**
      * APPEND-ONLY, and the database enforces it

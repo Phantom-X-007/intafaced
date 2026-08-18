@@ -166,11 +166,22 @@ export type TradeErrorCode =
   // halted the listing and the caller should stop asking, this one means the
   // venue is between sessions and the same order will be fine on Monday.
   | 'trade.market_closed'
+  /**
+   * Schedule key present on the row but absent from `TRADING_SCHEDULES`
+   * (D-S-05 / D26-P1-T9). Misconfiguration — not a session boundary.
+   */
+  | 'trade.unknown_schedule'
+  /**
+   * `asset_class` outside `ASSET_CLASSES` (D-S-05). Refusal names the permitted set.
+   */
+  | 'trade.unknown_asset_class'
   | 'trade.market_kind_unsupported'
   | 'trade.order_type_unsupported'
   | 'trade.invalid_qty'
   | 'trade.invalid_price'
   | 'trade.below_min_notional'
+  /** Place without clientOrderId — retry would open a second hold. */
+  | 'trade.client_order_id_required'
   | 'trade.no_reference_price'
   | 'trade.spot_disabled'
   /**
@@ -194,10 +205,33 @@ export type TradeErrorCode =
    */
   | 'trade.fee_exceeds_fill'
   /**
-   * Forex/commodity production listing without fiat settlement rails (D-S-05).
-   * Model/paper listings remain legal; this is the production-list lie.
+   * Forex/commodity production listing or place without settlement law
+   * (D26-P1-T7 / §13 `socket.forex-settlement` — needs D26-P0-05 + fiat rails).
+   * Model/paper listings remain legal; this is the production-list / hold-path lie.
    */
   | 'trade.unsettled_asset_class_listing'
+  /**
+   * Options listing refused because D26-P0-05 settlement asset law is unset.
+   * `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` empty → refuse (SOCKET §13
+   * `socket.options-settlement-asset-law`). Never invent live set / asset / matrix.
+   */
+  | 'trade.options_settlement_law_unset'
+  /**
+   * Options listing refused because settlement fixing is not configured (D7).
+   * `TRADE_OPTIONS_SETTLEMENT_FIXING` empty → refuse. Distinct from terms.
+   */
+  | 'trade.options_fixing_unconfigured'
+  /**
+   * Options listing refused for incomplete contract terms (half-list) or terms
+   * on a non-options kind. Schema CHECK `markets_options_terms_ck` is the same rule.
+   */
+  | 'trade.options_terms_incomplete'
+  /**
+   * Real-money futures list/enable refused because the insurance fund for the
+   * quote asset is empty (DIRECTION:33). Distinct from `trade.insurance_underfunded`
+   * (shortfall cover on an open position). Does not encode a target size.
+   */
+  | 'trade.insurance_fund_empty'
   | 'trade.hold_uncovered'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'
@@ -219,6 +253,7 @@ export type TradeErrorCode =
   | 'trade.otc_last_look_forbidden'
   | 'trade.otc_not_owner'
   | 'trade.otc_quote_missing'
+  | 'trade.otc_already_settled'
   | 'trade.otc_settle_refused'
   /** Algo (D-S-04 TWAP) kill-switch / schedule / state. */
   | 'trade.algo_disabled'
@@ -234,8 +269,17 @@ export type TradeErrorCode =
   | 'trade.algo_mark_missing'
   | 'trade.algo_insufficient_balance'
   | 'trade.algo_child_refused'
+  | 'trade.algo_child_cancel_failed'
   | 'trade.algo_principal_unavailable'
   | 'trade.algo_market_closed'
+  | 'trade.algo_volume_immature'
+  | 'trade.algo_no_volume'
+  /**
+   * Resume would stretch the schedule past 2× the order's own durationMs
+   * (ADR 2026-08-08). Trader may cancel-and-recreate; parent stays paused.
+   */
+  | 'trade.algo_resume_extends_too_far'
+  | 'trade.algo_cancel_incomplete'
   /** Identity S2S ownership consult failed — refuse rather than store an unvalidated id */
   | 'trade.sub_account_unavailable'
   /** Missing or foreign sub-account (existence not leaked) */

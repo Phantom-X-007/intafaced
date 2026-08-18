@@ -5,6 +5,7 @@ import {
   ReferralError,
   ancestors,
   chainDepth,
+  chainHasCycle,
   wouldCreateCycle,
   referralTreeBoardCard,
   referralTreeStatusLine,
@@ -58,6 +59,22 @@ describe('MemoryReferralTree Slice A', () => {
     expect(() => tree.attribute({ userId: U(2), referrerId: U(3) })).toThrow(ReferralError);
     tree.attribute({ userId: U(3), referrerId: U(2) });
     expect(() => tree.attribute({ userId: U(1), referrerId: U(3) })).toThrow(ReferralError);
+  });
+
+  it('sequential double-path mutual referral cannot form a cycle (A→B then B→A)', () => {
+    // Concurrent TOCTOU residual is fixed in ReferralService (txn + advisory lock).
+    // Sequential path must still refuse the second edge.
+    const tree = new MemoryReferralTree();
+    tree.attribute({ userId: U(2), referrerId: U(1) }); // B→A
+    expect(() => tree.attribute({ userId: U(1), referrerId: U(2) })).toThrow(ReferralError); // A→B
+    const parent = new Map(tree.listEdges().map((e) => [e.userId, e.referrerId]));
+    expect(wouldCreateCycle(parent, U(1), U(2))).toBe(true);
+    expect(chainHasCycle(parent, U(2))).toBe(false);
+    // Simulated corrupt graph (what concurrent insert without lock would leave):
+    const corrupt = new Map(parent);
+    corrupt.set(U(1), U(2));
+    expect(chainHasCycle(corrupt, U(1))).toBe(true);
+    expect(chainHasCycle(corrupt, U(2))).toBe(true);
   });
 
   it('enforces max depth', () => {

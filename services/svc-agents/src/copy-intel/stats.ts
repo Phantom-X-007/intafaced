@@ -2,13 +2,20 @@
  * Copy-Intel Stage-1 — audited leader stats from fixtures only.
  *
  * Spec: docs/ops/trk/agents.copy-intel.md Stage 1.
+ * D26-P1-A5: writes audited leader stats; NO returns-ranked marketing board
+ * (see `returns-board-refuse.ts` — mirrors trade.copy ranking ban).
  *
  * Rules:
  *   · Stats are computed from caller-supplied leader performance rows.
  *   · Never invents PnL, win rate, or follower counts.
+ *   · Output order is **input / fixture order** — never sorted by PnL or win rate.
  *   · Writes produce an audit record shape (in-memory Stage-1) with provenance.
  *   · No trade placement, no ledger, no profit-share — trade.copy product law residual.
+ *   · Explicit `copyPlane: 'live'` stays unavailable until the sealed live
+ *     leaders allowlist exists (`live-leader-plane-refuse.ts` — Class X).
  */
+
+import { isLiveLeaderPlaneAllowlisted } from './live-leader-plane-refuse.js';
 
 export type LeaderPerformanceFixture = {
   readonly leaderId: string;
@@ -107,6 +114,7 @@ export function filterLeadersByAllowlist(
 /**
  * Build audited leader stats from fixtures. Incomplete rows are skipped;
  * empty input → empty; all incomplete → unavailable (never invent green leaders).
+ * Stats are appended in fixture order — never ranked by returns (D26-P1-A5).
  */
 export function buildLeaderStats(
   fixtures: readonly LeaderPerformanceFixture[],
@@ -121,6 +129,11 @@ export function buildLeaderStats(
   const now = options.now ?? new Date();
   const idPrefix = options.idPrefix ?? 'ci';
   if (options.copyPlane === 'dark') {
+    return { status: 'unavailable', userMessageKey: 'agents.copy_intel.unavailable', reason: 'copy_plane_dark' };
+  }
+  // Live plane without a sealed allowlist is still dark — never invent leaders.
+  // Reason stays `copy_plane_dark` so the public door schema does not grow.
+  if (options.copyPlane === 'live' && !isLiveLeaderPlaneAllowlisted(options.leaderAllowlist)) {
     return { status: 'unavailable', userMessageKey: 'agents.copy_intel.unavailable', reason: 'copy_plane_dark' };
   }
 

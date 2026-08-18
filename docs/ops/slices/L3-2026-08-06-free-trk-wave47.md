@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-06  
 **Class:** N  
-**Depends on:** wave46 (local, thrift-held) · tip #876  
+**Depends on:** wave46 (local historical pack) · tip #876  
 **Does NOT invent L1/L2.**
 
 ## Outcome

@@ -165,6 +165,7 @@ describe('CCXT error taxonomy', () => {
     expect(UNAUTHENTICATED.status).toBe(401);
     expect(badSymbol('X').status).toBe(404);
     expect(notSupported('x', 'y').status).toBe(501);
+    expect(notSupported('x', 'y').body.retryAfter).toBeUndefined();
     expect(invalidOrder('x').body.code).toBe('InvalidOrder');
   });
 

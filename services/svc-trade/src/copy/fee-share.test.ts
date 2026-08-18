@@ -57,6 +57,25 @@ describe('attributeCopyFeeShare', () => {
     expect(a.skippedReason).toBeNull();
   });
 
+  it('uses fillFeeAmount (settled fee) over notional×bps invent', () => {
+    // Notional path would invent 1 USDT fee; real fill collected 0.7.
+    const a = attributeCopyFeeShare({
+      law: published,
+      fillId: 'f2-fill-fee',
+      leaderId: LEADER,
+      followerId: FOLLOWER,
+      assetId: 'USDT',
+      followerFillNotional: parseAmount('1000'),
+      protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('0.7'),
+      roundTripsThisPeriod: 0,
+      earningsPaidThisPeriod: 0n,
+      feeShareKilled: false,
+    });
+    expect(formatAmount(a.protocolFee)).toBe('0.7');
+    expect(formatAmount(a.cappedLeaderShare)).toBe('0.35');
+  });
+
   it('applies earnings cap per follower', () => {
     const a = attributeCopyFeeShare({
       law: published,

@@ -8,7 +8,8 @@ overrides:
   fast-uri@>=3.0.0 <3.1.5: 3.1.5
   fast-uri@>=4.0.0 <4.1.2: 4.1.2
   js-yaml@>=4.0.0 <4.3.1: 4.3.1
-  nanoid@<3.3.17: 3.3.17
+  nanoid@<3.3.18: 3.3.18
+  nanoid@>=4.0.0 <5.1.6: 5.1.6
 
 importers:
 
@@ -50,6 +51,9 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -75,6 +79,21 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.4
         version: 19.2.4(@types/react@19.2.18)
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/academy-ambassadors-pay:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
       rimraf:
         specifier: ^6.0.1
         version: 6.1.3
@@ -115,6 +134,21 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/connect-data-lake:
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -221,12 +255,80 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../config
+      '@intafaced/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@intafaced/safe-regex':
         specifier: workspace:^
         version: link:../safe-regex
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/execution-arb:
+    dependencies:
+      '@intafaced/ledger-client':
+        specifier: workspace:*
+        version: link:../ledger-client
+      '@intafaced/venue-adapter':
+        specifier: workspace:*
+        version: link:../venue-adapter
+      '@intafaced/venue-contracts':
+        specifier: workspace:*
+        version: link:../venue-contracts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/execution-house-tenant:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/execution-mm:
+    dependencies:
+      '@intafaced/ledger-client':
+        specifier: workspace:*
+        version: link:../ledger-client
+      '@intafaced/venue-adapter':
+        specifier: workspace:*
+        version: link:../venue-adapter
+      '@intafaced/venue-contracts':
+        specifier: workspace:*
+        version: link:../venue-contracts
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -287,9 +389,49 @@ importers:
 
   packages/market-data:
     dependencies:
+      '@intafaced/connect-data-lake':
+        specifier: workspace:*
+        version: link:../connect-data-lake
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../ledger-client
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/portfolio-view:
+    dependencies:
+      '@intafaced/ledger-client':
+        specifier: workspace:*
+        version: link:../ledger-client
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  packages/quant-honesty:
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -430,6 +572,9 @@ importers:
 
   services/svc-academy:
     dependencies:
+      '@intafaced/academy-ambassadors-pay':
+        specifier: workspace:*
+        version: link:../../packages/academy-ambassadors-pay
       '@intafaced/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -445,6 +590,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -567,6 +715,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -738,12 +889,67 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@intafaced/quant-honesty':
+        specifier: workspace:*
+        version: link:../../packages/quant-honesty
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
+      fastify:
+        specifier: ^5.11.2
+        version: 5.11.2
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      tsx:
+        specifier: ^4.23.7
+        version: 4.23.11
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.11)(yaml@2.9.0)
+
+  services/svc-execution:
+    dependencies:
+      '@intafaced/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@intafaced/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@intafaced/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@intafaced/execution-house-tenant':
+        specifier: workspace:*
+        version: link:../../packages/execution-house-tenant
+      '@intafaced/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
+      '@trpc/server':
+        specifier: ^11.0.0-rc.660
+        version: 11.18.0(typescript@5.9.3)
       fastify:
         specifier: ^5.11.2
         version: 5.11.2
@@ -784,6 +990,12 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@intafaced/ledger-client':
+        specifier: workspace:*
+        version: link:../../packages/ledger-client
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -837,6 +1049,9 @@ importers:
       '@intafaced/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -904,9 +1119,15 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
+      '@intafaced/portfolio-view':
+        specifier: workspace:*
+        version: link:../../packages/portfolio-view
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -959,6 +1180,12 @@ importers:
       '@intafaced/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@intafaced/ledger-client':
+        specifier: workspace:*
+        version: link:../../packages/ledger-client
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -1008,6 +1235,9 @@ importers:
       '@intafaced/exchange-contract':
         specifier: workspace:*
         version: link:../../packages/exchange-contract
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -1118,6 +1348,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -1182,6 +1415,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -1304,6 +1540,12 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
@@ -1313,9 +1555,15 @@ importers:
       '@trpc/server':
         specifier: ^11.0.0-rc.660
         version: 11.18.0(typescript@5.9.3)
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(postgres@3.4.9)
       fastify:
         specifier: ^5.11.2
         version: 5.11.2
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -1353,6 +1601,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -1478,6 +1729,9 @@ importers:
       '@intafaced/events':
         specifier: workspace:*
         version: link:../../packages/events
+      '@intafaced/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
@@ -3228,8 +3482,8 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  nanoid@3.3.17:
-    resolution: {integrity: sha512-xQLf0A3HOMlgHq0n247/LRuAOYmB7dXJ/DvAxGvsSBij45XtBSmQycu+F8ODbHwns/XyFZagyL1+J0Offw1E0g==}
+  nanoid@3.3.18:
+    resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
@@ -5082,7 +5336,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  nanoid@3.3.17: {}
+  nanoid@3.3.18: {}
 
   nats@2.29.3:
     dependencies:
@@ -5210,13 +5464,13 @@ snapshots:
 
   postcss@8.4.31:
     dependencies:
-      nanoid: 3.3.17
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.17
+      nanoid: 3.3.18
       picocolors: 1.1.1
       source-map-js: 1.2.1
 

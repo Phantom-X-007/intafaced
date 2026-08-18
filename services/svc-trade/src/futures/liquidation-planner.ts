@@ -5,9 +5,9 @@
  * liquidate and builds ledger recipe inputs. Does NOT invent marks, does NOT
  * post, does NOT run a cron. Job/cron supplies marks + posts recipes.
  *
- * Isolated v1: full close when equity <= maintenance threshold (default 50% of
- * initial margin) or when equity is non-positive. Loss draws margin first,
- * then insurance; residual margin (if any) is released to the user.
+ * Isolated v1: full close when equity is non-positive, or when equity is at
+ * or below a **named** maintenance threshold. There is no product default of
+ * 50% — omitted `maintenanceBps` is D3 unset, not an invented table.
  */
 import { formatAmount, parseAmount, recipes, type Amount, type PostRequest } from '@intafaced/ledger-client';
 
@@ -34,7 +34,7 @@ export interface LiquidationPlanInput {
   markPrice: string;
   /**
    * Liquidate when equity <= this fraction of initial margin (bps).
-   * Default 5000 = 50%. Set 0 to only liquidate when equity <= 0.
+   * Omitted = D3 unset: do not invent 50%. Equity ≤ 0 still liquidates.
    */
   maintenanceBps?: number;
 }
@@ -80,13 +80,13 @@ export function planLiquidation(input: LiquidationPlanInput): LiquidationDecisio
   const uPnL = unrealizedPnl(position.side, position.size, position.entryPrice, mark);
   const equity = position.margin + uPnL;
 
-  const maintBps = input.maintenanceBps ?? 5000;
-  if (maintBps < 0 || maintBps > 10_000) {
+  const maintNamed = input.maintenanceBps;
+  if (maintNamed !== undefined && (maintNamed < 0 || maintNamed > 10_000)) {
     return { liquidate: false, equity, unrealizedPnl: uPnL, reason: 'invalid_maintenance_bps' };
   }
-  const maintenance = (position.margin * BigInt(maintBps)) / 10_000n;
+  const maintenance = maintNamed === undefined ? null : (position.margin * BigInt(maintNamed)) / 10_000n;
 
-  let should = equity <= 0n || equity <= maintenance;
+  let should = equity <= 0n || (maintenance !== null && equity <= maintenance);
   let reason = equity <= 0n ? 'equity_non_positive' : 'below_maintenance';
 
   /**
@@ -125,7 +125,12 @@ export function planLiquidation(input: LiquidationPlanInput): LiquidationDecisio
   }
 
   if (!should) {
-    return { liquidate: false, equity, unrealizedPnl: uPnL, reason: 'healthy' };
+    return {
+      liquidate: false,
+      equity,
+      unrealizedPnl: uPnL,
+      reason: maintNamed === undefined ? 'maintenance_bps_unset' : 'healthy',
+    };
   }
 
   /**

@@ -76,6 +76,7 @@
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
+import ixTrade from '../../assets/js/ix-trade.js';
 
 export default {
   name: 'IxProtocol',
@@ -116,7 +117,11 @@ export default {
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
-    this.load('health', query('protocol', 'health', undefined, this.ixToken));
+    this.load(
+      'health',
+      query('protocol', 'health', undefined, this.ixToken),
+      ixTrade.schemas.protocolHealth
+    );
     this.load('chain', query('protocol', 'chainStatus', undefined, this.ixToken));
   }
 };

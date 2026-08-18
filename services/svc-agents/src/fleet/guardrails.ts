@@ -103,6 +103,44 @@ export interface Guardrail {
   readonly limits: GuardrailLimits;
 }
 
+/**
+ * Tools that must never appear on a **product** agent guardrail.
+ *
+ * Test probes (`probe` / `thrifty`) may still grant `trade.order` to exercise
+ * approval and budget rules. Product agent ids (navigator, support, scanner,
+ * merchant, copy-intel) hard-fail at parse if a money-moving tool is granted —
+ * undeclared refuse alone is not enough if registration accepts a grant.
+ *
+ * Pure stats/write-audit tools (e.g. copy-intel `trade.copy.stats.write`) are
+ * not on this list — they do not move value.
+ */
+export const FLEET_HARD_MONEY_WRITE_TOOLS = [
+  'ledger.post',
+  'ledger.hold',
+  'pay.refund',
+  'pay.capture',
+  'pay.route.change',
+  'bank.transfer',
+  'bank.withdraw',
+  'bank.loan',
+  'trade.order',
+  'trade.cancel',
+  'trade.copy.follow',
+  'trade.copy.unfollow',
+  'p2p.release',
+] as const;
+
+/** Product agent ids that must never grant money-write tools. */
+export const PRODUCT_AGENT_IDS = ['navigator', 'support', 'scanner', 'merchant', 'copy-intel'] as const;
+
+export function isFleetHardMoneyWriteTool(tool: string): boolean {
+  return (FLEET_HARD_MONEY_WRITE_TOOLS as readonly string[]).includes(tool);
+}
+
+export function isProductAgentId(agentId: string): boolean {
+  return (PRODUCT_AGENT_IDS as readonly string[]).includes(agentId);
+}
+
 export function parseGuardrail(input: unknown): Guardrail {
   const config = guardrailSchema.parse(input);
 
@@ -117,6 +155,15 @@ export function parseGuardrail(input: unknown): Guardrail {
     if (!config.limits.allowedModules.includes(tool.module)) {
       throw new Error(
         `Tool "${tool.name}" acts in module "${tool.module}", which is not in allowedModules — ` + `grant the module or drop the tool`,
+      );
+    }
+
+    // Product agents: money-moving tools are never grantable. Test probes may
+    // still declare them to exercise approval / budget enforcement.
+    if (isProductAgentId(config.agentId) && isFleetHardMoneyWriteTool(tool.name)) {
+      throw new Error(
+        `Product agent "${config.agentId}" cannot grant money-moving tool "${tool.name}" — ` +
+          `value moves only via packages/ledger-client recipes`,
       );
     }
   }
@@ -303,7 +350,7 @@ export function evaluateCompletion(
   if (!session.allowed) return session;
 
   if (!guardrail.limits.allowedTasks.includes(attempt.task)) {
-    return refuse('agents.task_not_allowed', 'agents.refused.tool_not_declared', { tool: attempt.task });
+    return refuse('agents.task_not_allowed', 'agents.refused.task_not_allowed', { task: attempt.task });
   }
 
   if (attempt.maxOutputTokens > guardrail.limits.maxOutputTokensPerCall) {

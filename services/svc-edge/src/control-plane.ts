@@ -1,7 +1,60 @@
 import type { FastifyInstance } from 'fastify';
 import { AuthError } from '@intafaced/auth';
+import {
+  checkNetworkAccess,
+  type ComplianceQueueDispositionRequest,
+  type ComplianceQueueItem,
+  type ComplianceQueueKind,
+} from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
+import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
+import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
+import { isS2sPath, resolve } from './routes.js';
+import { registerQuantHonestyRoutes } from './quant-honesty-door.js';
+import { userCopy } from './user-copy.js';
+
+const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
+
+function geoBlockStatus(region: string) {
+  const decision = evaluateGeoBlock({ region });
+  return {
+    allowed: decision.allowed,
+    code: decision.code,
+    reason: decision.reason,
+    screeningDeclaration: decision.screeningDeclaration,
+    screeningConfigured: decision.screeningConfigured,
+    listHitCount: decision.listHitCount,
+    inventedBlockedList: false as const,
+    regionResolved: decision.regionResolved,
+    enforcedOnApiPath: true,
+  };
+}
+
+/**
+ * Parse disposition body for the compliance queue. Unknown status refuses closed.
+ */
+export function parseComplianceDisposition(
+  body: {
+    status?: string;
+    reason?: string;
+    partnerRef?: string;
+  },
+  authenticatedActor: string,
+): ComplianceQueueDispositionRequest {
+  const status = body.status?.trim();
+  if (status === 'pending') return { status: 'pending' };
+  if (status === 'cleared') {
+    return { status: 'cleared', by: 'operator', actor: authenticatedActor };
+  }
+  if (status === 'rejected') {
+    return { status: 'rejected', by: 'operator', actor: authenticatedActor, reason: body.reason ?? '' };
+  }
+  if (status === 'partner_cleared') {
+    return { status: 'partner_cleared', partnerRef: body.partnerRef ?? '' };
+  }
+  throw new Error(`compliance disposition status must be pending|cleared|rejected|partner_cleared — got ${JSON.stringify(status)}`);
+}
 
 /**
  * THE OPERATOR CONTROL PLANE, AS SOMETHING A TEST CAN DRIVE (§14.6).
@@ -57,12 +110,25 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     if (pathname === null) {
       req.log.warn({ rawUrl: req.url }, 'edge: refused — the path cannot be resolved to one upstream');
       return reply.code(400).send({
-        error: 'the request path could not be resolved to a single upstream',
+        error: userCopy('edge.unresolvable_path'),
         code: 'edge.unresolvable_path',
       });
     }
 
     if (!pathname.startsWith('/api/')) return;
+
+    /**
+     * S2S `/internal/*` is not a public route. Pay jobs, token stake, identity
+     * rank, bank cron — all sit at that path behind a service secret the edge
+     * does not hold and will not forward. Refuse here, before the kill-switch
+     * and before the proxy, so a live module cannot 200 an S2S job from the
+     * internet. 404 + `edge.s2s_not_proxied`, never a green pass-through.
+     */
+    const routed = resolve(pathname);
+    if (routed && isS2sPath(routed.path)) {
+      req.log.warn({ path: pathname, module: routed.upstream.module }, 'edge: refused — S2S path is not a public door');
+      return reply.code(404).send({ error: userCopy('edge.s2s_not_proxied'), code: 'edge.s2s_not_proxied' });
+    }
 
     /**
      * FAIL CLOSED, TWICE.
@@ -92,23 +158,109 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     // completely different responses at 3am.
     if (decision.reason === 'undecidable') {
       req.log.error({ path: pathname }, 'edge: kill-switch check failed — refusing, failing closed');
-      return reply.code(503).header('retry-after', '30').send({
-        error: 'the operator kill-switch could not be evaluated; refusing',
-        code: 'edge.kill_switch_undecidable',
-      });
+      return reply
+        .code(503)
+        .header('retry-after', '30')
+        .send({
+          error: userCopy('edge.kill_switch_undecidable'),
+          code: 'edge.kill_switch_undecidable',
+        });
     }
 
     req.log.warn({ module: decision.module, path: pathname }, 'edge: refused — module killed by operator');
     // 503 with `retry-after`, not 403: this is a temporary operational state, and
     // a client that reads 403 as "you may never do this" will stop retrying once
     // the incident is over.
+    //
+    // Wave 13: halt codes residual — operatorReason + haltCode so a client never
+    // confuses "module killed" with undecidable/network refuse.
+    const operatorReason = decision.module != null ? (killSwitches.reasonFor(decision.module) ?? null) : null;
     return reply
       .code(503)
       .header('retry-after', '30')
       .send({
-        error: `module "${decision.module}" is switched off by the operator`,
+        error: userCopy('edge.module_killed'),
         code: 'edge.module_killed',
         module: decision.module,
+        haltCode: decision.reason,
+        operatorReason,
+      });
+  });
+}
+
+/**
+ * Geo-block on the product door (`/api/*`).
+ *
+ * Unset / empty screening is unknown — not a geo-clearance and not an invented
+ * block list. Admin / health / ready stay open so operators can see why.
+ * Does not invent sanctions content (Class X).
+ */
+export function registerGeoBlockGuard(app: FastifyInstance): void {
+  app.addHook('onRequest', async (req, reply) => {
+    const pathname = resolvedPathname(req.url);
+    if (pathname === null) return;
+    if (!pathname.startsWith('/api/')) return;
+
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    const decision = evaluateGeoBlock({ region: region.region });
+    if (decision.allowed) return;
+
+    req.log.warn(
+      {
+        path: pathname,
+        code: decision.code,
+        declaration: decision.screeningDeclaration,
+        region: decision.region,
+      },
+      'edge: refused — geo-block / empty screening',
+    );
+    return reply.code(geoBlockHttpStatus(decision)).send(geoBlockPublicBody(decision));
+  });
+}
+
+/**
+ * Network-signal fail-closed guard on the product door (`/api/*`).
+ *
+ * Status already surfaces unset≠clear (#1582). Product Done bar: when
+ * INTAFACED_NETWORK_SIGNAL_FAIL_CLOSED is armed, traffic refuses with a typed
+ * code — not silent allow. Does not invent a VPN partner (Class X).
+ *
+ * Admin / health / ready stay open so operators can still see why the door is
+ * closed and un-arm the switch.
+ */
+export function registerNetworkAccessGuard(app: FastifyInstance): void {
+  app.addHook('onRequest', async (req, reply) => {
+    const pathname = resolvedPathname(req.url);
+    if (pathname === null) return; // kill-switch path already refused unresolvable
+    if (!pathname.startsWith('/api/')) return;
+
+    const access = checkNetworkAccess(process.env);
+    if (access.allowed) return;
+
+    const edgeCode =
+      access.code === 'denied.network_flagged'
+        ? 'edge.network_flagged'
+        : access.code === 'denied.network_dark'
+          ? 'edge.network_dark'
+          : 'edge.network_unconfigured';
+
+    req.log.warn(
+      { path: pathname, networkCode: access.code, declaration: access.signal.declaration },
+      'edge: refused — network signal fail-closed',
+    );
+    return reply
+      .code(503)
+      .header('retry-after', '30')
+      .send({
+        error: userCopy(edgeCode),
+        code: edgeCode,
+        networkCode: access.code,
+        declaration: access.signal.declaration,
       });
   });
 }
@@ -122,6 +274,8 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
  * whether an admin path is real.
  */
 export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void {
+  // Public §29 honesty door — not proxied to svc-quant (that service must not exist yet).
+  registerQuantHonestyRoutes(app);
   /**
    * Authenticate, or answer. Returns null when it has already replied, so a
    * handler cannot forget to stop.
@@ -153,6 +307,14 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   app.get('/admin/status', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
     const snap = admin.read();
+    const honesty = admin.honesty();
+    const ops = admin.opsHonesty();
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
     return {
       ok: true,
       service: 'svc-edge',
@@ -163,9 +325,214 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       auditCount: snap.audit.length,
       lastChange: snap.audit[0] ?? null,
       ledgerConfigured: admin.ledgerConfigured(),
+      // Modules this edge cannot halt — `ws` is the one that used to look green
+      // while the market-data socket stayed live (SOCKET §13 socket.ws-behind-the-edge).
+      outsideTheDoor: honesty.outsideTheDoor,
+      enforceableModules: honesty.enforceableModules,
+      // Process-local durability only. multiReplicaShared is always false until
+      // a shared store exists; never invent one on the status surface.
+      killState: honesty.killState,
+      // Live kill is the operator surface — not the drop-I `edge.gateway` flag
+      // (still NOT_ENFORCED until a deliberate enforcement PR). Status must say
+      // so out loud so a console never invents a flag-only halt.
+      liveKillControl: honesty.liveKillControl,
+      flagEdgeGateway: honesty.flagEdgeGateway,
       // Reminder for operators reading JSON at 3am — full path list is in the runbook.
       releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
+      // ── ops.compliance / ops.analytics residual (wave 10 + 13) ────────────
+      // #1551 mechanisms at the door: unset≠clear, invent freeze refuse,
+      // partner_cleared refuse, warehouse dark — never silent green ticks.
+      // Wave 13: region source honesty + network fail-closed on /api path.
+      region: {
+        code: region.region,
+        regionResolved: region.regionResolved,
+        source: region.source,
+        headerName: region.headerName,
+        statusLine: regionResolutionStatusLine(region),
+        note: region.note,
+      },
+      // Geo-block honesty: unset/empty screening is unknown, never a clearance.
+      geoBlock: geoBlockStatus(region.region),
+      networkSignal: {
+        declaration: ops.network.signal.declaration,
+        partnerConfigured: ops.network.signal.partnerConfigured,
+        kind: ops.network.signal.kind,
+        statusLine: ops.network.statusLine,
+        accessAllowed: ops.network.access.allowed,
+        accessCode: ops.network.access.code,
+        summary: ops.network.signal.summary,
+        enforcedOnApiPath: true,
+      },
+      freezeAuthority: {
+        soleKey: ops.freeze.soleKey,
+        note: ops.freeze.note,
+        authorities: ops.freeze.authorities,
+        inventTradeFreezeOk: ops.freeze.inventProbes['trade freeze'].ok,
+        inventPayFreezeOk: ops.freeze.inventProbes['pay freeze'].ok,
+        ledgerPostingOk: ops.freeze.inventProbes['ledger.posting'].ok,
+      },
+      complianceQueue: {
+        empty: ops.complianceQueue.empty,
+        pending: ops.complianceQueue.items.length,
+        partnerConfigured: ops.complianceQueue.partnerConfigured,
+        summary: ops.complianceQueue.summary,
+      },
+      analytics: {
+        replicaConfigured: ops.analytics.replicaConfigured,
+        replicaCount: ops.analytics.replicaCount,
+        refuse: ops.analytics.refuse,
+        surfaceStatus: ops.analytics.surface.status,
+        mayLabelLive: ops.analytics.surface.mayLabelLive,
+        statusLine: ops.analytics.statusLine,
+        etlWatermark: ops.analytics.etlWatermark,
+        etlWatermarkAt: ops.analytics.etlWatermarkAt,
+        etlNote: ops.analytics.etlNote,
+      },
     };
+  });
+
+  /**
+   * Geo-block probe — refuse with a typed code when screening is unset/empty.
+   * 409, not 200 green. Never invents a sanctions list.
+   */
+  app.get('/admin/compliance/geo-block', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    const decision = evaluateGeoBlock({ region: region.region });
+    const status = geoBlockOpsHttpStatus(decision);
+    if (status !== 200) {
+      return reply.code(status).send({
+        ok: false,
+        error: geoBlockErrorMessage(decision),
+        code: decision.code,
+        reason: decision.reason,
+        region: decision.region,
+        screeningDeclaration: decision.screeningDeclaration,
+        screeningConfigured: decision.screeningConfigured,
+        inventedBlockedList: false,
+        regionResolved: decision.regionResolved,
+      });
+    }
+    return {
+      ok: true,
+      code: decision.code,
+      reason: decision.reason,
+      region: decision.region,
+      screeningDeclaration: decision.screeningDeclaration,
+      screeningConfigured: decision.screeningConfigured,
+      listHitCount: decision.listHitCount,
+      inventedBlockedList: false,
+      regionResolved: decision.regionResolved,
+    };
+  });
+
+  /**
+   * Compliance queue snapshot — honest empty when nothing pending.
+   * partnerConfigured follows screening list posture (never invents a vendor).
+   */
+  app.get('/admin/compliance/queue', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    return admin.complianceQueueSnapshot();
+  });
+
+  /**
+   * Open a screening/review case. Never auto-invented — empty stays empty until
+   * an operator (or future intake path) opens explicitly.
+   */
+  app.post('/admin/compliance/queue/open', async (req, reply) => {
+    const auth = await operator(req.headers.authorization, reply, 'module');
+    if (!auth) return reply;
+
+    const body = (req.body ?? {}) as {
+      id?: string;
+      kind?: string;
+      subjectId?: string;
+      openedAt?: string;
+    };
+    const id = typeof body.id === 'string' ? body.id.trim() : '';
+    const kind = typeof body.kind === 'string' ? body.kind.trim() : '';
+    const subjectId = typeof body.subjectId === 'string' ? body.subjectId.trim() : '';
+    if (id === '' || subjectId === '' || !QUEUE_KINDS.has(kind as ComplianceQueueKind)) {
+      return reply.code(400).send({
+        error: 'id, subjectId, and kind (screening_hit|kyc_review|network_flag|manual) required',
+        code: 'edge.invalid_compliance_open',
+      });
+    }
+
+    const item: ComplianceQueueItem = {
+      id,
+      kind: kind as ComplianceQueueKind,
+      subjectId,
+      openedAt: typeof body.openedAt === 'string' && body.openedAt.trim() !== '' ? body.openedAt.trim() : new Date().toISOString(),
+    };
+
+    try {
+      const queue = admin.openComplianceCase(item);
+      req.log.warn({ operator: auth.principal.userId, itemId: id, kind }, 'edge: compliance queue open');
+      return queue;
+    } catch (err) {
+      const message = (err as Error).message;
+      const conflict = /already open/i.test(message);
+      return reply
+        .code(conflict ? 409 : 400)
+        .send({ error: message, code: conflict ? 'edge.compliance_case_exists' : 'edge.invalid_compliance_open' });
+    }
+  });
+
+  /**
+   * Disposition a queue item. Hostile path blocked here too: partner_cleared
+   * without screening partner → 409 refuse.partner_absent (not 200 green).
+   */
+  app.post('/admin/compliance/queue/disposition', async (req, reply) => {
+    const auth = await operator(req.headers.authorization, reply, 'module');
+    if (!auth) return reply;
+
+    const body = (req.body ?? {}) as {
+      itemId?: string;
+      status?: string;
+      reason?: string;
+      partnerRef?: string;
+    };
+    const itemId = typeof body.itemId === 'string' ? body.itemId.trim() : '';
+    if (itemId === '') {
+      return reply.code(400).send({ error: 'itemId required', code: 'edge.invalid_compliance_disposition' });
+    }
+
+    let request;
+    try {
+      // Attribution comes from the verified token. A caller-supplied `actor`
+      // field is deliberately ignored so one operator cannot forge another's
+      // identity into the case audit trail.
+      request = parseComplianceDisposition(body, auth.principal.userId);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message, code: 'edge.invalid_compliance_disposition' });
+    }
+
+    const result = admin.disposeComplianceCase(itemId, request);
+    if (!result.ok) {
+      // 409: the case may exist, but this disposition is refused (partner absent).
+      return reply.code(409).send({ error: result.reason, code: result.code, ok: false });
+    }
+    req.log.warn(
+      { operator: auth.principal.userId, itemId, status: result.status, actor: result.actor },
+      'edge: compliance queue disposition',
+    );
+    return { ...result, queue: admin.complianceQueueSnapshot() };
+  });
+
+  /**
+   * Analytics warehouse door — real replica lag probe when URLs are set.
+   * Absent URL / connect fail / not-a-standby → unknown, never invented live.
+   * ETL watermark is operator-stamped or honestly absent (does not paint live).
+   */
+  app.get('/admin/analytics/warehouse', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    return admin.probeWarehouse();
   });
 
   app.get('/admin/kill-switches', async (req, reply) => {

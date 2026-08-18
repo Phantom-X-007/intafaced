@@ -2,6 +2,7 @@
 
 **Status:** engineering record, 2026-07-29, against commit `4311cff`.
 **Companion:** [`NOTICE`](../NOTICE) at the repository root — the evidence. This file is the decisions.
+**Tip freshness (2026-08-15, D26-P3-04):** §§ below are still that compile. Working-tree facts that diverged are named in `NOTICE` §11 and pinned by `tooling/ci/notice-pin.mjs`. This is not a new legal opinion. Charting Library is **gone from the working tree** (Path A, #106); history may still hold it. **Licence purchase remains Class X (Nitro + counsel).** Undetermined jars, Geetest, and other §10 rows are unchanged asks for counsel — agents do not close them.
 
 > **This is not legal advice.** It is an engineering audit of what is in the tree and what each
 > artefact says about itself. Nothing here clears anything. Several items below need a lawyer, and

@@ -132,14 +132,7 @@ const PINNED = {
       2,
       "src/certs/xp-emit.test.ts | TS2345 | Argument of type '{ userId: string; certId: string; xpDelta: string; idempotencyKey: string; }' is not assignable to parameter of type 'XpEarnedIntent'.",
     ],
-    [
-      1,
-      "src/tournaments/bulk-score.test.ts | TS2345 | Argument of type '{ seasonStatus: \"frozen\"; patches: { userId: string; score: number; }[]; }' is not assignable to parameter of type '{ seasonStatus: SeasonStatus; seasonId: string; patches: readonly ScorePatch[]; }'.",
-    ],
-    [
-      1,
-      "src/tournaments/bulk-score.test.ts | TS2345 | Argument of type '{ seasonStatus: \"live\"; patches: { userId: string; score: number; }[]; }' is not assignable to parameter of type '{ seasonStatus: SeasonStatus; seasonId: string; patches: readonly ScorePatch[]; }'.",
-    ],
+    // bulk-score.test seasonId-required pins retired after calendar-gate type tighten (W6 L02).
     [
       3,
       "src/tournaments/season-lifecycle.test.ts | TS2322 | Type 'SeasonRecord' is not assignable to type '{ status: \"scheduled\"; id: string; slug: string; title: string; rulesSummary: string; startsAt: Date; endsAt: null; }'.",
@@ -167,7 +160,7 @@ const PINNED = {
   'services/svc-blueprint': [
     [
       2,
-      'src/blueprint-service.test.ts | TS2339 | Property \'message\' does not exist on type \'Error | { blueprint: { id: string; userId: string; engineVersion: string; profile: { decisionStyle: "analytical" | "intuitive" | "collaborative" | "decisive"; riskTemperament: "guarded" | ... 2 more ... | "bold"; ... 5 more ...; guardrails: { ...; }; }; cardAssetUrl: string | null; visibility: "private" | ... 1 more...\'.',
+      'src/blueprint-service.test.ts | TS2339 | Property \'message\' does not exist on type \'Error | { blueprint: { userId: string; id: string; engineVersion: string; profile: { decisionStyle: "analytical" | "intuitive" | "collaborative" | "decisive"; riskTemperament: "guarded" | ... 2 more ... | "bold"; ... 5 more ...; guardrails: { ...; }; }; cardAssetUrl: string | null; visibility: "private" | ... 1 more...\'.',
     ],
   ],
 
@@ -210,8 +203,8 @@ const PINNED = {
   // 1 — services/svc-ledger
   'services/svc-ledger': [[1, 'src/s2s-http.test.ts | TS2554 | Expected 4 arguments, but got 3.']],
 
-  // 1 — services/svc-notify
-  'services/svc-notify': [[1, 'src/boot-refusal.test.ts | TS2554 | Expected 1-3 arguments, but got 4.']],
+  // 0 — services/svc-notify (Wave 13 L12: spawnSync arity fixed; pin deleted)
+  'services/svc-notify': [],
 
   // 3 — services/svc-p2p
   'services/svc-p2p': [
@@ -229,13 +222,9 @@ const PINNED = {
     ],
   ],
 
-  // 10 — services/svc-pay
+  // 9 — services/svc-pay (broadcast-store TS2352 pin retired — cast via unknown)
   'services/svc-pay': [
     [1, "src/ledger-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"],
-    [
-      1,
-      "src/rails/broadcast-store.test.ts | TS2352 | Conversion of type '(strings: TemplateStringsArray, ...values: unknown[]) => Promise<{ idempotency_key: string; }[] | { tx_hash: string; }[]>' to type 'BroadcastSql & { rows: Map<string, string>; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
-    ],
     [4, "src/rails/posture.test.ts | TS2339 | Property 'message' does not exist on type 'Error | { txHash: string; }'."],
     [
       1,
@@ -288,36 +277,8 @@ const PINNED = {
   'services/svc-trade': [[1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
 
   // 14 — services/svc-ws
-  'services/svc-ws': [
-    [1, "src/depth/hub.test.ts | TS2322 | Type '{}' is not assignable to type 'never'."],
-    [1, "src/depth/hub.test.ts | TS2344 | Type 'Function' does not satisfy the constraint '(...args: any) => any'."],
-    [
-      1,
-      "src/depth/hub.test.ts | TS2345 | Argument of type '{ highWaterBytes: number; maxLagTicks: number; }' is not assignable to parameter of type 'undefined'.",
-    ],
-    [
-      1,
-      "src/depth/hub.test.ts | TS2345 | Argument of type '{ maxConnections: number; }' is not assignable to parameter of type 'undefined'.",
-    ],
-    [
-      5,
-      "src/depth/hub.test.ts | TS2345 | Argument of type '{ registry: { markets: () => Promise<string[]>; }; }' is not assignable to parameter of type 'undefined'.",
-    ],
-    [1, 'src/depth/hub.test.ts | TS2698 | Spread types may only be created from object types.'],
-    [1, "src/ws/co-mount.test.ts | TS2345 | Argument of type 'StubSource' is not assignable to parameter of type 'DepthSource'."],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2353 | Object literal may only specify known properties, and 'log' does not exist in type 'PrivateOrderHubOptions'.",
-    ],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2353 | Object literal may only specify known properties, and 'log' does not exist in type 'TradeHubOptions'.",
-    ],
-    [
-      1,
-      "src/ws/co-mount.test.ts | TS2416 | Property 'snapshot' in type 'StubSource' is not assignable to the same property in base type 'DepthSource'.",
-    ],
-  ],
+  // co-mount StubSource/hub-ctor pins cleared 2026-08-09 (#1342 typecheck-clean rewrite).
+  'services/svc-ws': [],
 };
 
 // ── Plumbing ────────────────────────────────────────────────────────────────

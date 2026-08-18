@@ -1,7 +1,10 @@
 import {
+  agentActionCompleted,
+  agentActionRejected,
   bankMarginCalled,
   fillSettled,
   kycApproved,
+  orderUpdated,
   p2pEscrowLocked,
   p2pEscrowRefunded,
   p2pEscrowReleased,
@@ -18,6 +21,15 @@ import {
 } from '@intafaced/events';
 import type { CreateResult, NotifyService } from './notify-service.js';
 import type { Severity } from './store.js';
+import {
+  NOTIFY_EVENT_CONSUMERS,
+  SKIPPED_NOTIFY_SUBJECTS,
+  notifyEventConsumerCount,
+  notifyEventDurableNames,
+} from './event-wiring-matrix.js';
+
+/** Class B matrix — re-exported so production graph reaches the pin (reachability gate). */
+export { NOTIFY_EVENT_CONSUMERS, SKIPPED_NOTIFY_SUBJECTS, notifyEventConsumerCount, notifyEventDurableNames };
 
 /**
  * EVENT WIRING — fan-out.
@@ -45,6 +57,8 @@ import type { Severity } from './store.js';
  * userId principal, and has clear user-facing meaning. No invented publishers.
  * Skipped (no user ids on payload): p2pDisputeResolved, p2pTradeExpired.
  * p2pTradeDisputed notifies openedBy only — the counterparty is not on the payload.
+ * orderUpdated notifies cancelled/rejected/expired only — fills already have fillSettled.
+ * agentActionCompleted notifies completion/session_close only — never tool_call/embedding noise.
  */
 
 /**
@@ -155,9 +169,58 @@ export const DEFAULT_POSITION_NOTIFY_POLICY: PositionNotifyPolicy = {
   severity: 'critical',
 };
 
+/** The lifecycle states `intafaced.trade.order.updated` can carry. */
+type OrderStatus = PayloadOf<'orderUpdated'>['status'];
+
+/**
+ * WHICH ORDER TRANSITIONS ARE WORTH A NOTIFICATION.
+ *
+ * `trade.order.updated` is high-frequency: every pending/open/fill change.
+ * Fills already produce `trade.fill` via `fillSettled`. Pending and open are
+ * the trader's own click (and private WS already fans the live row).
+ *
+ * The inbox default is the three terminal states that can complete while the
+ * app is closed: cancelled, rejected, expired. Widening is a one-line change
+ * to `statuses` plus copy — not an env variable.
+ */
+export interface OrderTerminalNotifyPolicy {
+  readonly statuses: readonly OrderStatus[];
+  readonly severity: Severity;
+}
+
+export const DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY: OrderTerminalNotifyPolicy = {
+  statuses: ['cancelled', 'rejected', 'expired'],
+  severity: 'info',
+};
+
+/** The action kinds `intafaced.agents.action.completed` can carry. */
+type AgentActionKind = PayloadOf<'agentActionCompleted'>['kind'];
+
+/**
+ * WHICH AGENT COMPLETIONS ARE WORTH A NOTIFICATION.
+ *
+ * `agents.action.completed` is high-frequency: every tool_call, embedding, and
+ * usage_settlement publishes. The user-facing log is already `agent_actions`
+ * under the caller's authorisation. Inbox fan-out is only the two kinds a
+ * person would miss with the app closed: a finished reply, and a session close.
+ *
+ * Everything else is ACKED AND NOT WRITTEN — same posture as position/order.
+ */
+export interface AgentActionCompletedNotifyPolicy {
+  readonly kinds: readonly AgentActionKind[];
+  readonly severity: Severity;
+}
+
+export const DEFAULT_AGENT_ACTION_COMPLETED_NOTIFY_POLICY: AgentActionCompletedNotifyPolicy = {
+  kinds: ['completion', 'session_close'],
+  severity: 'info',
+};
+
 export interface SubscribeOptions {
   /** Override the conservative default above. Production boots without one. */
   readonly positionNotify?: PositionNotifyPolicy;
+  readonly orderNotify?: OrderTerminalNotifyPolicy;
+  readonly agentActionCompletedNotify?: AgentActionCompletedNotifyPolicy;
 }
 
 /**
@@ -223,6 +286,8 @@ export async function subscribeNotificationEvents(
 ): Promise<SubscriptionReport> {
   const attachments: Attachment[] = [];
   const positionPolicy = options.positionNotify ?? DEFAULT_POSITION_NOTIFY_POLICY;
+  const agentCompletedPolicy = options.agentActionCompletedNotify ?? DEFAULT_AGENT_ACTION_COMPLETED_NOTIFY_POLICY;
+  const orderPolicy = options.orderNotify ?? DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY;
 
   attachments.push(
     await attach(bus, 'fillSettled', fillSettled.subject, 'notify-fill-settled', async (payload) => {
@@ -244,6 +309,37 @@ export async function subscribeNotificationEvents(
           severity: 'info',
           sourceSubject: fillSettled.subject,
           sourceIdempotencyKey: payload.fillId,
+        }),
+      );
+    }),
+  );
+
+  attachments.push(
+    await attach(bus, 'orderUpdated', orderUpdated.subject, 'notify-order-updated', async (payload) => {
+      if (!orderPolicy.statuses.includes(payload.status)) return;
+
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'trade.order.terminal',
+          titleKey: 'notify.trade.order.terminal.title',
+          bodyKey: 'notify.trade.order.terminal.body',
+          params: {
+            orderId: payload.orderId,
+            marketId: payload.marketId,
+            status: payload.status,
+            side: payload.side,
+            type: payload.type,
+            qty: payload.qty,
+            filledQty: payload.filledQty,
+            price: payload.price,
+            clientOrderId: payload.clientOrderId,
+            ts: payload.ts,
+          },
+          href: `/trade/orders/${payload.orderId}`,
+          severity: orderPolicy.severity,
+          sourceSubject: orderUpdated.subject,
+          sourceIdempotencyKey: `${payload.orderId}:${payload.status}`,
         }),
       );
     }),
@@ -498,6 +594,74 @@ export async function subscribeNotificationEvents(
       );
     }),
   );
+
+  attachments.push(
+    await attach(bus, 'agentActionRejected', agentActionRejected.subject, 'notify-agent-action-rejected', async (payload) => {
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'agents.action.rejected',
+          titleKey: 'notify.agents.action.rejected.title',
+          bodyKey: 'notify.agents.action.rejected.body',
+          params: {
+            refusalCode: payload.refusalCode,
+            tool: payload.tool ?? '—',
+            task: payload.task ?? '—',
+            sessionId: payload.sessionId,
+            agentId: payload.agentId,
+          },
+          href: `/agents/sessions/${payload.sessionId}`,
+          severity: 'action',
+          sourceSubject: agentActionRejected.subject,
+          sourceIdempotencyKey: `${payload.sessionId}:${payload.sequence}`,
+        }),
+      );
+    }),
+  );
+
+  attachments.push(
+    await attach(bus, 'agentActionCompleted', agentActionCompleted.subject, 'notify-agent-action-completed', async (payload) => {
+      /**
+       * High-frequency stream. tool_call / embedding / session_open /
+       * usage_settlement are already on agent_actions; writing them here would
+       * turn the inbox into a telemetry dump. Return before notify.create so a
+       * suppressed kind never reaches the dispatcher.
+       *
+       * Business key is `<sessionId>:<sequence>` — the same grain the publisher
+       * uses. Kind is not in the key: a given sequence has one kind.
+       */
+      if (!agentCompletedPolicy.kinds.includes(payload.kind)) return;
+
+      nakIfRetryable(
+        await notify.create({
+          userId: payload.userId,
+          kind: 'agents.action.completed',
+          titleKey: 'notify.agents.action.completed.title',
+          bodyKey: 'notify.agents.action.completed.body',
+          params: {
+            kind: payload.kind,
+            task: payload.task ?? '—',
+            tool: payload.tool ?? '—',
+            sessionId: payload.sessionId,
+            agentId: payload.agentId,
+            sequence: payload.sequence,
+          },
+          href: `/agents/sessions/${payload.sessionId}`,
+          severity: agentCompletedPolicy.severity,
+          sourceSubject: agentActionCompleted.subject,
+          sourceIdempotencyKey: `${payload.sessionId}:${payload.sequence}`,
+          // Inbox only — email/SMS/push stay refuse-until-credentials (#1991).
+          outOfApp: false,
+        }),
+      );
+    }),
+  );
+
+  // Class B growth pin: attach count must match the deliberate matrix.
+  // A casual second attach without a matrix row fails here at boot, not in CI only.
+  if (attachments.length !== notifyEventConsumerCount()) {
+    throw new Error(`notify event-wiring drift: attached ${attachments.length} consumers, matrix has ${notifyEventConsumerCount()}`);
+  }
 
   return {
     subscriptions: attachments.map((a) => a.subscription).filter((s): s is Subscription => s !== null),

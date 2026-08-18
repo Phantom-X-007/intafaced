@@ -6,11 +6,15 @@ import type { FundingRateEntry } from './funding-rate-source.js';
 
 const SECRET = 'test-internal-secret-for-trade-funding-rate';
 
-async function build(publish: (e: FundingRateEntry) => void) {
+/** Test-only magnitude bound — NOT product law (D2). Allows 0.0001; refuses 1000000. */
+const FIXTURE_FUNDING_MAX_ABS = '1';
+
+async function build(publish: (e: FundingRateEntry) => void, maxAbsRate: string | null = FIXTURE_FUNDING_MAX_ABS) {
   const app = Fastify();
   registerInternalFundingRate(app, {
     internalSecret: SECRET,
     publishFundingRate: publish,
+    maxAbsRate,
     now: () => 1_700_000_000_000,
   });
   await app.ready();
@@ -178,6 +182,42 @@ describe('POST /internal/futures/funding-rate', () => {
     expect(res.json()).toMatchObject({ ok: true, marketId: 'm1', rate: '0.0001', periodId: 'm1:t0' });
     expect(published).toHaveLength(1);
     expect(published[0]!.rate).toBe('0.0001');
+    await app.close();
+  });
+
+  /**
+   * C12 / BUILD-STOP D2: absurd rate never enters the rate book.
+   * Fixture max is test-only — not the product ceiling Denon still owns.
+   */
+  it('refuses rate 1000000 with trade.funding_rate_exceeds_max — nothing published', async () => {
+    const published: FundingRateEntry[] = [];
+    const app = await build((e) => published.push(e));
+    const headers = serviceAuthHeaders('svc-oracle', SECRET);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/futures/funding-rate',
+      headers,
+      payload: { marketId: 'm1', rate: '1000000', periodId: 'm1:p-absurd' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('trade.funding_rate_exceeds_max');
+    expect(published).toEqual([]);
+    await app.close();
+  });
+
+  it('refuses publish when max abs rate is unset (fail-closed)', async () => {
+    const published: FundingRateEntry[] = [];
+    const app = await build((e) => published.push(e), null);
+    const headers = serviceAuthHeaders('svc-oracle', SECRET);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/futures/funding-rate',
+      headers,
+      payload: { marketId: 'm1', rate: '0.0001', periodId: 'm1:p0' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('trade.funding_rate_bound_unconfigured');
+    expect(published).toEqual([]);
     await app.close();
   });
 });

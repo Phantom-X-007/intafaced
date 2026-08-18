@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { AuthError, bearerToken, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
+import { LedgerError } from '@intafaced/ledger-client';
 import type { LedgerService } from './service.js';
 
 /**
@@ -35,14 +36,20 @@ import type { LedgerService } from './service.js';
  * releasing it required a second redeploy. `apps/admin` has shipped a red
  * "Halt posting" button, with a typed confirmation, that set React state.
  *
- * ── Why three raw routes and not a tRPC mount ───────────────────────────────
+ * ── Why raw routes and not a tRPC mount ─────────────────────────────────────
  *
  * Mounting `appRouter` would serve the whole router, including `post`, on a
  * port. `post` is `serviceProcedure` so it would still refuse a user token —
  * but the reason svc-ledger has no HTTP router today is a deliberate one, and
- * widening the money plane's surface to reach one operator switch inverts the
- * cost. These three handlers mirror `registerS2sHttp`'s shape: explicit,
- * enumerable, one line each, and nothing reachable that is not named here.
+ * widening the money plane's surface to reach operator switches inverts the
+ * cost. These handlers mirror `registerS2sHttp`'s shape: explicit, enumerable,
+ * one line each, and nothing reachable that is not named here.
+ *
+ * Routes: GET/POST `/operator/freeze`, POST `/operator/unfreeze`,
+ * POST `/operator/reconcile`. Reconcile was the residual of the original
+ * freeze-only ship — freeze was wired first because halt is more urgent than
+ * audit, and apps/admin kept an honest-simulated reconcile button until this
+ * path existed for edge to proxy.
  *
  * ── Authentication ─────────────────────────────────────────────────────────
  *
@@ -62,8 +69,12 @@ const freezeSchema = z.object({
    * Required, and required to be useful. The database's own check constraint
    * refuses an unattributed freeze; this refuses an unexplained one, because
    * `reason` is what the next operator reads before deciding whether to thaw.
+   * Trim first so twelve spaces cannot satisfy `min(12)` with no readable text.
    */
-  reason: z.string().min(12).max(500),
+  reason: z
+    .string()
+    .transform((s) => s.trim())
+    .pipe(z.string().min(12).max(500)),
 });
 
 export interface FreezeSnapshot {
@@ -71,6 +82,24 @@ export interface FreezeSnapshot {
   readonly reason: string | null;
   readonly actor: string | null;
   readonly changedAt: string;
+}
+
+/**
+ * On-demand reconciliation report for the operator console.
+ *
+ * Matches the three independent checks in `ledger/reconcile.ts`. Never carries
+ * a `simulated` flag — if this route answers, the book was asked. A broken
+ * chain reports `chainLength` as the number of transactions that verified
+ * before the break (and `chainBrokenAt` when known), not zero: zero looks like
+ * an empty healthy book.
+ */
+export interface ReconcileSnapshot {
+  readonly ok: boolean;
+  readonly accountsChecked: number;
+  readonly chainLength: number;
+  readonly unbalancedAssets: readonly string[];
+  readonly ranAt: string;
+  readonly chainBrokenAt?: string;
 }
 
 /** Map an `AuthError` to a status an operator console can branch on. */
@@ -111,6 +140,13 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
       try {
         return await handle(operator, req.body);
       } catch (err) {
+        // Different attribution while already frozen: first reason stands
+        // (STOP §4.2b #3). Must not look like a successful freeze — soft-200
+        // used to return the standing row and operators believed their reason
+        // had landed. 409 + the durable code so a console can branch.
+        if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
+          return reply.code(409).send({ message: err.message, code: err.code });
+        }
         const message = err instanceof Error ? err.message : 'operator request failed';
         // 400 rather than 500: everything reachable here is either a validation
         // failure or a constraint the database refused, and both are the
@@ -156,6 +192,40 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
     guarded(async (operator) => {
       app.log.warn({ actor: operator.userId }, 'LEDGER THAW requested by operator — value movement resumes');
       return shape(await ledger.unfreeze(operator.userId));
+    }),
+  );
+
+  /**
+   * On-demand full reconciliation — balances vs replay, hash chain, totalsByAsset.
+   *
+   * Behind the same `admin:treasury` + MFA door as freeze. On failure the
+   * service freezes itself before answering (§4.2); this handler only shapes
+   * the report. It is deliberately a POST (a mutation of operator attention and
+   * potentially of freeze state), not a GET that a load balancer could cache.
+   *
+   * apps/admin and svc-edge still have to proxy this — their residual is not
+   * this service's. Until they do, the scheduled job and this route are the
+   * live paths; the console's simulated button is an honesty marker, not a
+   * substitute for the book.
+   */
+  app.post(
+    '/operator/reconcile',
+    guarded(async (operator) => {
+      app.log.info({ actor: operator.userId }, 'LEDGER RECONCILE requested by operator');
+      const report = await ledger.reconcile();
+      const snapshot: ReconcileSnapshot = {
+        ok: report.ok,
+        accountsChecked: report.balances.accountsChecked,
+        // Prefer length-so-far on a break over inventing green zero.
+        chainLength: report.chain.length,
+        unbalancedAssets: report.unbalancedAssets,
+        ranAt: report.ranAt.toISOString(),
+        ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
+      };
+      if (!report.ok) {
+        app.log.fatal({ actor: operator.userId, report: snapshot }, 'LEDGER RECONCILIATION FAILED via operator request — posting frozen');
+      }
+      return snapshot;
     }),
   );
 }

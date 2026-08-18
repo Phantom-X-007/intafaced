@@ -490,6 +490,35 @@ describe('stop orders', () => {
     expect(outcome.fills).toHaveLength(0);
     expect(outcome.cancellations[0]!.reason).toBe('trigger_rejected');
   });
+
+  /**
+   * Sequence honesty on trigger rejection (audit M2 / README reject-counter promise).
+   *
+   * Normal submit checks viability BEFORE nextSequence — a pure reject burns zero.
+   * Activation already removed the stop from the book, so the cancel needs one
+   * sequence (same as a user cancel of a live stop). Taking an "activation"
+   * sequence first and then a second for the cancel burns two for a path that
+   * never filled or rested — and leaves cancel.sequence !== outcome.sequence.
+   */
+  it('a trigger-rejected stop burns one sequence (the cancel), not two', () => {
+    const book = primed();
+    book.submit(
+      order({ id: 'po-stop', account: 'b', type: 'stop_limit', side: 'buy', qty: '5', price: '106', stopPrice: '105', tif: 'PO' }),
+    );
+    const before = book.currentSequence;
+
+    const trigger = book.submit(order({ account: 'c', side: 'buy', qty: '1' }));
+    const outcome = trigger.triggered[0]!;
+
+    expect(outcome.rejected?.code).toBe('post_only_would_cross');
+    expect(outcome.cancellations).toHaveLength(1);
+    // One shared sequence for the rejected activation cancel — not activation+cancel.
+    expect(outcome.cancellations[0]!.sequence).toBe(outcome.sequence);
+    // Aggressor: acceptance sequence + one fill sequence = +2; trigger cancel = +1 → +3 total.
+    expect(book.currentSequence).toBe(before + 3);
+    // Depth memo keys on sequence; stop removal must move it (one cancel is enough).
+    expect(book.depth().sequence).toBe(book.currentSequence);
+  });
 });
 
 // ── Cancels ─────────────────────────────────────────────────────────────────

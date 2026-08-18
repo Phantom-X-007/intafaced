@@ -10,7 +10,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { P2pService } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
-import { ANY_COUNTRY, InstrumentError } from './instruments.js';
+import { ANY_COUNTRY, InstrumentError, methodIdKey } from './instruments.js';
 import { createP2pRouter } from './router.js';
 import { P2pErasure } from './erasure.js';
 
@@ -39,6 +39,8 @@ const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'),
 const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
+const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
+const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
 
 const SELLER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';
@@ -102,6 +104,8 @@ if (!available) {
     await tx.unsafe(instrumentsMigration);
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
+    await tx.unsafe(lateSettleErrorMigration);
+    await tx.unsafe(disputeOpenOriginMigration);
   });
 
   const instruments = new InstrumentService(sql);
@@ -229,12 +233,165 @@ if (!available) {
   describe('the method registry', () => {
     it('ships empty, so an unregistered market refuses rather than guesses', async () => {
       await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
-      expect(await instruments.listMethodSchemas()).toEqual([]);
+      expect(await instruments.enabledMethodKeys()).toEqual(new Set());
 
-      // The honest failure. The alternative is a seeded guess at what this
-      // market needs, which produces an instrument that looks complete and
-      // cannot be paid — discovered by a buyer, after escrow is locked.
-      await expect(sellerInstrument()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+      // PIN: an empty catalogue must refuse, not return []. [] is how a
+      // seller/register/pay door still looks like a live rail with zero methods.
+      await expect(instruments.listMethodSchemas()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+      await expect(callerFor(SELLER).instruments.methods.list({})).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(sellerInstrument()).rejects.toMatchObject({
+        code: 'p2p.instrument_method_unknown',
+        message: 'p2p.instrument_method_unknown',
+      });
+      await expect(
+        callerFor(SELLER).instruments.create({
+          methodId: METHOD,
+          country: 'DE',
+          fiatCurrency: 'USD',
+          details: { account_reference: CANARY, holder_name: 'A Seller' },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    it('PIN: empty registry refuses list/register/pay with a stable code, not a fake account', async () => {
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      const unknown = { code: 'p2p.instrument_method_unknown' as const };
+
+      await expect(instruments.listMethodSchemas()).rejects.toMatchObject(unknown);
+      await expect(sellerInstrument()).rejects.toMatchObject(unknown);
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject(unknown);
+      await expect(
+        p2p.createOffer({
+          makerId: BUYER,
+          side: 'buy',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject(unknown);
+
+      // Pay disclosure with no trade is NOT_FOUND (oracle-closed), never a
+      // destination. Operator register is the one door that must still work —
+      // that is how the empty registry becomes a real rail.
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: crypto.randomUUID() })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(
+        instruments.registerMethodSchema({
+          methodId: METHOD,
+          country: ANY_COUNTRY,
+          label: 'Test transfer',
+          fields: [{ key: 'account_reference', label: 'Account reference', required: true }],
+        }),
+      ).resolves.toMatchObject({ methodId: METHOD });
+    });
+
+    it('RED: an empty registry is not a live payable rail', async () => {
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      // `offer_method_no_destination` would mean "this rail exists; add a
+      // destination." That sentence is how an empty registry looks payable.
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+
+      // Buy offers used to skip every method check, so the board could advertise
+      // whatever string the maker typed as if it were a rail.
+      const buy = p2p.createOffer({
+        makerId: BUYER,
+        side: 'buy',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      await expect(buy).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+
+      expect(await p2p.listOffers({})).toEqual([]);
+    });
+
+    it('a leftover destination is not payable once the operator registry is empty', async () => {
+      const created = await sellerInstrument();
+      await fund(SELLER, '1000');
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      expect(await instruments.liveMethodKeys(SELLER, 'USD')).toEqual(new Set());
+      expect(await instruments.enabledMethodKeys()).toEqual(new Set());
+      expect(created.status).toBe('active');
+
+      // #1858 closed create/board. Take still used `loadOfferRaw` + attach on
+      // any active dest, so a leftover row after the operator emptied the
+      // registry still locked escrow. The dest is still there; it is not a rail.
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.take_refused',
+      });
+
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log.some((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toBe(true);
+    });
+
+    it('a leftover destination is not payable after the operator disables the schema', async () => {
+      await sellerInstrument();
+      await fund(SELLER, '1000');
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+
+      await instruments.setMethodSchemaEnabled(METHOD, ANY_COUNTRY, false);
+
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.take_refused',
+      });
     });
 
     it('rejects a field the operator never declared instead of dropping it', async () => {
@@ -307,14 +464,30 @@ if (!available) {
   describe('taking an offer', () => {
     it('refuses before any lock when the seller has nowhere to be paid', async () => {
       await fund(SELLER, '1000');
-      // A USD destination exists; the offer is priced in GBP.
+      // A USD destination exists; a GBP sell cannot list the method at all now
+      // (board honesty). The residual take path is: create with a live destination,
+      // remove it, then take — still refuse before any lock.
       await sellerInstrument({ fiatCurrency: 'USD' });
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'GBP',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          totalAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
 
       const offer = await p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
         asset: ASSET,
-        fiatCurrency: 'GBP',
+        fiatCurrency: 'USD',
         priceType: 'fixed',
         price: amt('1'),
         minAmt: amt('10'),
@@ -322,6 +495,8 @@ if (!available) {
         totalAmt: amt('500'),
         methods: [METHOD],
       });
+      const [header] = await instruments.listInstruments(SELLER);
+      await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
         code: 'p2p.take_refused',
@@ -334,8 +509,8 @@ if (!available) {
       expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
       expect(await sql`SELECT trade_id FROM p2p.trade_payment_instruments`).toHaveLength(0);
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
-      const after = await p2p.getOffer(offer.id);
-      expect(after.remainingAmt).toBe(amt('500'));
+      // Off the board once the destination is gone — strangers cannot probe it.
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
     it('freezes the destination onto the trade in the same transaction', async () => {
@@ -459,6 +634,7 @@ if (!available) {
         details: { account_reference: CANARY, holder_name: 'A Seller' },
       });
 
+      // List the method they DO hold; probe a different method at take.
       const offer = await p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
@@ -469,7 +645,7 @@ if (!available) {
         minAmt: amt('10'),
         maxAmt: amt('500'),
         totalAmt: amt('500'),
-        methods: ['Other_Rail'],
+        methods: ['Bank_Transfer'],
       });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Other_Rail' })).rejects.toMatchObject({
@@ -496,9 +672,27 @@ if (!available) {
    * indistinguishable, and every one of them must be on the record.
    */
   describe('the take oracle', () => {
-    /** An offer that lists `methodId`, from a seller funded and ready. */
+    /**
+     * An offer that lists `methodId`, from a seller funded and ready.
+     * Sell create requires a live destination for each listed method — pass
+     * `withInstrument: false` only after one was created and then removed
+     * (legacy residual / mid-life removal).
+     */
     async function offerListing(methodId: string, fiatCurrency = 'USD') {
       await fund(SELLER, '1000');
+      // Ensure a live destination for create; caller may remove afterwards.
+      const existing = await instruments.listInstruments(SELLER);
+      const has = existing.some((h) => h.methodId === methodIdKey(methodId) && h.fiatCurrency === fiatCurrency && h.status === 'active');
+      if (!has) {
+        await instruments.createInstrument({
+          ownerId: SELLER,
+          methodId,
+          country: 'DE',
+          fiatCurrency,
+          label: 'for board',
+          details: { account_reference: CANARY, holder_name: 'A Seller' },
+        });
+      }
       return p2p.createOffer({
         makerId: SELLER,
         side: 'sell',
@@ -511,6 +705,12 @@ if (!available) {
         totalAmt: amt('500'),
         methods: [methodId],
       });
+    }
+
+    async function removeAllSellerInstruments() {
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.status === 'active') await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+      }
     }
 
     /** Everything a caller can observe from one refused take. */
@@ -540,20 +740,27 @@ if (!available) {
       await registerMethod();
       await registerMethod({ methodId: 'other-rail' });
 
-      // (a) The offer lists the method. The seller has NO instrument for it.
+      // (a) Offer listed the method; destination was removed after post.
       const noInstrument = await offerListing('other-rail');
+      await removeAllSellerInstruments();
       const a = await refusalShape(noInstrument.id, 'other-rail');
 
-      // (b) The offer does NOT list the method. The seller DOES hold one.
+      // (b) The offer does NOT list the method. The seller DOES hold one for METHOD only.
       await sellerInstrument();
-      const notAccepted = await offerListing('other-rail');
+      const notAccepted = await offerListing('other-rail'); // needs other-rail instrument to create
+      // Keep METHOD instrument; drop other-rail so take with METHOD is "not accepted" by offer.
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.methodId === 'other-rail' && h.status === 'active') {
+          await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+        }
+      }
       const b = await refusalShape(notAccepted.id, METHOD);
 
       expect(a.code).toBe('BAD_REQUEST');
       expect(a).toEqual(b);
       // And the message names nothing the caller was not entitled to see: not
       // the method they asked for, not the currency, not the seller.
-      expect(a.message).toBe('This offer cannot be taken with the selected payment method');
+      expect(a.message).toBe('p2p.take_refused');
       expect(a.message).not.toContain('other-rail');
       expect(a.message).not.toContain(METHOD);
       expect(a.message).not.toContain('USD');
@@ -567,11 +774,13 @@ if (!available) {
       await registerMethod();
       await registerMethod({ methodId: 'other-rail' });
       const offer = await offerListing('other-rail');
+      await removeAllSellerInstruments();
 
       await expect(refusalShape(offer.id, 'other-rail')).resolves.toMatchObject({ code: 'BAD_REQUEST' });
 
       expect(await sql`SELECT id FROM p2p.p2p_trades`).toHaveLength(0);
-      expect((await p2p.getOffer(offer.id)).remainingAmt).toBe(amt('500'));
+      // Off the board (no live destination) — remaining inventory still in DB via raw.
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
 
       // THE LOG ROW SURVIVED THE ROLLBACK. Not written on the reserve
@@ -598,10 +807,16 @@ if (!available) {
       await registerMethod({ methodId: 'other-rail' });
 
       const noInstrument = await offerListing('other-rail');
+      await removeAllSellerInstruments();
       await refusalShape(noInstrument.id, 'other-rail');
 
       await sellerInstrument();
       const notAccepted = await offerListing('other-rail');
+      for (const h of await instruments.listInstruments(SELLER)) {
+        if (h.methodId === 'other-rail' && h.status === 'active') {
+          await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
+        }
+      }
       await refusalShape(notAccepted.id, METHOD);
 
       const log = await instruments.accessLogFor(SELLER);
@@ -622,6 +837,7 @@ if (!available) {
       await registerMethod();
       await registerMethod({ methodId: 'other-rail' });
       const offer = await offerListing('other-rail');
+      await removeAllSellerInstruments();
 
       for (let i = 0; i < 5; i++) await refusalShape(offer.id, 'other-rail');
 
@@ -761,6 +977,8 @@ if (!available) {
           maxAmount: '100',
         },
         'offers.close': { offerId: offer.id },
+        'offers.pause': { offerId: offer.id },
+        'offers.resume': { offerId: offer.id },
         // A random offer id on purpose: a stranger who TAKES an offer becomes a
         // counterparty, which is the product working, not a leak.
         'trades.take': { offerId: crypto.randomUUID(), amount: '10', method: METHOD },
@@ -781,6 +999,10 @@ if (!available) {
         'disputes.list': {},
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
+        // Moderator backlog counts only (open/overdue/escalated/neverSeen) —
+        // no instrument id, no account details, no dispute row join. Stranger
+        // without allowlist/moderation env refuses; probe asserts no canary.
+        'disputes.backlog': {},
         // Operator-only late settlement queue — no instrument fields; stranger refuses.
         'ops.lateSettlements': {},
         'reputation.get': { userId: SELLER },
@@ -813,11 +1035,17 @@ if (!available) {
         // details, by construction: `merchant-service.ts` selects from
         // `p2p_merchants` and `p2p_merchant_events` only.
         //
-        // `me` and `submitApplication` are self-only — neither takes a userId,
-        // so a stranger reaches their own (absent) record. `decide` and
-        // `history` need `admin:compliance`, which a stranger does not hold.
-        // Probed as a stranger anyway: the assertion is on what comes back.
+        // `apiAccess`, `me` and `submitApplication` are self-only — none takes
+        // a userId, so a stranger reaches their own standing only. `apiAccess`
+        // returns literals plus that status and never joins instrument tables.
+        // `decide` and `history` need `admin:compliance`, which a stranger does
+        // not hold. Probed anyway: the assertion is on what comes back.
+        'merchants.apiAccess': undefined,
         'merchants.me': undefined,
+        // Offer-ceiling posture only — decimal strings / null from env policy.
+        // Never joins instrument tables (merchant-limits.ts pure functions).
+        'merchants.offerLimits': undefined,
+        'merchants.myOfferCeiling': undefined,
         'merchants.submitApplication': undefined,
         'merchants.withdraw': { reason: 'probing' },
         'merchants.decide': { userId: SELLER, to: 'approved', reason: 'probing' },
@@ -899,6 +1127,134 @@ if (!available) {
       expect(JSON.stringify(board)).not.toContain(CANARY);
       expect(board.find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
       expect(trade.id).toBeTruthy();
+    });
+  });
+
+  // ── Sell board honesty: no method without a live destination ─────────────
+
+  describe('a sell offer only advertises methods the maker can be paid on', () => {
+    it('refuses create when the maker lists a method with no active destination', async () => {
+      // beforeEach registered the method schema; no instrument for SELLER.
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
+    });
+
+    it('drops the offer from the board after the destination is removed', async () => {
+      await sellerInstrument();
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+
+      const [header] = await instruments.listInstruments(SELLER);
+      await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
+
+      // Residual closed: board no longer advertises a method that cannot be paid.
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
+    });
+
+    it('does not force buy offers to hold destinations at create', async () => {
+      // Maker is the buyer; seller is the eventual taker — unknown at post time.
+      // The method still has to be an operator-registered rail, or the board
+      // would advertise an invented string as payable.
+      await expect(
+        p2p.createOffer({
+          makerId: BUYER,
+          side: 'buy',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).resolves.toMatchObject({ side: 'buy', methods: [METHOD] });
+    });
+
+    it('drops a buy offer from the board when the operator registry is emptied', async () => {
+      const offer = await p2p.createOffer({
+        makerId: BUYER,
+        side: 'buy',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
+    });
+
+    it('filters a multi-method sell offer down to live rails only', async () => {
+      await registerMethod({ methodId: 'other-rail' });
+      await sellerInstrument(); // METHOD only
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD, 'other-rail'],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.offer_method_no_destination' });
+
+      // After both destinations exist, both list; remove one → board shows one.
+      await instruments.createInstrument({
+        ownerId: SELLER,
+        methodId: 'other-rail',
+        country: 'DE',
+        fiatCurrency: 'USD',
+        label: 'Other',
+        details: { account_reference: 'x', holder_name: 'A Seller' },
+      });
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD, 'other-rail'],
+      });
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)?.methods).toEqual([METHOD, 'other-rail']);
+
+      const headers = await instruments.listInstruments(SELLER);
+      const other = headers.find((h) => h.methodId === 'other-rail');
+      await instruments.removeInstrument({ instrumentId: other!.id, ownerId: SELLER });
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
     });
   });
 

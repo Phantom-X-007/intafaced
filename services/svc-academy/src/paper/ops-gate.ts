@@ -15,6 +15,10 @@ export type PaperOpsStatus = {
   readonly envKey: typeof PAPER_OPS_ENV_KEY;
   /** Live trade path is never gated by this flag. */
   readonly liveTradeUnaffected: true;
+  /** D26-P1-C4 — this surface is paper ops, never live money. */
+  readonly simulated: true;
+  readonly venue: 'paper';
+  readonly realMoney: false;
 };
 
 /** Default true — missing / undefined means drills are on. */
@@ -28,6 +32,9 @@ export function paperOpsStatus(enabled: boolean | undefined): PaperOpsStatus {
     flagId: PAPER_OPS_FLAG_ID,
     envKey: PAPER_OPS_ENV_KEY,
     liveTradeUnaffected: true,
+    simulated: true,
+    venue: 'paper',
+    realMoney: false,
   };
 }
 

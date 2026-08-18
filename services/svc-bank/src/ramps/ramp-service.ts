@@ -13,7 +13,14 @@ import {
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
-import { assertCryptoRamp, refuseFiatRamp, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
+import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
+import { assertCryptoRamp, assertFiatSocketWhenNone, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
+import {
+  destKindForRamp,
+  UserWithdrawDestinationStore,
+  type UserWithdrawDestinations,
+  type WithdrawDestination,
+} from '../withdraw-destination.js';
 
 /**
  * RAMPS (§8.1 / D-S-09) — the CRYPTO LEDGER half: on-ramp credit, off-ramp settle.
@@ -56,9 +63,12 @@ import { assertCryptoRamp, refuseFiatRamp, type RampProgramme, NO_RAMP_PROGRAMME
  * WHAT IS NOT HERE
  * ═════════════════════════════════════════════════════════════════════════════
  *
- *   · FIAT. `socket.psp-partners` — refuse `bank.fiat_ramp_socket`.
+ *   · FIAT without a live pay RailAdapter. `socket.psp-partners` — refuse
+ *     `bank.fiat_ramp_no_pay_adapter`. When `PayFiatRampPort` yields a live rail, fiat
+ *     uses the same ledger-client deposit/withdraw recipes (no second book).
  *   · CHAIN BROADCAST / CONFIRMATION. Live crypto send and inbound watcher are
- *     svc-pay. Settle here means value left OUR book to `bank-crypto-ledger`.
+ *     svc-pay. Settle here means value left OUR book to `bank-crypto-ledger`
+ *     (crypto) or the pay rail id (fiat via adapter).
  *   · EARN APY, CARD BIN, or any commercial rate invention.
  *   · A LIVE MODE that sets `simulated: false`. Class X is a human decision.
  */
@@ -142,10 +152,23 @@ export interface RampServiceOptions {
    * silence is `none`, and every money path then refuses `bank.no_ramp_rail`.
    */
   programme?: RampProgramme;
+  /**
+   * Pay-adapter plane for fiat legs (D26-P1-B4). Default empty → honest refuse.
+   * Never invent a partner here; inject from the edge when pay registers a live
+   * fiat RailAdapter.
+   */
+  payFiat?: PayFiatRampPort;
+  /**
+   * Persisted user withdraw dest. Default is the SQL store. Tests may inject
+   * `assertOnlyWithdrawDestinations` so persist asserts and require refuses.
+   */
+  destinations?: UserWithdrawDestinations;
 }
 
 export class RampService {
   private readonly programme: RampProgramme;
+  private readonly payFiat: PayFiatRampPort;
+  private readonly destinations: UserWithdrawDestinations;
 
   constructor(
     private readonly sql: Sql,
@@ -153,11 +176,32 @@ export class RampService {
     options: RampServiceOptions = {},
   ) {
     this.programme = options.programme ?? NO_RAMP_PROGRAMME;
+    this.payFiat = options.payFiat ?? emptyPayFiatRampPort;
+    this.destinations = options.destinations ?? new UserWithdrawDestinationStore(sql);
   }
 
   /** What this deployment's ramp programme is — including that it is not one. */
   programmeInfo(): RampProgramme {
     return this.programme;
+  }
+
+  /** Persist a user withdraw dest (IBAN/IFSC/EVM) so a later offramp has a real ref. */
+  setWithdrawDestination(input: { userId: string; kind: string; ref: string }) {
+    return this.destinations.persist(input);
+  }
+
+  /**
+   * Public settle probe: either a live pay adapter can host both fiat legs,
+   * or refuse with `bank.fiat_ramp_no_pay_adapter`. Empty rails cannot look live.
+   * Mode `none` refuses `bank.fiat_ramp_socket` first — no default fiat rail.
+   */
+  async fiatSettle(): Promise<{ canSettle: true; onrampRailId: string; offrampRailId: string }> {
+    assertFiatSocketWhenNone(this.programme);
+    const rails = await Promise.resolve(this.payFiat.listFiatRails());
+    assertEmptyRailsCannotLookLive(rails, { simulated: this.programme.simulated });
+    const onrampRailId = await resolvePayFiatRailId(this.payFiat, 'onramp');
+    const offrampRailId = await resolvePayFiatRailId(this.payFiat, 'offramp');
+    return { canSettle: true, onrampRailId, offrampRailId };
   }
 
   async onrampsOf(userId: string): Promise<OnrampRecord[]> {
@@ -180,7 +224,8 @@ export class RampService {
    * OPERATOR-CREDENTIALED. A user who can credit their own balance does not
    * need a ramp. Router gates on `admin:treasury`.
    *
-   * Fiat refuses before a row is written. Unconfigured programme refuses by name.
+   * Fiat resolves a live pay RailAdapter rail id (or refuses the socket) before
+   * any row. Unconfigured crypto programme refuses by name.
    */
   async creditOnramp(input: {
     userId: string;
@@ -190,11 +235,12 @@ export class RampService {
     railRef: string;
     creditedBy: string;
   }): Promise<OnrampRecord> {
-    if (input.kind === 'fiat') refuseFiatRamp();
     if (input.amount <= 0n) {
       throw new BankError('On-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
-    const rail = assertCryptoRamp(this.programme);
+    assertRampAssetId(input.assetId);
+    if (input.kind === 'fiat') assertFiatSocketWhenNone(this.programme);
+    const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'onramp') : assertCryptoRamp(this.programme);
 
     return withMoneySpan(
       'bank.ramp.onramp',
@@ -232,7 +278,9 @@ export class RampService {
 
   /**
    * Move value out of the user's available balance to the crypto ledger rail
-   * boundary. Does NOT broadcast. `simulated` stays true.
+   * boundary. Crypto pays the stored EVM dest through ledger-client; refuses
+   * if none stored — before withdrawHold. Does NOT broadcast.
+   * `simulated` stays true.
    */
   async offramp(input: {
     offrampId: string;
@@ -240,23 +288,22 @@ export class RampService {
     assetId: string;
     amount: Amount;
     kind: RampKind;
-    destinationRef: string;
+    destinationRef?: string;
     clientRef: string;
   }): Promise<OfframpRecord> {
-    if (input.kind === 'fiat') refuseFiatRamp();
     if (input.amount <= 0n) {
       throw new BankError('Off-ramp amount must be positive', 'bank.ramp_invalid_amount');
     }
-    if (!input.destinationRef.trim()) {
-      throw new BankError('Off-ramp destination is required', 'bank.ramp_invalid_destination');
-    }
-    const rail = assertCryptoRamp(this.programme);
+    assertRampAssetId(input.assetId);
+    if (input.kind === 'fiat') assertFiatSocketWhenNone(this.programme);
+    const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
+    const dest = await this.resolveWithdrawDestination(input.userId, input.kind, input.destinationRef);
 
     return withMoneySpan(
       'bank.ramp.offramp',
       { operation: 'offramp', amount: formatAmount(input.amount), userId: input.userId, assetId: input.assetId },
       async () => {
-        const claimed = await this.claimOfframp({ ...input, rail });
+        const claimed = await this.claimOfframp({ ...input, rail, destinationRef: dest.ref });
 
         if (claimed.status === 'settled') return claimed;
         if (claimed.status === 'rejected') {
@@ -327,6 +374,26 @@ export class RampService {
     return (await this.ledger.balance(userAvailable(userId, assetId))).amount;
   }
 
+  /**
+   * Crypto withdraw always uses the stored EVM dest. Persist an offered dest
+   * then require the store — refuse closed if none stored, before withdrawHold.
+   * Fiat still persist-or-require (IBAN/IFSC). No PSP.
+   */
+  private async resolveWithdrawDestination(userId: string, kind: RampKind, offeredRef?: string): Promise<WithdrawDestination> {
+    const destKind = destKindForRamp(kind);
+    const offered = offeredRef?.trim();
+    if (kind === 'crypto') {
+      if (offered) {
+        await this.destinations.persist({ userId, kind: destKind, ref: offered });
+      }
+      return this.destinations.require({ userId, kind: destKind });
+    }
+    if (offered) {
+      return this.destinations.persist({ userId, kind: destKind, ref: offered });
+    }
+    return this.destinations.require({ userId, kind: destKind });
+  }
+
   /** Hold account for an offramp — for tests and recovery visibility. */
   holdAccount(userId: string, assetId: string, offrampId: string) {
     return withdrawalHoldAccount(userId, assetId, offrampId);
@@ -382,17 +449,56 @@ export class RampService {
     clientRef: string;
   }): Promise<OfframpRecord> {
     return transaction(this.sql, async (tx) => {
-      const inserted = await tx<OfframpRow[]>`
-        INSERT INTO bank.ramp_offramps (
-          id, user_id, asset_id, amount, kind, rail, destination_ref, client_ref, simulated, status
-        ) VALUES (
-          ${input.offrampId}::uuid, ${input.userId}, ${input.assetId}, ${formatAmount(input.amount)}::numeric,
-          ${input.kind}, ${input.rail}, ${input.destinationRef}, ${input.clientRef}, true, 'pending'
-        )
-        ON CONFLICT (user_id, client_ref) DO NOTHING
-        RETURNING *
+      /**
+       * Two unique keys: primary `id` and `(user_id, client_ref)`.
+       *
+       * `ON CONFLICT (user_id, client_ref)` alone left same-id / different-
+       * clientRef as a raw PG 23505 on the primary key. Resolve both keys by
+       * name as `bank.ramp_conflict` — never surface constraint codes.
+       */
+      const byId = await tx<OfframpRow[]>`
+        SELECT * FROM bank.ramp_offramps
+         WHERE id = ${input.offrampId}::uuid
+         FOR UPDATE
       `;
-      if (inserted[0]) return toOfframp(inserted[0]);
+      if (byId[0]) {
+        const existing = toOfframp(byId[0]);
+        if (offrampFactsMismatch(existing, input)) {
+          throw new BankError(`Off-ramp id ${input.offrampId} was already used with different terms`, 'bank.ramp_conflict');
+        }
+        return existing;
+      }
+
+      try {
+        const inserted = await tx<OfframpRow[]>`
+          INSERT INTO bank.ramp_offramps (
+            id, user_id, asset_id, amount, kind, rail, destination_ref, client_ref, simulated, status
+          ) VALUES (
+            ${input.offrampId}::uuid, ${input.userId}, ${input.assetId}, ${formatAmount(input.amount)}::numeric,
+            ${input.kind}, ${input.rail}, ${input.destinationRef}, ${input.clientRef}, true, 'pending'
+          )
+          ON CONFLICT (user_id, client_ref) DO NOTHING
+          RETURNING *
+        `;
+        if (inserted[0]) return toOfframp(inserted[0]);
+      } catch (err) {
+        // Concurrent same-id insert (or any other unique on this row) — resolve, don't leak 23505.
+        if (!isUniqueViolation(err)) throw err;
+        const raced = await tx<OfframpRow[]>`
+          SELECT * FROM bank.ramp_offramps
+           WHERE id = ${input.offrampId}::uuid
+              OR (user_id = ${input.userId} AND client_ref = ${input.clientRef})
+           FOR UPDATE
+        `;
+        if (raced[0]) {
+          const existing = toOfframp(raced[0]);
+          if (offrampFactsMismatch(existing, input)) {
+            throw new BankError(`Off-ramp claim collided on id ${input.offrampId} or client ref ${input.clientRef}`, 'bank.ramp_conflict');
+          }
+          return existing;
+        }
+        throw err;
+      }
 
       const rows = await tx<OfframpRow[]>`
         SELECT * FROM bank.ramp_offramps
@@ -400,12 +506,7 @@ export class RampService {
          FOR UPDATE
       `;
       const existing = toOfframp(rows[0]!);
-      const mismatch =
-        existing.assetId !== input.assetId ||
-        existing.amount !== input.amount ||
-        existing.destinationRef !== input.destinationRef ||
-        existing.id !== input.offrampId;
-      if (mismatch) {
+      if (offrampFactsMismatch(existing, input)) {
         throw new BankError(`Client ref ${input.clientRef} was already used for a different off-ramp`, 'bank.ramp_conflict');
       }
       return existing;
@@ -458,4 +559,48 @@ function toOfframp(row: OfframpRow): OfframpRecord {
     createdAt: row.created_at,
     settledAt: row.settled_at,
   };
+}
+
+/**
+ * Asset id shape gate — not a commercial allowlist.
+ *
+ * Empty / whitespace would post a ledger deposit under a nonsense asset and
+ * look "successful". A full allowlist of pairs is product law (Nitro); until
+ * that exists we only refuse the shapes that cannot be a real asset id.
+ */
+function assertRampAssetId(assetId: string): void {
+  const trimmed = assetId.trim();
+  if (!trimmed || trimmed !== assetId) {
+    throw new BankError(
+      'Ramp asset id must be a non-empty crypto symbol with no leading or trailing whitespace',
+      'bank.ramp_invalid_asset',
+    );
+  }
+}
+
+/** Claimed row must match every client-supplied term, including both unique keys. */
+function offrampFactsMismatch(
+  existing: OfframpRecord,
+  input: {
+    offrampId: string;
+    userId: string;
+    assetId: string;
+    amount: Amount;
+    destinationRef: string;
+    clientRef: string;
+  },
+): boolean {
+  return (
+    existing.id !== input.offrampId ||
+    existing.userId !== input.userId ||
+    existing.assetId !== input.assetId ||
+    existing.amount !== input.amount ||
+    existing.destinationRef !== input.destinationRef ||
+    existing.clientRef !== input.clientRef
+  );
+}
+
+/** postgres.js surfaces PG SQLSTATE on `err.code`. */
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
 }

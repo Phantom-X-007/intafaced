@@ -61,8 +61,8 @@
  * waves were RIGHT to leave it alone. Punishing them for that would be the gate
  * being wrong on the one thing they got right.
  *
- * WHY WARN BEFORE BLOCK. Thrift was rewritten in August because a spend meter
- * masquerading as a correctness gate made agents stop shipping. So the stamp
+ * WHY WARN BEFORE BLOCK. A prior spend meter dressed as a correctness gate
+ * made agents stop shipping (that thrift law is deleted; this gate is about stamp-mill quality only). So the stamp
  * verdict has two tiers and the threshold is stated, not implied:
  *
  *   seriesHits < STAMP_BLOCK_RUN  → WARN, loud, exit 0. First offence is visible.

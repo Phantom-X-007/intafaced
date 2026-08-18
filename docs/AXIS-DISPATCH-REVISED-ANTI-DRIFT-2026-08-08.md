@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # Revised five dispatches — anti-drift pass (2026-08-08)
 
 **Status:** C1 is **executing in-repo** (not paste-only). Holds the five C1–C5 briefs that the axis planner planned to release after Nitro’s full green light, revised after a four-lane anti-drift audit, then **re-verified at tip 2026-08-08** (errata below).
@@ -76,7 +78,7 @@ Order (do not reorder):
 Fence: tooling/scripts/swarm.mjs, tooling/ci/claim-check.mjs, tooling/ci/claim-staleness.mjs,
 docs/ops/SWARM-MANDATE.md, docs/ops/trk/**, GitHub issues, tooling/tracker/features.mjs (shared).
 Forbidden: services/**, vendor/**, docs/audit/**, .github/workflows/**.
-pnpm claim:check before first edit. One service/path-cluster per PR when thrift soft/hard.
+pnpm claim:check before first edit. One service/path-cluster per PR (reviewability — Actions thrift deleted 2026-08-07).
 ```
 
 ---

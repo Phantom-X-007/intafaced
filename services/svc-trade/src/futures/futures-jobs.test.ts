@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { parseFundingMarketIds, startFuturesJobs } from './futures-jobs.js';
 import type { MarkSource } from './liquidation-tick.js';
 
@@ -18,7 +19,7 @@ describe('startFuturesJobs', () => {
   it('disabled → no scheduled jobs (safe default)', () => {
     const handle = startFuturesJobs({
       sql: {} as never,
-      ledger: { post: vi.fn() },
+      ledger: { post: vi.fn(), balance: vi.fn() },
       matching: { depth: vi.fn() } as never,
       bus: null,
       config: {
@@ -26,9 +27,11 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 1000,
         fundingIntervalMs: 1000,
         fundingMarketIds: ['m1'],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     expect(handle.host.list()).toEqual([]);
+    expect(handle.marginCalls).toBeTruthy();
     handle.stop();
   });
 
@@ -44,7 +47,10 @@ describe('startFuturesJobs', () => {
         if (t.includes('select')) return Promise.resolve([]);
         return Promise.resolve([]);
       }, {}) as never,
-      ledger: { post: async () => ({ id: 'x' }) as never },
+      ledger: {
+        post: async () => ({ id: 'x' }) as never,
+        balance: async () => ({ account: {} as never, accountId: 'x', amount: 0n }),
+      },
       matching: {
         depth: async () => ({ bids: [], asks: [], sequence: 0 }),
       } as never,
@@ -54,6 +60,7 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 60_000,
         fundingIntervalMs: 60_000,
         fundingMarketIds: ['m1', 'm2'],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     const names = handle.host.list().sort();
@@ -63,6 +70,34 @@ describe('startFuturesJobs', () => {
     handle.stop();
     expect(handle.host.list()).toEqual([]);
     void timers;
+  });
+
+  it('enabled with empty fundingMarketIds schedules liq only — never invents a funding market', () => {
+    const handle = startFuturesJobs({
+      sql: Object.assign((strings: TemplateStringsArray) => {
+        void strings;
+        return Promise.resolve([]);
+      }, {}) as never,
+      ledger: {
+        post: async () => ({ id: 'x' }) as never,
+        balance: async () => ({ account: {} as never, accountId: 'x', amount: 0n }),
+      },
+      matching: {
+        depth: async () => ({ bids: [], asks: [], sequence: 0 }),
+      } as never,
+      bus: null,
+      config: {
+        enabled: true,
+        liqIntervalMs: 60_000,
+        fundingIntervalMs: 60_000,
+        fundingMarketIds: [],
+        fundingMaxAbsRate: null,
+      },
+    });
+    const names = handle.host.list();
+    expect(names).toContain('futures.liquidation');
+    expect(names.filter((n) => n.startsWith('futures.funding.'))).toEqual([]);
+    handle.stop();
   });
 
   it('markPrice prefers venue fabric over matching depth', async () => {
@@ -79,7 +114,7 @@ describe('startFuturesJobs', () => {
     }));
     const handle = startFuturesJobs({
       sql: {} as never,
-      ledger: { post: vi.fn() },
+      ledger: { post: vi.fn(), balance: vi.fn() },
       matching: { depth } as never,
       bus: null,
       venueMarkSource: venue,
@@ -88,6 +123,7 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 1000,
         fundingIntervalMs: 1000,
         fundingMarketIds: [],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     expect(await handle.markPrice('m1')).toBe('50000');
@@ -101,7 +137,7 @@ describe('startFuturesJobs', () => {
   it('markPrice null when no venue and empty depth (never invent)', async () => {
     const handle = startFuturesJobs({
       sql: {} as never,
-      ledger: { post: vi.fn() },
+      ledger: { post: vi.fn(), balance: vi.fn() },
       matching: {
         depth: async () => ({ bids: [], asks: [], sequence: 0 }),
       } as never,
@@ -111,9 +147,21 @@ describe('startFuturesJobs', () => {
         liqIntervalMs: 1000,
         fundingIntervalMs: 1000,
         fundingMarketIds: [],
+        fundingMaxAbsRate: '1', // test fixture only — not product law (D2)
       },
     });
     expect(await handle.markPrice('m1')).toBeNull();
     handle.stop();
+  });
+
+  it('does not import DEFAULT_FUTURES_LADDER_POLICY — omitted D3 does not invent rungs', () => {
+    const src = readFileSync(new URL('./futures-jobs.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/DEFAULT_FUTURES_LADDER_POLICY/);
+  });
+
+  it('does not pass a maintenanceBps number into the live tick', () => {
+    const src = readFileSync(new URL('./futures-jobs.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/maintenanceBps\s*:/);
+    expect(src).toMatch(/policy:\s*deps\.ladderPolicy/);
   });
 });

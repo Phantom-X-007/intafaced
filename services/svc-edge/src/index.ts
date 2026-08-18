@@ -1,15 +1,18 @@
 import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
-import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
+import { registerAdminRoutes, registerGeoBlockGuard, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
+import { resolveRequestRegion } from './geo-region.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
-import { rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
+import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
 import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { exchangePrincipal } from './principal-exchange.js';
-import { resolve, UPSTREAMS } from './routes.js';
+import { upstreamBody } from './proxy-body.js';
+import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
+import { userCopy } from './user-copy.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -42,6 +45,9 @@ registerProcessHooks(
 const app = Fastify({
   logger: { level: env.LOG_LEVEL },
   disableRequestLogging: false,
+  // Explicit body budget — see EDGE_BODY_LIMIT_BYTES. Refuses with 413 before
+  // principal exchange or upstream work, so an oversized body is not free CPU.
+  bodyLimit: env.EDGE_BODY_LIMIT_BYTES,
   // Unset means "believe the socket, never the header". See EDGE_TRUST_PROXY in
   // env.ts: this is what decides whether `req.ip` — and therefore the throttle's
   // key — identifies a caller or identifies our own load balancer.
@@ -133,7 +139,7 @@ await registerRateLimit(app, rateLimit);
 const rateLimitState = rateLimitSummary(rateLimit);
 app.log[rateLimitState.level]({ appEnv: env.APP_ENV, ...rateLimit }, rateLimitState.summary);
 
-const upstreamUrl = (envVar: string, devUrl: string): string => (process.env[envVar] ?? devUrl).replace(/\/$/, '');
+const envLookup = (name: string): string | undefined => process.env[name];
 
 const tokenConfig = {
   secret: env.JWT_ACCESS_SECRET,
@@ -177,7 +183,18 @@ app.get('/ready', async () => ({
   ready: true,
   // The route table, so an operator can see what the edge will forward without
   // reading the source. Deliberately no secrets, no upstream URLs.
+  //
+  // `wired` is whether the env var is SET — not whether the process behind it
+  // is healthy. A prefix listed here with `wired: false` would have been
+  // forwarded to localhost in staging/prod (a 200/502 on an unwired door).
   routes: UPSTREAMS.map((u) => u.prefix),
+  upstreamWiring: (() => {
+    const table = readyRoutes(envLookup);
+    return {
+      wired: table.filter((r) => r.wired).map((r) => r.prefix),
+      unwired: table.filter((r) => !r.wired).map((r) => r.prefix),
+    };
+  })(),
   // Whether screening is armed, and how many regions it refuses — a count, not
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.
@@ -202,10 +219,20 @@ app.get('/ready', async () => ({
   // facts, and a probe that renders both as `0` cannot tell an operator which
   // one is why the front-end says the platform is unreachable.
   cors: { configured: cors.configured, allowedOrigins: cors.origins.length },
+  // Throttle posture without boot logs. multiReplicaShared is always false —
+  // counters are per process; do not invent a shared store on /ready.
+  rateLimit: rateLimitReadiness(rateLimit),
+  // Body budget the process will accept (bytes). Count only — not a secret.
+  bodyLimitBytes: env.EDGE_BODY_LIMIT_BYTES,
   // Readiness is about the process, never about the switches: a killed module is
   // an operator's decision, and taking the edge out of the load balancer because
   // of it would remove the surface that serves cancels and reads.
-  disabledModules: killSwitches.disabledModules(),
+  //
+  // `disabledModules` is deliberately ABSENT here. `/ready` is unauthenticated
+  // and a CORS surface; publishing the halt list let any caller learn which
+  // modules an operator had killed — the same oracle the preflight ordering
+  // exists to deny (audit 2026-08-08 #5). Operators read the list from
+  // `GET /admin/status` (admin:write + MFA).
 }));
 
 // ── Operator control plane (§14.6) ─────────────────────────────────
@@ -215,6 +242,12 @@ app.get('/ready', async () => ({
 // through a test-only copy of the rule is not verified.
 
 registerKillSwitchGuard(app, killSwitches);
+// Geo-block on /api — unset/empty screening is unknown, not a geo-clearance.
+// Must not invent sanctions list content (Class X).
+registerGeoBlockGuard(app);
+// Network fail-closed on /api — product Done bar for VPN/signal residual.
+// Must not invent a partner; refuses only when env arms fail-closed / flagged.
+registerNetworkAccessGuard(app);
 registerAdminRoutes(app, admin);
 
 /**
@@ -222,81 +255,117 @@ registerAdminRoutes(app, admin);
  *
  * A catch-all rather than a route per upstream, because the failure mode of a
  * missing route must be 404 — not "fell through to a default upstream".
+ *
+ * Encapsulated so the JSON parser here can keep RAW BYTES (pay webhook HMAC)
+ * without turning `/admin/*` bodies into Buffers. Fastify parsers are
+ * per-context; the parent keeps the object parser the control plane needs.
  */
-app.all('/api/*', async (req, reply) => {
-  const url = new URL(req.url, `http://${env.HTTP_HOST}`);
-  const target = resolve(url.pathname);
-
-  if (!target) {
-    // An unlisted prefix is not forwarded anywhere. An edge that proxies what
-    // it does not recognise is a proxy for the entire internal network.
-    return reply.code(404).send({ error: 'no route', code: 'edge.no_route' });
-  }
-
-  // The kill-switch already ran, in the `onRequest` hook registered above —
-  // before body parsing and before this handler exists. See `control-plane.ts`
-  // for why it is a hook and not a check here: a guard inside one handler
-  // protects that handler, a hook protects the door.
-
-  const exchanged = await exchangePrincipal(req.headers, {
-    tokens: tokenConfig,
-    edgeSecret: env.EDGE_PRINCIPAL_SECRET,
-    // Resolved here, never read from the request: region drives the
-    // jurisdiction matrix, so a caller who could set it would choose its own
-    // regulator. A single configured value today; geo-IP replaces this line.
-    region: env.DEFAULT_REGION,
-    // Direct to identity for `ifc_…` API keys — never via this edge (loop).
-    identityUrl: env.IDENTITY_URL,
+await app.register(async (api) => {
+  api.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) => {
+    done(null, body);
+  });
+  api.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'buffer' }, (_req, body, done) => {
+    done(null, body);
   });
 
-  // A refused token is logged and the request continues as ANONYMOUS. The
-  // service decides — `protectedProcedure` answers UNAUTHORIZED with the right
-  // status, and a `publicProcedure` still works, which is what lets a caller
-  // with an expired token reach `auth.refresh` and recover.
-  if (exchanged.rejected) {
-    req.log.info({ reason: exchanged.rejected, path: url.pathname }, 'edge: token refused, forwarding anonymous');
-  }
+  api.all('/api/*', async (req, reply) => {
+    const url = new URL(req.url, `http://${env.HTTP_HOST}`);
+    const target = resolve(url.pathname);
 
-  // Recorded for the metric, not for the response. Kept as three values rather
-  // than a boolean because "presented nothing" and "presented something we
-  // refused" are different incidents: a spike in `refused` after a deploy is a
-  // signing-key mismatch, and a spike in `anonymous` is a front-end that stopped
-  // attaching the header. An availability panel that merges them shows neither.
-  markAuthOutcome(req, exchanged.rejected ? 'refused' : exchanged.principal ? 'authenticated' : 'anonymous');
+    if (!target) {
+      // An unlisted prefix is not forwarded anywhere. An edge that proxies what
+      // it does not recognise is a proxy for the entire internal network.
+      return reply.code(404).send({ error: userCopy('edge.no_route'), code: 'edge.no_route' });
+    }
 
-  const base = upstreamUrl(target.upstream.envVar, target.upstream.devUrl);
-  const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : (req.body as unknown);
+    if (isS2sPath(target.path)) {
+      // Belt: the onRequest hook already refuses this. Kept so a future route
+      // that skips the hook cannot open the S2S plane.
+      return reply.code(404).send({ error: userCopy('edge.s2s_not_proxied'), code: 'edge.s2s_not_proxied' });
+    }
 
-  return withEdgeSpan(
-    'edge.proxy',
-    {
-      upstream: target.upstream.prefix,
-      method: req.method,
-      auth: exchanged.rejected ?? (exchanged.principal ? 'authenticated' : 'anonymous'),
-    },
-    async () => {
-      let response: Response;
-      try {
-        response = await fetch(`${base}${target.path}${url.search}`, {
-          method: req.method,
-          headers: exchanged.headers,
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-          signal: AbortSignal.timeout(env.UPSTREAM_TIMEOUT_MS),
-        });
-      } catch (err) {
-        // 502, not 500: the edge is fine, the upstream is not, and a caller
-        // needs to tell those apart before deciding whether to retry.
-        req.log.error({ err, upstream: target.upstream.prefix }, 'edge: upstream unreachable');
-        return reply.code(502).send({ error: 'upstream unavailable', code: 'edge.upstream_unavailable' });
-      }
+    const resolved = resolveUpstreamBase(target.upstream, envLookup, env.APP_ENV);
+    if ('unwired' in resolved) {
+      // Staging/prod with no PAY_URL (etc.) used to silently hit localhost.
+      // 503 + named code, not a 200/502 that looks like the service is down.
+      req.log.error({ prefix: target.upstream.prefix, envVar: target.upstream.envVar }, 'edge: upstream env unset');
+      return reply.code(503).send({
+        error: userCopy('edge.upstream_unwired'),
+        code: 'edge.upstream_unwired',
+        module: target.upstream.module,
+      });
+    }
 
-      const text = await response.text();
-      return reply
-        .code(response.status)
-        .header('content-type', response.headers.get('content-type') ?? 'application/json')
-        .send(text);
-    },
-  );
+    // The kill-switch already ran, in the `onRequest` hook registered above —
+    // before body parsing and before this handler exists. See `control-plane.ts`
+    // for why it is a hook and not a check here: a guard inside one handler
+    // protects that handler, a hook protects the door.
+
+    // Region: DEFAULT_REGION, or trusted geo header when EDGE_GEO_COUNTRY_HEADER
+    // + EDGE_TRUST_PROXY are both set. Never caller-supplied free-form region.
+    const regionRes = resolveRequestRegion({
+      defaultRegion: env.DEFAULT_REGION,
+      trustProxy: env.EDGE_TRUST_PROXY !== undefined,
+      geoHeaderName: env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+
+    const exchanged = await exchangePrincipal(req.headers, {
+      tokens: tokenConfig,
+      edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+      region: regionRes.region,
+      // Direct to identity for `ifc_…` API keys — never via this edge (loop).
+      identityUrl: env.IDENTITY_URL,
+    });
+
+    // A refused token is logged and the request continues as ANONYMOUS. The
+    // service decides — `protectedProcedure` answers UNAUTHORIZED with the right
+    // status, and a `publicProcedure` still works, which is what lets a caller
+    // with an expired token reach `auth.refresh` and recover.
+    if (exchanged.rejected) {
+      req.log.info({ reason: exchanged.rejected, path: url.pathname }, 'edge: token refused, forwarding anonymous');
+    }
+
+    // Recorded for the metric, not for the response. Kept as three values rather
+    // than a boolean because "presented nothing" and "presented something we
+    // refused" are different incidents: a spike in `refused` after a deploy is a
+    // signing-key mismatch, and a spike in `anonymous` is a front-end that stopped
+    // attaching the header. An availability panel that merges them shows neither.
+    markAuthOutcome(req, exchanged.rejected ? 'refused' : exchanged.principal ? 'authenticated' : 'anonymous');
+
+    const body = upstreamBody(req.method, req.body);
+
+    return withEdgeSpan(
+      'edge.proxy',
+      {
+        upstream: target.upstream.prefix,
+        method: req.method,
+        auth: exchanged.rejected ?? (exchanged.principal ? 'authenticated' : 'anonymous'),
+      },
+      async () => {
+        let response: Response;
+        try {
+          response = await fetch(`${resolved.base}${target.path}${url.search}`, {
+            method: req.method,
+            headers: exchanged.headers,
+            ...(body === undefined ? {} : { body }),
+            signal: AbortSignal.timeout(env.UPSTREAM_TIMEOUT_MS),
+          });
+        } catch (err) {
+          // 502, not 500: the edge is fine, the upstream is not, and a caller
+          // needs to tell those apart before deciding whether to retry.
+          req.log.error({ err, upstream: target.upstream.prefix }, 'edge: upstream unreachable');
+          return reply.code(502).send({ error: userCopy('edge.upstream_unavailable'), code: 'edge.upstream_unavailable' });
+        }
+
+        const text = await response.text();
+        return reply
+          .code(response.status)
+          .header('content-type', response.headers.get('content-type') ?? 'application/json')
+          .send(text);
+      },
+    );
+  });
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });

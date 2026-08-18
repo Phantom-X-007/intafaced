@@ -108,6 +108,9 @@ beforeAll(async () => {
       OTEL_ENABLED: 'false',
       JWT_ACCESS_SECRET: 'test-only-signing-secret-at-least-32-characters-long',
       EDGE_PRINCIPAL_SECRET: 'test-only-edge-principal-secret-at-least-32-chars',
+      // Listed fixture so the geo-block guard can pass through to the proxy
+      // (unset would 503 as unknown). Placeholder codes only — not counsel content.
+      INTAFACED_SANCTIONS_REGIONS: 'AA:test-fixture-not-a-real-list',
       // Kept out of the repo tree so a test run cannot leave a state file behind.
       EDGE_KILL_STATE_PATH: '',
     },
@@ -158,6 +161,42 @@ describe('the deployed svc-edge serves /metrics', () => {
     // is what lets a second service adopt the package and appear as its own
     // series on the same panel.
     expect(samples.every((s) => s.labels.service === 'svc-edge')).toBe(true);
+  });
+});
+
+/**
+ * Unauthenticated `/ready` must not be a kill-switch oracle.
+ *
+ * CORS preflight is ordered so an unauthenticated caller cannot learn which
+ * modules an operator halted. Publishing `disabledModules` on `/ready` undid
+ * that (audit 2026-08-08 #5). The operator surface is `/admin/status`.
+ */
+describe('the deployed /ready does not leak the halt list', () => {
+  it('answers ready with routes/screening/cors and without disabledModules', async () => {
+    const res = await fetch(`${base}/ready`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ready).toBe(true);
+    expect(Array.isArray(body.routes)).toBe(true);
+    expect(body.screening).toBeTypeOf('object');
+    expect(body.cors).toBeTypeOf('object');
+    expect(body.bodyLimitBytes).toBeTypeOf('number');
+    expect(Object.prototype.hasOwnProperty.call(body, 'disabledModules')).toBe(false);
+  });
+
+  it('still returns 502 with edge.upstream_unavailable when an upstream is absent', async () => {
+    // Proves the proxy path in index.ts is wired: dead upstream → 502, not 500.
+    const res = await fetch(`${base}/api/trade/trpc/orders.list`, { method: 'GET' });
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('edge.upstream_unavailable');
+  });
+
+  it('returns 404 edge.no_route for an unlisted prefix', async () => {
+    const res = await fetch(`${base}/api/ledger/trpc/post`, { method: 'POST' });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe('edge.no_route');
   });
 
   it('counts a failed proxy attempt — the outage goes in the denominator', async () => {

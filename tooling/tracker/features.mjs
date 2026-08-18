@@ -193,7 +193,10 @@ export const FEATURES = [
     phase: '1',
     status: 'done',
     requires: ['services/svc-identity'],
-    note: 'Base keys on main. **Reclaimed 2026-08-04** from Shehzad M5 — Nitro agents own remaining money-routing graph (no cross-leak). Class M. Do not invent money routing.',
+    note:
+      'Base keys on main. **D26-P1-I1 / D-S-11 sealed 2026-08-12** — ownership doors (assertOwned + assertTransferDoor), ' +
+      'cross-leak ban via ledger subAccountTransfer only, trade S2S ownership gate, live-partition cap (IDENTITY_MAX_SUB_ACCOUNTS), ' +
+      'no per-sub-account tier/jurisdiction. Class M. Do not invent money routing / KYC vault.',
   }),
   f('identity.kyc', 'KYC tiers wired to JURISDICTION_MATRIX', {
     module: 'identity',
@@ -267,15 +270,29 @@ export const FEATURES = [
     module: 'identity',
     phase: '1',
     plane: 'F',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.kyc', 'identity.kyc-review'],
-    note: 'Law §10:443, gap-closed 2026-08-08: "PII isolation: KYC docs in separate encrypted store; services get status flags, never documents." Compliance-load-bearing and unrowed since the law was written (audit §A1.a #16). HALF OF IT ALREADY HOLDS — AND IT HOLDS VACUOUSLY, WHICH IS THE POINT OF THE ROW. `services/svc-identity/src/db/schema.ts` cites §10:443 by name and gives kyc_records one `provider_ref` column documented as "a pointer, never a document, a name, or a date of birth", so the services-get-flags half is honoured in code today. But it is honoured because NO DOCUMENT EXISTS ANYWHERE: no verification provider is integrated, so there is nothing yet to isolate. An invariant that holds only because the feature is empty is not an invariant; it is a coincidence with a deadline. WHY THIS READS `ready`: what is claimable now is the store itself (envelope encryption, separate credentials, no service-level read path) and a GATE asserting no service schema ever grows a document column. Both have to exist BEFORE the first document arrives — retrofitting isolation after a provider is wired is the expensive order, and the cheap window is open precisely because the store is empty. WHAT NEEDS THE OWNER: which verification provider. That is a commercial and jurisdictional choice, and Class X where real identity documents are involved — same class as the sanctions list (DIRECTION §8.7). PHASE: §10 is not phased by the law; `1` is stated so it sits with identity.kyc, the row whose data it protects.',
+    requires: [
+      'services/svc-identity/src/kyc/document-store.ts',
+      'services/svc-identity/src/kyc/provider-ref-bind.ts',
+      'services/svc-identity/drizzle/0010_kyc_document_store.sql',
+    ],
+    note:
+      '**DONE 2026-08-16:** Title is the encrypted KYC document store (§10), not a live vendor. ' +
+      'Vault + principal-bound getFor/deleteFor + operator tRPC meta-only + provider_ref bind + foreign-service gate on main (#1348). ' +
+      'Production `index.ts` constructs/wires `kycDocs` via `kycRouterBootOptions(sql, env.IDENTITY_KYC_DOC_KEY)` when the key is set (#1806, #2101); unset → procedures named-refuse `kyc_doc.unwired`; invalid key → `kyc_doc.key_missing`. Pin: `kyc/index-boot-wire.test.ts`. ' +
+      'Named Class X residual (not this title): live verification vendor webhook — no vendor invented. Services get status flags only; kyc.status never returns provider_ref or document bytes.',
   }),
   f('infra.drop-flags', 'Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11)', {
     module: 'core-ops',
     phase: '1',
     plane: 'F',
+    status: 'wip',
+    owner: 'ZenYoda3',
+    requires: ['packages/config/src/flags.ts'],
     dependsOn: ['infra.config'],
-    note: 'Law §11:456, gap-closed 2026-08-08. §11 maps six drop phases to the flags that switch them on and closes with "the drop sequence is configuration, not deployment risk" — and THE CONFIGURATION DOES NOT EXIST (audit §A1.a #15). `tooling/coverage.yaml` drop_phases already names this row under drop phases 0, I, III and V, so four of the six drop gates point at a capability with no code. WHY IT READS `ready` AND DEPENDS ONLY ON infra.config: this row is the SWITCH, not the features behind it. §11:449 flags "founding badges (NFT mint)", and the mint itself is launch.nft — chain owner, blocked. Putting launch.nft in `dependsOn` would have parked a phase-1 framework behind a phase-5 row and recreated exactly the inverted-edge defect this same PR removed from venue.aggregation and v22.alerts. A flag can exist and be OFF for a feature that does not; that is what dark shipping means. So: the framework, the waitlist and the referral queue (§11:449) are buildable today against infra.config, which is `done` and already carries typed flags. DONE-BAR CONDITION, not a blocking edge: a flag whose feature does not exist must read as OFF-and-unbuilt rather than OFF-and-ready, or the flag surface becomes a second, quieter tracker that disagrees with this one. PHASE: §11 is a mapping chapter and is not itself phased; `1` is stated because drop phase 0 is the first thing it gates. NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`, so no drop date is committed and this row does not create one.',
+    note: 'Law §11:456. SWITCH mountain (not the features behind it). 2026-08-09 W10 L14: product refuse path shipped — `assertEnabled` / `FlagDisabledError` so waitlist+referral refuse when off (wrong phase / override / kill); `offReadiness` makes OFF unbuilt plan rows read `unbuilt` not ready (tracker Done-bar). Residual: wire callers in waitlist/referral services when those surfaces exist; founding-badge mint remains launch.nft (chain). NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`.',
   }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────
@@ -306,79 +323,150 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade'],
-    note: 'Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). CI org billing may block Actions re-prove; edge product-check optional remaining.',
+    note: 'Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). Actions are unlimited on this public repo (thrift retired 2026-08-07) — do not read billing as a Done blocker. Edge product-check optional remaining.',
   }),
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
     status: 'wip',
-    owner: 'nitro-agent',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    note: '**Partial-liquidation ladder landed #1136 (2026-08-08)** — futures/maintenance-ladder.ts, depth-referenced tiers in scaled bigint, wired through liquidation-tick.ts behind an optional dep so the old full-close path runs unchanged when absent. The gap-series proof THIS NOTE PREVIOUSLY RECORDED AS UNRUN is now run: 100→96→94→93 then a 14% gap to 80 yields [skipped_healthy, skipped_healthy, partially_liquidated, partially_liquidated, liquidated], margin drawn totals exactly 100, and a gap past the 2000 bps breaker is refused rather than traded through. STILL NOT done: no leveraged entry through the book, funding still off and owner-reserved, insurance-fund ACCOUNT choice owner-reserved (so the fund receiving the shortfall is proved only engine-side), and no margin-call grace clock — svc-trade has no transport for one and the ADR forbids starting grace without it. **Reclaimed 2026-08-04** from Shehzad M3 — Nitro agents implement only from tip product law or honest thin §13. Never invent mid/funding. Denon owns product-law invent. **Isolated margin ONLY.** `DIRECTION` §1 and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` done-bar item 8 forbid a cross-margin path even disabled — this row advertised cross/isolated until 2026-08-07 and was wrong. **Orderable behind a flag since 2026-08-08** — `assertTradable` takes a futures order when `TRADE_FUTURES_ENABLED` is on and refuses `trade.futures_disabled` when off, which is the shipped default; orders match on the same svc-matching book (D-S-06, no second book) and settle through the ledger. STATUS STAYS `ready`, NOT `done`: orderability is one of the six things `DIRECTION` §1 calls MVP, and the other five are untouched — no leveraged entry through the book (a futures order is funded by the same full hold as a spot order), funding still off and owner-reserved, insurance fund absent, and the gap-series liquidation proof unrun. The unblocker was `c7dfb5e4`/`cc90c2f4` making the mark size-aware; before those, an orderable futures book was a self-dealing machine.',
+    requires: ['services/svc-trade/src/futures'],
+    note:
+      'WIP (not umbrella-done) — D26-P4-09 2026-08-15: T1e is LANDED #1689, not current craft. ' +
+      'Gap-series honesty on tip (mark-gap-series-honesty.test.ts — markSourceFromDepth mid gap + smooth-ramp control). ' +
+      'Also sealed on tip: #1685 T1g ADL disclosure; #1684 T1d insurance shortfall; #1681 T1c partial vs real book; #1679 T1f; #1678 T1b. Isolated margin ONLY. ' +
+      'Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). ' +
+      'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
+      '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), ' +
+      '#1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c, #1684 T1d, #1685 T1g. ' +
+      'Still not umbrella-done: leveraged entry requires named leverage on POST /positions (no silent 1x; live re-leverage still 501); funding jobs OFF default + owner §8 rates/ceilings, ' +
+      'Denon ladder numbers (D3), N1 profit-source capitalisation. ' +
+      'D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list ' +
+      '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. ' +
+      'D26-P0-07 SEALED 2026-08-13 (adr/2026-08-13-leverage-defaults-frozen.md): 10× isolated frozen; no silent raise. ' +
+      'D26-P0-14 SEALED 2026-08-13 (adr/2026-08-13-mark-dust-floor.md): keep shipped min-best 100 quote + 100 bps; no third %. ' +
+      'Never invent mid/funding/grace/ADL rates.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.futures'],
+    requires: ['services/svc-trade/src/spot/options-listing.ts'],
+    note:
+      'D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; ' +
+      'empty/unset → named refuse; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty (never parsed as a coin table; ADR landing does not authorize stamp). ' +
+      'D26-P1-T6: listMarket throws trade.options_settlement_law_unset while stamp empty (SOCKET §13 socket.options-settlement-asset-law). ' +
+      'Fixing alone must not unlock. After a later owner names set + asset: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; ' +
+      'DB CHECK markets_options_terms_ck. No IV surface, no invent live set / settlement asset / D7 source. Orders still refused by ' +
+      'assertTradable (trade.market_kind_unsupported). Product-complete only after later stamp + D7 + engine — freeze ADR is not Done.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'token.staking'],
-    requires: ['services/svc-trade'],
+    requires: ['services/svc-trade/src/otc'],
     note:
-      'Stage 2026-08-07 (D-S-02 Part A): RFQ quote discloses counterparty/size/expiry/spread; accept binds quoted price (no last look); blank ' +
-      'DIRECTION §8 desk law → refuse-closed; settle via ledger-client marketMakerMakerFill when owner publishes. Never invent spread/stake/mid. ' +
-      'Residual: owner §8 numbers, maker-routing settle, durable otc_quotes table. ' +
-      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-otc — no open PR and no branch on origin; its stage merged as #1000. ' +
-      'This one was the most expensive stale claim in the file and the reason is worth keeping. `requires: [services/svc-trade]` names the WHOLE ' +
-      'service, so while this row was owned, claim-check answered "human-claimed" for every path in svc-trade — a directory with twenty-plus ' +
-      'agent PRs merged into it during the same week. Combined with the module fallback (an owned row with `module: trade` locks ' +
-      '`services/svc-trade` even when it declares no paths), the service reported three separate human owners. ' +
-      'DELIBERATELY NOT TOUCHED in the same pass, so nobody reads this as a blanket unlock: `trade.copy` and `trade.algo` keep `owner: Nitro` ' +
-      'because their stated residual IS an owner decision — the blank §8 numbers — so the claim is describing reality, not stale. ' +
-      '`connect.venue-vault` keeps `owner: shehzad002`; it is key custody and genuinely his. Those two are why svc-trade will still read as ' +
-      'claimed after this PR, and that is correct rather than a miss.',
+      'WIP residual (not umbrella-done) — D26-P4-09 2026-08-15: T2 RFQ/stake/settle LANDED #1686; durable quotes #1814; mid-feed #1812. ' +
+      'RFQ→stake→fail-closed quote (mid asOf + owner maxMidAgeSeconds)→ledger settle. ' +
+      'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
+      'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
+      '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
+      '2026-08-14: socket.otc-mid-feed closed — venue observation source (TRADE_OTC_MID_FROM_VENUE, default OFF) refreshes asOf; boot TRADE_OTC_MIDS is not a live feed and is not mixed in when venue is on. ' +
+      '2026-08-14: TRADE_VENUE_MARK_STREAM ON → same MaintainedBook port as marks/MM; desynced withholds; snapshot poll when stream off. ' +
+      '2026-08-14: durable quotes table — otc_desk_quotes + OtcQuoteStore; accept/settle survive process restart; numbers are the quoted ones, never a new mid. ' +
+      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, maker-routing recipe close. ' +
+      'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
   }),
-  f('trade.copy', 'Copy trading, audited leaders, profit share', {
+  f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    requires: ['services/svc-trade/src/copy'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Prior wip 2026-08-07 money wave 3 — D-S-03 Stage: follow/unfollow + envelope mirror refuse; blank DIRECTION §8 leader_share_bps + jurisdiction → refuse-closed (never invent rates). Residual: owner §8 numbers, on-chain session-key caps (build order §7.1).',
+    requires: [
+      'services/svc-trade/src/copy',
+      'services/svc-trade/src/copy/auto-mirror-place.ts',
+      'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
+    ],
+    note:
+      'D26-P0-02 SEALED 2026-08-13: TRADE_COPY_FEE_SHARE_LAW published (leaderShareBps=1000, cap 1000.00, decay 50/5000) — ' +
+      'adr/2026-08-13-d26-p0-02-owner-launch-seals.md. ' +
+      '2026-08-14: placeMirror wires follower placeOrder (IOC market, clientOrderId copy-mirror:follow:fill); unwired port still refuses; never invents fills. ' +
+      'D26-P0-15 owner-published 2026-08-14: TRADE_COPY_JURISDICTION_LAW in .env.example (49 ISO, not worldwide; blank still refuse). ' +
+      'Mechanism still adr/2026-08-12-copy-jurisdiction-refuse-closed.md. ' +
+      'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
+      'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
+      '2026-08-14: listFollowsByFollower (not full table) + unique (follower,leader) race maps to trade.copy_already_following (never raw PG 23505). ' +
+      '2026-08-14: placeMirror clientOrderId hashed to 64 chars when follow+fill overflow (spot retry key). ' +
+      'Still open: session-key caps (protocol).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
     phase: '2',
     dependsOn: ['trade.spot', 'pay.rails'],
-    requires: ['services/svc-trade', 'packages/contracts/src/instruments.ts'],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. NOT production listing: D-S-05 / instrument ADR — model + venue hours first; listing forex pairs without fiat settlement is the lie. What exists: asset_class + schedule on trade.markets; assertMarketOpen refuse on closed venue. Still missing for full product: fiat settlement rails so no forex market is listed in production.',
+    requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'packages/contracts/src/instruments.ts'],
+    note:
+      'D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; euro-stable ≠ fiat rails. ' +
+      'D26-P1-T7: explicit §13 socket.forex-settlement refuse-closed until P0-05 (now sealed) AND fiat settle rails — ' +
+      'forex.settlementStatus + list/place/setMarketStatus(active) share trade.unsettled_asset_class_listing; never invent settlement asset. ' +
+      'On OPEN_MONEY allowlist 2026-08-08. **Not "unlisted"** — migration `0001_multi_asset_instruments.sql` seeds six majors active ' +
+      '(EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF, USD/CAD) and the public market list publishes them `active: true`. They are **unfundable** ' +
+      '(no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169/#1220 + T7 socket refuse NEW production listing and place. ' +
+      'What exists: asset_class + schedule; assertMarketOpen; D-S-05/T7 listing+place refuse. Full product blocked on rails, not on "no markets listed."',
   }),
-  f('trade.algo', 'TWAP / VWAP / POV execution', {
+  f('trade.algo', 'TWAP execution', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Prior wip 2026-08-07 money wave 2 — D-S-04 TWAP Stage (parent=schedule, children via placeOrder, refuse blank mark/empty book). VWAP/POV still out (no honest volume series).',
     requires: ['services/svc-trade/src/algo'],
+    note:
+      '**DONE 2026-08-16:** Title is TWAP only. Create + children when TRADE_ALGO_JOBS_ENABLED + cancel honesty (cancel-fail parks paused / haltReason cancel_incomplete; resume refused; next tick idle) on main. ' +
+      '2026-08-16 hydrate-on-mutate proofs: cold pause/resume/cancel + cancel_incomplete resume refuse; getAlgo and mutate share owner hydrate. ' +
+      'Jobs gated default OFF (TRADE_ALGO_JOBS_ENABLED denylist). Pin: twap-engine.test.ts cancel_incomplete. ' +
+      'D-S-04 #1002 + ADR #1145 + #1193 + hydrate-on-mutate + persist-on-tick + durable place grant (no JWT). ' +
+      'VWAP/POV are not this row — see socket.trade-vwap-pov (owner market maturity, not missing candles). TWAP on main + #2213; no new algo code.',
+  }),
+  f('socket.trade-vwap-pov', 'VWAP / POV execution', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.algo'],
+    note:
+      '§13 — owner market maturity, not missing candles. Agents must not invent VWAP/POV product, fills, volume curves, or participation defaults. ' +
+      'TWAP shipped on trade.algo. Empty-tape refuse in src/algo is honesty, not a claim these algos exist as product.',
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
     phase: '2',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    requires: ['services/svc-trade/src/public-rest.ts', 'services/svc-trade/src/private-rest.ts'],
-    note: 'On OPEN_MONEY allowlist 2026-08-08. partial — all REST_ROUTES mounted. Public: markets (paper flag + schedule/sessionOpen/hours/nextSessionChange so bots tell sim vs real and venue-shut vs exchange-down), orderbook, ticker, tickers, trades (?since= ms), ohlcv (live non-seeded fill aggregation #345 + materialize job default OFF TRADE_CANDLE_JOBS_*; honest [] when never traded; never invent candles), funding-rate (published or NotSupported). Private (edge-signed, fail-closed): orders open/closed/:id, POST/DELETE orders (+ cancelAll), account trades/fees/balance, positions list/open/close (caller price fields refused — mark path only). setLeverage/setMarginMode mounted as 501 NotSupported (never silent success). Futures residual jobs default OFF by design. Empty books until order or trade.mm-bot seed (honest [] not 502 — #185). Private WS under ws.gateway. Residual: public paper-list policy (N3), rate-limit published vs edge (N4), mm seed ops — not missing routes.',
+    requires: [
+      'services/svc-trade/src/public-rest.ts',
+      'services/svc-trade/src/private-rest.ts',
+      'services/svc-trade/src/ccxt-capability-matrix.ts',
+    ],
+    note:
+      '**DONE 2026-08-13 D26-P1-T5:** claim ≡ wire — `ccxt-capability-matrix.test.ts` fails if a REST_ROUTES row is missing or a refuse arm drifts. GET /api/v1/capabilities serves matrix. Residual not blocking: paper-list exclude (N3 Nitro — do not invent), published rate-limit vs edge 300/min (N4), mm seed ops. ' +
+      'On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms.',
   }),
   f('trade.mm-bot', 'Internal market-maker seeding books at launch', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: ['services/svc-trade/src/mm'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). seedMarket + job OFF default + marketMakerMakerFill + settleFill house-MM; cancel/reseed lifecycle + mid port on main (MM-1/2/3). Still residual: orderFilled event accountId recovery, production mid ops. Not Done — ready with ops kill-switches.',
+    note:
+      '**DONE 2026-08-16 #2207:** Title is true on tip. seedMarket (#325) + job host default OFF (#326, #1962) + marketMakerMakerFill/settleFill house-MM (#328) + cancel/reseed (#340) + mid port (#356) + seed-honesty (#1710) + fill-account recovery on live orderFilled → settleFillEvent (#1852). ' +
+      'TRADE_MM_SEED_ENABLED kills jobs and the seeded placeOrder path. Production mid ops (TRADE_MM_SEED_MID_FROM_VENUE / venue map) is an operator enable, not missing seed machinery — never invents mids or manufactured crosses. ' +
+      'Pin: fill-account.test.ts fails if recoverMatchingAccountId leaves settleFillEvent. Did not mark trade.algo or venue.aggregation done.',
   }),
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
@@ -386,57 +474,76 @@ export const FEATURES = [
     status: 'ready',
     dependsOn: ['trade.spot'],
     requires: ['packages/venue-adapter', 'packages/venue-contracts'],
-    note: 'Updated 2026-08-02 A-TRADE-VENUE-OPS. NOT "via CCXT" — §27 forbids a third-party connectivity library in the money path and there is no `ccxt` in the workspace by design; we are that layer. Fabric: packages/venue-contracts + packages/venue-adapter (Binance spot public market data only; trading half deliberately not ready). Mounted in svc-trade: TRADE_VENUE_MARK_VENUE + TRADE_VENUE_MARK_SYMBOLS default empty/OFF — when set to binance-spot + marketId:symbol map, public book mid preferred for futures marks (A-TRADE-VENUE-1); optional TRADE_MM_SEED_MID_FROM_VENUE for MM mid after env map miss (A-TRADE-MM-3). Ops enable path: services/svc-trade/README.md "Venue fabric mark". Never invents mid (empty venue, unknown id, unmapped market, empty book → null). Still `ready`, not `done`: (1) one public venue only — second venue needs a real MarketDataAdapter + createVenueMarketDataAdapter id; (2) TRADING half NOT BUILT (credentials throw not_ready); (3) no live-network CI; (4) futures risk truth remains human M3. VENUE VAULT REMOVED FROM THIS DONE BAR 2026-08-08 — AND NOT AS A LOOSENED BAR, AS AN INVERTED ONE. From 2026-08-02 this note carried "Venue Vault absent" as residual (3), while `connect.venue-vault` is `phase: 5`, `status: socket`, owner @shehzad002 and `dependsOn: [venue.aggregation]` — the Vault is DOWNSTREAM of this row. A done bar that names its own dependent can never be satisfied by anyone: this row was waiting on a phase-5 socket that is waiting on this row, and the tracker cycle detector cannot see it because one leg is prose and the other is data. Six phase-2 rows (connect.latency-grading, connect.data-lake, execution.sor, execution.arbitrage, execution.market-making, execution.house-tenant) compute `blocked` behind this row, so the cost of the inversion was a phase-2 stack parked behind another developer\'s phase-5 socket. On the merits it does not belong here either: §27:761 is per-USER encrypted external API keys, HSM-backed and trade-only, so a user can trade THEIR OWN accounts on other venues. Nothing in this row touches a per-user credential — cross-venue market-data aggregation reads public books, and house routing signs with house keys. The Vault remains the hard blocker it always was under socket.dex-execution and under the external-venue half of quant.sdk (§29:787 takes its keys from the Vault, trade-only). The four residuals above are unchanged and are the real bar; this row stays `ready`, not `done`.',
+    note: '2026-08-14 TRADE_VENUE_MARK_STREAM (default OFF) reads existing MaintainedBook instead of polling snapshotBook; desynced/unservable → null (never invent). Polling residual spent when ops opts in. Still `ready`, not `done`: trading half / live-network CI / M3 unchanged. Updated 2026-08-02 A-TRADE-VENUE-OPS. NOT "via CCXT" — §27 forbids a third-party connectivity library in the money path and there is no `ccxt` in the workspace by design; we are that layer. Fabric: packages/venue-contracts + packages/venue-adapter (Binance spot public market data only; trading half deliberately not ready). Mounted in svc-trade: TRADE_VENUE_MARK_VENUE + TRADE_VENUE_MARK_SYMBOLS default empty/OFF — when set to binance-spot + marketId:symbol map, public book mid preferred for futures marks (A-TRADE-VENUE-1); optional TRADE_MM_SEED_MID_FROM_VENUE for MM mid after env map miss (A-TRADE-MM-3). Ops enable path: services/svc-trade/README.md "Venue fabric mark". Never invents mid (empty venue, unknown id, unmapped market, empty book → null). Still `ready`, not `done`: (1) one public venue only — second venue needs a real MarketDataAdapter + createVenueMarketDataAdapter id; (2) TRADING half NOT BUILT (credentials throw not_ready); (3) no live-network CI; (4) futures risk truth remains human M3. VENUE VAULT REMOVED FROM THIS DONE BAR 2026-08-08 — AND NOT AS A LOOSENED BAR, AS AN INVERTED ONE. From 2026-08-02 this note carried "Venue Vault absent" as residual (3), while `connect.venue-vault` is `phase: 5`, `status: socket`, owner @shehzad002 and `dependsOn: [venue.aggregation]` — the Vault is DOWNSTREAM of this row. A done bar that names its own dependent can never be satisfied by anyone: this row was waiting on a phase-5 socket that is waiting on this row, and the tracker cycle detector cannot see it because one leg is prose and the other is data. Six phase-2 rows (connect.latency-grading, connect.data-lake, execution.sor, execution.arbitrage, execution.market-making, execution.house-tenant) compute `blocked` behind this row, so the cost of the inversion was a phase-2 stack parked behind another developer\'s phase-5 socket. On the merits it does not belong here either: §27:761 is per-USER encrypted external API keys, HSM-backed and trade-only, so a user can trade THEIR OWN accounts on other venues. Nothing in this row touches a per-user credential — cross-venue market-data aggregation reads public books, and house routing signs with house keys. The Vault remains the hard blocker it always was under socket.dex-execution and under the external-venue half of quant.sdk (§29:787 takes its keys from the Vault, trade-only). The four residuals above are unchanged and are the real bar; this row stays `ready`, not `done`.',
   }),
   f('connect.venue-vault', 'Venue Vault — per-user external API keys, HSM-backed, withdrawal refused (§27)', {
-    module: 'trade',
     phase: '5',
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['venue.aggregation'],
-    note: 'Law §27:761, gap-closed 2026-08-07. venue.aggregation\'s own note has admitted "Venue Vault absent" since 2026-08-02 while no row existed for it — a KEY CUSTODY SURFACE holding users\' credentials to other exchanges, with no owner. It is also the hard blocker under socket.dex-execution: quoting needs no credentials, executing does. Owner is the chain owner because this is key custody and that is where the expertise sits, NOT because it is protocol plane — the keys are for custodial venues. The split, so it is not confused later: the vault design, the key handling and the withdrawal-permission refusal are his; wiring svc-trade to a vault that exists is ordinary agent work. Non-negotiable in any design: a stored key that carries withdrawal permission is refused at registration, not filtered at use.',
+    note:
+      'Law §27:761. KEY CUSTODY — owner @shehzad002 (chain expertise, not protocol plane). Vault design + key handling + withdrawal-permission refuse = his. ' +
+      'Wiring svc-trade once a vault exists = ordinary agent work. W4 A0: removed `module: trade` so claim-check no longer invents services/svc-trade for this socket ' +
+      '(there is no vault tree under svc-trade yet; whole-service lock was a false claim-check hit). Add requires when a real path exists. ' +
+      'Non-negotiable: stored key with withdrawal permission refused at registration, not filtered at use.',
   }),
   f('connect.latency-grading', 'Latency grading — every adapter scored live, feeding routing weights (§27)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
     dependsOn: ['venue.aggregation'],
-    note: 'Law §27:760, gap-closed 2026-08-08 — §30:793 phases Connect at 2, the phase being worked, and this capability had no row at all. WHAT IS DECIDED: `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) puts §27 in scope and states the rule this row lives under — "latency grading is a MEASUREMENT, never an estimate": an adapter that has not run has NO score, not a low score, and an unscored adapter must not receive routing weight. That ADR also already permits the measurement plumbing to be built without asking again. WHAT IS NOT DECIDED: which venues we connect and in what order — D-S-18 reserves that to the owner, commercial before technical. No weight function is proposed here either; the consumer is `execution.sor`, and §28:770 makes the latency grade ONE INPUT to that cost model, not a ranking rule of its own. Blocked, and the blocker is real rather than bookkeeping: `venue.aggregation` is one public market-data adapter (Binance spot) with the trading half deliberately not built, so there is nothing to grade against anything.',
+    requires: ['packages/venue-adapter/src/fabric/latency.ts', 'packages/venue-contracts/src/latency.ts'],
+    note: 'Law §27:760, gap-closed 2026-08-08. WHAT IS DECIDED: `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) puts §27 in scope and states the rule this row lives under — "latency grading is a MEASUREMENT, never an estimate": an adapter that has not run has NO score, not a low score, and an unscored adapter must not receive routing weight. WHAT IS NOT DECIDED: which venues we connect and in what order — D-S-18 reserves that to the owner, commercial before technical. No weight function is proposed here either; the consumer is `execution.sor`, and §28:770 makes the latency grade ONE INPUT to that cost model, not a ranking rule of its own. UNBLOCKED AND BUILT 2026-08-09 (D26-P1-X1). Two corrections to what this note said before, both of which had gone stale rather than been wrong when written: (a) it said "this capability had no row at all" while ALSO describing the plumbing as unbuilt — in fact `packages/venue-adapter/src/fabric/latency.ts` and its tests landed in #209 (ee334a6f) with the fabric, and both venue adapters have fed their grader on every REST exit since; (b) the stated blocker — "`venue.aggregation` is one public market-data adapter (Binance spot)" — was removed by #1148 (1ae907dd), which landed `bybit-spot` as a second public MarketDataAdapter registered in `createVenueMarketDataAdapter`. A grade with no peer is a number and a median of one venue is that venue\'s opinion of itself, so the blocker was real; it is simply spent. WHAT THIS PR FIXED, and it was the load-bearing defect rather than missing code: an adapter with no observations graded `\'F\'`, which D-S-18 forbids in as many words. `\'F\'` asserted a measured property of a venue we may never have contacted, AND was indistinguishable from a venue we did measure and found unusable — two states needing opposite responses (venue fault vs unwired plumbing on our side). The old test asserted the defect as intended behaviour ("grades an unmeasured venue F, not A"). Now: `grade: null` for ungraded — the fabric\'s existing refusal convention alongside empty venue, unknown id, unmapped market and empty book — with every derived statistic `null` too, because a 0% reject rate over zero samples is a perfect score awarded for silence. `isGraded()` is a TYPE GUARD, so code that ranks on the letter cannot compile without handling the ungraded case. Ungraded still does not earn routing weight (D-S-18 second clause): `healthFromGrade` marks it unhealthy and the router excludes AND reports it through existing machinery. The measurement is named — `LatencyMeasurement` is a union of one, `rest-round-trip`, recording what it does NOT measure (stream delivery lag, book staleness per #1163 `observedAt`, venue-side matching, and time spent waiting on our own rate-limit governor — that last is tested, since charging a venue for a delay we imposed would argue for routing away from a venue that did nothing wrong). REACHABLE: `latencyGrade?()` is declared on `MarketDataAdapter` in venue-contracts, so the grade is readable through the type consumers actually hold (`createVenueMarketDataAdapter` returns `MarketDataAdapter | null`); a method on the concrete class alone would have been invisible through it, which is the unreachable-guard failure this repo has hit repeatedly. 197 tests in venue-adapter (was 184), fixtures and injected clocks only — no live-network CI was added, that remains `venue.aggregation` residual (4) and a separate decision. `ready`, NOT `done`, and the reason is the REACHABLE limb of the three-part bar rather than modesty: the grade is reachable through the contract but NO SHIPPED CONSUMER READS IT. Nothing calls `latencyGrade()` outside tests, and the natural consumer is `svc-trade`, which was out of bounds for this change (residual wave, four futures PRs the same day) — and the real consumer is `execution.sor`, which is blocked and does not exist. Code-complete but unconsumed is `ready`. ON THE RENDERED BADGE, which says `blocked` and is not a contradiction: `blocked` is computed, not declared, and this row still `dependsOn` `venue.aggregation`, which is itself `ready` rather than `done` (its residuals 2/3/4 — no trading half, no live-network CI, futures risk human M3 — are untouched by this work). So the edge stays and the badge stays. What changed is that the specific blocker this row\'s note named, one venue, is spent: the work was buildable and is built. Read the badge as "its dependency is not `done`", not as "nothing here exists". RESIDUAL: (1) svc-trade `/health` now reads `latencyGrade()` (2026-08-14) — ops surface only, ungraded stays null, no letter→bps invent; SOR still the ranking consumer when it exists; (2) `DEFAULT_THRESHOLDS` (p95 [150,400,1000,3000]ms, reject [50,200,1000,3000]bps, maxStalenessMs 5000, minSamples 10) predates this work (#209) and GATES MONEY through `healthy: false` — unruled numbers awaiting an owner call under DIRECTION §8 item 8; this PR added none and re-tuned none; (3) `VenueHealth.latencyMs` is a required `number` shared with every rail in the repo, so "no measurement" has no `null` to use — `UNMEASURED_LATENCY_MS` is a sentinel whose safety is DIRECTIONAL (maximum value, ascending sort, so an unmeasured venue always loses a tie it enters) rather than representational, and a provisional graded-F venue with no successful call does carry it into ranking; (4) grading covers REST round-trip only — the WS stream path is not graded, so a venue delivering its stream late reads clean.',
   }),
   f('connect.data-lake', 'Unified data lake — normalised ticks, books and fills to a time-series store (§27)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation'],
-    note: 'Law §27:762, gap-closed 2026-08-08. §30:793 phases Connect at 2. The law calls this our data moat and the backtest fuel for §29, and `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) records the cost of its absence from the other side: §29 Quant is blocked on this lake, which is blocked on §27 adapters. WHAT IS DECIDED: capture only, and per D-S-18 a venue that is not connected is ABSENT in the record, never an empty book — a hole in capture must be readable as a hole, not as a quiet market. WHAT IS NOT DECIDED: the store itself. No time-series database is chosen, provisioned or in either compose file, retention is unwritten, and whether §29 ships to users at all is explicitly left with the owner by D-S-18. Blocked on `venue.aggregation` for the same reason as latency grading: with one public adapter the lake would hold one venue and the internal book.',
+    requires: ['packages/venue-adapter/src/fabric/capture-lake.ts'],
+    note: 'Law §27:762, gap-closed 2026-08-08. §30:793 phases Connect at 2. The law calls this our data moat and the backtest fuel for §29, and `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) records the cost of its absence from the other side: §29 Quant is blocked on this lake, which is blocked on §27 adapters. WHAT IS DECIDED: capture only, and per D-S-18 a venue that is not connected is ABSENT in the record, never an empty book — a hole in capture must be readable as a hole, not as a quiet market. WHAT IS NOT DECIDED: the store itself. No time-series database is chosen, provisioned or in either compose file, retention is unwritten, and whether §29 ships to users at all is explicitly left with the owner by D-S-18. CAPTURE HONESTY SHIPPED 2026-08-12 (feat/connect-capture-lake-honesty): `packages/venue-adapter` `CaptureLake` append log — null/mismatched adapter → typed `hole` (`not_connected`); `VenueUnavailableError` → hole with venue reason (incl. `no_depth`); connected empty snapshot → `book` quiet-market fact; `bookFromCapture(hole)` is null (never synthetic empty). Second public venue (`bybit-spot`) already on tip (#1148) so the old "one adapter" lake blocker is spent for capture shape. Still `wip` / not `done`: no TSDB, no retention, no tick/fill normalisation pipeline, no compose store, Quant product still owner-gated by D-S-18.',
   }),
   f('execution.sor', 'svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports (§28)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation', 'connect.latency-grading'],
-    note: 'Law §28:770, gap-closed 2026-08-08 — §30:793 phases Execution at 2 and it had no row, while `services/svc-dex/src/quote/market-data-source.ts` refuses BY NAME because "svc-execution does not exist". WHAT IS DECIDED, and it is the load-bearing half: THE RANKING RULE ALREADY EXISTS AND IS NOT RE-OPENED HERE. `packages/venue-adapter/src/router.ts` ranks on effective price through one interface the internal book also implements — "the router has no notion of ours versus theirs and cannot quietly favour us" — with a single bounded, disclosed, tested internal preference of 5 bps applied at ranking time only (`internalPreferenceBps`, default 5; `docs/TERMINAL.md` §4), under which a genuinely worse internal book still loses. Whoever claims this row EXTENDS that cost model with the §28:770 terms it lacks — expected impact, latency grade, transfer cost between venues — and adds execution reports (implementation shortfall, venue attribution). A second ranking rule, a second thumb on the scale, or a preference above 5 bps is a product change for the owner, not a PR. Also already settled: a fill is a proposal until the ledger posts it (D-S-06, `docs/adr/2026-08-04-matching-dual-target.md`), so an OMS state reading `filled` before the ledger post is wrong. WHAT IS NOT DECIDED: nothing of the service exists — there is no `services/svc-execution`, and this row does NOT authorise scaffolding one before a claim. Blocked, and D-S-18 states why in one sentence: "a cross-venue router with one venue is a router with nothing to route between."',
+    requires: ['packages/venue-adapter'],
+    note: 'D26-P2-06 (2026-08-15): one-book residual — `internalPreferenceBps` default 5 and hard cap (cannot silently raise); worse internal still loses; internal vs external ranked through one LiquiditySource. OMS/EMS scaffold still residual. Law §28:770, gap-closed 2026-08-08 — §30:793 phases Execution at 2 and it had no row, while `services/svc-dex/src/quote/market-data-source.ts` refuses BY NAME because "svc-execution does not exist". WHAT IS DECIDED, and it is the load-bearing half: THE RANKING RULE ALREADY EXISTS AND IS NOT RE-OPENED HERE. `packages/venue-adapter/src/router.ts` ranks on effective price through one interface the internal book also implements — "the router has no notion of ours versus theirs and cannot quietly favour us" — with a single bounded, disclosed, tested internal preference of 5 bps applied at ranking time only (`internalPreferenceBps`, default 5; `docs/TERMINAL.md` §4), under which a genuinely worse internal book still loses. D26-P1-X3 (2026-08-12): §28 cost-model completeness in `packages/venue-adapter` — `scoreSorCost` + `planRoute({ costTermsByVenue })` require fee/impact/transfer/graded latency or refuse (weight 0); no letter→bps invent (D-S-14); no structural house preference beyond 5 bps. **Execution reports deepen (2026-08-12):** `buildExecutionReport` — shortfall + venue attribution over RoutePlan (no invent fills). Residual: OMS/EMS service scaffold, letter→bps owner schedule. A second ranking rule, a second thumb on the scale, or a preference above 5 bps is a product change for the owner, not a PR. Also already settled: a fill is a proposal until the ledger posts it (D-S-06). WHAT IS NOT DECIDED: full `services/svc-execution` — this claim does NOT scaffold one. D-S-18: "a cross-venue router with one venue is a router with nothing to route between."',
   }),
   f('execution.arbitrage', 'Arbitrage engine — cross-exchange, triangular, basis, funding, DEX to CEX (§28)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['execution.sor'],
-    note: 'Law §28:772, gap-closed 2026-08-08. §30:793 phases it at 2. WHAT IS DECIDED: it rides the ONE ranking rule under `execution.sor` — `packages/venue-adapter`\'s effective-price ranking with the bounded, tested 5 bps internal tie-break the README records as the reason "the router cannot favour us structurally" — and an arbitrage leg does not get a preference of its own. The law supplies its own honesty term too: "inventory-based execution (pre-positioned inventory both sides — no bridge-latency fantasy)", so a DEX-to-CEX opportunity priced on a bridge completing inside the spread is refused, not sized. WHAT IS NOT DECIDED: capital. Every opportunity class in §28:772 needs house inventory on both sides of a venue pair, and no inventory policy, exposure cap or funding source exists anywhere — an owner magnitude under the same rule as every other economic number (D-S-14, `docs/adr/2026-08-04-token-economics-outcomes.md`). Blocked on `execution.sor`, which is blocked on §27.',
+    requires: ['packages/execution-arb'],
+    note: 'Law §28:772, gap-closed 2026-08-08. §30:793 phases it at 2. WHAT IS DECIDED: it rides the ONE ranking rule under `execution.sor` — `packages/venue-adapter`\'s effective-price ranking with the bounded, tested 5 bps internal tie-break the README records as the reason "the router cannot favour us structurally" — and an arbitrage leg does not get a preference of its own. The law supplies its own honesty term too: "inventory-based execution (pre-positioned inventory both sides — no bridge-latency fantasy)", so a DEX-to-CEX opportunity priced on a bridge completing inside the spread is refused, not sized. D26-P0-01 sealed external-only. D26-P1-X4 (2026-08-12): product path `@intafaced/execution-arb` — `scanExternalCrossExchangeArb` uses SOR `scoreSorCost` / all-in effective price; refuses internal legs, missing/unscored cost terms (weight 0), bridge fantasy / missing pre-positioned inventory, and no-edge after costs; never invents spreads/fees/depth. Residual: triangular / basis / funding classes, inventory policy + exposure caps (D-S-14 owner magnitudes), OMS atomic legs + PnL attribution, capital. WHAT IS NOT DECIDED: capital magnitudes. Still dependsOn `execution.sor` (cost model on tip via #1673; OMS residual remains).',
   }),
   f('execution.market-making', 'Market-making engine — internal MM and external-venue MM, one engine (§28)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['execution.sor', 'trade.mm-bot'],
-    note: 'Law §28:773, gap-closed 2026-08-08. §30:793 phases it at 2. `trade.mm-bot` is the internal half and covers book seeding only; §28:773 wants ONE engine that "seeds our books and works the street". THE TENSION, WRITTEN DOWN RATHER THAN DISCOVERED LATER: §28:773 has the house quoting our own book, and `docs/adr/2026-08-05-futures-risk-and-mark-law.md` (D-S-01 / D-S-07, Accepted) governs with "A price that moves money is never supplied by the party it pays." Those two meet in a measured place, not a theoretical one — `services/svc-trade/src/futures/mark-from-depth.ts` records that two dust orders once minted a payout-grade mid and paid 2,000 USDT out of the profit pot, and states that the change making futures orderable "turns this into self-dealing with two dust orders, no capital at risk". A house MM whose quotes reach any valuation path is that same defect with capital behind it. So: internal quotes may seed liquidity; they may NOT become a mark, an index, or any input that pays the house. WHAT IS NOT DECIDED and must not be invented: spread, skew and inventory-band magnitudes (owner numbers, D-S-14), and whether the house may quote a market whose marks it also supplies — a fairness ruling, not an implementation detail. Blocked on `execution.sor`, and on `trade.mm-bot`, which is `ready` with residual ops work rather than done.',
+    requires: ['packages/execution-mm'],
+    note: 'Law §28:773, gap-closed 2026-08-08. §30:793 phases it at 2. `trade.mm-bot` is the internal half and covers book seeding only; §28:773 wants ONE engine that "seeds our books and works the street". OWNER RULING SEALED 2026-08-12 (D26-P0-01) in `docs/adr/2026-08-08-house-desk-and-market-making-fairness.md`: Q1 house desk v1 EXTERNAL-ONLY; Q3 HARD EXCLUSION — internal quotes never counted in mark derivation (no percentage cap invent; ties DEFAULT_MIN_BEST_LEVEL / dust refuse path). D26-P1-X5 (2026-08-12): EXTERNAL half product path `@intafaced/execution-mm` — `quoteExternalMm` + `planExternalMmHedge` + `evaluateMmKillSwitches` on SOR cost model; refuses internal venue MM with honest reason; never invents mids/depth/fees; owner spread/skew/bands (D-S-14). INTERNAL half remains BLOCKED until a later explicit owner ruling. Q2 existence-disclosure deferred. Residual: wire into OMS/svc-execution, live venue books, owner magnitude schedules. Still dependsOn `execution.sor` and `trade.mm-bot` (`ready` with residual ops, not done).',
   }),
   f('execution.house-tenant', 'House desk sealed private tenant — the Throne Law (§28)', {
     module: 'trade',
     phase: '2',
     plane: 'F',
+    status: 'wip',
+    owner: 'Nitro',
     dependsOn: ['execution.sor'],
-    note: 'Law §28:777, gap-closed 2026-08-08 so the capability stops being invisible — and this row is FLAGGED, NOT DESIGNED. §28:777 specifies a multi-tenant svc-execution in which the house desk runs as a sealed private tenant: separate keys, separate deployment namespace, strategies never in the product repo, never listed, never disclosed. NEEDS AN OWNER ADR BEFORE ANY CODE. A house desk trading alongside customers on the same rails is a conflict-of-interest and fairness question, not an engineering task, and it sits next to the rule the futures work already settled — "A price that moves money is never supplied by the party it pays" (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`). No agent should pick the answer, and this note deliberately proposes none: not what the house desk may see of customer flow, not whether it may quote markets customers trade, not the isolation test that would prove the seal holds. §30:795 records the plane for this row as "—"; `F` here means only that house money is custodial platform value, and is not a plane decision. Blocked on `execution.sor`, and gated behind a decision no `dependsOn` edge can express.',
+    requires: ['packages/execution-house-tenant', 'services/svc-execution'],
+    note: 'Law §28:777, gap-closed 2026-08-08. OWNER RULING SEALED 2026-08-12 (D26-P0-01) in `docs/adr/2026-08-08-house-desk-and-market-making-fairness.md` (+ owner packet §A1): Q1 v1 is EXTERNAL-ONLY — house desk may trade external venues; pointing this tenant at our own matching book stays BLOCKED until a later explicit ruling. Q2 existence-disclosure deferred (not decided; internal trading off for v1). Q3 hard mark exclusion binds when any internal quotes exist. Five mechanism rules still Accepted: no structural queue advantage, D-S-06 one book / no extra preference, sealed ≠ unaudited (ledger recipes), kill-switches apply first. STAGE-1 MECHANISM (2026-08-16): `@intafaced/execution-house-tenant` + thin `svc-execution` tRPC `execution.tenant.describe|kill`; `internal_venue` refuse for `kind:internal` / matching-book; adminKill first. Internal-venue half still blocked. §30:795 plane "—"; `F` here means house money is custodial platform value, not a plane decision. Still dependsOn `execution.sor`.',
   }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
@@ -447,7 +554,7 @@ export const FEATURES = [
       'docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md',
       'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue',
     ],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Repointed 2026-08-03 (ADR retire-apps-web): the terminal is the vendored Vue desk, not the retired Next scaffold. On the shell today: order entry, blotter, depth and public tape against svc-edge; real OHLCV candles via assets/js/market-chart/kline.js; hotkeys #337, honesty #349, sub-account selector #358, a11y #367. NOT done: (1) no live feed — Exchange.vue hardcodes feedLive: false; (2) no runtime shape validation of edge responses; (3) desk arithmetic not yet decimal-safe on bignumber. dependsOn is ws.depth not ws.gateway so the book is not blocked on positions.',
+    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Terminal = vendored Vue desk (ADR retire-apps-web). On tip: depth feedLive only after snapshot (#1221); REST + UC accept float refuse (#1231); book shape messages (#1224); confirm/fill decimals (#1225); dex/protocol custodial:true refuse (#1242); shell-i18n + shell-golden gates (#1230). Residual: brand drain / depth number refuse / snapshot provenance in L11 W5. dependsOn is ws.depth not ws.gateway so the book is not blocked on positions.',
   }),
   f('web.shell', 'Product shell — the served customer surface', {
     module: 'core-ops',
@@ -463,15 +570,20 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['matching.engine'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; apps/web applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them.',
+    note: 'D26-P4-06 (2026-08-15) product SLO for the shell: empty book stays empty — `docs/ops/DEPTH-TAPE-PRODUCT-SLO.md`. No fake depth, no invent mid, no seed fills as live tape; no measured latency SLO (honesty, not a p99). Status stays `done` (backend doors); Vue craft remains HUMAN. CORRECTED 2026-08-15 D26-P4-09: `apps/web` is deleted (ADR retire-apps-web). services/svc-ws polls svc-matching’s public depth endpoint, diffs it with `@intafaced/market-data`’s `diffDepth`, and fans snapshot+delta out over a websocket; the vendored shell (`vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-depth-feed.js`) applies them with `applyDelta` and resnapshots on a gap. Reachable (mounted routes + a real socket, wired into the terminal), tested (47 service tests, incl. a 200-tick stream rebuilt client-side through `applyDelta`, both backpressure stages, and an end-to-end socket suite), and unpropped (no stub upstream — it reads the real engine). Split out of `ws.gateway`: that entry names four streams and this is one of them.',
   }),
   f('ws.gateway', 'WebSocket fan-out: depth, trades, orders, positions', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['matching.engine', 'ws.depth'],
     requires: ['services/svc-ws', 'packages/market-data'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Positions channel receives positionUpdated from trade.futures open/close (#281). Still not full product gateway done — residual streams/ops.',
+    note:
+      'WIP 2026-08-16 Denon (feat/ws-empty-book-engine-unavailable): public depth must disclose matching-down vs honest empty; not done. ' +
+      'Owner released 2026-08-08 (axis C1 / Nitro green light). Positions channel receives positionUpdated from trade.futures open/close (#281). ' +
+      '2026-08-14: boot bus retry + private-half retry without tearing the tape + mid-session `closed()` re-attach (flags drop, depth keeps serving). ' +
+      'Still not product-done — residual streams/ops + empty-book honesty.',
   }),
 
   f('web.mobile-apps', 'Native mobile apps — iOS and Android, own name, zero attribution (§25:727)', {
@@ -490,7 +602,8 @@ export const FEATURES = [
     dependsOn: ['ledger.double-entry'],
     requires: ['services/svc-pay'],
     note:
-      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `ops.admin`. On OPEN_MONEY allowlist 2026-08-08 so the swarm money gate no longer hides this row. Agents may implement. `wip` became `ready` only because the tracker ' +
+      'D26-P0-08 SEALED 2026-08-13 (adr/2026-08-13-pay-write-grant-a2-unpublished.md): A2 unpublished = ' +
+      'auth.merchant_pay_scope_grant_unpublished; no invented grantor; issueMerchantPayScopes stays refuse. ' +
       'refuses a `wip` row with no owner — "someone is on it right now" needs a name — and `ready` means what it says here: every dependency is ' +
       'done and it is free to claim. Nothing about what is built changed with this edit; the paragraph below is unaltered and still governs. ' +
       'What the release does NOT touch: card acquiring stays a commercial relationship no PR closes (see socket.psp-partners), so an agent that ' +
@@ -503,7 +616,7 @@ export const FEATURES = [
       '`payment.list`, `getMerchantByUserId`, `scripts/card-sandbox-e2e.mjs` and migration `0005_pay_merchant_kyb`. ' +
       '#800 supplied the merchant-state writer the surface had been missing, so `merchants.status` is now written and historied ' +
       '(`merchant_status_events`, append-only by trigger, migration `0006`). 514 svc-pay tests green. ' +
-      'WHY IT IS STILL `wip` AND NOT `done`, two reasons, both checked in code rather than inferred: ' +
+      'WHY IT IS STILL `ready` AND NOT `done` (D26-P4-09 2026-08-15: status is `ready`, not `wip` — no owner, free to claim), two reasons, both checked in code rather than inferred: ' +
       '(1) CARD ACQUIRING IS ABSENT, NOT SANDBOX. `PAY_REGISTER_CARD_SANDBOX` defaults to off in staging/prod, `PAY_CHECKOUT_RAILS` ' +
       'defaults to `crypto-native:crypto` so the public hosted checkout never sees a card, and `PAY_ALLOW_SANDBOX_RAILS=false` makes ' +
       'staging/prod refuse to BOOT while any registered rail declares itself sandbox. So in every posture that ships, this gateway is ' +
@@ -522,16 +635,37 @@ export const FEATURES = [
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
     phase: '3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/kyb-service.ts',
+      'services/svc-pay/src/psp-mode.ts',
+      'services/svc-pay/drizzle/0013_pay_merchant_kyb_history.sql',
+      'services/svc-pay/src/psp-done-bar.test.ts',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P1):** PSP path without third-party money library (D-S-10 boot seal) + merchant ' +
+      'durability — digital KYB live operator path (`kyb.submit`/`kyb.decide`) + append-only KYB/pricing histories; ' +
+      'PSP mode enable refuses missing feeBps (no invent fees). Public-door proof: `psp-done-bar.test.ts` (#1720 tip + Done-bar closeout). ' +
+      'Residual: kybStatus money-gate is pay.gateway; card acquiring stays socket.psp-partners.',
   }),
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.psp'],
-    note: '**Sub-merchant tree landed #1135 (2026-08-08)** — merchants.parent_merchant_id (NULL = top of its own tree, nothing backfilled) plus settling_party, and pay.merchant_permission_events as an append-only journal behind a trigger. Authorization is two checks that are not the same check, both at the procedure boundary: a STRUCTURAL ancestor-or-self scope that cannot be widened, and an AREA check over descendants only; the acting node is resolved from the principal and is deliberately not on the wire. Moves no value. **The "14 permission areas" in this title has never existed anywhere** — it is one string copied between this file, coverage.yaml and the build doc; ELEVEN areas shipped, each naming a surface svc-pay actually has, and area is text not an enum so a twelfth costs one line. Fixing the number is an OWNER decision. Also found: payfac was never actually blocked by pay.psp — merchant.create has accepted mode payfac since migration 0000 and it changed nothing. STILL NOT done: the nine areas naming gateway procedures are not yet enforced there — router.ts still authorizes with a single assertMerchantOwnership userId comparison, and wiring it touches the money paths. **Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/payfac-permissions.ts',
+      'services/svc-pay/src/public-rest.payfac-permissions.test.ts',
+      'docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md',
+    ],
+    note:
+      '**READY 2026-08-16 (#2210)** — REST + tRPC money doors now read `PAYFAC_SURFACE_AREAS` ' +
+      '(ancestor-or-self + area). Hosted `checkout.open` stays public (payer, no principal). Title still says 14; eleven shipped ' +
+      '(owner decision). STILL NOT done: §13 sockets `socket.payfac-settling-party-partner` + `socket.payfac-split-fee-recipes` ' +
+      '(no invent settling partner / split-fee recipes). Trees + journal + REST permissions #1741. Not full underwriting.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
@@ -554,45 +688,110 @@ export const FEATURES = [
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', {
     module: 'pay',
     phase: '3',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.rails'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    note: 'WIP residual — D26-P4-09 2026-08-15: P3 checkout smart-routing LANDED #1793, not current craft. Hosted checkout open walks selectSmartCheckoutRail (geo/method/risk). Blank dims → pay.routing_input_missing; no invented approval/cost. Payer cannot name a rail. STILL NOT done: live acquiring / PSP (Class X). Not tracker done until live connectors.',
   }),
   f('pay.settlement', 'Dual settlement — bank or crypto', {
     module: 'pay',
     phase: '3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.rails'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: ['services/svc-pay/src/settlement-ledger.ts', 'services/svc-pay/src/settlement-ledger.test.ts'],
+    note: '**D26-P1-P4 completed 2026-08-12** — bank and crypto payout paths compose only ledger-client withdraw hold/settle/reverse recipes. Configured crypto completes against the chain adapter; bank remains honestly absent and refuses before any recipe posts until its Class X commercial socket exists. Integration proof pins both outcomes and ledger reconciliation.',
   }),
   f('pay.fraud', 'Risk scoring, chargebacks, decline recovery', {
     module: 'pay',
     phase: '3',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/fraud/evaluate.ts',
+      'services/svc-pay/src/fraud/review-queue.ts',
+      'services/svc-pay/src/fraud/dispute-case.ts',
+      'services/svc-pay/src/fraud/chargeback-ledger-socket.ts',
+      'services/svc-pay/src/fraud-done-bar.test.ts',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P5):** Scoring mechanism + review queue + dispute case surface ' +
+      '(fraud.evaluate / enqueueReview / openDispute) with settled→disputed writer. Chargeback ledger ' +
+      'recipes refuse-closed via named §13 `socket.pay-chargeback-ledger-wire` — not a stub unwired ' +
+      'matrix and not silent posts. List content (IPs/devices/sanctions) Class X. Public-door proof: ' +
+      '`fraud-done-bar.test.ts`. Residual: durable disputes table + owner sign-off to close the socket.',
   }),
   f('pay.subscriptions', 'Recurring — card and crypto', {
     module: 'pay',
     phase: '3',
+    // Ghost clear 2026-08-09 W4: schema/schedule/lifecycle/invoice-runner on tip (#1214).
+    // W10 L01: mandate.cancel + listExecutions + path allowlist.
+    // W11 L02: merchant fleet list (mandate.list / subscription.list); claim released.
+    // D26-P1-P6 Done bar: Mandates product-complete; notify gaps honest.
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/subscriptions/mandate-product.ts',
+      'services/svc-pay/src/subscriptions/mandate-product.test.ts',
+      'services/svc-pay/src/subscriptions/subscriptions-done-bar.test.ts',
+    ],
+    note:
+      '**DONE 2026-08-12 (D26-P1-P6):** Mandates product-complete; notify gaps honest. Crypto invoice-and-watch E2E ' +
+      '(create mandate → subscription → due runner → invoice → capture settles execution → cancel immediate) via ' +
+      '`subscriptions-done-bar.test.ts` + merchant doors. Fire path uses `mandateChargeDisposition` matrix; charge traces ' +
+      'to active mandate; re-consent refuse `mandate.proposeTerms` → `pay.subscription_reconsent_required`; card refuses ' +
+      '`pay.mandate_rail_absent` → `socket.psp-partners` (no invent pull). Bounded dunning = MAX_ATTEMPTS_PER_CYCLE then ' +
+      'named `arrears` stall (reachable from fire). Pre-charge notify sealed §13 `socket.pay-precharge-notify` — fire ' +
+      'acknowledges gap with `notified:false` before openInvoice; Ready door `subscription.productReady` never reports notified. ' +
+      'Parked sockets (not this mountain): live card charge-against-mandate (`socket.psp-partners`). ' +
+      'Pre-charge **attempt** is recorded on `subscription_executions.notify_status` (wired port → attempted; ' +
+      'unwired → skipped_unwired / `pay.subscription_notify_unwired`). `notified` stays false. Inbox delivery ' +
+      'still `socket.pay-precharge-notify`.',
   }),
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
     phase: '3',
+    status: 'wip',
+    owner: 'nitro-agents',
     dependsOn: ['pay.gateway'],
-    note: '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M.',
+    requires: [
+      'services/svc-pay/src/plugins/reference-client.ts',
+      'services/svc-pay/src/plugins/webhook-vectors.ts',
+      'services/svc-pay/src/plugins/plugins-done-bar.test.ts',
+      'services/svc-pay/src/plugins/woocommerce-contract.test.ts',
+      'plugins/woocommerce-intafaced-pay/intafaced-pay.php',
+      'docs/pay/PLUGINS-REFERENCE-PATH-2026-08-10.md',
+    ],
+    note:
+      '**Woo CMS adapter 2026-08-16 (wip):** first real store plugin — `plugins/woocommerce-intafaced-pay/` consumes ' +
+      'pay.public-api + TS reference client pins (Bearer, Idempotency-Key, decimal-string amounts, frozen HMAC). ' +
+      'Magento/OpenCart remain §13 `pay.plugin_cms_unwired`. Not three CMS plugins in this PR. ' +
+      'Prior D26-P1-P8 (2026-08-12) banked the TS reference path + socket; this slice is the Woo product tree.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
     module: 'pay',
     phase: '3',
     plane: 'B',
-    status: 'wip',
-    owner: 'nitro-money-w3',
+    // D26-P1-P7 Done bar: Surface + webhooks + sandbox.
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.gateway', 'identity.apikeys'],
-    requires: ['services/svc-pay/src/public-rest.ts', 'services/svc-pay/src/merchant-webhooks.ts'],
+    requires: [
+      'services/svc-pay/src/public-rest.ts',
+      'services/svc-pay/src/merchant-webhooks.ts',
+      'services/svc-pay/src/sandbox-key-routing.ts',
+      'services/svc-pay/src/public-api-done-bar.test.ts',
+    ],
     note:
-      '**Reclaimed 2026-08-04** M1 expand — Nitro agents Class M. Steps 1–2 tip (#988/#994). ' +
-      'Step 3 outbound webhooks (signing/retry/dedup/dashboard) in flight on feat/pay-residual-stage3. ' +
-      'Not Class X acquirer. Sandbox-key routing = step 4.',
+      '**DONE 2026-08-12 (D26-P1-P7):** Surface + webhooks + sandbox. REST /v1 + OpenAPI + idempotency ' +
+      '(#988/#994) · signed outbound webhooks with retry/disable/dashboard (#1006) · durable claimDue now ' +
+      'truly FOR UPDATE SKIP LOCKED + lease · POST …/webhook-endpoints/:id/enable re-activates · payment ' +
+      '`mode: sandbox|live` from rail posture · sandbox-key routing (#1014) · money path (#1507/#1624) · ' +
+      'edge BASE (#1181) · quickstart (#1024) · Done-bar suite `public-api-done-bar.test.ts`. ' +
+      'Parked (not this mountain): pay:* prod grant mint / KYB money-gate (DIRECTION §8) · live acquirer ' +
+      'Class X `socket.psp-partners` · dispute/chargeback wire.',
   }),
   f('p2p.offers', 'Offers, maker/taker, 100+ fiat currencies', {
     module: 'p2p',
@@ -613,20 +812,16 @@ export const FEATURES = [
   f('p2p.disputes', 'Moderated dispute resolution', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/router.ts', 'services/svc-p2p/src/state.ts', 'services/svc-p2p/src/moderation-auth.ts'],
     note:
-      'CLAIMED 2026-08-07 nitro money/ops wave 3 — feat/p2p-disputes-stage (D-S-08 residual). ' +
-      'STAGE SHIPPED in svc-p2p: moderation reachability via `P2P_MODERATOR_USER_IDS` (natural-person allowlist) so a ' +
-      'real session with `p2p:read` can call `disputes.list` / `disputes.resolve` when named; empty allowlist ' +
-      'honest-refuses with `p2p.moderation_unreachable` (PRECONDITION_FAILED) rather than sitting forever behind ' +
-      '`admin:compliance` that SESSION_SCOPES withholds. `disputes.open` and health/ready disclose `moderationReachable`. ' +
-      'admin:compliance still counts when a principal holds it (tests / future operator grant). No fake auto-ruling; ' +
-      'timer still escalate-and-hold only. ' +
-      'NOT done: apps/admin dispute console still absent; `p2p:moderate` scope split remains OWNER sign-off ' +
-      '(DIRECTION §3) and is deliberately not minted here. Prior honesty note (2026-08-06 corrected from false `done`) stands for the gap this stage closed.',
+      '**DONE 2026-08-13:** mechanism on tip — open/list/backlog/resolve, `opened_via`, `resolutionNotes`, empty ' +
+      '`P2P_MODERATOR_USER_IDS` → `p2p.moderation_unreachable`, API keys cannot rule, SQL invariant 0003 (no auto-ruling). ' +
+      'Money only existing escrow release/refund recipes. Pin: `disputes-tracker-pin.test.ts`. Residual not blocking: ' +
+      'apps/admin Vue (`nitro-frontend-all`); `p2p:moderate` scope mint (DIRECTION §3); who-moderates Class X env ' +
+      'allowlist (do not invent ids); chat_thread_id; events outbox.',
   }),
   f('p2p.reputation', 'Reputation feeding the same XP graph', {
     module: 'p2p',
@@ -639,20 +834,23 @@ export const FEATURES = [
   f('p2p.payment-instruments', 'Payment instruments — where the buyer actually pays', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['p2p.escrow'],
     requires: ['services/svc-p2p/src/instrument-service.ts'],
-    note: "A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
+    note: "GHOST OWNER CLEARED 2026-08-09 L03 W4 (mechanism on main #428). Residual is operator content + Class X KMS, not craft. A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
   }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
     phase: '3',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['p2p.reputation'],
     requires: ['services/svc-p2p'],
-    note: 'Stage 1 of 3 shipped (TRK-p2p.merchants DoD): p2p_merchants + append-only p2p_merchant_events (trigger-enforced), apply/approve/reject/suspend/reinstate/withdraw state machine with actor rules, and eligibility from EARNED reputation so a fresh account cannot borrow merchant trust. tRPC: merchants.me/submitApplication/withdraw (self) + decide/history (admin:compliance). Membership only — no balance, no custody; escrow still moves value through ledger recipes (§0.6). Eligibility thresholds are a policy object with a conservative default because tier ladder + numeric limits are open product law (spec §5). STILL OPEN for done: Stage 2 limits enforced on offer create + badge on public profile; Stage 3 merchant API keys/scopes/rate limits, or an explicit cut of the API to a later row.',
+    note:
+      '**DONE 2026-08-16:** Denon accepts unset `P2P_OFFER_MAX_STANDARD`/`P2P_OFFER_MAX_MERCHANT` as unlimited (documented product, not a missing feature). ' +
+      'Stage 1 membership (apply/decide/withdraw) + Stage 2 ceiling mechanism + honest API (`merchants.offerLimits` / `merchants.myOfferCeiling` / health `offerLimitsConfigured`) on tip. ' +
+      'reputation.get exposes `merchant: boolean|null`. Stage 3 second key plane stays CUT — identity.apikeys + edge throttle + `merchants.apiAccess`; no invented ceiling magnitudes. ' +
+      'Pin: `merchants-tracker-pin.test.ts`. Residual not blocking: optional numeric ceilings (owner env), eligibility defaults (spec §5), apps/admin Vue.',
   }),
 
   f('api.gateway', 'Public API — ONE gateway in front of trade, pay and data (§9)', {
@@ -808,7 +1006,7 @@ export const FEATURES = [
     plane: 'B',
     owner: 'shehzad002',
     dependsOn: ['blueprint.onboarding', 'protocol.smart-accounts'],
-    note: 'Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity.',
+    note: 'Owner set 2026-08-07. The blockchain task board has claimed this as Tier F since 2026-08-03 while this row said `ready` and unowned — so an agent doing the correct free-work check would have started it legitimately. The blueprint half (what a rank means, how it is computed) is already `done`; what is unbuilt is the on-chain half: attestations that verify without disclosing identity. D26-P1-I4 2026-08-16: Fiat-plane zero-PII refuse + product-Done refuse while P0-12 unsealed (svc-blueprint attestations helper). STATUS stays ready — on-chain leftover Shehzad; do not flip done from this slice.',
   }),
 
   // ── PHASE 4P · INTACHAIN ─────────────────────────────────────────────────
@@ -881,8 +1079,13 @@ export const FEATURES = [
     phase: '5',
     status: 'done',
     dependsOn: ['bank.accounts'],
-    requires: ['services/svc-bank/src/cards/card-service.ts', 'services/svc-bank/src/cards/issuer.ts'],
+    requires: [
+      'services/svc-bank/src/cards/card-service.ts',
+      'services/svc-bank/src/cards/issuer.ts',
+      'services/svc-bank/src/cards/cards-auth-product.test.ts',
+    ],
     note:
+      '**D26-P1-B2 public-door proof 2026-08-12 (#1765):** `cards-auth-product.test.ts` — auth path via mounted router + ledger half reachable; live-issuer latency stays socket.live-issuer. ' +
       '**SPLIT 2026-08-06** per docs/adr/2026-08-04-bank-vertical-law.md correction 3. This row is the LEDGER HALF, which is what the ' +
       'title names (CardIssuerAdapter + card-sim). The LIVE RAIL half is **socket.live-issuer** and is not counted here. ' +
       '**Reclaimed 2026-08-04** M6 — Nitro agents thin. Class M. ' +
@@ -908,23 +1111,38 @@ export const FEATURES = [
     module: 'bank',
     phase: '5',
     plane: 'P',
+    status: 'done',
     dependsOn: ['bank.cards', 'protocol.smart-accounts'],
-    note: '**Reclaimed 2026-08-04** M6 custodial half — agents thin; on-chain JIT contract half remains Shehzad protocol board.',
+    requires: [
+      'services/svc-bank/src/cards/conversion.ts',
+      'services/svc-bank/src/cards/card-service.ts',
+      'services/svc-bank/src/cards/sovereign-card-product.test.ts',
+      'services/svc-bank/drizzle/0007_card_jit_conversion.sql',
+    ],
+    note:
+      '**Custodial half DONE #1174** (2026-08-09) · **D26-P1-B3 refuse-invent seal** (mounted-router product suite): ' +
+      'settlement asset ≠ funding asset; rate frozen at auth; refuses invented marks (bank.mark_*); no second book; ' +
+      'no invent FX. On-chain JIT / smart-account funding half remains Shehzad protocol board.',
   }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',
     phase: '5',
-    status: 'ready',
+    status: 'done',
     dependsOn: ['pay.rails'],
-    requires: ['services/svc-bank/src/ramps/ramp-service.ts', 'services/svc-bank/src/ramps/rails.ts'],
+    requires: [
+      'services/svc-bank/src/ramps/ramp-service.ts',
+      'services/svc-bank/src/ramps/rails.ts',
+      'services/svc-bank/src/ramps/pay-fiat-adapter.ts',
+      'services/svc-bank/src/ramps/ramps-fiat-product.test.ts',
+    ],
     note:
-      '**SPLIT 2026-08-04 ADR** · **CRYPTO LEDGER HALF DONE #997** (claim TRK-bank.ramps status:merged). ' +
-      'OWNER CLEARED 2026-08-08 (axis C1 absorbs #1128 closeout): stale `owner: cursor-swarm-bank` fenced ALL of services/svc-bank ' +
-      'via claim-check path map and parked money-critical #1102. Same release standard as #1122. ' +
-      'CRYPTO LEG — ledger surface on main: ramps.programme|onramps|offramps|offramp + ops creditOnramp; value only via ' +
-      'ledger-client deposit/withdrawHold/withdrawSettle against rail bank-crypto-ledger. BANK_RAMP_MODE=none|crypto-ledger, default none; ' +
-      'simulated: true always; fiat refuses bank.fiat_ramp_socket → socket.psp-partners. No earn APY / card BIN invented. ' +
-      'FIAT LEG — socket.psp-partners, not this row. Live chain confirm/send remains svc-pay + Class X.',
+      '**D26-P1-B4 COMPLETE #1773** — Fiat on/off via PayFiatRampPort (svc-pay RailAdapter plane) on public doors ' +
+      '(ops.creditOnramp + ramps.offramp); empty/sandbox/absent refuse bank.fiat_ramp_socket before any row; live adapter ' +
+      'books only via ledger-client deposit/withdrawHold/withdrawSettle against the pay rail id (no second book, no bank-local PSP). ' +
+      'Programme surfaces fiatVia: svc-pay.RailAdapter. simulated: true always. No APY/BIN invent. ' +
+      'auto-invest/business claim fences narrowed to their dirs (owners unchanged). ' +
+      '**SPLIT 2026-08-04 ADR** · CRYPTO LEDGER HALF #997. Commercial partner / money-transmission remains socket.psp-partners + Class X. ' +
+      'Live chain confirm/send remains svc-pay + Class X.',
   }),
   f('agents.gateway', 'Model-agnostic gateway, per-user metering', {
     module: 'agents',
@@ -938,33 +1156,56 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     status: 'wip',
-    owner: 'nitro-agent',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway'],
-    note: '**Metered guardrailed session landed #1150 (2026-08-08)** — navigator/session-run.ts drives the #1114 openSession → act → settle → closeSession path rather than a parallel one, so the runtime decides tool admissibility at call time instead of a guardrail being documented and enforced by nobody. Proved load-bearing by mutation, not by comment: bypassing runtime.act to call the tool executor directly fails 6 of 14 tests, including the money-write refusal and both thrown-path tests. STILL NOT done: no guardrail is written to agent_definitions at boot — registerScannerAgent exists and is called from NOWHERE, so a navigator twin would have been dead code making boot registration look wired when it is not; tool inputs remain caller-supplied fixtures. Stage-1 2026-08-04: navigatorAgentGuardrail — navigator.plan/tool_select + read-only trade/identity tools; money-write tools refuse undeclared. Stage-2 grounded tools residual. Not tracker done until live grounded env.',
+    // Path-narrowed 2026-08-15: was whole svc-agents; fence matches navigator dir like bank.auto-invest.
+    requires: ['services/svc-agents/src/navigator'],
+    note:
+      '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment. ' +
+      'Fence: requires narrowed to src/navigator so path-disjoint agents.coach residual is not HUMAN-CLAIMED.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
+    status: 'ready',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
-    note: 'Stage-1 2026-08-04: supportAgentGuardrail — read-only support tools + support.classify/reply tasks; money tools (ledger/pay/bank/trade/p2p) refused undeclared. Stage-2: KB grounding via ops.support. Not tracker done until grounded env.',
+    requires: ['services/svc-agents/src/support-agent', 'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts'],
+    note:
+      '**D26-P1-O3 2026-08-15 (desk vs agent split):** this row is the assist surface, not the desk and not a production KB plane. ' +
+      'Unstamp `done` — Stage-1/A2 code on tip is not live ops.support KB grounding in a production env. Residual: live KB+account-state env (Class X credentials). Do not edit svc-agents on this mountain (open agents PRs). ' +
+      '**D26-P1-A2 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
+      'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
+      'No packages/i18n.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
     phase: '5',
     status: 'wip',
-    owner: 'nitro-agent',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.spot'],
-    note: "**Metered session run landed #1114 (2026-08-08)** — scanner.runSession drives ranking through the fleet runtime, so each ticker fetch is admitted, counted against the session budget and audited. A scanner run bills ZERO and says so; no synthetic charge was invented to make it look metered. Dark-plane and blank-tier law refuse BEFORE the session opens (openCalls === 0), so nobody is billed for a scan that never happened. STILL NOT done: tickers are caller-supplied fixtures, not real allowlisted data in env, which is this row's own done bar; registerScannerAgent is exported but called from nowhere, so runSession 404s until a guardrail is registered. Known gap: agents.scanner.tier_closed is missing from packages/i18n/src/catalog.ts. Stage-1 2026-08-04: pure fixture rank in svc-agents (`scanner/rank.ts`) — empty/stale/incomplete refuse with copy keys; no invent prices; no auto-trade. Live tools + shell UX residual. Not tracker done until allowlisted live data path.",
+    note: '**D26-P1-A3 2026-08-13:** P0-11 sealed — production default is abs_change_x_log_volume + last/volume24h/change24hBps (adr/2026-08-12-scanner-signal-inputs-law.md). Omitted law on public doors uses that constant; explicit unpublished still refuses. STILL NOT done: live spot tickers (Class X). Not tracker done until live data path.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'pay.routing'],
+    note:
+      '**D26-P1-A4 2026-08-16:** missing/dark pay metrics named refuse (`no_metrics` / `pay_plane_dark` / `stale`); never invent numeric rate. ' +
+      'STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
   }),
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',
     phase: '5',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.copy'],
+    requires: ['services/svc-agents/src/copy-intel'],
+    note:
+      '**D26-P1-A5 2026-08-12:** tip #1708 audited refuse + residual directory presentation (presentDirectory / leaderId order). ' +
+      'STILL NOT done: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until live leaders allowlist.',
   }),
   f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
     module: 'academy',
@@ -984,39 +1225,72 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies'],
+    status: 'done',
+    owner: 'Phantom-X-007',
+    requires: ['services/svc-academy/src/curriculum/import-pipeline.ts', 'services/svc-academy/src/curriculum/import-pipeline.test.ts'],
+    note:
+      '**D26-P1-C5 Done-bar sealed 2026-08-12 (#1738):** import substance bar (not char-count theater); ' +
+      '`lessonSubstanceChecklist` + `substanceBarMet` on spine (20 playbooks + 3 workbooks platform-native). ' +
+      'Licensed DERIV//DESK dump assets remain Class X residual (not agent invent).',
   }),
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
-    note: '**Cert XP emit landed #1117 (2026-08-08)** — certs/xp-publish.ts turns a grant into a real xpEarned publish keyed on academy.cert:cert:<userId>:<certId>, including on the already-granted path (safe because identity does ON CONFLICT (idempotency_key) DO NOTHING), which is the recovery path. STILL NOT done: this row promises "→ real perks" and the work stops at XP. svc-identity is the SoT for rank and rank_thresholds.perks; a cert→perk map here would be a second opinion on another service\'s table and needs a contracts PR first. An unpriced cert publishes nothing rather than a guessed amount.',
+    // GHOST OWNER CLEARED 2026-08-09 L07 W9: was wip @nitro-agent with cert XP
+    // + grant race + spine seals already on main (#1117 · #1370 · #1490). No open
+    // academy PR held the path — the leftover owner fenced ALL of
+    // services/svc-academy via module fallback (false block on residual honesty).
+    // status ready (not wip): mechanism free; full title "→ real perks" is multi-svc residual.
+    status: 'ready',
+    owner: null,
+    note:
+      'D26-P1-C1 2026-08-12: grantCert → XP → real identity perks OR refuse invent perk money ' +
+      '(certs/perk-plane.ts · certPerkPlane · certPerkIntent). svc-identity remains SoT; no academy ' +
+      'cert→perk map / perk book. Unpriced cert still publishes nothing. NOT tracker done on full ' +
+      'title until multi-svc cert→perk product law (contracts) — honesty plane is sealed.',
     dependsOn: ['academy.curriculum', 'identity.rank'],
   }),
   f('academy.ambassadors', 'Residencies, IFC pay, revenue share', {
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'token.staking'],
-    status: 'ready',
-    requires: ['services/svc-agents'],
+    status: 'done',
+    owner: 'Phantom-X-007',
+    requires: ['services/svc-academy/src/ambassadors/ifc-pay-rate-law.ts', 'services/svc-academy/src/ambassadors/ifc-pay.ts'],
     note:
-      'Owner released 2026-08-08 (axis C1 / Nitro green light). Stage-1 programme appoint/freeze + Stage-2 residency desk (non-money). ' +
-      'Stage next: IFC pay + revenue share refuse-closed Class M — no invent rates. ' +
-      'Not tracker done until residencies seasons + real pay/share (or product-cut) match title.',
+      '**D26-P1-C2 Done-bar sealed 2026-08-12 (#1725):** residencies / IFC pay under rate authority — owner-published ' +
+      'JSON law only; refuse invent rates; dry-run quote when authority present; accepted-residency gate. ' +
+      'SOCKET residual: live settlement Class M until ledger recipe (no recipes in ambassadors); seasons product residual.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
     module: 'academy',
     phase: '5',
     dependsOn: ['academy.lobbies', 'trade.spot'],
+    owner: 'Phantom-X-007',
+    status: 'wip',
+    // Path-narrowed 2026-08-15: was whole svc-academy; fence matches tournaments dir like bank.auto-invest.
+    requires: ['services/svc-academy/src/tournaments'],
+    note:
+      'D26-P1-C3 2026-08-12: blank/unset prize pools typed refuse `academy.prize_pool_unset` — cannot start; no invent IFC. ' +
+      'Ladder Stage-1+lifecycle on tip; Class M fund/payout recipes still refuse-closed until owner amounts + ledger. ' +
+      'Fence: requires narrowed to src/tournaments so path-disjoint academy residual is not HUMAN-CLAIMED.',
   }),
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
     module: 'academy',
     phase: '5',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
+    requires: [
+      'services/svc-trade/drizzle/0006_paper_markets.sql',
+      'services/svc-academy/src/paper/workbook-loop.ts',
+      'services/svc-academy/src/paper/ops-gate.ts',
+      'services/svc-academy/src/paper/ledger-isolation.test.ts',
+    ],
     note:
-      'Stage-1 2026-08-04: trade.markets.paper flag + placeOrder isolation (zero ledger posts on paper). ' +
-      'Stage-2 workbook wire + fill-ref attach. ' +
-      'Stage-3 2026-08-07: ACADEMY_PAPER_TRADING_ENABLED ops kill-switch (live trade unaffected) — #1001.',
+      'DONE 2026-08-15: title bar met on tip — paper market flag + placeOrder zero-ledger isolation, workbook drill loop with trade fill-refs only, ' +
+      'ACADEMY_PAPER_TRADING_ENABLED kill-switch (live trade unaffected, #1001). XP/rank from paper is academy.certs (not this row). ' +
+      'Stage-1 2026-08-04: trade.markets.paper + placeOrder isolation. Stage-2 workbook wire. Stage-3 ops gate.',
   }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
     owner: 'shehzad002',
@@ -1179,12 +1453,30 @@ export const FEATURES = [
       'usable:0 instantly — that is how DoD clause 5 holds with no event. NO suspension POLICY was added: releasing on a ' +
       'transition an operator recorded is not deciding it. ' +
       'PR #1100 (stake endpoint serialization) and #1109 (Stage 1) are on main — the earlier note that they were unmerged is stale. ' +
-      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce still open.',
+      'Org-vs-user left as per-user on purpose (adding org_id later is a nullable column plus a backfill). market.commerce C1+C2 done #1189; C3 subscriptions residual.',
   }),
   f('market.commerce', 'Listings, subscriptions, purchases, house commission', {
     module: 'market',
     phase: '5',
+    status: 'done',
     dependsOn: ['market.vendors'],
+    requires: ['services/svc-market'],
+    note:
+      'D26-P0-02 OWNER NUMBER 2026-08-13: MARKET_HOUSE_COMMISSION_BPS=0 in `.env.example` (explicit free-cut); ' +
+      'compose pass-through `${MARKET_HOUSE_COMMISSION_BPS:-}` (no `:-0` seed); schema still has no in-code default. ' +
+      'D26-P0-10 SEALED 2026-08-13 (adr/2026-08-13-house-commission-authority.md): authority = host ' +
+      'MARKET_HOUSE_COMMISSION_BPS; blank refuses; 0 is explicit owner free-cut; no agent-invented bps. ' +
+      'Money only via recipes.marketPurchase → houseFees(market); blank MARKET_HOUSE_COMMISSION_BPS refuses ' +
+      'market.commission_not_configured (never invents free commission; 0 only when owner sets). ' +
+      'Crash re-drive settles from claim snapshot (not live env bps). Over-capacity after unstake: oldest-first ' +
+      'entitledListingRefs; excess refuse market.listing_over_capacity. Concurrent createListing cannot oversell ' +
+      'slots (claimSlot FOR UPDATE + orphan rollback). Catalogue registration order (ASC) — ranking DIRECTION §8 owner. ' +
+      'D26-P1-M1 Class M residual SEALED 2026-08-12: compose LEDGER_URL→svc-ledger (no localhost invent); ' +
+      'public-door PRECONDITION_FAILED + empty catalogue proofs; ledger listing/premium recipes coord #1761. ' +
+      'ranking/featured. C3 listing subscriptions: periodSeconds on the listing (no default month); ' +
+      'purchase posts recipes.marketPurchase; access is time-bounded; cancel stops new access without a reverse recipe; ' +
+      'past-due refuses market.subscription_past_due. Leftover rows without a period stay unsellable ' +
+      '(market.subscription_period_unset) and off the public catalogue.',
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',
@@ -1203,73 +1495,107 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.accounts'],
+    requires: ['services/svc-support', 'docker-compose.apps.yml'],
     note:
-      'Stage-1 2026-08-07 #989: ticket spine. Stage-2 2026-08-07 #999: operator queue API (listQueue/next/claim) wired on svc-support — no money. ' +
-      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-ops-support. Released on evidence, not assumption — that swarm has no open PR and ' +
-      'no branch on origin, and its staged work is already merged. A claim nobody is inside costs exactly what the collision it prevents costs: ' +
-      'the next agent reads `owner` and stands down. ' +
-      'Residual, re-derived 2026-08-08 and larger than "desk UI": tickets and comments are two in-process `Map`s (`support-service.ts`), so the ' +
-      'desk loses every ticket on restart AND two replicas behind the edge serve disjoint ticket sets — the second is the argument that survives ' +
-      '"just do not restart it". The claim in `operator-queue.ts` is read-then-write over a Map, so its exclusivity is TOCTOU by construction. ' +
-      'Durability is not one class: svc-support has no `support` Postgres schema and no `svc_support` role in tooling/infra/postgres-init, and no ' +
-      'TEST_DATABASE_URL_SUPPORT in CI — the store class is the small half. Note `env.ts` already REQUIRES DATABASE_URL through serviceEnvSchema ' +
-      'while its own docblock says "no database"; the comment is the thing that is wrong, not the env. KB is further along than this row implied: ' +
-      'five articles exist keyed with English copy in @intafaced/i18n, and `searchKb`/`getKbById` are written but not exposed on the router. ' +
-      'Genuinely absent: any customer entry point — `create` is reachable only as a raw tRPC call through the edge, and the customer form must be ' +
-      'Vue in the vendored shell, never a new SPA.',
+      '**2026-08-16 process loop (wip, not done):** mounted Fastify/tRPC inject proves ticket create + searchKb/getKb; `/ready` reports process timestamps (zeros until first success). `TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE` stays false (live-env Class X). Vue/SLA residual. ' +
+      '**D26-P1-O3 2026-08-15 (desk vs agents.support split):** unstamp `done`. Desk code + compose pin on tip is not a live-env ticket+KB loop; `/health` liveness ≠ served loop (`ticketKbLoopObservedInLiveCompose: false`). ' +
+      '`agents.support` is assist, not this mountain. Named refuse `support.identity_grounding_unwired` when INTERNAL_SERVICE_SECRET is blank — not silent `plane_dark`. Vue/admin HUMAN; no invented SLA. ' +
+      'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +
+      'atomic claim UPDATE (two operators racing cannot both win), `searchKb`/`getKb` on the router, TEST_DATABASE_URL_SUPPORT + turbo pass-through. ' +
+      '**Stage-4 #1494 (2026-08-09): the desk can now say what it read.** Closes the two Stage-2 boxes docs/ops/trk/ops.support.md left unchecked. ' +
+      '(a) AUDIT TRAIL — `support.ticket_events`, append-only and dense-sequenced by unique index, written in the SAME transaction as the state change ' +
+      'it records, so there is no path that moves a ticket without recording who moved it and from what; `setStatus` was previously a bare UPDATE whose ' +
+      'only trace was an `updated_at` the next comment overwrote. Lifecycle is a table (`src/lifecycle.ts`): `closed` is terminal, `resolved → open` is a ' +
+      "recorded reopen, self-transitions refused. (b) ACCOUNT-STATE GROUNDING — read port on svc-identity's new `GET /internal/account/:userId` " +
+      '(`accountStateSchema` = userId + status + kycTier, three fields and no fourth); NOT a support-side projection, so an operator cannot reassure a ' +
+      'user from a stale copy of a freeze. Takes no userId argument — the id comes off the ticket, so `support:ops` is not a platform-wide account lookup. ' +
+      '(c) ESCALATION CASE FILE — `support.case_files`, immutable once written, `citations` refused empty at three layers (builder, zod, CHECK). Citations ' +
+      'are ref + sha256 digest, never content, so the record proves what was read without becoming a PII archive. ' +
+      'Fleet compose pin #1796: `docker-compose.apps.yml` runs `svc-support` on 4017 with `*internal-secret`, `IDENTITY_URL` → svc-identity; edge `SUPPORT_URL`. ' +
+      'Residual: Vue desk / apps/admin (`nitro-frontend-all`); SLA wording (DIRECTION §8 item 9 owner); live-env ticket+KB observation. ' +
+      'No money on this service ever: no ledger client, and the case file has no amount/currency/instruction field — `money_request` is a reason NAME that ' +
+      'files a request for the pay/ledger recipe that owns the value (§0.6).',
   }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'wip',
+    owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     note:
-      'READ THE DEFECT PARAGRAPH BELOW BEFORE TREATING `ready` AS A CLEAN START. ' +
-      'Stage-1 2026-08-07 #996: admin treeStatus/node + payout refuse-closed. Stage-2 2026-08-07 #1008: members roster + freeze/unfreeze honestyLine. ' +
-      'Stage-3 2026-08-07 #1027, WHICH THIS ROW NEVER RECORDED: durable commission accruals — migration 0007, an SQL store, and two MOUNTED ' +
-      'procedures on svc-identity (`affiliates.accrueDryRun`, `affiliates.accrue`). ' +
-      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-affiliates — no open PR, no branch on origin. Kept `wip` rather than `ready` because ' +
-      'the row is not idle, it is DEFECTIVE, and the next reader must not treat it as a clean start. ' +
-      'THE DEFECT, found 2026-08-08 by reading #1027 rather than its PR title: `DEFAULT_ACCRUAL_TIERS` in `affiliates/commission.ts` hardcodes ' +
-      '10% / 5% / 2% fee-share rates as the FALLBACK when a caller omits `tiers`, and `affiliates.accrue` persists rows computed from them. ' +
-      'Nobody published those numbers. DIRECTION §8 item 10 reserves "every other fee-share rate" to the owner, and this row\'s own non-goal ' +
-      'says no commission percentage without fee events. The refuse-closed gate was fitted to `payout` only — but the invented number enters at ' +
-      'ACCRUAL, which is where a claim on real money is created; payout is merely where it leaves. It is also test-locked: the suite computes ' +
-      'expected values from the fake rates, so deleting them reddens tests, which is how an honesty debt becomes load-bearing. ' +
-      'Removing it is Class N, needs no owner number, and is the first thing to do here — port the discriminated-union law from ' +
-      '`svc-trade/src/copy/fee-share-law.ts`, where `published: false` makes the rate unreachable in the type system rather than merely unset. ' +
-      'Also open and not previously written down: `attribute` reads the parent map, decides, then inserts with no transaction, so two accounts ' +
-      'referring each other concurrently can both pass the cycle check and write a 2-cycle the DB does not forbid — every later read then throws ' +
-      '`referral.cycle` and that subtree bricks, with no repair path. `listByBeneficiary` is written and indexed and reachable from no procedure, ' +
-      'so an affiliate cannot see their own earnings — and must not, until the rate law is fixed, or the statement shows fabricated money. ' +
-      'Residual unchanged: Class M ledger recipe after DIRECTION §8 owner rates; reuse `rewardPay` + `sweepFeesToRewards` unchanged, because ' +
-      'ADDING or CHANGING a ledger recipe is a DIRECTION §8 carve-out and stops being agent-mergeable.',
+      'D26-P1-O2 2026-08-13: compose identity LEDGER_URL→svc-ledger (payout can post; unset still ledger_unwired; no localhost default). Vue residual (nitro-frontend-all). ' +
+      'D26-P1-O2 2026-08-13: svc-pay settleWindow best-effort POST after merchantSettlement LANDED #1800 (412/down never unwind; sourceModule=pay; no invent rates). ' +
+      'D26-P0-02 SEALED 2026-08-13 #1799: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5). Mountain stays wip: Vue. ' +
+      'D26-P1-O2 2026-08-13: identity accrue door LANDED #1794; svc-trade settleFill best-effort POST after house fees (412/down never unwind fill; no invent rates). ' +
+      'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
+      '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
+      'dry-run may simulate; Stage `treeStatus` exposes `rateAuthorityPublished` + status line (tier count only, never rate invent); ' +
+      'Mountain stays wip/ready-not-done until pay producer + ledger URL on identity. Owner rates are now published (D26-P0-02). ' +
+      'Wave 13 L04 honesty: mixed sourceModule on one fee event refuses `affiliate.payout.mixed_source_module` (no multi-pool debit); treeStatus frozenCount = freezes on tree participants only (not global freeze ledger). ' +
+      'Wave 10 #L05 / #1589 source_module on accruals (fee-pool provenance for payout sweep) — land before producer wire. ' +
+      'Rate invent FIXED #1133 (2026-08-08): blank / unpublished accrual tiers refuse-closed; DEFAULT_ACCRUAL_TIERS gone. ' +
+      'Wave 3 residual #1180 (2026-08-09): attribute under txn + advisory lock + post-insert cycle recheck; `affiliates.myAccruals` self-only ' +
+      'reads durable rows (never invents rates). Stage-1 #996 tree/payout refuse · Stage-2 #1008 members/freeze · Stage-3 #1027 accrue store. ' +
+      'SLICE C PAYOUT ENGINE LANDED #1477 (2026-08-09) — affiliates/payout-engine.ts. The tree, attribution and durable accruals already existed, so this ' +
+      'built the payout half ON TOP of them rather than a second tree. `affiliates.payout` no longer throws an unconditional stub: it plans a multi-tier ' +
+      'fan-out from durable accrual rows and posts it through EXISTING recipes (sweepFeesToRewards + rewardPay). No recipe added or edited — DIRECTION §3 ' +
+      'owner carve-out. svc-identity gained @intafaced/ledger-client and a `Pick<LedgerClient,"post">` client (narrower than all seven siblings on purpose: ' +
+      'a service that must hold no balance gets no balance read). ' +
+      'STILL `wip`, NOT `done`: rates are published (D26-P0-02) but svc-pay producer + identity LEDGER_URL + Vue remain. Blank env still refuses `affiliate.payout.rates_unset`. ' +
+      'NEW HOLE CLOSED THAT WAS NOT IN THE BRIEF: resolveAccrualTiers accepts per-call operator `requestTiers`, which is defensible at accrual (writes a ' +
+      'claim, moves nothing) and NOT at payout — paying "the rate on the row" would launder an operator-supplied rate into real money. Payout therefore ' +
+      'ignores row.rate and requires every row to match the owner-published tier for its hop, else `affiliate.payout.rate_unpublished`. Compared numerically, ' +
+      'so "0.10" vs "0.1" is not a false refuse an operator would "fix" by editing a rate. ' +
+      'PAYOUT-01 CLICKED 2026-08-13: MAX_PAYOUT_TIER_DEPTH = 5 (same as DEFAULT_MAX_REFERRAL_DEPTH). ' +
+      'ATOMICITY, STATED HONESTLY: LedgerClient has no batch API and an all-legs single post would need a new multi-beneficiary recipe (owner carve-out), so ' +
+      'the fan-out is replay-safe by key rather than one transaction — a crash mid-fan-out leaves the tree partly paid and re-running completes it, paying ' +
+      'nobody twice. Keys are business-derived: `affiliate:<feeEventId>:<beneficiaryId>:h<hop>`, which IS the accrual unique constraint — no clock, no UUID. ' +
+      'One sweep PER LEG, not per fee event, because sweepFeesToRewards omits the amount from its key: a per-event sweep would dedupe against itself if the ' +
+      'row set grew and silently borrow the difference from the rewards engine. ' +
+      'Also refused and tested: cycles and self-referral (write time in the tree, and again at payout so a pre-fix row cannot pay), depth past the bound, ' +
+      'mixed-asset fan-out, rows from another fee event, duplicate rows, frozen beneficiary (freeze applied AFTER accrual still stops the money), and an ' +
+      'unfunded fee pool (fails rather than inventing). 31 engine tests + 12 mount tests; 12 mutations each verified to turn a named test red. ' +
+      'ONE OF THOSE MUTATIONS FOUND A REAL BUG IN THIS PR before merge: payoutKeysAreBusinessDerived allowed a uuid that `endsWith` the key on the theory that ' +
+      'a trailing id was the business one — backwards, since trailing is exactly where a generated id is appended, so `close:${id}:${randomUUID()}` passed the ' +
+      'guard clean. Replaced with a count (exactly one uuid per key, the beneficiary) plus a Date.now() segment check, and pointed a test at both shapes. ' +
+      'Compose fleet now sets identity LEDGER_URL→svc-ledger (2026-08-13). Schema stays optional/undefaulted: a host that omits it still refuses ' +
+      '`affiliate.payout.ledger_unwired` rather than posting against localhost. Vue residual keeps the mountain `wip`. ' +
+      'NAMED GAP FOR WHOEVER WIRES THE PRODUCER, because it will bite them and is invisible from the payout side: FeeEvent and the accrual row do NOT record ' +
+      'which module fee pool the fee landed in. A trading fee lands in houseFees("trade"), a payment fee in houseFees("pay") — payout has only ' +
+      'AFFILIATE_PAYOUT_SOURCE_MODULE = "identity" to sweep from. It is one named constant plus an overridable `sourceModule` param rather than a literal at the ' +
+      'call site, so the hedge is legible, but it IS an assumption: a real producer needs a source-module column on the accrual row, or commission gets swept ' +
+      'from a pool that never held the fee (which fails as InsufficientFunds rather than inventing — safe, but a failure). Not fixed here because inventing a ' +
+      'column shape for a producer that does not exist is the same class of guess as inventing a rate.',
   }),
-  f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', { module: 'core-ops', phase: '5', dependsOn: ['identity.kyc'] }),
+  f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', {
+    module: 'core-ops',
+    phase: '5',
+    status: 'done',
+    owner: 'Phantom-X-007',
+    dependsOn: ['identity.kyc'],
+    requires: ['packages/config/src/screening.ts', 'packages/config/src/jurisdiction.ts'],
+    note:
+      '**D26-P1-O1 Done-bar sealed 2026-08-12 (#1734):** screening *mechanism* — `INTAFACED_SCREENING_FAIL_CLOSED` → ' +
+      '`denied.screening_unconfigured` when list unset; honesty-only default OFF. List *content* remains Class X (Nitro/counsel). ' +
+      'VPN partner / geo-IP socket / case-management UI residual. Avoid dual-edit Nitro #1659 svc-edge control-plane.',
+  }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
+    requires: ['packages/contracts/src/ops-analytics-warehouse.ts', 'services/svc-edge/src/compliance-honesty.ts'],
     note:
-      'Stage-1 2026-08-07: replica role law + honest empty warehouse surface in contracts (ops-analytics-warehouse) + ADR/runbook. No invent volume. ' +
-      'CLAIM RELEASED 2026-08-08: was `wip` @cursor-swarm-analytics — no open PR, no branch on origin. ' +
-      'THE `requires` IS DELETED IN THE SAME BREATH, and that matters more than the owner did. It named `packages/contracts`, a package eleven ' +
-      'services import, so claim-check reported ALL of packages/contracts as owned by one analytics swarm: every agent touching any contract ' +
-      'anywhere in the platform was told a human held it. `requires` is meant to prove a path exists on disk for a `done` claim; on an OWNED row ' +
-      'it silently becomes a lock, and pointing it at a shared package locks the package rather than the feature. ' +
-      'Residual, re-derived 2026-08-08 and CORRECTED — "admin consumer" is stale, #1032 landed one: apps/admin serves ' +
-      '/api/analytics/warehouse over queryWarehouseSurface with 3 tests. What is actually missing: (1) LAG IS NEVER MEASURED. The only supply of ' +
-      '`lagSeconds` in the tree is `ANALYTICS_REPLICA_LAG_SECONDS`, a string an operator types once — set it to 5 and the surface reports freshness ' +
-      '`live` forever whether or not a replica exists. Nothing queries pg_last_xact_replay_timestamp or pg_stat_replication anywhere. It is ' +
-      'harmless only because the GET path always passes zero facts, so no number is painted yet; the badge logic is already wrong. A lag reading ' +
-      'must itself carry a measurement time, or a stale reading passes as fresh. (2) `assertAnalyticsReplicaRole` HAS NO PRODUCTION CALLER — the ' +
-      'admin route reads a self-declared `ANALYTICS_REPLICA_CONFIGURED` boolean and never sees a URL, and the three ANALYTICS_REPLICA_*_URL vars ' +
-      'in .env.example are read by no code. It is a check that would fail correctly if anything called it. (3) `empty` cannot distinguish "the ETL ' +
-      'never ran" from "the ETL ran and found nothing" — no watermark exists, so `empty` currently overclaims. (4) No ETL/cube job; cube helpers ' +
-      'have zero production callers. Not tracker done until replica wiring + one honest cube + access control ship.',
+      '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — `ANALYTICS_ETL_WATERMARK_AT` + ' +
+      '`resolveEtlWatermark` absent/present honesty; stamp never paints live cubes alone; writer URLs refuse. ' +
+      '**2026-08-15:** production SQL lag probe — `createSqlWarehouseLagProbe` runs ANALYTICS_REPLICA_LAG_SQL; ' +
+      'svc-edge `/admin/analytics/warehouse` is the caller (one-shot postgres.js, ANALYTICS_REPLICA_PROBE=off kill). ' +
+      'URL absent / connect fail / not-a-standby → unknown, never invented live. ' +
+      'Residual (not invent): cube job callers (Phase B late — no warehouse process). Never second balances.',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
@@ -1278,39 +1604,45 @@ export const FEATURES = [
     dependsOn: ['infra.ui-tokens'],
     requires: ['apps/admin'],
     note:
-      'CLAIM RELEASED 2026-08-08 by Nitro, by name, alongside `pay.gateway`. The `owner: Nitro` never meant a human was typing — ' +
-      'it meant agents must not implement here, and that is now lifted. ' +
-      'AND THE NOTE IT REPLACES WAS FALSE, WHICH IS THE MORE EXPENSIVE HALF. The old text — "apps/admin has ZERO test files and ' +
-      'makes no network call of any kind ... every kill-switch, freeze and reconcile is React `useState`" — was true when written on ' +
-      '2026-07-28 and has been wrong since 2026-07-30. Re-derived from the tree on 2026-08-08: apps/admin has 5 test files and ~50 ' +
-      'cases; `/` and `/ledger` post through their own BFF routes to svc-edge `/admin/kill-switches` and `/admin/ledger/{freeze,unfreeze}`, ' +
-      'which reach svc-ledger `/operator/freeze`; the console is mounted in docker-compose.apps.yml on :3100 with operator and treasury ' +
-      'tokens. The five merges that made it real: #186, #360, #447 (which DELETED the fake freeze path), #436, #1032. ' +
-      'EXACTLY ONE control is still inert — "Run reconcile (simulated)" (`ledger-ops.tsx`) — and it is honest about it three ways: the ' +
-      'button says simulated, the payload field is named `simulated` rather than `result`, and `delivered: false` is a literal type so ' +
-      'no code path can claim otherwise. Reconcile is dark at TWO layers, not one: svc-ledger never mounts its tRPC router, so ' +
-      '`ledger.reconcile` has no HTTP surface at all, and svc-edge therefore has nothing to proxy. Per-flag switches on the kill board ' +
-      'are session previews and say Preview on every row. ' +
-      'WHY A STALE NOTE IS A REAL COST, not paperwork: this row is what a dispatcher reads before assigning work, and for eleven days ' +
-      'it advertised shipped, tested, money-authority code as theatre — an invitation to rebuild it. That is the same failure the ' +
-      'tracker header warns about, arriving from the opposite direction. ' +
-      'Still NOT `done`, and the gap is not the UI: there is no fee-param or listing WRITE path anywhere in the platform (market rows ' +
-      'are written by migration only), no operator-scoped treasury balance read, and the console is published on :3100 behind a shared ' +
-      'token with no SSO and no network ACL — that exposure is Class X and no PR closes it.',
+      'Console is NOT a facade (kill/freeze live via BFF → edge). **Wave 3 #1188 (2026-08-09)**: `/tools` Operator tools page + BFF proxies already-mounted ' +
+      'edge tRPC (KYC, freeze identity, bank.ops, merchantState, token mint/distribute, academy ops) — missing EDGE/token → not-wired, never fake success. ' +
+      'Reconcile stays simulated (honest marker) until full 3-service mount. Still NOT done: fee/listing write paths absent platform-wide; Class X SSO/ACL ' +
+      'on :3100; no invent fee schedules.',
   }),
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
     module: 'notify',
     phase: '5',
-    status: 'wip',
-    owner: 'nitro-agent',
+    status: 'ready',
     dependsOn: ['infra.events'],
     requires: ['services/svc-notify'],
-    note: '**Liquidation fan-out landed #1116 (2026-08-08)** — svc-notify now consumes intafaced.trade.position.updated and writes a critical inbox row plus out-of-app fan-out when a futures position is liquidated. That subject was previously consumed only by svc-ws, which fans it over a private WebSocket — reaching exactly the traders who happen to have the app open, the opposite of the population that needs to hear it. Only liquidated notifies; the other three transitions are acked and not written, because a row behind every open and close is undecided product law (a policy object with the conservative default, deliberately not an env var). **MUST NOT flip to done:** every out-of-app channel still refuses in every real deploy — the gateway credentials are Class X and blocked on the owner, not on code. In-app inbox shipped (svc-notify: list/unreadCount/markRead/markAllRead; bus consumers: fillSettled, p2pEscrowLocked, p2pEscrowReleased, p2pEscrowRefunded, p2pTradeDisputed (openedBy only #157), kycApproved, rankUpdated, stakeCreated, bankMarginCalled; ON CONFLICT dedupe). Multi-channel fan-out now exists: one NotificationChannel adapter interface with three real out-of-app adapters (email/push/SMS), per-channel delivery rows with attempted_at kept apart from accepted_at, claim-per-(notification,channel) idempotency, confirmed-address targets, and a retryable/permanent split that decides whether the bus redelivers. The outcome column is accepted_at, not delivered_at: a 2xx from a gateway is custody, not receipt, and no delivery receipts are modelled (migration 0002). NOT done: no out-of-app channel can actually deliver until the owner supplies gateway credentials — until then email, push and SMS refuse every message with channel.not_configured and the refusal is on the record. In-app is the honest fallback and is genuinely delivering.',
+    note:
+      '**2026-08-14:** durable inbox for agentActionCompleted (completion/session_close only). ' +
+      '**D26-P1-O5 deepen (2026-08-12):** `notify.operatorDeliveries` (`admin:read`) — newest-first ' +
+      'cross-user delivery outcomes; `accepted`≠end-device delivered. Prior #1701: fan-out mountain vs §13 ' +
+      'channels explicit (`mountain-vs-sockets.ts`). Mountain stays `ready` not `done` while OOA refuse; ' +
+      'no provider invent; Class X credentials remain owner. ' +
+      'GHOST OWNER CLEARED 2026-08-09 wave 3: was `wip` @nitro-agent with no open PR when wave started; residual built and merged as #1187 (stuck-pending reap, ' +
+      'register/verify rate limits, consent footer). Prior: liquidation fan-out #1116, multi-channel adapters, delivery honesty (accepted≠delivered). ' +
+      '**Wave 4 #1504 (2026-08-09)**: closed a declared-but-unwired surface — AlertService.evaluateMarket was complete, tested and had NO CALLER while ' +
+      'router.ts called it "an internal job path" (D-S-13 Class B: createAlert returned status active for a watch nothing would ever evaluate). Sweep now ' +
+      'mounted on an interval fanning in from activeMarkets(), reported on /ready; MarkSource.kind required so a dark port cannot read as live; both alert ' +
+      'procedures carry evaluation {markSource,canFire,code} so the gap is disclosed in code (Class C). Also mount.reachable.test.ts — the tRPC mount over ' +
+      'a real socket; nothing in the repo had ever exercised fastifyTRPCPlugin, and createCaller stays green on a mount that was never registered. ' +
+      '**Wave 10 #1586**: trade public ticker MarkSource when TRADE_URL set; unset stays dark. ' +
+      '**Wave 13 #1638 (L12)**: compose sets TRADE_URL for svc-notify (same surface bank uses) so the stack is not dark-by-default while trade is up; ' +
+      'settle ownership by attempt so a late gateway after reclaim cannot stamp accepted over attempt N+1; claim never abandons under a live lease. ' +
+      '**MUST NOT flip to done:** out-of-app channels refuse channel.not_configured until Class X gateway credentials (owner). In-app DELIVERS. ' +
+      'email/push/sms transports are wired and proven against a real HTTP server (gateway-wire.test.ts counts at the server) but cannot deliver without ' +
+      'owner-provisioned credentials — wired to refuse, never to pretend. ' +
+      'Residual: more event consumers (optional); Class X gateway credentials. ' +
+      '(Multi-replica rate-limit N× already closed by migration 0005 + PostgresTargetRateLimiter.)',
   }),
   f('v22.alerts', 'Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31)', {
     module: 'notify',
     phase: '2',
     plane: 'F',
+    owner: 'Phantom-X-007',
+    status: 'wip',
     dependsOn: ['trade.spot'],
     note: 'Law §31:809, gap-closed 2026-08-08; DEPENDENCY CORRECTED 2026-08-08 and the reasoning is here rather than in a commit message. THE PHASE IS NOT WHAT WAS WRONG. §31:809 ends "Phase 2 (alerts core) / 5 (intelligence tiers)" and §38:854 repeats it as "Alerts & watchlists (B/svc-notify/2–5)", so the law is explicit twice that the core belongs at 2 — the phase being worked. The edge was wrong: this row depended on `ops.notifications`, which is `phase: 5`, putting a phase-5 prerequisite in front of a phase-2 capability and rendering a row the law phases at 2 as permanently unstartable. Resolved by arguing the dependency down to what the core actually needs, NOT by moving the phase, because moving the phase would contradict the law in the one sentence where it is unambiguous. WHAT THE CORE ACTUALLY NEEDS: condition evaluation against a price the platform can source, plus watchlists. §31:809 says it "Rides §9 notification fan-out" — it CONSUMES a delivery path rather than building one, and a delivery path exists and is genuinely delivering (svc-notify in-app inbox, bus consumers, ON CONFLICT dedupe — see `ops.notifications`). WHY THE EDGE CAME OFF: the only thing standing between `ops.notifications` and `done` is out-of-app gateway CREDENTIALS the owner must obtain — email, push and SMS refuse every message with channel.not_configured until then (`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`, audit §C2). That is a done-bar residual on a supplier, not a start-bar dependency on this row, and §31:809 places no such condition on the alerts core. Keeping the edge repeated the mistake `venue.aggregation` made with the Venue Vault: a residual belonging on a done bar written as a blocking edge. THE RESIDUAL IS NOT DISCARDED — IT MOVES ONTO THIS ROW\'S OWN DONE BAR: this row may not read `done` while an alert can only reach an in-app inbox, and an alert that must reach a device and cannot must refuse by name rather than silently drop (svc-notify already has that vocabulary). STILL NOT DECIDED, and out of scope for the core: the Phase-5 intelligence tiers (whale-flow pings are Scanner-tier, and §31:809 ties tiers to stake); funding and liquidation-proximity alerts, which follow `trade.futures` (itself `ready`) and not this row; mobile watchlist sync, which needs `web.mobile-apps` and has no code. The honesty constraint transfers unchanged from the marks work — an alert compared against a price the platform cannot source refuses rather than firing on a stale or invented number, and `services/svc-trade/src/futures/accepted-mark.ts` is the existing vocabulary for saying so. `plane: F` is stated rather than defaulted — an alert has to know who to tell. RECORDED, NOT SILENTLY RESOLVED: §38:854 gives this capability plane B; this row says F. The disagreement is written down here rather than settled by whoever edits next.',
   }),
@@ -1356,15 +1688,33 @@ export const FEATURES = [
     module: 'bank',
     phase: '5',
     plane: 'B',
+    status: 'wip',
+    owner: 'nitro-bank-roundup',
     dependsOn: ['bank.accounts', 'bank.cards', 'bank.earn', 'trade.convert', 'protocol.smart-accounts'],
-    note: 'Law §31:805, gap-closed 2026-08-08. §31:805 phases it 5 and §38:854 records B/svc-bank/5. Scope: DCA on any asset or basket at any cadence, card round-ups sweeping spare change into a chosen asset or yield vault, threshold sweeps ("anything over X moves to yield"), and explicitly "Both planes; ledger recipes (F) / allowance contracts (P)". THE FIAT HALF IS BUILDABLE TODAY, and that is worth saying plainly even though the row reads blocked: bank.accounts, bank.cards, bank.earn and trade.convert are all `done`, so scheduled buys, round-ups on card spend and sweeps into an earn pool are ordinary ledger-recipe work over shipped rows. It reads blocked because §31:805 specifies BOTH planes and the sovereign half funds a vault "via standing session-key allowance" — that is protocol.smart-accounts, which is `ready` and the chain owner\'s, not `done`. Whoever claims this ships the F half and leaves the allowance half behind its real blocker; a standing allowance simulated custodially is the opposite of what the law asked for. §0.6 APPLIES WITHOUT EXCEPTION: a recurring buy is a ledger recipe and no schedule holds its own balance. NOTHING HERE NEEDS AN OWNER NUMBER — round-up granularity and sweep thresholds are user settings, not platform magnitudes, so D-S-14 does not gate this row.',
+    // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` and fenced ALL bank mountains
+    // including ramps/cards/earn. Owner + wip unchanged — only the claim-check fence matches the real dir.
+    requires: ['services/svc-bank/src/auto-invest'],
+    note:
+      'Law §31:805 F-plane PARTIAL: threshold_sweep → earn via earnDeposit; card_roundup spare change on capture → same-asset earn (kill AUTO_INVEST_ENABLED also stops the hook); ' +
+      'createDca / cross-asset round-up refuse bank.auto_invest_rate_unset (no invent §8). ops.runAutoInvest + AUTO_INVEST_ENABLED. ' +
+      'Still open: ConvertPort→trade.convert wire, P-plane session-key allowance (protocol.smart-accounts / Shehzad). ' +
+      '§0.6: rules hold no balance. Residual law: gap-closed 2026-08-08 note on both planes still stands for Done. ' +
+      'Fence: requires narrowed to src/auto-invest so path-disjoint bank.ramps/cards work is not HUMAN-CLAIMED.',
   }),
   f('bank.business', 'svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31)', {
     module: 'bank',
     phase: '5',
     plane: 'F',
+    status: 'wip',
+    owner: 'nitro-w13-l03',
+    // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` (same over-fence as auto-invest).
+    requires: ['services/svc-bank/src/business'],
     dependsOn: ['bank.accounts', 'bank.cards', 'pay.gateway'],
-    note: 'Law §31:811, gap-closed 2026-08-08 — AND THE LAW WROTE A TEST FOR THIS SERVICE BEFORE THE SERVICE EXISTED. §38:854 adds "payroll run integrity test (multi-recipient atomicity)" to the DoD. There is no `services/svc-bank-biz`, so that DoD clause has had nothing to attach to since the day it was written, and a DoD condition with no capability under it is a condition nobody can fail — which is the whole reason this row now exists. §31:811 phases it 5; §38:854 gives the plane as F with P recipients (payroll to sovereign vaults), so `plane: F` is stated rather than defaulted: the corporate account is custodial, the payee may not be. Scope per §31:811: corporate accounts on the same ledger, multi-user roles with maker/checker and spend thresholds, team expense cards with per-card limits and category locks, invoicing wired to Pay, accounting exports, and CRYPTO PAYROLL — scheduled multi-recipient payouts in a stables/fiat mix, contractor self-onboarding, payslip records. Blocked on pay.gateway (`ready`, not `done`) because §31:811 wires invoicing to Pay; bank.accounts and bank.cards are `done` and are the halves that already exist to build on. THE ATOMICITY RULE, WRITTEN NOW RATHER THAN DISCOVERED IN PRODUCTION: a payroll run that pays 40 of 50 recipients and reports success is exactly the failure §38:854 names. Under §0.6 the run is one ledger movement or it is refused — no per-recipient partial state a retry can double-pay — and the DoD test asserts that, not merely that a payout endpoint returned 200. NOT ON THE BOARD AT ALL, and this row cannot be `done` without it: §31:811 says "KYB per Lane B", and there is no KYB anywhere in the platform. identity.kyc is individual KYC, and a corporate account holder is not a person. Naming that here so whoever claims this does not discover it halfway.',
+    note:
+      'W13 L03 DEEPEN: over-threshold propose places purposed ledger hold (business-approval:<id>); approve settles hold→dest; ' +
+      'reject/cancel releases. Still partial — KYB/payroll/invoicing/expense cards residual or §13. Prior W10 L08: dual-control roles. ' +
+      'Law §31:811, gap-closed 2026-08-08 — payroll atomicity DoD and KYB Lane B still block full Done. Blocked on pay.gateway for invoicing; ' +
+      'no invent payroll without law. Fence: requires narrowed to src/business so path-disjoint bank.ramps work is not HUMAN-CLAIMED.',
   }),
   f('tax.engine', 'svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)', {
     module: 'tax',
@@ -1427,8 +1777,15 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'academy.curriculum'],
-    note: 'Law §8.2:388 ("v2: ... Coach") and §25:708, which gives the AI Coach its OWN matrix row (B / svc-agents / 5) — which is why it is a row here rather than folded into the fleet, and why both the agents capability and the academy capability claim it. Gap-closed 2026-08-08; audit §A1.a #11 and #12. Blocked on academy.curriculum (`ready`, not `done`): a coach grounded in nothing is a chatbot, and the DERIV//DESK library import is the material it is supposed to be grounded in. agents.gateway is `done`. THE LINE THIS AGENT SITS CLOSEST TO: coaching a user on the platform they are trading on is one sentence away from advice, and advice is regulated in most places we operate. agents.support already has the honest shape — KB-grounded and account-state-grounded, escalating with a case file rather than improvising — and this row inherits it. NOT DECIDED, and NOT an agent\'s to decide: whether the Coach may reference the user\'s own positions. §8.2 grounds Support in account state, and the same grounding on a coaching agent turns education into a recommendation about live money. That is an owner ruling, and it changes what gets built rather than only what gets said.',
+    requires: ['services/svc-agents/src/coach/grounded-session.ts', 'services/svc-agents/src/coach/academy-curriculum-source.ts'],
+    note:
+      'DONE 2026-08-15 S2S spine citations (GET ACADEMY_URL/internal/curriculum, fail-closed empty). ' +
+      'Licensed dump residual (licensedLibraryImported stays false). No advice, no positions. ' +
+      'Law §8.2:388 ("v2: ... Coach") and §25:708. Fence: requires narrowed to src/coach so path-disjoint ' +
+      'agents.navigator work is not HUMAN-CLAIMED by this row.',
   }),
   f('agents.growth', 'Growth Agent — acquisition and campaign proposals (§8.2)', {
     module: 'agents',
@@ -1448,8 +1805,11 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'B',
+    status: 'wip',
+    owner: 'ZenYoda3',
     dependsOn: ['ledger.double-entry', 'indexer.readmodels'],
-    note: 'Law §25:723 ("Portfolio suite (users + house) | B | portfolio views over ledger+indexer | 5"), gap-closed 2026-08-08 — no row, and no service claimed it (audit §A1.a #4). Blocked on indexer.readmodels, which is exactly the second half of the substrate the matrix names: the ledger half (ledger.double-entry) is `done`, the on-chain half is not, and a portfolio showing only the custodial side of a two-plane platform is a MISLEADING balance rather than a partial one. THAT IS THE LOAD-BEARING RULE FOR THIS ROW: a holding the platform cannot currently read is ABSENT AND NAMED, never zero. D-S-18 states the same principle for venues — "a venue that is not connected is absent, never an empty book" — and it transfers exactly, because a zero in a portfolio is a claim, and it is the one number a user will act on. §0.6 applies in the direction people forget: a portfolio is a VIEW. It reads the ledger and the indexer and holds no balance of its own. THE HOUSE HALF NEEDS CARE: §25:723 says users AND house, and house positions are the platform\'s own book — the same surface ops.custody covers for wallets, and Class X wherever real balances are exposed. This row also blocks agents.portfolio, which cannot rebalance against a portfolio nobody can read.',
+    requires: ['packages/portfolio-view', 'services/svc-ledger'],
+    note: "**Stage-1 WIP 2026-08-16 (feat/ops-portfolio-ledger-view):** custodial holdings are a READ VIEW of existing `ledger.balances` (`packages/portfolio-view` + svc-ledger `portfolio` / `POST /trpc/portfolio`). Indexer half is named `{ status: 'absent', reason: 'indexer.readmodels_unbuilt' }` — never a zero chain balance. Empty custodial book is empty, not invented volume. No post. Not `done`: indexer.readmodels remains unmet. Law §25:723 (\"Portfolio suite (users + house) | B | portfolio views over ledger+indexer | 5\"), gap-closed 2026-08-08 — no row, and no service claimed it (audit §A1.a #4). Blocked on indexer.readmodels, which is exactly the second half of the substrate the matrix names: the ledger half (ledger.double-entry) is `done`, the on-chain half is not, and a portfolio showing only the custodial side of a two-plane platform is a MISLEADING balance rather than a partial one. THAT IS THE LOAD-BEARING RULE FOR THIS ROW: a holding the platform cannot currently read is ABSENT AND NAMED, never zero. D-S-18 states the same principle for venues — \"a venue that is not connected is absent, never an empty book\" — and it transfers exactly, because a zero in a portfolio is a claim, and it is the one number a user will act on. §0.6 applies in the direction people forget: a portfolio is a VIEW. It reads the ledger and the indexer and holds no balance of its own. THE HOUSE HALF NEEDS CARE: §25:723 says users AND house, and house positions are the platform's own book — the same surface ops.custody covers for wallets, and Class X wherever real balances are exposed. This row also blocks agents.portfolio, which cannot rebalance against a portfolio nobody can read.",
   }),
   f('ops.business-systems', 'CRM, HR and team, Finance with live revenue, Project engine (§25:714)', {
     module: 'core-ops',
@@ -1469,7 +1829,10 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'F',
+    status: 'wip',
+    owner: 'nitro-agent',
     dependsOn: ['ops.support'],
+    requires: ['services/svc-support'],
     note: 'Law §25:720 ("Knowledge base / Workflow automation | — | svc-core-ops | 5"), gap-closed 2026-08-08. ops.support carries "KB" in its TITLE, which is precisely how this stayed invisible: a word in another row\'s title is not a row, and the workflow-automation engine beside it had no board presence at all (audit §A1.a #9). Blocked on ops.support (`ready`, not `done`), which is the right edge in both directions — the standalone KB is an extraction of what the support desk already stores, and agents.support is grounded in it. PLANE: §25 gives "—"; `F` states operator-side and identity-bearing, not a plane ruling. TWO CAPABILITIES IN ONE MATRIX LINE, AND THEY ARE NOT THE SAME SIZE. A public, versioned knowledge base is a content surface and ordinary work. A WORKFLOW AUTOMATION ENGINE — user-defined triggers running actions across modules — is an agent runtime with a different name, and it must not become a second one: agents.gateway already owns the fleet runtime, the guardrail schema and the `agent_actions` audit log, and anything that executes on a user\'s behalf belongs behind those or the Agentic Law has a hole in it. Worth an owner ruling on whether the automation half ships at all, rather than discovering the overlap after it is built.',
   }),
   f('ops.social-promotion', 'Social promotion — share pipeline and tracked attribution, every surface (§25:725)', {
@@ -1533,7 +1896,7 @@ export const FEATURES = [
     status: 'socket',
     owner: 'Nitro',
     dependsOn: ['dex.quote-router'],
-    note: "OWNER-GATED, assigned to Nitro 2026-08-07 rather than left unowned — an unowned decision reads as unclaimed engineering, and this one is neither. It is not the chain owner's to take and no PR closes it. §13 — THE BLOCKER, and it is a DECISION, not code, not a chain. svc-dex can read three kinds of venue and all three are dark for different reasons. (1) `intachain-clob` reads svc-indexer, whose chain feed needs a contract emitting BookLevel/Fill/Position; only contracts/dev/DevVenue.sol does, a dev fixture with no book and no access control, INDEXER_VENUE_ADDRESS is the zero address and the adapter refuses to construct on it — that is socket.clob-contracts, a contracts decision. (2) `internal-book` reads svc-matching, which derives markets from journal replay, so its books stay empty until an order lands or trade.mm-bot seeds depth — an operations problem, not a code one. (3) External venues need one row in DEX_EXTERNAL_VENUES, and the default is `[]` deliberately: a service that had no outbound egress yesterday does not silently acquire it. THAT THIRD PATH NEEDS NO CODE, NO CHAIN AND NO CREDENTIALS — public depth is unauthenticated on any tier-one venue, and a live probe against a throwaway depth server proved the adapter prices correctly the moment a row exists. So the honest blocker is: NOBODY HAS DECIDED WHICH VENUE THIS PLATFORM QUOTES. Checked 2026-08-03 against both accepted ADRs (2026-07-28-vendored-exchange-integration, Accepted 2026-07-31 Option B; 2026-08-02-adopt-vendored-product-keep-our-ledger, Accepted 2026-08-02) and docs/SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md: NONE of them mentions svc-dex, a DEX, a CLOB, INTACORE or a venue at all, and none lists a DEX question among its open owner-gated items. The decision is not taken AND not tracked as pending — which is why this socket exists. Until it is taken, refusing with 503 is the correct product behaviour and must not be softened to make a screen look alive.",
+    note: 'D26-P0-03 SEALED 2026-08-13 (adr/2026-08-13-dex-venue-set-refuse-closed.md): empty default is refuse; agents do not seed DEX_EXTERNAL_VENUES. Socket stays until Nitro publishes a durable set. OWNER-GATED, assigned to Nitro 2026-08-07. THE CODE IS FINISHED. IT CANNOT SERVE A QUOTE. Three adapters, all dark on shipped defaults: intachain-clob (socket.clob-contracts), internal-book (empty until an order lands), external venues DEX_EXTERNAL_VENUES=[] by design. Until Nitro publishes a host set, refusing with 503 dex.quote.no_venue_available is the correct product behaviour.',
   }),
   f('socket.dex-fee-source', 'Authoritative per-venue fee and settlement schedule', {
     module: 'dex',
@@ -1635,6 +1998,19 @@ export const FEATURES = [
       'Stays socket — honest.',
   }),
 
+  f('socket.options-settlement-asset-law', 'Options / forex settlement asset law (D26-P0-05 ADR)', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.options'],
+    requires: ['services/svc-trade/src/spot/options-listing.ts'],
+    note:
+      '§13 — D26-P0-05 freeze sealed 2026-08-15 (docs/adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty, settlement asset unset. ' +
+      'Socket stays until a later owner names a live set + asset; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty and is never parsed. Named 2026-08-12 (D26-P1-T6): ' +
+      'svc-trade listMarket(kind=options) refuses with trade.options_settlement_law_unset while the stamp is empty. Inventing a coin here would ' +
+      'close a ready row with a lie. Forex share is sibling socket.forex-settlement. Closing this socket requires a later owner stamp, not this freeze.',
+  }),
+
   // ── §13 · DELIBERATELY NOT IN v1 ─────────────────────────────────────────
   f('socket.rust-matching', 'Rust port of svc-matching', {
     module: 'matching',
@@ -1673,7 +2049,84 @@ export const FEATURES = [
       'capture, void, 3DS/SCA, disputes) at this socket instead of answering plausibly, and `RailMode` carries `absent` distinctly from ' +
       '`sandbox` so a missing acquirer cannot read as a working one. card-sandbox is dev/test only: PAY_REGISTER_CARD_SANDBOX defaults off ' +
       'in staging/prod, PAY_CHECKOUT_RAILS is crypto-native alone, and PAY_ALLOW_SANDBOX_RAILS=false makes those environments refuse to ' +
-      'boot with a sandbox rail registered. Pointing any rail at real money is Class X.',
+      'boot with a sandbox rail registered. Pointing any rail at real money is Class X. ' +
+      'D26-P1-P6: subscription card path refuses `pay.mandate_rail_absent` into this socket — rail port has createMandate/revokeMandate and ' +
+      'no charge-against-mandate operation; do not invent pull in svc-pay subscriptions.',
+  }),
+  f('socket.pay-precharge-notify', 'Pre-charge subscription notify (SPEC §4 before money lands)', {
+    module: 'pay',
+    phase: '5',
+    status: 'socket',
+    dependsOn: ['pay.subscriptions', 'ops.notifications'],
+    note:
+      '§13 — customer inbox still needs svc-notify/credentials (`socket.notify-*`). Fire path now records a durable attempt on ' +
+      '`subscription_executions.notify_status` before openInvoice (wired → attempted; unwired → skipped_unwired / ' +
+      '`pay.subscription_notify_unwired`). `notified` stays false — an attempt is not a delivered inbox. Closing this socket is ' +
+      'customer-channel delivery, not inventing `notified:true`. Pins: mandate-product.ts · precharge-notify-unpublished.test.ts · ' +
+      'subscriptions-done-bar.test.ts.',
+  }),
+  f('socket.forex-settlement', 'Forex/commodity settlement asset law + fiat settle rails', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['pay.rails'],
+    requires: ['services/svc-trade/src/spot/forex-settlement.ts'],
+    note:
+      '§13 — D26-P1-T7 explicit socket (2026-08-12). D26-P0-05 freeze sealed 2026-08-15 (live set empty; settlement asset unset). trade.forex product-complete only after ' +
+      'fiat settle rails posture. Until then: forex.settlementStatus published=false; production active listMarket / setMarketStatus(active) / ' +
+      'place refuse trade.unsettled_asset_class_listing naming this socket. Paper + non-active listing allowed (model). Do NOT invent settlement ' +
+      'asset (stablecoin-margined vs true fiat omnibus — D8; PAY_CRYPTO_ASSETS must not accidentally map EUR→euro stablecoin). No code closes this.',
+  }),
+  f('socket.otc-maker-routing', 'Maker-routed OTC settle (external maker ledger path)', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.otc'],
+    requires: ['services/svc-trade/src/otc/maker-routing.ts'],
+    note:
+      '§13 — named 2026-08-12 under trade.otc residual. Platform-principal settle is real (marketMakerMakerFill). ' +
+      'Maker counterparty settle refuses via planOtcSettle + otc.deskStatus.makerRouting until owner publishes routing recipe + ledger path. ' +
+      'Do NOT invent maker book / silent second counterparty. Pins: maker-routing.ts · settle.ts · otc-maker-routing-donebar.test.ts.',
+  }),
+  f('socket.otc-mid-feed', 'Live OTC mid observation feed (refreshes asOf)', {
+    module: 'trade',
+    phase: '2',
+    status: 'done',
+    dependsOn: ['trade.otc'],
+    requires: [
+      'services/svc-trade/src/otc/mid-feed.ts',
+      'services/svc-trade/src/otc/venue-mid-source.ts',
+      'services/svc-trade/src/otc/otc-mid-feed-donebar.test.ts',
+    ],
+    note:
+      'DONE 2026-08-14 — venue public book observation (same TRADE_VENUE_MARK_VENUE adapter) refreshes asOf when TRADE_OTC_MID_FROM_VENUE is on. ' +
+      'Default OFF. Empty TRADE_OTC_VENUE_SYMBOLS never invents pairs. Boot TRADE_OTC_MIDS is not mixed in while venue is on. ' +
+      'deskStatus.midFeed.liveObservationFeed tracks install. Unmapped/dark/missing observedAt → null. Pins: venue-mid-source.ts · mid-feed.ts · index.ts.',
+  }),
+  // D26-P1-P5: pay.fraud Done bar ships dispute cases; ledger chargeback posts stay refuse-closed here.
+  f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
+    module: 'pay',
+    phase: '3',
+    status: 'socket',
+    dependsOn: ['pay.fraud'],
+    requires: ['services/svc-pay/src/fraud/chargeback-ledger-socket.ts'],
+    note:
+      '§13 residual (named 2026-08-12 under D26-P1-P5) — packages/ledger-client already has chargebackOpen / Shortfall / Won / ' +
+      'ShortfallRecovered with an explicit Class M owner-sign-off banner. svc-pay records dispute cases and projects payment → disputed, ' +
+      'but must not call those recipes until the four named questions in chargeback.ts are signed. The seam refuses by name ' +
+      '(`refuseChargebackLedgerPost` → pay.chargeback_ledger_unwired) so the Done bar is mechanism + honest socket, not a silent book ' +
+      'entry or an unwired stub string. Closing = owner sign-off then wire dispute open to post; inventing split legs or shortfall ' +
+      'policy is forbidden. Blocklist / scheme list content remains Class X.',
+  }),
+  f('socket.copy-auto-mirror-place', 'Copy auto-mirror place into spot after planMirror', {
+    module: 'trade',
+    phase: '2',
+    status: 'socket',
+    dependsOn: ['trade.copy', 'trade.spot'],
+    requires: ['services/svc-trade/src/copy/auto-mirror-place.ts', 'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts'],
+    note:
+      'CORRECTED 2026-08-15 D26-P4-09 — do not read as unwired on tip. Production `svc-trade` `index.ts` wires `placeFollowerOrder` → follower `placeOrder` (IOC market; #1811). Unwired port still refuses by name (never invent fills). ' +
+      'deskStatus.autoMirrorPlace.published tracks the port. Status stays `socket` (not flipped to done): session-key / protocol residual still open. Closing needs that durable allowance, not a fake order id.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {

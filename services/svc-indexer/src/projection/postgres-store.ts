@@ -86,6 +86,10 @@ export class PostgresProjectionStore implements ProjectionStore {
   async applyBlock(block: ChainBlock): Promise<ApplyOutcome> {
     assertValidBlock(block);
 
+    if (block.chainId !== this.chainId) {
+      throw new Error(`indexer.wrong_chain: block chainId ${block.chainId} does not match store chainId ${this.chainId}`);
+    }
+
     return this.sql.begin(async (tx) => {
       const [prior] = await tx<Array<{ status: string }>>`
         SELECT status FROM blocks WHERE chain_id = ${this.chainId} AND hash = ${block.hash}
@@ -93,6 +97,60 @@ export class PostgresProjectionStore implements ProjectionStore {
       const duplicate = prior?.status === 'canonical';
 
       const blockTime = new Date(block.timestamp * 1000);
+
+      // Parent link is the store's last line of defence (parity with memory-store).
+      // The indexer checks the forward link; a second writer (or a corrupted apply)
+      // must not plant a height that does not hang off the current canonical head.
+      const [headRow] = await tx<BlockRow[]>`
+        SELECT chain_id, hash, parent_hash, height, status, block_time, event_count
+        FROM blocks
+        WHERE chain_id = ${this.chainId} AND status = 'canonical'
+        ORDER BY height DESC
+        LIMIT 1
+      `;
+      const head = headRow ? toStoredBlock(headRow) : null;
+      // Under-tip plant (incl. height 0 while head is higher): poisons the tape.
+      // Idempotent re-apply of a known hash at that height is fine (duplicate path).
+      if (head && block.height < head.height) {
+        const [occupantRow] = await tx<Array<{ hash: string }>>`
+          SELECT hash FROM blocks
+          WHERE chain_id = ${this.chainId} AND height = ${block.height} AND status = 'canonical'
+          LIMIT 1
+        `;
+        if (!occupantRow) {
+          throw new Error(
+            `indexer.height_below_tip: cannot apply height ${block.height} when canonical head is ${head.height} — unwind first if reorg, do not plant under tip`,
+          );
+        }
+        if (occupantRow.hash !== block.hash) {
+          throw new Error(
+            `indexer.competing_canonical_block: height ${block.height} already holds canonical ${occupantRow.hash} — unwind first`,
+          );
+        }
+      }
+      if (block.height > 0) {
+        const [parentRow] = await tx<Array<{ hash: string }>>`
+          SELECT hash FROM blocks
+          WHERE chain_id = ${this.chainId} AND hash = ${block.parentHash}
+          LIMIT 1
+        `;
+        const parentPresent = Boolean(parentRow);
+        if (head && head.height === block.height - 1 && head.hash !== block.parentHash) {
+          throw new Error(
+            `indexer.parent_mismatch: block ${block.height} claims parent ${block.parentHash} but canonical head is ${head.hash}`,
+          );
+        }
+        if (head && block.height > head.height + 1) {
+          throw new Error(
+            `indexer.height_gap: cannot apply height ${block.height} when canonical head is ${head.height} — fill or re-index, do not jump`,
+          );
+        }
+        // Empty store may start at any height (startHeight); only enforce parent
+        // presence when we already hold the parent height.
+        if (head && block.height === head.height + 1 && !parentPresent) {
+          throw new Error(`indexer.parent_missing: block ${block.height} parents ${block.parentHash} which is not in the store`);
+        }
+      }
 
       // A block whose hash we already orphaned comes back canonical here — a
       // chain that reorgs away and then back is ordinary, and a projection that
@@ -129,13 +187,17 @@ export class PostgresProjectionStore implements ProjectionStore {
             // (block hash, log index) is the chain's own identity for a log.
             // DO NOTHING here is THE anti-double-count guarantee for the tape:
             // a re-read of the same block inserts nothing at all.
+            // Addresses lowercased on write so EIP-55 spellings cannot dual-key
+            // against case-sensitive DISTINCT ON / unique indexes.
+            const maker = event.maker.toLowerCase();
+            const taker = event.taker.toLowerCase();
             await tx`
               INSERT INTO fills (chain_id, block_hash, log_index, block_height, market, price, quantity, taker_side, maker, taker, block_time)
               VALUES (
                 ${this.chainId}, ${block.hash}, ${event.logIndex}, ${block.height}, ${event.market},
                 ${formatAmount(positiveAmountOf(event.price, 'fill price'))},
                 ${formatAmount(positiveAmountOf(event.quantity, 'fill quantity'))},
-                ${event.takerSide}, ${event.maker}, ${event.taker}, ${blockTime}
+                ${event.takerSide}, ${maker}, ${taker}, ${blockTime}
               )
               ON CONFLICT (chain_id, block_hash, log_index) DO NOTHING
             `;
@@ -143,10 +205,11 @@ export class PostgresProjectionStore implements ProjectionStore {
           }
 
           case 'position': {
+            const account = event.account.toLowerCase();
             await tx`
               INSERT INTO positions (chain_id, market, account, block_height, block_hash, size, entry_price)
               VALUES (
-                ${this.chainId}, ${event.market}, ${event.account}, ${block.height}, ${block.hash},
+                ${this.chainId}, ${event.market}, ${account}, ${block.height}, ${block.hash},
                 ${formatAmount(amountOf(event.size, 'position size'))},
                 ${formatAmount(nonNegativeAmountOf(event.entryPrice, 'position entry price'))}
               )

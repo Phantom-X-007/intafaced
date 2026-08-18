@@ -185,76 +185,325 @@ export function listWarehouseReplicaSources(): readonly AnalyticsSourceDb[] {
   return WAREHOUSE_REPLICA_PLAN_V0.sources;
 }
 
+/**
+ * How lag was obtained.
+ *   · probed     — measured against a replica (carries lagMeasuredAt)
+ *   · configured — operator-typed env number (never "live" without measurement age)
+ *   · unknown    — no lag signal
+ */
+export type LagSource = 'probed' | 'configured' | 'unknown';
+
+/**
+ * Max age of a lag *measurement* (seconds) before the reading itself is unknown.
+ * A "5s lag" stamped an hour ago is a lie, not live.
+ */
+export const LAG_MEASUREMENT_MAX_AGE_SECONDS = 60;
+
+/** Env keys for Stage-1 replica URLs (one per source DB). */
+export const ANALYTICS_REPLICA_URL_ENV = {
+  ledger: 'ANALYTICS_REPLICA_LEDGER_URL',
+  trade: 'ANALYTICS_REPLICA_TRADE_URL',
+  identity: 'ANALYTICS_REPLICA_IDENTITY_URL',
+} as const;
+
+/**
+ * ETL watermark honesty (ops.analytics / D26-P1-O4 residual).
+ *
+ * Operator-stamped ISO-8601 instant of the last successful warehouse ETL run.
+ * Unset / blank / unparseable → `absent` — never invent "ran and found nothing"
+ * vs "never ran". Presence of a watermark does NOT paint live cubes; lag probe
+ * rules still gate `mayLabelLive`.
+ */
+export const ANALYTICS_ETL_WATERMARK_AT_ENV = 'ANALYTICS_ETL_WATERMARK_AT' as const;
+
+export type EtlWatermarkState = 'absent' | 'present';
+
+export type EtlWatermarkResolution = {
+  readonly state: EtlWatermarkState;
+  /** ISO-8601 when `state === 'present'`; otherwise null. */
+  readonly at: string | null;
+  readonly note: string;
+  /** Env key name only — never a secret. */
+  readonly envKey: typeof ANALYTICS_ETL_WATERMARK_AT_ENV;
+};
+
+const ETL_ABSENT_NOTE = 'ETL watermark: ABSENT — cannot claim "ran and found nothing" vs "never ran". No fake cubes.';
+const ETL_PRESENT_NOTE = 'ETL watermark: PRESENT (operator-stamped). Does not imply live cubes — lag probe still required.';
+
+/**
+ * Live cubes require all four: replica configured, fresh probed lag in the live
+ * band, an ETL watermark, and real facts. Any missing piece → never mayLabelLive.
+ * Watermark alone never paints live; lag probe alone never paints live.
+ */
+export function mayPaintLiveCubes(input: {
+  readonly replicaConfigured: boolean;
+  readonly lagMayLabelLive: boolean;
+  readonly etlWatermark: EtlWatermarkState;
+  readonly hasFacts: boolean;
+}): boolean {
+  return input.replicaConfigured === true && input.lagMayLabelLive === true && input.etlWatermark === 'present' && input.hasFacts === true;
+}
+
+/**
+ * Resolve ETL watermark from env. Fail-closed: junk timestamps are absent.
+ */
+export function resolveEtlWatermark(env: Record<string, string | undefined> = process.env): EtlWatermarkResolution {
+  const raw = env[ANALYTICS_ETL_WATERMARK_AT_ENV];
+  if (raw === undefined || raw.trim() === '') {
+    return { state: 'absent', at: null, note: ETL_ABSENT_NOTE, envKey: ANALYTICS_ETL_WATERMARK_AT_ENV };
+  }
+  const trimmed = raw.trim();
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) {
+    return {
+      state: 'absent',
+      at: null,
+      note: `ETL watermark: ABSENT — ${ANALYTICS_ETL_WATERMARK_AT_ENV} is not a parseable ISO-8601 instant. No fake cubes.`,
+      envKey: ANALYTICS_ETL_WATERMARK_AT_ENV,
+    };
+  }
+  return {
+    state: 'present',
+    at: new Date(ms).toISOString(),
+    note: ETL_PRESENT_NOTE,
+    envKey: ANALYTICS_ETL_WATERMARK_AT_ENV,
+  };
+}
+
+/**
+ * SQL for lag on a hot-standby: seconds since last replayed WAL.
+ * NULL when the connection is not in recovery (not a standby) — treat as unknown.
+ * Callers inject a query runner; contracts never open a DB pool.
+ */
+export const ANALYTICS_REPLICA_LAG_SQL =
+  'SELECT CASE WHEN pg_last_xact_replay_timestamp() IS NULL THEN NULL ' +
+  'ELSE EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp())) END AS lag_seconds';
+
 export type WarehouseSurfaceStatus = 'ok' | 'empty' | 'unavailable' | 'refuse';
 
+export type WarehouseLagMeta = {
+  readonly lagSource: LagSource;
+  readonly lagMeasuredAt: number | null;
+};
+
+export type WarehouseEtlHonesty = {
+  readonly etlWatermark: EtlWatermarkState;
+  readonly etlWatermarkAt: string | null;
+};
+
 export type WarehouseSurfaceResult =
-  | {
+  | ({
       readonly status: 'ok';
       readonly points: readonly CubePoint[];
       readonly freshness: LagFreshness;
       readonly mayLabelLive: boolean;
-    }
-  | {
+      readonly lagSource: LagSource;
+      readonly lagMeasuredAt: number | null;
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'empty';
       readonly reason: 'no_facts';
       readonly freshness: LagFreshness;
       readonly mayLabelLive: false;
-    }
-  | {
+      readonly lagSource: LagSource;
+      readonly lagMeasuredAt: number | null;
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'unavailable';
       readonly reason: 'replica_unconfigured' | 'lag_unknown' | 'lag_stale';
       readonly freshness: LagFreshness;
       readonly mayLabelLive: false;
-    }
-  | {
+      readonly lagSource: LagSource;
+      readonly lagMeasuredAt: number | null;
+    } & WarehouseEtlHonesty)
+  | ({
       readonly status: 'refuse';
       readonly reason: string;
       readonly mayLabelLive: false;
-    };
+      readonly lagSource: LagSource;
+      readonly lagMeasuredAt: number | null;
+    } & WarehouseEtlHonesty);
 
 export type WarehouseSurfaceInput = {
-  /** False until ANALYTICS_REPLICA_* URLs are configured for the process. */
+  /** False until ANALYTICS_REPLICA_* URLs (or dry-run flag) are configured. */
   readonly replicaConfigured: boolean;
   /** Observed lag; null/undefined → unknown (never "live"). */
   readonly lagSeconds: number | null | undefined;
+  /**
+   * Epoch ms when lag was measured. Required for a "live" badge.
+   * Stale measurements (older than LAG_MEASUREMENT_MAX_AGE_SECONDS) → unknown.
+   */
+  readonly lagMeasuredAt?: number | null;
+  /**
+   * How lag was obtained. Omitted + lagSeconds set → treated as `configured`
+   * (operator-typed; cannot claim live without measurement age).
+   */
+  readonly lagSource?: LagSource;
+  /** Clock injection for measurement-age tests. */
+  readonly nowMs?: number;
   /**
    * Fixture / replica fact rows. Empty or omitted → empty surface
    * (never invent trading volume).
    */
   readonly facts?: readonly CubeFactRow[] | null;
+  /**
+   * ETL watermark honesty. Omitted → `absent` (fail-closed). Presence never
+   * paints live cubes by itself; absence forbids `mayLabelLive`.
+   */
+  readonly etlWatermark?: EtlWatermarkState;
+  readonly etlWatermarkAt?: string | null;
 };
+
+export type EffectiveWarehouseLag = {
+  readonly lagSeconds: number | null;
+  readonly lagMeasuredAt: number | null;
+  readonly lagSource: LagSource;
+  readonly freshness: LagFreshness;
+  /** True only with a fresh measurement and lag inside the live band. */
+  readonly mayLabelLive: boolean;
+  readonly measurementAgeSeconds: number | null;
+};
+
+/**
+ * Fail-closed lag resolution.
+ *
+ * Rules:
+ *   1. Measurement older than LAG_MEASUREMENT_MAX_AGE_SECONDS → unknown.
+ *   2. `configured` (env-typed) without lagMeasuredAt → never mayLabelLive;
+ *      freshness caps at `delayed` (never paints "live" from a typed number).
+ *   3. `probed` without lagMeasuredAt → unknown (probe must stamp time).
+ *   4. Fresh measurement + live band → mayLabelLive.
+ */
+export function resolveEffectiveWarehouseLag(input: {
+  readonly lagSeconds: number | null | undefined;
+  readonly lagMeasuredAt?: number | null;
+  readonly lagSource?: LagSource;
+  readonly nowMs?: number;
+}): EffectiveWarehouseLag {
+  const now = input.nowMs ?? Date.now();
+  const hasLagNumber = input.lagSeconds !== null && input.lagSeconds !== undefined;
+  const lagSource: LagSource = input.lagSource ?? (hasLagNumber ? 'configured' : 'unknown');
+  const measuredAt = input.lagMeasuredAt ?? null;
+
+  const ageSeconds = measuredAt !== null && Number.isFinite(measuredAt) ? (now - measuredAt) / 1000 : null;
+
+  // Stale or inverted measurement timestamp → the reading itself is unknown.
+  if (measuredAt !== null) {
+    if (ageSeconds === null || ageSeconds < 0 || ageSeconds > LAG_MEASUREMENT_MAX_AGE_SECONDS) {
+      return {
+        lagSeconds: null,
+        lagMeasuredAt: measuredAt,
+        lagSource,
+        freshness: 'unknown',
+        mayLabelLive: false,
+        measurementAgeSeconds: ageSeconds,
+      };
+    }
+  }
+
+  // Probe without a timestamp is not a probe — fail closed.
+  if (lagSource === 'probed' && measuredAt === null) {
+    return {
+      lagSeconds: null,
+      lagMeasuredAt: null,
+      lagSource: 'probed',
+      freshness: 'unknown',
+      mayLabelLive: false,
+      measurementAgeSeconds: null,
+    };
+  }
+
+  // Operator-typed lag with no measurement age: usable for delayed/stale bands,
+  // but never "live" and never mayLabelLive.
+  if (lagSource === 'configured' && measuredAt === null) {
+    const raw = lagFreshness(input.lagSeconds);
+    const freshness: LagFreshness = raw === 'live' ? 'delayed' : raw;
+    return {
+      lagSeconds: hasLagNumber ? (input.lagSeconds as number) : null,
+      lagMeasuredAt: null,
+      lagSource: 'configured',
+      freshness,
+      mayLabelLive: false,
+      measurementAgeSeconds: null,
+    };
+  }
+
+  if (!hasLagNumber || lagSource === 'unknown') {
+    return {
+      lagSeconds: null,
+      lagMeasuredAt: measuredAt,
+      lagSource: lagSource === 'unknown' ? 'unknown' : lagSource,
+      freshness: 'unknown',
+      mayLabelLive: false,
+      measurementAgeSeconds: ageSeconds,
+    };
+  }
+
+  const freshness = lagFreshness(input.lagSeconds);
+  // Live badge requires a fresh measurement stamp — never a bare number.
+  const live = freshness === 'live' && measuredAt !== null && mayLabelLive(input.lagSeconds);
+  return {
+    lagSeconds: input.lagSeconds as number,
+    lagMeasuredAt: measuredAt,
+    lagSource,
+    freshness,
+    mayLabelLive: live,
+    measurementAgeSeconds: ageSeconds,
+  };
+}
 
 /**
  * Read-only analytics surface.
  *
  * Honest empty warehouse: no facts → `empty`. Unconfigured replica or lag that
  * fails the live SLO → `unavailable`. Never fabricates volume series.
+ * Env-only lag without measurement age never claims live.
+ * Missing ETL watermark never claims live (fail-closed if omitted).
  */
 export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSurfaceResult {
+  const etlWatermark: EtlWatermarkState = input.etlWatermark ?? 'absent';
+  const etlWatermarkAt = etlWatermark === 'present' ? (input.etlWatermarkAt ?? null) : null;
+  const etl: WarehouseEtlHonesty = { etlWatermark, etlWatermarkAt };
+
   if (!input.replicaConfigured) {
     return {
       status: 'unavailable',
       reason: 'replica_unconfigured',
       freshness: 'unknown',
       mayLabelLive: false,
+      lagSource: 'unknown',
+      lagMeasuredAt: null,
+      ...etl,
     };
   }
 
-  const freshness = lagFreshness(input.lagSeconds);
-  if (freshness === 'unknown') {
+  const effective = resolveEffectiveWarehouseLag({
+    lagSeconds: input.lagSeconds,
+    lagMeasuredAt: input.lagMeasuredAt,
+    lagSource: input.lagSource,
+    nowMs: input.nowMs,
+  });
+
+  if (effective.freshness === 'unknown') {
     return {
       status: 'unavailable',
       reason: 'lag_unknown',
       freshness: 'unknown',
       mayLabelLive: false,
+      lagSource: effective.lagSource,
+      lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
-  if (freshness === 'stale') {
+  if (effective.freshness === 'stale') {
     return {
       status: 'unavailable',
       reason: 'lag_stale',
       freshness: 'stale',
       mayLabelLive: false,
+      lagSource: effective.lagSource,
+      lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
 
@@ -263,28 +512,53 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
     return {
       status: 'empty',
       reason: 'no_facts',
-      freshness,
+      freshness: effective.freshness,
       mayLabelLive: false,
+      lagSource: effective.lagSource,
+      lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
     };
   }
 
   const evaluated = evaluateCubeFixtures(facts);
   if (evaluated.status === 'refuse') {
-    return { status: 'refuse', reason: evaluated.reason, mayLabelLive: false };
+    return {
+      status: 'refuse',
+      reason: evaluated.reason,
+      mayLabelLive: false,
+      lagSource: effective.lagSource,
+      lagMeasuredAt: effective.lagMeasuredAt,
+      ...etl,
+    };
   }
 
   for (const p of evaluated.points) {
     const check = assertMetricPoint(p.metricId, p.value);
     if (!check.ok) {
-      return { status: 'refuse', reason: `${p.metricId}: ${check.reason}`, mayLabelLive: false };
+      return {
+        status: 'refuse',
+        reason: `${p.metricId}: ${check.reason}`,
+        mayLabelLive: false,
+        lagSource: effective.lagSource,
+        lagMeasuredAt: effective.lagMeasuredAt,
+        ...etl,
+      };
     }
   }
 
   return {
     status: 'ok',
     points: evaluated.points,
-    freshness,
-    mayLabelLive: mayLabelLive(input.lagSeconds),
+    freshness: effective.freshness,
+    mayLabelLive: mayPaintLiveCubes({
+      replicaConfigured: true,
+      lagMayLabelLive: effective.mayLabelLive,
+      etlWatermark,
+      hasFacts: evaluated.points.length > 0,
+    }),
+    lagSource: effective.lagSource,
+    lagMeasuredAt: effective.lagMeasuredAt,
+    ...etl,
   };
 }
 
@@ -292,14 +566,235 @@ export function queryWarehouseSurface(input: WarehouseSurfaceInput): WarehouseSu
  * Operator-facing one-liner. Never implies live volume when surface is empty.
  */
 export function warehouseSurfaceStatusLine(result: WarehouseSurfaceResult): string {
+  const wm = `wm=${result.etlWatermark}`;
   if (result.status === 'ok') {
-    return `status=ok points=${result.points.length} freshness=${result.freshness} live=${result.mayLabelLive ? '1' : '0'}`;
+    return `status=ok points=${result.points.length} freshness=${result.freshness} live=${result.mayLabelLive ? '1' : '0'} lagSource=${result.lagSource} ${wm}`;
   }
   if (result.status === 'empty') {
-    return `status=empty reason=${result.reason} freshness=${result.freshness} live=0`;
+    return `status=empty reason=${result.reason} freshness=${result.freshness} live=0 lagSource=${result.lagSource} ${wm}`;
   }
   if (result.status === 'unavailable') {
-    return `status=unavailable reason=${result.reason} freshness=${result.freshness} live=0`;
+    return `status=unavailable reason=${result.reason} freshness=${result.freshness} live=0 lagSource=${result.lagSource} ${wm}`;
   }
-  return `status=refuse reason=${result.reason} live=0`;
+  return `status=refuse reason=${result.reason} live=0 lagSource=${result.lagSource} ${wm}`;
+}
+
+// ── Replica env resolution + optional lag probe ─────────────────────────────
+
+export type AnalyticsReplicaUrlEnv = Readonly<Record<string, string | undefined>>;
+
+export type ConfiguredReplicaEndpoint = {
+  readonly source: AnalyticsSourceDb;
+  readonly url: string;
+  readonly username: string;
+};
+
+/**
+ * Collect ANALYTICS_REPLICA_{LEDGER,TRADE,IDENTITY}_URL from an env map.
+ * Empty / whitespace values are ignored.
+ */
+export function listConfiguredAnalyticsReplicaUrls(
+  env: AnalyticsReplicaUrlEnv,
+): readonly { readonly source: AnalyticsSourceDb; readonly url: string }[] {
+  const out: { source: AnalyticsSourceDb; url: string }[] = [];
+  for (const source of WAREHOUSE_REPLICA_SOURCES) {
+    const key = ANALYTICS_REPLICA_URL_ENV[source];
+    const raw = env[key];
+    const url = typeof raw === 'string' ? raw.trim() : '';
+    if (url.length > 0) out.push({ source, url });
+  }
+  return out;
+}
+
+/**
+ * Injected lag probe. Contracts never open sockets — unit tests mock this;
+ * production may run ANALYTICS_REPLICA_LAG_SQL via a read-only pool.
+ */
+export type WarehouseLagProbe = (args: {
+  readonly endpoints: readonly ConfiguredReplicaEndpoint[];
+  readonly nowMs: number;
+}) =>
+  | Promise<{ readonly lagSeconds: number | null; readonly measuredAt: number } | null>
+  | { readonly lagSeconds: number | null; readonly measuredAt: number }
+  | null;
+
+/** Stamp a probe reading (pure helper for SQL result adapters). */
+export function lagFromProbeReading(
+  lagSeconds: number | null | undefined,
+  nowMs: number,
+): { readonly lagSeconds: number | null; readonly measuredAt: number; readonly lagSource: 'probed' } {
+  const lag = lagSeconds === null || lagSeconds === undefined || !Number.isFinite(lagSeconds) || lagSeconds < 0 ? null : lagSeconds;
+  return { lagSeconds: lag, measuredAt: nowMs, lagSource: 'probed' };
+}
+
+/**
+ * Parse a `ANALYTICS_REPLICA_LAG_SQL` result (postgres.js row, array, or object).
+ * NULL / missing / negative / non-finite → null (not a standby, or unreadable).
+ */
+export function parseWarehouseLagSqlResult(result: unknown): number | null {
+  const row = Array.isArray(result) ? result[0] : result;
+  if (row == null || typeof row !== 'object') return null;
+  const rec = row as { readonly lag_seconds?: unknown; readonly lagSeconds?: unknown };
+  const raw = rec.lag_seconds ?? rec.lagSeconds;
+  if (raw == null) return null;
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : typeof raw === 'bigint' ? Number(raw) : NaN;
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
+/** Injected one-shot query. Contracts still do not open a pool. */
+export type WarehouseLagSqlQuery = (args: {
+  readonly url: string;
+  readonly sql: string;
+  readonly source: AnalyticsSourceDb;
+}) => Promise<unknown> | unknown;
+
+/**
+ * Production SQL probe: run ANALYTICS_REPLICA_LAG_SQL on every configured replica.
+ *
+ * · Any source that fails / returns NULL → overall unknown (never live from a subset).
+ * · All connections fail → null (not a measurement).
+ * · All succeed → worst lag (max seconds).
+ * · Writer-looking URL → null (role law; resolveWarehouseReplicaConfig already refuses).
+ */
+export function createSqlWarehouseLagProbe(query: WarehouseLagSqlQuery): WarehouseLagProbe {
+  return async ({ endpoints, nowMs }) => {
+    if (endpoints.length === 0) return null;
+    const lags: number[] = [];
+    let sawQuery = false;
+    let sawUnknown = false;
+    for (const ep of endpoints) {
+      const role = assertAnalyticsReplicaRole(ep.url, 'readonly');
+      if (!role.ok) return null;
+      try {
+        const raw = await query({ url: ep.url, sql: ANALYTICS_REPLICA_LAG_SQL, source: ep.source });
+        sawQuery = true;
+        const lag = parseWarehouseLagSqlResult(raw);
+        if (lag === null) sawUnknown = true;
+        else lags.push(lag);
+      } catch {
+        sawUnknown = true;
+      }
+    }
+    if (!sawQuery) return null;
+    if (sawUnknown || lags.length === 0) {
+      return { lagSeconds: null, measuredAt: nowMs };
+    }
+    return { lagSeconds: Math.max(...lags), measuredAt: nowMs };
+  };
+}
+
+export function parseConfiguredLagSeconds(raw: string | undefined): number | null {
+  if (raw === undefined || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+export type ResolvedWarehouseReplica =
+  | {
+      readonly status: 'ok';
+      readonly replicaConfigured: boolean;
+      readonly endpoints: readonly ConfiguredReplicaEndpoint[];
+      readonly lagSeconds: number | null;
+      readonly lagMeasuredAt: number | null;
+      readonly lagSource: LagSource;
+    }
+  | {
+      readonly status: 'refuse';
+      readonly reason: string;
+      readonly replicaConfigured: false;
+      readonly endpoints: readonly [];
+      readonly lagSeconds: null;
+      readonly lagMeasuredAt: null;
+      readonly lagSource: 'unknown';
+    };
+
+/**
+ * Production path: read replica URLs, assert readonly roles, optional lag probe.
+ *
+ * · URL present + writer-looking username → refuse (assertAnalyticsReplicaRole caller).
+ * · Probe present + endpoints → lagSource `probed` with measurement stamp.
+ * · Probe absent + ANALYTICS_REPLICA_LAG_SECONDS → lagSource `configured` (never live alone).
+ * · Neither → lag unknown; replicaConfigured true only if URL or dry-run flag set.
+ */
+export async function resolveWarehouseReplicaConfig(
+  opts: {
+    readonly env?: AnalyticsReplicaUrlEnv;
+    readonly probe?: WarehouseLagProbe | null;
+    readonly nowMs?: number;
+    /** Override static lag (tests). Default: parse env ANALYTICS_REPLICA_LAG_SECONDS. */
+    readonly configuredLagSeconds?: number | null;
+    /** Override dry-run flag (tests). Default: env ANALYTICS_REPLICA_CONFIGURED === 'true'. */
+    readonly configuredFlag?: boolean;
+  } = {},
+): Promise<ResolvedWarehouseReplica> {
+  const env = opts.env ?? (typeof process !== 'undefined' ? process.env : {});
+  const nowMs = opts.nowMs ?? Date.now();
+  const rawUrls = listConfiguredAnalyticsReplicaUrls(env);
+  const endpoints: ConfiguredReplicaEndpoint[] = [];
+
+  for (const { source, url } of rawUrls) {
+    const check = assertAnalyticsReplicaRole(url, 'readonly');
+    if (!check.ok) {
+      return {
+        status: 'refuse',
+        reason: check.reason,
+        replicaConfigured: false,
+        endpoints: [],
+        lagSeconds: null,
+        lagMeasuredAt: null,
+        lagSource: 'unknown',
+      };
+    }
+    endpoints.push({ source, url, username: check.username });
+  }
+
+  const flag = opts.configuredFlag ?? env.ANALYTICS_REPLICA_CONFIGURED === 'true';
+  const replicaConfigured = endpoints.length > 0 || flag;
+
+  if (opts.probe && endpoints.length > 0) {
+    const measured = await opts.probe({ endpoints, nowMs });
+    if (measured) {
+      return {
+        status: 'ok',
+        replicaConfigured: true,
+        endpoints,
+        lagSeconds: measured.lagSeconds,
+        lagMeasuredAt: measured.measuredAt,
+        lagSource: 'probed',
+      };
+    }
+    // Probe ran but could not measure (e.g. not a standby) → unknown, still configured.
+    return {
+      status: 'ok',
+      replicaConfigured: true,
+      endpoints,
+      lagSeconds: null,
+      lagMeasuredAt: null,
+      lagSource: 'unknown',
+    };
+  }
+
+  const configuredLag =
+    opts.configuredLagSeconds !== undefined ? opts.configuredLagSeconds : parseConfiguredLagSeconds(env.ANALYTICS_REPLICA_LAG_SECONDS);
+
+  if (configuredLag !== null) {
+    return {
+      status: 'ok',
+      replicaConfigured,
+      endpoints,
+      lagSeconds: configuredLag,
+      lagMeasuredAt: null,
+      lagSource: 'configured',
+    };
+  }
+
+  return {
+    status: 'ok',
+    replicaConfigured,
+    endpoints,
+    lagSeconds: null,
+    lagMeasuredAt: null,
+    lagSource: 'unknown',
+  };
 }

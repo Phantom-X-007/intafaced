@@ -3,6 +3,7 @@ import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
 import { TokenError, type TokenService } from './token-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * svc-token API surface.
@@ -74,44 +75,44 @@ export interface TokenRouterOptions {
 
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
-  if (err instanceof InsufficientFundsError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  if (err instanceof InsufficientFundsError || err instanceof LedgerError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
   if (err instanceof TokenError) {
+    const message = userCopy(err.code);
     switch (err.code) {
       case 'token.proposal_not_found':
       case 'token.stake_not_found':
-        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+        return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
       case 'token.proposal_not_allowed':
       case 'token.already_voted':
-        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+        return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
       // 409: the request is well-formed, but the revenue window (or the run id)
       // is already spoken for. This is the refusal that used to arrive as a raw
       // PG 23505 — an opaque INTERNAL_SERVER_ERROR, *after* the burn had already
       // posted irreversibly.
       case 'token.buyback_window_overlap':
       case 'token.buyback_run_conflict':
-        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+        return new TRPCError({ code: 'CONFLICT', message, cause: err });
       case 'token.buyback_window_invalid':
       case 'token.buyback_revenue_invalid':
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
       case 'token.stake_conflict':
+      case 'token.stake_claim_missing':
       case 'token.epoch_closed':
       case 'token.supply_exhausted':
       case 'token.nothing_to_distribute':
+      case 'token.yield_source_underfunded':
       case 'token.params_missing':
       case 'token.params_invalid':
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       default:
-        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+        return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
     }
   }
-  if (err instanceof LedgerError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
-  }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Token operation failed', cause: err });
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('error.generic'), cause: err });
 }
 
 async function guard<T>(fn: () => Promise<T>): Promise<T> {
@@ -124,7 +125,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
 
 function assertSelf(principalUserId: string | undefined, ownerId: string): void {
   if (principalUserId !== ownerId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'This stake belongs to another user' });
+    throw new TRPCError({ code: 'FORBIDDEN', message: userCopy('error.forbidden') });
   }
 }
 
@@ -185,7 +186,11 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         const userId = ctx.principal.userId;
         if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
         const staked = await token.stakeOf(userId);
-        return { staked: staked.toString() };
+        // formatAmount — never Amount.toString(). The scaled bigint string
+        // (e.g. 10000 IFC → "10000000000000000000000") is what #1100 sealed
+        // out of the S2S gate; the tRPC surface must not re-open that 10^18
+        // fail-open for any edge client that parseAmounts the field.
+        return { staked: formatAmount(staked) };
       }),
 
     accessOf: scopedProcedure('token:read', { module: 'token' })
@@ -202,7 +207,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
         const access = await token.accessOf(userId);
         return {
-          staked: access.staked.toString(),
+          staked: formatAmount(access.staked),
           tier: access.tier.name,
           feeDiscountBps: access.feeDiscountBps,
         };
@@ -298,14 +303,15 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     //  - Nothing calls either one. No cron, no bus subscriber, no admin form.
     //    A human with admin:treasury + MFA invokes them by hand or they never
     //    run at all.
-    //  - Every figure they act on is typed by that human. `sources[].amount` is
-    //    validated for decimal SHAPE only — no code reads the houseFees balance
-    //    it claims to sweep (audit T-03) — and `tokensBought` is asserted, not
-    //    executed, because no market-buy exists in this or any other service.
+    //  - `sources[].amount` is still operator-typed (aggregation job is the
+    //    socket), but first-claim amounts are bound to live houseFees — over-
+    //    claim refuses `token.yield_source_underfunded` (#1353). `tokensBought`
+    //    is asserted, not executed — no market-buy exists. `revenueTotal` is
+    //    validated as assetId → unsigned decimals before the buyback claim.
     //
     // The maths and the ledger recipes underneath are real and tested; the
-    // automation and the input validation are the missing halves. §13 sockets
-    // `token.yield` and `token.buyback`.
+    // missing half is automation / real purchase, not pot bind or burn order.
+    // §13 sockets `token.yield` and `token.buyback`.
 
     distributeRevenue: scopedProcedure('admin:treasury')
       .input(

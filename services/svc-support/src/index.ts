@@ -1,16 +1,15 @@
-import Fastify from 'fastify';
-import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import postgres from 'postgres';
 import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
+import { createAccountStateClient } from './account-state.js';
+import { createSupportHttpApp } from './http-app.js';
 import { SupportService } from './support-service.js';
-import { createSupportRouter, type SupportRouter } from './router.js';
+import { PostgresSupportStore } from './store.js';
+import { createSupportRouter } from './router.js';
+import { createTicketKbLoopObserver } from './ticket-kb-loop-observation.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
-// `@opentelemetry/api` alone is a no-op: without this call every span in
-// ./tracing.ts is built, tagged and then discarded before it reaches the
-// collector. Tracers grabbed at module scope resolve lazily through the proxy
-// provider, so registering here still captures them.
 registerProcessHooks(
   startTelemetry({
     serviceName: env.SERVICE_NAME,
@@ -21,27 +20,50 @@ registerProcessHooks(
 );
 
 /**
- * svc-support — tickets + KB + Stage-2 operator queue (ops.support).
- * In-memory store. No ledger. No balances.
+ * svc-support — tickets + KB + operator queue (ops.support).
+ * Durable Postgres store. No ledger. No balances.
  */
-const support = new SupportService();
-const appRouter = createSupportRouter(support);
+const sql = postgres(env.DATABASE_URL, {
+  max: env.DATABASE_POOL_MAX,
+  ssl: env.DATABASE_SSL ? 'require' : false,
+  connection: { search_path: 'support,public', application_name: env.SERVICE_NAME },
+  onnotice: () => undefined,
+});
+
+await sql`SELECT 1 FROM support.tickets LIMIT 1`.catch(() => {
+  throw new Error('support schema is missing — run migrations before starting svc-support');
+});
+
+// Migration 0001 is checked separately from 0000. A desk booting on 0000 alone
+// would serve tickets and silently record no history — the audit trail would be
+// permanently empty and nothing would say why, which is the failure mode this
+// whole slice exists to remove.
+await sql`SELECT 1 FROM support.ticket_events LIMIT 1`.catch(() => {
+  throw new Error('support.ticket_events is missing — apply migration 0001 before starting svc-support');
+});
+
+await sql`SELECT 1 FROM support.kb_articles LIMIT 1`.catch(() => {
+  throw new Error('support.kb_articles is missing — apply migration 0003 before starting svc-support');
+});
+
+const store = new PostgresSupportStore(sql);
+// Account state is READ from svc-identity per request, never cached here.
+const accounts = createAccountStateClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const support = new SupportService(store, accounts);
+const loop = createTicketKbLoopObserver();
+const appRouter = createSupportRouter(support, loop);
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
 });
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
-
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, stage: '2-memory-queue' }));
-
-await app.register(fastifyTRPCPlugin, {
-  prefix: '/trpc',
-  trpcOptions: {
-    router: appRouter,
-    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
-  } satisfies FastifyTRPCPluginOptions<SupportRouter>['trpcOptions'],
+const app = await createSupportHttpApp({
+  router: appRouter,
+  edgeContext,
+  serviceName: env.SERVICE_NAME,
+  identitySecret: env.INTERNAL_SERVICE_SECRET,
+  loop,
+  logLevel: env.LOG_LEVEL,
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
@@ -51,6 +73,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       await app.close();
+      await sql.end({ timeout: 5 });
       process.exit(0);
     })();
   });

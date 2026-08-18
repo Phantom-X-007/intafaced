@@ -1,41 +1,54 @@
 # svc-market
 
-Vendor lifecycle for `market.vendors` (§8.7). **A user applies to be a
-marketplace vendor, an operator vets the application, an approved vendor holds
-listing slots their IFC stake tier pays for, and a stranger with no account can
-see who is listed right now.** Stage 3 completes the mountain — apply → vet →
-slot → list eligibility — with no commerce money settlement.
+Vendor lifecycle for `market.vendors` (§8.7) plus listings and one-time purchase
+for `market.commerce`. **A user applies to be a marketplace vendor, an operator
+vets the application, an approved vendor holds listing slots their IFC stake
+tier pays for, a stranger can see who is listed, a listed vendor publishes a
+priced listing, and a buyer pays via ledger recipes with a disclosed house
+commission.**
 
 Doctrine: §0.6 no balances here; §2 no SQL into another service's schema; the
-stake numbers stay in svc-token.
+stake numbers stay in svc-token; value moves only through `packages/ledger-client`.
 
 ## Stages
 
-| Stage | What it is                                                 | Built |
-| ----- | ---------------------------------------------------------- | ----- |
-| **1** | Apply → vet, with an append-only decision history          | **✓** |
-| **2** | Stake-gated listing slots, from `vendorSlots` under a lock | **✓** |
-| **3** | Public listing eligibility, feeding `market.commerce`      | **✓** |
+| Stage  | What it is                                                 | Built |
+| ------ | ---------------------------------------------------------- | ----- |
+| **1**  | Apply → vet, with an append-only decision history          | **✓** |
+| **2**  | Stake-gated listing slots, from `vendorSlots` under a lock | **✓** |
+| **3**  | Public listing eligibility, feeding `market.commerce`      | **✓** |
+| **C1** | Listing catalog (no money)                                 | **✓** |
+| **C2** | One-time purchase + house commission (Class M)             | **✓** |
+| **C3** | Subscriptions                                              | **✓** |
 
 ## API
 
 tRPC under `/trpc` (edge mounts `/api/market`). Principal via edge HMAC
 (`EDGE_PRINCIPAL_SECRET`).
 
-| Procedure          | Scope          | Behaviour                                         |
-| ------------------ | -------------- | ------------------------------------------------- |
-| `profile`          | **public**     | One listed vendor's public profile                |
-| `listed`           | **public**     | The directory of vendors listed right now         |
-| `applyAsVendor`    | `market:write` | Create the caller's own application (`applied`)   |
-| `mine`             | `market:read`  | The caller's own application, or `null`           |
-| `claimSlot`        | `market:write` | Take a listing slot, if the caller's tier has one |
-| `releaseSlot`      | `market:write` | Give a slot back                                  |
-| `slots`            | `market:read`  | Tier, capacity, held and **usable** slots         |
-| `listApplications` | `market:ops`   | Operator queue — undecided first, oldest first    |
-| `vet`              | `market:ops`   | Record an operator's decision and apply it        |
-| `history`          | `market:ops`   | The decision trail for one application            |
+| Procedure            | Scope          | Behaviour                                                    |
+| -------------------- | -------------- | ------------------------------------------------------------ |
+| `profile`            | **public**     | One listed vendor's public profile                           |
+| `listed`             | **public**     | The directory of vendors listed right now                    |
+| `listings`           | **public**     | Active sellable listings (one-time + perioded subscriptions) |
+| `commerceProgramme`  | **public**     | Whether house commission bps is configured                   |
+| `applyAsVendor`      | `market:write` | Create the caller's own application (`applied`)              |
+| `mine`               | `market:read`  | The caller's own application, or `null`                      |
+| `createListing`      | `market:write` | Create a listing; claims a slot named by the listing id      |
+| `archiveListing`     | `market:write` | Archive own listing; releases its slot                       |
+| `myListings`         | `market:read`  | Caller's listings                                            |
+| `purchase`           | `market:write` | One-time or one-period subscription purchase (`purchaseId`)  |
+| `myPurchases`        | `market:read`  | Caller's purchases                                           |
+| `cancelSubscription` | `market:write` | Stop new access; no ledger reverse                           |
+| `subscriptionAccess` | `market:read`  | Time-bounded grant, or named past-due / cancelled            |
+| `claimSlot`          | `market:write` | Take a listing slot, if the caller's tier has one            |
+| `releaseSlot`        | `market:write` | Give a slot back                                             |
+| `slots`              | `market:read`  | Tier, capacity, held and **usable** slots                    |
+| `listApplications`   | `market:ops`   | Operator queue — undecided first, oldest first               |
+| `vet`                | `market:ops`   | Record an operator's decision and apply it                   |
+| `history`            | `market:ops`   | The decision trail for one application                       |
 
-HTTP: `GET /health`, `GET /ready` (`stage: 3-list-eligibility`).
+HTTP: `GET /health`, `GET /ready` (`stage: commerce-subscriptions`, plus whether commission is configured).
 
 Neither `claimSlot` nor `releaseSlot` takes a `vendorId`: a slot is always spent
 against the caller's own vendor row. A claim that could name its vendor would let
@@ -96,11 +109,11 @@ read that cannot verify entitlement must not report a vendor as listable.
 a capacity and not a balance. That is also the safest position on the bug PR #1100
 fixed — a field that is never read cannot be accidentally re-scaled.
 
-**Depends on PR #1100.** Until that merges, `/internal/stake/:userId` returns
-HTTP 500 to every caller (`AccessTier.minStake` is a bigint and Fastify's
-`JSON.stringify` fallback throws on one), so no slot can be claimed in an
-environment built without it. The fail-closed path is what makes that a refusal
-rather than a free-for-all.
+**Depends on PR #1100 (merged).** That PR fixed
+`/internal/stake/:userId` returning HTTP 500 for every caller (`AccessTier.minStake`
+was a bigint and Fastify's `JSON.stringify` fallback threw). Fail-closed still
+holds: any remaining non-2xx / unusable payload is `market.stake_unavailable`,
+not free capacity.
 
 ### Capacity cannot be oversold
 
@@ -157,8 +170,9 @@ cannot pass by the rows quietly disappearing.
 
 **A partial drop still leaves them listed**, and that is deliberate: somebody at
 Initiate is entitled to a slot. Which of an over-held vendor's listings stays
-live is `market.commerce`'s to decide when it exists; this mountain answers at the
-vendor level.
+live is `market.commerce`'s: **oldest open slot first** (`claimed_at ASC`), count
+= current usable capacity. Excess listings stay in `myListings` but drop from the
+public catalogue and refuse purchase with `market.listing_over_capacity`.
 
 ### What a stranger sees
 
@@ -178,22 +192,25 @@ could enumerate everybody an operator has thrown off the marketplace.
 ### The `market.commerce` seam
 
 `VendorService.listingEligibility({ vendorId })` or `({ userId })` — a method, not
-only a procedure, because the consumer the DoD names is another service's write
-path. Commerce holds a principal, so it asks by `userId`; the public profile asks
-by `vendorId`; one rule serves both. It returns a verdict with a code commerce can
-act on (`market.vendor_not_found`, `market.vendor_not_approved`,
+only a procedure. **Public catalogue and purchase** re-read it so an unstaked or
+suspended vendor cannot present as listed or sell. It returns a verdict with a
+code commerce can act on (`market.vendor_not_found`, `market.vendor_not_approved`,
 `market.slot_required`, `market.stake_required`) rather than throwing, because a
 refusal that arrives as an exception gets flattened into a 500 that tells the
 vendor nothing.
+
+**Create listing does not use `listingEligibility`.** A vendor is listed only
+after they hold a usable slot; the first listing is what claims that slot.
+Create gates on **approved vendor** + successful `claimSlot({ ref: listingId })`.
+Using eligibility on create would refuse every first listing with
+`market.slot_required` (chicken-and-egg). Purchase and catalogue still require a
+live open slot with `ref = listingId`, so a crash between insert and claim cannot
+sell an orphan row.
 
 `market.stake_unavailable` is the exception, and it is **thrown**: "we could not
 check" is not a finding about the vendor and must never be recorded as one. A
 caller handed `stake_required` during an svc-token outage would tell an honest
 vendor to go and stake.
-
-**No commerce surface was built here** — no listing table, no price, no
-commission. Those are `market.commerce`, and its commission rate is an
-owner-gated blank.
 
 ### Fail closed, ordered so an outage costs as little as possible
 
@@ -216,6 +233,7 @@ cached `is_listed`.
 ### The order is deliberately boring
 
 `created_at ASC`, tie-broken by id. Registration order: already in the database,
+and the public `listings` catalogue uses the same registration order (not newest-first) —
 stable under pagination, and it says nothing about how good anybody is. Ranking,
 quality scoring and featured placement are reserved to the owner by
 `docs/DIRECTION-2026-07-31.md` §8, and choosing one here — even "newest first",
@@ -228,25 +246,18 @@ turns one slow lookup into an unbounded number of them.
 
 ## Events
 
-**None published, none consumed — still true at Stage 2.** No accepted bus subject
-exists for vendor lifecycle, and `packages/events` is not a dependency of this
-service. Declaring a subject with no publisher or subscriber is an orphan the
-wiring gate correctly refuses; connecting to NATS to publish nothing would add a
-boot dependency that can fail in exchange for no capability. When a subject is
-accepted, it lands in an events PR first.
-
-That includes the unstake event a slot release would otherwise want. There is no
-subscriber wiring for one, so Stage 2 re-checks stake at claim time and on every
-read instead — see "Release" above.
+**None published, none consumed.** No accepted bus subject exists for vendor
+lifecycle or market purchases yet. Declaring a subject with no publisher is an
+orphan the wiring gate correctly refuses. Unstake has no bus subject either —
+eligibility re-reads svc-token live instead.
 
 ## Ledger
 
-**No ledger recipes, and no `@intafaced/ledger-client` dependency.** This service
-holds no balances and moves no value. `market` is `custodial: true` in the module
-registry because the _marketplace_ eventually takes custody of purchase funds —
-that is `market.commerce`, a different mountain with its own recipes. Nothing in
-`market.vendors` is an amount, a price or a balance, and no column in its schema
-could hold one.
+**Vendors half moves no value.** Slot capacity is not money. **Commerce half**
+depends on `@intafaced/ledger-client` and posts only `recipes.marketPurchase`
+(buyer → vendor net + `houseFees('market')`). Market tables hold no balances —
+price and commission_bps are intent records. The house rate is owner-gated via
+`MARKET_HOUSE_COMMISSION_BPS` (no default).
 
 ## Schema
 
@@ -265,11 +276,10 @@ column** — that is svc-token's, read live. A partial unique index on
 `(vendor_id, ref) WHERE released_at IS NULL` makes "one open slot per listing" a
 database fact for any future path that does not take the lock.
 
-A slot table rather than counting listings, because there are no listings:
-`market.commerce` is a different mountain and Stage 3 is not built, so deriving
-capacity from a table that does not exist would make the oversell guarantee
-untestable — the one thing this stage is for. Stage 3 attaches a listing by
-writing its id into `ref`.
+A slot table rather than counting listings: Stage 2 shipped before commerce, so
+oversell was provable with opaque `ref`s alone. Commerce now writes the listing
+id into `ref` on create. Schema also has `market.listings` and `market.purchases`
+(migration `0002_market_commerce.sql`).
 
 ## Observability
 
@@ -284,3 +294,38 @@ live control is the edge kill-switch, which works because `/api/market` is in
 `UPSTREAMS` (`services/svc-edge/src/routes.ts`). Nothing here reads the flags,
 and the flag registry's own comment says so out loud rather than implying
 otherwise.
+
+## Commerce money path (Class M)
+
+| Recipe           | Reason            | Accounts                                                   |
+| ---------------- | ----------------- | ---------------------------------------------------------- |
+| `marketPurchase` | `market.purchase` | buyer available → vendor available + `houseFees('market')` |
+
+- **Idempotency:** `market.purchase:<purchaseId>` (client-supplied).
+- **Commission:** `MARKET_HOUSE_COMMISSION_BPS` — **no in-code default**. Unset
+  refuses `market.commission_not_configured` on **createListing** and **purchase**
+  before any row, slot claim, or post; **public catalogue returns []** so the
+  shopfront never advertises unsellable stock. Owner published **`0`** in
+  `.env.example` (2026-08-13 explicit free-cut). Compose pass-through only
+  (`${MARKET_HOUSE_COMMISSION_BPS:-}`) and wires `LEDGER_URL` to `svc-ledger`.
+- **Rounding:** floor on commission (customer favour); buyer pays exactly the
+  listed price (vendor net + house = price).
+- **Eligibility:** catalogue and purchase re-check `listingEligibility` plus a
+  live slot `ref = listingId` — never a stored `is_listed`. Create uses
+  approved + `claimSlot` (see seam above). Purchase re-checks again immediately
+  before the ledger post (stake/suspend TOCTOU close).
+- **Crash re-drive:** a pending purchase settles from the **claim snapshot**
+  (price + commission_bps on the row), not a later env rate. Settle updates only
+  while `status = 'pending'`.
+- **Subscriptions:** `createListing(subscription)` requires `periodSeconds` (whole
+  seconds, no default month). Unset period refuses `market.subscription_period_unset`
+  before insert or slot claim. Purchase of a perioded subscription posts the same
+  `marketPurchase` recipe as one-time; access is `settled_at + period`. Cancel
+  (`cancelSubscription`) stops new access and does **not** reverse the ledger.
+  After the window, access refuses `market.subscription_past_due` (or
+  `market.subscription_cancelled` if cancelled). Leftover rows without a period
+  stay off the public catalogue. Automatic recurring `subscribe` still refuses
+  `market.subscription_recurring_not_built` (no second recipe / scheduler).
+
+No balance column exists on `market.listings` or `market.purchases`. Price and
+commission_bps are intent records; the only balances live in svc-ledger.

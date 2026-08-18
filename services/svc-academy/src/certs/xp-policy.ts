@@ -5,11 +5,14 @@
  * `intafaced.identity.xp.earned`. Does NOT post ledger money. Does NOT invent
  * perk tables — perks remain identity rank SoT.
  *
- * Emit path residual: wire to bus when academy owns publish of xpEarned;
- * this module only names the payload so double-award is impossible.
+ * Emit path is live: `xp-publish.ts` + `grantCert` publish the intent. This
+ * module only names the payload so double-award is impossible (same key +
+ * identity ON CONFLICT). Unpriced certs publish nothing rather than invent XP.
  */
 
 import { certIdempotencyKey, type CertGrantRecord } from './progress.js';
+import { listCertCatalog } from './catalog.js';
+import { assertCertGrantPathHonest } from './grant-ledger.js';
 
 export type CertXpPolicy = {
   readonly certId: string;
@@ -19,8 +22,9 @@ export type CertXpPolicy = {
 
 /** v0 policy — product may retune amounts; tests pin strings. */
 export const CERT_XP_V0: readonly CertXpPolicy[] = [
+  // Only certs that exist in CERT_CATALOG. markets-v1 was a ghost — plane advertised
+  // XP for a cert nobody can grant. Add rows here only when catalog + product law land.
   { certId: 'foundations-v1', xpDelta: '100' },
-  { certId: 'markets-v1', xpDelta: '150' },
 ] as const;
 
 export function xpPolicyFor(certId: string): CertXpPolicy | null {
@@ -58,6 +62,7 @@ export type XpEarnedIntent = {
  * cannot double-award even if publish is retried.
  */
 export function xpIntentFromGrant(grant: CertGrantRecord): XpEarnedIntent | null {
+  assertCertGrantPathHonest(grant);
   const policy = xpPolicyFor(grant.certId);
   if (!policy) return null;
   if (!/^\d+$/.test(policy.xpDelta) || policy.xpDelta === '0') return null;
@@ -197,4 +202,19 @@ export function xpPolicyCountInRange(min: number, max: number): boolean {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return false;
   const n = xpPolicyCount();
   return n >= min && n <= max;
+}
+
+/**
+ * Every XP policy certId must be grantable — present in CERT_CATALOG.
+ * A policy without a definition is a ghost that certXpPlane would advertise.
+ */
+export function xpPolicyCatalogConsistent(): boolean {
+  const catalogIds = new Set(listCertCatalog().map((c) => c.id));
+  return CERT_XP_V0.every((p) => catalogIds.has(p.certId));
+}
+
+/** L3 — policy cert ids missing from the grantable catalog. Empty when honest. */
+export function xpPolicyGhostCertIds(): readonly string[] {
+  const catalogIds = new Set(listCertCatalog().map((c) => c.id));
+  return CERT_XP_V0.filter((p) => !catalogIds.has(p.certId)).map((p) => p.certId);
 }

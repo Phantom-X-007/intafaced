@@ -13,6 +13,10 @@
     "./identity": {
       "types": "./dist/identity.d.ts",
       "default": "./dist/identity.js"
+    },
+    "./academy-cert-perks": {
+      "types": "./dist/academy-cert-perks.d.ts",
+      "default": "./dist/academy-cert-perks.js"
     }
   },
   "scripts": {

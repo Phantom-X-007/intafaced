@@ -7,12 +7,18 @@ import { env } from './env.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { DEFAULT_ROUTING_TABLE, parseRoutingTable, type RoutingTable } from './gateway/routing.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { UsageMeter } from './metering/meter.js';
 import { MockModelProvider } from './providers/mock.js';
 import { UpstreamModelProvider } from './providers/upstream.js';
 import type { ModelProvider } from './providers/provider.js';
 import { AgentRuntime } from './runtime.js';
+import { registerProductAgentsAtBoot } from './fleet/boot-register.js';
+import { fleetMatrixBoardCard } from './fleet/matrix.js';
 import { agentsReadiness } from './readiness.js';
+import { createAcademyCurriculumSource } from './coach/academy-curriculum-source.js';
+import { createHttpSupportDeskPort } from './support-agent/desk-port.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -33,9 +39,11 @@ registerProcessHooks(
 /**
  * svc-agents — the agent fleet runtime and model gateway (§8.2).
  *
- * This process is the runtime. It ships with NO agents: Navigator, Support,
- * Market Scanner and Merchant are separate work that registers guardrails
- * against this service and drives `openSession → think → act → settle`.
+ * Stage-1 product factories (navigator / support / scanner / merchant /
+ * copy-intel) are registered into `agent_definitions` at boot so metered
+ * `runSession` paths can open without a separate deploy-side seed. `coach` and
+ * `growth` are refuse/proposal doors (not factories). Portfolio / launch remain
+ * doctrine names only until product law.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -101,6 +109,8 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const meter = new UsageMeter(sql, ledger, {
   assetId: env.AGENTS_FEE_ASSET_ID,
   windowMinutes: env.AGENTS_USAGE_WINDOW_MINUTES,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
 });
 
 const runtime = new AgentRuntime(sql, gateway, meter, bus, {
@@ -108,7 +118,29 @@ const runtime = new AgentRuntime(sql, gateway, meter, bus, {
   meteringEnabled: env.AGENTS_METERING_ENABLED,
 });
 
-const appRouter = createAgentsRouter({ runtime, gateway, meter, feeAssetId: env.AGENTS_FEE_ASSET_ID });
+// Upsert product guardrails before the listener opens — openSession binds from
+// agent_definitions; a process with zero rows makes every runSession 404.
+const bootAgents = await registerProductAgentsAtBoot(runtime);
+
+const academyUrl = env.ACADEMY_URL;
+const loadCoachGrounding = academyUrl ? () => createAcademyCurriculumSource(academyUrl, env.INTERNAL_SERVICE_SECRET).load() : undefined;
+
+const supportDesk = env.SUPPORT_URL
+  ? createHttpSupportDeskPort({
+      supportUrl: env.SUPPORT_URL,
+      ...(env.IDENTITY_URL ? { identityUrl: env.IDENTITY_URL } : {}),
+      internalSecret: env.INTERNAL_SERVICE_SECRET,
+    })
+  : undefined;
+
+const appRouter = createAgentsRouter({
+  runtime,
+  gateway,
+  meter,
+  feeAssetId: env.AGENTS_FEE_ASSET_ID,
+  ...(loadCoachGrounding ? { loadCoachGrounding } : {}),
+  ...(supportDesk ? { supportDesk, edgePrincipalSecret: env.EDGE_PRINCIPAL_SECRET } : {}),
+});
 
 // Built before the listener opens: a service that cannot authenticate the edge
 // must fail to start, not start and serve every request as anonymous.
@@ -125,7 +157,10 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  * work when the engine is down. What an operator must not misread:
  *   · `providerMode: mock` is not production inference
  *   · `usefulPath.available` is whether a completion can leave the process now
- *   · product agents are not registered by this service — residual says so
+ *   · productAgentsRegistered is the boot upsert count (not live inference)
+ *   · fleet is the Stage-1 matrix card (mounts + boot flags), not live inference
+ *   · meteringEnabled=false is D26-P1-A6 audit-only (`meteringMode: audit_only`,
+ *     meteringAllowsFeeCharge=false) — process-ready is not a silent feeCharge
  * Never a vendor name (Doctrine §0.7).
  */
 app.get('/ready', async () =>
@@ -134,6 +169,8 @@ app.get('/ready', async () =>
     providers,
     table: gateway.routingTable,
     meteringEnabled: env.AGENTS_METERING_ENABLED,
+    productAgentsRegistered: bootAgents.count,
+    fleet: fleetMatrixBoardCard(),
   }),
 );
 
@@ -151,7 +188,13 @@ await app.register(fastifyTRPCPlugin, {
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
-  { port: env.HTTP_PORT, provider: env.AGENTS_PROVIDER, metering: env.AGENTS_METERING_ENABLED, tasks: gateway.routingTable.routes.length },
+  {
+    port: env.HTTP_PORT,
+    provider: env.AGENTS_PROVIDER,
+    metering: env.AGENTS_METERING_ENABLED,
+    tasks: gateway.routingTable.routes.length,
+    productAgents: bootAgents.registered,
+  },
   'svc-agents ready',
 );
 

@@ -157,9 +157,10 @@
  * margin parameter beyond §1's stated defaults" to the owner (`DIRECTION` §8
  * item 8). A minimum book depth is one of those, and so is the fraction of a
  * position that must rest behind its mark. What is implemented here is the
- * MECHANISM and its refusal; both numbers are conservative placeholders, each
- * lives in exactly one named constant, and both are per-deployment configuration
- * on one policy object rather than something scattered through the call sites.
+ * MECHANISM and its refusal; both numbers are the D26-P0-14 sealed pair
+ * (`docs/adr/2026-08-13-mark-dust-floor.md`) until a listed book has observed
+ * depth. They live in exactly one named constant each, on one policy object,
+ * rather than scattered through the call sites.
  */
 import { parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { EngineDepth } from '../spot/matching-client.js';
@@ -177,8 +178,9 @@ import type { MarkPolicy } from './mark-policy.js';
  *
  * Conservative and deliberately unambitious: it is chosen to be far above dust
  * and far below anything a real market maker rests, so it catches the attack
- * without opining on what a liquid book looks like. It is a placeholder for an
- * owner ruling, not a considered risk limit.
+ * without opining on what a liquid book looks like. D26-P0-14 sealed this
+ * shipped `'100'` until a real market lists with observed depth — do not
+ * retune it in a PR.
  *
  * KNOWN LIMITATION, stated rather than papered over: the threshold is one number
  * in QUOTE units and is applied to every futures market. That is right while
@@ -193,8 +195,8 @@ import type { MarkPolicy } from './mark-policy.js';
  * constant, this type and `bestLevelIsQuotable` rather than growing a second
  * floor with a second name. The unit is the same — quote-asset units of the
  * pair being read — and so is the reasoning, so a second default here would be
- * a second unruled number, not a second decision. When the owner rules, they
- * rule once; if they rule DIFFERENTLY for external venues, the mechanism is
+ * a second floor, not a second decision. P0-14 sealed one pair for both paths.
+ * If the owner later rules DIFFERENTLY for external venues, the mechanism is
  * already there (`createConfiguredVenueMarkSource`'s `depthPolicy`) and no call
  * site has to move.
  */
@@ -220,12 +222,13 @@ export const DEFAULT_MIN_BEST_LEVEL_NOTIONAL = '100';
  * in the other direction either. The gap between those two is where the number
  * is allowed to be wrong without either stranding traders or paying attackers.
  *
- * IT IS A PLACEHOLDER FOR AN OWNER RULING, NOT A CONSIDERED RISK LIMIT
- * (`DIRECTION` §8 item 8). What the mechanism guarantees is that the ruling has
- * exactly one place to land, and that the number cannot be zero by accident: a
- * policy that omits it gets this one, and a policy whose value is unreadable
- * gets this one too. Zero is reachable only by an operator writing zero, which
- * is a decision and reads like one.
+ * IT IS THE D26-P0-14 SEALED FLOOR, NOT AN OPEN PLACEHOLDER
+ * (`docs/adr/2026-08-13-mark-dust-floor.md`). The dual-floor shape is the
+ * ruling; retune only from observed listed depth. What the mechanism still
+ * guarantees is that the pair has exactly one place to land, and that the
+ * number cannot be zero by accident: a policy that omits it gets this one, and
+ * a policy whose value is unreadable gets this one too. Zero is reachable only
+ * by an operator writing zero, which is a decision and reads like one.
  *
  * KNOWN LIMITATION, stated rather than papered over: like the absolute floor, it
  * is one number applied to every futures market. A market whose honest top of

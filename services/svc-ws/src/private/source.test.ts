@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
-import { MemoryEventBus, validatePayload } from '@intafaced/events';
+import { describe, expect, it, vi } from 'vitest';
+import { MemoryEventBus, validatePayload, type EventBus, type Subscription } from '@intafaced/events';
 import { PrivateOrderHub } from './hub.js';
-import { subscribePrivateFills, subscribePrivateOrders, subscribePrivatePositions } from './source.js';
+import { subscribePrivateFills, subscribePrivateOrders, subscribePrivatePositions, tryAttachPrivate } from './source.js';
 
 function sink() {
   const sent: string[] = [];
@@ -223,5 +223,54 @@ describe('private bus → hub sources', () => {
     expect(JSON.parse(alice.sent[1]!).channel).toBe('positions');
     expect(bob.sent).toHaveLength(1);
     expect(JSON.parse(bob.sent[0]!).channel).toBe('fills');
+  });
+
+  it('tryAttachPrivate lands all three channels so a later order fans out', async () => {
+    const bus = new MemoryEventBus('svc-ws-test');
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach(USER_A, alice);
+
+    const attached = await tryAttachPrivate({ bus, hub, durable: 'ws-test-try-ok' });
+    expect(attached).not.toBeNull();
+
+    await bus.publish(
+      'orderUpdated',
+      validatePayload('orderUpdated', {
+        orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        userId: USER_A,
+        marketId: 'btc-usdt',
+        status: 'open',
+        side: 'buy',
+        type: 'limit',
+        qty: '1',
+        filledQty: '0',
+        price: '100',
+        clientOrderId: null,
+        ts: '2026-07-31T00:00:00.000Z',
+      }),
+    );
+    expect(alice.sent).toHaveLength(1);
+    expect(JSON.parse(alice.sent[0]!).channel).toBe('orders');
+  });
+
+  it('tryAttachPrivate tears a partial half and returns null when a later subscribe fails', async () => {
+    let calls = 0;
+    const unsub = vi.fn(async () => undefined);
+    const bus = {
+      subscribe: async () => {
+        calls += 1;
+        if (calls === 2) throw new Error('fills durable taken');
+        return { unsubscribe: unsub } satisfies Subscription;
+      },
+    } as unknown as EventBus;
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const warn = vi.fn();
+
+    const attached = await tryAttachPrivate({ bus, hub, durable: 'ws-test-try-partial', log: { info: vi.fn(), warn } });
+    expect(attached).toBeNull();
+    expect(calls).toBe(2);
+    expect(unsub).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
   });
 });

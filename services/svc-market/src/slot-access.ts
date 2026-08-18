@@ -45,11 +45,29 @@ export type SlotDecision =
   | { allowed: true }
   | {
       allowed: false;
-      code: 'market.vendor_not_approved' | 'market.stake_required' | 'market.slots_exhausted';
+      code: 'market.vendor_not_approved' | 'market.stake_required' | 'market.slots_exhausted' | 'market.stake_unavailable';
       reason: string;
     };
 
+/** Owner slot capacity is a non-negative integer from svc-token — never a guessed count. */
+function ownerSlotCapacitySet(capacity: unknown): capacity is number {
+  return typeof capacity === 'number' && Number.isInteger(capacity) && capacity >= 0;
+}
+
 export function decideVendorSlot(entitlement: SlotEntitlement, request: SlotRequest): SlotDecision {
+  /**
+   * Unset / unusable owner magnitudes refuse closed. Coercing `undefined` would
+   * skip the zero-capacity stake gate (`undefined <= 0` is false) and then
+   * admit (`0 >= undefined` is false) — inventing a free slot.
+   */
+  if (!ownerSlotCapacitySet(entitlement.capacity)) {
+    return {
+      allowed: false,
+      code: 'market.stake_unavailable',
+      reason: 'Owner stake/slot magnitudes are unset — refuse rather than invent a slot count.',
+    };
+  }
+
   /**
    * Approval first, because it is the fact that outranks the other two. A
    * suspended vendor with a Sovereign stake still may not list, and telling them
@@ -112,5 +130,6 @@ export function decideVendorSlot(entitlement: SlotEntitlement, request: SlotRequ
  */
 export function usableSlots(entitlement: SlotEntitlement, request: SlotRequest): number {
   if (entitlement.status !== 'approved') return 0;
+  if (!ownerSlotCapacitySet(entitlement.capacity)) return 0;
   return Math.max(0, Math.min(request.open, entitlement.capacity));
 }

@@ -68,6 +68,14 @@ Idempotency-Key: <your business key>
 
 Use a business id (order id, invoice id), never `randomUUID()` per attempt.
 
+**Refunds go one step further.** If you omit `refundId` (or send empty /
+whitespace), your `Idempotency-Key` becomes that refund's business identity for
+that payment — so the same key can never refund twice, even if your retry arrives
+after the idempotency record above has expired. Send a **new** key (or an
+explicit `refundId`) when you genuinely mean a second partial refund on the same
+payment. The same explicit `refundId` with a **different amount** is a conflict
+(`pay.refund_id_conflict`), not a silent success of the old amount.
+
 ---
 
 ## 5 · Payment lifecycle (happy path)
@@ -76,15 +84,15 @@ Use a business id (order id, invoice id), never `randomUUID()` per attempt.
 create → authorize → capture → (optional) refund
 ```
 
-| Step      | Method                         | Scope        | Notes                                                               |
-| --------- | ------------------------------ | ------------ | ------------------------------------------------------------------- |
-| Create    | `POST /payments`               | `pay:write`  | Body: `merchantId`, `amount`, `assetId`, `method`, `railAdapter`, … |
-| Authorize | `POST /payments/:id/authorize` | `pay:write`  | No value moves yet                                                  |
-| Capture   | `POST /payments/:id/capture`   | `pay:write`  | Optional partial amount                                             |
-| Refund    | `POST /payments/:id/refund`    | `pay:refund` | Own scope on purpose                                                |
-| Get       | `GET /payments/:id`            | `pay:read`   |                                                                     |
-| List      | `GET /payments?merchantId=`    | `pay:read`   |                                                                     |
-| Balances  | `GET /balances?merchantId=`    | `pay:read`   | Clearing + settled                                                  |
+| Step      | Method                         | Scope        | Notes                                                                                        |
+| --------- | ------------------------------ | ------------ | -------------------------------------------------------------------------------------------- |
+| Create    | `POST /payments`               | `pay:write`  | Body: `merchantId`, `amount`, `assetId`, `method`, `railAdapter`, …                          |
+| Authorize | `POST /payments/:id/authorize` | `pay:write`  | No value moves yet                                                                           |
+| Capture   | `POST /payments/:id/capture`   | `pay:write`  | Full authorized amount only — partial capture is refused (`pay.partial_capture_unsupported`) |
+| Refund    | `POST /payments/:id/refund`    | `pay:refund` | Own scope on purpose                                                                         |
+| Get       | `GET /payments/:id`            | `pay:read`   |                                                                                              |
+| List      | `GET /payments?merchantId=`    | `pay:read`   |                                                                                              |
+| Balances  | `GET /balances?merchantId=`    | `pay:read`   | Clearing + settled                                                                           |
 
 ### Sandbox vs live rail (step 4)
 
@@ -124,6 +132,10 @@ Response includes a **signing secret** (once).
 - Body is **state** (`payment.captured` with current payment shape), not an instruction to charge again.
 - Permanent failures: endpoint is disabled; inspect with  
   `GET /api/pay/v1/webhook-deliveries?merchantId=&status=failed`.
+- After you fix the receiver:  
+  `POST /api/pay/v1/webhook-endpoints/:id/enable?merchantId=` (resets the failure counter).
+
+Every payment response includes `mode: "sandbox" | "live"` from the rail posture — tell them apart without guessing.
 
 Webhooks never move value by themselves.
 
@@ -148,7 +160,7 @@ Examples you will see early:
 | `pay.idempotency_required` | Mutating POST without `Idempotency-Key`                           |
 | `pay.idempotency_conflict` | Same key, different body                                          |
 | `pay.sandbox_rail_refused` | Live key named a sandbox rail (or sandbox value movement refused) |
-| `pay.validation_failed`    | Bad body (e.g. amount not a decimal string)                       |
+| `pay.invalid_amount`       | Bad amount (not a decimal string, or non-positive)                |
 
 ---
 

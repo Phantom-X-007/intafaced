@@ -4,8 +4,9 @@ The payments core (§6.1). Merchants, the payment lifecycle, settlement into the
 
 **What it is NOT:** it does not hold balances (the ledger does), it does not choose between rails (smart routing is its own feature), and it does not know the name of a single payment processor. Every rail — the two here and every one that comes later — is an implementation of one interface, and `src/rails/conformance.ts` is what keeps that true.
 
-**In this PR:** gateway mode, the adapter interface, `crypto-native`, `card-sandbox`, and the conformance kit.
-**Not in this PR** (each a separate tracker feature): PSP mode, smart routing, fraud scoring, the checkout builder, subscriptions, commerce plugins, disputes. PayFac **sub-merchant trees** landed separately — [see below](#payfac--sub-merchant-trees-61).
+**On tip today:** gateway mode, rails (`crypto-native`, `card-sandbox`, absent `bank-payout`), public REST + webhooks, PayFac **sub-merchant trees + area fence on money paths** ([below](#payfac--sub-merchant-trees-61)), subscriptions as **crypto invoice-and-watch product-complete** (mandate � due � invoice � capture settle � cancel immediate; card path refuses `pay.mandate_rail_absent`; bounded dunning � `arrears` stall; pre-charge notify sealed as �13 `socket.pay-precharge-notify` with Ready `subscription.productReady`  never invents `notified:true`), destination shape refuse (EVM + IBAN) before hold, G3 settlement release, G4 suspend-safe payout hold, **PSP digital KYB** (`kyb.submit` / `kyb.decide` under `admin:compliance` + append-only KYB/pricing histories; no third-party money lib  D-S-10).
+**On tip for pay.fraud (D26-P1-P5):** scoring + review queue + dispute **case** mechanism (`fraud.*` tRPC); chargeback ledger recipes refuse-closed via named �13 `socket.pay-chargeback-ledger-wire` (recipes exist in ledger-client  not posted from svc-pay). List content Class X.
+**Still separate / residual:** smart routing (no invent costs/approval rates), commerce plugins, live card charge-against-mandate + real pre-charge delivery (`socket.psp-partners` / `socket.pay-precharge-notify`), IFSC bank dest without partner table, `pay:*` grant path (Nitro DIRECTION �8.4), `kybStatus` money-gate (pay.gateway  sequenced after approver), card acquiring (`socket.psp-partners`), durable disputes table + owner sign-off to close the chargeback ledger socket.
 
 ---
 
@@ -35,24 +36,25 @@ Where value actually is, at each stage:
 
 Internal tRPC (`src/router.ts`). Money is a **decimal string** in both directions; the input schema rejects a JSON number.
 
-| Procedure           | Scope        | Input                                                               | Output                                           |
-| ------------------- | ------------ | ------------------------------------------------------------------- | ------------------------------------------------ |
-| `health`            | public       | –                                                                   | `{ ok, service, rails }`                         |
-| `railHealth`        | `pay:read`   | –                                                                   | `RailHealth[]`                                   |
-| `merchant.create`   | `pay:write`  | `{ userId, mode, pricing: { feeBps } }`                             | `{ id, userId, mode, feeBps }`                   |
-| `merchant.profile`  | `pay:write`  | `{ merchantId, checkoutConfig, feeRouting, domains }`               | `{ id, merchantId }`                             |
-| `merchant.balances` | `pay:read`   | `{ merchantId, assetId }`                                           | `{ clearing, available }` — read from the ledger |
-| `payment.create`    | `pay:write`  | `{ merchantId, amount, assetId, method, railAdapter, instrument? }` | `Payment`                                        |
-| `payment.authorize` | `pay:write`  | `{ paymentId }`                                                     | `Payment`                                        |
-| `payment.capture`   | `pay:write`  | `{ paymentId, amount? }`                                            | `Payment`                                        |
-| `payment.refund`    | `pay:refund` | `{ paymentId, amount, refundId? }`                                  | `Payment`                                        |
-| `payment.get`       | `pay:read`   | `{ paymentId }`                                                     | `Payment`                                        |
-| `payment.history`   | `pay:read`   | `{ paymentId }`                                                     | `PaymentEvent[]`                                 |
-| `settlement.run`    | `pay:write`  | `{ merchantId, window, assetId }`                                   | `Settlement`                                     |
-| `settlement.payout` | `pay:payout` | `{ settlementId, railId, destination }`                             | `Settlement`                                     |
-| `settlement.get`    | `pay:read`   | `{ settlementId }`                                                  | `Settlement`                                     |
+| Procedure            | Scope        | Input                                                                         | Output                                           |
+| -------------------- | ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------ |
+| `health`             | public       | –                                                                             | `{ ok, service, rails }`                         |
+| `railHealth`         | `pay:read`   | –                                                                             | `RailHealth[]`                                   |
+| `merchant.create`    | `pay:write`  | `{ mode, pricing: { feeBps } }` — `userId` from the principal, never the body | `{ id, userId, mode, feeBps }`                   |
+| `merchant.profile`   | `pay:write`  | `{ merchantId, checkoutConfig, feeRouting, domains }`                         | `{ id, merchantId }`                             |
+| `merchant.balances`  | `pay:read`   | `{ merchantId, assetId }`                                                     | `{ clearing, available }` — read from the ledger |
+| `payment.create`     | `pay:write`  | `{ merchantId, amount, assetId, method, railAdapter, instrument? }`           | `Payment`                                        |
+| `payment.authorize`  | `pay:write`  | `{ paymentId }`                                                               | `Payment`                                        |
+| `payment.capture`    | `pay:write`  | `{ paymentId, amount? }`                                                      | `Payment`                                        |
+| `payment.refund`     | `pay:refund` | `{ paymentId, amount, refundId? }`                                            | `Payment`                                        |
+| `payment.get`        | `pay:read`   | `{ paymentId }`                                                               | `Payment`                                        |
+| `payment.history`    | `pay:read`   | `{ paymentId }`                                                               | `PaymentEvent[]`                                 |
+| `settlement.run`     | `pay:write`  | `{ merchantId, window, assetId }`                                             | `Settlement`                                     |
+| `settlement.payout`  | `pay:payout` | `{ settlementId, railId, destination }` — dest must match rail (EVM/IBAN)     | `Settlement`                                     |
+| `settlement.get`     | `pay:read`   | `{ settlementId }`                                                            | `Settlement`                                     |
+| `settlement.release` | `pay:write`  | `{ settlementId, reason }` — unstick pending freeze; **no ledger move**       | `Settlement`                                     |
 
-Refunds and payouts carry their own scopes. Taking a payment and sending money back out are not the same authority.
+Refunds and payouts carry their own scopes. Taking a payment and sending money back out are not the same authority. Bad destinations refuse as `pay.invalid_destination_ref` / `pay.destination_kind_mismatch` **before** any hold.
 
 **HTTP:** `POST /webhooks/:railId` (public, signature-authenticated), `GET /health`, `GET /ready`, hosted checkout `GET /checkout?token=` / `GET /pay/link/:token` (public HTML; browser via edge `/api/pay/checkout?token=`).
 
@@ -94,6 +96,7 @@ A user who can call the thing that credits their own balance does not need to de
 | --------------- | --------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `card-sandbox`  | `sandbox`, permanently      | a `Map` in `card-sandbox.ts`                                                                  | `po_<settlementId>` — a string this file invented             |
 | `crypto-native` | derived from the chain port | `EvmLiveChain` when configured; else `MemoryChain` (dev) / `UnconfiguredChain` (staging/prod) | a real `txHash` on a live chain; `0xout…` / refusal otherwise |
+| `bank-payout`   | `absent`, permanently       | nothing — sponsor bank / licence is a commercial socket                                       | never succeeds; `pay.rail_not_live` before any hold           |
 
 **Live crypto-native** is wired when all of these are set:
 
@@ -120,7 +123,7 @@ That builds `EvmLiveChain` (`src/rails/evm-chain.ts`, `posture: 'live'`), starts
 
 - A **production** (or public testnet) RPC, not only compose anvil — anvil proves the wiring; it is not a chain decision (`docs/decisions/local-dev-chain.md`).
 - Custody of the hot wallet / deposit mnemonic outside the repo (HSM or signing service preferred; the in-process key is the v1 minimum).
-- Live boot wires `PostgresBroadcastStore` (`pay.crypto_broadcasts`, migration 0004) for multi-replica claim→put. `MemoryBroadcastStore` remains the unit/local default when no store is passed to `defaultChainFor`. Residual: a crash **after** `eth_sendRawTransaction` but **before** `put` can still double-send on retry (hash never journalled); put-before-receipt closes the wait-for-inclusion window only.
+- Live boot wires `PostgresBroadcastStore` (`pay.crypto_broadcasts`, migration 0004 + `signed_raw` in 0012) for multi-replica claim→putSigned→sendRaw→put. `MemoryBroadcastStore` remains the unit/local default when no store is passed to `defaultChainFor`. DIRECTION §3.1 / D26-P1-P9: the signed raw is journalled **before** `eth_sendRawTransaction`; crash-resume rebroadcasts the identical payload (`claim` → `resume`) instead of signing a second spend. Put-before-receipt still closes the wait-for-inclusion window.
 - **Card acquiring** — sponsor bank / BIN. Still a §13 commercial socket; `card-sandbox` is never it.
 
 `/ready` and `railHealth` both carry `mode` now, because `healthy: true` was accurate and useless — a sandbox is reliably healthy at simulating.
@@ -164,9 +167,9 @@ So this ships the **mechanism**, and `PERMISSION_AREAS` in `src/submerchants.ts`
 #### What is deliberately NOT here
 
 - **Settling a sub-merchant out of our account.** `settlingParty` accepts `'self'` only and refuses everything else by name (`pay.submerchant_settling_party_unsupported`). That is acquiring — a sponsor bank and an acquiring BIN, which `docs/SPEC-PAY-VERTICALS-2026-08-02.md` §8 puts on the owner's list and `socket.psp-partners` tracks. The column exists so adopting a partner later is configuration rather than a rewrite; it is not a switch this service can throw.
-- **Enforcing the areas on the gateway surface.** Nine of the eleven areas name procedures in `router.ts` that still authorize with `assertMerchantOwnership` — a single `merchant.userId === principal.userId` comparison, unchanged by this PR. That comparison is correct for a merchant acting on itself and is exactly the extension point `router.ts` already names: _"When PayFac trees or merchant teams land, this function is the one place a membership check replaces the equality."_ Wiring it is a second PR against `payment-service.ts` and the money paths, and doing it in the same change as the tree would put a rewrite of every merchant authorization into a schema PR.
+- **Areas on the gateway surface (W5).** Money and merchant procedures in `router.ts` / `public-rest.ts` call `assertMerchantAreaAccess` with the matching area (`payment`, `payment.refund`, `settlement`, `settlement.payout`, `payment.link`, `webhook`, `kyb`, …). Self still holds every area. A parent without a grant is `pay.submerchant_permission_denied`; a stranger stays `pay.merchant_forbidden`. Pins: `merchant-ownership.test.ts`.
 - **Split payments and sub-merchant fee routing.** Ledger recipes, Class M, and the owner's sign-off (`docs/PAY-LANE-HARVEST-AND-BUILD-PLAN-2026-08-08.md` §6.4).
-- **Sub-merchant KYB workflow and document capture.** `pay.psp`.
+- **Sub-merchant KYB workflow and document capture.** Top-level merchant digital KYB (submit + operator decide + history) ships under `kyb.*` / mig 0013; document-capture vendor integration and sub-merchant KYB remain residual. Card acquiring stays `socket.psp-partners`.
 
 ### Error codes
 
@@ -174,7 +177,9 @@ So this ships the **mechanism**, and `PERMISSION_AREAS` in `src/submerchants.ts`
 
 Also: `pay.submerchant_grant_lateral`, `pay.submerchant_grant_self`, `pay.submerchant_grant_redundant`, `pay.submerchant_revoke_redundant`, `pay.submerchant_area_unknown`, `pay.submerchant_too_deep`, `pay.submerchant_reason_required`, `pay.submerchant_pricing_invalid`, `pay.submerchant_settling_party_unsupported`, `pay.submerchant_not_onboarded`.
 
-`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.settlement_in_flight`, `pay.settlement_desynced`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`, `pay.rail_not_live`.
+`pay.rail_declined`, `pay.rail_failed`, `pay.capture_exceeds_authorized`, `pay.partial_capture_unsupported`, `pay.refund_exceeds_captured`, `pay.refund_in_flight`, `pay.settlement_in_flight`, `pay.settlement_desynced`, `pay.rail_amount_mismatch`, `pay.invalid_transition`, `pay.nothing_to_settle`, `pay.fee_exceeds_gross`, `pay.merchant_pricing_invalid`, `pay.webhook_invalid`, `pay.webhook_unmatched`, `pay.rail_unknown`, `pay.rail_not_creditable`, `pay.deposit_conflict`, `pay.withdrawal_not_found`, `pay.withdrawal_conflict`, `pay.rail_not_live`, `pay.destination_kind_mismatch`.
+
+`pay.destination_kind_mismatch` is refused **before** any ledger hold: a crypto payout cannot name a bank IBAN (and the reverse). Retrying with the same wrong kind never moves money.
 
 `pay.settlement_in_flight` and `pay.settlement_desynced` map to **CONFLICT**. The first refuses a pre-settlement refund while a pending window has frozen the payment (clearing must not be drained under a frozen gross). The second refuses to post a settlement whose live captured−refunded totals no longer match the freeze — better a stuck pending row than a ledger entry funded by someone else's capture.
 
@@ -232,19 +237,27 @@ Every value movement is a recipe. This service holds no balance of any kind (Doc
 
 The three `withdraw*` recipes serve **both** outbound paths — a merchant payout keyed on `<settlementId>:<attempt>`, and a user withdrawal keyed on `<withdrawalId>:<attempt>`. Same shape, same reasoning, one set of recipes.
 
+For D26-P1-P4, `settlement-ledger.ts` makes that constraint executable: both
+`bank` and `crypto` settlement destinations produce only the existing
+`withdrawHold` → `withdrawSettle` / `withdrawReverse` requests. Rail adapters
+own the destination difference; svc-pay does not assemble entries or invent a
+bank-specific book. `bank-payout` remains `absent` and refuses before the hold
+until the Class X sponsor-bank socket exists, while configured `crypto-native`
+can complete the same recipe plan against a real chain.
+
 **`merchantClearing(merchantId, assetId)`** is a new account constructor: a `module`-owned account per merchant, per asset. It answers "a payment was captured but not settled — whose funds are those?" as a balance rather than an investigation. `sum(merchantClearing(m))` is exactly what svc-pay owes merchant `m` right now, readable from the ledger without touching a single svc-pay table — which is what makes reconciliation between the two meaningful.
 
 ### Idempotency keys — all business keys, never random
 
-| Key                                                       | Governs                                                                  |
-| --------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `payment.capture:<paymentId>`                             | A payment is captured once, however many times the webhook is delivered. |
-| `payment.refund:<refundId>`                               | One refund, one posting. `<refundId>` defaults to `<paymentId>:<n>`.     |
-| `payment.refund.reverse:<refundId>`                       | The reversal of that refund.                                             |
-| `settlement:<merchantId>:<window>:<assetId>`              | A window settles once, per asset.                                        |
-| `withdraw.hold\|settle\|reverse:<settlementId>:<attempt>` | One merchant payout attempt.                                             |
-| `withdraw.hold\|settle\|reverse:<withdrawalId>:<attempt>` | One user withdrawal attempt.                                             |
-| `deposit:<rail>:<railRef>`                                | A rail reference is credited once, however often it is redelivered.      |
+| Key                                                       | Governs                                                                                                                                    |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `payment.capture:<paymentId>`                             | A payment is captured once, however many times the webhook is delivered.                                                                   |
+| `payment.refund:<paymentId>:<refundId>`                   | One refund, one posting. Namespaced by payment so merchant ids do not collide across payments. `<refundId>` defaults to `<paymentId>:<n>`. |
+| `payment.refund.reverse:<paymentId>:<refundId>`           | The reversal of that refund.                                                                                                               |
+| `settlement:<merchantId>:<window>:<assetId>`              | A window settles once, per asset.                                                                                                          |
+| `withdraw.hold\|settle\|reverse:<settlementId>:<attempt>` | One merchant payout attempt.                                                                                                               |
+| `withdraw.hold\|settle\|reverse:<withdrawalId>:<attempt>` | One user withdrawal attempt.                                                                                                               |
+| `deposit:<rail>:<railRef>`                                | A rail reference is credited once, however often it is redelivered.                                                                        |
 
 > **Why the asset is in the settlement key.** §6.1's settlement is keyed on merchant and window. A merchant taking USDT and BTC on the same day has two settlements, and without the asset in the key the second would find the first's transaction, return it, and strand a whole currency's takings in clearing. The `settlements` table carries an `asset_id` column for the same reason: `gross`/`fees`/`net` are meaningless without one.
 
@@ -255,7 +268,7 @@ The direction of the money decides the order:
 - **Inbound (capture):** the rail moves first, the ledger books second. We only book value we know has arrived. A crash in between leaves money captured at the rail and not yet in the book — the classic. Nothing is lost: both halves are keyed on the payment id, so re-running finishes the job.
 - **Outbound (refund, payout):** the ledger moves first, the rail second. The merchant must be shown to have the money before any of it goes somewhere irreversible; a post-settlement refund they cannot cover fails at the ledger, before the rail is asked. A crash in between leaves the book correct and only the status projection behind. If the rail then refuses, the ledger posting is reversed in the same call.
 
-A refund whose id is already in flight is **refused**, not re-sent: `RailAdapter.refund(ref, amount)` carries no refund id (§6.1), so the rail cannot dedupe it for us, and "send it again and hope" is how one refund becomes two.
+A refund whose id is already in flight is **refused**, not re-sent. Live crypto receives a durable `refundId` (M226-02) so a process restart reuses the same outbound broadcast key; card-sandbox ignores it. The **service** still refuses re-entry while `refund.posted` has no terminal `refunded` / `refund.reversed` — "send it again and hope" is how one refund becomes two on a rail that cannot dedupe.
 
 ### User money: whose funds are stranded, per branch
 

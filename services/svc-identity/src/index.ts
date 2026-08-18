@@ -5,13 +5,20 @@ import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
+import { parseTotpSecretKey } from './auth/totp-crypto.js';
 import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
 import { FreezeService } from './affiliates/freeze-service.js';
 import { SqlAccrualStore } from './affiliates/accrual-store.js';
 import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
+import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
+import { bootKycVault } from './kyc/boot-vault.js';
+import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
+import { WaitlistService } from './waitlist/waitlist-service.js';
+import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
+import { registerAffiliateProducerPayout } from './affiliates/producer-payout.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -39,7 +46,13 @@ registerProcessHooks(
  * rank_state. Until this consumer existed they reached nothing — see ./events.ts.
  */
 
-if (env.APP_ENV === 'prod') await assertArgon2Available();
+if (env.APP_ENV === 'prod') {
+  await assertArgon2Available();
+  // TOTP secrets must not sit base32-plaintext in prod; refuse boot without key.
+  if (!parseTotpSecretKey(env.IDENTITY_TOTP_SECRET_KEY)) {
+    throw new Error('IDENTITY_TOTP_SECRET_KEY is required in prod (32-byte AES key as base64 or 64-char hex)');
+  }
+}
 
 const sql = postgres(env.DATABASE_URL, {
   max: env.DATABASE_POOL_MAX,
@@ -94,6 +107,10 @@ const auth = new AuthService(
       .map((s) => s.trim())
       .filter(Boolean),
   },
+  env.IDENTITY_TOTP_SECRET_KEY,
+  undefined,
+  undefined,
+  env.IDENTITY_MAX_SUB_ACCOUNTS,
 );
 
 const referral = new ReferralService(sql);
@@ -102,6 +119,28 @@ const accruals = new SqlAccrualStore(sql);
 /** Fail boot on malformed owner rates — never invent commission percentages. */
 const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON);
 
+/**
+ * The affiliate payout rail. Compose sets LEDGER_URL to in-network svc-ledger.
+ * Absent (non-compose / omitted) → payout refuses `affiliate.payout.ledger_unwired`
+ * rather than reporting a payment it could not make. No localhost default.
+ */
+const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET) : undefined;
+
+/**
+ * §10 KYC encrypted vault. Unset IDENTITY_KYC_DOC_KEY → vault null (procedures
+ * named-refuse `[kyc_doc.unwired]`). Set but invalid → boot throws `kyc_doc.key_missing`
+ * (not a silent missing store). Never invent a key. Live vendor webhook remains Class X.
+ */
+const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
+
+const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
+  drop: env.LAUNCH_DROP,
+  env: {
+    INTAFACED_FLAG_WAITLIST_ENABLED: env.INTAFACED_FLAG_WAITLIST_ENABLED,
+    INTAFACED_FLAG_REFERRAL_QUEUE: env.INTAFACED_FLAG_REFERRAL_QUEUE,
+  },
+});
+
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
   webauthnEnabled: env.WEBAUTHN_ENABLED,
@@ -109,6 +148,9 @@ export const appRouter = createIdentityRouter(auth, rank, {
   freeze,
   accruals,
   accrualTierLaw,
+  ledger,
+  ...(vault ?? {}),
+  waitlist,
 });
 export type AppRouter = typeof appRouter;
 
@@ -122,6 +164,28 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() }));
+
+/**
+ * D26-P1-O2: fee producers (svc-trade / svc-pay) accrue under owner rate law.
+ * Same durable store as affiliates.accrue — no ledger post. Body-bound S2S.
+ */
+registerAffiliateProducerAccrue(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  referral,
+  freeze,
+  accruals,
+  accrualTierLaw,
+});
+
+registerAffiliateProducerPayout(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  freeze,
+  accruals,
+  accrualTierLaw,
+  ledger,
+  // Accrue already installed retainRawBody on this instance.
+  installRawBody: false,
+});
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).
@@ -151,11 +215,41 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
   return row;
 });
 
+/**
+ * Service-to-service account state (svc-support's grounding read).
+ *
+ * Three fields — status and KYC tier — published as `accountStateSchema`. It is
+ * an S2S route and not a `scopedProcedure` for the same reason `/internal/rank`
+ * is: the caller is svc-support acting for an operator who is NOT the account
+ * holder, and the tRPC surface would need a user principal svc-support does not
+ * hold. Making identity accept "trust me, this is a support person" instead
+ * would be granting an authority no scope defines.
+ *
+ * Unknown user → 404, which the caller renders as "not read". It must never
+ * render as an account in good standing.
+ */
+app.get<{ Params: { userId: string } }>('/internal/account/:userId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const state = await auth.accountState(req.params.userId);
+  if (!state) {
+    return reply.code(404).send({ error: 'account not found', code: 'identity.account_not_found' });
+  }
+  return state;
+});
+
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
   trpcOptions: {
     router: appRouter,
-    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    createContext: ({ req }) => {
+      const base = edgeContext({ headers: req.headers, id: req.id });
+      // Origin for apiKeys.exchange domain_whitelist (edge-forwarded; not body).
+      const raw = req.headers.origin ?? req.headers['x-forwarded-origin'];
+      const clientOrigin = Array.isArray(raw) ? raw[0] : raw;
+      return clientOrigin ? { ...base, clientOrigin } : base;
+    },
   } satisfies FastifyTRPCPluginOptions<IdentityRouter>['trpcOptions'],
 });
 

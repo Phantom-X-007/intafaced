@@ -126,12 +126,46 @@ describe('navigator Stage-2 data tools', () => {
       plane: 'live',
       tierLaw: publishedAll,
       userTier: 'free',
+      requesterUserId: 'u1',
       session: { sessionId: 's1', userId: 'u1', status: 'open' },
     });
     expect(r).toEqual({
       status: 'ok',
       tool: 'identity.session.read',
       session: { sessionId: 's1', userId: 'u1', status: 'open' },
+    });
+  });
+
+  it('refuses an identity session owned by another user', () => {
+    const r = invokeNavigatorDataTool({
+      tool: 'identity.session.read',
+      plane: 'live',
+      tierLaw: publishedAll,
+      userTier: 'free',
+      requesterUserId: 'requester',
+      session: { sessionId: 's1', userId: 'another-user', status: 'open' },
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      tool: 'identity.session.read',
+      reason: 'subject_mismatch',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+  });
+
+  it('undeclared read tools refuse — caller fixtures cannot invent an allowlist grant', () => {
+    const r = invokeNavigatorDataTool({
+      tool: 'trade.fills.history',
+      plane: 'live',
+      tierLaw: { published: true, matrix: { free: ['trade.fills.history', ...NAVIGATOR_DATA_TOOLS] } },
+      userTier: 'free',
+      requesterUserId: 'u1',
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      tool: 'trade.fills.history',
+      reason: 'tool_not_declared',
+      userMessageKey: 'agents.navigator.unavailable',
     });
   });
 

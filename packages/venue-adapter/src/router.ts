@@ -1,4 +1,5 @@
 import { type Amount, ZERO, add, sub, min, mul, div, mulBps, formatAmount } from '@intafaced/ledger-client';
+import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCostTerms } from './cost-model.js';
 import { isRoutable, type LiquiditySource, type QuoteRequest, type VenueQuote } from './source.js';
 
 /**
@@ -7,6 +8,12 @@ import { isRoutable, type LiquiditySource, type QuoteRequest, type VenueQuote } 
  * Ranks every routable venue on the price a user actually gets, splits the
  * order across venues when one cannot fill it alone, and refuses to route into
  * prices that have drifted too far from the best available.
+ *
+ * §28:770 cost model (D26-P1-X3): when `costTermsByVenue` is supplied, ranking
+ * uses all-in cost (fee + expected impact + transfer) and unscored latency /
+ * missing terms refuse with weight zero. Without that map, behaviour is the
+ * fee-from-quote path (backward compatible). The only structural house thumb
+ * remains `internalPreferenceBps` (default 5).
  */
 
 export interface RouteLeg {
@@ -16,11 +23,18 @@ export interface RouteLeg {
   readonly price: Amount;
   /**
    * Price including that venue's taker fee — what the user actually pays or
-   * receives per unit. This is the TRUE figure, never the internally-preferred
-   * ranking figure. What we show is what happens.
+   * receives per unit at the venue. This is the TRUE venue figure, never the
+   * internally-preferred ranking figure. What we show is what happens.
+   *
+   * When the §28 complete cost model scored the leg, `allInEffectivePrice` is
+   * the ranking figure (fee + impact + transfer); otherwise it equals this.
    */
   readonly effectivePrice: Amount;
+  /** All-in ranking price when cost terms were supplied; else same as effectivePrice. */
+  readonly allInEffectivePrice: Amount;
   readonly feeBps: number;
+  readonly expectedImpactBps?: number;
+  readonly transferCostBps?: number;
   readonly kind: string;
 }
 
@@ -46,7 +60,17 @@ export interface RoutePlan {
 
 export interface RejectedVenue {
   readonly venueId: string;
-  readonly reason: 'unhealthy' | 'stale' | 'no_quote' | 'slippage' | 'venue_cap' | 'filled';
+  readonly reason:
+    | 'unhealthy'
+    | 'stale'
+    | 'no_quote'
+    | 'slippage'
+    | 'venue_cap'
+    | 'filled'
+    /** §28 complete model: fee / impact / transfer term missing or invalid. */
+    | 'incomplete_cost'
+    /** §28 / D-S-18: unscored latency → routing weight zero. */
+    | 'zero_weight';
   readonly detail?: string;
 }
 
@@ -63,6 +87,9 @@ export interface RouterOptions {
    * It is a tiebreak, not a cover for bad pricing: at the default 5 bps an
    * internal book that is genuinely worse loses, and the user is shown the real
    * effective price either way.
+   *
+   * D26-P2-06 / D-S-06: a request above the accepted 5 bps is **capped**, never
+   * applied. Raising the thumb is an owner product change, not a caller option.
    */
   readonly internalPreferenceBps?: number;
   /** Legs worse than the best effective price by more than this are dropped. */
@@ -71,14 +98,39 @@ export interface RouterOptions {
   readonly maxVenues?: number;
   readonly maxStalenessMs?: number;
   readonly now?: Date;
+  /**
+   * §28 complete cost model (D26-P1-X3). When set, every candidate venue must
+   * appear with complete terms (fee, expected impact, transfer, graded latency)
+   * or it is refused. Ranking uses all-in bps; missing/unscored → weight 0.
+   * Omit for the legacy fee-from-quote path.
+   */
+  readonly costTermsByVenue?: Readonly<Record<string, SorCostTerms>>;
 }
 
+/** Accepted D-S-06 / TERMINAL §4 house thumb. Default and hard ceiling. */
+export const ACCEPTED_INTERNAL_PREFERENCE_BPS = 5 as const;
+
 const DEFAULTS = {
-  internalPreferenceBps: 5,
+  internalPreferenceBps: ACCEPTED_INTERNAL_PREFERENCE_BPS,
   maxSlippageBps: 50,
   maxVenues: 4,
   maxStalenessMs: 5_000,
 } as const;
+
+/**
+ * Resolve the ranking-time internal preference.
+ *
+ * Callers may lower it (including to 0). They cannot raise it: anything above
+ * the accepted 5 bps is clamped. Non-finite values fall back to the default
+ * rather than opening an unbounded thumb.
+ */
+export function capInternalPreferenceBps(requested?: number): number {
+  if (requested === undefined || !Number.isFinite(requested)) {
+    return ACCEPTED_INTERNAL_PREFERENCE_BPS;
+  }
+  if (requested <= 0) return 0;
+  return Math.min(ACCEPTED_INTERNAL_PREFERENCE_BPS, requested);
+}
 
 /**
  * What the user really pays (buy) or receives (sell) per unit.
@@ -107,8 +159,13 @@ function preferenceAdjusted(effective: Amount, side: 'buy' | 'sell', isInternal:
 interface Candidate {
   readonly source: LiquiditySource;
   readonly quote: VenueQuote;
+  /** Venue fee-only effective (user-facing). */
   readonly effective: Amount;
+  /** All-in effective used for ranking (fee[+impact+transfer] when complete). */
+  readonly allIn: Amount;
   readonly ranking: Amount;
+  readonly expectedImpactBps?: number;
+  readonly transferCostBps?: number;
 }
 
 /**
@@ -121,7 +178,12 @@ export async function planRoute(
   sources: readonly LiquiditySource[],
   options: RouterOptions = {},
 ): Promise<RoutePlan> {
-  const opts = { ...DEFAULTS, ...options };
+  const opts = {
+    ...DEFAULTS,
+    ...options,
+    // Cap after spread so a caller cannot silently raise the house thumb.
+    internalPreferenceBps: capInternalPreferenceBps(options.internalPreferenceBps),
+  };
   const now = opts.now ?? new Date();
   const rejected: RejectedVenue[] = [];
   const candidates: Candidate[] = [];
@@ -170,10 +232,46 @@ export async function planRoute(
       continue;
     }
 
-    const effective = effectivePrice(quote.price, quote.feeBps, request.side);
-    const adjusted = preferenceAdjusted(effective, request.side, source.kind === 'internal', opts.internalPreferenceBps);
+    const feeOnly = effectivePrice(quote.price, quote.feeBps, request.side);
+    let allIn = feeOnly;
+    let expectedImpactBps: number | undefined;
+    let transferCostBps: number | undefined;
 
-    candidates.push({ source, quote, effective, ranking: rankKey(adjusted, request.side) });
+    if (opts.costTermsByVenue) {
+      const terms = opts.costTermsByVenue[source.id];
+      if (!terms) {
+        rejected.push({
+          venueId: source.id,
+          reason: 'incomplete_cost',
+          detail: 'no SorCostTerms for venue — refuse rather than assume zeros',
+        });
+        continue;
+      }
+      const scored = scoreSorCost(terms);
+      if (!scored.ok) {
+        rejected.push({
+          venueId: source.id,
+          reason: costRefuseToRouteReason(scored.reason),
+          detail: `${scored.reason}: ${scored.detail}`,
+        });
+        continue;
+      }
+      allIn = allInEffectivePrice(quote.price, scored.totalCostBps, request.side);
+      expectedImpactBps = scored.expectedImpactBps;
+      transferCostBps = scored.transferCostBps;
+    }
+
+    const adjusted = preferenceAdjusted(allIn, request.side, source.kind === 'internal', opts.internalPreferenceBps);
+
+    candidates.push({
+      source,
+      quote,
+      effective: feeOnly,
+      allIn,
+      ranking: rankKey(adjusted, request.side),
+      expectedImpactBps,
+      transferCostBps,
+    });
   }
 
   if (candidates.length === 0) {
@@ -191,7 +289,9 @@ export async function planRoute(
   });
 
   const best = candidates[0]!;
-  const bestEffective = best.effective;
+  // Slippage guard uses all-in when the complete model is on, else fee-only —
+  // same figure the ranker used, never the preference-adjusted one.
+  const bestAllIn = best.allIn;
 
   // ── Fill ──────────────────────────────────────────────────────────────────
   const legs: RouteLeg[] = [];
@@ -207,10 +307,10 @@ export async function planRoute(
       continue;
     }
 
-    // Slippage is measured against the best TRUE effective price, not the
+    // Slippage is measured against the best TRUE all-in price, not the
     // preference-adjusted one — otherwise the thumb on the scale would widen
     // the tolerance for everyone else too.
-    const drift = priceDriftBps(bestEffective, candidate.effective, request.side);
+    const drift = priceDriftBps(bestAllIn, candidate.allIn, request.side);
     if (drift > opts.maxSlippageBps) {
       rejected.push({ venueId: candidate.source.id, reason: 'slippage', detail: `${drift} bps worse than best` });
       continue;
@@ -222,15 +322,26 @@ export async function planRoute(
       amount: take,
       price: candidate.quote.price,
       effectivePrice: candidate.effective,
+      allInEffectivePrice: candidate.allIn,
       feeBps: candidate.quote.feeBps,
+      expectedImpactBps: candidate.expectedImpactBps,
+      transferCostBps: candidate.transferCostBps,
       kind: candidate.source.kind,
     });
     remaining = sub(remaining, take);
   }
 
   const routedAmount = sub(request.amount, remaining);
+  // Report fee-only total to the user (venue cash); ranking already used all-in.
   const totalCost = legs.reduce((sum, leg) => add(sum, mul(leg.effectivePrice, leg.amount)), ZERO);
   const averageEffectivePrice = routedAmount > 0n ? div(totalCost, routedAmount) : ZERO;
+  const averageAllIn =
+    routedAmount > 0n
+      ? div(
+          legs.reduce((sum, leg) => add(sum, mul(leg.allInEffectivePrice, leg.amount)), ZERO),
+          routedAmount,
+        )
+      : ZERO;
 
   return {
     symbol: request.symbol,
@@ -241,7 +352,7 @@ export async function planRoute(
     legs,
     averageEffectivePrice,
     totalCost,
-    improvementBps: improvementVersusSingleVenue(legs, bestEffective, averageEffectivePrice, request.side),
+    improvementBps: improvementVersusSingleVenue(legs, bestAllIn, averageAllIn, request.side),
     rejected,
   };
 }

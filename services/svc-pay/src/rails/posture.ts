@@ -319,8 +319,23 @@ export function assertRailMayMoveValue(adapter: RailAdapter, capability: RailCap
 
 // ── THE PUBLIC INBOUND GATE ──────────────────────────────────────────────────
 
+export type PublicCheckoutUnavailableReason = 'sandbox' | 'absent' | 'none-configured' | 'unhealthy' | 'psp-unset';
+
+export type PublicCheckoutUnavailableCode =
+  | 'pay.checkout_rail_not_live'
+  /** Operator checkout rail list is empty — not "the rail is down". */
+  | 'pay.checkout_rails_unset'
+  /** Card/PSP acquiring is not configured (`socket.psp-partners`) — not a sandbox lie. */
+  | 'pay.psp_unset';
+
+export function publicCheckoutUnavailableCode(reason: PublicCheckoutUnavailableReason): PublicCheckoutUnavailableCode {
+  if (reason === 'none-configured') return 'pay.checkout_rails_unset';
+  if (reason === 'psp-unset') return 'pay.psp_unset';
+  return 'pay.checkout_rail_not_live';
+}
+
 export class PublicCheckoutUnavailable extends Error {
-  readonly code = 'pay.checkout_rail_not_live';
+  readonly code: PublicCheckoutUnavailableCode;
 
   constructor(
     readonly railId: string | null,
@@ -328,8 +343,9 @@ export class PublicCheckoutUnavailable extends Error {
      * `absent` is its own reason for the same operator-facing purpose the third
      * `RailMode` serves: "we have a rail and it lies" and "we have no rail" send
      * a reader to two different places, and only one of them is fixable today.
+     * `psp-unset` is the card-acquiring socket (`socket.psp-partners`) specifically.
      */
-    readonly reason: 'sandbox' | 'absent' | 'none-configured' | 'unhealthy',
+    readonly reason: PublicCheckoutUnavailableReason,
   ) {
     super(
       (railId === null
@@ -339,6 +355,7 @@ export class PublicCheckoutUnavailable extends Error {
         `could not complete.`,
     );
     this.name = 'PublicCheckoutUnavailable';
+    this.code = publicCheckoutUnavailableCode(reason);
   }
 }
 
@@ -395,19 +412,44 @@ export function assertRailMayAcceptPublicPayment(adapter: RailAdapter, policy: V
 export const PUBLIC_CHECKOUT_CAPABILITIES: readonly RailCapability[] = ['authorize', 'capture', 'webhook'];
 
 /**
+ * Why a preference-list entry was skipped. Taxonomy only — no invented cost or
+ * approval-rate numbers (DIRECTION §8 blanks refuse closed).
+ */
+export type RailSkipReason = 'not-registered' | 'missing-capability' | 'absent' | 'unhealthy' | 'sandbox';
+
+export interface RailDecisionEntry {
+  readonly railId: string;
+  readonly outcome: 'chosen' | 'skipped';
+  /** Present on skips; omitted on the chosen rail. */
+  readonly reason?: RailSkipReason;
+}
+
+/**
+ * Preference walk with a full decision record (SPEC §5 — log reason per decision).
+ * No cost weights, no geo tables, no risk scores.
+ */
+export interface PublicCheckoutRailDecision {
+  readonly adapter: RailAdapter;
+  readonly considered: readonly RailDecisionEntry[];
+}
+
+/**
  * Which registered rail serves a public checkout, in configured order.
  *
- * NOT ROUTING. Smart routing — geo, method, amount band, risk score, live
- * approval rates — is its own tracker feature (`pay.routing`), and when it lands
- * it replaces this function and nothing else. What this does is far dumber and
- * deliberately so: walk an operator-configured preference list and take the
- * first entry that is registered, can run the whole inbound lifecycle, is
- * answering, and passes the gate above.
+ * NOT ROUTING ALONE. Smart routing — geo, method, risk — lives in
+ * `services/svc-pay/src/routing/decide.ts` (`selectSmartCheckoutRail`) and
+ * replaces this preference walk when those dimensions are required. What this
+ * does is far dumber and deliberately so: walk an operator-configured preference
+ * list and take the first entry that is registered, can run the whole inbound
+ * lifecycle, is answering, and passes the gate above.
  *
  * THE PREFERENCE LIST IS CONFIGURATION, NEVER A REQUEST FIELD. That is the whole
  * reason this function exists rather than a `railAdapter` input: a hosted
  * checkout that can name a rail, or a payment link that resolves to one, is
  * exactly where the sandbox-withdrawal P0 would come back.
+ *
+ * Prefer `selectPublicCheckoutRailDetailed` when the caller must persist the
+ * decision record (SPEC §5). This wrapper keeps existing call sites stable.
  */
 export function selectPublicCheckoutRail(
   rails: RailRegistry,
@@ -415,14 +457,34 @@ export function selectPublicCheckoutRail(
   policy: ValueMovementPolicy,
   now: Date = new Date(),
 ): RailAdapter {
+  return selectPublicCheckoutRailDetailed(rails, preference, policy, now).adapter;
+}
+
+/**
+ * Preference walk + decision log. Reasons are only the existing skip taxonomy
+ * (not-registered / missing-capability / absent / unhealthy / sandbox).
+ */
+export function selectPublicCheckoutRailDetailed(
+  rails: RailRegistry,
+  preference: readonly string[],
+  policy: ValueMovementPolicy,
+  now: Date = new Date(),
+): PublicCheckoutRailDecision {
   let sawSandbox = false;
   let sawUnhealthy = false;
   let sawAbsent = false;
+  const considered: RailDecisionEntry[] = [];
 
   for (const railId of preference) {
-    if (!rails.has(railId)) continue;
+    if (!rails.has(railId)) {
+      considered.push({ railId, outcome: 'skipped', reason: 'not-registered' });
+      continue;
+    }
     const adapter = rails.get(railId);
-    if (!PUBLIC_CHECKOUT_CAPABILITIES.every((c) => adapter.capabilities.includes(c))) continue;
+    if (!PUBLIC_CHECKOUT_CAPABILITIES.every((c) => adapter.capabilities.includes(c))) {
+      considered.push({ railId, outcome: 'skipped', reason: 'missing-capability' });
+      continue;
+    }
 
     // BEFORE the health check, because an absent rail is unhealthy BY
     // CONSTRUCTION and reporting it as `unhealthy` would send an operator to
@@ -431,20 +493,24 @@ export function selectPublicCheckoutRail(
     // — one is a bad minute, the other is a procurement task.
     if (adapter.mode === 'absent') {
       sawAbsent = true;
+      considered.push({ railId, outcome: 'skipped', reason: 'absent' });
       continue;
     }
 
     if (!isUsable(adapter, now)) {
       sawUnhealthy = true;
+      considered.push({ railId, outcome: 'skipped', reason: 'unhealthy' });
       continue;
     }
     try {
       assertRailMayAcceptPublicPayment(adapter, policy);
     } catch {
       sawSandbox = true;
+      considered.push({ railId, outcome: 'skipped', reason: 'sandbox' });
       continue;
     }
-    return adapter;
+    considered.push({ railId, outcome: 'chosen' });
+    return { adapter, considered };
   }
 
   // The reason is for operators. The payer's page says "this merchant cannot
@@ -453,7 +519,17 @@ export function selectPublicCheckoutRail(
   // deployment with a sandbox rail configured has made a posture decision it can
   // revisit; `absent` outranks `unhealthy` because "nothing is configured" is not
   // something waiting five minutes will fix.
-  throw new PublicCheckoutUnavailable(null, sawSandbox ? 'sandbox' : sawAbsent ? 'absent' : sawUnhealthy ? 'unhealthy' : 'none-configured');
+  const cardishPref = preference.length > 0 && preference.every((id) => /card|psp|acquirer/i.test(id));
+  const collapsed: PublicCheckoutUnavailableReason = sawSandbox
+    ? 'sandbox'
+    : sawAbsent
+      ? cardishPref
+        ? 'psp-unset'
+        : 'absent'
+      : sawUnhealthy
+        ? 'unhealthy'
+        : 'none-configured';
+  throw new PublicCheckoutUnavailable(null, collapsed);
 }
 
 /**

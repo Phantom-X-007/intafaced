@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryDeliveryStore } from './channel-store.js';
+import { MemoryDeliveryStore, STUCK_PENDING_GRACE_MS, reapDecision, shouldReapDelivery } from './channel-store.js';
 
 /**
  * The delivery sweep — a row that is over must stop reading as "still trying".
@@ -12,6 +12,14 @@ import { MemoryDeliveryStore } from './channel-store.js';
  * spends the last attempt can be the same one JetStream then parks. There is no
  * sixth message, `claim` is never called again, and the row stays `pending`.
  *
+ * SECOND DOOR (in_flight burns max_deliver without raising attempts)
+ *
+ * The `in_flight` path returns retryable without incrementing `attempts`. Each
+ * such pass still consumes one bus delivery. Sustained lease contention parks
+ * the message while `attempts` stays low, so the attempts-ceiling arm never
+ * fires. Arm 2 retires those rows once the lease has been dead longer than the
+ * bus could still be retrying (`STUCK_PENDING_GRACE_MS`).
+ *
  * `notify.deliveries` is a user-facing screen — the README says so precisely
  * because the person whose collateral is at risk is the one who needs to know
  * whether the margin call reached them. `pending` on that screen means "still
@@ -19,6 +27,8 @@ import { MemoryDeliveryStore } from './channel-store.js';
  */
 
 const CRASHED_MID_SEND = 60_000;
+/** Short grace so stuck-pending tests do not advance a real 150s. */
+const TEST_GRACE_MS = 5_000;
 
 describe('MemoryDeliveryStore.reapExhausted', () => {
   /** A store whose clock the test drives, so lease expiry is decided and not waited for. */
@@ -60,7 +70,7 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     const claim = await store.claim('n2', 'sms', 1);
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
-    await store.settle({ id: claim.id, status: 'failed', attempted: true, detail: '503' });
+    await store.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true, detail: '503' });
 
     // 'failed' says "will be tried again". At the attempt ceiling that is false.
     expect(await store.reapExhausted(1)).toBe(1);
@@ -80,16 +90,41 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     expect((await store.listForNotification('n3'))[0]?.status).toBe('pending');
   });
 
-  it('leaves a row that still has attempts left alone', async () => {
+  it('leaves a row that still has attempts left alone while the bus may still redeliver', async () => {
     const { store, clock } = storeAt(1_000_000);
 
     expect((await store.claim('n4', 'email', 3)).claimed).toBe(true);
     clock.now += CRASHED_MID_SEND + 1;
 
-    // Dead lease, but the bus may still redeliver and this send may still work.
-    // Abandoning it here would throw away a retry the user is owed.
-    expect(await store.reapExhausted(3)).toBe(0);
+    // Dead lease, but still inside the stuck-pending grace — the bus may still
+    // redeliver and this send may still work. Abandoning it here would throw
+    // away a retry the user is owed.
+    expect(await store.reapExhausted(3, { stuckGraceMs: TEST_GRACE_MS })).toBe(0);
     expect((await store.listForNotification('n4'))[0]?.status).toBe('pending');
+  });
+
+  it('retires stuck pending when the lease has been dead longer than the bus could retry', async () => {
+    // THE in_flight HOLE: attempts stay at 1 (in_flight never increments), bus
+    // parks after max_deliver, lease dies, nothing reclaims. Without arm 2 the
+    // row would read pending forever while attempts < maxAttempts.
+    const { store, clock } = storeAt(1_000_000);
+
+    expect((await store.claim('n7', 'email', 3)).claimed).toBe(true);
+    const [mid] = await store.listForNotification('n7');
+    expect(mid).toMatchObject({ status: 'pending', attempts: 1 });
+
+    // Lease expires, then the full stuck-pending grace elapses — past any bus
+    // redelivery that could still reclaim the row.
+    clock.now += CRASHED_MID_SEND + TEST_GRACE_MS + 1;
+
+    expect(await store.reapExhausted(3, { stuckGraceMs: TEST_GRACE_MS })).toBe(1);
+
+    const [after] = await store.listForNotification('n7');
+    expect(after?.status).toBe('abandoned');
+    // Arm 2: attempts still 1 of 3 — must NOT claim attempts_exhausted.
+    expect(after?.refusalCode).toBe('channel.delivery_stuck');
+    expect(after?.attempts).toBe(1);
+    expect(after?.acceptedAt).toBeNull();
   });
 
   it('never rewrites an accepted row', async () => {
@@ -98,7 +133,7 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     const claim = await store.claim('n5', 'email', 1);
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
-    await store.settle({ id: claim.id, status: 'accepted', attempted: true, reference: 'gw-1' });
+    await store.settle({ id: claim.id, attempt: claim.attempt, status: 'accepted', attempted: true, reference: 'gw-1' });
 
     expect(await store.reapExhausted(1)).toBe(0);
     expect((await store.listForNotification('n5'))[0]?.status).toBe('accepted');
@@ -110,9 +145,90 @@ describe('MemoryDeliveryStore.reapExhausted', () => {
     const claim = await store.claim('n6', 'push', 1);
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
-    await store.settle({ id: claim.id, status: 'failed', attempted: true });
+    await store.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true });
 
     expect(await store.reapExhausted(1)).toBe(1);
     expect(await store.reapExhausted(1)).toBe(0);
+  });
+});
+
+describe('shouldReapDelivery — stuck-pending arm', () => {
+  const now = new Date(2_000_000);
+  const grace = STUCK_PENDING_GRACE_MS;
+
+  it('does not reap a pending row whose lease died only moments ago', () => {
+    expect(
+      shouldReapDelivery(
+        {
+          status: 'pending',
+          attempts: 1,
+          leaseUntil: new Date(now.getTime() - 1),
+          updatedAt: new Date(now.getTime() - 1),
+        },
+        3,
+        now,
+        grace,
+      ),
+    ).toBe(false);
+  });
+
+  it('reaps a pending row whose lease has been dead past the bus window as delivery_stuck', () => {
+    const decision = reapDecision(
+      {
+        status: 'pending',
+        attempts: 1,
+        leaseUntil: new Date(now.getTime() - grace),
+        updatedAt: new Date(now.getTime() - grace - 1_000),
+      },
+      3,
+      now,
+      grace,
+    );
+    expect(decision).toEqual({ reaped: true, reason: 'channel.delivery_stuck' });
+    expect(
+      shouldReapDelivery(
+        {
+          status: 'pending',
+          attempts: 1,
+          leaseUntil: new Date(now.getTime() - grace),
+          updatedAt: new Date(now.getTime() - grace - 1_000),
+        },
+        3,
+        now,
+        grace,
+      ),
+    ).toBe(true);
+  });
+
+  it('names attempts_exhausted when the attempt budget was actually spent', () => {
+    expect(
+      reapDecision(
+        {
+          status: 'pending',
+          attempts: 3,
+          leaseUntil: new Date(now.getTime() - 1),
+          updatedAt: new Date(now.getTime() - 1),
+        },
+        3,
+        now,
+        grace,
+      ),
+    ).toEqual({ reaped: true, reason: 'channel.attempts_exhausted' });
+  });
+
+  it('never reaps a live lease even past the grace wall-clock', () => {
+    expect(
+      shouldReapDelivery(
+        {
+          status: 'pending',
+          attempts: 5,
+          leaseUntil: new Date(now.getTime() + 60_000),
+          updatedAt: new Date(now.getTime() - grace * 2),
+        },
+        3,
+        now,
+        grace,
+      ),
+    ).toBe(false);
   });
 });

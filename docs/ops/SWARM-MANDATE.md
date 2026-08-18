@@ -94,6 +94,8 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | **Zero-walk guard (both wirings)**             | No subject / no diff / no ancestors / broken symbol walk ⇒ **exit 1, advisory included**. Both checkouts pin `fetch-depth: 0`; under the `actions/checkout` default of 1 this gate printed `OK` having compared nothing to nothing.                                                             |
 | **`.githooks/pre-push`**                       | `format:check` + refuse direct push to `main`. **Nothing counts runs.** Delivery is never blocked by a volume number.                                                                                                                                                                           |
 | **CI triggers**                                | `push: main` **and** `pull_request` (push:main restored 2026-08-07 — only a push check proves the trunk is green). Docs-format is PR-only and skips FREEZE/claims/R00–R02/DASHBOARD-only. Manual: `workflow_dispatch`.                                                                          |
+| **Main CI no-cancel**                          | `ci.yml`: `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`. Every merge to main is allowed to finish CI (public Actions free). PR branches still cancel superseding runs. **Not a merge throttle** — unlimited parallel ship stays.                                                 |
+| **Red tip = one heal lane**                    | Claim `main-heal` / `blocked-main`; one fix PR; no competing heal PRs; no product merges onto red tip. Path-disjoint craft may continue in worktrees. Full text: `CONTRIBUTING.md` §1.                                                                                                          |
 | **Coordination PR ban**                        | No PR whose sole job is R07/peace/cycle/FREEZE tip-bump/claims meter/status. Those stay files; ship only with a real product/law delta.                                                                                                                                                         |
 | `pnpm swarm:status` ops-churn / Actions 24h    | Informational counts only — the repo is public, so Actions are free and unlimited                                                                                                                                                                                                               |
 | `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                                                                                                                                                                     |
@@ -123,10 +125,10 @@ When the primary board finish is met but the session continues (AFK / “never s
 ### AFK PR law (mandatory)
 
 **There is no PR budget and no Actions budget.** The repo is public; Actions on standard runners
-are free and unlimited. The "thrift" throttle that used to live here was **deleted 2026-08-07**
-(retirement note: [`../GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../GITHUB-CI-SPEND-CONTROL-2026-07-31.md)).
-**Finished work is never held back to keep a run count down.** No caps, no cooling window, no
-`THRIFT_ALLOW`. GitHub is the **merge seal**, not the chat log.
+are free and unlimited. Old spend thrift was **deleted 2026-08-07**
+(retirement: [`../GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](../GITHUB-CI-SPEND-CONTROL-2026-07-31.md)).
+**Finished work is never held back for CI cost.** No caps, no cooling window, no override flags.
+GitHub is the **merge seal**, not the chat log.
 
 | Rule                    | Detail                                                                                                                                 |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |

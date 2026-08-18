@@ -140,6 +140,8 @@ if (!available) {
   }, 30_000);
 
   describe('order-route properties — CX-2 retry same clientOrderId', () => {
+    // 20s — same budget as CX-3. Under full-suite PG load, 8 property runs
+    // of N placeOrder retries routinely exceed vitest's 5s default.
     it('property: N sequential retries → one order, one hold, one engine submit', async () => {
       await fc.assert(
         fc.asyncProperty(fc.integer({ min: 2, max: 10 }), async (n) => {
@@ -186,7 +188,7 @@ if (!available) {
         }),
         { numRuns: 8 },
       );
-    });
+    }, 20_000);
   });
 
   describe('order-route properties — CX-3 fill redelivery', () => {

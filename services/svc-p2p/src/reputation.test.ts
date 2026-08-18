@@ -151,6 +151,18 @@ describe('XP into the one graph (§6.2 → §4.1)', () => {
   it('gives each party of one trade a distinct key', () => {
     expect(xpKey('t', 'seller', 'trade.completed.seller')).not.toBe(xpKey('t', 'buyer', 'trade.completed.buyer'));
   });
+
+  it('does not invent a rank that unlocks money inside this package', () => {
+    // XP is announced with business keys; rank_state and p2pLimitMultiplier live
+    // in identity. Badges here are display only — a spotless badge must not
+    // change a fee or a ceiling in this service.
+    const hot = snapshotOf({ ...EMPTY_COUNTERS, tradesTotal: 100, completed: 100 });
+    expect(hot.badges).toContain('spotless');
+    // No fee / limit field on the snapshot — if one appears, this pin fails.
+    expect(hot).not.toHaveProperty('feeBps');
+    expect(hot).not.toHaveProperty('p2pLimitMultiplier');
+    expect(hot).not.toHaveProperty('offerCeiling');
+  });
 });
 
 describe('INVARIANT: counters can never contradict the database constraints', () => {

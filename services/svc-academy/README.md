@@ -8,13 +8,13 @@
 
 **Deliberately not finished here**, each for a stated reason:
 
-| Absent                                                | Why                                                                                                                                                                                                                               |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live audio/video                                      | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                      |
-| Full DERIV//DESK library (20 playbooks + 3 workbooks) | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented. |
-| Cert → **perk** surfacing                             | A cert earns XP and stops there. Rank and perks are svc-identity's SoT (§4.1); a perk read here would be a second opinion on somebody else's table.                                                                               |
-| Ambassador residencies and per-session IFC pay        | **Money.** Needs ledger recipes that do not exist. A stubbed pay path that looks finished is worse than an honest gap.                                                                                                            |
-| Tournaments, seasonal ladders, prize pools            | Money again, and gated on the season engine.                                                                                                                                                                                      |
+| Absent                                                                        | Why                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Live audio/video                                                              | There is no SFU in this stack and no credential for one. The provider is `none` and **refuses** — see below.                                                                                                                          |
+| Full DERIV//DESK library (20 playbooks + 3 workbooks)                         | Proprietary library is **not in this monorepo**. The 20 + 3 on tip are platform-native and written here, at full length — that is the honest claim, and it is not the licensed import, which stays residual rather than invented.     |
+| Cert → **perk** invent / money                                                | D26-P1-C1: `grantCert` surfaces **real** identity perks after XP, or **refuses** when identity is unreadable / invent is requested. Academy never maps cert→perk and never invents perk money (`certs/perk-plane.ts`).                |
+| Ambassador **IFC pay / revenue share** (programme + residencies Stage-1 ship) | **Money under rate authority (D26-P1-C2).** Appoint/freeze/badge and residency apply/decide are real. Owner-published IFC / share law opens dry-run quotes; live settlement refuses until Class M ledger recipes. Never invent rates. |
+| Tournament **IFC prize pools** (ladder Stage-1 ships)                         | Seasons + standings + lifecycle edges are real. Blank/unset pools typed-refuse `academy.prize_pool_unset` (cannot start). Prize fund/payout refuse-closed — no invent IFC. Class M recipes are a separate PR.                         |
 
 ---
 
@@ -112,30 +112,31 @@ tRPC, mounted at `/trpc`, reached through svc-edge at `/api/academy` (port 4016)
 
 #### Depth, and why there is a surface for it
 
-`curriculumInventory` answers _are there 20 playbooks and 3 workbooks_. Its
-validation floor is 40 characters and a leading heading — which a three-bullet
-stub clears, and for a long time did: every item on the spine passed while the
-median body was 258 characters. Counting is not reading.
+`curriculumInventory` answers _are there 20 playbooks and 3 workbooks_. Counting
+is not reading: an older 40-character stub gate once let every spine item pass
+while the median body was 258 characters. That gate is gone.
 
-`curriculumDepth` answers the second question against an editorial floor
-(`CURRICULUM_MIN_BODY_CHARS`), and it answers by returning `thinSlugs` — naming
-what falls short rather than asserting that nothing does. `allDeep` is true only
-when the list is empty. Bodies are English (`en`); other locales fall back and
-report `fellBack: true` via `curriculumItemLocalized` — a translation is never
-invented.
+`curriculumDepth` and the import pipeline both use the editorial floor
+`CURRICULUM_MIN_BODY_CHARS` (**900** characters). Depth returns `thinSlugs` —
+naming what falls short rather than asserting that nothing does. `allDeep` is
+true only when the list is empty. Bodies are English (`en`); other locales fall
+back and report `fellBack: true` via `curriculumItemLocalized` — a translation
+is never invented.
 
 ### Certifications → XP (`academy.certs`)
 
-| Procedure                  | Scope           | Purpose                                                                     |
-| -------------------------- | --------------- | --------------------------------------------------------------------------- |
-| `certDefinitions`          | `academy:read`  | Code-seeded certs and the curriculum slugs each requires                    |
-| `enrollCertPath`           | `academy:write` | Enrol the caller on a path                                                  |
-| `markCurriculumComplete`   | `academy:write` | Mark one curriculum item complete (idempotent)                              |
-| `grantCert`                | `academy:write` | Grant the caller's cert when complete, **and publish the XP it is worth**   |
-| `myCerts` / `certProgress` | `academy:read`  | What the caller has earned, and what is missing                             |
-| `certXpPlane`              | `academy:read`  | Is this process publishing awards, under which module/action, at what value |
+| Procedure                  | Scope           | Purpose                                                                                       |
+| -------------------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| `certDefinitions`          | `academy:read`  | Code-seeded certs and the curriculum slugs each requires                                      |
+| `enrollCertPath`           | `academy:write` | Enrol the caller on a path                                                                    |
+| `markCurriculumComplete`   | `academy:write` | Mark one curriculum item complete (idempotent)                                                |
+| `grantCert`                | `academy:write` | Grant the caller's cert when complete, **publish XP**, then **real identity perks or refuse** |
+| `myCerts` / `certProgress` | `academy:read`  | What the caller has earned, and what is missing                                               |
+| `certXpPlane`              | `academy:read`  | Is this process publishing awards, under which module/action, at what value                   |
+| `certPerkPlane`            | `academy:read`  | Perks via identity rank only; invent perk money refuse-closed (D26-P1-C1)                     |
+| `certPerkIntent`           | `admin:write`   | Attempt invent cert→perk money — always refuse, never amounts                                 |
 
-`grantCert` is safe to call twice. The grant is idempotent on `(user, cert)` and the award carries the same business key, so a repeat is dropped by identity rather than paid twice — that is also how an award missed during a bus outage is recovered. XP amounts are a v0 policy in `src/certs/xp-policy.ts` with a conservative default; product may retune them, and a cert with no policy publishes **nothing** rather than an invented amount.
+`grantCert` is safe to call twice. The grant is idempotent on `(user, cert)` and the award carries the same business key, so a repeat is dropped by identity rather than paid twice — that is also how an award missed during a bus outage is recovered. XP amounts are a v0 policy in `src/certs/xp-policy.ts` with a conservative default; product may retune them, and a cert with no policy publishes **nothing** (no XP, no perk-grant shape) rather than an invented amount. After XP, `perks` is either a **real** `rank_thresholds.perks` readout from svc-identity or a **refuse** (unpriced / identity unreadable / invent path) — academy never invents perk money or a cert→perk map (`src/certs/perk-plane.ts`, D26-P1-C1).
 
 A seat belongs to `ctx.principal.userId`. **No procedure takes a userId from the input except `invite`**, where naming somebody else _is_ the operation — and that one is host-only, so the caller must already own the room. The scene is written **whole** by the host, not merged per attendee: merging would need a conflict model this does not have, and half a merge is a room that renders differently for different people.
 
@@ -180,16 +181,20 @@ All five are pure and need **no database** — none opens a connection, and none
 
 The service's SQL paths are exercised through the fleet's e2e suite rather than a per-service Postgres harness: this service holds no value, and its failure mode is an empty room rather than a lost balance, so the harness cost is better spent on services that move money. The one SQL path that would repay a harness is the capacity race under `FOR UPDATE`, and that is the honest gap in this suite.
 
-## Ambassador programme (Stage-1 — status only)
+## Ambassador programme (Stage-1 status + D26-P1-C2 rate authority)
 
-Appoint / freeze / public badge. **No pay.** Hosting still uses §4.1 `lobbyHostRights` only.
+Appoint / freeze / public badge. Residencies apply/decide are non-money. **IFC / revenue-share rates are owner-only.**
 
-| Capability                        | Gate                             |
-| --------------------------------- | -------------------------------- |
-| Open lobby / invite / run session | `lobbyHostRights` (svc-identity) |
-| Programme badge active            | `ambassadors.status = active`    |
-| Appoint / freeze                  | operator `admin:write`           |
-| IFC pay / revenue share           | **Not built** (Class M Stage-2)  |
+| Capability                        | Gate                                                               |
+| --------------------------------- | ------------------------------------------------------------------ |
+| Open lobby / invite / run session | `lobbyHostRights` (svc-identity)                                   |
+| Programme badge active            | `ambassadors.status = active`                                      |
+| Appoint / freeze                  | operator `admin:write`                                             |
+| IFC / share **rate authority**    | `ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON` / `…_REVENUE_SHARE_LAW_JSON` |
+| IFC / share **dry-run quote**     | published law (+ accepted residency for `residencyIfcPayQuote`)    |
+| IFC / share **live settlement**   | **Refuse** until Class M ledger recipe (separate PR)               |
+
+Blank law JSON → unpublished → refuse invent. Published law opens quote path only; amounts come from the owner JSON, never from code defaults.
 
 Migration: `drizzle/0001_ambassadors.sql`.
 
@@ -223,13 +228,15 @@ Workbook paper drills consume trade's `paper` market flag. **No prices invented 
 
 ### Two rules that are enforced, not documented
 
-**Everything a drill produces is sealed.** `sealSimulated` is the only constructor for a paper payload, and every wire schema requires the seal as literals — `simulated: true`, `venue: 'paper'`, `realLedger: false`, `withdrawable: false`, plus the disclaimer in full. The run itself carries `simulated: true`, so every projection (board card, both status lines, the CSV export) reads the label from one place rather than remembering to add it. A status line with the label stripped no longer parses; it does not degrade into something readable as live.
+**Everything a drill produces is sealed.** `sealSimulated` is the only constructor for a paper payload, and every wire schema requires the seal as literals — `simulated: true`, `venue: 'paper'`, `realLedger: false`, `withdrawable: false`, `realMoney: false`, plus the disclaimer in full. The run itself carries `simulated: true`, so every projection (board card, both status lines, the CSV export) reads the label from one place rather than remembering to add it. A status line with the label stripped no longer parses; it does not degrade into something readable as live.
+
+**D26-P1-C4 harden — paper never readable as real money.** After the seal, `assertPaperNeverReadableAsRealMoney` deep-scans the outbound payload and refuses (`academy.paper_looks_like_real_money`) any custody-looking key (`availableBalance`, `ledgerTxId`, `holdAmount`, …), any seal bit flipped to true (`realMoney` / `live` / `isLive`), or a non-paper `venue`. Public doors: `paperDrill` / `paperDrillResult` also `.strict()`-refuse inbound `realMoney`/`live` claims (they must not strip-and-proceed). `paperOpsStatus` reports `realMoney: false`, `simulated: true`, `venue: 'paper'` and refuses if the service presents paper as live. Progress / identity / step-bar projections also carry `realMoney: false`; status and export lines require `realMoney=0` to parse.
 
 **Nothing is priced here.** Prices, sizes and the mark are the ones **trade published**, handed in as decimal strings — a JSON number is a 400, not a coercion. A fill with no published price is `academy.paper_price_unavailable`; an open position with no published mark comes back `unrealisedPnl: null, markUnavailable: true`. Neither is filled in with a plausible number.
 
 `paper/ledger-isolation.test.ts` reads every module under `src/paper/` and fails the build on any import of the ledger's write surface (client, recipes, `orderHold`, `tradeFill`, `.post(`). The decimal **math** from `@intafaced/ledger-client` is allowed and required — a simulated figure uses the one money implementation, or it is a float pretending.
 
-**Known gap — the flag is taken on trust.** `market.paper` arrives in the input. Academy has no way to ask trade whether a market really is paper: no `packages/contracts` surface publishes trade markets. Until one exists, a caller that lies about the flag gets a drill against a market that is not paper — and academy still posts nothing, so the blast radius is a wrong label rather than a wrong ledger entry. Closing it needs a contracts PR first (see `docs/ops/trk/academy.paper-trading.md`).
+**D26-P1-C4 — paper flag is not taken on trust.** `paperDrill` / `paperDrillResult` call `assertCallerPaperFlagVerified` before the workbook loop. Trade's public `GET /api/v1/markets` `paper` field is the source of truth (env `TRADE_URL`). A caller that sends `paper: true` for a live listing is refused `academy.paper_flag_mismatch`. If `TRADE_URL` is unset, the drill refuses `academy.paper_flag_unverified` rather than trusting the wire. Listing unreachable → `academy.paper_flag_unavailable`. Missing/false paper on the body still refuses `not_paper` / `no_market` (never a silent live drill). Simulated results stay sealed; this service still posts nothing to the ledger.
 
 ## Curriculum import pipeline (Stage-1)
 

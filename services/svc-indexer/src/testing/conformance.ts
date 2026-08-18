@@ -365,8 +365,37 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
 
       await expect(shallow.sync()).rejects.toBeInstanceOf(ReorgTooDeepError);
       expect(shallow.halted).not.toBeNull();
+      expect(shallow.lastError).not.toBeNull();
       // A halted indexer stops advancing rather than limping on.
       expect((await shallow.sync()).idle).toBe('halted');
+      // Idle-halted must NOT wipe lastError — status needs both halt and why.
+      expect(shallow.lastError).not.toBeNull();
+      expect(shallow.halted).not.toBeNull();
+    });
+
+    /**
+     * README: resume is for AFTER re-index, not instead of it. Without this
+     * path a deep halt is permanent even when an operator has repaired the
+     * projection — sync would keep returning idle:halted forever.
+     */
+    it('resume after a deep halt clears the halt so a later pass can run', async () => {
+      source.append(block(level(MARKET, 'bid', '100', '1')));
+      for (let i = 0; i < 9; i++) source.append(block(level(MARKET, 'bid', '100', String(i + 2))));
+
+      const shallow = newIndexer(2);
+      await shallow.sync();
+      source.reorg(1, [block(level(MARKET, 'bid', '100', '99'))]);
+      await expect(shallow.sync()).rejects.toBeInstanceOf(ReorgTooDeepError);
+      expect(shallow.halted).not.toBeNull();
+      expect(shallow.lastError).not.toBeNull();
+
+      shallow.resume();
+      expect(shallow.halted).toBeNull();
+      expect(shallow.lastError).toBeNull();
+      // The deep fork is still present — next pass must ATTEMPT (throw again),
+      // not silently idle as halted.
+      await expect(shallow.sync()).rejects.toBeInstanceOf(ReorgTooDeepError);
+      expect(shallow.halted).not.toBeNull();
     });
 
     // ── Pruning ───────────────────────────────────────────────────────────
@@ -446,6 +475,45 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
         ['A-USD', '5'],
         ['B-USD', '2'],
       ]);
+    });
+
+    /**
+     * EIP-55 checksum casing is presentation, not identity. Stores that keep
+     * the write spelling as the key split one account into two; Postgres
+     * `DISTINCT ON (market, account)` is case-sensitive, so mixed-case writes
+     * would dual-key and serve two "current" sizes. Lowercase on write makes
+     * that state unrepresentable — same as EVM decode already does.
+     */
+    it('treats mixed-case address spellings as one account — newest size wins', async () => {
+      const mixed = '0xAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAaAa';
+      const lower = mixed.toLowerCase();
+      const upper = ('0x' + mixed.slice(2).toUpperCase()) as string;
+
+      source.append(block(position(MARKET, mixed, '1', '100')));
+      source.append(block(position(MARKET, lower, '9', '101')));
+      await indexer.sync();
+
+      // Query with any casing → newest size, single current row.
+      for (const query of [mixed, lower, upper]) {
+        const pos = await store.position(MARKET, query);
+        expect(pos, `position via ${query}`).not.toBeNull();
+        expect(formatAmount(pos!.size)).toBe('9');
+        expect(pos!.account).toBe(lower);
+        expect(await store.positionsOf(query)).toHaveLength(1);
+      }
+    });
+
+    it('refuses applyBlock when block.chainId does not match the store', async () => {
+      const foreign = {
+        chainId: CHAIN_ID + 1,
+        height: 0,
+        hash: `0x${'a'.repeat(64)}`,
+        parentHash: `0x${'b'.repeat(64)}`,
+        timestamp: 1_700_000_000,
+        events: [] as ChainEvent[],
+      };
+      await expect(store.applyBlock(foreign)).rejects.toThrow(/chainId|chain_id|wrong.?chain/i);
+      expect(await store.head()).toBeNull();
     });
   });
 }

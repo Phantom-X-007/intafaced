@@ -179,38 +179,11 @@ Vue.filter('dateFormat', function(tick) {
     return moment(tick).format("YYYY-MM-DD HH:mm:ss");
 });
 
-Vue.filter('toFixed', function(number, scale) {
-    return new Number(number).toFixed(scale);
-});
-
-Vue.filter('toPercent', function(point) {
-    var str = Number(point * 100).toFixed(1);
-    str += "%";
-    return str;
-});
-
-function toFloor(number, scale = 8) {
-    if (new Number(number) == 0) {
-        return 0;
-    }
-    var __str = number + "";
-    if (__str.indexOf('e') > -1 || __str.indexOf('E') > -1) {
-        var __num = new Number(number).toFixed(scale + 1),
-            __str = __num + "";
-        return __str.substring(0, __str.length - 1);
-    } else if (__str.indexOf(".") > -1) {
-        if (scale == 0) {
-            return __str.substring(0, __str.indexOf("."));
-        }
-        return __str.substring(0, __str.indexOf(".") + scale + 1);
-    } else {
-        return __str;
-    }
-}
-Vue.filter('toFloor', (number, scale) => {
-    return toFloor(number, scale);
-});
-Vue.prototype.toFloor = toFloor;
+/* Money display filters (toFixed / toFloor / toPercent) REMOVED.
+ * They laundered IEEE floats into painted money. Desk money goes through
+ * ix-money / moneyText / decimal() only. Re-adding these filters is a
+ * doctrine fail — do not restore.
+ */
 
 new Vue({
     el: '#app',

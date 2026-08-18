@@ -75,7 +75,9 @@ describe('checkout page rendering', () => {
     expect(html).toContain('19.99');
     expect(html).toContain('USD');
     expect(html).toContain('Acme Widgets');
-    expect(html).toContain('Continue to payment');
+    expect(html).toContain('Continue');
+    expect(html).toContain('lang="en"');
+    expect(html).toMatch(/name="geoCountry"/);
     // Still no card capture. There is no live acquiring rail, and a form that
     // took a PAN against a mock acquirer would be the most dishonest thing here.
     expect(html.toLowerCase()).not.toContain('card number');
@@ -171,7 +173,7 @@ describe('checkout page rendering', () => {
 
   it('renders honest empty and error states', () => {
     expect(renderCheckoutPage({ kind: 'missing_token' }).status).toBe(400);
-    expect(renderCheckoutPage({ kind: 'not_found' }).html).toContain('Link not found');
+    expect(renderCheckoutPage({ kind: 'not_found' }).html).toContain('We could not find that.');
     expect(renderCheckoutPage({ kind: 'expired' }).status).toBe(410);
     expect(renderCheckoutPage({ kind: 'expired' }).html).toContain('expired');
     expect(renderCheckoutPage({ kind: 'exhausted' }).status).toBe(410);
@@ -243,7 +245,26 @@ describe('stateForError', () => {
     // A posture refusal and a suspended merchant land on the same page: telling
     // an anonymous payer which one it is discloses our rail estate.
     expect(stateForError(payErr('pay.checkout_rail_not_live', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.checkout_rails_unset', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.psp_unset', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.routing_no_rail', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.merchant_inactive', '')).kind).toBe('unavailable');
+    // Layer B money-door refuse — hosted HTML must not 500 a live KYB gap.
+    expect(stateForError(payErr('pay.kyb_required', '')).kind).toBe('unavailable');
+    // Remaining live-acquiring refuses that still 500'd after #1808.
+    expect(stateForError(payErr('pay.merchant_pricing_invalid', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.merchant_not_found', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.rail_unknown', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.rail_capability', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.sandbox_rail_refused', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.rail_not_live', '')).kind).toBe('unavailable');
+    // Operator stub decide is not a checkout money door — do not over-map.
+    expect(stateForError(payErr('pay.kyb_operator_required', '')).kind).toBe('error');
+    expect(stateForError(payErr('pay.kyb_invalid', '')).kind).toBe('error');
+    expect(stateForError(payErr('pay.psp_mode_required', '')).kind).toBe('error');
+    // Per-payment rail decline is not "merchant cannot take payment" — a
+    // payment was started; unavailable copy would lie.
+    expect(stateForError(payErr('pay.rail_declined', '')).kind).toBe('error');
     // Anything unrecognised is a 500, never a friendlier-looking state — the
     // friendly-looking states are the ones that imply money moved.
     expect(stateForError(payErr('pay.something_new', '')).kind).toBe('error');
@@ -317,7 +338,7 @@ describe('checkout routes', () => {
     });
     const r1 = await notFound.inject({ method: 'GET', url: '/checkout?token=pl_missing_token_xx' });
     expect(r1.statusCode).toBe(404);
-    expect(r1.body).toContain('Link not found');
+    expect(r1.body).toContain('We could not find that.');
     await notFound.close();
 
     const expired = await build({
@@ -349,12 +370,17 @@ describe('checkout routes', () => {
       method: 'POST',
       url: '/checkout/session',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: 'token=pl_stubbed_token_value',
+      payload: 'token=pl_stubbed_token_value&geoCountry=DE',
     });
 
     expect(res.statusCode).toBe(303);
     expect(res.headers.location).toBe('/checkout/session/cs_session_token_here');
-    expect(received).toEqual({ linkToken: 'pl_stubbed_token_value', amount: undefined, assetId: undefined });
+    expect(received).toEqual({
+      linkToken: 'pl_stubbed_token_value',
+      amount: undefined,
+      assetId: undefined,
+      geoCountry: 'DE',
+    });
     await app.close();
   });
 
@@ -402,7 +428,7 @@ describe('checkout routes', () => {
     });
 
     expect(res.statusCode).toBe(400);
-    expect(res.body).toContain('plain number');
+    expect(res.body).toContain('Enter a valid amount.');
     expect(called).toBe(false);
     await app.close();
   });
@@ -423,6 +449,98 @@ describe('checkout routes', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.body).toContain('Nothing has been charged');
+    expect(res.body).not.toContain('Payment received');
+    await app.close();
+  });
+
+  it('shows the unavailable page when rails are unset, never a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.checkout_rails_unset', 'no rails');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body).not.toContain('Payment received');
+    await app.close();
+  });
+
+  it('shows the unavailable page when PSP is unset, never a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.psp_unset', 'no psp');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body).not.toContain('Payment received');
+    await app.close();
+  });
+
+  /**
+   * D26-P1-P10 Layer B is already on the money door (`assertMerchantActive`).
+   * The hosted page used to fall through to 500 "Something went wrong" — a lie
+   * to an anonymous payer. Same unavailable page as posture / inactive; never
+   * leak KYB status or invite a retry that cannot fix it.
+   */
+  it('shows the unavailable page when live KYB is not approved — not a 500, not a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.kyb_required', 'Merchant x KYB is none; live acquiring requires approved KYB');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value&geoCountry=DE',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body.toLowerCase()).not.toContain('try again');
+    expect(res.body.toLowerCase()).not.toContain('kyb');
+    expect(res.body.toLowerCase()).not.toContain('something went wrong');
+    await app.close();
+  });
+
+  it('shows the unavailable page when live pricing is unpublished — not a 500, not a receipt', async () => {
+    const app = await build({
+      openCheckoutSession: async () => {
+        throw payErr('pay.merchant_pricing_invalid', 'Merchant x has no fee rate and no default is configured');
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/checkout/session',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: 'token=pl_stubbed_token_value&geoCountry=DE',
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toContain('Nothing has been charged');
+    expect(res.body.toLowerCase()).not.toContain('try again');
+    expect(res.body.toLowerCase()).not.toContain('pricing');
+    expect(res.body.toLowerCase()).not.toContain('fee');
+    expect(res.body.toLowerCase()).not.toContain('something went wrong');
     await app.close();
   });
 

@@ -67,7 +67,8 @@ export type DataToolRefuseReason =
   | 'invalid_decimal'
   | 'stale'
   | 'empty_markets'
-  | 'incomplete_session';
+  | 'incomplete_session'
+  | 'subject_mismatch';
 
 export type DataToolRefuse = {
   readonly status: 'refuse';
@@ -111,6 +112,8 @@ export function invokeNavigatorDataTool(input: {
   /** Product-law tier matrix. Blank → refuse-closed (no invent). */
   tierLaw?: NavigatorTierLaw | null;
   userTier?: string;
+  /** Authenticated caller. Required before returning identity-scoped data. */
+  requesterUserId?: string;
   now?: Date;
   quote?: QuoteFixture | null;
   markets?: readonly MarketListFixture[] | null;
@@ -247,6 +250,14 @@ export function invokeNavigatorDataTool(input: {
       status: 'refuse',
       tool,
       reason: 'incomplete_session',
+      userMessageKey: 'agents.navigator.unavailable',
+    };
+  }
+  if (!input.requesterUserId?.trim() || session.userId !== input.requesterUserId) {
+    return {
+      status: 'refuse',
+      tool,
+      reason: 'subject_mismatch',
       userMessageKey: 'agents.navigator.unavailable',
     };
   }

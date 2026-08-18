@@ -7,6 +7,7 @@
 import type { FastifyInstance } from 'fastify';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { periodIdFor, type FundingRateEntry } from './funding-rate-source.js';
+import { assertFundingRateWithinBound, FundingRateBoundError } from './funding-rate-bound.js';
 
 /** Clock-skew allowance on a publisher's `asOfMs`. Anything beyond is refused. */
 const FUTURE_SKEW_MS = 60_000;
@@ -14,6 +15,11 @@ const FUTURE_SKEW_MS = 60_000;
 export interface InternalFundingRateDeps {
   internalSecret: string;
   publishFundingRate: (entry: FundingRateEntry) => void;
+  /**
+   * Absolute max |rate| (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * Null = unconfigured → refuse publish (fail-closed; no invented ceiling).
+   */
+  maxAbsRate: string | null;
   /** Optional clock for asOf default. */
   now?: () => number;
 }
@@ -50,6 +56,18 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
         error: 'trade.funding_rate_publish_invalid',
         message: 'rate must be a decimal string',
       });
+    }
+
+    // Magnitude bound BEFORE the rate book accepts anything. An absurd rate
+    // ("1000000") must never become the published quote a tick settles against.
+    // Unset max is refuse, not invent (owner residual D2).
+    try {
+      assertFundingRateWithinBound(rate, deps.maxAbsRate);
+    } catch (err) {
+      if (err instanceof FundingRateBoundError) {
+        return reply.code(400).send({ error: err.code, message: err.message });
+      }
+      throw err;
     }
 
     const nowMs = (deps.now ?? Date.now)();

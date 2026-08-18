@@ -14,7 +14,7 @@ PRE-FLIGHT (first 60s — anti-drift + free-work discovery)
 4. Never implement on main checkout — worktree only.
 5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md · pnpm swarm:freeze · pnpm swarm:status · pnpm swarm:next · docs/ops/DASHBOARD.md
 6. Denon product queue (tip): docs/REGROUP-2026-08-03.md · retire ADR: docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md
-6b. Denon hard board (agents babysit only — not free shell craft): docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
+6b. Denon hard board LIVE (agents babysit only — not free craft / not invent-risk engines): docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md · LIVE-LANES denon-hard-parallel · factory done: docs/SPEC-FACTORY-INDEX-2026-08-04.md · historical: docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
 7. FE residual: docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · tooling/frontend/residual-register.json · pnpm frontend:residual
 8. Also if present: docs/START-HERE.md · docs/VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md · docs/REDUNDANT-VS-PORT-2026-08-03.md
 9. Owners: Nitro=FE/shell · Denon=spine + his open PRs (no dual-edit) · Shehzad @shehzad002=M1–M7 (babysit only).
@@ -64,7 +64,7 @@ MANDATORY WORKFLOW
 4. Hard bans: no cross-service SQL; no balances outside ledger; no money in number; no vendor names in UI; no “temporary” without §13 socket; no invent mid/depth/rates; no force-push of spine branches; **no agent implement on Shehzad M1–M7 paths**. Board Clear agent Done bars only on agent-owned rows.
 5. Before “done”: pnpm verify; report real output. Stream A also needs browser proof when shell is up. Before money code: state risks (custody, stranding, floats, brand) + Class M path.
 6. No commits/PRs unless I asked to ship (or residual/Board Clear/AFK campaign / I said go all-out). AFK-ACTIVE + residual tip_note AFK-ACTIVE = Class N Stream A ship authorized without per-PR ask. No random new architecture.
-7. CI: local pnpm verify green before the push that opens/updates a code PR — local is seconds, CI is minutes. There is NO Actions budget (public repo = free unlimited Actions), so never hold finished work back, never batch a PR fatter, never skip tests or fake green "to save $". Parallel PRs unlimited. The old thrift law was deleted 2026-08-07 (see AGENTS.md · docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+7. CI: local pnpm verify green before the push that opens/updates a code PR — local is seconds, CI is minutes. There is NO Actions budget (public repo = free unlimited Actions), so never hold finished work back, never batch a PR fatter, never skip tests or fake green "to save $". Parallel PRs unlimited. Actions spend thrift deleted 2026-08-07 (AGENTS.md · docs/GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
 
 RIGHT WAY (quality bar)
 - Senior, surgical, doctrine-true. Prefer smallest green PR over hero branch.

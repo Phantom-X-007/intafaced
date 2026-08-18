@@ -1,6 +1,6 @@
 import { withWsSpan } from '../tracing.js';
 import type { DepthHub, HubLogger } from './hub.js';
-import type { DepthSource } from './source.js';
+import { DepthNoBookError, type DepthSource } from './source.js';
 
 /**
  * THE CLOCK.
@@ -90,8 +90,11 @@ export class DepthPoller {
             });
           } catch (err) {
             // One failed read is not a reason to tear down subscriptions: the
-            // clients' books are still valid as of the last sequence, and the
-            // next tick either repairs them or the socket dies on its own.
+            // clients' last proven book is still valid as of its sequence.
+            // 404 = matching is up and the book is absent. Anything else is
+            // engine-down and must be named — never a silent empty snapshot.
+            if (err instanceof DepthNoBookError) this.#hub.noteMatchingReachable(marketId);
+            else this.#hub.markEngineUnavailable(marketId);
             this.#log.warn({ marketId, err: String(err) }, 'ws: depth poll failed');
           }
         }),

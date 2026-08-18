@@ -5,6 +5,7 @@ import { ALL_EVENTS, EVENT_CATALOG, WIRING_SOCKETS, wiringSocketReason } from '.
 import { MemoryEventBus } from './memory-bus.js';
 import {
   EventSchemaDriftError,
+  EventSubjectMismatchError,
   EventValidationError,
   EventVersionMismatchError,
   MemorySeenStore,
@@ -14,6 +15,8 @@ import {
   validatePayload,
 } from './bus.js';
 import { createEnvelope, decodeEnvelope, encodeEnvelope, type Envelope } from './envelope.js';
+import { ACK_WAIT_MS, ACK_WAIT_NS, DEFAULT_MAX_DELIVER } from './jetstream-bus.js';
+import type { EventName, PayloadOf } from './catalog.js';
 
 describe('§10 subject law: intafaced.<service>.<entity>.<verb>', () => {
   it('builds a valid subject', () => {
@@ -377,6 +380,34 @@ describe('schema drift: the bus refuses rather than strips', () => {
     expect(() => acceptEnvelope('orderFilled', same)).not.toThrow(EventVersionMismatchError);
     expect(() => acceptEnvelope('orderFilled', same)).toThrow(EventSchemaDriftError);
   });
+
+  /**
+   * Subject is identity. A payload that validates under the *subscription's*
+   * schema while the envelope names a different subject used to pass — the
+   * gate checked version and drift, never the name on the wire. Same-shape
+   * events (several carry only uuids + decimals) would then be accepted under
+   * the wrong catalog entry.
+   */
+  it('refuses an envelope whose subject is not the one the subscription asked for', () => {
+    const env = createEnvelope({
+      subject: EVENT_CATALOG.orderCancelled.subject,
+      version: 1,
+      producer: 'svc-matching',
+      idempotencyKey: 'wrong-subject',
+      payload: fill(),
+    }) as Envelope;
+
+    expect(() => acceptEnvelope('orderFilled', env)).toThrow(EventSubjectMismatchError);
+    try {
+      acceptEnvelope('orderFilled', env);
+      expect.unreachable('subject mismatch must not pass');
+    } catch (err) {
+      const mismatch = err as EventSubjectMismatchError;
+      expect(mismatch.expectedSubject).toBe(EVENT_CATALOG.orderFilled.subject);
+      expect(mismatch.envelopeSubject).toBe(EVENT_CATALOG.orderCancelled.subject);
+      expect(mismatch.message).toContain('svc-matching');
+    }
+  });
 });
 
 describe('declared wiring sockets', () => {
@@ -409,6 +440,8 @@ describe('declared wiring sockets', () => {
   it('no longer records either of the two findings that started this — both ends are wired', () => {
     expect(wiringSocketReason('xpEarned', 'subscriber')).toBeNull();
     expect(wiringSocketReason('bankMarginCalled', 'publisher')).toBeNull();
+    expect(wiringSocketReason('agentActionRejected', 'subscriber')).toBeNull();
+    expect(wiringSocketReason('agentActionCompleted', 'subscriber')).toBeNull();
     // And says nothing about ends that were always wired.
     expect(wiringSocketReason('bankMarginCalled', 'subscriber')).toBeNull();
     expect(wiringSocketReason('orderFilled', 'publisher')).toBeNull();
@@ -467,6 +500,66 @@ describe('§10 consumer idempotency', () => {
     expect(handler).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * The mark is held for an in-flight handler and for a success — NOT for a
+   * failure. Before this, `checkAndSet` marked on arrival, so a handler that
+   * threw was already recorded as processed and the redelivery was swallowed
+   * and acked: at-most-once, silently.
+   *
+   * That mattered most where a throw is the design. `svc-identity/src/events.ts`
+   * documents an XP award for an unknown user as an FK violation "which throws,
+   * which NAKs, which parks the message after `max_deliver`" — the alternative
+   * being that "XP silently vanishes, which is precisely the failure this wiring
+   * exists to end". Nothing could park while the first retry was eaten here.
+   */
+  it('re-runs a redelivered envelope whose handler threw — a failure is not a completion', async () => {
+    const store = new MemorySeenStore();
+    let attempts = 0;
+    const wrapped = idempotent(
+      async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('transient: downstream was down');
+      },
+      store,
+      'rank-recalc',
+    );
+
+    const payload = { userId: crypto.randomUUID(), sourceModule: 'academy', action: 'cert.earned', xpDelta: 500 };
+    const envelope = { subject: 'xpEarned', idempotencyKey: 'cert-retry-1' } as never;
+
+    // First delivery throws, and the throw must reach the bus so it can NAK.
+    await expect(wrapped(payload as never, envelope)).rejects.toThrow('transient');
+
+    // Redelivery actually runs the handler again.
+    await wrapped(payload as never, envelope);
+    expect(attempts).toBe(2);
+
+    // ...and now that it succeeded, a further redelivery is deduped as before.
+    await wrapped(payload as never, envelope);
+    expect(attempts).toBe(2);
+  });
+
+  it('keeps failing a handler that always throws, so it can reach the dead-letter', async () => {
+    const store = new MemorySeenStore();
+    let attempts = 0;
+    const wrapped = idempotent(
+      async () => {
+        attempts += 1;
+        throw new Error('permanent: user does not exist');
+      },
+      store,
+      'rank-recalc',
+    );
+    const envelope = { subject: 'xpEarned', idempotencyKey: 'cert-park-1' } as never;
+
+    for (let i = 0; i < 5; i++) {
+      await expect(wrapped({} as never, envelope)).rejects.toThrow('permanent');
+    }
+
+    // Every delivery reached the handler; none was silently acked on its behalf.
+    expect(attempts).toBe(5);
+  });
+
   it('scopes dedupe per consumer, so two consumers each see the event', async () => {
     const bus = new MemoryEventBus('svc-identity');
     const store = new MemorySeenStore();
@@ -483,5 +576,307 @@ describe('§10 consumer idempotency', () => {
 
     expect(a).toHaveBeenCalledTimes(1);
     expect(b).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('bus defaults — single source of the numbers others pin against', () => {
+  it('exports maxDeliver 5 and ack_wait 30s, with ns derived from ms', () => {
+    // svc-notify hardcodes the same pair today (channel-store BUS_ACK_WAIT_MS,
+    // stuck-grace pin). Exporting here is how a second copy stops being law.
+    expect(DEFAULT_MAX_DELIVER).toBe(5);
+    expect(ACK_WAIT_MS).toBe(30_000);
+    expect(ACK_WAIT_NS).toBe(ACK_WAIT_MS * 1_000_000);
+    expect(ACK_WAIT_NS).toBe(30_000_000_000);
+  });
+});
+
+/**
+ * CATALOG GROWTH — every event must accept a legal fixture and refuse a number
+ * where money is a decimal string.
+ *
+ * Before this block, ~23 of 32 catalog entries had no `validatePayload` call
+ * anywhere in this package's suite. A schema edit on an untested event could
+ * ship green. The fixtures are the minimum legal shape, not product examples.
+ */
+function catalogFixtures(): { [K in EventName]: PayloadOf<K> } {
+  const uid = () => crypto.randomUUID();
+  const ts = () => new Date().toISOString();
+  const addr = '0x' + 'a'.repeat(40);
+  const bytes32 = '0x' + 'b'.repeat(64);
+  const entry = (direction: 'debit' | 'credit') => ({
+    accountId: uid(),
+    assetId: 'USDT',
+    direction,
+    amount: '10.00',
+  });
+
+  return {
+    xpEarned: { userId: uid(), sourceModule: 'trade', action: 'order.filled', xpDelta: 1 },
+    rankUpdated: { userId: uid(), rank: 2, previousRank: 1, xp: '100' },
+    userCreated: { userId: uid(), handle: 'sovereign' },
+    kycApproved: { userId: uid(), tier: 'basic', jurisdiction: 'SG' },
+    ledgerTxPosted: {
+      txId: uid(),
+      module: 'trade',
+      reason: 'trade.fill',
+      hash: 'h1',
+      previousHash: null,
+      entries: [entry('debit'), entry('credit')],
+      postedAt: ts(),
+    },
+    ledgerReconciliationFailed: {
+      accountId: uid(),
+      assetId: 'USDT',
+      snapshotBalance: '1.00',
+      replayBalance: '0.99',
+      drift: '0.01',
+      module: 'ledger',
+    },
+    ledgerFreezeUpdated: {
+      frozen: true,
+      reason: 'reconciliation drift',
+      actor: 'reconciliation',
+      changedAt: ts(),
+    },
+    stakeCreated: {
+      stakeId: uid(),
+      userId: uid(),
+      amount: '100.00',
+      tier: 'flex',
+      unlocksAt: null,
+    },
+    buybackExecuted: {
+      runId: uid(),
+      tokensBought: '1',
+      tokensBurned: '0.5',
+      tokensToRewards: '0.5',
+      revenueWindow: { from: ts(), to: ts() },
+    },
+    bankMarginCalled: {
+      loanId: uid(),
+      userId: uid(),
+      sequence: 1,
+      ltvBps: 8000,
+      cureCollateralAmount: '0.1',
+      collateralAssetId: 'BTC',
+      calledAt: ts(),
+      graceExpiresAt: ts(),
+    },
+    blueprintCreated: {
+      blueprintId: uid(),
+      userId: uid(),
+      engineVersion: '1',
+      visibility: 'private',
+    },
+    blueprintDeleted: { blueprintId: uid(), userId: uid(), erasedAt: ts() },
+    crewMemberCreated: {
+      crewId: uid(),
+      userId: uid(),
+      role: 'anchor',
+      crewSize: 2,
+      matchRunId: uid(),
+    },
+    orderAccepted: { orderId: uid(), marketId: 'btc-usdt', sequence: 1 },
+    orderFilled: {
+      marketId: 'btc-usdt',
+      makerOrderId: uid(),
+      takerOrderId: uid(),
+      price: '64000',
+      qty: '0.1',
+      sequence: 1,
+      ts: ts(),
+    },
+    orderCancelled: { orderId: uid(), marketId: 'btc-usdt', remainingQty: '0.1', sequence: 1 },
+    orderUpdated: {
+      orderId: uid(),
+      userId: uid(),
+      marketId: 'btc-usdt',
+      status: 'open',
+      side: 'buy',
+      type: 'limit',
+      qty: '1',
+      filledQty: '0',
+      price: '100',
+      clientOrderId: null,
+      ts: ts(),
+    },
+    fillSettled: {
+      fillId: uid(),
+      orderId: uid(),
+      userId: uid(),
+      marketId: 'btc-usdt',
+      side: 'buy',
+      liquidity: 'taker',
+      price: '100',
+      qty: '1',
+      quoteAmount: '100',
+      feeAsset: 'USDT',
+      feeAmount: '0.1',
+      feeBps: 10,
+      sequence: 1,
+      ts: ts(),
+    },
+    positionUpdated: {
+      positionId: uid(),
+      userId: uid(),
+      marketId: 'btc-usdt-perp',
+      symbol: 'BTC/USDT:USDT',
+      status: 'open',
+      side: 'long',
+      contracts: '1',
+      entryPrice: '64000',
+      markPrice: '64100',
+      notional: '64000',
+      leverage: '5',
+      collateral: '12800',
+      unrealizedPnl: '100',
+      realizedPnl: '0',
+      liquidationPrice: '50000',
+      marginMode: 'cross',
+      fundingPaid: '0',
+      ts: ts(),
+    },
+    protocolAccountCreated: {
+      chainId: 1,
+      account: addr,
+      owner: addr,
+      userSalt: bytes32,
+      txHash: bytes32,
+    },
+    protocolSessionKeyCreated: {
+      chainId: 1,
+      account: addr,
+      sessionKey: addr,
+      specHash: bytes32,
+      validAfter: 0,
+      validUntil: 9_999_999_999,
+      spendLimitWei: '1000000000000000000',
+      targets: [addr],
+      selectors: ['0x12345678'],
+      txHash: bytes32,
+    },
+    protocolSessionKeyCancelled: {
+      chainId: 1,
+      account: addr,
+      sessionKey: addr,
+      revokedBy: addr,
+      txHash: bytes32,
+    },
+    agentActionCompleted: {
+      sessionId: uid(),
+      userId: uid(),
+      agentId: 'a1',
+      sequence: 0,
+      kind: 'completion',
+      task: 'chat',
+      tool: null,
+      inputTokens: 1,
+      outputTokens: 1,
+    },
+    agentActionRejected: {
+      sessionId: uid(),
+      userId: uid(),
+      agentId: 'a1',
+      sequence: 0,
+      refusalCode: 'agents.tool_not_declared',
+      tool: null,
+      task: null,
+    },
+    agentUsageSettled: {
+      sessionId: uid(),
+      userId: uid(),
+      windowId: 'w1',
+      amount: '0.01',
+      assetId: 'USDT',
+      chargeKey: 'agents.usage:w1',
+    },
+    p2pOfferCreated: {
+      offerId: uid(),
+      makerId: uid(),
+      side: 'sell',
+      asset: 'BTC',
+      fiatCurrency: 'USD',
+      priceType: 'fixed',
+      price: '64000',
+      minAmount: '0.01',
+      maxAmount: '1',
+    },
+    p2pEscrowLocked: {
+      tradeId: uid(),
+      offerId: uid(),
+      sellerId: uid(),
+      buyerId: uid(),
+      asset: 'BTC',
+      amount: '0.1',
+      fiatCurrency: 'USD',
+      fiatAmount: '6400',
+      paymentDeadline: ts(),
+    },
+    p2pEscrowReleased: {
+      tradeId: uid(),
+      sellerId: uid(),
+      buyerId: uid(),
+      asset: 'BTC',
+      amount: '0.1',
+      fee: '0.001',
+      resolvedBy: 'seller',
+      releaseSeconds: 60,
+    },
+    p2pEscrowRefunded: {
+      tradeId: uid(),
+      sellerId: uid(),
+      buyerId: uid(),
+      asset: 'BTC',
+      amount: '0.1',
+      resolvedBy: 'timeout',
+      reason: 'payment deadline',
+    },
+    p2pTradeDisputed: {
+      tradeId: uid(),
+      disputeId: uid(),
+      openedBy: uid(),
+      reason: 'no payment',
+      moderatorDeadline: ts(),
+    },
+    p2pDisputeResolved: {
+      disputeId: uid(),
+      tradeId: uid(),
+      moderatorId: 'system:p2p-backstop',
+      resolution: 'refund',
+      automatic: true,
+    },
+    p2pTradeExpired: {
+      tradeId: uid(),
+      from: 'awaiting_payment',
+      outcome: 'refunded',
+    },
+  };
+}
+
+describe('catalog fixtures — every event is exercised, money stays a string', () => {
+  const fixtures = catalogFixtures();
+
+  it('covers every catalog key exactly once', () => {
+    const keys = Object.keys(fixtures).sort();
+    const catalogKeys = Object.keys(EVENT_CATALOG).sort();
+    expect(keys).toEqual(catalogKeys);
+  });
+
+  it.each(Object.keys(EVENT_CATALOG) as EventName[])('%s accepts its fixture', (name) => {
+    expect(() => validatePayload(name, fixtures[name])).not.toThrow();
+  });
+
+  it.each([
+    ['ledgerTxPosted', (p: PayloadOf<'ledgerTxPosted'>) => ({ ...p, entries: [{ ...p.entries[0]!, amount: 10 }, p.entries[1]!] })],
+    ['stakeCreated', (p: PayloadOf<'stakeCreated'>) => ({ ...p, amount: 100 })],
+    ['orderFilled', (p: PayloadOf<'orderFilled'>) => ({ ...p, price: 64000 })],
+    ['fillSettled', (p: PayloadOf<'fillSettled'>) => ({ ...p, feeAmount: 0.1 })],
+    ['positionUpdated', (p: PayloadOf<'positionUpdated'>) => ({ ...p, contracts: 1.25 })],
+    ['agentUsageSettled', (p: PayloadOf<'agentUsageSettled'>) => ({ ...p, amount: 0.01 })],
+    ['p2pEscrowLocked', (p: PayloadOf<'p2pEscrowLocked'>) => ({ ...p, amount: 0.1 })],
+    ['bankMarginCalled', (p: PayloadOf<'bankMarginCalled'>) => ({ ...p, cureCollateralAmount: 0.1 })],
+  ] as const)('%s refuses a JS number on a money field', (name, poison) => {
+    // @ts-expect-error — deliberate number on a decimal-string field
+    expect(() => validatePayload(name, poison(fixtures[name]))).toThrow(EventValidationError);
   });
 });

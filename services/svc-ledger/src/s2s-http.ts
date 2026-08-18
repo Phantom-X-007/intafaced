@@ -9,6 +9,7 @@ import {
 import {
   formatAmount,
   parseAmount,
+  accountPurpose,
   accountRefSchema,
   postRequestSchema,
   InsufficientFundsError,
@@ -18,8 +19,10 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { z } from 'zod';
+import { portfolioViewFromLedgerBalances } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * Plain S2S HTTP surface used by service ledger-clients.
@@ -35,7 +38,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     return {
       status: 400,
       body: {
-        message: err.message,
+        message: userCopy(err.code),
         code: err.code,
         accountId: err.accountId,
         assetId: err.assetId,
@@ -45,7 +48,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     };
   }
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
-    return { status: 500, body: { message: err.message, code: err.code } };
+    return { status: 500, body: { message: userCopy(err.code), code: err.code } };
   }
   // 400, not 500: the caller handed us an identifier from the wrong space. That
   // is a bad request with an actionable fix ("you passed the vendored member id
@@ -60,7 +63,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     return { status: 401, body: { message: err.message, code: err.code } };
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
-    return { status: 412, body: { message: err.message, code: err.code } };
+    return { status: 412, body: { message: userCopy(err.code), code: err.code } };
   }
   // 400 for both history refusals, same reasoning as `owner_identity_space`
   // above: the request as asked cannot be answered, retrying it unchanged is
@@ -71,7 +74,7 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
   if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
     return { status: 400, body: { message: err.message, code: err.code } };
   }
-  if (err instanceof LedgerError) return { status: 500, body: { message: err.message, code: err.code } };
+  if (err instanceof LedgerError) return { status: 500, body: { message: userCopy(err.code), code: err.code } };
   if (err instanceof z.ZodError) return { status: 400, body: { message: err.message } };
   return { status: 500, body: { message: 'Ledger request failed' } };
 }
@@ -106,6 +109,9 @@ export async function handleS2sBalance(ledger: LedgerService, body: unknown) {
     accountId: balance.accountId,
     assetId: input.assetId,
     kind: input.kind,
+    // Purpose is account IDENTITY (P0-3). Canonical trim — echoing the request
+    // string would let padded "order:x " and "order:x" look like two pots.
+    purpose: accountPurpose(input),
     amount: formatAmount(balance.amount),
   };
 }
@@ -148,8 +154,27 @@ export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
     accountId: b.accountId,
     assetId: b.account.assetId,
     kind: b.account.kind,
+    // Purpose is account IDENTITY (P0-3), not optional decoration. Two holds
+    // with different claims must not collapse to the same (assetId, kind) on
+    // the wire — callers that key by those alone would re-commingle what the
+    // book keeps apart.
+    purpose: b.account.purpose ?? '',
     amount: formatAmount(b.amount),
   }));
+}
+
+/**
+ * Portfolio Stage-1 view. Same owner input as `balances`. Same door as every
+ * other S2S route. Does not post. Indexer half is named absent by the view.
+ */
+export async function handleS2sPortfolio(ledger: LedgerService, body: unknown) {
+  const input = balancesInput.parse(body);
+  const balances = await ledger.balances(input.ownerType, input.ownerId);
+  return portfolioViewFromLedgerBalances({
+    ownerType: input.ownerType,
+    ownerId: input.ownerId,
+    balances,
+  });
 }
 
 /**
@@ -245,4 +270,5 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
   // would have been unauthenticated exactly as the money plane once was. There
   // is one door, and every route goes through it.
   app.post('/trpc/history', guarded(handleS2sHistory));
+  app.post('/trpc/portfolio', guarded(handleS2sPortfolio));
 }

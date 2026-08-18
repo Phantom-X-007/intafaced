@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # Coordination program — finish audit
 
 **Date:** 2026-08-02  
@@ -34,7 +36,7 @@ This program is **FINISHED** only when all of the following hold:
 | F3  | Campaign micro-next → BOARD-CLEAR-NEXT only                                                              | NEXT banner no longer “never TRACKER as live SoT” for ownership | ✅ #385                   |
 | F4  | Session dual-build → LIVE-LANES + path intersect                                                         | LIVE-LANES + PARALLEL law                                       | ✅ (pointer seal this PR) |
 | F5  | Mountain events only — no every-craft tax                                                                | Layers guarantees + CONTRIBUTING                                | ✅                        |
-| F6  | No new limits: Approves / PR caps / CI force / thrift undo                                               | Layers “Operator guarantees” + “Hard rejects”                   | ✅                        |
+| F6  | No new limits: Approves / PR caps / CI force · thrift later deleted (public)                             | Layers “Operator guarantees” + “Hard rejects”                   | ✅                        |
 | F7  | Zero Nitro manual                                                                                        | Layers + AGENTS operator mode                                   | ✅                        |
 | F8  | Cold entry chain: AGENTS, START-HERE, session prompt, GO, PARALLEL, LIVE-LANES all point or state layers | grep COORDINATION-TRUTH-LAYERS                                  | ✅ after seal             |
 | F9  | Decision log records layers decision                                                                     | DECISION-LOG append                                             | ✅ this seal              |

@@ -63,6 +63,42 @@ function forged(p: Principal = principal()) {
 function stubBank(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     spaces: { unnamedAssets: async () => [], ...(overrides.spaces as object | undefined) },
+    transfers: {
+      runDueTransfers: async () => ({
+        schedulesConsidered: 0,
+        settled: 0,
+        rejected: 0,
+        alreadyFired: 0,
+        strandedSwept: 0,
+        failures: [],
+      }),
+      ...(overrides.transfers as object | undefined),
+    },
+    earn: {
+      accrue: async () => ({
+        poolId: '00000000-0000-4000-8000-000000000001',
+        date: '2026-01-01',
+        paid: 0n,
+        recipients: 0,
+        alreadyAccrued: false,
+      }),
+      accrueAll: async () => ({ results: [], failures: [] }),
+      ...(overrides.earn as object | undefined),
+    },
+    loans: {
+      accrue: async () => ({ loanId: '00000000-0000-4000-8000-000000000002', charged: 0n, days: [] as string[] }),
+      accrueAll: async () => ({ results: [], failures: [] }),
+      runRiskSweep: async () => ({ marked: 0, called: 0, liquidated: 0, cleared: 0, refused: [] }),
+      ...(overrides.loans as object | undefined),
+    },
+    autoInvest: {
+      runDue: async () => ({ considered: 0, settled: 0, skipped: 0, rejected: 0, failures: [] }),
+      ...(overrides.autoInvest as object | undefined),
+    },
+    business: {
+      accountsOf: async () => [],
+      ...(overrides.business as object | undefined),
+    },
   } as unknown as BankServices;
 }
 
@@ -114,5 +150,223 @@ describe('svc-bank mount — the public surface', () => {
 
   it('serves health even when a forged principal was presented', async () => {
     await expect(createBankRouter(stubBank()).createCaller(forged()).health()).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
+  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+
+  it('refuses with SERVICE_UNAVAILABLE / bank.transfers_disabled when the flag is off, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      transfers: {
+        runDueTransfers: async () => {
+          ran = true;
+          return {
+            schedulesConsidered: 1,
+            settled: 1,
+            rejected: 0,
+            alreadyFired: 0,
+            strandedSwept: 0,
+            failures: [],
+          };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { scheduledTransfersEnabled: false }).createCaller(treasury()).ops.runDueTransfers({}),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      cause: { code: 'bank.transfers_disabled' },
+    });
+    expect(ran).toBe(false);
+  });
+
+  it('runs when the flag is on', async () => {
+    let ran = false;
+    const bank = stubBank({
+      transfers: {
+        runDueTransfers: async () => {
+          ran = true;
+          return {
+            schedulesConsidered: 0,
+            settled: 0,
+            rejected: 0,
+            alreadyFired: 0,
+            strandedSwept: 0,
+            failures: [],
+          };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { scheduledTransfersEnabled: true }).createCaller(treasury()).ops.runDueTransfers({}),
+    ).resolves.toMatchObject({ schedulesConsidered: 0, settled: 0 });
+    expect(ran).toBe(true);
+  });
+});
+
+/**
+ * Kill-switch parity residual (#1271 shape for earn / loan / risk):
+ * HTTP jobs honour INTEREST_ACCRUAL_ENABLED, LOAN_ACCRUAL_ENABLED, and
+ * LOAN_RISK_SWEEP_ENABLED. tRPC `ops.*` must not be a back door past them.
+ */
+describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => {
+  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+
+  it('ops.accrueInterest refuses when interestAccrualEnabled is false, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      earn: {
+        accrueAll: async () => {
+          ran = true;
+          return { results: [], failures: [] };
+        },
+        accrue: async () => {
+          ran = true;
+          return {
+            poolId: '00000000-0000-4000-8000-000000000001',
+            date: '2026-01-01',
+            paid: 0n,
+            recipients: 0,
+            alreadyAccrued: false,
+          };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { interestAccrualEnabled: false }).createCaller(treasury()).ops.accrueInterest({}),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      cause: { code: 'bank.interest_accrual_disabled' },
+    });
+    expect(ran).toBe(false);
+  });
+
+  it('ops.accrueInterest runs when the flag is on', async () => {
+    let ran = false;
+    const bank = stubBank({
+      earn: {
+        accrueAll: async () => {
+          ran = true;
+          return { results: [], failures: [] };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { interestAccrualEnabled: true }).createCaller(treasury()).ops.accrueInterest({}),
+    ).resolves.toMatchObject({ results: [], failures: [] });
+    expect(ran).toBe(true);
+  });
+
+  it('ops.accrueLoanInterest refuses when loanAccrualEnabled is false, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      loans: {
+        accrueAll: async () => {
+          ran = true;
+          return { results: [], failures: [] };
+        },
+        accrue: async () => {
+          ran = true;
+          return { loanId: '00000000-0000-4000-8000-000000000002', charged: 0n, days: [] as string[] };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { loanAccrualEnabled: false }).createCaller(treasury()).ops.accrueLoanInterest({}),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      cause: { code: 'bank.loan_accrual_disabled' },
+    });
+    expect(ran).toBe(false);
+  });
+
+  it('ops.runRiskSweep refuses when loanRiskSweepEnabled is false, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      loans: {
+        runRiskSweep: async () => {
+          ran = true;
+          return { marked: 0, called: 0, liquidated: 0, cleared: 0, refused: [] };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { loanRiskSweepEnabled: false }).createCaller(treasury()).ops.runRiskSweep({}),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      cause: { code: 'bank.loan_risk_sweep_disabled' },
+    });
+    expect(ran).toBe(false);
+  });
+
+  it('ops.runRiskSweep runs when the flag is on', async () => {
+    let ran = false;
+    const bank = stubBank({
+      loans: {
+        runRiskSweep: async () => {
+          ran = true;
+          return { marked: 1, called: 0, liquidated: 0, cleared: 0, refused: [] };
+        },
+      },
+    });
+
+    await expect(
+      createBankRouter(bank, { loanRiskSweepEnabled: true }).createCaller(treasury()).ops.runRiskSweep({}),
+    ).resolves.toMatchObject({ marked: 1 });
+    expect(ran).toBe(true);
+  });
+});
+
+/**
+ * Kill-switch parity for auto-invest (#1526 shape): HTTP
+ * `/internal/jobs/run-auto-invest` and tRPC `ops.runAutoInvest` share
+ * `AUTO_INVEST_ENABLED` / `bank.auto_invest_disabled`. tRPC is not a back door.
+ */
+describe('svc-bank mount — ops.runAutoInvest kill switch', () => {
+  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+
+  it('refuses with SERVICE_UNAVAILABLE / bank.auto_invest_disabled when the flag is off, and never runs', async () => {
+    let ran = false;
+    const bank = stubBank({
+      autoInvest: {
+        runDue: async () => {
+          ran = true;
+          return { considered: 1, settled: 1, skipped: 0, rejected: 0, failures: [] };
+        },
+      },
+    });
+
+    await expect(createBankRouter(bank, { autoInvestEnabled: false }).createCaller(treasury()).ops.runAutoInvest({})).rejects.toMatchObject(
+      {
+        code: 'SERVICE_UNAVAILABLE',
+        cause: { code: 'bank.auto_invest_disabled' },
+      },
+    );
+    expect(ran).toBe(false);
+  });
+
+  it('runs when the flag is on', async () => {
+    let ran = false;
+    const bank = stubBank({
+      autoInvest: {
+        runDue: async () => {
+          ran = true;
+          return { considered: 0, settled: 0, skipped: 0, rejected: 0, failures: [] };
+        },
+      },
+    });
+
+    await expect(createBankRouter(bank, { autoInvestEnabled: true }).createCaller(treasury()).ops.runAutoInvest({})).resolves.toMatchObject(
+      { considered: 0, settled: 0 },
+    );
+    expect(ran).toBe(true);
   });
 });

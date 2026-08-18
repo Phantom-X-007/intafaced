@@ -209,6 +209,23 @@ describe('BinanceSpotMarketData — public data, no credentials', () => {
     const http = new FakeHttp().queue({ lastUpdateId: 1, bids: [[30000, 2]], asks: [] });
     await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/JSON number/);
   });
+
+  it('REFUSES a two-sided dust book as no_depth (D26-P1-T8 payout-grade)', async () => {
+    const http = new FakeHttp().queue({
+      lastUpdateId: 9,
+      bids: [['30000.00', '0.00000001']],
+      asks: [['30002.00', '0.00000001']],
+    });
+    const md = adapter(http, new FakeStream());
+    try {
+      await md.snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+      expect((error as VenueUnavailableError).message).toMatch(/not payout-grade/);
+    }
+  });
 });
 
 describe('rate governing on the REST path', () => {

@@ -1,3 +1,5 @@
+import { CaptureLog, type CaptureRecord, type VenueConnection } from '@intafaced/connect-data-lake';
+
 /**
  * PUBLIC TRADE TAPE (§5.2 ws.gateway).
  *
@@ -85,3 +87,56 @@ export function tradePrintFromFill(fill: FillLike): TradePrint {
 
 /** Keys a public print is allowed to carry. Used by tests and any scanner. */
 export const TRADE_PRINT_PUBLIC_KEYS = ['type', 'marketId', 'sequence', 'price', 'quantity', 'ts'] as const;
+
+export interface VenueFillIngest {
+  readonly venueId: string;
+  readonly connection: VenueConnection;
+  readonly fill?: FillLike | null;
+}
+
+export interface VenueTickIngest {
+  readonly venueId: string;
+  readonly connection: VenueConnection;
+  readonly marketId: string;
+  readonly tick?: { readonly price: string; readonly quantity: string; readonly ts: string } | null;
+}
+
+export interface VenueTapeIngestResult {
+  readonly record: CaptureRecord;
+  readonly print: TradePrint | null;
+}
+
+/**
+ * Fill ingest with a venue id. Unconnected venues write absent — they do not
+ * mint a public print from silence.
+ */
+export function ingestVenueFill(lake: CaptureLog, input: VenueFillIngest): VenueTapeIngestResult {
+  const fill = input.fill ?? null;
+  if (input.connection !== 'connected' || fill === null) {
+    const record = lake.captureFill({
+      venueId: input.venueId,
+      marketId: fill?.marketId ?? '',
+      connection: input.connection,
+      fill: null,
+    });
+    return { record, print: null };
+  }
+  const print = tradePrintFromFill(fill);
+  const record = lake.captureFill({
+    venueId: input.venueId,
+    marketId: print.marketId,
+    connection: 'connected',
+    fill: { price: print.price, quantity: print.quantity, ts: print.ts, sequence: print.sequence },
+  });
+  return { record, print };
+}
+
+/** Tick ingest. Same absent-vs-measured rule as fills. */
+export function ingestVenueTick(lake: CaptureLog, input: VenueTickIngest): CaptureRecord {
+  return lake.captureTick({
+    venueId: input.venueId,
+    marketId: input.marketId,
+    connection: input.connection,
+    tick: input.tick ?? null,
+  });
+}

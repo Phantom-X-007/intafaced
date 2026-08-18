@@ -5,12 +5,15 @@
  * when the server already has a valid v1 scene.
  */
 
+import { sceneFingerprint } from './edit-policy.js';
 import { emptyScene, parseScene, type SceneV1 } from './scene.js';
 
 export type ReconnectOk = {
   readonly status: 'ok';
   readonly scene: SceneV1;
   readonly source: 'server' | 'local_draft' | 'empty_default';
+  /** Same SoT as session.sceneFingerprint — host writes must echo this. */
+  readonly fingerprint: string;
 };
 
 export type ReconnectRefuse = {
@@ -34,7 +37,12 @@ export function restoreSceneOnReconnect(input: { serverScene: unknown | null | u
     if (!server.ok) {
       return { status: 'refuse', reason: 'server_invalid', message: server.message };
     }
-    return { status: 'ok', scene: server.scene, source: 'server' };
+    return {
+      status: 'ok',
+      scene: server.scene,
+      source: 'server',
+      fingerprint: sceneFingerprint(server.scene),
+    };
   }
 
   if (input.localDraft != null) {
@@ -42,10 +50,16 @@ export function restoreSceneOnReconnect(input: { serverScene: unknown | null | u
     if (!local.ok) {
       return { status: 'refuse', reason: 'local_invalid', message: local.message };
     }
-    return { status: 'ok', scene: local.scene, source: 'local_draft' };
+    return {
+      status: 'ok',
+      scene: local.scene,
+      source: 'local_draft',
+      fingerprint: sceneFingerprint(local.scene),
+    };
   }
 
-  return { status: 'ok', scene: emptyScene(), source: 'empty_default' };
+  const scene = emptyScene();
+  return { status: 'ok', scene, source: 'empty_default', fingerprint: sceneFingerprint(scene) };
 }
 
 /** L3 — true when reconnect ok. */

@@ -852,18 +852,29 @@ export default {
         var tickersRes = results[1];
         this.loading = false;
 
-        if (!marketsRes.ok || !Array.isArray(marketsRes.data)) {
+        if (!marketsRes.ok) {
           // Unreachable listing ≠ a venue with no markets.
           this.marketsDown = true;
           this.marketsMessage = marketsRes.message || "";
+          return;
+        }
+        var marketsGate = ixTrade.accept(ixTrade.schemas.markets, marketsRes.data);
+        if (!marketsGate.ok) {
+          this.marketsDown = true;
+          this.marketsMessage = marketsGate.message || "";
           return;
         }
 
         // Tickers may fail on their own. The listing is still true, so the
         // markets are shown with no price rather than hidden — a missing last
         // price prints "Not traded" (never 0, never the string "null").
-        var tickers = tickersRes.ok && tickersRes.data ? tickersRes.data : {};
-        var rows = ixTrade.toMarketRows(marketsRes.data, tickers);
+        // Shape failure on tickers is the same class of lie as missing — no last.
+        var tickers = {};
+        if (tickersRes.ok && tickersRes.data) {
+          var tickersGate = ixTrade.accept(ixTrade.schemas.tickers, tickersRes.data);
+          if (tickersGate.ok) tickers = tickersGate.data;
+        }
+        var rows = ixTrade.toMarketRows(marketsGate.data, tickers);
 
         var buckets = {};
         var quotes = [];

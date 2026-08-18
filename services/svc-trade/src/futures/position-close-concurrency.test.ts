@@ -62,6 +62,7 @@ import type { LedgerClient, PostRequest } from '@intafaced/ledger-client';
 import { PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import type { QuotedMarkSource } from './liquidation-tick.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -140,6 +141,7 @@ if (!available) {
     return new PositionService(sql, recording, {
       marks: source,
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus: null,
       now: () => NOW,
     });
@@ -196,7 +198,14 @@ if (!available) {
    */
   async function openWinner(service: PositionService) {
     feed('50000');
-    const pos = await service.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const pos = await service.open({
+      clientOpenId: 't-open-position-close-concurrency.test-1',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     feed('55000');
     return pos;
   }
@@ -378,8 +387,22 @@ if (!available) {
     `;
     feed('50000');
     feed('50000', MARKET_2);
-    const a = await service.open({ userId: ALICE, symbol: 'BTC/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
-    const b = await service.open({ userId: ALICE, symbol: 'ETH/USDT-PERP', side: 'long', size: amt('1'), leverage: amt('10') });
+    const a = await service.open({
+      clientOpenId: 't-open-position-close-concurrency.test-2',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const b = await service.open({
+      clientOpenId: 't-open-position-close-concurrency.test-3',
+      userId: ALICE,
+      symbol: 'ETH/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
     feed('55000');
     feed('55000', MARKET_2);
     await Promise.all([service.close(ALICE, a.id!), service.close(ALICE, b.id!)]);

@@ -2,7 +2,7 @@
  * Affiliates L3 — freeze audit store (non-pay).
  *
  * Operator freezes beneficiaries with a reason; accrual uses the id set.
- * No ledger, no invent rates. Payout remains Class M residual.
+ * No ledger, no invent rates. Payout skips frozen beneficiaries (same id set).
  */
 
 import { accrueWithFreezes } from './freeze.js';

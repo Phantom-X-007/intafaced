@@ -52,6 +52,10 @@ const bool = z
   .union([z.boolean(), z.string()])
   .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
 
+/** Compose interpolates unset optional URLs to "". Blank is absent, not an invalid URL. */
+const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), inner);
+
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // Only mounting services merge this — a service reached solely through the
 // gateway has no edge header to verify, and demanding the secret there would
@@ -67,6 +71,27 @@ const schema = serviceEnvSchema
       /** svc-ledger's internal address. Metered usage is billed through it. */
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
+      /**
+       * svc-identity base for affiliate accrue + payout after usage feeCharge.
+       * Blank → noop ports (feeCharge still posts). Never invent rates.
+       * No localhost default — unset is honest noop, not a guessed identity.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
+       * Academy base URL for coach curriculum grounding
+       * (`GET /internal/curriculum`). Unset / blank → envCoachGrounding() empty
+       * catalog (chatbot refuse). Set → S2S fetch; 401/dark academy still empty.
+       */
+      ACADEMY_URL: blankAsAbsent(z.string().url().optional()),
+
+      /**
+       * svc-support base for live KB/ticket reads (`/trpc/searchKb`, `/trpc/getKb`,
+       * `/trpc/get`). Unset / blank → support live tools refuse `no_live_kb`.
+       * No localhost default — unset is honest dark, not a guessed desk.
+       */
+      SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
+
       /** Asset premium agent tiers are billed in (§8.2). */
       AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
 
@@ -78,9 +103,11 @@ const schema = serviceEnvSchema
       AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
 
       /**
-       * Kill-switch for billing (§14 admin controls). Usage is still RECORDED
-       * when this is off: turning metering off must not also destroy the ability
-       * to find out what the fleet cost while it was off.
+       * Kill-switch for billing (§14 admin controls). When off (D26-P1-A6
+       * product law, sealed): audit-only forever — no usage_records, no windows,
+       * no feeCharge — including settle of leftover windows. Token counts stay
+       * on the action audit only (knowable cost without inventing a deferred
+       * bill). Dual-write of usage_records while off is forbidden.
        */
       AGENTS_METERING_ENABLED: bool.default(true),
 

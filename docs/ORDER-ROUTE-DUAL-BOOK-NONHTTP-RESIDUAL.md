@@ -1,26 +1,30 @@
 # Dual-book residual — classified setBalance (post deep-audit finish)
 
-**Generated:** 2026-08-02 · `node tooling/scripts/dual-book-setbalance-classify.mjs`  
-**Brand-safe paths** use `vendor/<exchange>/…` in prose.
+**Generated:** 2026-08-02 · **Re-derived W8 L07:** 2026-08-09 · tip `5ee00f24`  
+**Script:** `node tooling/scripts/dual-book-setbalance-classify.mjs`  
+**Tree:** `vendor/upstream-exchange/**` (brand-safe prose may say `vendor/<exchange>/…`)
 
-## Summary (re-derived this turn)
+## Summary (re-derived this turn · RAN-IT)
 
-| Kind                    | Count | Meaning                                                    |
-| ----------------------- | ----: | ---------------------------------------------------------- |
-| **LIVE**                | **0** | Non-HTTP money mints                                       |
-| **WALLET_INIT_ZERO**    |     6 | Register zeros — not value mint                            |
-| **DEAD_NULL**           |     8 | Behind dual-book null / early-return                       |
-| **HTTP_DOOR_COVERED**   |    13 | Controllers — door fragment likely listed (incl. dividend) |
-| **HTTP_DOOR_UNCOVERED** | **0** | Would need door list or M7                                 |
-| **RECORD_NOT_WALLET**   |     1 | HotTransferRecord log field — not MemberWallet             |
+| Kind                    |     Count | Meaning                                                                                                              |
+| ----------------------- | --------: | -------------------------------------------------------------------------------------------------------------------- |
+| **LIVE**                |     **0** | Non-HTTP money mints                                                                                                 |
+| **WALLET_INIT_ZERO**    |         6 | Register zeros — not value mint                                                                                      |
+| **DEAD_THROW**          |         1 | Method body throws dual-book IllegalStateException before write                                                      |
+| **RECORD_NOT_WALLET**   |         1 | HotTransferRecord log field — not MemberWallet                                                                       |
+| **HTTP_DOOR_UNCOVERED** |     **0** | Would need door list or M7                                                                                           |
+| **HTTP_DOOR_COVERED**   | 0 printed | Controllers with active setBalance are throw-sealed or block-comment dead; door interceptor still lists 40 fragments |
+
+Live non-comment `setBalance`/`setFrozenBalance` walk (Engine B, same turn): 6 zero-inits + 1 HotTransferRecord only.
 
 ## Remaining (honest)
 
-| Item                                                       | Owner        |
-| ---------------------------------------------------------- | ------------ |
-| Entity `MemberWalletService.save` still can write balances | M7 shehzad   |
-| JVM live 410 smoke                                         | Ops / Docker |
-| Human X                                                    | Nitro        |
+| Item                                                       | Owner                        |
+| ---------------------------------------------------------- | ---------------------------- |
+| Entity `MemberWalletService.save` still can write balances | M7 shehzad / product law     |
+| JVM live 410 smoke                                         | Ops / Docker                 |
+| Grade B ledger-adapter call sites                          | product law — not free craft |
+| Human X (licence / counsel)                                | Nitro                        |
 
 ## Not go-live
 

@@ -66,6 +66,29 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
+       * TWAP slice scheduler (D-S-04 / trade.algo). Default OFF.
+       *
+       * Distinct from TRADE_ALGO_ENABLED: that one decides whether a user may
+       * CREATE a schedule, this one decides whether anything ever executes it.
+       * Off, a TWAP is accepted, persisted, and never places a child — which is
+       * exactly the pre-mount state, so this defaults off until an operator
+       * turns it on deliberately (denylist: only 1/true/on/yes enable).
+       *
+       * Mount is legal only with ADR 2026-08-08 re-space + cancel honesty.
+       */
+      TRADE_ALGO_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
+       * How often the TWAP scheduler asks the engine for the next due slice.
+       * Cap 1000ms: the engine's floor for sliceIntervalMs is 1s, so anything
+       * above 1s here can under-run a legal schedule. Refuse at boot.
+       */
+      TRADE_ALGO_JOBS_INTERVAL_MS: z.coerce.number().int().min(250).max(1_000).default(1_000),
+
+      /**
        * MAY A FUTURES MARKET ACCEPT AN ORDER? (`trade.futures` / D-S-01.)
        *
        * DEFAULT OFF, and off is a product state rather than an outage. With this
@@ -95,10 +118,9 @@ const schema = serviceEnvSchema
        *     remove the one ceiling there is. Orders on a futures book are funded
        *     by the same hold as spot (`holdFor` / `assertTradable` in
        *     `spot/risk.ts`), and a MARGIN position opened through
-       *     `futures/position-service.ts` is refused above
-       *     `DEFAULT_MAX_LEVERAGE` however this flag is set. There used to be no
-       *     ceiling at all; see `futures/initial-margin.ts` for what that cost
-       *     and for whose ruling the number is awaiting.
+       *     `futures/position-service.ts` is refused above the DIRECTION §1
+       *     10× cap (D26-P0-07), or a tighter `TRADE_FUTURES_MAX_LEVERAGE`.
+       *     Empty env is 10× in code — not refuse-closed, not a raise.
        *   · It does not lower the mark bar. `DEFAULT_MIN_BEST_LEVEL_NOTIONAL`
        *     still refuses a dust book, which is the whole reason this flag
        *     could be added at all (`c7dfb5e4`, `cc90c2f4`) — and
@@ -115,6 +137,34 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
       /**
+       * OPTIONS SETTLEMENT ASSET LAW stamp (trade.options / D26-P0-05).
+       *
+       * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
+       * kind=options throws `trade.options_settlement_law_unset` until this is a
+       * non-empty opaque string meaning the P0-05 ADR (live set, settlement asset,
+       * refuse matrix) is published. The string is NEVER parsed for assets or
+       * matrix rows — inventing those is SOCKET §13
+       * `socket.options-settlement-asset-law`. Stamp only after the ADR exists.
+       */
+      TRADE_OPTIONS_SETTLEMENT_ASSET_LAW: z.string().default(''),
+
+      /**
+       * OPTIONS SETTLEMENT FIXING CONFIG (trade.options / D7).
+       *
+       * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
+       * kind=options throws `trade.options_fixing_unconfigured` until this is
+       * set to a non-empty opaque string (and P0-05 law is also stamped). The
+       * string is stamped on the market row as `settlement_fixing`; it is NOT
+       * parsed for source, window, expiry clock, or funded payor account. Those
+       * are owner law (D7) and inventing them here would be the exact failure
+       * this thin slice exists to prevent.
+       *
+       * No IV surface. No pricing model. Orders on options remain refused by
+       * `assertTradable` (`trade.market_kind_unsupported`) until an engine exists.
+       */
+      TRADE_OPTIONS_SETTLEMENT_FIXING: z.string().default(''),
+
+      /**
        * Futures residual jobs (liquidation scan + funding ticks).
        * Default OFF — must be explicitly enabled. Never invents markets/rates.
        */
@@ -126,14 +176,47 @@ const schema = serviceEnvSchema
       /** Liquidation scan interval when jobs enabled. Default 15s. */
       TRADE_FUTURES_LIQ_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
 
-      /** Funding tick interval per market when jobs enabled. Default 8h. */
-      TRADE_FUTURES_FUNDING_INTERVAL_MS: z.coerce.number().int().min(60_000).max(86_400_000).default(28_800_000),
+      /**
+       * Funding tick interval per market when jobs enabled.
+       * EMPTY = do not schedule funding ticks. D2: there is no product 8h default.
+       * A set value must be an integer 60000–86400000.
+       */
+      TRADE_FUTURES_FUNDING_INTERVAL_MS: z
+        .string()
+        .default('')
+        .transform((raw, ctx) => {
+          const s = raw.trim();
+          if (s === '') return null;
+          const n = Number(s);
+          if (!Number.isInteger(n) || n < 60_000 || n > 86_400_000) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'TRADE_FUTURES_FUNDING_INTERVAL_MS must be an integer 60000–86400000, or empty (no invented 8h schedule)',
+            });
+            return z.NEVER;
+          }
+          return n;
+        }),
 
       /**
        * Comma-separated market UUIDs for funding ticks.
        * Empty (default) = funding jobs not scheduled — never invent market list.
        */
       TRADE_FUTURES_FUNDING_MARKET_IDS: z.string().default(''),
+
+      /**
+       * Absolute max |period funding rate| as a positive decimal string
+       * (same units as published rates — absolute, not bps).
+       *
+       * NO DEFAULT. The product ceiling is owner residual D2
+       * (`docs/BUILD-STOP-TRADE-2026-08-08.md`). Inventing e.g. "0.01" here
+       * would dress an interim number as law.
+       *
+       * Empty: publish + settlement refuse rate application (fail-closed).
+       * Non-empty funding market list without this set: boot fails.
+       * See `futures/funding-rate-bound.ts`.
+       */
+      TRADE_FUTURES_FUNDING_MAX_ABS_RATE: z.string().default(''),
 
       /**
        * THE ACCOUNT REALISED FUTURES PROFIT IS PAID FROM, and therefore the
@@ -153,6 +236,13 @@ const schema = serviceEnvSchema
        * `futures/profit-source.ts`.
        */
       TRADE_FUTURES_PROFIT_SOURCE: z.string().default(''),
+
+      /**
+       * Maximum leverage on a futures open (decimal string, same units as the
+       * request). EMPTY = DIRECTION §1 10× in code (D26-P0-07). Set only to
+       * tighten (≤ 10). A value above 10× fails boot — that is a raise.
+       */
+      TRADE_FUTURES_MAX_LEVERAGE: z.string().default(''),
 
       /**
        * Market-maker seed job (trade.mm-bot residual).
@@ -203,8 +293,8 @@ const schema = serviceEnvSchema
       /**
        * Venue fabric mark source (A-TRADE-VENUE-1 / venue.aggregation).
        * Empty (default) = off — marks fall back to matching depth mid only.
-       * Known ids: `binance-spot`, `bybit-spot` — both PUBLIC MarketDataAdapters,
-       * neither holding a credential.
+       * Known ids: `binance-spot`, `bybit-spot`, `okx-spot` — PUBLIC MarketDataAdapters,
+       * none holding a credential.
        * Unknown id → no adapter (refuse invent). Never invents mid.
        */
       TRADE_VENUE_MARK_VENUE: z.string().default(''),
@@ -215,6 +305,16 @@ const schema = serviceEnvSchema
        * Unmapped market → null mark for that id (never invent symbol).
        */
       TRADE_VENUE_MARK_SYMBOLS: z.string().default(''),
+
+      /**
+       * When true, futures venue marks read the sequenced MaintainedBook
+       * (stream-first + snapshot join) instead of polling snapshotBook each tick.
+       * Default OFF. Empty symbol map still starts nothing. Desynced feed → null mark.
+       */
+      TRADE_VENUE_MARK_STREAM: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
       /**
        * Spot candle materialization job (A-TRADE-SPOT-1).
@@ -243,11 +343,26 @@ const schema = serviceEnvSchema
       TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default('1m'),
 
       /**
+       * Engine ↔ ledger reconcile sweep (A10 / ENGINE-LEDGER-RECONCILE-HANDOFF).
+       * Default OFF — builds counterpart view from trade.orders + hold balances,
+       * POSTs matching `/reconcile`, alerts on refuse, auto-deletes only
+       * unfunded pending. Never releases funded missing silently.
+       */
+      TRADE_RECONCILE_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Reconcile sweep interval when enabled. Default 60s. */
+      TRADE_RECONCILE_JOBS_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+
+      /**
        * OTC RFQ desk law (trade.otc / D-S-02). JSON or empty.
        *
        * Empty (default) = unpublished → refuse-closed. Never invent spread bps,
        * min stake, or principal-vs-maker — DIRECTION §8 owner-only.
-       * Published shape: {"published":true,"spreadBps":N,"minStake":"…","counterparty":"platform"|"maker","quoteTtlMs":30000}
+       * Published shape: {"published":true,"spreadBps":N,"minStake":"…","counterparty":"platform"|"maker","quoteTtlMs":30000,"maxMidAgeSeconds":N}
+       * maxMidAgeSeconds is required when published — never invent mid freshness.
        */
       TRADE_OTC_DESK_LAW: z.string().default(''),
 
@@ -255,11 +370,53 @@ const schema = serviceEnvSchema
        * OTC reference mids, ops-published: `BASE/QUOTE:mid,BASE/QUOTE:mid`.
        *
        * Empty (default) = the desk can source no price and every quote refuses
-       * `trade.otc_no_reference_price`. This is the ONLY place an OTC mid comes
-       * from — it is deliberately not a caller input, because a taker who names
-       * the price can name it at 1 and take the house inventory.
+       * `trade.otc_no_reference_price`. Boot-stamped asOf + desk-law
+       * `maxMidAgeSeconds` makes a static map go dark after the owner window.
+       * Boot-stamped map is not a live feed. When TRADE_OTC_MID_FROM_VENUE is
+       * on, production uses the venue observation source instead (no boot fallback).
+       * Deliberately not a caller input.
        */
       TRADE_OTC_MIDS: z.string().default(''),
+
+      /**
+       * When true, OTC quotes source mid from the same public venue adapter as
+       * TRADE_VENUE_MARK_VENUE. Default OFF. With TRADE_VENUE_MARK_STREAM also
+       * on, uses the same MaintainedBook port as futures marks / MM (desynced
+       * → null). Never invents if venue down / unmapped / empty book. Boot
+       * TRADE_OTC_MIDS is not mixed in when this is on.
+       */
+      TRADE_OTC_MID_FROM_VENUE: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /**
+       * OTC pairKey → venue unified symbol: `BTC/USDT:BTC/USDT,ETH/USDT:ETH/USDT`.
+       * Empty (default) = every pair unmapped → null mid (never invent symbols).
+       * Keys are OTC pair keys, not trade.markets UUIDs (those stay on TRADE_VENUE_MARK_SYMBOLS).
+       */
+      TRADE_OTC_VENUE_SYMBOLS: z.string().default(''),
+
+      /**
+       * Copy fee-share law (trade.copy / D-S-03 / D26-P0-02). JSON or empty.
+       *
+       * Empty (default) = unpublished → refuse-closed. Never invent
+       * leader_share_bps / caps / decay — DIRECTION §8 owner-only.
+       * Published shape: {"published":true,"leaderShareBps":N,"earningsCapPerFollower":"…",
+       * "decayRoundTrips":N,"decayShareBps":N}
+       */
+      TRADE_COPY_FEE_SHARE_LAW: z.string().default(''),
+
+      /**
+       * Copy jurisdiction allowlist (trade.copy / D-S-03 / D26-P0-15).
+       *
+       * Empty (default) = unpublished → follow refuses. Never invent a second
+       * list in callers (adr/2026-08-12-copy-jurisdiction-refuse-closed.md).
+       * Owner JSON is in `.env.example` (published 2026-08-14); compose has no default.
+       * Published shape: {"published":true,"allowedRegions":["…"]}
+       * Published empty array = serve none (still fail closed).
+       */
+      TRADE_COPY_JURISDICTION_LAW: z.string().default(''),
 
       /** svc-token — stakeOf for OTC staked-tier gate. */
       TOKEN_URL: z.string().url().default('http://localhost:4003'),

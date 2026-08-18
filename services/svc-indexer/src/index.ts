@@ -1,5 +1,4 @@
 import Fastify from 'fastify';
-import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createDb } from '@intafaced/db';
 import { createEdgeContext } from '@intafaced/contracts';
 import { checkAccess } from '@intafaced/config';
@@ -8,7 +7,8 @@ import { NullChainSource } from './chain/memory-source.js';
 import { EvmChainSource } from './chain/evm/source.js';
 import { PostgresProjectionStore } from './projection/postgres-store.js';
 import { Indexer } from './indexer.js';
-import { createIndexerRouter, type ChainProbe, type IndexerRouter } from './router.js';
+import { createIndexerRouter, type ChainProbe } from './router.js';
+import { registerIndexerPublicHttp } from './public-http.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -145,48 +145,19 @@ export type AppRouter = typeof appRouter;
 // (docs/decisions/mount-boundary.md).
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
-app.get('/health', async () => ({
-  ok: true,
-  service: env.SERVICE_NAME,
+await registerIndexerPublicHttp(app, {
+  indexer,
+  appRouter,
+  serviceName: env.SERVICE_NAME,
   chainId: env.INDEXER_CHAIN_ID,
-  custodial: false,
-  ingestEnabled,
-}));
-
-/**
- * Readiness is about whether this projection trusts itself.
- *
- * A halted indexer has hit a reorg deeper than its retained history: it knows
- * its book is wrong and cannot repair it. Leaving the rotation is the correct
- * response — a stale book is a bad experience, a confidently wrong book is the
- * failure this service exists to prevent. Being unreachable costs a user
- * nothing they cannot get from any node; a wrong price costs them a trade.
- *
- * A database that will not answer is the other way out of the rotation, for the
- * ordinary reason.
- */
-app.get('/ready', async (_req, reply) => {
-  const halted = indexer.halted;
-  if (halted) {
-    return reply.code(503).send({ ready: false, reason: halted.reason, haltedAt: halted.at.toISOString() });
-  }
-  try {
+  ingestEnabled: () => ingestEnabled,
+  dbPing: async () => {
     await db.sql`SELECT 1`;
-    return { ready: true };
-  } catch (err) {
-    return reply.code(503).send({ ready: false, reason: (err as Error).message });
-  }
-});
-
-await app.register(fastifyTRPCPlugin, {
-  prefix: '/trpc',
-  trpcOptions: {
-    router: appRouter,
-    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
-    onError({ path, error }) {
-      app.log.error({ path, err: error }, 'trpc error');
-    },
-  } satisfies FastifyTRPCPluginOptions<IndexerRouter>['trpcOptions'],
+  },
+  createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+  onTrpcError({ path, error }) {
+    app.log.error({ path, err: error }, 'trpc error');
+  },
 });
 
 /**
@@ -207,15 +178,10 @@ if (sovereignty.code !== 'allowed.permissionless') {
 /**
  * A boot-time chain check that LOGS rather than throws.
  *
- * Deliberate. A read model whose chain is not up yet still has a job — it serves
- * everything already projected, and `status` now states exactly how stale that
- * is. Refusing to start would take the read path down over a dependency the read
- * path does not need, and in a compose stack it would mean svc-indexer racing
- * `evm` and losing.
- *
- * What must never happen is starting quietly. So the refusal is logged at
- * `error` with its code, `status.chain` carries the same refusal on every
- * request, and `Indexer.lastError` records each pass that cannot advance.
+ * Deliberate. Refusing to start would crash-loop a compose stack racing `evm`.
+ * The process stays up, `/health` stays green, `status` names the refusal.
+ * After a failed pass, data paths and `/ready` refuse so a last projection
+ * is not served as live (D26-P1-I3 + serving-refuse lastError).
  */
 if (evmSource) {
   const probe = await chainProbe();
@@ -250,7 +216,11 @@ export function setIngestEnabled(next: boolean): void {
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
-      indexer.stop();
+      try {
+        await indexer.stopAndDrain();
+      } catch (err) {
+        app.log.error({ err }, 'indexer drain timed out on shutdown — closing anyway');
+      }
       await app.close();
       await db.close();
       process.exit(0);

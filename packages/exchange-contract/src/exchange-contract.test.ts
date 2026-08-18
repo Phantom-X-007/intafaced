@@ -11,7 +11,7 @@ import {
   exchangeErrorSchema,
   marketSchema,
 } from './schemas.js';
-import { REST_ROUTES, WS_CHANNELS } from './api.js';
+import { REST_ROUTES, WS_CHANNELS, RATE_LIMITS } from './api.js';
 
 describe('CCXT unified symbols', () => {
   it('parses a spot pair', () => {
@@ -82,7 +82,7 @@ describe('money crosses the boundary as a decimal string', () => {
 });
 
 describe('order validation at the boundary', () => {
-  const base = { symbol: 'BTC/USDT', side: 'buy', amount: '1' } as const;
+  const base = { symbol: 'BTC/USDT', side: 'buy', amount: '1', clientOrderId: 'cli-1' } as const;
 
   it('accepts a well-formed limit order', () => {
     expect(createOrderRequestSchema.safeParse({ ...base, type: 'limit', price: '90000' }).success).toBe(true);
@@ -117,6 +117,12 @@ describe('order validation at the boundary', () => {
   it('carries a client order id for idempotent retries', () => {
     const parsed = createOrderRequestSchema.parse({ ...base, type: 'market', clientOrderId: 'bot-42' });
     expect(parsed.clientOrderId).toBe('bot-42');
+  });
+
+  it('refuses a create without clientOrderId — retry would double-hold', () => {
+    const { clientOrderId: _omit, ...noId } = base;
+    const result = createOrderRequestSchema.safeParse({ ...noId, type: 'market' });
+    expect(result.success).toBe(false);
   });
 });
 
@@ -174,6 +180,13 @@ describe('API surface', () => {
   it('marks private WS channels as scoped', () => {
     expect(WS_CHANNELS.orderbook.private).toBe(false);
     expect(WS_CHANNELS.positions.private).toBe(true);
+  });
+
+  it('publishes the edge-enforced 300/min — not a dead 1200/600/20 contract', () => {
+    expect(RATE_LIMITS.publicPerMinute).toBe(300);
+    expect(RATE_LIMITS.privatePerMinute).toBe(300);
+    expect('ordersPerSecond' in RATE_LIMITS).toBe(false);
+    expect('weightPerMinute' in RATE_LIMITS).toBe(false);
   });
 
   it('declares a millisecond span for every timeframe', () => {

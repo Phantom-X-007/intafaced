@@ -19,6 +19,15 @@ import {
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import {
+  affiliateLegAfterLoanLiquidate,
+  affiliateLegAfterLoanRepay,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+  type AffiliateBankFeeLeg,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
+import {
   DEFAULT_MARK_POLICY,
   assertAcceptableForLiquidation,
   acceptableForMarking,
@@ -34,6 +43,7 @@ import {
   describeLtv,
   ltvBps,
   markPortfolio,
+  isMarginCallCured,
   planLiquidation,
   splitProceeds,
   type LiquidationPolicy,
@@ -135,6 +145,12 @@ export interface LoanRecord {
   quoteAssetId: string;
   aprBps: number;
   principal: Amount;
+  /**
+   * Collateral pledged at open, snapshotted once — a TERM, not a live balance.
+   * Live holdings are ledger + `loan_collateral_events`. Null only on legacy
+   * rows opened before this column existed.
+   */
+  openingCollateral: Amount | null;
   status: 'pending' | 'active' | 'margin_call' | 'liquidating' | 'repaid' | 'liquidated';
   drawLedgerTxId: string | null;
   openedAt: Date;
@@ -264,6 +280,21 @@ export interface LoanServiceOptions {
   readonly marginCalls?: MarginCallSink;
   readonly markPolicy?: MarkPolicy;
   readonly daysPerYear?: number;
+  /**
+   * Module kill (`BANK_LOANS_ENABLED` / FLAG_REGISTRY bank.loans). Default true.
+   * When false, `open` refuses `bank.loans_disabled`.
+   */
+  readonly moduleEnabled?: boolean;
+  /**
+   * Identity affiliate accrue after house bank fees post. Default noop.
+   * Failures must not unwind loanRepay / loanLiquidate.
+   */
+  readonly affiliateAccrue?: AffiliateAccruePort;
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind the ledger post. Body is `{ feeEventId }` only.
+   */
+  readonly affiliatePayout?: AffiliatePayoutPort;
 }
 
 const ONE = parseAmount('1');
@@ -279,6 +310,8 @@ export class LoanService {
   private readonly venue: LiquidationVenue;
   private readonly marginCalls: MarginCallSink;
   private readonly markPolicy: MarkPolicy;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
 
   constructor(
     private readonly sql: Sql,
@@ -288,6 +321,8 @@ export class LoanService {
     this.venue = options.venue ?? marketMakerVenue();
     this.marginCalls = options.marginCalls ?? recordOnlyMarginCallSink;
     this.markPolicy = options.markPolicy ?? DEFAULT_MARK_POLICY;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   // ── Products ───────────────────────────────────────────────────────────────
@@ -440,6 +475,9 @@ export class LoanService {
     principal: Amount;
     now?: Date;
   }): Promise<{ loan: LoanRecord; ltvBps: number; collateralLedgerTxId: string; drawLedgerTxId: string }> {
+    if (this.options.moduleEnabled === false) {
+      throw new BankError('Loans module is disabled (BANK_LOANS_ENABLED / bank.loans)', 'bank.loans_disabled');
+    }
     const now = input.now ?? new Date();
     const product = await this.product(input.productId);
 
@@ -489,10 +527,11 @@ export class LoanService {
 
     const inserted = await this.sql<Array<Record<string, unknown>>>`
       INSERT INTO bank.loans (
-        id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opened_at
+        id, product_id, user_id, debt_asset_id, collateral_asset_id, quote_asset_id, apr_bps, principal, opening_collateral, opened_at
       ) VALUES (
         ${loanId}, ${product.id}, ${input.userId}, ${product.debtAssetId}, ${product.collateralAssetId},
-        ${product.quoteAssetId}, ${product.aprBps}, ${formatAmount(input.principal)}::numeric, ${now}
+        ${product.quoteAssetId}, ${product.aprBps}, ${formatAmount(input.principal)}::numeric,
+        ${formatAmount(input.collateralAmount)}::numeric, ${now}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING *
@@ -503,31 +542,34 @@ export class LoanService {
     /**
      * THE RETRY MUST BE THE SAME LOAN, NOT JUST THE SAME ID.
      *
-     * `ON CONFLICT (id) DO NOTHING` means a retry writes nothing and `loan`
-     * becomes the FIRST call's row — carrying the FIRST call's principal. Every
-     * check above ran on `input`. `completePending` below then locks
-     * `input.collateralAmount` and draws `loan.principal`. Nothing reconciled
-     * the two, so the guard and the payout could read different numbers.
-     *
-     * The attack that gets: open loan X for 1 000 000 against 2 000 000 of
-     * collateral you do not hold. The LTV check passes on those numbers, the row
-     * persists at 1 000 000, the collateral lock fails for insufficient funds
-     * and the loan stays `pending`. Retry loan X for 1 against 2 of collateral
-     * you DO hold — LTV passes on the new numbers, the insert conflicts and does
-     * nothing, and the service locks 2 units and draws 1 000 000. Repeat until
-     * the reserve is empty.
-     *
-     * Refusing is the right shape rather than re-deriving LTV from
-     * `loan.principal`: a retry that asks for different terms is a different
-     * loan, and silently honouring the stored ones would answer a request
-     * nobody made. Same id + same principal stays idempotent, which is what the
-     * caller-supplied id is for.
+     * Order: who is asking → principal → opening collateral. Borrower first so a
+     * second caller is not answered with the first loan's stored amounts via a
+     * typed amount mismatch. Principal and collateral still refuse under-coll
+     * and principal-swap attacks once identity matches.
      */
+    if (loan.userId !== input.userId || loan.productId !== product.id) {
+      throw new BankError(
+        `Loan ${loan.id} already exists and was not opened by this request — a retry must carry the same terms. ` +
+          `Use a new loan id to open a different loan`,
+        'bank.loan_borrower_mismatch',
+      );
+    }
+
     if (loan.principal !== input.principal) {
       throw new BankError(
         `Loan ${loan.id} already exists with a principal of ${formatAmount(loan.principal)} ${loan.debtAssetId}, but this request asks for ` +
           `${formatAmount(input.principal)} — a retry must carry the same terms. Use a new loan id to borrow a different amount`,
         'bank.loan_principal_mismatch',
+      );
+    }
+
+    const storedOpening =
+      loan.openingCollateral ?? (await this.collateralEvent(loan.id, 0).then((e) => (e ? parseAmount(e.amount) : null)));
+    if (storedOpening !== null && storedOpening !== input.collateralAmount) {
+      throw new BankError(
+        `Loan ${loan.id} already exists with opening collateral of ${formatAmount(storedOpening)} ${loan.collateralAssetId}, but this request asks for ` +
+          `${formatAmount(input.collateralAmount)} — a retry must carry the same terms. Use a new loan id to pledge a different amount`,
+        'bank.loan_collateral_mismatch',
       );
     }
 
@@ -706,15 +748,70 @@ export class LoanService {
    * loan alone. Clearing the call is left to the next mark rather than done here:
    * curing is a question about a price, and this method does not have one.
    */
-  async addCollateral(input: { loanId: string; amount: Amount }): Promise<{ ledgerTxId: string; sequence: number }> {
+  async addCollateral(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+    const now = input.now ?? new Date();
     const loan = await this.loan(input.loanId);
     if (loan.status === 'repaid' || loan.status === 'liquidated') {
       throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
     }
     if (input.amount <= 0n) throw new BankError('Collateral top-up must be positive', 'bank.below_minimum');
 
+    await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+
     const sequence = await this.nextCollateralSequence(loan.id);
     const txId = await this.lockCollateral(loan, input.amount, sequence);
+    return { ledgerTxId: txId, sequence };
+  }
+
+  /**
+   * Release excess collateral from a live loan through ledger-client.
+   *
+   * Marks first. A missing mark refuses `bank.mark_missing` before any release —
+   * withdrawing against a book nobody priced is the same lie as originating on a
+   * default. After-release LTV is computed from those marks and the product cap;
+   * this method does not invent a rate. Curing is still the next mark's job.
+   */
+  async releaseExcess(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+    const now = input.now ?? new Date();
+    const loan = await this.loan(input.loanId);
+    if (loan.status === 'repaid' || loan.status === 'liquidated') {
+      throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
+    }
+    if (loan.status === 'pending') {
+      throw new BankError(
+        `Loan ${loan.id} is pending — abandon it rather than peeling collateral off an undrawn row`,
+        'bank.loan_not_drawable',
+      );
+    }
+    if (input.amount <= 0n) throw new BankError('Collateral release must be positive', 'bank.below_minimum');
+
+    const marks = await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+    const product = await this.product(loan.productId);
+    const debt = await this.outstanding(loan.id);
+    const held = await this.collateralOf(loan);
+    if (input.amount > held) {
+      throw new BankError(
+        `Loan ${loan.id} holds ${formatAmount(held)} ${loan.collateralAssetId}, not ${formatAmount(input.amount)}`,
+        'bank.loan_collateral_short',
+      );
+    }
+
+    const remaining = held - input.amount;
+    const collateralMark = marks.get(loan.collateralAssetId)!;
+    const debtMark = marks.get(loan.debtAssetId)!;
+    const debtValue = quoteValue(debt.total, debtMark.price, 'ceil');
+    const collateralValue = quoteValue(remaining, collateralMark.price, 'floor');
+    const afterLtv = ltvBps(debtValue, collateralValue);
+    if (afterLtv > product.maxLtvBps) {
+      throw new BankError(
+        `Release would put loan ${loan.id} at LTV ${describeLtv(afterLtv)} ` +
+          `above the ${describeLtv(product.maxLtvBps)} limit for "${product.name}"`,
+        'bank.ltv_exceeded',
+      );
+    }
+
+    const sequence = await this.nextCollateralSequence(loan.id);
+    const txId = await this.releaseCollateral(loan, input.amount, sequence);
     return { ledgerTxId: txId, sequence };
   }
 
@@ -747,19 +844,19 @@ export class LoanService {
     });
   }
 
-  private async releaseCollateral(loan: LoanRecord, amount: Amount): Promise<string> {
-    const sequence = await this.nextCollateralSequence(loan.id);
+  private async releaseCollateral(loan: LoanRecord, amount: Amount, sequence?: number): Promise<string> {
+    const seq = sequence ?? (await this.nextCollateralSequence(loan.id));
     return this.drivenPost({
       claim: async (tx) => {
         const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
           INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
-          VALUES (${loan.id}, ${sequence}, 'release', ${formatAmount(amount)}::numeric)
+          VALUES (${loan.id}, ${seq}, 'release', ${formatAmount(amount)}::numeric)
           ON CONFLICT (loan_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
         const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${seq}
         `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
@@ -770,7 +867,7 @@ export class LoanService {
             userId: loan.userId,
             collateralAssetId: loan.collateralAssetId,
             amount,
-            sequence,
+            sequence: seq,
           }),
         ),
       table: 'loan_collateral_events',
@@ -865,17 +962,36 @@ export class LoanService {
     return { loanId: loan.id, days: results, charged };
   }
 
-  /** Every open loan accrues. The job's entry point. */
-  async accrueAll(until: Date = new Date(), limit = 1_000): Promise<Array<{ loanId: string; charged: Amount; days: number }>> {
+  /**
+   * Every open loan accrues. The job's entry point.
+   *
+   * One loan that cannot accrue (bad row, transient fault) must not stop the
+   * rest of the book. Failures are returned for the operator, not swallowed —
+   * same isolation posture as `runRiskSweep` and earn `accrueAll`.
+   */
+  async accrueAll(
+    until: Date = new Date(),
+    limit = 1_000,
+  ): Promise<{
+    results: Array<{ loanId: string; charged: Amount; days: number }>;
+    failures: Array<{ loanId: string; reason: string; code?: string }>;
+  }> {
     const rows = await this.sql<Array<{ id: string }>>`
       SELECT id FROM bank.loans WHERE status IN ('active', 'margin_call', 'liquidating') ORDER BY opened_at ASC LIMIT ${limit}
     `;
-    const out: Array<{ loanId: string; charged: Amount; days: number }> = [];
+    const results: Array<{ loanId: string; charged: Amount; days: number }> = [];
+    const failures: Array<{ loanId: string; reason: string; code?: string }> = [];
     for (const row of rows) {
-      const result = await this.accrue({ loanId: row.id, until });
-      out.push({ loanId: row.id, charged: result.charged, days: result.days.length });
+      try {
+        const result = await this.accrue({ loanId: row.id, until });
+        results.push({ loanId: row.id, charged: result.charged, days: result.days.length });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        const code = err instanceof BankError ? err.code : undefined;
+        failures.push({ loanId: row.id, reason, ...(code ? { code } : {}) });
+      }
     }
-    return out;
+    return { results, failures };
   }
 
   // ── Repayment ──────────────────────────────────────────────────────────────
@@ -958,6 +1074,25 @@ export class LoanService {
       table: 'loan_repayments',
     });
 
+    await this.notifyBankAffiliateAccrue(
+      affiliateLegAfterLoanRepay({
+        loanId: loan.id,
+        borrowerId: loan.userId,
+        sequence,
+        interest: interestPaid,
+        debtAssetId: loan.debtAssetId,
+      }),
+    );
+    await this.notifyBankAffiliatePayout(
+      affiliateLegAfterLoanRepay({
+        loanId: loan.id,
+        borrowerId: loan.userId,
+        sequence,
+        interest: interestPaid,
+        debtAssetId: loan.debtAssetId,
+      }),
+    );
+
     const remaining = await this.outstanding(loan.id);
 
     // ── SETTLEMENT: the debt is clear, so the collateral goes back ───────────
@@ -977,6 +1112,107 @@ export class LoanService {
     }
 
     return { ledgerTxId, sequence, interestPaid, principalPaid, remaining, closed };
+  }
+
+  /**
+   * SEIZE one underwater loan through ledger-client.
+   *
+   * Marks first. A missing mark refuses `bank.mark_missing` before any post —
+   * a zero default would read as no collateral and liquidate. The split is
+   * computed from outstanding and the mark; the caller cannot nominate a rate.
+   *
+   * Not a user door. Operator surface (`ops.seizeLoan`) so the borrower cannot
+   * choose the instant their own collateral is marked.
+   */
+  async seize(input: { loanId: string; now?: Date }): Promise<{
+    ledgerTxId: string;
+    collateralSold: Amount;
+    proceeds: Amount;
+    principalRepaid: Amount;
+    interestRepaid: Amount;
+    closed: boolean;
+  }> {
+    if (this.options.moduleEnabled === false) {
+      throw new BankError('Loans module is disabled (BANK_LOANS_ENABLED / bank.loans)', 'bank.loans_disabled');
+    }
+    const now = input.now ?? new Date();
+    const loan = await this.loan(input.loanId);
+
+    if (loan.status === 'repaid' || loan.status === 'liquidated') {
+      throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
+    }
+    if (loan.status === 'pending') {
+      throw new BankError(`Loan ${loan.id} has no drawn principal to seize`, 'bank.loan_not_drawable');
+    }
+
+    const product = await this.product(loan.productId);
+    const marks = await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+    const collateralMark = marks.get(loan.collateralAssetId)!;
+    const debtMark = marks.get(loan.debtAssetId)!;
+
+    const debt = await this.outstanding(loan.id);
+    const collateral = await this.collateralOf(loan);
+
+    if (debt.total <= 0n) {
+      throw new BankError(`Loan ${loan.id} has nothing outstanding — release its collateral instead`, 'bank.loan_closed');
+    }
+
+    const rung = planLiquidation({
+      debt: debt.total,
+      debtMark,
+      collateral,
+      collateralMark,
+      policy: product.policy,
+      marginCalledAt: loan.marginCalledAt,
+      now,
+    });
+
+    if (rung.action !== 'liquidate') {
+      throw new BankError(`Loan ${loan.id} is not seizable at this mark (LTV ${rung.ltvBps} bps)`, 'bank.margin_call_required');
+    }
+
+    assertAcceptableForLiquidation(collateralMark, loan.lastMarkPrice, now, this.markPolicy);
+
+    await this.liquidateTranche({
+      loan,
+      product,
+      ltv: rung.ltvBps,
+      graceWaived: rung.graceWaived,
+      collateralToSell: rung.collateralToSell,
+      closesPosition: rung.closesPosition,
+      collateralMark,
+      debt,
+      now,
+    });
+
+    const rows = await this.sql<
+      Array<{
+        ledger_tx_id: string | null;
+        collateral_sold: string;
+        proceeds: string;
+        principal_repaid: string;
+        interest_repaid: string;
+      }>
+    >`
+      SELECT ledger_tx_id, collateral_sold, proceeds, principal_repaid, interest_repaid
+        FROM bank.loan_liquidations
+       WHERE loan_id = ${loan.id} AND status = 'settled'
+       ORDER BY tranche DESC
+       LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row?.ledger_tx_id) {
+      throw new BankError(`Loan ${loan.id} seize posted no liquidation`, 'bank.no_liquidation_counterparty');
+    }
+    const closed = (await this.loan(loan.id)).status === 'liquidated';
+    return {
+      ledgerTxId: row.ledger_tx_id,
+      collateralSold: parseAmount(row.collateral_sold),
+      proceeds: parseAmount(row.proceeds),
+      principalRepaid: parseAmount(row.principal_repaid),
+      interestRepaid: parseAmount(row.interest_repaid),
+      closed,
+    };
   }
 
   /**
@@ -1160,7 +1396,18 @@ export class LoanService {
     `;
 
     if (rung.action === 'none') {
-      if (loan.marginCalledAt !== null) {
+      // `none` means either LTV recovered (real cure) OR collateral is exhausted
+      // with residual debt still outstanding. Only the first may clear to active.
+      // See `isMarginCallCured` / honesty residual: full coll sale with unpaid
+      // interest must not false-cure to healthy active with zero collateral.
+      if (
+        isMarginCallCured({
+          ladderAction: rung.action,
+          debt: debt.total,
+          collateral,
+          marginCalledAt: loan.marginCalledAt,
+        })
+      ) {
         // CURED. The borrower posted collateral, or repaid, or the market came
         // back. Clearing the call resets the grace clock, which is correct: a
         // borrower who cured is entitled to a fresh warning and a fresh hour
@@ -1170,6 +1417,13 @@ export class LoanService {
         `;
         await this.clearMarginCalls(loan.id, now);
         return 'cleared';
+      }
+      // Residual claim with no collateral left: stay non-active (margin_call /
+      // liquidating). Borrower can still repay interest; do not report healthy.
+      if (debt.total > 0n && collateral <= 0n && loan.status !== 'margin_call' && loan.status !== 'liquidating') {
+        await this.sql`
+          UPDATE bank.loans SET status = 'margin_call', updated_at = now() WHERE id = ${loan.id}
+        `;
       }
       return 'none';
     }
@@ -1370,6 +1624,27 @@ export class LoanService {
       });
 
       void ledgerTxId;
+
+      await this.notifyBankAffiliateAccrue(
+        affiliateLegAfterLoanLiquidate({
+          loanId: loan.id,
+          borrowerId: loan.userId,
+          tranche,
+          interestRepaid: split.interestRepaid,
+          penalty: split.penalty,
+          debtAssetId: loan.debtAssetId,
+        }),
+      );
+      await this.notifyBankAffiliatePayout(
+        affiliateLegAfterLoanLiquidate({
+          loanId: loan.id,
+          borrowerId: loan.userId,
+          tranche,
+          interestRepaid: split.interestRepaid,
+          penalty: split.penalty,
+          debtAssetId: loan.debtAssetId,
+        }),
+      );
     });
 
     // ── The shortfall, named ────────────────────────────────────────────────
@@ -1435,6 +1710,16 @@ export class LoanService {
     return Number(rows[0]?.n ?? 0) > 0;
   }
 
+  /** Best-effort; never throws. loanRepay / loanLiquidate already posted. */
+  private async notifyBankAffiliateAccrue(legs: readonly AffiliateBankFeeLeg[]): Promise<void> {
+    await fireAffiliateAccrue(this.affiliateAccrue, legs);
+  }
+
+  /** Best-effort payout after accrue; never throws. House fee already posted. */
+  private async notifyBankAffiliatePayout(legs: readonly AffiliateBankFeeLeg[]): Promise<void> {
+    await fireAffiliatePayout(this.affiliatePayout, legs);
+  }
+
   /** Retry any settled liquidations whose shortfall never made it onto the insurance fund (B-01). */
   private async coverOpenShortfalls(loan: LoanRecord): Promise<void> {
     const rows = await this.sql<Array<{ tranche: number; shortfall: string }>>`
@@ -1453,7 +1738,43 @@ export class LoanService {
 
   // ── Reserve ────────────────────────────────────────────────────────────────
 
+  /**
+   * Fund the lending reserve: claim a bank funding row, post the recipe, settle.
+   *
+   * The row is the independent half of `reconcileReserve` (B-02). Ledger balance
+   * alone cannot prove what was funded — a tautology with outstanding. Same
+   * `fundingId` re-posts idempotently and returns the original ledger tx.
+   */
   async fundReserve(input: { debtAssetId: string; fundingId: string; amount: Amount; from?: AccountRef }): Promise<{ ledgerTxId: string }> {
+    if (input.amount <= 0n) {
+      throw new BankError('Reserve funding amount must be positive', 'bank.below_minimum');
+    }
+
+    const claimed = await this.sql<Array<{ funding_id: string; status: string; ledger_tx_id: string | null; amount: string }>>`
+      INSERT INTO bank.loan_reserve_fundings (funding_id, debt_asset_id, amount, status)
+      VALUES (${input.fundingId}, ${input.debtAssetId}, ${formatAmount(input.amount)}::numeric, 'pending')
+      ON CONFLICT (funding_id) DO NOTHING
+      RETURNING funding_id, status, ledger_tx_id, amount::text AS amount
+    `;
+
+    if (claimed.length === 0) {
+      const existing = await this.sql<Array<{ status: string; ledger_tx_id: string | null; amount: string; debt_asset_id: string }>>`
+        SELECT status, ledger_tx_id, amount::text AS amount, debt_asset_id
+          FROM bank.loan_reserve_fundings WHERE funding_id = ${input.fundingId}
+      `;
+      const row = existing[0];
+      if (!row) {
+        throw new BankError(`Funding ${input.fundingId} disappeared after a conflict`, 'bank.loan_not_found');
+      }
+      if (row.debt_asset_id !== input.debtAssetId || parseAmount(row.amount) !== input.amount) {
+        throw new BankError(`Funding ${input.fundingId} already exists on different terms`, 'bank.loan_principal_mismatch');
+      }
+      if (row.status === 'settled' && row.ledger_tx_id) {
+        return { ledgerTxId: row.ledger_tx_id };
+      }
+      // Pending retry: re-drive the post below.
+    }
+
     const posted = await this.ledger.post(
       recipes.loanReserveFund({
         fundingId: input.fundingId,
@@ -1462,19 +1783,26 @@ export class LoanService {
         ...(input.from ? { from: input.from } : {}),
       }),
     );
+
+    await this.sql`
+      UPDATE bank.loan_reserve_fundings
+         SET status = 'settled',
+             ledger_tx_id = ${posted.id},
+             settled_at = now()
+       WHERE funding_id = ${input.fundingId}
+         AND status = 'pending'
+    `;
+
     return { ledgerTxId: posted.id };
   }
 
   /**
    * THE RECONCILIATION.
    *
-   * `balance(loanReserve) + Σ(outstanding principal)` must equal everything ever
-   * funded into the reserve, less anything ever lost to bad debt. Two independent
-   * sums, computed from different places — one from the ledger, one from svc-bank's
-   * rows — and a mismatch means one of them is lying.
-   *
-   * This is what the absent `outstanding` column buys. A stored figure would make
-   * this check compare the loan table against itself.
+   * Identity: `funded − badDebt ≈ reserveBalance + outstandingPrincipal`.
+   * `funded` is the independent sum of settled `loan_reserve_fundings` rows —
+   * not reserve + outstanding (a tautology). `drift` is the residual; ops can
+   * treat a non-zero drift as a real health signal now that `independent` is true.
    */
   async reconcileReserve(debtAssetId: string): Promise<{
     reserveBalance: Amount;
@@ -1482,14 +1810,31 @@ export class LoanService {
     badDebt: Amount;
     funded: Amount;
     drift: Amount;
+    /**
+     * True when `funded` comes from the bank funding table (independent of the
+     * reserve balance). Drift is then a real residual, not a hard-coded zero.
+     */
+    independent: boolean;
   }> {
     const reserve = await this.ledger.balance(loanReserve(debtAssetId));
 
     const rows = await this.sql<
-      Array<{ outstanding_principal: string; bad_debt: string; drawn: string; repaid: string; recovered: string }>
+      Array<{
+        outstanding_principal: string;
+        bad_debt: string;
+        drawn: string;
+        repaid: string;
+        recovered: string;
+        funded: string;
+      }>
     >`
       WITH open_loans AS (
-        SELECT id, principal FROM bank.loans WHERE debt_asset_id = ${debtAssetId}
+        -- Only DRAWN loans. A pending row's principal never left the reserve;
+        -- counting it as outstanding inflates the identity and makes an empty
+        -- book look funded by undrawn intentions.
+        SELECT id, principal FROM bank.loans
+         WHERE debt_asset_id = ${debtAssetId}
+           AND drawn_at IS NOT NULL
       )
       SELECT
         COALESCE((SELECT SUM(principal) FROM open_loans), 0) AS drawn,
@@ -1500,7 +1845,11 @@ export class LoanService {
         COALESCE((SELECT SUM(q.shortfall) FROM bank.loan_liquidations q
                    JOIN open_loans l ON l.id = q.loan_id
                   WHERE q.status = 'settled' AND q.bad_debt_ledger_tx_id IS NOT NULL), 0) AS bad_debt,
-        COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal
+        COALESCE((SELECT SUM(l.principal) FROM open_loans l), 0) AS outstanding_principal,
+        COALESCE((
+          SELECT SUM(amount) FROM bank.loan_reserve_fundings
+           WHERE debt_asset_id = ${debtAssetId} AND status = 'settled'
+        ), 0) AS funded
     `;
 
     const row = rows[0]!;
@@ -1509,15 +1858,11 @@ export class LoanService {
     const recovered = parseAmount(row.recovered);
     const badDebt = parseAmount(row.bad_debt);
     const outstandingPrincipal = drawn - repaid - recovered - badDebt;
-
-    // funded / drift honesty (B-02):
-    // `funded` is currently defined as reserve + outstanding principal — a
-    // tautology, not an independent sum of `loan.reserve.funded` journal rows.
-    // True drift needs ledger journal aggregation (or a bank funding table).
-    // Until that exists, report drift 0 and do not claim independent reconcile.
     const outstandingClamped = outstandingPrincipal < 0n ? 0n : outstandingPrincipal;
-    const funded = reserve.amount + outstandingClamped;
-    const drift = 0n;
+    const funded = parseAmount(row.funded);
+    // Identity: funded − badDebt = reserve + outstanding  →  drift zero when healthy.
+    const drift = funded - badDebt - reserve.amount - outstandingClamped;
+    const independent = true;
 
     return {
       reserveBalance: reserve.amount,
@@ -1525,6 +1870,7 @@ export class LoanService {
       badDebt,
       funded,
       drift,
+      independent,
     };
   }
 
@@ -1664,6 +2010,7 @@ function toProduct(row: Record<string, unknown>): LoanProductRecord {
 }
 
 function toLoan(row: Record<string, unknown>): LoanRecord {
+  const openingRaw = row.opening_collateral;
   return {
     id: String(row.id),
     productId: String(row.product_id),
@@ -1673,6 +2020,7 @@ function toLoan(row: Record<string, unknown>): LoanRecord {
     quoteAssetId: String(row.quote_asset_id),
     aprBps: Number(row.apr_bps),
     principal: parseAmount(String(row.principal)),
+    openingCollateral: openingRaw === null || openingRaw === undefined ? null : parseAmount(String(openingRaw)),
     status: row.status as LoanRecord['status'],
     drawLedgerTxId: row.draw_ledger_tx_id === null ? null : String(row.draw_ledger_tx_id),
     openedAt: row.opened_at as Date,

@@ -61,6 +61,12 @@
         <dt>{{ $t("exchange.terminal.volume24h") }}</dt>
         <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
       </dl>
+      <!-- Last / 24h high-low-volume are REST ticker snapshots, not the live depth
+           stream. Badge "Depth live" is separate — do not let 24h labels imply a
+           rolling live window without provenance. -->
+      <div class="ix-head-snapshot" :title="$t('intafaced.trade.snapshotSource')">
+        {{ $t('intafaced.trade.snapshotSource') }}
+      </div>
 
       <!-- A-UI-SUB: identity catalogue switcher. No balances. No order routing. -->
       <div class="ix-head-sub">
@@ -958,6 +964,7 @@ var deskA11y = require('../../assets/js/desk-a11y.js');
 var deskPrefs = require('../../assets/js/desk-prefs.js');
 var bookHonesty = require('../../assets/js/book-honesty.js');
 var ixMoney = require('../../assets/js/ix-money.js');
+var ixMarketImpact = require('../../assets/js/ix-market-impact.js');
 var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
@@ -1268,47 +1275,51 @@ export default {
      */
     marketImpactLabel() {
       if (this.orderType !== 'MARKET_PRICE') return '';
-      if (!this.bookReachable) return 'book unknown';
-      const size = this.num(this.form.amount);
-      if (size <= 0) return '';
+      if (!this.bookReachable) {
+        return this.$t
+          ? this.$t('exchange.terminal.impactBookUnknown')
+          : 'book unknown';
+      }
+      /* Decimal walk of top-of-book — never IEEE avg (ix-market-impact). */
       const levels =
         this.side === 'BUY'
           ? this.groupPlate(this.plate.asks, 'ask').slice().reverse()
           : this.groupPlate(this.plate.bids, 'bid').slice();
-      if (!levels.length) return 'no depth';
-      let remain = size;
-      let cost = 0;
-      let filled = 0;
-      const mid = this.lastPrice;
-      for (let i = 0; i < levels.length && remain > 0; i++) {
-        const px = this.num(levels[i].price);
-        const qty = this.num(levels[i].amount);
-        if (px <= 0 || qty <= 0) continue;
-        if (this.quoteSized) {
-          /* Market buy amount is quote currency — spend remain quote. */
-          const takeQuote = Math.min(remain, px * qty);
-          const takeBase = takeQuote / px;
-          cost += takeQuote;
-          filled += takeBase;
-          remain -= takeQuote;
-        } else {
-          const take = Math.min(remain, qty);
-          cost += take * px;
-          filled += take;
-          remain -= take;
-        }
+      const est = ixMarketImpact.estimateMarketImpact({
+        size: this.form.amount,
+        quoteSized: !!this.quoteSized,
+        levels: levels,
+        mid: this.lastPrice,
+        side: this.side,
+        scale: this.baseCoinScale,
+        money: ixMoney
+      });
+      if (!est.ok) {
+        if (est.reason === 'bad-size') return '';
+        return this.$t
+          ? this.$t('exchange.terminal.impactNoDepth')
+          : 'no depth';
       }
-      if (filled <= 0) return 'no depth';
-      const avg = cost / filled;
-      const slip =
-        mid > 0 ? ((this.side === 'BUY' ? avg - mid : mid - avg) / mid) * 100 : null;
-      const avgTxt = this.fmt(avg, this.baseCoinScale);
-      if (remain > 1e-12) {
-        return slip == null
-          ? `avg ${avgTxt} · partial book`
-          : `avg ${avgTxt} · ~${slip.toFixed(2)}% · partial`;
+      const avgWord = this.$t
+        ? this.$t('exchange.terminal.impactAvg')
+        : 'avg';
+      let line = avgWord + ' ' + est.avg;
+      if (est.slipPct != null) {
+        line += ' · ~' + est.slipPct + '%';
       }
-      return slip == null ? `avg ${avgTxt}` : `avg ${avgTxt} · ~${slip.toFixed(2)}%`;
+      if (est.partial) {
+        const part = this.$t
+          ? this.$t(
+              est.slipPct != null
+                ? 'exchange.terminal.impactPartial'
+                : 'exchange.terminal.impactPartialBook'
+            )
+          : est.slipPct != null
+            ? 'partial'
+            : 'partial book';
+        line += ' · ' + part;
+      }
+      return line;
     },
     /* A percent of an unknown balance is not a number. isPositive is false for
        null/empty, so the percent buttons stay off rather than sizing fiction. */
@@ -1330,16 +1341,20 @@ export default {
     /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
-      if (this.exchangeable != 1) return '{{ $t("exchange.terminal.halted") }}';
+      if (this.exchangeable != 1) return this.$t('exchange.terminal.halted');
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
-        return 'Market ' + (this.side === 'BUY' ? 'buy' : 'sell') + ' is disabled for this pair.';
+        return this.$t('exchange.terminal.marketDisabled', {
+          side: this.side === 'BUY' ? 'buy' : 'sell'
+        });
       }
       var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
       if (subBlock) return subBlock;
       return '';
     },
     submitLabel() {
-      const verb = this.side === 'BUY' ? 'Buy' : 'Sell';
+      const verb = this.side === 'BUY'
+        ? this.$t('exchange.terminal.buy')
+        : this.$t('exchange.terminal.sell');
       return this.currentCoin.coin ? verb + ' ' + this.currentCoin.coin : verb;
     },
     /* Last / 24h stats: never present a cold zero as a live market print. */
@@ -1348,16 +1363,19 @@ export default {
     },
     feeLabel() {
       if (!this.feeKnown) {
-        return 'unknown · the venue published no fee for this pair (not free)';
+        return this.$t('exchange.terminal.feeUnknown');
       }
       /* symbolFee is the published TAKER rate as a decimal string ("0.001").
          pctOf multiplies in decimal — a label, not a charge. */
-      return this.pctOf(this.symbolFee, 2) + '% taker · venue schedule for this pair';
+      return this.$t('exchange.terminal.feeTakerSchedule', {
+        pct: this.pctOf(this.symbolFee, 2)
+      });
     },
     tradesEmptyLabel() {
       return bookHonesty.tradesEmptyLabel({
         loading: this.tradesLoading,
-        reachable: this.tradesReachable
+        reachable: this.tradesReachable,
+        message: this.tradesMessage || null
       });
     }
   },
@@ -1990,7 +2008,9 @@ export default {
       return bookHonesty.bookSideEmptyLabel({
         loading: this.bookLoading,
         reachable: this.bookReachable,
-        side: side
+        side: side,
+        /* Shape failures write gate.message here — show it, not a generic "did not respond". */
+        message: this.bookMessage || null
       });
     },
 
@@ -2540,19 +2560,20 @@ export default {
       this.orderValidationError = '';
       this.liveAnnounce = '';
 
-      const amount = this.num(this.form.amount);
-      const price = this.num(this.form.price);
+      /* Confirm copy must match the wire: form strings, not float→fmt. */
+      const amountText = String(this.form.amount == null ? '' : this.form.amount).trim() || '—';
+      const priceText = String(this.form.price == null ? '' : this.form.price).trim() || '—';
 
       const side = this.side === 'BUY' ? this.$t('exchange.terminal.buy') : this.$t('exchange.terminal.sell');
       const type = this.orderType === 'MARKET_PRICE' ? this.$t('exchange.terminal.typeMarket') : this.$t('exchange.terminal.typeLimit');
       const priceLine =
         this.orderType === 'MARKET_PRICE'
           ? this.$t('exchange.terminal.confirmPriceBest')
-          : this.$t('exchange.terminal.confirmPriceLine', { price: this.fmt(price, this.baseCoinScale) + ' ' + (this.currentCoin.base || '') });
+          : this.$t('exchange.terminal.confirmPriceLine', { price: priceText + ' ' + (this.currentCoin.base || '') });
       const amountLine =
         this.amountLabel +
         ': ' +
-        this.fmt(amount, this.quoteSized ? this.baseCoinScale : this.coinScale) +
+        amountText +
         ' ' +
         (this.amountUnit || '');
       const feeLine = this.$t('exchange.terminal.feeEst') + ': ' + this.feeLabel;
@@ -3186,6 +3207,19 @@ $radius-sm: var(--ix-radius-sm, 8px);
   margin-left: auto;
   flex: 0 1 auto;
   min-width: 0;
+}
+
+.ix-head-snapshot {
+  flex: 0 1 auto;
+  max-width: 11rem;
+  margin-left: 8px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: $dim;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ix-head-status {

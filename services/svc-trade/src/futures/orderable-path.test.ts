@@ -94,8 +94,8 @@ import {
   markSourceFromDepth,
   requiredBestLevelSize,
 } from './mark-from-depth.js';
-import { DEFAULT_MAX_LEVERAGE } from './initial-margin.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE, TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -214,13 +214,14 @@ if (!available) {
 
   /** Rest a maker order through the REAL order path and return its id. */
   async function rest(service: TradeService, userId: string, market: Market, side: 'buy' | 'sell', qty: string, price: string) {
+    // clientOrderId max 64 — userId is already a UUID; do not composite past the cap.
     return service.placeOrder(principalFor(userId), {
       marketId: market.id,
       side,
       type: 'limit',
       qty: amt(qty),
       price: amt(price),
-      clientOrderId: `${userId}-${side}-${price}-${qty}-${randomUUID()}`,
+      clientOrderId: randomUUID(),
     });
   }
 
@@ -256,9 +257,32 @@ if (!available) {
     return new PositionService(sql, ledger, {
       marks: markSourceFromDepth(async (id) => (id === marketId ? bookFromOrders(marketId) : null)),
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus,
       now: () => NOW,
     });
+  }
+
+  /**
+   * DIRECTION:33 — real-money active futures list requires a non-empty insurance
+   * pot. Seed via the real recipes (fees pot → topup), never invent a target size.
+   */
+  async function fundInsurance(amount: string) {
+    const seed = amt(amount);
+    const pos = `ins-seed-${randomUUID()}`;
+    await ledger.post(recipes.deposit({ userId: CAROL, assetId: 'USDT', amount: seed, rail: 'test', railRef: `ins-${randomUUID()}` }));
+    await ledger.post(recipes.futuresMarginLock({ positionId: pos, userId: CAROL, assetId: 'USDT', amount: seed }));
+    await ledger.post(
+      recipes.futuresRealizeLoss({
+        positionId: pos,
+        userId: CAROL,
+        assetId: 'USDT',
+        fromMargin: seed,
+        fromInsurance: 0n,
+        lossId: pos,
+      }),
+    );
+    await ledger.post(recipes.futuresInsuranceTopup({ topupId: pos, assetId: 'USDT', amount: seed }));
   }
 
   beforeEach(async () => {
@@ -272,7 +296,9 @@ if (!available) {
     tradeOn = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, futuresEnabled: true });
 
     // Listing is not enabling. This row exists on both services identically; the
-    // only difference between them is one boolean.
+    // only difference between them is one boolean. Fund first — empty pot refuses
+    // the active futures INSERT (DIRECTION:33 / D26-P0-17).
+    await fundInsurance('1');
     perp = await tradeOff.listMarket(listing());
     spot = await tradeOff.listMarket(
       listing({ symbol: 'BTC/USDT', kind: 'spot', lotSize: amt('0.0001'), minQty: amt('0.0001'), minNotional: amt('1') }),
@@ -564,7 +590,14 @@ if (!available) {
       const fatAsk = await rest(tradeOn, CAROL, perp, 'sell', '10', '2001');
       expect(bestFromDepth(await bookFromOrders(perp.id), depthRequirement(amt('10')))).toEqual({ bestBid: '1999', bestAsk: '2001' });
 
-      const pos = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('10'), leverage: amt('1') });
+      const pos = await positions.open({
+        clientOpenId: 't-open-orderable-path.test-1',
+        userId: ALICE,
+        symbol: perp.symbol,
+        side: 'long',
+        size: amt('10'),
+        leverage: amt('1'),
+      });
       expect(pos.entryPrice).toBe('2000');
 
       // Everything real is pulled — through the real cancel path, which releases
@@ -672,7 +705,14 @@ if (!available) {
 
       const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
       await expect(
-        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('10'), leverage: amt('1') }),
+        positions.open({
+          clientOpenId: 't-open-orderable-path.test-2',
+          userId: ALICE,
+          symbol: perp.symbol,
+          side: 'long',
+          size: amt('10'),
+          leverage: amt('1'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.mark_missing' });
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
@@ -727,7 +767,14 @@ if (!available) {
       const openBid = await rest(tradeOn, BOB, perp, 'buy', '10', '1999');
       const openAsk = await rest(tradeOn, CAROL, perp, 'sell', '10', '2001');
 
-      const pos = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt(SIZE), leverage: amt('10') });
+      const pos = await positions.open({
+        clientOpenId: 't-open-orderable-path.test-3',
+        userId: ALICE,
+        symbol: perp.symbol,
+        side: 'long',
+        size: amt(SIZE),
+        leverage: amt('10'),
+      });
       expect(pos.entryPrice).toBe('2000');
       expect(pos.notional).toBe('1000000');
       expect(pos.initialMargin).toBe('100000');
@@ -875,11 +922,25 @@ if (!available) {
 
       const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
       await expect(
-        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt(SIZE), leverage: amt('10') }),
+        positions.open({
+          clientOpenId: 't-open-orderable-path.test-4',
+          userId: ALICE,
+          symbol: perp.symbol,
+          side: 'long',
+          size: amt(SIZE),
+          leverage: amt('10'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.mark_missing' });
 
       // The identical book opens the position it IS deep enough for.
-      const small = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('50'), leverage: amt('10') });
+      const small = await positions.open({
+        clientOpenId: 't-open-orderable-path.test-5',
+        userId: ALICE,
+        symbol: perp.symbol,
+        side: 'long',
+        size: amt('50'),
+        leverage: amt('10'),
+      });
       expect(small.entryPrice).toBe('2000');
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before - amt('10000'));
@@ -930,7 +991,14 @@ if (!available) {
       const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
       await expect(
-        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('100000') }),
+        positions.open({
+          clientOpenId: 't-open-orderable-path.test-6',
+          userId: ALICE,
+          symbol: perp.symbol,
+          side: 'long',
+          size: amt('5'),
+          leverage: amt('100000'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.leverage_too_high' });
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
@@ -953,7 +1021,14 @@ if (!available) {
       const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
       await expect(
-        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('1000000') }),
+        positions.open({
+          clientOpenId: 't-open-orderable-path.test-7',
+          userId: ALICE,
+          symbol: perp.symbol,
+          side: 'long',
+          size: amt('5'),
+          leverage: amt('1000000'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.leverage_too_high', status: 400 });
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
@@ -965,15 +1040,29 @@ if (!available) {
     /** The cap is a number, it is at the top of the range this repo trades, and it opens. */
     it('opens at exactly the cap and refuses one step past it', async () => {
       const positions = await bookedPositions();
-      expect(DEFAULT_MAX_LEVERAGE).toBe('10');
+      expect(TEST_MAX_LEVERAGE).toBe('10');
 
-      const atCap = await positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('10') });
+      const atCap = await positions.open({
+        clientOpenId: 't-open-orderable-path.test-8',
+        userId: ALICE,
+        symbol: perp.symbol,
+        side: 'long',
+        size: amt('5'),
+        leverage: amt('10'),
+      });
       expect(atCap.leverage).toBe('10');
       // 5 x 2000 / 10
       expect(atCap.initialMargin).toBe('1000');
 
       await expect(
-        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: amt('5'), leverage: amt('10.01') }),
+        positions.open({
+          clientOpenId: 't-open-orderable-path.test-9',
+          userId: ALICE,
+          symbol: perp.symbol,
+          side: 'long',
+          size: amt('5'),
+          leverage: amt('10.01'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.leverage_too_high' });
     });
 
@@ -988,7 +1077,14 @@ if (!available) {
       const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
       await expect(
-        positions.open({ userId: ALICE, symbol: perp.symbol, side: 'long', size: 0n, leverage: amt('10') }),
+        positions.open({
+          clientOpenId: 't-open-orderable-path.test-10',
+          userId: ALICE,
+          symbol: perp.symbol,
+          side: 'long',
+          size: 0n,
+          leverage: amt('10'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.size_invalid', status: 400 });
 
       expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);

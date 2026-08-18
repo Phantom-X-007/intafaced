@@ -177,6 +177,39 @@ const PLACEHOLDER_VALUES = [
   /^\$\{[^}]+\}$/, // ${VAR} — the outcome we want
   /^\$\{[^}]+:\?[\s\S]*\}$/, // ${VAR:?message} — compose refuses to start without it. STRONGER than ${VAR}; always allowed.
   /^\$\{[^}]+:-[^}]*\}$/, // ${VAR:-default} — allowed here, flagged below if it defaults to something secret-shaped
+  //
+  // GitHub Actions secret / variable reference — `${{ secrets.NAME }}`.
+  //
+  // ADDED 2026-08-09 (staging deploy workflow, D26-P3-01). This CLOSES a hole
+  // rather than widening the rule.
+  //
+  // `${{ secrets.X }}` does not match the `${VAR}` pattern above: `[^}]+` cannot
+  // cross the inner brace, so `\}$` never reaches the second `}`. The value fell
+  // through to `committed-credential` and the gate reported a literal where there
+  // is none. Measured against a probe workflow before this line existed:
+  //
+  //   STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+  //   → ✖ [committed-credential] .github/workflows/…:10
+  //
+  // Wrong on the merits — the value is a reference into GitHub's secret store,
+  // there is no literal in the tree, and there is no fallback, which is the
+  // outcome the header of this file asks for. Wrong in its effect too: the only
+  // ways past it were to rename the secret to something SECRET_KEY does not
+  // recognise, or to move the reference into a `run:` body where this scan does
+  // not look. Both make a real secret harder to find, and the first is exactly
+  // the "breaking one half of the pair to satisfy a scanner would be theatre"
+  // trap described a few lines above. A gate that pushes authors toward
+  // misnaming their credentials is worse on that line than no gate at all.
+  //
+  // NARROW ON PURPOSE: one `secrets.` or `vars.` reference, whole value, nothing
+  // else in it. The dangerous forms stay failures —
+  //
+  //   ${{ secrets.A || 'fallback' }}     still fails: a literal, in the tree
+  //   ${{ secrets.A }}${{ secrets.B }}   still fails: a composed credential
+  //   ${{ inputs.token }}                still fails: an input carries a default
+  //   ${{ github.event.inputs.token }}   still fails: attacker-supplied
+  //
+  /^\$\{\{\s*(?:secrets|vars)\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}$/,
   /^[a-z0-9_-]*dev[_-]?only[a-z0-9_-]*$/i,
   /^(changeme|change_me|placeholder|example|sample|dummy|redacted|removed|none|null|todo|tbd|xxx+|x{3,})$/i,
   /placeholder/i,

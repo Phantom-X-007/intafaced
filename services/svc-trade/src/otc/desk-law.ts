@@ -22,6 +22,11 @@ export type OtcDeskLaw =
       readonly counterparty: OtcCounterpartyMode;
       /** Quote TTL in ms. */
       readonly quoteTtlMs: number;
+      /**
+       * Max age of a mid observation, seconds. Owner-published only (DIRECTION §8).
+       * Older than this → refuse quote rather than price off a memory.
+       */
+      readonly maxMidAgeSeconds: number;
     };
 
 /** Production default — no invent. */
@@ -80,7 +85,18 @@ export function parseOtcDeskLawJson(raw: string | null | undefined): OtcDeskLaw 
     throw new OtcError('TRADE_OTC_DESK_LAW.quoteTtlMs must be 1000..3600000', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
   }
 
-  return { published: true, spreadBps, minStake, counterparty, quoteTtlMs };
+  // No default — inventing a staleness window is inventing when the desk may
+  // still move money. Owner must name the number, or the law is unpublished.
+  const maxMidAgeSeconds = obj.maxMidAgeSeconds;
+  if (typeof maxMidAgeSeconds !== 'number' || !Number.isInteger(maxMidAgeSeconds) || maxMidAgeSeconds < 1 || maxMidAgeSeconds > 86_400) {
+    throw new OtcError(
+      'TRADE_OTC_DESK_LAW.maxMidAgeSeconds must be an integer 1..86400 — refuse rather than invent mid freshness',
+      'trade.otc_desk_law_blank',
+      OTC_DESK_LAW_RESIDUAL,
+    );
+  }
+
+  return { published: true, spreadBps, minStake, counterparty, quoteTtlMs, maxMidAgeSeconds };
 }
 
 /** Require published law or throw refuse-closed. */
@@ -97,5 +113,5 @@ export function requirePublishedOtcDeskLaw(law: OtcDeskLaw | null | undefined): 
 
 export function otcDeskLawStatusLine(law: OtcDeskLaw): string {
   if (law.published !== true) return 'published=0 residual=DIRECTION_§8_refuse_closed';
-  return `published=1 spreadBps=${law.spreadBps} counterparty=${law.counterparty} ttlMs=${law.quoteTtlMs}`;
+  return `published=1 spreadBps=${law.spreadBps} counterparty=${law.counterparty} ttlMs=${law.quoteTtlMs} maxMidAgeSeconds=${law.maxMidAgeSeconds}`;
 }

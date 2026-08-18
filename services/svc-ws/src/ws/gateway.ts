@@ -1,7 +1,9 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import type { TradeHub } from '../trade/hub.js';
 
 /**
@@ -74,9 +76,10 @@ export interface WebSocketGateway {
   close(reason: string): Promise<void>;
 }
 
-/** RFC 6455 caps a close reason at 123 bytes; a longer one throws. */
+/** RFC 6455 caps a close reason at 123 bytes; a longer one throws. Catalog keys resolve first. */
 function closeReason(reason: string): string {
-  return reason.length <= 120 ? reason : `${reason.slice(0, 117)}...`;
+  const copy = resolveWsCopy(reason);
+  return copy.length <= 120 ? copy : `${copy.slice(0, 117)}...`;
 }
 
 function sinkFor(socket: WebSocket): DepthSink {
@@ -125,10 +128,20 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
   const alive = new WeakSet<WebSocket>();
 
   const onUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer): void => {
-    const url = new URL(request.url ?? '/', 'http://gateway.invalid');
+    // Fixed base — never Host. Same reason as private: a Host-derived base can
+    // throw before the path check and, on co-mount, abort later upgrade listeners
+    // with an uncaught exception so the socket never gets a 4xx and hangs.
+    let url: URL;
+    try {
+      url = new URL(request.url ?? '/', 'http://gateway.invalid');
+    } catch (err) {
+      log.warn({ err: String(err) }, 'ws: unreadable upgrade URL');
+      return reject(socket, 400, 'Bad Request');
+    }
     // Co-mounted with private gateway: Node fires every upgrade listener.
     // Only ignore the private path so private auth can run; other paths still 404.
-    if (url.pathname === '/private/stream') return;
+    // Shared constant — string drift would 404 private before auth ever runs.
+    if (url.pathname === PRIVATE_STREAM_PATH) return;
     if (url.pathname !== STREAM_PATH) return reject(socket, 404, 'Not Found');
 
     if (!enabled()) return reject(socket, 503, 'Service Unavailable');
@@ -140,13 +153,23 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     if (channel === null) return reject(socket, 400, 'Bad Request');
 
     wss.handleUpgrade(request, socket, head, (ws) => {
+      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
+      // Capacity refuse closes the sink inside attach — terminate so the client
+      // never sits half-open with zero frames (mirrors private gateway).
+      if (!detach) {
+        try {
+          ws.terminate();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
       alive.add(ws);
       ws.on('pong', () => alive.add(ws));
       // Inbound frames are dropped without being parsed. See the header.
       ws.on('message', () => undefined);
       ws.on('error', () => ws.terminate());
-
-      const detach = channel === 'trades' ? tradeHub.attach(marketId, sinkFor(ws)) : hub.attach(marketId, sinkFor(ws));
       ws.on('close', detach);
     });
   };
@@ -182,11 +205,12 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
       server.off('upgrade', onUpgrade);
       // Say why, rather than dropping the TCP connection: a client that is told
       // reconnects with backoff, and one that is not reconnects immediately.
-      hub.closeAll(CLOSE_GOING_AWAY, reason);
-      tradeHub.closeAll(CLOSE_GOING_AWAY, reason);
-      for (const ws of wss.clients) ws.close(CLOSE_GOING_AWAY, closeReason(reason));
+      const copy = resolveWsCopy(reason);
+      hub.closeAll(CLOSE_GOING_AWAY, copy);
+      tradeHub.closeAll(CLOSE_GOING_AWAY, copy);
+      for (const ws of wss.clients) ws.close(CLOSE_GOING_AWAY, closeReason(copy));
       await new Promise<void>((resolve) => wss.close(() => resolve()));
-      log.info({ reason }, 'ws: gateway closed');
+      log.info({ reason: copy }, 'ws: gateway closed');
     },
   };
 }

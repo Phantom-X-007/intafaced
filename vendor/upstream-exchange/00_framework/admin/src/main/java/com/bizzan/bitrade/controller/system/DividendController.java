@@ -144,38 +144,12 @@ public class DividendController extends BaseAdminController {
 
     //分红
     public synchronized void startDividend(String unit, BigDecimal dividend, Coin coin) {
-        //平台币钱包
-        List<MemberWallet> list = memberWalletService.findAllByCoin(coin);
-        //总的平台币
-        BigDecimal amount = list.stream().map(x ->
-                add(x.getBalance(), x.getFrozenBalance())
-        ).reduce((x, y) -> add(x, y)).orElse(BigDecimal.ZERO);
-        Coin coin1 = coinService.findByUnit(unit);
-        List<MemberWallet> list1 = memberWalletService.findAllByCoin(coin1);
-        Map<Long, MemberWallet> map = list1.stream().collect(Collectors.toMap(x -> x.getMemberId(), x -> x));
-        list.stream()
-                .filter(x -> add(x.getFrozenBalance(), x.getBalance()).compareTo(BigDecimal.ZERO) > 0)
-                .forEach(x -> {
-                    BigDecimal va = mulDown(divDown(add(x.getBalance(), x.getFrozenBalance()), amount), dividend, 6);
-                    map.get(x.getMemberId()).setBalance(add(x.getBalance(), va));
-                    memberWalletService.save(map.get(x.getMemberId()));
-                    MemberTransaction memberTransaction = new MemberTransaction();
-                    memberTransaction.setFee(BigDecimal.ZERO);
-                    memberTransaction.setSymbol(unit);
-                    memberTransaction.setMemberId(x.getMemberId());
-                    memberTransaction.setType(TransactionType.DIVIDEND);
-                    memberTransaction.setAmount(va);memberTransaction.setRealFee("0");
-                    memberTransaction.setDiscountFee("0");
-                    memberTransaction.setCreateTime(new Date());
-                    memberTransaction= memberTransactionService.save(memberTransaction);
-                    RewardRecord rewardRecord1 = new RewardRecord();
-                    rewardRecord1.setAmount(va);
-                    rewardRecord1.setCoin(coin1);
-                    rewardRecord1.setMember(memberService.findOne(x.getMemberId()));
-                    rewardRecord1.setRemark(RewardRecordType.DIVIDEND.getCnName());
-                    rewardRecord1.setType(RewardRecordType.DIVIDEND);
-                    rewardRecordService.save(rewardRecord1);
-                });
+        // Dual-book Option B — admin has no compose service, so the 410 door never
+        // executes. Pro-rata setBalance across every holder was the Grade C mint with
+        // an explicit save(). ADR 2026-08-04: agents may throw where only a door stood.
+        // Queue if ever re-enabled: ledger recipe rewardPay (not Java book).
+        throw new IllegalStateException(
+                "admin dividend is disabled: Java shell must not credit balances (INTAFACED dual-book)");
     }
 
     @RequiresPermissions("system:dividend:page-query")

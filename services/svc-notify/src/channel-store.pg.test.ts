@@ -109,7 +109,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
     expect(first.claimed).toBe(true);
     if (!first.claimed) return;
 
-    await s.settle({ id: first.id, status: 'failed', attempted: true, detail: '503' });
+    await s.settle({ id: first.id, attempt: first.attempt, status: 'failed', attempted: true, detail: '503' });
 
     const second = await s.claim(NOTIFICATION, 'push', 3);
     expect(second.claimed).toBe(true);
@@ -121,7 +121,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
     expect(first.claimed).toBe(true);
     if (!first.claimed) return;
 
-    await s.settle({ id: first.id, status: 'accepted', attempted: true, reference: 'gw-1' });
+    await s.settle({ id: first.id, attempt: first.attempt, status: 'accepted', attempted: true, reference: 'gw-1' });
 
     const second = await s.claim(NOTIFICATION, 'sms', 3);
     expect(second.claimed).toBe(false);
@@ -135,7 +135,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
       const claim = await s.claim(NOTIFICATION, 'email', 2);
       expect(claim.claimed).toBe(true);
       if (!claim.claimed) return;
-      await s.settle({ id: claim.id, status: 'failed', attempted: true, detail: 'boom' });
+      await s.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true, detail: 'boom' });
     }
 
     const blocked = await s.claim(NOTIFICATION, 'email', 2);
@@ -152,7 +152,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
 
-    await s.settle({ id: claim.id, status: 'failed', attempted: true, detail: '503' });
+    await s.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true, detail: '503' });
 
     const [row] = await s.listForNotification(NOTIFICATION);
     expect(row?.leaseUntil).toBeNull();
@@ -164,7 +164,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
     expect(claim.claimed).toBe(true);
     if (!claim.claimed) return;
 
-    await s.settle({ id: claim.id, status: 'refused', refusalCode: 'channel.no_target', attempted: false });
+    await s.settle({ id: claim.id, attempt: claim.attempt, status: 'refused', refusalCode: 'channel.no_target', attempted: false });
 
     const [row] = await s.listForNotification(NOTIFICATION);
     expect(row).toMatchObject({ status: 'refused', refusalCode: 'channel.no_target' });
@@ -248,7 +248,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
       const claim = await s.claim(NOTIFICATION, 'email', 1);
       expect(claim.claimed).toBe(true);
       if (!claim.claimed) return;
-      await s.settle({ id: claim.id, status: 'accepted', attempted: true, reference: 'gw-1' });
+      await s.settle({ id: claim.id, attempt: claim.attempt, status: 'accepted', attempted: true, reference: 'gw-1' });
 
       await s.reapExhausted(1);
       expect((await s.listForNotification(NOTIFICATION))[0]?.status).toBe('accepted');
@@ -259,7 +259,7 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
       const claim = await s.claim(NOTIFICATION, 'email', 1);
       expect(claim.claimed).toBe(true);
       if (!claim.claimed) return;
-      await s.settle({ id: claim.id, status: 'failed', attempted: true, detail: '503' });
+      await s.settle({ id: claim.id, attempt: claim.attempt, status: 'failed', attempted: true, detail: '503' });
 
       expect(await s.reapExhausted(1)).toBeGreaterThanOrEqual(1);
       // Second pass: this row is already terminal, so it is not retired twice.
@@ -269,6 +269,61 @@ describe.skipIf(!available)('PostgresDeliveryStore — the claim guard, executed
         status: 'abandoned',
         attempts: 1,
       });
+    });
+
+    it('listRecent is newest-first and capped — operator outcomes view', async () => {
+      const s = store();
+      const first = await s.claim(NOTIFICATION, 'email', 3);
+      expect(first.claimed).toBe(true);
+      if (!first.claimed) return;
+      await s.settle({
+        id: first.id,
+        attempt: first.attempt,
+        status: 'refused',
+        refusalCode: 'channel.not_configured',
+        attempted: false,
+      });
+
+      const second = await s.claim(OTHER_NOTIFICATION, 'inapp', 3);
+      expect(second.claimed).toBe(true);
+      if (!second.claimed) return;
+      await s.settle({ id: second.id, attempt: second.attempt, status: 'accepted', attempted: true });
+
+      const recent = await s.listRecent(10);
+      const ours = recent.filter((r) => r.notificationId === NOTIFICATION || r.notificationId === OTHER_NOTIFICATION);
+      expect(ours.length).toBeGreaterThanOrEqual(2);
+      const inapp = ours.find((r) => r.channel === 'inapp');
+      const email = ours.find((r) => r.channel === 'email');
+      expect(inapp).toMatchObject({ status: 'accepted' });
+      expect(email).toMatchObject({ status: 'refused', refusalCode: 'channel.not_configured' });
+      expect(email?.acceptedAt).toBeNull();
+      expect(await s.listRecent(1)).toHaveLength(1);
+    });
+
+    it('arm 2 on Postgres names delivery_stuck when attempts are still below max', async () => {
+      // THE in_flight hole, executed against real SQL: one claim (attempts=1),
+      // lease dies, stuckGrace short so we do not wait 150s. Must not stamp
+      // attempts_exhausted for a budget that was never spent.
+      //
+      // Postgres rounds grace up to whole seconds (`graceSeconds = ceil(ms/1000)`).
+      // Wait lease (1s) + grace (1s) + slack so the row is actually past the
+      // dead-lease window — waiting only ~lease leaves arm 2 with zero rows.
+      const s = new PostgresDeliveryStore(sql!, { leaseMs: 1_000 });
+      expect((await s.claim(NOTIFICATION, 'email', 3)).claimed).toBe(true);
+      await new Promise((r) => setTimeout(r, 2_500));
+
+      const [before] = await s.listForNotification(NOTIFICATION);
+      expect(before).toMatchObject({ status: 'pending', attempts: 1 });
+
+      expect(await s.reapExhausted(3, { stuckGraceMs: 1_000 })).toBeGreaterThanOrEqual(1);
+
+      const [after] = await s.listForNotification(NOTIFICATION);
+      expect(after).toMatchObject({
+        status: 'abandoned',
+        attempts: 1,
+        refusalCode: 'channel.delivery_stuck',
+      });
+      expect(after?.acceptedAt).toBeNull();
     });
   });
 });

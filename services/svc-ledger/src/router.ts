@@ -3,6 +3,7 @@ import { router, publicProcedure, scopedProcedure, serviceProcedure, TRPCError }
 import {
   formatAmount,
   parseAmount,
+  accountPurpose,
   accountRefSchema,
   postRequestSchema,
   InsufficientFundsError,
@@ -11,8 +12,10 @@ import {
   InvalidEntryError,
   type EntryInput,
 } from '@intafaced/ledger-client';
+import { portfolioViewFromLedgerBalances, portfolioViewSchema } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * svc-ledger's internal API.
@@ -26,31 +29,41 @@ import type { LedgerService } from './service.js';
 
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof InsufficientFundsError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
   if (err instanceof UnbalancedTransactionError || err instanceof InvalidEntryError) {
     // A malformed transaction is a bug in the calling service, not user error.
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy(err.code), cause: err });
   }
   if (err instanceof LedgerError && err.code === 'ledger.frozen') {
-    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: userCopy(err.code), cause: err });
+  }
+  // Already frozen under another actor/reason — conflict, not internal error.
+  // Mirrors operator HTTP 409 so both doors name the same refusal.
+  if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
+    return new TRPCError({ code: 'CONFLICT', message: userCopy(err.code), cause: err });
   }
   // The window as asked cannot be answered, and retrying it unchanged never
   // will be. Same status as `s2s-http.httpError` gives these two, so the mounted
   // route and its twin cannot tell a caller different things about one refusal.
+  // Cap / range copy stays on the error — it is caller-actionable, not catalog.
   if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   if (err instanceof LedgerError) {
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy(err.code), cause: err });
   }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Ledger post failed', cause: err });
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('error.generic'), cause: err });
 }
 
 const balanceOutput = z.object({
   accountId: z.string(),
   assetId: z.string(),
   kind: z.string(),
+  // Purpose is account IDENTITY (P0-3), not optional decoration. Two holds with
+  // different claims must not collapse to the same (assetId, kind) on the wire —
+  // callers that key by those alone would re-commingle what the book keeps apart.
+  purpose: z.string(),
   amount: z.string(),
 });
 
@@ -114,6 +127,7 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountId: balance.accountId,
           assetId: input.assetId,
           kind: input.kind,
+          purpose: accountPurpose(input),
           amount: formatAmount(balance.amount),
         };
       }),
@@ -124,7 +138,7 @@ export function createLedgerRouter(ledger: LedgerService) {
       .query(async ({ ctx, input }) => {
         // A principal may only read its own balances, whatever its scopes say.
         if (input.ownerType === 'user' && ctx.principal.userId !== input.ownerId) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'This account belongs to another user' });
+          throw new TRPCError({ code: 'FORBIDDEN', message: userCopy('error.forbidden') });
         }
 
         const balances = await ledger.balances(input.ownerType, input.ownerId);
@@ -132,8 +146,29 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountId: b.accountId,
           assetId: b.account.assetId,
           kind: b.account.kind,
+          purpose: b.account.purpose ?? '',
           amount: formatAmount(b.amount),
         }));
+      }),
+
+    /**
+     * Stage-1 portfolio VIEW (§25:723). Reads `ledger.balances`. Does not post.
+     * Indexer/readmodels are unbuilt — named absent, never a zero chain balance.
+     */
+    portfolio: scopedProcedure('ledger:read')
+      .input(z.object({ ownerType: z.enum(['user', 'subaccount', 'module', 'house', 'treasury']), ownerId: z.string() }))
+      .output(portfolioViewSchema)
+      .query(async ({ ctx, input }) => {
+        if (input.ownerType === 'user' && ctx.principal.userId !== input.ownerId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'This account belongs to another user' });
+        }
+
+        const balances = await ledger.balances(input.ownerType, input.ownerId);
+        return portfolioViewFromLedgerBalances({
+          ownerType: input.ownerType,
+          ownerId: input.ownerId,
+          balances,
+        });
       }),
 
     /**
@@ -210,15 +245,21 @@ export function createLedgerRouter(ledger: LedgerService) {
           accountsChecked: z.number(),
           chainLength: z.number(),
           unbalancedAssets: z.array(z.string()),
+          /** Present only when the hash chain failed — where verification stopped. */
+          chainBrokenAt: z.string().optional(),
         }),
       )
       .mutation(async () => {
         const report = await ledger.reconcile();
+        // chainLength is the number of transactions that verified, even on a
+        // break — never collapse a broken chain to 0 (that looks like an empty
+        // healthy book). Same shape as POST /operator/reconcile.
         return {
           ok: report.ok,
           accountsChecked: report.balances.accountsChecked,
-          chainLength: report.chain.ok ? report.chain.length : 0,
+          chainLength: report.chain.length,
           unbalancedAssets: report.unbalancedAssets,
+          ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
         };
       }),
 
@@ -230,18 +271,38 @@ export function createLedgerRouter(ledger: LedgerService) {
      * reply naming a different actor is the fastest way to find that out.
      */
     freeze: scopedProcedure('admin:treasury')
-      .input(z.object({ reason: z.string().min(1) }))
+      // Same floor as POST /operator/freeze: a twelve-character minimum forces a
+      // sentence the next operator can act on. `min(1)` accepted "x" and left
+      // the durable row unactionable — the database only refuses empty reason,
+      // not a useless one. Cap matches the HTTP schema (500).
+      .input(
+        z.object({
+          // Same floor as POST /operator/freeze — trim so spaces cannot pad min(12).
+          reason: z
+            .string()
+            .transform((s) => s.trim())
+            .pipe(z.string().min(12).max(500)),
+        }),
+      )
       .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
       .mutation(async ({ ctx, input }) => {
-        const state = await ledger.freeze(input.reason, ctx.principal.userId);
-        return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        try {
+          const state = await ledger.freeze(input.reason, ctx.principal.userId);
+          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     unfreeze: scopedProcedure('admin:treasury')
       .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
       .mutation(async ({ ctx }) => {
-        const state = await ledger.unfreeze(ctx.principal.userId);
-        return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        try {
+          const state = await ledger.unfreeze(ctx.principal.userId);
+          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
   });
 }

@@ -216,30 +216,12 @@ public class WithdrawRecordController extends BaseAdminController {
     public MessageResult addNumber(
             @RequestParam("id") Long id,
             @RequestParam("transactionNumber") String transactionNumber) {
-        WithdrawRecord record = withdrawRecordService.findOne(id);
-        Assert.notNull(record, "该记录不存在");
-        Assert.isTrue(record.getIsAuto() == BooleanEnum.IS_FALSE, "该提现单为自动审核");
-        record.setTransactionNumber(transactionNumber);
-        record.setStatus(WithdrawStatus.SUCCESS);
-        MemberWallet memberWallet = memberWalletService.findByCoinAndMemberId(record.getCoin(), record.getMemberId());
-        Assert.notNull(memberWallet, "member id " + record.getMemberId() + " 的 wallet 为 null");
-        memberWallet.setFrozenBalance(memberWallet.getFrozenBalance().subtract(record.getTotalAmount()));
-        memberWalletService.save(memberWallet);
-        record = withdrawRecordService.save(record);
-
-        MemberTransaction memberTransaction = new MemberTransaction();
-        memberTransaction.setMemberId(record.getMemberId());
-        memberTransaction.setAddress(record.getAddress());
-        memberTransaction.setAmount(record.getTotalAmount());
-        memberTransaction.setSymbol(record.getCoin().getUnit());
-        memberTransaction.setCreateTime(record.getCreateTime());
-        memberTransaction.setType(TransactionType.WITHDRAW);
-        memberTransaction.setFee(record.getFee());
-        memberTransaction.setRealFee(record.getFee()+"");
-        memberTransaction.setDiscountFee("0");
-        memberTransaction= memberTransactionService.save(memberTransaction);
-
-        return MessageResult.success(messageSource.getMessage("SUCCESS"), record);
+        // Dual-book Option B — admin has no compose service, so the 410 door never
+        // executes. Remittance burned frozen wallet balances without ledger settle.
+        // ADR 2026-08-04: agents may throw where only a door stood.
+        // Queue if ever re-enabled: ledger recipe withdrawSettle (not Java book).
+        throw new IllegalStateException(
+                "admin withdraw remittance is disabled: Java shell must not settle balances (INTAFACED dual-book)");
     }
 
     //批量打款
@@ -252,41 +234,11 @@ public class WithdrawRecordController extends BaseAdminController {
             @RequestParam("ids") Long[] ids,
             @RequestParam("transactionNumber") String transactionNumber,
             @RequestParam("password") String password) {
-        Assert.notNull(admin, messageSource.getMessage("DATA_EXPIRED_LOGIN_AGAIN"));
-        password = Encrypt.MD5(password + md5Key);
-        if (!password.equals(admin.getPassword())) {
-            return error(messageSource.getMessage("WRONG_PASSWORD"));
-        }
-        WithdrawRecord withdrawRecord;
-        for (Long id : ids) {
-            withdrawRecord = withdrawRecordService.findOne(id);
-            notNull(withdrawRecord, "id :" + id + messageSource.getMessage("NO_DATA"));
-            isTrue(withdrawRecord.getStatus() == WAITING, "提现状态不是等待放币,不能打款!");
-            isTrue(withdrawRecord.getIsAuto() == IS_FALSE, "不是人工审核提现!");
-            //标记提现完成
-            withdrawRecord.setStatus(SUCCESS);
-            //交易编码
-            withdrawRecord.setTransactionNumber(transactionNumber);
-            MemberWallet memberWallet = memberWalletService.findByCoinAndMemberId(withdrawRecord.getCoin(), withdrawRecord.getMemberId());
-            Assert.notNull(memberWallet, "member id " + withdrawRecord.getMemberId() + " 的 wallet 为 null");
-            memberWallet.setFrozenBalance(memberWallet.getFrozenBalance().subtract(withdrawRecord.getTotalAmount()));
-            memberWalletService.save(memberWallet);
-            withdrawRecordService.save(withdrawRecord);
-
-            MemberTransaction memberTransaction = new MemberTransaction();
-            memberTransaction.setMemberId(withdrawRecord.getMemberId());
-            memberTransaction.setAddress(withdrawRecord.getAddress());
-            memberTransaction.setAmount(withdrawRecord.getTotalAmount());
-            memberTransaction.setSymbol(withdrawRecord.getCoin().getUnit());
-            memberTransaction.setCreateTime(withdrawRecord.getCreateTime());
-            memberTransaction.setType(TransactionType.WITHDRAW);
-            memberTransaction.setFee(withdrawRecord.getFee());
-            memberTransaction.setRealFee(withdrawRecord.getFee()+"");
-            memberTransaction.setDiscountFee("0");
-            memberTransaction= memberTransactionService.save(memberTransaction);
-
-        }
-        return success();
+        // Dual-book Option B — same as addNumber: batch remittance debited frozen
+        // balances on every selected record. Refuse at method entry.
+        // Queue if ever re-enabled: ledger recipe withdrawSettle (not Java book).
+        throw new IllegalStateException(
+                "admin withdraw remittance is disabled: Java shell must not settle balances (INTAFACED dual-book)");
     }
 
 }

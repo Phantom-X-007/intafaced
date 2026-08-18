@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { scheduleKeySchema } from '@intafaced/contracts';
 
 /**
  * CCXT-SHAPED PUBLIC EXCHANGE API.
@@ -37,11 +38,10 @@ export const isoDatetime = z.string().datetime({ offset: true });
 export const marketTypeSchema = z.enum(['spot', 'swap', 'future', 'option']);
 
 /**
- * Stable schedule keys — same set as `@intafaced/contracts` TRADING_SCHEDULES.
- * Duplicated on the wire schema so exchange-contract stays free of a contracts
- * dependency; the two lists must stay aligned.
+ * Stable schedule keys — derived from `@intafaced/contracts` `TRADING_SCHEDULES`
+ * (D-S-05). Never a second handwritten list; drift fails at typecheck/import.
  */
-export const marketScheduleKeySchema = z.enum(['crypto-24x7', 'fx-global', 'cme-globex']);
+export const marketScheduleKeySchema = scheduleKeySchema;
 export type MarketScheduleKey = z.infer<typeof marketScheduleKeySchema>;
 
 /** One open window on the venue's local week (day 0 = Sunday). */
@@ -314,11 +314,11 @@ export const createOrderRequestSchema = z
     postOnly: z.boolean().optional(),
     reduceOnly: z.boolean().optional(),
     /**
-     * Caller-supplied idempotency key. Strongly recommended: a resubmitted
-     * order with the same key returns the original rather than opening a second
-     * position. Bots retry; the book must not double.
+     * Caller-supplied idempotency key. Required: a resubmitted order with the
+     * same key returns the original rather than opening a second hold. Bots
+     * retry; the book must not double.
      */
-    clientOrderId: z.string().min(1).max(64).optional(),
+    clientOrderId: z.string().min(1).max(64),
     /** Sub-account to trade from (§4.1 sub_accounts). */
     subAccountId: z.string().uuid().optional(),
   })

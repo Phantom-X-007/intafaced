@@ -62,14 +62,57 @@ export interface ExchangeOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+/**
+ * Hop-by-hop headers (RFC 7230 §6.1) plus the request identity headers the
+ * edge must rewrite itself.
+ *
+ * Until this list was complete, the comment above claimed the class while only
+ * `connection` (plus `host` / `content-length`) was stripped — an audit finding
+ * (`docs/audit/2026-08-08-svc-edge.md` #7). `transfer-encoding`, `te`,
+ * `trailer`, `upgrade`, `keep-alive` and the proxy-auth pair were forwarded.
+ * Undici may reject some of those outbound, but a safety control that relies on
+ * the outbound client to paper over a leaky filter is not a control.
+ *
+ * `host` is not hop-by-hop in the RFC sense; it is stripped because the
+ * upstream's host must be the edge's own choice, never the caller's.
+ * `content-length` is stripped because the proxy may re-encode the body and a
+ * stale length would lie.
+ *
+ * `x-forwarded-origin` is stripped here, then re-set from the real `Origin`
+ * in `exchangePrincipal`. Identity's `apiKeys.exchange` reads
+ * `origin ?? x-forwarded-origin` for domain_whitelist. A client-supplied
+ * value would let a stolen browser key pick its own allowed origin.
+ */
+export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'host',
+  'content-length',
+  'x-forwarded-origin',
+]);
+
+/** Browser `Origin` only. Never `x-forwarded-origin` — that header is ours to write. */
+export function requestOrigin(headers: Record<string, string | string[] | undefined>): string | null {
+  const raw = headers.origin ?? headers.Origin;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /** Strip every reserved header, whatever its case. */
 export function stripReserved(headers: Record<string, string | string[] | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, value] of Object.entries(headers)) {
     const lower = name.toLowerCase();
     if (lower.startsWith(RESERVED_HEADER_PREFIX)) continue;
-    // Hop-by-hop headers must not be proxied; `host` must be the upstream's.
-    if (lower === 'host' || lower === 'connection' || lower === 'content-length') continue;
+    if (HOP_BY_HOP_HEADERS.has(lower)) continue;
     // The upstream has no use for the bearer token and should never see it —
     // a service that can read a token is a service that can replay it.
     if (lower === 'authorization') continue;
@@ -103,13 +146,21 @@ export async function exchangeApiKeyForAccessToken(
   key: string,
   identityUrl: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
+  origin?: string | null,
 ): Promise<string | null> {
   const base = identityUrl.replace(/\/$/, '');
   let response: Response;
   try {
     response = await fetchFn(`${base}/trpc/apiKeys.exchange`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        // Identity domain_whitelist fails closed on a missing origin when the
+        // key is locked. Omitting this made every browser key land anonymous
+        // at the door, and a client-supplied x-forwarded-origin was the
+        // forgeable bypass on the proxied tRPC path.
+        ...(origin ? { origin } : {}),
+      },
       // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
       body: JSON.stringify({ json: { key } }),
       signal: AbortSignal.timeout(5_000),
@@ -154,6 +205,13 @@ export async function exchangePrincipal(
   const forward = stripReserved(headers);
   forward['x-intafaced-region'] = options.region;
 
+  // Edge-attested origin only. Client x-forwarded-origin was stripped above.
+  const origin = requestOrigin(headers);
+  if (origin) {
+    forward.origin = origin;
+    forward['x-forwarded-origin'] = origin;
+  }
+
   let token = bearerFrom(headers);
   if (!token) return { headers: forward, principal: null, rejected: null };
 
@@ -164,7 +222,7 @@ export async function exchangePrincipal(
     if (!options.identityUrl) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
-    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch);
+    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin);
     if (!exchanged) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }

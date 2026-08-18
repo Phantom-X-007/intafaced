@@ -4,9 +4,15 @@ import { AuthError } from '@intafaced/auth';
 import { formatAmount, parseAmount, InsufficientFundsError, LedgerError } from '@intafaced/ledger-client';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
+import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
+import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
+import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
 import type { OtcDeskService } from './otc/otc-service.js';
+import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
+import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
+import type { CopyService } from './copy/copy-service.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -30,6 +36,32 @@ import type { OtcDeskService } from './otc/otc-service.js';
 
 /** Unsigned decimal string. Reuses the exchange contract's rule rather than inventing a second one. */
 const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are unsigned decimal strings with at most 18 decimal places');
+
+/** Shared TWAP parent presentation (create/get/pause/resume/cancel). */
+const algoParentOutputSchema = z.object({
+  id: z.string(),
+  symbol: z.string(),
+  side: orderSideSchema,
+  kind: z.enum(['twap', 'vwap', 'pov']),
+  totalQty: decimal,
+  durationMs: z.number().int(),
+  sliceIntervalMs: z.number().int(),
+  limitPrice: decimal.nullable(),
+  status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
+  slicesPlanned: z.number().int(),
+  nextSliceIndex: z.number().int(),
+  childrenEmitted: z.number().int(),
+  missesRecorded: z.number().int(),
+  haltReason: z.string().nullable(),
+  participationBps: z.number().int().nullable(),
+  createdAt: z.string(),
+  startedAt: z.string(),
+  nextDueAt: z.string(),
+  /** Projected wall-clock end after last re-space (ADR 2026-08-08). */
+  projectedEndsAt: z.string(),
+  /** Distinguishes user pause from tick outage; null until first stretch. */
+  scheduleStretchReason: z.enum(['user_pause', 'tick_outage']).nullable(),
+});
 
 const marketOutput = z.object({
   id: z.string().uuid(),
@@ -168,6 +200,30 @@ function toTrpcError(err: unknown): TRPCError {
     }
   }
 
+  if (err instanceof CopyError) {
+    switch (err.code) {
+      case 'trade.copy_not_following':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'trade.copy_jurisdiction_blocked':
+      case 'trade.copy_self_follow':
+      case 'trade.copy_fee_share_killed':
+      case 'trade.copy_pnl_fee_forbidden':
+      case 'trade.copy_ranking_forbidden':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'trade.copy_fee_share_blank':
+      case 'trade.copy_jurisdiction_blank':
+      case 'trade.copy_law_blank':
+      case 'trade.copy_settle_refused':
+      case 'trade.copy_auto_mirror_place_socket':
+      case 'trade.copy_place_disabled':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      case 'trade.copy_paper_live_forbidden':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      default:
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
+
   if (err instanceof TradeError) {
     switch (err.code) {
       case 'trade.market_not_found':
@@ -216,7 +272,7 @@ async function guard<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
+export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, copy?: CopyService) {
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-trade') }))
@@ -251,8 +307,11 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
               qty: decimal,
               price: decimal.optional(),
               timeInForce: timeInForceSchema.optional(),
-              /** Strongly recommended. Without one, a retry opens a second order. */
-              clientOrderId: z.string().min(1).max(64).optional(),
+              /**
+               * Required. Without one a retry opens a second hold under a fresh
+               * order id — the money-path equivalent of double-spend on a timeout.
+               */
+              clientOrderId: z.string().min(1).max(64),
               subAccountId: z.string().uuid().optional(),
             })
             .superRefine((order, ctx) => {
@@ -413,10 +472,18 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
     otc: router({
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!otc) {
+          const deskLaw = 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
           return {
             published: false,
             statusLine: 'published=0 residual=DIRECTION_§8_refuse_closed',
-            residual: 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed',
+            residual: deskLaw,
+            makerRouting: otcMakerRoutingStatus(),
+            midFeed: otcMidFeedStatus(),
+            residuals: {
+              deskLaw,
+              makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
+              midFeed: OTC_MID_FEED_RESIDUAL,
+            },
           };
         }
         return otc.deskStatus();
@@ -424,13 +491,26 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
 
       quote: scopedProcedure('trade:read', { module: 'trade' })
         .input(
-          z.object({
-            side: orderSideSchema,
-            baseAsset: z.string().min(1).max(32),
-            quoteAsset: z.string().min(1).max(32),
-            qty: decimal,
-            makerId: z.string().min(1).max(120).optional(),
-          }),
+          /**
+           * `.strict()`, and it is the money guard rather than tidiness.
+           *
+           * zod strips unknown keys by default, so a body carrying `midPrice`
+           * was accepted and silently discarded. That is the posture #1097
+           * fixed the *reading* of but not the *shape* of: a client sending a
+           * price got a 200 and a quote priced off something else, which is
+           * indistinguishable from the desk having honoured it. On the one
+           * surface where the customer naming the price was a live exploit,
+           * an unknown field is refused and named instead of ignored.
+           */
+          z
+            .object({
+              side: orderSideSchema,
+              baseAsset: z.string().min(1).max(32),
+              quoteAsset: z.string().min(1).max(32),
+              qty: decimal,
+              makerId: z.string().min(1).max(120).optional(),
+            })
+            .strict(),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
@@ -449,10 +529,17 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
 
       accept: scopedProcedure('trade:write', { module: 'trade' })
         .input(
-          z.object({
-            quoteId: z.string().uuid(),
-            assertedPrice: decimal.optional(),
-          }),
+          /**
+           * `assertedPrice` is the one price the customer may send, and it can
+           * only ever cause a REFUSAL: it must equal the quoted price or the
+           * accept is rejected as last look. It is never the price that fills.
+           */
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              assertedPrice: decimal.optional(),
+            })
+            .strict(),
         )
         .mutation(({ ctx, input }) =>
           guard(async () => {
@@ -465,7 +552,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
         ),
 
       settle: scopedProcedure('trade:write', { module: 'trade' })
-        .input(z.object({ quoteId: z.string().uuid() }))
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
         .mutation(({ ctx, input }) =>
           guard(async () => {
             if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
@@ -490,28 +577,11 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
             limitPrice: decimal.optional(),
             clientAlgoId: z.string().min(1).max(48).optional(),
             subAccountId: z.string().uuid().optional(),
-            kind: z.enum(['twap']).optional(),
+            kind: z.enum(['twap', 'vwap', 'pov']).optional(),
+            participationBps: z.number().int().min(1).max(10_000).optional(),
           }),
         )
-        .output(
-          z.object({
-            id: z.string(),
-            symbol: z.string(),
-            side: orderSideSchema,
-            kind: z.literal('twap'),
-            totalQty: decimal,
-            durationMs: z.number().int(),
-            sliceIntervalMs: z.number().int(),
-            limitPrice: decimal.nullable(),
-            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
-            slicesPlanned: z.number().int(),
-            nextSliceIndex: z.number().int(),
-            childrenEmitted: z.number().int(),
-            missesRecorded: z.number().int(),
-            haltReason: z.string().nullable(),
-            createdAt: z.string(),
-          }),
-        )
+        .output(algoParentOutputSchema)
         .mutation(({ ctx, input }) =>
           guard(async () => {
             const parent = await trade.createTwap(ctx.principal, {
@@ -524,6 +594,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
               clientAlgoId: input.clientAlgoId,
               subAccountId: input.subAccountId,
               kind: input.kind ?? 'twap',
+              participationBps: input.participationBps,
             });
             return presentAlgo(parent);
           }),
@@ -531,25 +602,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
 
       get: scopedProcedure('trade:read')
         .input(z.object({ algoId: z.string().min(1) }))
-        .output(
-          z.object({
-            id: z.string(),
-            symbol: z.string(),
-            side: orderSideSchema,
-            kind: z.literal('twap'),
-            totalQty: decimal,
-            durationMs: z.number().int(),
-            sliceIntervalMs: z.number().int(),
-            limitPrice: decimal.nullable(),
-            status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']),
-            slicesPlanned: z.number().int(),
-            nextSliceIndex: z.number().int(),
-            childrenEmitted: z.number().int(),
-            missesRecorded: z.number().int(),
-            haltReason: z.string().nullable(),
-            createdAt: z.string(),
-          }),
-        )
+        .output(algoParentOutputSchema)
         .query(({ ctx, input }) => guard(async () => presentAlgo(await trade.getAlgo(ctx.principal, input.algoId)))),
 
       progress: scopedProcedure('trade:read')
@@ -581,6 +634,202 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService) {
         .input(z.object({ algoId: z.string().min(1) }))
         .mutation(({ ctx, input }) => guard(async () => presentAlgo(await trade.cancelAlgo(ctx.principal, input.algoId)))),
     }),
+
+    /**
+     * Forex settlement posture (trade.forex / D26-P1-T7).
+     * Always refuse-closed until D26-P0-05 + fiat settle rails — never invents
+     * settlement asset. §13 socket.forex-settlement.
+     *
+     * Completeness = honest refuse product on public doors (status + listing
+     * probe + place path), not fundable FX. Do not mark trade.forex done.
+     */
+    forex: router({
+      settlementStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => forexSettlementStatus()),
+
+      /**
+       * Same listing gate as TradeService.listMarket / setMarketStatus(active).
+       * Public-door probe so refuse is not unit-helper-only until an admin
+       * listMarket transport mounts. Production active non-paper forex/
+       * commodity → trade.unsettled_asset_class_listing naming the socket.
+       */
+      assertProductionListing: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            assetClass: z.enum(['crypto', 'commodity', 'forex']),
+            status: z.enum(['active', 'pending', 'halted', 'delisted']),
+            paper: z.boolean(),
+          }),
+        )
+        .mutation(({ input }) =>
+          guard(async () => {
+            assertProductionUnsettledAssetClassListing(input);
+            return { ok: true as const, refused: false as const };
+          }),
+        ),
+    }),
+
+    /**
+     * Copy trading (trade.copy / D-S-03 / SPEC-SOVEREIGN-ROUTING-AND-COPY).
+     *
+     * Follow / kill / unfollow are product-mounted. Blank DIRECTION §8 laws
+     * refuse-closed — never invent leader_share_bps or jurisdiction allowlist.
+     * Fee-share settle posts only via ledger-client when owner law is published.
+     */
+    copy: router({
+      deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
+        if (!copy) {
+          return {
+            sovereign: {
+              shape: 'sovereign' as const,
+              custody: false,
+              feeModel: 'protocol_fee_share' as const,
+              pnlFeeForbidden: true,
+              rankingForbidden: true,
+              killUnfollowReal: true,
+            },
+            feeSharePublished: false,
+            jurisdictionPublished: false,
+            statusLine: 'feeShare=0 residual=D26-P0-02_leader_share_bps jurisdiction=0 residual=D26-P0-15_jurisdiction',
+            residual: COPY_LAW_RESIDUAL,
+            residuals: {
+              rates: COPY_FEE_SHARE_RESIDUAL,
+              jurisdiction: COPY_JURISDICTION_RESIDUAL,
+              autoMirrorPlace: COPY_AUTO_MIRROR_PLACE_RESIDUAL,
+            },
+            autoMirrorPlace: autoMirrorPlaceStatus(false),
+          };
+        }
+        return copy.deskStatus();
+      }),
+
+      follow: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            leaderId: z.string().min(1).max(120),
+            region: z.string().min(1).max(16),
+            permittedMarkets: z.array(z.string().min(1).max(64)).min(1).max(64),
+            maxNotionalPerOrder: decimal,
+            maxAggregateExposure: decimal,
+            expiresAt: z.string().datetime(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError(
+                'Copy is refuse-closed until owner publishes DIRECTION §8 / D26-P0-15 served-jurisdiction list',
+                'trade.copy_jurisdiction_blank',
+                COPY_JURISDICTION_RESIDUAL,
+              );
+            }
+            return copy.follow(ctx.principal, input);
+          }),
+        ),
+
+      unfollow: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.unfollow(ctx.principal, input);
+          }),
+        ),
+
+      killFeeShare: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.killFeeShare(ctx.principal, input);
+          }),
+        ),
+
+      /** Caller's follows only — product desk list. */
+      listMyFollows: scopedProcedure('trade:read', { module: 'trade' }).query(({ ctx }) =>
+        guard(async () => {
+          if (!copy) return [];
+          return copy.listMyFollows(ctx.principal);
+        }),
+      ),
+
+      /**
+       * Plan a mirror of a leader fill under one of the caller's follows.
+       * Envelope / cap / expiry refuse typed — never invents a different shape.
+       * Does not place a spot order (auto-mirror execution is a separate residual).
+       */
+      planMirror: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+            marketId: z.string().min(1).max(64),
+            side: z.enum(['buy', 'sell']),
+            qty: decimal,
+            notional: decimal,
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.planMirrorForFollow(ctx.principal, input);
+          }),
+        ),
+
+      /**
+       * Place a planned mirror into spot via follower placeOrder (limit at plan envelope).
+       * TRADE_COPY_PLACE_MIRROR off / blank §8 / paper→live refuse by name.
+       */
+      placeMirror: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+            leaderPaper: z.boolean(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('copy.placeMirror is refuse-closed until TRADE_COPY_PLACE_MIRROR is on', 'trade.copy_place_disabled');
+            }
+            return copy.placeMirrorForFollow(ctx.principal, input);
+          }),
+        ),
+
+      /**
+       * Attribute + settle leader fee-share for a follower fill.
+       * Blank §8 → PRECONDITION_FAILED. Never invents rates.
+       */
+      settleFeeShare: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z.object({
+            followId: z.string().min(1).max(64),
+            fillId: z.string().min(1).max(120),
+            assetId: z.string().min(1).max(32),
+            followerFillNotional: decimal,
+            protocolFeeBps: z.number().int().min(0).max(10_000),
+            fillFeeAmount: decimal.optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError(
+                'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
+                'trade.copy_fee_share_blank',
+                COPY_FEE_SHARE_RESIDUAL,
+              );
+            }
+            return copy.settleFeeShare(ctx.principal, input);
+          }),
+        ),
+    }),
   });
 }
 
@@ -589,7 +838,7 @@ function presentAlgo(parent: import('./algo/index.js').TwapParent) {
     id: parent.id,
     symbol: parent.symbol,
     side: parent.side,
-    kind: 'twap' as const,
+    kind: parent.kind,
     totalQty: formatAmount(parent.totalQty),
     durationMs: parent.durationMs,
     sliceIntervalMs: parent.sliceIntervalMs,
@@ -600,7 +849,12 @@ function presentAlgo(parent: import('./algo/index.js').TwapParent) {
     childrenEmitted: parent.children.length,
     missesRecorded: parent.misses.length,
     haltReason: parent.haltReason,
+    participationBps: parent.participationBps,
     createdAt: parent.createdAt.toISOString(),
+    startedAt: parent.startedAt.toISOString(),
+    nextDueAt: parent.nextDueAt.toISOString(),
+    projectedEndsAt: parent.projectedEndsAt.toISOString(),
+    scheduleStretchReason: parent.scheduleStretchReason,
   };
 }
 

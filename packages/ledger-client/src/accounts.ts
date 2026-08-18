@@ -24,8 +24,8 @@ export function userAvailable(userId: string, assetId: string): AccountRef {
  * inventing a purpose string, which is worth having to justify.
  */
 export function userHold(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userHold requires a purpose (P0-3) — e.g. `order:<id>` or `withdraw:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'hold', purpose };
+  if (!purpose?.trim()) throw new Error('userHold requires a purpose (P0-3) — e.g. `order:<id>` or `withdraw:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'hold', purpose: purpose.trim() };
 }
 
 /** Value reserved for one open order. Drawn down on fill, returned on cancel or expiry. */
@@ -43,8 +43,8 @@ export function withdrawalHoldAccount(userId: string, assetId: string, withdrawa
  * one pot per (user, asset) lets trade B fund trade A's release.
  */
 export function userEscrow(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userEscrow requires a purpose (L3-4) — e.g. `trade:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'escrow', purpose };
+  if (!purpose?.trim()) throw new Error('userEscrow requires a purpose (L3-4) — e.g. `trade:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'escrow', purpose: purpose.trim() };
 }
 
 /** Escrow pot for one P2P trade. */
@@ -57,8 +57,8 @@ export function tradeEscrowAccount(sellerId: string, assetId: string, tradeId: s
  * positions must not share a pot or each other's principal.
  */
 export function userStake(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userStake requires a purpose (L1/L3-5) — e.g. `token:stake:<id>` or `bank:earn:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'stake', purpose };
+  if (!purpose?.trim()) throw new Error('userStake requires a purpose (L1/L3-5) — e.g. `token:stake:<id>` or `bank:earn:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'stake', purpose: purpose.trim() };
 }
 
 /** Token staking pot for one stake row. */
@@ -90,8 +90,8 @@ export function earnStakeAccount(userId: string, assetId: string, positionId: st
  * common one.
  */
 export function userCollateral(userId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('userCollateral requires a purpose (P0-3) — e.g. `loan:<id>` or `position:<id>`');
-  return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral', purpose };
+  if (!purpose?.trim()) throw new Error('userCollateral requires a purpose (P0-3) — e.g. `loan:<id>` or `position:<id>`');
+  return { ownerType: 'user', ownerId: userId, assetId, kind: 'collateral', purpose: purpose.trim() };
 }
 
 /** Collateral securing ONE loan (§8.1). Released only when that loan is settled. */
@@ -131,17 +131,32 @@ export function loanReserve(assetId: string): AccountRef {
 
 /**
  * A sub-account's spendable balance — svc-bank's "spaces" read this.
- *
- * There is deliberately no `subAccountHold` beside it. One existed and had no
- * caller, because it could not have had a working one: it built `kind: 'hold'`
- * with no purpose, and `assertPurposedLocks` refuses every such post. A hold on
- * a space needs the same treatment as `houseHold` — a required purpose naming
- * what the value is being held FOR — and is worth writing when something
- * actually holds one, rather than left as a constructor whose every output the
- * ledger rejects.
  */
 export function subAccountAvailable(subAccountId: string, assetId: string): AccountRef {
   return { ownerType: 'subaccount', ownerId: subAccountId, assetId, kind: 'available' };
+}
+
+/**
+ * A sub-account hold FOR ONE PURPOSE (P0-3).
+ *
+ * Added when bank.business dual-control needed a real ledger hold on a named
+ * space: over-threshold maker/checker must reserve value from the debit space,
+ * which may be a named pot (`ownerType: 'subaccount'`), not only primary
+ * `userAvailable`. Purpose is required — an unpurposed sub-account hold was
+ * correctly refused forever; this constructor only exists so a named purpose
+ * (e.g. `business-approval:<id>`) can pair with the same space's available pot.
+ */
+export function subAccountHold(subAccountId: string, assetId: string, purpose: string): AccountRef {
+  if (!purpose?.trim()) {
+    throw new Error('subAccountHold requires a purpose (P0-3) — e.g. `business-approval:<id>`');
+  }
+  return {
+    ownerType: 'subaccount',
+    ownerId: subAccountId,
+    assetId,
+    kind: 'hold',
+    purpose: purpose.trim(),
+  };
 }
 
 /** Where a module's fee revenue lands. Staking yield is distributed from here (§4.3). */
@@ -171,8 +186,8 @@ export function marketMaker(assetId: string): AccountRef {
 
 /** House hold FOR ONE PURPOSE (mm-bot order reservations). */
 export function houseHold(ownerId: string, assetId: string, purpose: string): AccountRef {
-  if (!purpose) throw new Error('houseHold requires a purpose — e.g. `order:<id>`');
-  return { ownerType: 'house', ownerId, assetId, kind: 'hold', purpose };
+  if (!purpose?.trim()) throw new Error('houseHold requires a purpose — e.g. `order:<id>`');
+  return { ownerType: 'house', ownerId, assetId, kind: 'hold', purpose: purpose.trim() };
 }
 
 /** Market-maker reservation for one seed/open order. */

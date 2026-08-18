@@ -2,7 +2,7 @@
 
 **Tip base:** wave20 (#851)  
 **Class:** N  
-**Board-Delta:** free implementable TRK Stage-1 under thrift hard (local only)
+**Board-Delta:** free implementable TRK Stage-1 (local historical pack; thrift deleted 2026-08-07)
 
 ## Helpers
 

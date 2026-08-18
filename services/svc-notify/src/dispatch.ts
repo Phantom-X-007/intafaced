@@ -87,11 +87,12 @@ export class NotificationDispatcher {
     private readonly options: DispatchOptions,
   ) {}
 
-  async dispatch(notification: Notification): Promise<DispatchReport> {
+  async dispatch(notification: Notification, opts: { outOfApp?: boolean } = {}): Promise<DispatchReport> {
     return withNotifySpan(
       'notify.dispatch',
       { op: 'dispatch', kind: notification.kind, sourceSubject: notification.sourceSubject },
       async (span) => {
+        const outOfApp = opts.outOfApp !== false;
         const verified = await this.targets.verified(notification.userId);
         const byChannel = new Map<ChannelId, ChannelTarget>(verified.map((t) => [t.channel, t]));
         const outcomes: ChannelOutcome[] = [];
@@ -106,6 +107,15 @@ export class NotificationDispatcher {
         // Recording it as a delivery keeps one shape for "what happened to this
         // message across every channel", which is what the API answers.
         outcomes.push(await this.attempt(notification, 'inapp', notification.id, normaliseLocale(null)));
+
+        if (!outOfApp) {
+          const retry = outcomes.some((o) => o.retryable);
+          span.setAttribute('intafaced.notify.channels_attempted', outcomes.length);
+          span.setAttribute('intafaced.notify.channels_accepted', outcomes.filter((o) => o.status === 'accepted').length);
+          span.setAttribute('intafaced.notify.dispatch_retry', retry);
+          span.setAttribute('intafaced.notify.out_of_app', false);
+          return { notificationId: notification.id, outcomes, retry };
+        }
 
         for (const channel of OUT_OF_APP_CHANNELS) {
           const target = byChannel.get(channel);
@@ -190,7 +200,14 @@ export class NotificationDispatcher {
     // column is the difference between "the provider was down" and "we never
     // had anywhere to send it", and collapsing the two loses the answer a
     // borrower is owed.
-    await this.deliveries.settle({ id: claim.id, status: 'refused', refusalCode: code, detail, attempted: false });
+    await this.deliveries.settle({
+      id: claim.id,
+      attempt: claim.attempt,
+      status: 'refused',
+      refusalCode: code,
+      detail,
+      attempted: false,
+    });
     return { channel, status: 'refused', code, detail, retryable: false };
   }
 
@@ -218,12 +235,25 @@ export class NotificationDispatcher {
         idempotencyKey: `${notification.id}:${channel}`,
       });
 
-      await this.deliveries.settle({ id: claim.id, status: 'accepted', reference: receipt.reference, attempted: true });
+      await this.deliveries.settle({
+        id: claim.id,
+        attempt: claim.attempt,
+        status: 'accepted',
+        reference: receipt.reference,
+        attempted: true,
+      });
       return { channel, status: 'accepted', code: null, detail: null, retryable: false };
     } catch (err) {
       if (err instanceof ChannelRefusal) {
         // The adapter declined before doing anything — no credentials, typically.
-        await this.deliveries.settle({ id: claim.id, status: 'refused', refusalCode: err.code, detail: err.message, attempted: false });
+        await this.deliveries.settle({
+          id: claim.id,
+          attempt: claim.attempt,
+          status: 'refused',
+          refusalCode: err.code,
+          detail: err.message,
+          attempted: false,
+        });
         return { channel, status: 'refused', code: err.code, detail: err.message, retryable: false };
       }
 
@@ -233,15 +263,19 @@ export class NotificationDispatcher {
       // row that reads as "still being retried" when nothing will retry it.
       const exhausted = claim.attempt >= this.options.maxAttempts;
       const status = retryable && !exhausted ? 'failed' : 'abandoned';
+      // Permanent gateway rejects (e.g. 422) abandon without burning more bus
+      // attempts — but the row must still name *why*, not leave refusal_code null.
+      const refusalCode = exhausted ? 'channel.attempts_exhausted' : status === 'abandoned' ? 'channel.transport_rejected' : null;
 
       await this.deliveries.settle({
         id: claim.id,
+        attempt: claim.attempt,
         status,
-        refusalCode: exhausted ? 'channel.attempts_exhausted' : null,
+        refusalCode,
         detail,
         attempted: true,
       });
-      return { channel, status, code: exhausted ? 'channel.attempts_exhausted' : null, detail, retryable: status === 'failed' };
+      return { channel, status, code: refusalCode, detail, retryable: status === 'failed' };
     }
   }
 }

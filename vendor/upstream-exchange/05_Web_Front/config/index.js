@@ -17,7 +17,7 @@ const path = require('path')
 // `Vue.http.options.credentials = true` actually carries it.
 //
 // Defaults are the compose service names, because the dev server runs in the
-// `intafaced-bizzan-web` container attached to the `vendor_default` network.
+// `intafaced-vendor-shell` container attached to the `vendor_default` network.
 // Override with env vars when running `npm run dev` on the host directly, e.g.
 // COINEX_UC_TARGET=http://127.0.0.1:6001.
 const backend = {
@@ -27,7 +27,7 @@ const backend = {
     otc: process.env.COINEX_OTC_TARGET || 'http://coinex-otc:6006',
     // The INTAFACED platform's single front door. `host.docker.internal` rather
     // than a compose service name because this dev server runs in the
-    // `intafaced-bizzan-web` container on the default bridge network, while the
+    // `intafaced-vendor-shell` container on the default bridge network, while the
     // platform sits on `intafaced_default` — the two cannot resolve each other
     // by name, but the edge publishes 4000 on the host. Running `npm run dev` on
     // the host instead? IX_EDGE_TARGET=http://127.0.0.1:4000.

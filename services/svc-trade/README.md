@@ -6,8 +6,17 @@
 svc-matching; the money lives in svc-ledger. This service is the thing in between — the one that decides an order
 is allowed, funds it, hands it to the engine, and turns what comes back into ledger transactions.
 
-**Scope of this PR:** `trade.spot`. Futures, options, OTC, Convert, copy trading and algo execution are separate
-tracker features with their own PRs. See [Not in this PR](#not-in-this-pr).
+**Primary shipped surface here:** `trade.spot` + mounted Convert / OTC / CCXT REST / futures-orderable path (flagged).
+
+| Surface                                     | Mount            | Default                                                                       |
+| ------------------------------------------- | ---------------- | ----------------------------------------------------------------------------- |
+| Convert                                     | tRPC `convert.*` | ON (`TRADE_CONVERT_ENABLED`)                                                  |
+| OTC                                         | tRPC `otc.*`     | mounted; blank §8 law → refuse-closed                                         |
+| Algo TWAP create/ctrl                       | tRPC `algo.*`    | create ON; **scheduler job OFF** (`TRADE_ALGO_JOBS_ENABLED`, denylist enable) |
+| Copy                                        | tRPC `copy.*`    | mounted; blank §8 fee-share + jurisdiction laws → refuse-closed               |
+| Futures jobs / candle / MM seed / reconcile | job hosts        | **OFF**                                                                       |
+
+Wave-3 sealed money on tip (#1193 TWAP respace+jobs OFF, #1191/#1199 copy races, #1202–#1207 funding/insurance/reconcile, #1211 margin-call). See tracker `trade.copy` / `trade.algo` and [Not in this PR](#not-in-this-pr).
 
 ---
 
@@ -111,12 +120,14 @@ open has no client idempotency key — see audit residual).
 
 ### Seed / mm honesty (Spec SD-2…SD-4)
 
-| Rule              | Behavior                                                                       |
-| ----------------- | ------------------------------------------------------------------------------ |
-| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`)         |
-| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (kill-switch SD-4) |
-| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)         |
-| **F8**            | seed↔seed prints never inflate public tape                                     |
+| Rule              | Behavior                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`); MM seed records at rest via `recordSeededOrder` (D26-P1-T10) |
+| **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (wired to `TRADE_MM_SEED_ENABLED`, SD-4)                                 |
+| **Fill account**  | Seeded house-MM `orderFilled` recovers `house:market-maker` (never empty / HOUSE_MM_USER_UUID as a customer-looking id)              |
+| **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)                                                               |
+| **Cross ban**     | Seed submits are limit `PO`; synchronous engine fills → `manufactured_cross` + hold release (SD-5)                                   |
+| **F8**            | seed↔seed prints never inflate public tape                                                                                           |
 
 ### OHLCV / candles (A-TRADE-SPOT-1 + A-TRADE-SPOT-OPS)
 
@@ -150,31 +161,36 @@ Job stays **OFF** until an operator deliberately enables it. Missing market list
 
 Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matching depth for futures mark ticks when configured. **Default OFF** — empty venue id means depth-only marks (or null when book empty). Never invents a mid.
 
-| Path                                      | Behavior                                                                                                                                               |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth. |
-| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.           |
+| Path                                      | Behavior                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from the public book; futures jobs prefer it, then depth. `TRADE_VENUE_MARK_STREAM` (default OFF) uses sequenced `MaintainedBook` instead of polling `snapshotBook`. Desynced feed → null. |
+| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.                                                                                                                                       |
+| **OTC mid** `TRADE_OTC_MID_FROM_VENUE`    | Default **OFF**. When true, OTC RFQ mids come from the **same** public adapter; `TRADE_OTC_VENUE_SYMBOLS` maps pairKey→symbol. Unmapped/dark → null. Boot `TRADE_OTC_MIDS` is not mixed in.                                                                                        |
 
 #### Ops enable path (default safe)
 
-| Env                            | Default | Meaning                                                                                                                                                       |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`** — both keyless. Unknown id → warn once, stay off (never invent). |
-| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                         |
-| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                  |
+| Env                            | Default | Meaning                                                                                                                                                                      |
+| ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`**, **`okx-spot`** — all keyless. Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                                        |
+| `TRADE_VENUE_MARK_STREAM`      | `false` | When true, start one `MaintainedBook` per mapped symbol (stream-first + snapshot join). Default off so boot does not open WS. Desynced → null mark.                          |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                                 |
+| `TRADE_OTC_MID_FROM_VENUE`     | `false` | Optional OTC observation feed from the same public adapter. Default off.                                                                                                     |
+| `TRADE_OTC_VENUE_SYMBOLS`      | `""`    | `BTC/USDT:BTC/USDT` — OTC pairKey → venue unified symbol. Empty = every pair unmapped (never invent).                                                                        |
 
 **Enable checklist (ops):**
 
-1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget. Both governors reserve 20% headroom, and both refuse rather than silently waiting.
+1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget; `okx-spot` spends against a documented 10 requests / 2 seconds IP budget. Governors reserve 20% headroom, and refuse rather than silently waiting.
 2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols). The symbol format is the unified one (`BTC/USDT`) for either venue — the venue's own spelling is produced inside the adapter and nowhere else.
-3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median.
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot`, `bybit-spot`, **or** `okx-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median. Optional: `TRADE_VENUE_MARK_STREAM=true` to consume `MaintainedBook` instead of polling (still default off).
 4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
 5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
-6. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; never invent.
+6. Optional OTC: set `TRADE_OTC_VENUE_SYMBOLS` to real pair keys (never invent a catalogue) then `TRADE_OTC_MID_FROM_VENUE=true`. Dark/unmapped pairs still refuse. Boot `TRADE_OTC_MIDS` is not a fallback while this is on.
+7. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; OTC venue feed also goes dark (never invent).
 
 **Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
 
-**Second venue:** shipped 2026-08-08 as `bybit-spot` (public market data only; no trade or account half exists for it, and no credential is read anywhere in it). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A THIRD venue is not needed by any open residual on `venue.aggregation`.
+**Second venue:** shipped 2026-08-08 as `bybit-spot`. **Third venue:** shipped 2026-08-14 as `okx-spot` (public market data only; no trade or account half; no credential is read). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A fourth venue is not needed by any open residual on `venue.aggregation`.
 
 Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
@@ -182,15 +198,35 @@ Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
 Operator recovery for a **single** suspect order (not cancel-all):
 
-| Case                    | Detection                              | Action                                                     |
-| ----------------------- | -------------------------------------- | ---------------------------------------------------------- |
-| **orphan pending**      | `pending` + ledger hold 0              | delete row                                                 |
-| **open+hold no engine** | `open` + hold > 0 + engine cancel miss | release remainder once                                     |
-| **open+engine no hold** | `open` + hold 0                        | **fail closed** — never invent hold; cancel free book risk |
+| Case                    | Detection                                | Action                                                                  |
+| ----------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
+| **orphan pending**      | `pending` + ledger hold 0                | delete row                                                              |
+| **open+hold no engine** | `open` + hold > 0 + engine **list** miss | release remainder once (cancel only if list says live)                  |
+| **open+engine no hold** | `open` + hold 0                          | **fail closed** — never invent hold; cancel free book risk if list live |
+
+Liveness is `MatchingClient.listOrders` (GET), not cancel-as-probe. Cancel is repair.
 
 ```ts
 await trade.reconcileOrder(orderId);
 // tests: src/spot/order-route-reconcile.test.ts
+```
+
+### Scheduled engine ↔ ledger reconcile (A10)
+
+Default **OFF**. Builds the counterpart view from `trade.orders` (open/pending) + **live** hold balances, POSTs matching `POST /reconcile`, and:
+
+| Engine finding                         | Local action                                                                             |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **refuse** (incl. open+hold no engine) | **write nothing** — warn log / alert only                                                |
+| **auto** unfunded **pending**          | DELETE intent row only (moves no value)                                                  |
+| **market-id set drift** (handoff §4.5) | **alarm only** — `trade.markets` vs engine `GET /markets`; never invents/deletes markets |
+
+Does **not** call `reconcileOrder` (which still releases on open+hold no engine — operator single-order tool; handoff flags that risk). Env: `TRADE_RECONCILE_JOBS_ENABLED`, `TRADE_RECONCILE_JOBS_INTERVAL_MS`.
+
+```ts
+// pure + tick: src/spot/engine-ledger-reconcile.ts
+// job host:   src/spot/engine-ledger-reconcile-jobs.ts
+// tests:      src/spot/engine-ledger-reconcile.test.ts
 ```
 
 ### Order-path smoke (Spec CX-8)
@@ -307,21 +343,36 @@ The service checks these; the database enforces them regardless.
 
 ---
 
+## Copy deepen (D26-P1-T3)
+
+Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. **D26-P0-02** published `TRADE_COPY_FEE_SHARE_LAW` (1000 bps of our fee). **D26-P0-15** owner-published `TRADE_COPY_JURISDICTION_LAW` in `.env.example` (2026-08-14, market-comp CEX copy, not worldwide). Blank env still refuse-closed. Compose has no default.
+
+`copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
+
+- an already-started mirror or settlement finishes before kill/unfollow is acknowledged;
+- after `killFeeShare` is acknowledged, a new fill cannot pay leader fee-share;
+- after `unfollow` is acknowledged, a new mirror or settlement cannot use the deleted envelope;
+- production SQL pins the advisory lock and guarded queries to one database connection, so the guarantee holds across service processes without exhausting the connection pool.
+
+The public tRPC proof is `src/copy/router-mount.test.ts`. It blocks an in-flight ledger post/mirror claim, races the public kill/unfollow mutations against it, and proves the control waits before closing every later attempt. No §8 rate is supplied by production defaults; blank rates still refuse closed.
+
+---
+
 ## Not in this PR
 
 `trade.spot` only. §5.2 also specifies tables and behaviour that belong to other tracker features:
 
-| §5.2 item                                                          | Where it goes                                                                                                                                           |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder | `trade.futures`                                                                                                                                         |
-| options (European, cash-settled, full collateral)                  | `trade.options`                                                                                                                                         |
-| `copy_leaders`, `copy_follows`, profit share                       | `trade.copy`                                                                                                                                            |
-| `otc_quotes`, RFQ, staked-tier gate                                | `trade.otc`                                                                                                                                             |
-| Convert one-tap                                                    | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
-| TWAP / VWAP / POV                                                  | `trade.algo`                                                                                                                                            |
-| internal market-maker bot, venue aggregation                       | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
-| CCXT REST/ws surface over this router                              | `trade.ccxt-api`                                                                                                                                        |
-| volume aggregates per user per window feeding fee tiers            | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
+| §5.2 item                                                                      | Where it goes                                                                                                                                           |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `positions`, `funding_rates`, `insurance_fund`, liquidation ladder             | `trade.futures`                                                                                                                                         |
+| options (European, cash-settled, full collateral)                              | `trade.options`                                                                                                                                         |
+| `copy_follows`, `copy_mirrored_fills`, **fee-share** (P&L profit-share banned) | `trade.copy` — tRPC `copy.follow` / `killFeeShare` / `unfollow` / `settleFeeShare` / `deskStatus`; blank `TRADE_COPY_*` laws refuse; owner rates only   |
+| `otc_quotes`, RFQ, staked-tier gate                                            | `trade.otc`                                                                                                                                             |
+| Convert one-tap                                                                | `trade.convert` — **quote + execute on this service** (`convert.quote` / `convert.execute`; market IOC + house RFQ spread; same hold→fill path as spot) |
+| TWAP / VWAP / POV                                                              | `trade.algo`                                                                                                                                            |
+| internal market-maker bot, venue aggregation                                   | `trade.mm-bot`, `venue.aggregation`                                                                                                                     |
+| CCXT REST/ws surface over this router                                          | `trade.ccxt-api`                                                                                                                                        |
+| volume aggregates per user per window feeding fee tiers                        | SOCKET §13 — a windowed job over `fills`; the fills it needs are all written here already                                                               |
 
 The `market_kind` enum already carries `futures` and `options`, so listing one later is an `INSERT`, not a
 migration.
@@ -370,7 +421,7 @@ With it on, futures orders match on the **same** svc-matching book as spot, unde
 - **No funding.** Turning funding on for a market at all is reserved to the owner
   (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`), and it still needs `TRADE_FUTURES_JOBS_ENABLED` plus an
   explicit `TRADE_FUTURES_FUNDING_MARKET_IDS`.
-- **No payout source.** `TRADE_FUTURES_PROFIT_SOURCE` still has no default, on purpose.
+- **No payout source invent.** `TRADE_FUTURES_PROFIT_SOURCE` is owner-named in `.env.example` as `house:fees:trade:available` (PKT-B5). Compose still has no default.
 
 **Convert and TWAP stay spot-only on both settings** (`assertSpotSurface`). They were spot-only for free while
 `assertTradable` refused every non-spot market; now that it does not, they refuse by name, because neither has been

@@ -19,8 +19,9 @@ import {
 } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
-import { mmSeedOrderIdFor, orderIdFor } from './ids.js';
+import { HOUSE_MM_USER_UUID, mmSeedOrderIdFor, orderIdFor } from './ids.js';
 import { MM_MATCHING_ACCOUNT_ID } from '../mm/seed-market.js';
+import { looksLikeAnonymousCustomerFill, recoverMatchingAccountId } from '../mm/fill-account.js';
 import { StubMatching, StubPerks, StubSubAccounts, UnreachableMatching, principalFor, restsInFull } from './testing.js';
 
 /**
@@ -718,6 +719,52 @@ if (!available) {
       expect(await avail(ALICE, 'BTC')).toBe(btcBefore);
       expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe(mmHoldBefore);
     });
+
+    it('recovery from recorded seed row without event accountId is house STP, not an anonymous customer', async () => {
+      // recordSeededOrder writes HOUSE_MM_USER_UUID. Older orderFilled payloads
+      // omit makerAccountId — recovery must yield house:market-maker, not the
+      // bookkeeping UUID (that looks like a live customer fill).
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'mm-rec-row' }));
+      const mmOrderId = mmSeedOrderIdFor('recorded-run', btcusdt.id, 'sell', 1);
+      await ledger.post(recipes.marketMakerOrderHold({ orderId: mmOrderId, assetId: 'BTC', amount: amt('1') }));
+      await fund(ALICE, 'USDT', '1000');
+
+      matching.script1((request, next) => restsInFull(request, next()));
+      const taker = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-mm-recorded');
+
+      await sql`
+        INSERT INTO trade.orders (
+          id, user_id, market_id, side, type, price, qty, status, tif,
+          hold_asset, hold_amount, fee_discount_bps, seeded
+        ) VALUES (
+          ${mmOrderId}, ${HOUSE_MM_USER_UUID}, ${btcusdt.id}, ${'sell'}, ${'limit'},
+          ${'100'}::numeric, ${'1'}::numeric, ${'open'}, ${'PO'},
+          ${'BTC'}, ${'1'}::numeric, ${0}, ${true}
+        )
+      `;
+
+      const recovered = recoverMatchingAccountId({
+        eventAccountId: '',
+        orderUserId: HOUSE_MM_USER_UUID,
+      });
+      expect(looksLikeAnonymousCustomerFill(recovered)).toBe(false);
+      expect(recovered).toBe(MM_MATCHING_ACCOUNT_ID);
+
+      await trade.settleFillEvent({
+        marketId: btcusdt.id,
+        makerOrderId: mmOrderId,
+        takerOrderId: taker.id,
+        price: '100',
+        qty: '1',
+        sequence: 77,
+        takerAccountId: ALICE,
+      });
+
+      expect(postsWithReason('trade.fill.mm_maker')).toHaveLength(1);
+      expect(postsWithReason('trade.fill')).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(marketMakerOrderHoldAccount('BTC', mmOrderId))).amount)).toBe('0');
+      expect(await avail(ALICE, 'BTC')).toBe('0.998');
+    });
   });
 
   // ── Fee tiers ─────────────────────────────────────────────────────────────
@@ -820,6 +867,7 @@ if (!available) {
 
       await expect(
         trade.placeOrder(principalFor(ALICE, ['trade:read']), {
+          clientOrderId: 'auto-cli-1',
           marketId: btcusdt.id,
           side: 'buy',
           type: 'limit',
@@ -887,6 +935,7 @@ if (!available) {
 
         await expect(
           gated.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-2',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -912,6 +961,7 @@ if (!available) {
 
         await expect(
           gated.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-3',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -933,6 +983,7 @@ if (!available) {
 
         await expect(
           gated.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-4',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -951,6 +1002,7 @@ if (!available) {
         await fund(ALICE, 'USDT', '1000');
         await expect(
           trade.placeOrder(principalFor(ALICE), {
+            clientOrderId: 'auto-cli-5',
             marketId: btcusdt.id,
             side: 'buy',
             type: 'limit',
@@ -990,6 +1042,7 @@ if (!available) {
 
       await expect(
         off.placeOrder(principalFor(ALICE), {
+          clientOrderId: 'auto-cli-6',
           marketId: btcusdt.id,
           side: 'buy',
           type: 'limit',
@@ -1052,6 +1105,230 @@ if (!available) {
       expect(paper.assetClass).toBe('forex');
     });
 
+    /**
+     * DIRECTION:33 / D26-P0-17 — empty insurance fund → no real-money futures list.
+     * Capitalisation size stays owner-open; this only proves refuse-closed when empty
+     * and allow when any positive balance exists (via real topup recipe).
+     */
+    it('refuses active real-money futures listing when the insurance fund is empty', async () => {
+      await expect(
+        trade.listMarket({
+          symbol: 'BTC/USDT-PERP',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'futures',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 0,
+          takerBps: 0,
+        }),
+      ).rejects.toMatchObject({ code: 'trade.insurance_fund_empty' });
+
+      // paper + pending remain honest model paths without capitalisation
+      const paper = await trade.listMarket({
+        symbol: 'BTC/USDT-PERP-PAPER',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      expect(paper.kind).toBe('futures');
+      expect(paper.paper).toBe(true);
+
+      const pending = await trade.listMarket({
+        symbol: 'BTC/USDT-PERP-PENDING',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        status: 'pending',
+      });
+      expect(pending.status).toBe('pending');
+
+      // Enable-to-active must refuse the same way — listing as pending then
+      // flipping status cannot bypass DIRECTION:33.
+      await expect(trade.setMarketStatus(pending.id, 'active')).rejects.toMatchObject({
+        code: 'trade.insurance_fund_empty',
+      });
+    });
+
+    it('lists active futures once the insurance fund holds a positive balance', async () => {
+      const seedUser = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const seed = amt('1');
+      const pos = 'ins-list-seed';
+      await ledger.post(recipes.deposit({ userId: seedUser, assetId: 'USDT', amount: seed, rail: 'test', railRef: 'ins-list-dep' }));
+      await ledger.post(recipes.futuresMarginLock({ positionId: pos, userId: seedUser, assetId: 'USDT', amount: seed }));
+      await ledger.post(
+        recipes.futuresRealizeLoss({
+          positionId: pos,
+          userId: seedUser,
+          assetId: 'USDT',
+          fromMargin: seed,
+          fromInsurance: 0n,
+          lossId: pos,
+        }),
+      );
+      await ledger.post(recipes.futuresInsuranceTopup({ topupId: pos, assetId: 'USDT', amount: seed }));
+
+      const listed = await trade.listMarket({
+        symbol: 'ETH/USDT-PERP',
+        baseAsset: 'ETH',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+      });
+      expect(listed.kind).toBe('futures');
+      expect(listed.status).toBe('active');
+      expect(listed.paper).toBe(false);
+    });
+
+    /**
+     * trade.options refuse-closed until D26-P0-05 (SOCKET §13).
+     *
+     * Default service has empty TRADE_OPTIONS_SETTLEMENT_ASSET_LAW → refuse any
+     * kind=options list (even with complete terms + fixing). Fixing alone must
+     * not unlock. With P0-05 + fixing set, incomplete terms still refuse.
+     * Complete terms list; orders remain refused by assertTradable (no engine/IV).
+     */
+    it('refuses options listing when P0-05 settlement asset law is unset', async () => {
+      await expect(
+        trade.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-90000-C',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'options',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 10,
+          takerBps: 20,
+          optionType: 'call',
+          optionStrike: amt('90000'),
+          optionExpiryAt: new Date('2025-12-26T08:00:00.000Z'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.options_settlement_law_unset' });
+    });
+
+    it('refuses options when P0-05 is set but D7 fixing is empty', async () => {
+      const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
+      });
+      await expect(
+        withLaw.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-NOFIX',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'options',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 10,
+          takerBps: 20,
+          optionType: 'call',
+          optionStrike: amt('90000'),
+          optionExpiryAt: new Date('2025-12-26T08:00:00.000Z'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.options_fixing_unconfigured' });
+    });
+
+    it('refuses half-listed options even when P0-05 law + fixing are configured', async () => {
+      const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
+        optionsSettlementFixing: 'owner-d7-opaque-id',
+      });
+      await expect(
+        withLaw.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-HALF',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'options',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 10,
+          takerBps: 20,
+          // missing optionType / strike / expiry
+        }),
+      ).rejects.toMatchObject({ code: 'trade.options_terms_incomplete' });
+    });
+
+    it('lists a complete options market when P0-05 law + fixing are configured; orders still refuse by kind', async () => {
+      const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
+        optionsSettlementFixing: 'owner-d7-opaque-id',
+      });
+      const listed = await withLaw.listMarket({
+        symbol: 'BTC/USDT:USDT-251226-90000-C',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'options',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        optionType: 'call',
+        optionStrike: amt('90000'),
+        optionExpiryAt: new Date('2025-12-26T08:00:00.000Z'),
+      });
+      expect(listed.kind).toBe('options');
+      expect(listed.symbol).toBe('BTC/USDT:USDT-251226-90000-C');
+
+      // CHECK stamp is on the row even if Market domain omits terms.
+      const row = await sql<{ settlement_fixing: string | null; option_type: string | null; option_strike: string | null }[]>`
+        SELECT settlement_fixing, option_type, option_strike::text AS option_strike
+          FROM trade.markets WHERE id = ${listed.id}
+      `;
+      expect(row[0]?.settlement_fixing).toBe('owner-d7-opaque-id');
+      expect(row[0]?.option_type).toBe('call');
+      expect(row[0]?.option_strike).toMatch(/^90000(\.0+)?$/);
+
+      await fund(ALICE, 'USDT', '100000');
+      await expect(
+        withLaw.placeOrder(principalFor(ALICE), {
+          marketId: listed.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('0.01'),
+          price: amt('1000'),
+          clientOrderId: 'opt-must-refuse',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_kind_unsupported' });
+    });
+
     it('refuses a weekend forex order and holds nothing', async () => {
       // paper=true: D-S-05 allows modelling forex; production active listing is refused.
       const eurusd = await trade.listMarket({
@@ -1088,6 +1365,18 @@ if (!available) {
           qty: amt('100'),
           price: amt('1.10000'),
           clientOrderId: 'weekend-eurusd',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_closed' });
+
+      // Hours must win over clientOrderId — a weekend order without a retry key
+      // is still market_closed, not trade.client_order_id_required (no hold).
+      await expect(
+        saturday.placeOrder(principalFor(ALICE), {
+          marketId: eurusd.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('100'),
+          price: amt('1.10000'),
         }),
       ).rejects.toMatchObject({ code: 'trade.market_closed' });
 
@@ -1171,6 +1460,7 @@ if (!available) {
       await fund(ALICE, 'USDT', '1000');
       await expect(
         trade.placeOrder(principalFor(ALICE), {
+          clientOrderId: 'auto-cli-7',
           marketId: btcusdt.id,
           side: 'buy',
           type: 'stop_limit',
@@ -1277,9 +1567,30 @@ if (!available) {
       matching.asks = [];
 
       await expect(
-        trade.placeOrder(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', type: 'market', qty: amt('2') }),
+        trade.placeOrder(principalFor(ALICE), {
+          clientOrderId: 'auto-cli-8',
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'market',
+          qty: amt('2'),
+        }),
       ).rejects.toMatchObject({ code: 'trade.no_reference_price' });
 
+      expect(await held(ALICE, 'USDT')).toBe('0');
+    });
+
+    it('refuses place without clientOrderId — a retry would double-hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      matching.asks = [['100', '5']];
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'market',
+          qty: amt('1'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.client_order_id_required' });
+      expect(matching.submitted).toHaveLength(0);
       expect(await held(ALICE, 'USDT')).toBe('0');
     });
   });
@@ -1495,11 +1806,111 @@ if (!available) {
       expect(matching.submitted).toHaveLength(0);
     });
 
+    /**
+     * Convert M-03 sell half. Buy already binds maxAvgPrice into the engine
+     * protection ceiling. Without the sell floor, re-quote can pass at 99 and
+     * a pure market sell still print at 50 when the book moves — the user
+     * never accepted 50. Bound maxAvgPrice becomes an IOC limit floor.
+     */
+    it('binds convert maxAvgPrice into the engine as a sell floor (M-03)', async () => {
+      await fund(ALICE, 'BTC', '5');
+      matching.bids = [['100', '10']];
+      matching.asks = [['101', '10']];
+
+      await trade.convertExecute(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'sell',
+        qty: amt('1'),
+        clientConvertId: 'sell-floor-1',
+        maxAvgPrice: amt('99'),
+      });
+
+      expect(matching.submitted).toHaveLength(1);
+      expect(matching.submitted[0]!.request).toMatchObject({
+        type: 'limit',
+        side: 'sell',
+        price: '99',
+        tif: 'IOC',
+      });
+    });
+
+    it('refuses execute when maxAvgPrice is breached on a sell', async () => {
+      await fund(ALICE, 'BTC', '5');
+      matching.bids = [['50', '10']];
+      await expect(
+        trade.convertExecute(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'sell',
+          qty: amt('1'),
+          clientConvertId: 'too-cheap',
+          maxAvgPrice: amt('90'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.convert_price_moved' });
+      expect(matching.submitted).toHaveLength(0);
+    });
+
     it('honours the convert kill-switch', async () => {
       trade = new TradeService(sql, ledger, matching, perks, bus, { convertEnabled: false });
       await expect(trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({
         code: 'trade.convert_disabled',
       });
+    });
+
+    /**
+     * convertQuote must share assertMarketOpen with placeOrder. Without it, a
+     * Saturday EUR/USD convert still returns a price while placeOrder refuses
+     * market_closed — the user sees a fundable quote for a venue that cannot
+     * fill until Monday.
+     */
+    it('refuses convertQuote when the forex venue is shut (same gate as placeOrder)', async () => {
+      const eurusd = await trade.listMarket({
+        symbol: 'EUR/USD-CONVERT',
+        baseAsset: 'EUR',
+        quoteAsset: 'USD',
+        tickSize: amt('0.00001'),
+        lotSize: amt('0.01'),
+        minQty: amt('0.01'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        assetClass: 'forex',
+        schedule: 'fx-global',
+        paper: true,
+      });
+
+      matching.asks = [['1.10000', '1000']];
+      matching.bids = [['1.09900', '1000']];
+
+      const saturday = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        convertEnabled: true,
+        convertSpreadBps: 10,
+        now: () => new Date('2026-01-10T12:00:00Z'),
+      });
+
+      await expect(
+        saturday.convertQuote(principalFor(ALICE), {
+          marketId: eurusd.id,
+          side: 'buy',
+          qty: amt('100'),
+        }),
+      ).rejects.toMatchObject({ code: 'trade.market_closed' });
+
+      // Mid-session: same listing, same book, open clock → quote is honest.
+      const wednesday = new TradeService(sql, ledger, matching, perks, bus, {
+        spotEnabled: true,
+        convertEnabled: true,
+        convertSpreadBps: 10,
+        now: () => new Date('2026-01-14T12:00:00Z'),
+      });
+      const quote = await wednesday.convertQuote(principalFor(ALICE), {
+        marketId: eurusd.id,
+        side: 'buy',
+        qty: amt('100'),
+      });
+      expect(quote.symbol).toBe('EUR/USD-CONVERT');
+      expect(quote.fullyFilled).toBe(true);
     });
   });
 

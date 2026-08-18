@@ -28,24 +28,34 @@ import {
 } from './tick-stores.js';
 import type { FuturesLadderPolicy } from './maintenance-ladder.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
+import { durableMarginCallNotifier, sqlMarginCallStore, type MarginCallStore } from './margin-call-transport.js';
 
 export interface FuturesJobsConfig {
   /** Master kill — false = host created but no intervals started. */
   enabled: boolean;
   /** Liquidation scan interval. Default 15s when enabled. */
   liqIntervalMs: number;
-  /** Funding tick interval per market. Default 8h when enabled. */
-  fundingIntervalMs: number;
+  /**
+   * Funding tick interval per market. Null = do not schedule funding
+   * (D2: never invent an 8h period).
+   */
+  fundingIntervalMs: number | null;
   /**
    * Market ids to run funding for. Empty = funding job not scheduled
    * (never invent a market list).
    */
   fundingMarketIds: readonly string[];
+  /**
+   * Absolute max |period rate| (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * Null refuses settle/publish application. Required at boot when
+   * fundingMarketIds non-empty — see funding-rate-bound.ts. No product default.
+   */
+  fundingMaxAbsRate: string | null;
 }
 
 export interface FuturesJobsDeps {
   sql: Sql;
-  ledger: Pick<LedgerClient, 'post'>;
+  ledger: Pick<LedgerClient, 'post' | 'balance'>;
   matching: MatchingClient;
   bus: EventBus | null;
   config: FuturesJobsConfig;
@@ -62,11 +72,9 @@ export interface FuturesJobsDeps {
   now?: () => Date;
   onError?: (name: string, err: unknown) => void;
   /**
-   * Maintenance ladder parameters. Omitted → `DEFAULT_FUTURES_LADDER_POLICY`.
-   *
-   * A hook for the owner's `DIRECTION` §8 item 8 ruling to land in without any
-   * call site moving. The DEFAULT is a placeholder, not a risk opinion — see
-   * `maintenance-ladder.ts`.
+   * Maintenance ladder parameters. Omitted → liquidation tick skips
+   * (`skipped_d3_unset`) rather than applying placeholder rungs.
+   * Owner `DIRECTION` §8 names the table; this process does not.
    */
   ladderPolicy?: FuturesLadderPolicy;
 }
@@ -92,6 +100,11 @@ export interface FuturesJobsHandle {
    * place — there was no port there to read from.
    */
   marks: MarkSource;
+  /**
+   * Durable margin-call store — same instance the liquidation tick notifies
+   * into, so private REST can observe a delivered call end-to-end.
+   */
+  marginCalls: MarginCallStore;
   stop(): void;
 }
 
@@ -116,6 +129,14 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
 
   const markPrice = async (marketId: string, at?: Date) => marks.markPrice({ marketId, at: at ?? (deps.now ? deps.now() : new Date()) });
 
+  /**
+   * Margin-call transport is assembled even when jobs are OFF so the REST
+   * observe door and a later manual tick share one store. Delivery does not
+   * invent grace (D3).
+   */
+  const marginCalls = sqlMarginCallStore(deps.sql);
+  const notifyMarginCall = durableMarginCallNotifier(marginCalls);
+
   if (!deps.config.enabled) {
     return {
       host,
@@ -123,6 +144,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       getPublishedRate,
       markPrice,
       marks,
+      marginCalls,
       stop: () => host.stopAll(),
     };
   }
@@ -172,24 +194,29 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       ladder,
       ledger: deps.ledger,
       now: deps.now,
+      notifyMarginCall,
     });
   });
 
-  for (const marketId of deps.config.fundingMarketIds) {
-    if (!marketId.trim()) continue;
-    host.every(`futures.funding.${marketId}`, deps.config.fundingIntervalMs, async () => {
-      await runFundingTick(
-        {
-          rates: rates.source(),
-          positions: fundLoader,
-          periods,
-          ledger: deps.ledger,
-          margins,
-          now: deps.now,
-        },
-        marketId,
-      );
-    });
+  const fundingIntervalMs = deps.config.fundingIntervalMs;
+  if (fundingIntervalMs != null) {
+    for (const marketId of deps.config.fundingMarketIds) {
+      if (!marketId.trim()) continue;
+      host.every(`futures.funding.${marketId}`, fundingIntervalMs, async () => {
+        await runFundingTick(
+          {
+            rates: rates.source(),
+            positions: fundLoader,
+            periods,
+            ledger: deps.ledger,
+            margins,
+            maxAbsRate: deps.config.fundingMaxAbsRate,
+            now: deps.now,
+          },
+          marketId,
+        );
+      });
+    }
   }
 
   return {
@@ -198,6 +225,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     getPublishedRate,
     markPrice,
     marks,
+    marginCalls,
     stop: () => host.stopAll(),
   };
 }

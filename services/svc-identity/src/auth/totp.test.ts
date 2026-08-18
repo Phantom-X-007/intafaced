@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { base32Decode, base32Encode, generateRecoveryCodes, generateSecret, hotp, totp, totpUri, verifyTotp } from './totp.js';
+import {
+  base32Decode,
+  base32Encode,
+  generateRecoveryCodes,
+  generateSecret,
+  hotp,
+  matchTotpStep,
+  totp,
+  totpUri,
+  verifyTotp,
+} from './totp.js';
 
 /**
  * TOTP is verified against the RFC's own published test vectors. That is the
@@ -104,6 +114,15 @@ describe('verification', () => {
     const other = generateSecret();
     const now = new Date();
     expect(verifyTotp(secret, totp(other, { at: now }), { at: now })).toBe(false);
+  });
+
+  it('matchTotpStep returns the counter that produced the code', () => {
+    const now = new Date('2020-01-01T00:00:30.000Z');
+    const seconds = Math.floor(now.getTime() / 1000);
+    const counter = BigInt(Math.floor(seconds / 30));
+    const code = totp(secret, { at: now });
+    expect(matchTotpStep(secret, code, { at: now })).toBe(counter);
+    expect(matchTotpStep(secret, '000000', { at: now })).toBeNull();
   });
 });
 

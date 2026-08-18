@@ -10,23 +10,23 @@
 
 <!-- tracker:start -->
 
-`████████░░░░░░░░░░░░` **39%** — 57 of 148 features shipped
+`██████████░░░░░░░░░░` **52%** — 78 of 149 features shipped
 
-Phases: **0** 11/12 · **1** 11/13 · **2** 6/25 · **3** 5/18 · **3P** 10/13 · **4** 4/5 · **4P** 0/3 · **5** 9/55 · **5P** 1/4
+Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 10/13 · **4** 4/5 · **4P** 0/3 · **5** 18/55 · **5P** 1/4
 
-**In progress:** Perps: isolated margin, funding, partial-liquidation ladder (nitro-agent) · Moderated dispute resolution (nitro-agent) · Payment instruments — where the buyer actually pays (nitro-agent) · P2P merchant programme — badges, limits, API (nitro-agent) · Navigator — tool-calling inside user guardrails (nitro-agent) · Market Scanner — ranked signals by tier (nitro-agent) · Event-driven fan-out: in-app, push, email, SMS (nitro-agent)
+**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Support desk, tickets, KB (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007)
 
-**🟢 31 ready to claim** — nothing blocks these:
+**🟢 18 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
-- `identity.pii-isolation` — PII isolation — KYC documents in a separate encrypted store (§10)
-- `infra.drop-flags` — Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11)
-- `trade.otc` — OTC RFQ desk, staked-tier gate
-- `trade.copy` — Copy trading, audited leaders, profit share
 - `trade.forex` — Fiat pairs on the same engine
-- `trade.algo` — TWAP / VWAP / POV execution
-- `trade.ccxt-api` — CCXT-compatible public API (bots + terminals connect)
-- …and 23 more
+- `venue.aggregation` — External venue adapters via CCXT (cross-venue)
+- `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
+- `pay.gateway` — Branded gateway, hosted checkout, payment links
+- `pay.payfac` — PayFac mode — sub-merchant trees, 14 permission areas
+- `p2p.payment-instruments` — Payment instruments — where the buyer actually pays
+- `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
+- …and 10 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

@@ -12,7 +12,44 @@
  * only proves the tick cannot invent money.
  */
 import type { Amount, LedgerClient, PostRequest } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { planFundingSettlement, summarizeFundingPlan, type FundingOpenPosition, type FundingLeg } from './funding-settlement.js';
+import { assertFundingRateWithinBound } from './funding-rate-bound.js';
+
+/**
+ * Wire shape stored in `funding_period_membership.member_snapshots`.
+ * Amounts are decimal strings — never JSON numbers (18 dp).
+ */
+export interface FundingMemberSnapshot {
+  readonly positionId: string;
+  readonly userId: string;
+  readonly side: 'long' | 'short';
+  readonly size: string;
+  readonly entryPrice: string;
+  readonly marginAsset: string;
+}
+
+export function snapshotFundingMembers(positions: readonly FundingOpenPosition[]): FundingMemberSnapshot[] {
+  return positions.map((p) => ({
+    positionId: p.positionId,
+    userId: p.userId,
+    side: p.side,
+    size: formatAmount(p.size),
+    entryPrice: formatAmount(p.entryPrice),
+    marginAsset: p.marginAsset,
+  }));
+}
+
+export function positionsFromFundingSnapshots(snaps: readonly FundingMemberSnapshot[]): FundingOpenPosition[] {
+  return snaps.map((s) => ({
+    positionId: s.positionId,
+    userId: s.userId,
+    side: s.side,
+    size: parseAmount(s.size),
+    entryPrice: parseAmount(s.entryPrice),
+    marginAsset: s.marginAsset,
+  }));
+}
 
 /** External period rate. Null / refuse → tick skips; never synthesize a rate. */
 export interface FundingRateQuote {
@@ -50,6 +87,18 @@ export type FundingSkipReason = 'no_rate' | 'no_positions';
 export interface FundingPeriodStore {
   isSettled(periodId: string): Promise<boolean>;
   markSettled(periodId: string, meta: { legCount: number; totalPosted: number }): Promise<void>;
+  /**
+   * Freeze period membership + size/notional on first plan for `periodId`.
+   *
+   * First call stores the candidate **snapshots** (id, side, size, entry, user,
+   * margin asset) as the only plan inputs for this period. Later calls return
+   * that frozen set and ignore new candidates and live size changes.
+   *
+   * Required: without id freeze, a mid-gap opener mints a new ledger key (C14).
+   * Without size freeze, a partial close re-plans different amounts under the
+   * same keys — ledger first-wins vs margin re-net (W6/W7 residual).
+   */
+  freezeMembership(periodId: string, candidates: readonly FundingOpenPosition[]): Promise<readonly FundingOpenPosition[]>;
   /**
    * Record a skip that is NOT a settled zero-leg period.
    * Optional on older stores — tick still returns skipped; production wires it.
@@ -105,6 +154,13 @@ export interface FundingTickDeps {
    * below models it.
    */
   margins: FundingMarginApplier;
+  /**
+   * Absolute max |period rate| (TRADE_FUTURES_FUNDING_MAX_ABS_RATE).
+   * REQUIRED on the deps object (may be null = unconfigured).
+   * Null refuses settlement before any ledger post — unpublished bound is not
+   * a silent free pass. No product default invented here (owner residual D2).
+   */
+  maxAbsRate: string | null;
   /** Optional clock for tests. */
   now?: () => Date;
 }
@@ -152,11 +208,26 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
     return { status: 'skipped', reason: 'no_positions', periodId: quote.periodId };
   }
 
+  // Membership + size/notional frozen on the first plan for this periodId.
+  // Replays plan from that snapshot only — never open-now size, never a mid-gap
+  // opener (C14 + W8 notional freeze residual).
+  const members = await deps.periods.freezeMembership(quote.periodId, open);
+  if (members.length === 0) {
+    await deps.periods.markSettled(quote.periodId, { legCount: 0, totalPosted: 0 });
+    return { status: 'skipped', reason: 'no_legs', periodId: quote.periodId };
+  }
+
+  // Bound check before plan so an absurd rate never reaches leg construction
+  // or postLegs. assert is also inside planFundingSettlement (belt); this is
+  // the explicit money-path gate with the tick's configured max.
+  assertFundingRateWithinBound(quote.rate, deps.maxAbsRate);
+
   const legs = planFundingSettlement({
     periodId: quote.periodId,
     marketId: quote.marketId,
     rate: quote.rate,
-    positions: open,
+    maxAbsRate: deps.maxAbsRate,
+    positions: members,
   });
 
   if (legs.length === 0) {
@@ -178,7 +249,12 @@ export async function runFundingTick(deps: FundingTickDeps, marketId: string): P
   // acted as an opt-out from the margin move: a wire that forgot the dep settled
   // funding in the ledger and left every position's margin untouched, with no
   // error anywhere. `margins` is required, so this always runs.
-  await deps.margins.applyFundingNets(netFundingPaid(legs), quote.periodId);
+  //
+  // D26-P1-T1f / MVP-6: long/short funding is a pure transfer. Refuse before
+  // margin apply if nets do not conserve (sum ≠ 0) — never mint or burn.
+  const nets = netFundingPaid(legs);
+  assertFundingNetsZero(nets);
+  await deps.margins.applyFundingNets(nets, quote.periodId);
 
   await deps.periods.markSettled(quote.periodId, {
     legCount: legs.length,
@@ -209,6 +285,26 @@ export function netFundingPaid(legs: readonly FundingLeg[]): { positionId: strin
     byId.set(leg.payeePositionId, (byId.get(leg.payeePositionId) ?? 0n) - leg.amount);
   }
   return [...byId.entries()].map(([positionId, paid]) => ({ positionId, paid }));
+}
+
+/**
+ * D26-P1-T1f done bar: funding is a zero-sum transfer between longs and shorts.
+ * Sum of per-position nets MUST be 0 — otherwise the tick would mint or burn
+ * collateral. Called on the real tick path before margin apply.
+ */
+export function assertFundingNetsZero(nets: readonly { positionId: string; paid: Amount }[]): void {
+  let sum = 0n;
+  for (const n of nets) sum += n.paid;
+  if (sum !== 0n) {
+    throw new Error(`funding nets must sum to zero (long/short conservation); got sum=${sum} across ${nets.length} position(s)`);
+  }
+}
+
+/** Sum of paid nets — 0n when the book conserves (MVP-6). */
+export function sumFundingNets(nets: readonly { positionId: string; paid: Amount }[]): Amount {
+  let sum = 0n;
+  for (const n of nets) sum += n.paid;
+  return sum;
 }
 
 /** In-memory period store for unit tests and single-process dev. */
@@ -256,12 +352,30 @@ export function memoryFundingMarginApplier(): FundingMarginApplier & {
 export function memoryFundingPeriodStore(): FundingPeriodStore {
   const settled = new Map<string, number>();
   const skips = new Map<string, { reason: FundingSkipReason; marketId: string }>();
+  const membership = new Map<string, readonly FundingOpenPosition[]>();
   return {
     async isSettled(periodId) {
       return settled.has(periodId);
     },
     async markSettled(periodId, meta) {
       settled.set(periodId, meta.legCount);
+    },
+    async freezeMembership(periodId, candidates) {
+      if (!membership.has(periodId)) {
+        // Deep-copy amounts so later mutation of caller arrays cannot resize the freeze.
+        membership.set(
+          periodId,
+          candidates.map((p) => ({
+            positionId: p.positionId,
+            userId: p.userId,
+            side: p.side,
+            size: p.size,
+            entryPrice: p.entryPrice,
+            marginAsset: p.marginAsset,
+          })),
+        );
+      }
+      return membership.get(periodId)!;
     },
     async recordSkip(periodId, meta) {
       skips.set(periodId, { reason: meta.reason, marketId: meta.marketId });

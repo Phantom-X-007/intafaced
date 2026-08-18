@@ -1,9 +1,9 @@
 # ADR: the house desk and the market-making engine — what may be built before the owner rules
 
-**Status:** **Partially Accepted — 2026-08-08.** The mechanism rules below are Accepted and agents implement them. The three questions in "What still needs the owner" are **not decided**, and until they are, `execution.house-tenant` and the internal half of `execution.market-making` **may not be built**.
-**Decision owner:** repo owner. **Written by:** Denon.
+**Status:** **Accepted — 2026-08-12 (D26-P0-01 sealed).** The five mechanism rules below remain Accepted. The three owner questions are now **ruled** (external-only v1 · existence-disclosure deferred · hard mark exclusion). Source packet: [`docs/OWNER-DECISION-PACKET-2026-08-09.md`](../OWNER-DECISION-PACKET-2026-08-09.md) §A1 — recommendations sealed as owner decisions this session.
+**Decision owner:** repo owner (Denon). **Written by:** Denon.
 **Law:** [`INTAFACED_DEFINITIVE_BUILD.md`](../../INTAFACED_DEFINITIVE_BUILD.md) §28 (`:770`–`:777`), the Throne Law at `:777`.
-**Board:** `execution.sor`, `execution.arbitrage`, `execution.market-making`, `execution.house-tenant` — all boarded 2026-08-08 (#1127), all `blocked`.
+**Board:** `execution.sor`, `execution.arbitrage`, `execution.market-making`, `execution.house-tenant` — boarded 2026-08-08 (#1127). D26-P0-01 fairness gate sealed here.
 **Binds:** [`adr/2026-08-05-futures-risk-and-mark-law.md`](2026-08-05-futures-risk-and-mark-law.md), [`adr/2026-08-04-matching-dual-target.md`](2026-08-04-matching-dual-target.md) (D-S-06).
 
 ---
@@ -36,7 +36,7 @@ That sentence was not abstract. It cost five findings in `svc-trade` in a single
 
 ---
 
-## What is settled, and binds regardless of how the owner rules
+## What is settled, and binds regardless of later internal rulings
 
 Agents implement these now. They are not open.
 
@@ -44,7 +44,7 @@ Agents implement these now. They are not open.
 This follows from law already Accepted and needs no new ruling. A mark that moves money is subject to the `prices.ts` gates — `MarkQuality`, staleness, the deviation breaker armed against a stored basis, and `bestLevelIsQuotable`'s minimum resting notional. **A quote posted by the platform cannot be an input to a price the platform then pays out on**, whatever the tenancy arrangement. If the internal MM is the only resting size, the book is not payout-grade and the mark refuses — exactly as it does today for a dust book.
 
 **2. No structural queue advantage may be implemented.**
-§28`:774`'s "structural first-class access" describes owning the venue — colocation-by-construction, no network hop. It is **not** authority to give the house tenant earlier order visibility, priority in the matching sequence, cancel privileges customers lack, or a lower latency path _inside_ the engine. Those are different things and only the first is settled. **Until the owner rules, matching treats the house tenant as an ordinary participant.** An agent that finds itself writing a branch on tenant identity inside the matching path has left the settled zone and must stop.
+§28`:774`'s "structural first-class access" describes owning the venue — colocation-by-construction, no network hop. It is **not** authority to give the house tenant earlier order visibility, priority in the matching sequence, cancel privileges customers lack, or a lower latency path _inside_ the engine. Those are different things and only the first is settled. **Matching treats the house tenant as an ordinary participant.** An agent that finds itself writing a branch on tenant identity inside the matching path has left the settled zone and must stop.
 
 **3. D-S-06 stands: one book, and the router may not favour us structurally.**
 `packages/venue-adapter/src/router.ts`'s bounded, tested **5 bps** internal tie-break is the whole of the permitted preference. The SOR extends the _cost model_ with §28`:770`'s missing terms — fees, expected impact, latency grade, transfer cost — it does not add a second preference rule. No second book, no second ranking.
@@ -57,37 +57,27 @@ This follows from law already Accepted and needs no new ruling. A mark that move
 
 ---
 
-## What still needs the owner
+## Owner rulings (D26-P0-01 — sealed 2026-08-12)
 
-Three questions. Each changes what gets built, so none can be defaulted.
+These were reserved; they are now **Accepted owner decisions**, not recommendations.
 
-### Q1 — Does the house desk trade on our own venue at all, or only external ones?
+### Q1 — House desk v1 is EXTERNAL-ONLY — **Accepted**
 
-The MM engine `:773` explicitly does both — "seeds our books **and** works the street." These are very different products:
+**Ruling:** The house desk for v1 trades **external venues only**. Internal venue trading (house desk on our own book / pointing `execution.house-tenant` at our matching book) stays **blocked** until a later explicit owner ruling.
 
-- **External-only** removes the conflict entirely. The house desk becomes a customer of other venues; our book stays customer-only; the fairness question disappears rather than being managed.
-- **Internal too** is what §28 says, and is standard for real venues, but it means the operator trades against its own users on infrastructure it controls. That is a disclosure and possibly a licensing question in the compliant plane, not only an engineering one.
+**Unblocks:** `execution.sor`, `execution.arbitrage`, and the **external-venue** half of `execution.market-making` — ordinary engineering against external venues, with no fairness surface from trading our own users.
 
-**Recommendation: external-only for v1, internal seeding behind an explicit later ruling.** The reason is not squeamishness — it is that everything else in §28 (SOR, arbitrage, cost model, execution reports) can be built and proven against external venues with no fairness surface at all, and the internal question can then be answered with a working engine in hand instead of in the abstract. **This is a recommendation, not a decision.**
+**Keeps blocked:** `execution.house-tenant` **internal half** (house on own venue) and the **internal** half of `execution.market-making`. Multi-tenancy as a **mechanism** (separate keys, namespace, audit) may still be built; pointing that tenant at our book may not.
 
-### Q2 — If the house desk trades our venue, is that disclosed to users?
+### Q2 — Existence disclosure — **Deferred**
 
-The Throne Law says "never listed, never disclosed." That is unambiguous about **strategies**. It is silent about **existence**.
+**Ruling:** Existence-disclosure is **not decided** in this seal, because it only applies if/when internal trading is ruled in. With Q1 external-only for v1, there is no house counterparty on our venue to disclose or hide. A later ruling that permits internal trading **must** answer existence-disclosure before that half ships — this ADR does not invent that answer now.
 
-Not the same choice:
+### Q3 — HARD EXCLUSION from mark derivation — **Accepted**
 
-- **Strategy secret, existence disclosed** — "the platform operates a market-making desk on this venue" in the terms. Compatible with the Throne Law as written, and it is what regulated venues do.
-- **Existence also secret** — defensible for pure alpha, much harder to defend if a user later discovers the counterparty to their fill was the operator.
+**Ruling:** Internal quotes are **never counted** in mark derivation. No percentage cap of resting notional is invented. This ties the residual influence question to the same refuse/dust posture as `DEFAULT_MIN_BEST_LEVEL_*` on the futures mark path — thinner marks on young markets are accepted over inventing an N% figure.
 
-This one has real downside risk and honesty doctrine points hard at disclosure. **It is still the owner's to rule** because it is a positioning decision, not a correctness one.
-
-### Q3 — Where is the boundary between "seeds our books" and "supplies a price that moves money"?
-
-Even under the settled rule that internal quotes may not become a mark, there is a residual: an internal MM that is a large fraction of resting size **influences** the mark that other participants' liquidations settle against, without ever "supplying" it in the direct sense the futures ADR forbids.
-
-The honest options are a cap ("the internal MM may be at most N% of resting notional at the best level before its quotes are excluded from mark derivation") or a hard exclusion (internal quotes never counted in mark derivation at all, at the cost of a thinner mark on young markets).
-
-**Recommendation: hard exclusion, and accept the thinner mark** — because a percentage cap requires picking N, and this repo already has one unruled parameter (`DEFAULT_MIN_BEST_LEVEL_NOTIONAL = '100'`) waiting on the owner. Two unruled numbers governing the same path is drift. **Owner's call.**
+Mechanism rule 1 already forbade internal quotes becoming a mark; Q3 seals the stronger form: they are excluded from the derivation inputs entirely, not merely forbidden from being the sole supplier.
 
 ---
 
@@ -97,21 +87,24 @@ The honest options are a cap ("the internal MM may be at most N% of resting noti
 - `execution.arbitrage` — the opportunity scanner, risk-checked sizing, leg execution and per-class PnL attribution, **on external venues**.
 - The **external-venue** half of `execution.market-making` — quoting models, cross-venue hedging, kill-switches on volatility and inventory breach.
 - The risk spine, pre-trade checks, exposure caps, drawdown halts and the admin kill-switch — for every tenant including the house one.
-- Multi-tenancy as a **mechanism** — separate keys, separate namespace, per-tenant scoping and audit — with **no tenant granted any matching-path privilege**.
+- Multi-tenancy as a **mechanism** — separate keys, separate namespace, per-tenant scoping and audit — with **no tenant granted any matching-path privilege**, and with the house tenant **not pointed at our own book** until a later internal-trading ruling.
 
-## What may not be built until the owner rules
+## What remains blocked until a later explicit ruling
 
 - `execution.house-tenant` **on our own venue**. The tenancy mechanism may be built; pointing it at our book may not.
-- The **internal** half of `execution.market-making`.
-- Any mark-derivation change that counts internal quotes.
+- The **internal** half of `execution.market-making` (seeding / quoting our books as the house).
+- Existence-disclosure copy or product posture for an on-venue house desk (Q2 — deferred until internal trading is in scope).
+- Any mark-derivation change that **counts** internal quotes (forbidden by Q3 hard exclusion).
 - Any branch on tenant identity inside `svc-matching`'s ordering or visibility.
+- Any invented percentage cap on internal resting size for mark purposes.
 
 ---
 
 ## Done bar for the parts that are Accepted
 
 1. The SOR ranks on the D-S-06 cost model with no internal preference beyond the tested 5 bps. Proven by a test that puts our book at a worse price and asserts it loses.
-2. Internal quotes are excluded from, or provably cannot dominate, any payout-grade mark. Tested with an internal quote as the only resting size, asserting the mark **refuses**.
+2. Internal quotes are excluded from any payout-grade mark (Q3 hard exclusion). Tested with an internal quote as the only resting size, asserting the mark **refuses**.
 3. The house tenant's fills reconcile through `packages/ledger-client` like any other participant. Tested by `reconcile()`, not by inspection.
 4. The admin kill-switch halts the house tenant. Tested by halting it, not by asserting the button exists.
 5. No code path branches on tenant identity inside matching. **Asserted by a test, not by a comment** — this repo produced five guards this week that were correct in isolation and unreachable in place, each with a comment claiming the property the code lacked.
+6. No path points the house tenant at our own matching book until a later owner ruling re-opens Q1 for internal trading (and answers Q2).

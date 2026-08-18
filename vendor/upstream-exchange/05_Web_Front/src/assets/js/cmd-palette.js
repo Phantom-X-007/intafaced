@@ -53,7 +53,7 @@ function defaultCmdCatalog() {
       group: 'Trade',
       keywords: 'protocol non-custodial'
     },
-    { id: 'nav-ctc', label: 'C2C Exchange', path: '/ctc', group: 'Trade', keywords: 'otc c2c' },
+    { id: 'nav-ctc', label: 'C2C · not published', path: '/ctc', group: 'Trade', keywords: 'otc c2c socket' },
     {
       id: 'nav-otc',
       label: 'OTC desk',
@@ -197,34 +197,34 @@ function defaultCmdCatalog() {
       group: 'Help',
       keywords: 'company about'
     },
-    { id: 'nav-help', label: 'Help', path: '/help', group: 'Help', keywords: 'faq support' },
+    { id: 'nav-help', label: 'Help · status', path: '/help', group: 'Help', keywords: 'faq support socket' },
     {
       id: 'nav-helplist',
-      label: 'Help list',
-      path: '/helplist',
+      label: 'Help list · not published',
+      path: '/help',
       group: 'Help',
-      keywords: 'articles categories'
+      keywords: 'articles categories socket'
     },
     {
       id: 'nav-announce',
-      label: 'Announcements',
+      label: 'Announcements · not published',
       path: '/announcement/0',
       group: 'Help',
-      keywords: 'notice news'
+      keywords: 'notice news socket'
     },
     {
       id: 'nav-notice',
-      label: 'Notice board',
+      label: 'Notice board · not published',
       path: '/notice',
       group: 'Help',
-      keywords: 'cms notice list'
+      keywords: 'cms notice list socket'
     },
     {
       id: 'nav-app',
-      label: 'App download',
+      label: 'App download · not published',
       path: '/app',
       group: 'Navigate',
-      keywords: 'mobile apk store'
+      keywords: 'mobile apk store socket'
     }
   ];
 }

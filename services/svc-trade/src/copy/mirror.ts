@@ -12,7 +12,17 @@ import type { CopyFollow } from './follows.js';
 
 export type MirrorSide = 'buy' | 'sell';
 
+/**
+ * One leader fill the copy desk observed.
+ *
+ * `fillId` is mandatory — it is the engine business key (same family as
+ * `fillIdFor(market, sequence)` on the spot settle path and fee-share's
+ * `fillId`). Without it a redelivered observation would plan a second mirror
+ * and double-count session exposure. The store claims each fillId once per
+ * follow; a second call returns the prior plan and moves nothing.
+ */
 export interface LeaderFillObservation {
+  readonly fillId: string;
   readonly leaderId: string;
   readonly marketId: string;
   readonly side: MirrorSide;
@@ -22,6 +32,7 @@ export interface LeaderFillObservation {
 }
 
 export interface MirrorPlan {
+  readonly fillId: string;
   readonly followId: string;
   readonly followerId: string;
   readonly leaderId: string;
@@ -39,6 +50,7 @@ export interface MirrorPlan {
 }
 
 export interface PresentMirrorPlan {
+  readonly fillId: string;
   readonly followId: string;
   readonly followerId: string;
   readonly leaderId: string;
@@ -127,6 +139,7 @@ export function planMirror(input: {
   }
 
   return {
+    fillId: observation.fillId,
     followId: follow.followId,
     followerId: follow.followerId,
     leaderId: follow.leaderId,
@@ -140,6 +153,7 @@ export function planMirror(input: {
 }
 
 export function parseLeaderFillObservation(input: {
+  fillId: string;
   leaderId: string;
   marketId: string;
   side: MirrorSide;
@@ -149,6 +163,13 @@ export function parseLeaderFillObservation(input: {
 }): LeaderFillObservation {
   if (input.side !== 'buy' && input.side !== 'sell') {
     throw new CopyError('Mirror side must be buy|sell', 'trade.copy_envelope_invalid');
+  }
+  const fillId = input.fillId.trim();
+  if (!fillId) {
+    throw new CopyError('Leader fill id required — without it a redelivered fill would mirror twice', 'trade.copy_envelope_invalid');
+  }
+  if (fillId.length > 128) {
+    throw new CopyError('Leader fill id exceeds 128 chars', 'trade.copy_envelope_invalid');
   }
   const marketId = input.marketId.trim();
   if (!marketId) {
@@ -163,6 +184,7 @@ export function parseLeaderFillObservation(input: {
     throw new CopyError('Leader fill amounts must be valid decimals', 'trade.copy_envelope_invalid');
   }
   return {
+    fillId,
     leaderId: input.leaderId.trim(),
     marketId,
     side: input.side,
@@ -174,6 +196,7 @@ export function parseLeaderFillObservation(input: {
 
 export function presentMirrorPlan(plan: MirrorPlan): PresentMirrorPlan {
   return {
+    fillId: plan.fillId,
     followId: plan.followId,
     followerId: plan.followerId,
     leaderId: plan.leaderId,

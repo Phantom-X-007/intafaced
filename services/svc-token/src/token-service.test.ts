@@ -38,6 +38,7 @@ const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'
 const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
 const migrationBuybackClaim = readFileSync(join(here, '..', 'drizzle', '0002_buyback_window_claim.sql'), 'utf8');
 const migrationYieldPlan = readFileSync(join(here, '..', 'drizzle', '0003_yield_window_plan.sql'), 'utf8');
+const migrationYieldHeader = readFileSync(join(here, '..', 'drizzle', '0004_yield_window_header.sql'), 'utf8');
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -77,6 +78,7 @@ if (!available) {
   await sql.unsafe(migrationPending);
   await sql.unsafe(migrationBuybackClaim);
   await sql.unsafe(migrationYieldPlan);
+  await sql.unsafe(migrationYieldHeader);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -121,7 +123,7 @@ if (!available) {
   };
 
   beforeEach(async () => {
-    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts, token.yield_windows RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-token');
     token = new TokenService(sql, ledger, bus, options);
@@ -167,6 +169,100 @@ if (!available) {
       expect(await stakedOf(USER_A)).toBe('1000');
       const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
       expect(rows[0]?.status).toBe('active');
+    });
+
+    it('M-02 recovers a stake that crashed after ledger post and before activate', async () => {
+      // Crash window: pending claim + principal already in the stake account.
+      // stakeOf must stay zero until activate; retry must not double-debit.
+      await fund(USER_A, '5000');
+      const stakeId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      await sql`
+        INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
+        VALUES (
+          ${stakeId}, ${USER_A}, ${'1000'}::numeric, 'flex', 10000,
+          now(), null, 'pending'
+        )
+      `;
+      await ledger.post(
+        recipes.stake({
+          stakeId,
+          userId: USER_A,
+          assetId: 'IFC',
+          amount: amt('1000'),
+          tier: 'flex',
+        }),
+      );
+
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('4000');
+
+      const recovered = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+      expect(recovered.status).toBe('active');
+      expect(recovered.id).toBe(stakeId);
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('1000');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('4000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('keeps the pending claim when ledger post fails after applying (no post-without-claim)', async () => {
+      // Ambiguous failure class: MemoryLedger applied the stake, then the client
+      // saw a transport error. Old fail-path DELETEd pending on any catch →
+      // principal stuck in stake account with no row to unstake.
+      await fund(USER_A, '5000');
+      const stakeId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const realPost = ledger.post.bind(ledger);
+      let stakePosts = 0;
+      ledger.post = async (tx) => {
+        const result = await realPost(tx);
+        const isStake = typeof tx === 'object' && tx !== null && 'reason' in tx && (tx as { reason?: string }).reason === 'token.stake';
+        if (isStake) {
+          stakePosts += 1;
+          if (stakePosts === 1) {
+            throw new Error('simulated network flake after ledger apply');
+          }
+        }
+        return result;
+      };
+
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toThrow(/network flake/);
+
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.status).toBe('pending');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('4000');
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+
+      // Same stakeId recovers: ledger key no-ops, activate lands once.
+      const recovered = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId });
+      expect(recovered.status).toBe('active');
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('1000');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('does not report active when the claim row vanished after the ledger post', async () => {
+      await fund(USER_A, '5000');
+      const stakeId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const realPost = ledger.post.bind(ledger);
+      ledger.post = async (tx) => {
+        const result = await realPost(tx);
+        const isStake = typeof tx === 'object' && tx !== null && 'reason' in tx && (tx as { reason?: string }).reason === 'token.stake';
+        if (isStake) {
+          // Hostile race: claim deleted after apply (old fail-path / dual flight).
+          await sql`DELETE FROM token.stakes WHERE id = ${stakeId}`;
+        }
+        return result;
+      };
+
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId })).rejects.toMatchObject({
+        code: 'token.stake_claim_missing',
+      });
+      expect(await stakedOf(USER_A)).toBe('1000');
+      const rows = await sql`SELECT id FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows).toHaveLength(0);
     });
 
     it('M-01 refuses stakeId reuse with a different amount or user', async () => {
@@ -303,10 +399,54 @@ if (!available) {
       expect(await balanceOf(USER_A)).toBe('1000');
     });
 
+    it('M-04 recovers an unstake that crashed after claim and before ledger post', async () => {
+      // Crash window: status=unstaking so stakeOf already dropped the row, but
+      // principal still sits in the ledger stake account. Retry must return it
+      // exactly once and close the row.
+      await fund(USER_A, '1000');
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await sql`UPDATE token.stakes SET status = 'unstaking' WHERE id = ${stake.id} AND status = 'active'`;
+
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+      expect(await stakedOf(USER_A)).toBe('1000');
+      expect(await balanceOf(USER_A)).toBe('0');
+
+      const closed = await token.unstake(stake.id);
+      expect(closed.status).toBe('closed');
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await stakedOf(USER_A)).toBe('0');
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
+
+      await expect(token.unstake(stake.id)).rejects.toMatchObject({ code: 'token.stake_closed' });
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('rejects an unknown stake', async () => {
       await expect(token.unstake('44444444-4444-4444-8444-444444444444')).rejects.toMatchObject({
         code: 'token.stake_not_found',
       });
+    });
+
+    it('refuses to unstake a pending (unfunded) claim and moves no value', async () => {
+      // The throw exists for status=pending; only the time-lock branch was
+      // executed. A pending row is a claim without ledger principal behind it —
+      // unstaking it must not invent a return of funds.
+      const stakeId = '55555555-5555-4555-8555-555555555555';
+      await sql`
+        INSERT INTO token.stakes (id, user_id, amount, tier, multiplier_bps, started_at, unlocks_at, status)
+        VALUES (
+          ${stakeId}, ${USER_A}, ${'1000'}::numeric, 'flex', 10000,
+          now(), null, 'pending'
+        )
+      `;
+
+      await expect(token.unstake(stakeId)).rejects.toMatchObject({ code: 'token.stake_locked' });
+
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stakeId}`;
+      expect(rows[0]?.status).toBe('pending');
+      expect(await balanceOf(USER_A)).toBe('0');
+      expect(await stakedOf(USER_A)).toBe('0');
     });
   });
 
@@ -490,6 +630,52 @@ if (!available) {
       expect(again.alreadyPaid).toBe(1);
     });
 
+    it('collapses duplicate source modules so the plan total matches what was swept', async () => {
+      // Sweep key is per (window, module). Two legs of 50 used to plan 100 while
+      // only the first 50 moved — plan underfunded, payouts fail mid-loop or
+      // drain another window's residual in the rewards engine.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '100');
+
+      const result = await token.distributeRevenue({
+        windowId: 'w-dup-module',
+        sources: [
+          { module: 'trade', amount: amt('50') },
+          { module: 'trade', amount: amt('50') },
+        ],
+      });
+
+      expect(formatAmount(result.distributed)).toBe('100');
+      expect(result.recipients).toBe(1);
+      expect(await balanceOf(USER_A)).toBe('100');
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('concurrent re-settles of the same unpaid plan report one payout, not two', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '100');
+
+      // First call plans + pays. Second wave of concurrent retries must not
+      // each report distributed=100 (money is ledger-safe; the operator channel
+      // used to lie).
+      await token.distributeRevenue({ windowId: 'w-conc', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          token.distributeRevenue({ windowId: 'w-conc', sources: [{ module: 'trade', amount: amt('100') }] }),
+        ),
+      );
+
+      expect(results.every((r) => formatAmount(r.distributed) === '0')).toBe(true);
+      expect(results.every((r) => r.recipients === 0)).toBe(true);
+      expect(results.every((r) => r.alreadyPaid === 1)).toBe(true);
+      expect(await balanceOf(USER_A)).toBe('100');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     /**
      * ═════════════════════════════════════════════════════════════════════════
      * A WINDOW PAYS THE STAKERS IT HAD, NOT THE STAKERS IT HAS
@@ -585,36 +771,90 @@ if (!available) {
       expect(await balanceOf(USER_A)).toBe('100');
     });
 
-    it('plans a window the first time somebody is actually staked', async () => {
-      // The empty-pool case is not a settled window: the revenue is still in
-      // the engine, so the window must be plannable later rather than frozen
-      // empty forever.
+    it('does not pay a staker who joined AFTER an empty window was claimed', async () => {
+      // W4 residual / 0004: empty distribute used to write no plan row, so a
+      // later stake + re-run of the same window id planned the newcomer.
+      // Header freezes the empty answer. Fees still sweep into the engine
+      // (buyback and residual scheduling); late joiners need a NEW window id
+      // with NEW fees — the frozen id never invents recipients.
       await accrueFees('trade', '100');
       const empty = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(empty.recipients).toBe(0);
+      expect(formatAmount(empty.distributed)).toBe('0');
+
+      const headers = await sql<Array<{ window_id: string; total_amount: string }>>`
+        SELECT window_id, total_amount FROM token.yield_windows WHERE window_id = 'w-later'
+      `;
+      expect(headers).toHaveLength(1);
+      expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
 
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
 
-      const now = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
-      expect(formatAmount(now.distributed)).toBe('100');
+      const again = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(again.distributed)).toBe('0');
+      expect(again.recipients).toBe(0);
+      expect(await balanceOf(USER_A)).toBe('0');
+
+      // New window needs its own fees in houseFees (first window already swept).
+      await accrueFees('trade', '100');
+      const next = await token.distributeRevenue({ windowId: 'w-later-2', sources: [{ module: 'trade', amount: amt('100') }] });
+      expect(formatAmount(next.distributed)).toBe('100');
       expect(await balanceOf(USER_A)).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
-    it('leaves revenue in the rewards engine when nobody is staked', async () => {
+    it('refuses a different total on a previously empty window', async () => {
+      await accrueFees('trade', '100');
+      await token.distributeRevenue({ windowId: 'w-empty-mismatch', sources: [{ module: 'trade', amount: amt('100') }] });
+
+      await accrueFees('trade', '50');
+      await expect(
+        token.distributeRevenue({ windowId: 'w-empty-mismatch', sources: [{ module: 'trade', amount: amt('150') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_window_mismatch' });
+
+      // Header total frozen; no payouts invented.
+      const headers = await sql<Array<{ total_amount: string }>>`
+        SELECT total_amount FROM token.yield_windows WHERE window_id = 'w-empty-mismatch'
+      `;
+      expect(amt(headers[0]!.total_amount)).toBe(amt('100'));
+      expect(await sql`SELECT user_id FROM token.yield_payouts WHERE window_id = 'w-empty-mismatch'`).toHaveLength(0);
+    });
+
+    it('sweeps into the rewards engine when nobody is staked and freezes the window id', async () => {
       await accrueFees('trade', '100');
       const result = await token.distributeRevenue({ windowId: 'w-empty', sources: [{ module: 'trade', amount: amt('100') }] });
 
       expect(result.recipients).toBe(0);
       expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
       expect(ledger.totalsByAsset().IFC).toBe('0');
+      expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-empty'`).toHaveLength(1);
     });
 
     it('refuses a window with no revenue rather than posting nothing quietly', async () => {
       await expect(token.distributeRevenue({ windowId: 'w-zero', sources: [] })).rejects.toMatchObject({
         code: 'token.nothing_to_distribute',
       });
+    });
+
+    it('refuses a fee source larger than the houseFees pot before claiming the window', async () => {
+      // T-03 residual: operator-typed sources used to skip the balance check.
+      // Over-claim then either underfunded the plan or died mid-sweep after the
+      // header was already claimed. Fail closed on the pot that actually holds
+      // the fees — under-claim (leaving fees behind) is still allowed.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await accrueFees('trade', '50');
+
+      await expect(
+        token.distributeRevenue({ windowId: 'w-overclaim', sources: [{ module: 'trade', amount: amt('100') }] }),
+      ).rejects.toMatchObject({ code: 'token.yield_source_underfunded' });
+
+      // No header claimed, no fees moved.
+      expect(await sql`SELECT window_id FROM token.yield_windows WHERE window_id = 'w-overclaim'`).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('50');
+      expect(await balanceOf(USER_A)).toBe('0');
     });
 
     it('drains the source module fee account', async () => {
@@ -688,6 +928,35 @@ if (!available) {
       const burned = amt(emitted.payload.tokensBurned);
       const toRewards = amt(emitted.payload.tokensToRewards);
       expect(burned + toRewards).toBe(amt('777'));
+    });
+
+    it('refuses tokensBought=0 before claiming the window — zero must not spend the interval', async () => {
+      const window = { from: new Date('2026-10-01T00:00:00Z'), to: new Date('2026-10-08T00:00:00Z') };
+
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: window,
+          revenueTotal: { IFC: '0' },
+          tokensBought: amt('0'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_revenue_invalid' });
+
+      // No claim row — a later real burn for the same window must still be free.
+      const rows = await sql`SELECT id FROM token.buyback_runs`;
+      expect(rows).toHaveLength(0);
+      expect(await token.burnedSupply()).toBe(0n);
+
+      await accrueFees('trade', '500');
+      await token.distributeRevenue({ windowId: 'w-bb-zero-then-real', sources: [{ module: 'trade', amount: amt('500') }] });
+      const real = await token.recordBuyback({
+        runId: crypto.randomUUID(),
+        revenueWindow: window,
+        revenueTotal: { IFC: '500' },
+        tokensBought: amt('500'),
+      });
+      expect(real.burned + real.toRewards).toBe(amt('500'));
+      expect(await token.burnedSupply()).toBe(real.burned);
     });
   });
 
@@ -1154,6 +1423,61 @@ if (!available) {
     });
   });
 
+  describe('a deployment whose token_params values are invalid', () => {
+    let original: {
+      buyback_bps: string;
+      burn_split_bps: string;
+      total_supply: string;
+      halving_interval: number;
+      emission_curve: unknown;
+    };
+
+    beforeEach(async () => {
+      const rows = await sql<
+        Array<{
+          buyback_bps: string;
+          burn_split_bps: string;
+          total_supply: string;
+          halving_interval: number;
+          emission_curve: unknown;
+        }>
+      >`SELECT buyback_bps::text, burn_split_bps::text, total_supply::text, halving_interval, emission_curve FROM token.token_params WHERE id = true`;
+      original = rows[0]!;
+    });
+
+    afterEach(async () => {
+      await sql`
+        UPDATE token.token_params SET
+          buyback_bps = ${original.buyback_bps}::numeric,
+          burn_split_bps = ${original.burn_split_bps}::numeric,
+          total_supply = ${original.total_supply}::numeric,
+          halving_interval = ${original.halving_interval},
+          emission_curve = ${sql.json(original.emission_curve as never)}
+        WHERE id = true
+      `;
+    });
+
+    const dbToken = () => new TokenService(sql, ledger, bus, { ...options, loadParamsFromDb: true, feeScheduleTtlMs: 0 });
+
+    it('refuses an emission_curve that is not an object before minting', async () => {
+      // buyback_bps / halving_interval OOR are sealed by DB CHECK constraints
+      // (token_params_buyback_bps_ck, token_params_halving_positive_ck) — the
+      // UPDATE itself fails before the service can read. emission_curve is jsonb
+      // with no shape CHECK, so the service-layer params_invalid is reachable.
+      await sql`UPDATE token.token_params SET emission_curve = ${sql.json([] as never)} WHERE id = true`;
+      await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
+      const rows = await sql`SELECT epoch FROM token.emission_epochs`;
+      expect(rows).toHaveLength(0);
+    });
+
+    it('refuses an emission_curve missing initialEpochReward before minting', async () => {
+      await sql`UPDATE token.token_params SET emission_curve = ${sql.json({ kind: 'halving' } as never)} WHERE id = true`;
+      await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
+      const rows = await sql`SELECT epoch FROM token.emission_epochs`;
+      expect(rows).toHaveLength(0);
+    });
+  });
+
   // ── Emissions ─────────────────────────────────────────────────────────────
 
   describe('emissions', () => {
@@ -1335,6 +1659,48 @@ if (!available) {
       expect(next.epoch).toBe(1);
       await expect(token.mintEpoch(1)).rejects.toMatchObject({ code: 'token.epoch_closed' });
     });
+
+    it('resumes an open claim with the snapshotted reward after a crash mid-flight', async () => {
+      // Simulate: claim written, ledger post happened, close never ran.
+      const reward = DEFAULT_EMISSION_PARAMS.initialEpochReward;
+      await sql`
+        INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
+        VALUES (0, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
+      `;
+      await ledger.post(recipes.mintEmission({ epoch: 0, assetId: 'IFC', amount: reward, destination: rewardsEngine('IFC') }));
+
+      // Retune would change epochReward(0) if we recomputed — prove we do not.
+      const resumed = await token.mintEpoch(0);
+      expect(resumed.minted).toBe(reward);
+
+      const rows = await sql<Array<{ closed: boolean; mined_amount: string; scheduled_amount: string }>>`
+        SELECT closed, mined_amount, scheduled_amount FROM token.emission_epochs WHERE epoch = 0
+      `;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.closed).toBe(true);
+      expect(amt(rows[0]!.mined_amount)).toBe(reward);
+      expect(amt(rows[0]!.scheduled_amount)).toBe(reward);
+      // Ledger post was idempotent — balance is one reward, not two.
+      expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe(formatAmount(reward));
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('open claim reserves supply so a concurrent epoch cannot under-book the ceiling', async () => {
+      // Claim epoch 0 open at full reward without closing — ceiling must count it.
+      const reward = DEFAULT_EMISSION_PARAMS.initialEpochReward;
+      await sql`
+        INSERT INTO token.emission_epochs (epoch, scheduled_amount, mined_amount, closed)
+        VALUES (0, ${formatAmount(reward)}::numeric, ${formatAmount(reward)}::numeric, false)
+      `;
+
+      // Cap equals one epoch reward. Epoch 1 must refuse even though 0 is not closed.
+      const tight = new TokenService(sql, ledger, bus, {
+        ...options,
+        emission: { ...DEFAULT_EMISSION_PARAMS, maxSupply: reward },
+      });
+      await expect(tight.mintEpoch(1)).rejects.toMatchObject({ code: 'token.supply_exhausted' });
+      expect(await sql`SELECT epoch FROM token.emission_epochs WHERE epoch = 1`).toHaveLength(0);
+    });
   });
 
   // ── Governance (§4.3) ─────────────────────────────────────────────────────
@@ -1373,6 +1739,95 @@ if (!available) {
           now,
         }),
       ).rejects.toMatchObject({ code: 'token.proposal_not_allowed' });
+    });
+
+    it('refuses a stake just below the Initiate threshold', async () => {
+      await fund(USER_A, '999');
+      await token.stake({ userId: USER_A, amount: amt('999'), tier: 'flex' });
+      await expect(
+        token.createProposal({
+          kind: 'listing',
+          body: { symbol: 'X' },
+          createdBy: USER_A,
+          opensAt,
+          closesAt,
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_not_allowed' });
+    });
+
+    it('refuses a proposal window that does not close after it opens', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await expect(
+        token.createProposal({
+          kind: 'fee_param',
+          body: {},
+          createdBy: USER_A,
+          opensAt: closesAt,
+          closesAt: opensAt,
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_window' });
+    });
+
+    it('allows a vote AT opensAt and refuses AT closesAt (half-open window)', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'curriculum',
+        body: {},
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now: opensAt,
+      });
+
+      const atOpen = await token.castVote({
+        proposalId: proposal.id,
+        userId: USER_A,
+        choice: 'for',
+        now: opensAt,
+      });
+      expect(formatAmount(atOpen.weight)).toBe('1000');
+
+      await fund(USER_B, '1000');
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+      await expect(
+        token.castVote({
+          proposalId: proposal.id,
+          userId: USER_B,
+          choice: 'against',
+          now: closesAt,
+        }),
+      ).rejects.toMatchObject({ code: 'token.proposal_window' });
+    });
+
+    it('survives concurrent double-votes — one ballot, one success', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'listing',
+        body: {},
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          token
+            .castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now })
+            .then(() => 'ok' as const)
+            .catch((err: { code?: string }) => (err?.code === 'token.already_voted' ? 'voted' : 'other')),
+        ),
+      );
+
+      expect(results.filter((r) => r === 'ok')).toHaveLength(1);
+      expect(results.filter((r) => r === 'voted')).toHaveLength(7);
+      const detail = await token.getProposal(proposal.id);
+      expect(detail.tally.voterCount).toBe(1);
     });
 
     it('lets admin open a proposal without stake', async () => {
@@ -1525,6 +1980,34 @@ if (!available) {
       });
     });
 
+    it('draft stays terminal after opensAt — no silent open, no vote (socket honesty)', async () => {
+      // §13 token.governance: draft is not a deferred open. Time passing must
+      // not invent a status flip the service never wrote.
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+
+      const draft = await token.createProposal({
+        kind: 'fee_param',
+        body: { buybackBps: 1200 },
+        createdBy: USER_A,
+        opensAt: new Date('2026-08-01T00:00:00.000Z'),
+        closesAt: new Date('2026-08-15T00:00:00.000Z'),
+        now, // 2026-07-15 — window still in the future
+      });
+      expect(draft.status).toBe('draft');
+
+      const afterOpen = new Date('2026-08-05T12:00:00.000Z');
+      const reloaded = await token.getProposal(draft.id);
+      expect(reloaded?.status).toBe('draft');
+      await expect(token.castVote({ proposalId: draft.id, userId: USER_A, choice: 'for', now: afterOpen })).rejects.toMatchObject({
+        code: 'token.proposal_not_open',
+      });
+
+      const listed = await token.listProposals({ status: 'draft' });
+      expect(listed.some((p) => p.id === draft.id)).toBe(true);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     /**
      * A refusal nothing executes is a refusal nobody has checked still fires.
      * `token.proposal_not_found` had two throw sites and no test naming it —
@@ -1613,6 +2096,43 @@ if (!available) {
 
       expect(fromTable).toBe(fromLedger);
       expect(fromTable).toBe('10000');
+    });
+
+    it('sum of active stakes equals ledger stake accounts (drift refuses the property)', async () => {
+      // A2 residual: active rows are the only stakeOf input; their principals
+      // must equal the ledger stake pots for those users. Pending and closed
+      // rows must not invent a second total.
+      await fund(USER_A, '8000');
+      await fund(USER_B, '3000');
+      const a1 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('3000'), tier: 'm3' });
+      await token.stake({ userId: USER_B, amount: amt('3000'), tier: 'flex' });
+      await token.unstake(a1.id);
+
+      const activeRows = await sql<Array<{ amount: string }>>`
+        SELECT amount FROM token.stakes WHERE status = 'active' ORDER BY id
+      `;
+      const fromTable = activeRows.reduce((acc, r) => acc + amt(r.amount), 0n);
+      const fromStakeOf = (await token.stakeOf(USER_A)) + (await token.stakeOf(USER_B));
+      const fromLedger = amt(await stakedOf(USER_A)) + amt(await stakedOf(USER_B));
+
+      expect(formatAmount(fromTable)).toBe(formatAmount(fromStakeOf));
+      expect(formatAmount(fromTable)).toBe(formatAmount(fromLedger));
+      expect(formatAmount(fromTable)).toBe('6000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('accessOf.staked matches stakeOf for the same user (hot path vs tRPC)', async () => {
+      // GET /internal/stake reads accessOf; tRPC stakeOf is self-only. Both
+      // must answer the same money figure or gates open/close on a lie.
+      await fund(USER_A, '7500');
+      await token.stake({ userId: USER_A, amount: amt('2500'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1500'), tier: 'm12' });
+
+      const stakeOf = await token.stakeOf(USER_A);
+      const access = await token.accessOf(USER_A);
+      expect(access.staked).toBe(stakeOf);
+      expect(formatAmount(access.staked)).toBe('4000');
     });
 
     it('holds no numeric balance column of its own', async () => {

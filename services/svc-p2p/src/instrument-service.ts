@@ -16,6 +16,7 @@ import {
   type MethodSchema,
 } from './instruments.js';
 import { recordSwallowed, withSpan } from './tracing.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 
 /**
  * PAYMENT INSTRUMENTS — storage, disclosure, and the record of both.
@@ -286,6 +287,12 @@ export class InstrumentService {
          AND (${country}::text IS NULL OR country IN (${country ?? ANY_COUNTRY}, ${ANY_COUNTRY}))
        ORDER BY method_id ASC, country ASC
     `;
+    if (rows.length === 0 && filter.includeDisabled !== true) {
+      // An empty catalogue is not "pick a method". It is no rail. Returning []
+      // here is how a seller/register/pay screen still looks live against zero
+      // operator methods. Operator `includeDisabled` stays a listing of rows.
+      await this.refuseIfRegistryEmpty();
+    }
     return rows.map(toSchema);
   }
 
@@ -311,11 +318,10 @@ export class InstrumentService {
     if (!schema) {
       // The honest refusal. We do not know what this market needs, so we cannot
       // accept a destination for it — rather than accept a plausible-looking one
-      // that turns out to be unpayable when a buyer tries.
-      throw new InstrumentError(
-        `No payment method "${methodId}" is registered for ${country} — an operator must register its field requirements first`,
-        'p2p.instrument_method_unknown',
-      );
+      // that turns out to be unpayable when a buyer tries. Empty registry uses
+      // the same code (`p2p.instrument_method_unknown`) so a missing catalog
+      // cannot look like a rail the seller merely has not filled in yet.
+      throw emptyRegistry();
     }
     if (!schema.enabled) {
       throw new InstrumentError(`Payment method "${methodId}" is not currently accepted in ${country}`, 'p2p.instrument_method_disabled');
@@ -471,6 +477,44 @@ export class InstrumentService {
   }
 
   /**
+   * Method ids an operator has actually registered and left enabled.
+   *
+   * The registry ships empty. An empty set is not "any rail" — it is no rail.
+   * Offer create and the public board consult this so a missing schema cannot
+   * look like a destination the seller merely forgot to fill in.
+   */
+  async enabledMethodKeys(): Promise<ReadonlySet<string>> {
+    const rows = await this.sql<Array<{ method_id: string }>>`
+      SELECT DISTINCT method_id FROM p2p.payment_method_schemas WHERE enabled = true
+    `;
+    return new Set(rows.map((r) => methodIdKey(r.method_id)));
+  }
+
+  /**
+   * Active method ids for one owner in one fiat — the board's "can they be paid?"
+   * answer without disclosing destinations.
+   *
+   * Method ids are already stored lowercased; returned keys match `methodIdKey`.
+   * A destination whose method has no enabled schema is not payable: the
+   * operator registry is the rail, not a leftover instrument row.
+   */
+  async liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>> {
+    const fiat = fiatCurrency.trim().toUpperCase();
+    const rows = await this.sql<Array<{ method_id: string }>>`
+      SELECT DISTINCT i.method_id
+        FROM p2p.payment_instruments i
+        JOIN p2p.payment_method_schemas s
+          ON s.method_id = i.method_id
+         AND s.enabled = true
+         AND (s.country = i.country OR s.country = ${ANY_COUNTRY})
+       WHERE i.owner_id = ${ownerId}
+         AND i.fiat_currency = ${fiat}
+         AND i.status = 'active'
+    `;
+    return new Set(rows.map((r) => methodIdKey(r.method_id)));
+  }
+
+  /**
    * The owner reads their own details. Logged like everyone else's read.
    *
    * The owner is not exempt, because an account takeover reads exactly like an
@@ -599,12 +643,24 @@ export class InstrumentService {
     input: { tradeId: string; sellerId: string; takerId: string; methodId: string; fiatCurrency: string; sink: DenialSink },
   ): Promise<{ instrumentId: string; fingerprint: string }> {
     const methodId = methodIdKey(input.methodId);
+    // Same payable rule as `liveMethodKeys`: an active row is not a rail once
+    // the operator has emptied or disabled the schema. EXISTS, not JOIN, so a
+    // country row plus a `*` wildcard cannot duplicate the instrument and pick
+    // by an ordering nobody designed. A leftover destination still refuses
+    // through `refuseTake` — same sentence as "no destination" — so the take
+    // path cannot become an oracle for "schema gone vs dest gone".
     const rows = await tx<InstrumentRow[]>`
-      SELECT * FROM p2p.payment_instruments
-       WHERE owner_id = ${input.sellerId}
-         AND method_id = ${methodId}
-         AND fiat_currency = ${input.fiatCurrency}
-         AND status = 'active'
+      SELECT * FROM p2p.payment_instruments i
+       WHERE i.owner_id = ${input.sellerId}
+         AND i.method_id = ${methodId}
+         AND i.fiat_currency = ${input.fiatCurrency}
+         AND i.status = 'active'
+         AND EXISTS (
+           SELECT 1 FROM p2p.payment_method_schemas s
+            WHERE s.method_id = i.method_id
+              AND s.enabled = true
+              AND (s.country = i.country OR s.country = ${ANY_COUNTRY})
+         )
     `;
 
     const instrument = rows[0];
@@ -844,6 +900,16 @@ export class InstrumentService {
 
   // ── internals ──────────────────────────────────────────────────────────────
 
+  /**
+   * Zero enabled schemas is not an empty picker — it is no payable rail.
+   * Same code as an unknown method, so a catalog screen cannot tell "none yet"
+   * apart from "this string is not a rail" and paper over the gap with UX.
+   */
+  private async refuseIfRegistryEmpty(): Promise<void> {
+    const enabled = await this.enabledMethodKeys();
+    if (enabled.size === 0) throw emptyRegistry();
+  }
+
   private async ownedInstrument(instrumentId: string, ownerId: string): Promise<InstrumentRow> {
     const rows = await this.sql<InstrumentRow[]>`
       SELECT * FROM p2p.payment_instruments WHERE id = ${instrumentId} AND owner_id = ${ownerId} AND status = 'active'
@@ -1002,6 +1068,10 @@ function toSchema(row: SchemaRow): MethodSchema {
  * cause: the difference between "no such instrument" and "not yours" is itself
  * information about someone else's account.
  */
+function emptyRegistry(): InstrumentError {
+  return new InstrumentError(resolveP2pCopy(P2P_COPY.methodUnknown), 'p2p.instrument_method_unknown');
+}
+
 function notFound(id: string): InstrumentError {
   return new InstrumentError(`No payment instrument is available for ${id}`, 'p2p.instrument_not_found');
 }

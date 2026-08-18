@@ -2,6 +2,8 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-service.js';
+import type { CommerceService } from './commerce/commerce-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
@@ -110,30 +112,87 @@ const statusEventOut = z.object({
  */
 function mapError(err: unknown): never {
   if (err instanceof MarketError) {
-    if (err.code === 'market.vendor_not_found') throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
-    if (err.code === 'market.vendor_already_applied') throw new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
-    if (err.code === 'market.vet_operator_required') throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    const message = userCopy(err.code);
+    if (err.code === 'market.vendor_not_found') throw new TRPCError({ code: 'NOT_FOUND', message, cause: err });
+    if (err.code === 'market.vendor_already_applied') throw new TRPCError({ code: 'CONFLICT', message, cause: err });
+    if (err.code === 'market.vet_operator_required') throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     if (err.code === 'market.stake_required' || err.code === 'market.vendor_not_approved') {
-      throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     }
     // CONFLICT rather than FORBIDDEN: the vendor IS entitled, the capacity is
     // simply taken. Retrying after a release is correct client behaviour and a
     // 403 would tell them not to.
-    if (err.code === 'market.slots_exhausted') throw new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+    if (err.code === 'market.slots_exhausted') throw new TRPCError({ code: 'CONFLICT', message, cause: err });
     if (err.code === 'market.stake_unavailable') {
       // OUR infrastructure, not the caller's request, and the distinction
       // matters to a client: a 403 sends somebody off to go and stake, and
       // telling them that because svc-token was unreachable sends them to do
       // something they have already done. A 500 says "try again". Same mapping,
       // and the same reasoning, as `academy.stake_unavailable`.
-      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
     }
-    throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    if (
+      err.code === 'market.commission_not_configured' ||
+      err.code === 'market.subscription_not_built' ||
+      err.code === 'market.subscription_recurring_not_built' ||
+      err.code === 'market.subscription_period_unset' ||
+      err.code === 'market.subscription_past_due' ||
+      err.code === 'market.subscription_cancelled' ||
+      err.code === 'market.subscription_no_access' ||
+      err.code === 'market.period_not_applicable'
+    ) {
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
+    }
+    // Orphan listing / missing slot / over-quota after unstake — preconditions, not bad payloads.
+    if (err.code === 'market.listing_slot_missing' || err.code === 'market.slot_required' || err.code === 'market.listing_over_capacity') {
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
+    }
+    if (err.code === 'market.listing_not_found') {
+      throw new TRPCError({ code: 'NOT_FOUND', message, cause: err });
+    }
+    if (err.code === 'market.purchase_conflict' || err.code === 'market.purchase_self' || err.code === 'market.listing_not_owned') {
+      throw new TRPCError({ code: 'CONFLICT', message, cause: err });
+    }
+    if (err.code === 'market.insufficient_funds') {
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
+    }
+    throw new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
   }
   throw err;
 }
 
-export function createMarketRouter(vendors: VendorService) {
+const listingOut = z.object({
+  id: z.string().uuid(),
+  vendorId: z.string().uuid(),
+  title: z.string(),
+  description: z.string(),
+  offerType: z.enum(['one_time', 'subscription']),
+  assetId: z.string(),
+  price: z.string(),
+  periodSeconds: z.number().int().positive().nullable(),
+  status: z.enum(['active', 'archived']),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+const purchaseOut = z.object({
+  id: z.string().uuid(),
+  listingId: z.string().uuid(),
+  buyerId: z.string().uuid(),
+  vendorId: z.string().uuid(),
+  vendorUserId: z.string().uuid(),
+  assetId: z.string(),
+  price: z.string(),
+  commissionBps: z.number().int(),
+  status: z.enum(['pending', 'settled', 'rejected']),
+  ledgerTxId: z.string().uuid().nullable(),
+  rejectionCode: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  settledAt: z.string().datetime().nullable(),
+  accessUntil: z.string().datetime().nullable(),
+});
+
+export function createMarketRouter(vendors: VendorService, commerce?: CommerceService) {
   return router({
     /**
      * Apply to be a vendor. One application per account; status is not an input.
@@ -308,7 +367,167 @@ export function createMarketRouter(vendors: VendorService) {
       .query(async ({ input }) => {
         return vendors.history(input.vendorId, input.limit);
       }),
+
+    // ── market.commerce ──────────────────────────────────────────────────────
+
+    /**
+     * Whether this deployment has a house commission rate. Blank config is the
+     * refuse-closed default — createListing, public catalogue, and purchase
+     * will not invent a rate (D26-P1-M2).
+     */
+    commerceProgramme: publicProcedure
+      .output(z.object({ commissionBps: z.number().int().nullable(), commissionConfigured: z.boolean() }))
+      .query(() => {
+        if (!commerce) {
+          return { commissionBps: null, commissionConfigured: false };
+        }
+        return commerce.programme();
+      }),
+
+    createListing: scopedProcedure('market:write', { module: 'market' })
+      .input(
+        z.object({
+          title: z.string().min(1).max(120),
+          description: z.string().min(1).max(4_000),
+          offerType: z.enum(['one_time', 'subscription']),
+          assetId: z.string().min(1).max(32),
+          /** Decimal string — never a number. */
+          price: z.string().min(1).max(64),
+          /** Whole seconds. Required when offerType is subscription. No default month. */
+          periodSeconds: z.number().int().positive().optional(),
+        }),
+      )
+      .output(listingOut)
+      .mutation(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          // Blank MARKET_HOUSE_COMMISSION_BPS refuses before insert/slot claim.
+          return await commerce.createListing({ userId: ctx.principal!.userId, ...input });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    archiveListing: scopedProcedure('market:write', { module: 'market' })
+      .input(z.object({ listingId: z.string().uuid() }))
+      .output(listingOut)
+      .mutation(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.archiveListing({ userId: ctx.principal!.userId, listingId: input.listingId });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    myListings: scopedProcedure('market:read', { module: 'market' })
+      .output(z.array(listingOut))
+      .query(async ({ ctx }) => {
+        requireCommerce(commerce);
+        return commerce.myListings(ctx.principal!.userId);
+      }),
+
+    /** Public catalogue — empty when commission blank; else listed vendors only. */
+    listings: publicProcedure
+      .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
+      .output(z.array(listingOut))
+      .query(async ({ input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.publicListings({ limit: input?.limit });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    /**
+     * Automatic recurring charge is not built (no second recipe / scheduler).
+     * One period is `purchase`. Public so a missing procedure cannot look like 404.
+     */
+    subscribe: publicProcedure.input(z.object({ listingId: z.string().uuid().optional() }).optional()).mutation(async () => {
+      try {
+        throw new MarketError(
+          'Automatic recurring subscribe is not built — buy one period with purchase',
+          'market.subscription_recurring_not_built',
+        );
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+    /**
+     * One-time purchase. `purchaseId` is client-supplied so a retry is the same
+     * purchase. Blank commission config refuses before any post.
+     */
+    purchase: scopedProcedure('market:write', { module: 'market' })
+      .input(z.object({ listingId: z.string().uuid(), purchaseId: z.string().uuid() }))
+      .output(purchaseOut)
+      .mutation(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.purchase({
+            buyerId: ctx.principal!.userId,
+            listingId: input.listingId,
+            purchaseId: input.purchaseId,
+          });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    myPurchases: scopedProcedure('market:read', { module: 'market' })
+      .output(z.array(purchaseOut))
+      .query(async ({ ctx }) => {
+        requireCommerce(commerce);
+        return commerce.purchasesOf(ctx.principal!.userId);
+      }),
+
+    cancelSubscription: scopedProcedure('market:write', { module: 'market' })
+      .input(z.object({ listingId: z.string().uuid() }))
+      .output(
+        z.object({
+          listingId: z.string().uuid(),
+          buyerId: z.string().uuid(),
+          cancelledAt: z.string().datetime(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.cancelSubscription({ buyerId: ctx.principal!.userId, listingId: input.listingId });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    subscriptionAccess: scopedProcedure('market:read', { module: 'market' })
+      .input(z.object({ listingId: z.string().uuid() }))
+      .output(
+        z.object({
+          granted: z.literal(true),
+          listingId: z.string().uuid(),
+          buyerId: z.string().uuid(),
+          accessUntil: z.string().datetime(),
+        }),
+      )
+      .query(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await commerce.subscriptionAccess({ buyerId: ctx.principal!.userId, listingId: input.listingId });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
   });
+}
+
+function requireCommerce(commerce: CommerceService | undefined): asserts commerce is CommerceService {
+  if (!commerce) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.commerce is not wired in this process',
+    });
+  }
 }
 
 export type MarketRouter = ReturnType<typeof createMarketRouter>;

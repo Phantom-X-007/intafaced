@@ -84,6 +84,10 @@ export class MemoryProjectionStore implements ProjectionStore {
   async applyBlock(block: ChainBlock): Promise<ApplyOutcome> {
     assertValidBlock(block);
 
+    if (block.chainId !== this.chainId) {
+      throw new Error(`indexer.wrong_chain: block chainId ${block.chainId} does not match store chainId ${this.chainId}`);
+    }
+
     const existing = this.#blocks.get(block.hash);
     const duplicate = existing?.status === 'canonical';
 
@@ -93,6 +97,40 @@ export class MemoryProjectionStore implements ProjectionStore {
     const occupant = await this.blockAt(block.height);
     if (occupant && occupant.hash !== block.hash) {
       throw new Error(`indexer.competing_canonical_block: height ${block.height} already holds canonical ${occupant.hash} — unwind first`);
+    }
+
+    // Parent link is the store's last line of defence. The indexer checks the
+    // forward link; a second writer (or a corrupted apply) must not plant a
+    // height that does not hang off the current canonical head.
+    const head = await this.head();
+    // Under-tip plant: with head at H, a new block at height < H that we do not
+    // already hold poisons the tape while head() still reports the real tip.
+    // Re-applying a known hash at that height (idempotent) still uses the
+    // occupant/duplicate path above; missing occupant = refuse.
+    // height 0 is included — the height>0 parent gates used to skip genesis.
+    if (head && block.height < head.height && !occupant) {
+      throw new Error(
+        `indexer.height_below_tip: cannot apply height ${block.height} when canonical head is ${head.height} — unwind first if reorg, do not plant under tip`,
+      );
+    }
+    if (block.height > 0) {
+      const parent = this.#blocks.get(block.parentHash);
+      if (head && head.height === block.height - 1 && head.hash !== block.parentHash) {
+        throw new Error(
+          `indexer.parent_mismatch: block ${block.height} claims parent ${block.parentHash} but canonical head is ${head.hash}`,
+        );
+      }
+      // Gap: applying H+2 while head is H is not a reorg repair path (that is unwind).
+      if (head && block.height > head.height + 1) {
+        throw new Error(
+          `indexer.height_gap: cannot apply height ${block.height} when canonical head is ${head.height} — fill or re-index, do not jump`,
+        );
+      }
+      // Empty store may start at any height (startHeight); only enforce parent
+      // presence when we already hold the parent height.
+      if (head && block.height === head.height + 1 && !parent) {
+        throw new Error(`indexer.parent_missing: block ${block.height} parents ${block.parentHash} which is not in the store`);
+      }
     }
 
     this.#blocks.set(block.hash, {
@@ -136,6 +174,7 @@ export class MemoryProjectionStore implements ProjectionStore {
         case 'fill': {
           // (block hash, log index) is the chain's own identity for a log —
           // THE reason re-processing a block cannot double-count a trade.
+          // Addresses lowercased on write so EIP-55 spellings cannot dual-key.
           const key = (f: FillRecord) => f.blockHash === block.hash && f.logIndex === event.logIndex;
           if (this.#fills.some(key)) break;
           this.#fills.push({
@@ -146,17 +185,17 @@ export class MemoryProjectionStore implements ProjectionStore {
             price: positiveAmountOf(event.price, 'fill price'),
             quantity: positiveAmountOf(event.quantity, 'fill quantity'),
             takerSide: event.takerSide as TakerSide,
-            maker: event.maker,
-            taker: event.taker,
+            maker: event.maker.toLowerCase(),
+            taker: event.taker.toLowerCase(),
             blockTime: new Date(block.timestamp * 1000),
           });
           break;
         }
 
         case 'position': {
-          const row = this.#positions.find(
-            (p) => p.market === event.market && p.account === event.account && p.blockHeight === block.height,
-          );
+          // Same casing law as fills: one account is one account.
+          const account = event.account.toLowerCase();
+          const row = this.#positions.find((p) => p.market === event.market && p.account === account && p.blockHeight === block.height);
           const size = amountOf(event.size, 'position size');
           const entryPrice = nonNegativeAmountOf(event.entryPrice, 'position entry price');
           if (row) {
@@ -166,7 +205,7 @@ export class MemoryProjectionStore implements ProjectionStore {
           } else {
             this.#positions.push({
               market: event.market,
-              account: event.account,
+              account,
               size,
               entryPrice,
               blockHeight: block.height,
@@ -224,7 +263,9 @@ export class MemoryProjectionStore implements ProjectionStore {
     removed += levelsBefore - this.#levels.length;
 
     const positionsBefore = this.#positions.length;
-    this.#positions = keepNewest(this.#positions, (p) => `${p.market}|${p.account}`);
+    // Account already lowercased on write; key still lowercases so prune cannot
+    // dual-retain legacy mixed-case rows if any ever existed in memory.
+    this.#positions = keepNewest(this.#positions, (p) => `${p.market}|${p.account.toLowerCase()}`);
     removed += positionsBefore - this.#positions.length;
 
     // Orphan records below the horizon have outlived their forensic value —

@@ -16,6 +16,7 @@ import {
   defaultChainFor,
   railPostureStatus,
   selectPublicCheckoutRail,
+  selectPublicCheckoutRailDetailed,
   shouldRegisterCardSandbox,
   tryLiveChainFromEnv,
 } from './posture.js';
@@ -61,7 +62,7 @@ const payout = {
   amount: amt('100'),
   assetId: 'USDT',
   window: 'w',
-  destination: { kind: 'crypto', ref: '0xdest' },
+  destination: { kind: 'crypto', ref: '0x0000000000000000000000000000000000000004' },
 };
 
 // ══ THE DECLARATION ═════════════════════════════════════════════════════════
@@ -520,6 +521,58 @@ describe('selectPublicCheckoutRail', () => {
       throw new Error('should have refused');
     } catch (err) {
       expect((err as PublicCheckoutUnavailable).reason).toBe('none-configured');
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.checkout_rails_unset');
+    }
+  });
+
+  it('refuses an empty preference list as rails-unset, never as a live-rail outage', () => {
+    try {
+      selectPublicCheckoutRail(new RailRegistry([cardSandbox()]), [], 'allow-sandbox');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PublicCheckoutUnavailable);
+      expect((err as PublicCheckoutUnavailable).reason).toBe('none-configured');
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.checkout_rails_unset');
+    }
+  });
+
+  it('names PSP-unset when the only public candidate is an absent acquirer', () => {
+    const absent = new Proxy(cardSandbox(), {
+      get(target, prop, receiver) {
+        if (prop === 'id') return 'card-acquirer';
+        if (prop === 'mode') return 'absent';
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as CardSandboxAdapter;
+    try {
+      selectPublicCheckoutRail(new RailRegistry([absent]), ['card-acquirer'], 'allow-sandbox');
+      throw new Error('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PublicCheckoutUnavailable);
+      expect((err as PublicCheckoutUnavailable).reason).toBe('psp-unset');
+      expect((err as PublicCheckoutUnavailable).code).toBe('pay.psp_unset');
+    }
+  });
+
+  /**
+   * SPEC §5: log reason per decision. No cost/approval-rate invent — only the
+   * existing skip taxonomy. Detailed walk records every preference entry.
+   */
+  it('records the full preference walk (chosen + skip reasons, no invented scores)', () => {
+    const live = liveRail();
+    const rails = new RailRegistry([cryptoOn(new MemoryChain()), live]);
+    const decision = selectPublicCheckoutRailDetailed(rails, ['missing-rail', 'crypto-native', live.id], 'live-only');
+    expect(decision.adapter.id).toBe(live.id);
+    expect(decision.considered).toEqual([
+      { railId: 'missing-rail', outcome: 'skipped', reason: 'not-registered' },
+      { railId: 'crypto-native', outcome: 'skipped', reason: 'sandbox' },
+      { railId: live.id, outcome: 'chosen' },
+    ]);
+    // No cost / approval / geo fields on the decision — inventing those is DIRECTION §8.
+    for (const entry of decision.considered) {
+      expect(Object.keys(entry).sort()).toEqual(
+        entry.outcome === 'chosen' ? ['outcome', 'railId'].sort() : ['outcome', 'railId', 'reason'].sort(),
+      );
     }
   });
 });

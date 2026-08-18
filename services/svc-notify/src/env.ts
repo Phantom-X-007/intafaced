@@ -110,8 +110,14 @@ const schema = serviceEnvSchema
        */
       NOTIFY_REQUIRED_CHANNELS: blankAsAbsent(z.string().optional()),
 
-      /** Budget for one gateway call. A slow gateway must not stall the consumer. */
-      NOTIFY_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(250).max(30_000).default(5_000),
+      /**
+       * Budget for one gateway call. A slow gateway must not stall the consumer.
+       *
+       * Cap is `MAX_GATEWAY_TIMEOUT_MS` (ack_wait − lease slack = 25s), not 30s:
+       * above that the claim lease cannot both outlast the attempt and stay
+       * under bus redelivery, which reopens multi-replica double-send.
+       */
+      NOTIFY_GATEWAY_TIMEOUT_MS: z.coerce.number().int().min(250).max(25_000).default(5_000),
 
       /**
        * Characters before an SMS body is cut. Three GSM segments by default.
@@ -132,6 +138,17 @@ const schema = serviceEnvSchema
 
       /** How long an address-confirmation code stays valid. */
       NOTIFY_VERIFY_TTL_MINUTES: z.coerce.number().int().min(1).max(120).default(15),
+
+      /**
+       * Public trade base URL for v22.alerts marks (`GET /api/v1/markets` +
+       * `GET /api/v1/ticker/:symbol`). Same surface svc-bank already uses for
+       * loan marks — no invent, no shared table.
+       *
+       * Unset / blank → production keeps the dark MarkSource (canFire false).
+       * Set → live wiring; individual quotes may still refuse when the book is
+       * empty or trade is down.
+       */
+      TRADE_URL: blankAsAbsent(z.string().url().optional()),
     }),
   )
   .superRefine((parsed, ctx) => {

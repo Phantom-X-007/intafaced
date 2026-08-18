@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
+import { registerInternalCurriculumRoute } from './curriculum/internal-curriculum.js';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AcademyService } from './academy-service.js';
@@ -10,6 +11,8 @@ import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
 import { isUsable, NullStreamProvider, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
+import { createTradePublicPaperFlagPort } from './paper/market-flag-verify.js';
+import { parseAmbassadorIfcPayLawJson, parseAmbassadorRevenueShareLawJson } from './ambassadors/ifc-pay-rate-law.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -113,11 +116,15 @@ const academy = new AcademyService(
     maxRoomCapacity: env.ACADEMY_MAX_ROOM_CAPACITY,
     tournamentEnabled: env.ACADEMY_TOURNAMENT_ENABLED,
     paperTradingEnabled: env.ACADEMY_PAPER_TRADING_ENABLED,
+    paperMarketFlagPort: env.TRADE_URL ? createTradePublicPaperFlagPort({ baseUrl: env.TRADE_URL }) : undefined,
   },
   certXp,
 );
 
-export const appRouter = createAcademyRouter(academy);
+export const appRouter = createAcademyRouter(academy, {
+  ifcPayLaw: parseAmbassadorIfcPayLawJson(env.ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON),
+  revenueShareLaw: parseAmbassadorRevenueShareLawJson(env.ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON),
+});
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge
@@ -149,6 +156,8 @@ app.get('/ready', async () => ({
   // /ready is the least authenticated surface this service has.
   xp: { id: certXp.id, usable: certXp.usable, publishes: 'intafaced.identity.xp.earned' },
 }));
+
+registerInternalCurriculumRoute(app, env.INTERNAL_SERVICE_SECRET);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',

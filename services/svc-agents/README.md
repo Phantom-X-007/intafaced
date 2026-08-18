@@ -4,7 +4,7 @@
 
 Owns four things: a provider-agnostic model gateway, a per-task routing table, exact per-user metering billed through the ledger, and the `agent_actions` audit trail that makes an agent accountable.
 
-**What this service is not:** it is not an agent. Navigator, Support, Market Scanner and Merchant are separate work that registers a guardrail against this service and drives `openSession → think → act → settle → closeSession`. This PR is the runtime they will run on.
+**What this service is:** the fleet runtime **and** the five Stage-1 product factories (navigator / support / scanner / merchant / copy-intel). Boot upserts their guardrails into `agent_definitions`; each mounts a metered `*.runSession`. `riskCompliance`, `coach`, and `growth` are refuse/proposal doors (not fleet `runSession` factories). Portfolio / launch remain doctrine names only until product law. An ungrounded coach is a typed refuse, not a chatbot. Growth proposes and never publishes; a dark warehouse is not a funnel.
 
 It also holds no balances and prices nothing it does not have a rate for. Metered usage moves value exactly once, through `feeCharge`, into svc-ledger.
 
@@ -34,55 +34,65 @@ The alternative was to hardcode a hostname and a model id and add this service t
 
 Internal tRPC (§1). Every log query is scoped to `ctx.principal.userId` — an audit trail one user can query for another is a privacy incident wearing a feature's clothes.
 
-| Procedure       | Scope            | Input                                      | Output                                                         |
-| --------------- | ---------------- | ------------------------------------------ | -------------------------------------------------------------- |
-| `health`        | —                | —                                          | `{ ok, service }`                                              |
-| `routes.list`   | `agents:read`    | —                                          | tasks, output ceilings, and the **rate each is billed at**     |
-| `agent.get`     | `agents:read`    | `{ agentId }`                              | the guardrail, so a user can read it before granting a session |
-| `session.open`  | `agents:execute` | `{ agentId }`                              | session, with the guardrail bound to it                        |
-| `session.close` | `agents:execute` | `{ sessionId }`                            | settles open windows, then closes                              |
-| `session.log`   | `agents:read`    | `{ sessionId }`                            | every action, i18n-keyed                                       |
-| `run.complete`  | `agents:execute` | `{ sessionId, requestId, task, messages }` | text, token counts, cost, the audit row                        |
-| `usage.current` | `agents:read`    | `{ sessionId }`                            | what the open window would cost. Bills nothing                 |
-| `usage.settle`  | `admin:write`    | `{ sessionId, windowId }`                  | posts the charge. Idempotent                                   |
-| `log.mine`      | `agents:read`    | `{ limit }`                                | **the user-visible log** (§8.2)                                |
+| Procedure             | Scope            | Input                                      | Output                                                         |
+| --------------------- | ---------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| `health`              | —                | —                                          | `{ ok, service }`                                              |
+| `routes.list`         | `agents:read`    | —                                          | tasks, output ceilings, and the **rate each is billed at**     |
+| `agent.get`           | `agents:read`    | `{ agentId }`                              | the guardrail, so a user can read it before granting a session |
+| `session.open`        | `agents:execute` | `{ agentId }`                              | session, with the guardrail bound to it                        |
+| `session.close`       | `agents:execute` | `{ sessionId }`                            | settles open windows, then closes                              |
+| `session.log`         | `agents:read`    | `{ sessionId }`                            | every action, i18n-keyed                                       |
+| `run.complete`        | `agents:execute` | `{ sessionId, requestId, task, messages }` | text, token counts, cost, the audit row                        |
+| `usage.current`       | `agents:read`    | `{ sessionId }`                            | what the open window would cost. Bills nothing                 |
+| `usage.settle`        | `admin:write`    | `{ sessionId, windowId }`                  | posts the charge. Idempotent                                   |
+| `usage.settleSession` | `admin:write`    | `{ sessionId }`                            | settles every open / sealed-unbilled window. Idempotent        |
+| `log.mine`            | `agents:read`    | `{ limit }`                                | **the user-visible log** (§8.2)                                |
 
 `requestId` on `run.complete` is supplied by the caller and is the anti-double-bill handle: a client that retries after a timeout reuses it.
 
 ### Metered agent runs
 
-Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These three drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
+Most agent procedures are **pure**: they answer "what would this agent say" without a session, so the declared guardrail is enforced by nothing at call time and the usage is metered by nothing at all. These five drive the real runtime instead — `openSession → act → settle → closeSession` — so every tool call is guardrail-checked and audited, and the run settles through `UsageMeter` → ledger.
 
-| Procedure              | Scope            | Input                           | Output                                                 |
-| ---------------------- | ---------------- | ------------------------------- | ------------------------------------------------------ |
-| `scanner.runSession`   | `agents:execute` | plane, tier law, tier, tickers  | ranked signals + what the run cost                     |
-| `navigator.runSession` | `agents:execute` | plane, tier law, tier, `asks[]` | grounded findings, **unanswered asks**, what it cost   |
-| `support.runSession`   | `agents:execute` | plane, tier law, tier, `asks[]` | cited article keys, **escalation**, gaps, what it cost |
+| Procedure              | Scope            | Input                            | Output                                                 |
+| ---------------------- | ---------------- | -------------------------------- | ------------------------------------------------------ |
+| `scanner.runSession`   | `agents:execute` | plane, tier law, tier, tickers   | ranked signals + what the run cost                     |
+| `navigator.runSession` | `agents:execute` | plane, tier law, tier, `asks[]`  | grounded findings, **unanswered asks**, what it cost   |
+| `support.runSession`   | `agents:execute` | plane, tier law, tier, `asks[]`  | cited article keys, **escalation**, gaps, what it cost |
+| `merchant.runSession`  | `agents:execute` | plane, tier law, approval points | approval-rate watch + what the run cost                |
+| `copyIntel.runSession` | `agents:execute` | plane, leader fixtures           | audited write path + **directory** presentation + cost |
 
-All three are mutations, and all three report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
+Copy-Intel also exposes pure reads (no session): `copyIntel.buildStats` (fixtures → audited stats in **leaderId directory order**) and `copyIntel.presentDirectory` (search/filter directory, or typed refuse of returns-rank / marketing-board modes — SPEC-SOVEREIGN §4 / D26-P1-A5). Ok outputs never sort by PnL, win rate, or returns.
+
+All five are mutations, and all five report `metering` on **every** outcome including refusals: "we refused and billed you nothing" is a claim a caller should be able to read rather than infer. Amounts are decimal strings (§0.5).
 
 None of them calls the engine — a rank is arithmetic, and an answer is an echo of tool output — so each opens no usage window and settles to `0`. That zero is reported as a zero. A synthetic charge so a run "looks metered" would be a fabricated cost, which is the same class of lie as a fabricated price.
 
 `navigator.runSession` sends **every** ask to `runtime.act`, including ones a caller-supplied tier matrix wrongly granted. The runtime decides, not the caller and not the run: `trade.order` is not on `navigatorAgentGuardrail()`, so `act` refuses it and its executor is never reached. An ask that produced no fact comes back in `unanswered` with the reason and who refused it — the answer gets shorter, never padded. When nothing at all was reachable the run refuses outright rather than shipping an empty finding list dressed as a result.
 
-`support.runSession` is the same spine with the desk's own honesty rules, because this is the agent whose wrong answer a user acts on. A reply cites only the article keys `support.kb.search` actually returned. A KB that refused, missed, or was never asked for **escalates to a person** (`agents.support.escalated`) — a first-class product outcome, not an error, and never a hedged sentence. A run where no source at all was reachable **refuses** (`no_grounded_read`), because an `ok` carrying an empty finding list would read like an answer. A request to move money escalates before a session opens: refunds are `ops.support` plus a `packages/ledger-client` recipe, and reading the KB to discover that would bill a user for a lookup that cannot change the outcome. The requester is always `ctx.principal.userId`, so a ticket or account projection belonging to someone else refuses rather than reads, and the account projection is status + KYC tier with no balance field to leak (§0.6). Money tools are undeclared on `supportAgentGuardrail()`, so a tier matrix that granted `pay.refund` still never reaches its executor — `session-run.test.ts` asserts that over the whole `SUPPORT_MONEY_TOOLS` denylist.
+Identity-scoped navigator tools are also bound to the authenticated requester. `identity.session.read` refuses `subject_mismatch` when the supplied session belongs to another user; both the direct tool route and the metered runtime pass `ctx.principal.userId` into that check. The refusal is audited, returns no session data, and a tool-only run with no engine usage bills `0`.
+
+`support.runSession` is the same spine with the desk's own honesty rules, because this is the agent whose wrong answer a user acts on. A reply cites only the article keys `support.kb.search` actually returned. A KB that refused, missed, or was never asked for **escalates to a person** (`agents.support.escalated`) — a first-class product outcome, not an error, and never a hedged sentence. A run where no source at all was reachable **refuses** (`no_grounded_read`), because an `ok` carrying an empty finding list would read like an answer. When `identity.account.read` was asked and the fixture is missing, incomplete, owner-mismatched, or smuggles a balance field, the run **refuses** (`account_state_missing` / `balance_field_forbidden`) rather than answering from the KB as if the account were checked. Tool calls are **stoppable** via `AbortSignal`: abort returns `stopped`, settles/closes what opened, and never invents a silent `feeCharge`. A request to move money escalates before a session opens: refunds are `ops.support` plus a `packages/ledger-client` recipe, and reading the KB to discover that would bill a user for a lookup that cannot change the outcome. The requester is always `ctx.principal.userId`, so a ticket or account projection belonging to someone else refuses rather than reads, and the account projection is status + KYC tier with no balance field to leak (§0.6). Money tools are undeclared on `supportAgentGuardrail()`, so a tier matrix that granted `pay.refund` still never reaches its executor — `session-run.test.ts` asserts that over the whole `SUPPORT_MONEY_TOOLS` denylist.
 
 Also `GET /health` and `GET /ready`.
 
 ### `/ready` — honest, not decorative
 
-| Field                  | Meaning                                                                  |
-| ---------------------- | ------------------------------------------------------------------------ |
-| `ready`                | Process is up (schema + listen succeeded). Always true after boot.       |
-| `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**    |
-| `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).          |
-| `meteringEnabled`      | Billing kill-switch. Usage is still recorded when off.                   |
-| `tasks`                | Routing task ids currently configured.                                   |
-| `usefulPath.available` | Whether a **completion** can leave this process right now.               |
-| `usefulPath.task`      | First completion task that is currently servable, or null.               |
-| `usefulPath.residual`  | Why not / what this still is not (mock residual, orphan routes, outage). |
+| Field                     | Meaning                                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ready`                   | Process is up (schema + listen succeeded). Always true after boot.                                  |
+| `providerMode`            | `mock` (default) or `upstream`. **Mock is not production inference.**                               |
+| `providers[]`             | Logical provider ids + usable/healthy (no vendor names — §0.7).                                     |
+| `meteringEnabled`         | Billing kill-switch. When off (D26-P1-A6): audit-only forever — no usage_records, no feeCharge.     |
+| `meteringMode`            | `billed` when the kill-switch is on; `audit_only` when off.                                         |
+| `meteringAllowsFeeCharge` | Forever `false` while metering is off. Process-ready is not a silent bill.                          |
+| `fleet`                   | Stage-1 matrix card (agents / runSession / bootRegistered / missing routes). Zeros if not supplied. |
+| `tasks`                   | Routing task ids currently configured.                                                              |
+| `usefulPath.available`    | Whether a **completion** can leave this process right now.                                          |
+| `usefulPath.task`         | First completion task that is currently servable, or null.                                          |
+| `usefulPath.residual`     | Why not / what this still is not (mock residual, orphan routes, outage).                            |
 
-A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean Navigator / Support / the rest of the product fleet are registered — those agents are separate work. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
+A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean production inference is live — mock residual is intentional. Stage-1 product agents (navigator / support / scanner / merchant / copy-intel) **are** boot-registered and counted on `productAgentsRegistered` + the `fleet` card; registration is not the same as upstream AI. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
 
 The thin useful path on the gateway itself is `runUsefulPath` in `src/useful-path.ts` (one completion, no session/ledger). Fleet metering still goes through `openSession → think → settle`.
 
@@ -216,11 +226,11 @@ The service checks these; the database enforces them regardless.
 
 ## Kill-switches
 
-| Switch                                         | Effect when off                                                                                                                                     |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `agents.premiumTiers` flag (`packages/config`) | metered tiers unavailable — the module-wide gate in the admin console                                                                               |
-| `AGENTS_METERING_ENABLED=false`                | billing halts. Usage is **still recorded**: turning metering off must not also destroy the ability to find out what the fleet cost while it was off |
-| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close                                                                      |
+| Switch                                         | Effect when off                                                                                                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `agents.premiumTiers` flag (`packages/config`) | Registry / admin label only — `NOT_ENFORCED` today; **nothing in svc-agents reads it**. Do not treat the flag as a live billing gate.                                                       |
+| `AGENTS_METERING_ENABLED=false`                | billing halts. **No** `usage_records` / window / feeCharge — including settle of leftover windows. Action audit still holds token counts (knowable cost without inventing a deferred bill). |
+| `agent_definitions.enabled = false`            | one agent stops opening sessions; running ones are unaffected until they close. Boot re-register refreshes the guardrail only — it does **not** re-enable a killed agent.                   |
 
 ---
 
@@ -231,6 +241,7 @@ AGENTS_PROVIDER=mock                     # 'mock' (default) or 'upstream'
 AGENTS_FEE_ASSET_ID=IFC
 AGENTS_USAGE_WINDOW_MINUTES=60           # must divide 1440
 AGENTS_METERING_ENABLED=true
+ACADEMY_URL=http://svc-academy:4016      # coach spine; blank = empty catalog refuse
 
 # Only when AGENTS_PROVIDER=upstream. Secrets come from vault in prod (§9).
 AGENTS_UPSTREAM_BASE_URL=https://…
@@ -259,13 +270,19 @@ Pure layers (no database): cost arithmetic, guardrails, adapters, **readiness ho
 
 ### Residual (honest — not Done by this package alone)
 
-| Gap                                    | Why it is residual                                                                                                                                                                                                                          |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guardrail registration at boot         | `scanner.runSession` / `navigator.runSession` drive the runtime, but no guardrail is written to `agent_definitions` on startup, so `openSession` finds no agent in a real deployment. Registration is a deployment act and is still unwired |
-| Product agents (Support, Merchant, …)  | Register guardrails + drive the runtime; not seeded here                                                                                                                                                                                    |
-| Live data behind the navigator's tools | Tool inputs are caller-supplied fixtures. A real `svc-trade` / `svc-identity` call is the next slice; the refusals are already typed for it                                                                                                 |
-| Production inference                   | Requires `AGENTS_PROVIDER=upstream` + vault credentials                                                                                                                                                                                     |
-| Full premium-tier product surface      | Phase 5 agent product work on top of this runtime                                                                                                                                                                                           |
+| Gap                               | State on tip (W6 banked; W9 residual honesty)                                                                                                                                                                          |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardrail registration at boot    | **Wired** — `registerProductAgentsAtBoot` upserts the five Stage-1 factories into `agent_definitions` before listen (#1336).                                                                                           |
+| Stage-1 product agents (5)        | Factories + routing + metered `runSession` for navigator / support / scanner / merchant / copy-intel on tip (#1285 matrix 5/5).                                                                                        |
+| Fleet integrity pins              | Mount matrix (`#1296`), money-write register deny (`#1300`), request-id free-replay (`#1306`), sealed-unbilled recover (`#1286`), money-scope pin (`#1339`), hostile fleet pin (`#1433` + `bank.withdraw`).            |
+| Live data behind agent tools      | Caller-supplied fixtures. Dark / blank-tier / empty refuse unbilled. Live allowlists are Class X.                                                                                                                      |
+| i18n surface keys                 | svc-agents `COPY_KEYS` complete; packages/i18n EN parity banked (`#1337`).                                                                                                                                             |
+| Production inference              | `AGENTS_PROVIDER=upstream` + vault credentials (Class X). Mock residual on `/ready` is intentional.                                                                                                                    |
+| Agent pricing §8                  | Rates on routing table / env; blank rate refuses. Product magnitudes are Nitro-only.                                                                                                                                   |
+| Metering kill-switch              | **Wired** — `AGENTS_METERING_ENABLED=false` writes no `usage_records`, posts no `feeCharge` (including settle of leftover windows). Token counts on action audit only. Re-open usage_records only with product ruling. |
+| Admin multi-window settle         | **Wired** — `usage.settleSession` is `admin:write` multi-window (#1426). `usage.settle` remains per-window; `session.close` still settles.                                                                             |
+| v2 agents (portfolio…growth)      | Doctrine names only — no factory until product law.                                                                                                                                                                    |
+| Full premium-tier product surface | Phase 5 shell UX + live planes on top of this runtime. `agents.premiumTiers` flag is `NOT_ENFORCED` (registry only).                                                                                                   |
 
 The money and audit paths run against real Postgres with the ledger's in-memory reference implementation, which the conformance suite proves equivalent to svc-ledger's Postgres engine (§4.4). Real Postgres because every property worth testing here — append-only, the window seal, the unique request id — lives in the database, and a fake would test the fake.
 

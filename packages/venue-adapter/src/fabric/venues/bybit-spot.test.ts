@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { VenueCapabilityError, VenueUnavailableError } from '@intafaced/venue-contracts';
-import { BYBIT_IP_BACKOFF_MS, BybitSpotMarketData, bybitSymbolOf, subscribeRefusal, takerSideOf } from './bybit-spot.js';
+import { VenueCapabilityError, VenueCredentialsMissingError, VenueUnavailableError } from '@intafaced/venue-contracts';
+import {
+  BYBIT_IP_BACKOFF_MS,
+  BybitSpotAccount,
+  BybitSpotMarketData,
+  BybitSpotTrade,
+  bybitSymbolOf,
+  subscribeRefusal,
+  takerSideOf,
+} from './bybit-spot.js';
 import { AsyncFrameQueue, type HttpPort, type HttpResponse, type StreamHandle, type StreamPort } from '../transport.js';
 import { MaintainedBook } from '../book-feed.js';
 import { RateLimitGovernor } from '../rate-limit.js';
@@ -245,6 +253,24 @@ describe('refusals — never a book we cannot stand behind', () => {
     const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
     expect(snapshot.bids).toHaveLength(2);
     expect(snapshot.asks).toEqual([]);
+  });
+
+  it('TWO-SIDED DUST book: refused as no_depth — not a mid-able quote (D26-P1-T8)', async () => {
+    const http = new FakeHttp().queue(
+      orderbook(9, {
+        b: [['30000.00', '0.00000001']],
+        a: [['30002.00', '0.00000001']],
+      }),
+    );
+    const md = adapter(http, new FakeStream());
+    try {
+      await md.snapshotBook('BTC/USDT');
+      expect.unreachable('should have refused');
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('no_depth');
+      expect((error as VenueUnavailableError).message).toMatch(/not payout-grade/);
+    }
   });
 
   it('UNKNOWN market id: a non-zero retCode is refused as not_ready, never as an empty book', async () => {
@@ -859,5 +885,60 @@ describe('MaintainedBook on bybit-spot — subscribe, buffer, snapshot, join', (
     await book.close();
     stream.socket().close();
     await running;
+  });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE TRADING HALF — loud not_ready, never silent success
+// ════════════════════════════════════════════════════════════════════════════
+
+describe('BybitSpotTrade / BybitSpotAccount — typed not_ready', () => {
+  const order = {
+    symbol: 'BTC/USDT',
+    side: 'buy' as const,
+    type: 'limit' as const,
+    amount: 1n,
+    price: 1n,
+    clientOrderId: 'abc',
+  };
+  const keys = { venueId: 'bybit-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+
+  async function expectNotReady(run: () => Promise<unknown>, op: string) {
+    try {
+      await run();
+      expect.unreachable(`${op} should have thrown`);
+    } catch (error) {
+      expect(error).toBeInstanceOf(VenueUnavailableError);
+      expect((error as VenueUnavailableError).reason).toBe('not_ready');
+      expect((error as VenueUnavailableError).venueId).toBe('bybit-spot');
+    }
+  }
+
+  it('place/cancel/fetch/openOrders/balances throw not_ready WITH a trade-only key', async () => {
+    const trade = new BybitSpotTrade(keys);
+    const account = new BybitSpotAccount(keys);
+
+    await expectNotReady(() => trade.placeOrder(order), 'placeOrder');
+    await expectNotReady(() => trade.cancelOrder('BTC/USDT', 'abc'), 'cancelOrder');
+    await expectNotReady(() => trade.fetchOrder('BTC/USDT', 'abc'), 'fetchOrder');
+    await expectNotReady(() => trade.openOrders(), 'openOrders');
+    await expectNotReady(() => account.balances(), 'balances');
+  });
+
+  it('openOrders does not return [] — empty is indistinguishable from flat', async () => {
+    await expect(new BybitSpotTrade(keys).openOrders()).rejects.toThrow(VenueUnavailableError);
+  });
+
+  it('without credentials, throws missing-key rather than a fabricated order', async () => {
+    await expect(new BybitSpotTrade().placeOrder(order)).rejects.toThrow(VenueCredentialsMissingError);
+    await expect(new BybitSpotAccount().balances()).rejects.toThrow(VenueCredentialsMissingError);
+  });
+
+  it('public market data is unchanged — snapshotBook still needs no key', async () => {
+    const http = new FakeHttp().queue(orderbook(1));
+    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 50);
+    expect(snapshot.venueId).toBe('bybit-spot');
+    expect(snapshot.sequence).toBe(1);
+    expect(snapshot.bids).not.toHaveLength(0);
   });
 });

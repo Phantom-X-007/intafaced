@@ -82,6 +82,7 @@
 | In-app inbox                          | **Shipped** and tested                                                                                                                           |
 | Multi-channel adapter + delivery rows | **Shipped**; gateway contract stable                                                                                                             |
 | Real email/push/SMS to humans         | **Blocked on Class X secrets** — unconfigured channels refuse `channel.not_configured`                                                           |
+| Fan-out mountain vs §13 sockets       | **Explicit (D26-P1-O5):** mountain = `ops.notifications`; OOA = `socket.notify-*`. `notify.channels.socket` names the split on the wire          |
 | `ops.notifications` tracker `done`    | **Must not flip** while all out-of-app channels refuse in every real deploy                                                                      |
 | Tracker note age                      | Largely **accurate** (multi-channel exists; credentials missing). Prefer this pack + service README over scoreboard lines that only say “inbox.” |
 

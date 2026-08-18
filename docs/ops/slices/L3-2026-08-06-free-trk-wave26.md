@@ -15,7 +15,7 @@ Pay · prize pools · rates · Class M · dual-edit #800/#346.
 
 ## Done bar
 
-Focused vitest green; thrift soft; CI green.
+Focused vitest green; CI green.
 
 ## Paths allowlist
 

@@ -87,3 +87,15 @@ export function planAccrual(positions: readonly AccruingPosition[], aprBps: numb
 export function accrualDate(at: Date): string {
   return at.toISOString().slice(0, 10);
 }
+
+/**
+ * Start of the UTC accrual day.
+ *
+ * A scheduler may run at any hour without changing who earns that day. Using
+ * its wall-clock timestamp as the position cutoff would pay a full day's yield
+ * to a position opened minutes before a late run. The day boundary is the
+ * product cutoff; positions opened on or after it begin earning next day.
+ */
+export function accrualBoundary(at: Date): Date {
+  return new Date(`${accrualDate(at)}T00:00:00.000Z`);
+}

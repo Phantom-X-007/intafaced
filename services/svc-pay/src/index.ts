@@ -4,6 +4,7 @@ import { env } from './env.js';
 import { PayError, PayService } from './payment-service.js';
 import { UserMoneyService } from './user-money-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { BankPayoutAbsentAdapter } from './rails/bank-payout.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { RailRegistry } from './rails/registry.js';
@@ -20,12 +21,20 @@ import {
   shouldRegisterCardSandbox,
 } from './rails/posture.js';
 import { createPayRouter } from './router.js';
+import { MerchantPayoutDestinationStore } from './merchant-payout-destination.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
+import { KybService } from './kyb-service.js';
+import { PspModeService, assertNoThirdPartyMoneyLibrary } from './psp-mode.js';
+import { createKybPspRouter } from './kyb-router.js';
 import { SubMerchantService } from './submerchants.js';
 import { createSubMerchantRouter } from './submerchant-router.js';
+import { createSubscriptionRouter } from './subscription-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
+import { SubscriptionService, registerSubscriptionCycleRoutes } from './subscriptions/index.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -47,12 +56,17 @@ registerProcessHooks(
 /**
  * svc-pay — the payments core (§6.1).
  *
- * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode,
- * PayFac trees, smart routing, fraud scoring, the checkout builder,
- * subscriptions and plugins are each a separate tracker feature, and none of
- * them requires a change to the adapter interface — which is the claim
- * `src/rails/conformance.ts` exists to keep testable.
+ * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode
+ * (digital KYB + custom pricing durability, no third-party money library —
+ * D-S-10) is mounted beside merchant state. PayFac trees, smart routing, fraud
+ * scoring, the checkout builder, subscriptions and plugins are each a separate
+ * tracker feature, and none of them requires a change to the adapter interface
+ * — which is the claim `src/rails/conformance.ts` exists to keep testable.
  */
+
+// D-S-10 / Doctrine 5 — refuse boot if a third-party money orchestrator landed
+// in svc-pay's package.json. Socket.psp-partners stays a commercial relationship.
+assertNoThirdPartyMoneyLibrary();
 
 const sql = postgres(env.DATABASE_URL, {
   max: env.DATABASE_POOL_MAX,
@@ -84,7 +98,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
  */
 /**
  * Live crypto outbound broadcasts journal in Postgres so multi-replica fleets
- * share claim→put (MemoryBroadcastStore alone is single-process residual).
+ * share claim→putSigned→sendRaw→put (MemoryBroadcastStore alone is single-process).
  * Unconfigured/Memory chain paths ignore the store.
  */
 const broadcasts = new PostgresBroadcastStore(sql);
@@ -98,6 +112,10 @@ const cryptoRail = new CryptoNativeAdapter({
 });
 const rails = new RailRegistry([
   cryptoRail,
+  // Always registered. mode:'absent' — not a sandbox, so staging/prod boot is
+  // fine. Merchants who ask for bank settlement get pay.rail_not_live before any
+  // hold, instead of a silent "rail unknown" or a card-sandbox lie.
+  new BankPayoutAbsentAdapter(),
   ...(shouldRegisterCardSandbox(process.env)
     ? [
         new CardSandboxAdapter({
@@ -144,7 +162,9 @@ for (const { railId } of env.PAY_CHECKOUT_RAILS) {
  */
 const merchantWebhooks = new MerchantWebhookService(new PostgresMerchantWebhookStore(sql));
 
+const payoutDestinations = new MerchantPayoutDestinationStore(sql);
 const pay = new PayService(sql, ledger, rails, {
+  payoutDestinations,
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
   // NOT `railPosture.policy`. `PAY_ALLOW_SANDBOX_RAILS` relaxes the payout gate
@@ -152,14 +172,77 @@ const pay = new PayService(sql, ledger, rails, {
   // hosted checkout is reachable by strangers, so it follows the environment.
   publicCheckoutMovement: railPosture.publicCheckoutPolicy,
   checkoutRails: env.PAY_CHECKOUT_RAILS,
+  checkoutRiskBand: env.PAY_CHECKOUT_RISK_BAND,
   checkoutSessionTtlSeconds: env.PAY_CHECKOUT_SESSION_TTL_SECONDS,
   linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
   linkMaxTtlDays: env.PAY_LINK_MAX_TTL_DAYS,
   maxOpenSessionsPerLink: env.PAY_CHECKOUT_MAX_OPEN_SESSIONS,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   afterPaymentEvent: async (event) => {
     await merchantWebhooks.enqueue(event);
+    // Watch half of invoice-and-watch (SPEC §4): capture settles the execution.
+    if (event.type === 'payment.captured') {
+      await subscriptions.markExecutionSettledForPayment(event.payment.id);
+    }
   },
 });
+
+/**
+ * Subscriptions — mandate store + due runner (invoice path, no pull).
+ * Merchant surface is `createSubscriptionRouter`; cron is POST /internal/jobs/….
+ * Instantiated after `pay` so the invoice opener can create payments.
+ */
+const subscriptions = new SubscriptionService(
+  sql,
+  () => new Date(),
+  async (input) => {
+    const payment = await pay.createPayment({
+      merchantId: input.merchantId,
+      amount: input.amount,
+      assetId: input.assetId,
+      method: 'crypto',
+      railAdapter: 'crypto-native',
+      metadata: {
+        source: 'subscription',
+        subscriptionId: input.subscriptionId,
+        occurrence: String(input.occurrence),
+        customerId: input.customerId,
+        /*
+         * The BUSINESS key for the period, carried onto the payment so an
+         * operator reconciling a suspected double charge can see which PERIOD a
+         * payment belongs to without joining anything. Derived from
+         * (subscription, occurrence) and from nothing else — that is the
+         * difference between a retry that charges once and the shape that
+         * drained a pot here.
+         */
+        subscriptionCycleKey: input.idempotencyKey,
+      },
+    });
+    return { paymentId: payment.id };
+  },
+  {
+    /*
+     * EVERY RATE IS OWNER-ONLY, and the cycle has to refuse EARLIER than
+     * settlement does.
+     *
+     * `PAY_DEFAULT_FEE_BPS` is unset by default on purpose (see `env.ts`), and a
+     * merchant may carry no `pricing.feeBps` of its own. `prepareSettlement`
+     * already refuses to settle at an unknown price rather than settling at zero
+     * — "revenue that is not merely lost but invisible". A subscription must
+     * refuse to OPEN the charge, because by settlement time the customer has
+     * already paid and the refusal has arrived too late to be honest.
+     */
+    defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
+    resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
+    valueMovement: railPosture.policy,
+    /*
+     * Pre-charge notify port omitted: merchant webhooks are payment-shaped and
+     * fire AFTER money. A no-op port would record `attempted` while messaging
+     * nobody. Unwired writes notifyStatus skipped_unwired on the execution.
+     */
+  },
+);
 
 /**
  * User money in and out (§4.2). Merchant money is `PayService`; this is a user's
@@ -203,6 +286,13 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
 const merchantState = new MerchantStateService(sql);
 
 /**
+ * Digital KYB (live operator decide + history) and PSP custom-pricing durability.
+ * Path-disjoint from settlement / fraud. See `kyb-service.ts` / `psp-mode.ts`.
+ */
+const kyb = new KybService(sql);
+const pspMode = new PspModeService(sql);
+
+/**
  * PayFac sub-merchant trees and the permissions over them (§6.1).
  *
  * NO LEDGER CLIENT, ON PURPOSE. This service decides who may act on whose behalf
@@ -228,17 +318,22 @@ const subMerchants = new SubMerchantService(sql);
  * anyway.
  */
 export const appRouter = mergeRouters(
-  createPayRouter(pay, rails, userMoney),
+  // trees fence: gateway money paths check PayFac areas (merchant-ownership).
+  createPayRouter(pay, rails, userMoney, subMerchants, payoutDestinations),
   createMerchantStateRouter(merchantState),
+  createKybPspRouter(kyb, pspMode),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
   // own merchant node from the authenticated principal, because a merchant node
   // taken from a request body would let any merchant claim to be acting as any
   // other and the subtree fence would be measuring the wrong actor.
   createSubMerchantRouter(subMerchants, pay),
+  createSubscriptionRouter(subscriptions, pay, subMerchants),
 );
 export type { PayRouter } from './router.js';
 export type { MerchantStateRouter } from './merchant-state-router.js';
+export type { KybPspRouter } from './kyb-router.js';
 export type { SubMerchantRouter } from './submerchant-router.js';
+export type { SubscriptionRouter } from './subscription-router.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
@@ -300,6 +395,24 @@ app.get('/ready', async () => ({
 await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 
 /**
+ * Subscription charge cycle (SPEC §4). External cron, not setInterval.
+ *
+ * The handler used to be inline here. It moved into
+ * `subscriptions/internal-cycle-routes.ts` so a test can reach it over HTTP:
+ * `reachability` is a doctrine gate, and a route defined in the file that also
+ * reads env, opens the pool and calls `listen()` is not reachable from a suite.
+ * The mount is this line; there is no second copy of the handler.
+ *
+ * Crypto path opens a payment/invoice (never pull). Service credentials required
+ * so an unauthenticated caller cannot fan out invoices to every customer on the
+ * platform.
+ */
+registerSubscriptionCycleRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  subscriptions,
+});
+
+/**
  * STEP 1–3 — the merchant REST surface (reads + mutations + webhooks).
  *
  * Law: docs/adr/2026-08-07-pay-public-api-law.md. Auth is the same mount
@@ -319,6 +432,7 @@ await registerPublicPayRest(app, {
   pay,
   idempotency: new PostgresRestIdempotencyStore(sql),
   webhooks: merchantWebhooks,
+  trees: subMerchants,
 });
 
 /** Drain outbound merchant webhook deliveries (ADR §2.4 retry). */

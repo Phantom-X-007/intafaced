@@ -8,6 +8,7 @@ import { createLedgerRouter } from './router.js';
 import { writeSnapshots } from './ledger/reconcile.js';
 import { registerS2sHttp } from './s2s-http.js';
 import { registerOperatorHttp } from './operator-http.js';
+import { registerLedgerStatusHttp } from './status-http.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -57,23 +58,18 @@ export type AppRouter = typeof appRouter;
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, ...(await ledger.status()) }));
-
-app.get('/ready', async (_req, reply) => {
-  const status = await ledger.status();
-  if (!status.postingEnabled) return reply.code(503).send({ ready: false, reason: status.frozenReason });
-  return { ready: true };
-});
+registerLedgerStatusHttp(app, ledger, env.SERVICE_NAME);
 
 registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
 
 /**
- * §14.6 — the operator surface, and the first thing that can reach the freeze.
+ * §14.6 — the operator surface: freeze, unfreeze, and on-demand reconcile.
  *
- * `appRouter` above is exported for its TYPE and served on no port, so
- * `freeze`/`unfreeze`/`reconcile` — already written, already scoped to
- * `admin:treasury`, already durable and attributed in `posting_freeze` — were
- * callable by nothing. See the header of `operator-http.ts`.
+ * `appRouter` above is exported for its TYPE and served on no port, so the
+ * tRPC procedures alone were callable by nothing. `registerOperatorHttp`
+ * mounts GET/POST `/operator/freeze`, POST `/operator/unfreeze`, and
+ * POST `/operator/reconcile` behind `admin:treasury` + MFA. See
+ * `operator-http.ts`.
  */
 registerOperatorHttp(app, ledger, {
   secret: env.JWT_ACCESS_SECRET,

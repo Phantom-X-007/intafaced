@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { formatAmount } from '@intafaced/ledger-client';
 import { env } from './env.js';
@@ -9,6 +9,7 @@ import { TokenService } from './token-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createTokenRouter, type TokenRouter } from './router.js';
 import { registerInternalStake } from './internal-stake.js';
+import { registerInternalEmissions } from './internal-emissions.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -84,29 +85,12 @@ registerInternalStake(app, {
   accessOf: (userId) => token.accessOf(userId),
 });
 
-/**
- * Service-to-service / cron mint of the next sequential epoch.
- *
- * Prefer external cron → this endpoint (or tRPC mintEpoch with admin:treasury)
- * over the in-process auto-tick: a cron is pauseable, inspectable, and does not
- * depend on which replica holds the timer.
- */
-app.post('/internal/emissions/mint-next', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
-    return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
-  }
-  if (!env.EMISSIONS_ENABLED) {
-    return reply.code(503).send({ error: 'emissions are disabled', code: 'token.emissions_disabled' });
-  }
-  try {
-    const result = await token.mintNextEpoch();
-    return { epoch: result.epoch, minted: formatAmount(result.minted) };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'mint failed';
-    const code = err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : 'token.mint_failed';
-    // Fail closed: never 200 on a mint that did not land.
-    return reply.code(400).send({ error: message, code });
-  }
+// Cron mint. Lives in its own module so the kill-switch has a unit test —
+// see internal-emissions.ts (same extract pattern as internal-stake).
+registerInternalEmissions(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  emissionsEnabled: env.EMISSIONS_ENABLED,
+  mintNextEpoch: () => token.mintNextEpoch(),
 });
 
 // ── Optional emissions auto-tick ─────────────────────────────────────────────

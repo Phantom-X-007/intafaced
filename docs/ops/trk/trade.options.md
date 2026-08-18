@@ -3,8 +3,8 @@
 **Tracker id:** `trade.options`  
 **Title:** European options, cash-settled, full collateral in v1  
 **Module / phase:** `trade`  
-**Status on tip:** `ready` · blocked practically on **futures risk / multi-asset law** (Shehzad M3 adjacency + Denon product law)  
-**Tip freeze:** `origin/main` @ `56696496`  
+**Status on tip:** free / not started product — instrument enum only  
+**Tip freeze:** re-derive `origin/main` (pack prose re-verified 2026-08-09 against harvest)  
 **Pack type:** research only — **babysit implement**; no invent greeks or marks.
 
 ---
@@ -29,17 +29,18 @@
 | Full options engine              | **Not** shipped as titled product                   |
 | Collateral model                 | Title requires full collateral v1 — design residual |
 
-### 2.2 Hard blockers (coordination)
+### 2.2 Hard blockers (honest — 2026-08-09)
 
-| Blocker                 | Why                                          |
-| ----------------------- | -------------------------------------------- |
-| Futures risk M3         | Shehzad hard ownership — agents babysit only |
-| Multi-asset product law | Denon directs                                |
-| Mark integrity          | Same no-invent law as venue marks            |
+| Blocker                         | Why                                                                                                                                      |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Settlement fixing (D7)**      | Owner decision: which price source, window, expiry time, which funded account pays ITM holders — **the real gate**                       |
+| Mark integrity                  | Same no-invent law as venue marks                                                                                                        |
+| ~~Shehzad M3~~                  | **Dead as a block** — M3 reclaimed 2026-08-04; agents implement futures residual under tip product law, not "wait for Shehzad risk path" |
+| ~~Denon multi-asset law blank~~ | **Delivered as D-S-05** / instrument-enum ADR — model exists; does **not** free options settlement                                       |
 
-### 2.3 Open partner pile
+### 2.3 Partner path caution
 
-Denon money/integrity PRs (#445 tests, #433 matching, …) — no dual-edit; options craft would path-check matching/trade heavily.
+Options craft still path-checks matching/trade heavily — re-derive open PRs before dual-edit. #433 matching is **merged** (not a live hold).
 
 ---
 
@@ -88,26 +89,26 @@ Denon money/integrity PRs (#445 tests, #433 matching, …) — no dual-edit; opt
 
 ## 8 · Explicit non-goals
 
-- No implement while M3/human risk law open.
+- No invent settlement fixing or greeks while D7 is open.
 - No invent options chain UI.
 - No features.mjs done flip from research.
 
 ---
 
-## 9 · Why agents babysit only
+## 9 · Why agents do not freestyle options product
 
-| Board             | Role                                                    |
-| ----------------- | ------------------------------------------------------- |
-| Shehzad hard M3   | Futures risk — options risk will touch same money spine |
-| Denon product law | Multi-asset instruments direction                       |
-| Nitro Class X     | Any production go-live of risk                          |
+| Gate            | Role                                             |
+| --------------- | ------------------------------------------------ |
+| D7 settlement   | Owner-only price source / window / payer account |
+| Full collateral | Title requires it — no naked invent margin       |
+| Nitro Class X   | Any production go-live of risk                   |
 
-Research packs must not become shadow ADRs that force product law.
+Research packs must not become shadow ADRs that force product law. Shehzad M3 is **not** the blocker anymore.
 
 ## 10 · Pre-implement gate
 
-- [ ] Denon ADR or board row explicitly frees options craft
-- [ ] Path intersect clean vs #433 matching / money PRs
+- [ ] Owner settlement fixing (D7) written
+- [ ] Path intersect clean vs open money/matching PRs (re-derive; #433 is merged)
 - [ ] Full collateral model written with ledger recipes
 - [ ] Mark/oracle law for settlement
 
@@ -117,4 +118,4 @@ Until gates pass: **no** options UI, **no** invent IV boards, **no** features.mj
 
 ## 12 · One-line residual
 
-Babysit until Denon multi-asset law + Shehzad M3 risk path free; no invent greeks.
+Blocked on **options settlement fixing (D7)** — not on Shehzad M3 (reclaimed) or blank multi-asset law (D-S-05 delivered); no invent greeks.

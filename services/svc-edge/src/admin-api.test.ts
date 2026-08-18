@@ -89,6 +89,33 @@ describe('the treasury authority is not the module authority', () => {
   });
 });
 
+describe('control-plane honesty surface', () => {
+  it('names ws as outside the door so status cannot invent a green live socket halt', () => {
+    const { admin } = api();
+    const h = admin.honesty();
+    expect(h.outsideTheDoor.ws).toMatch(/not through this edge|socket\.ws-behind/i);
+    expect(h.enforceableModules).not.toContain('ws');
+    expect(h.enforceableModules).toContain('trade');
+    expect(h.killState.multiReplicaShared).toBe(false);
+  });
+
+  /**
+   * A2 residual (wave 8): `edge.gateway` is still NOT_ENFORCED. Status must say
+   * the live kill is the operator surface, not the flag — otherwise a console
+   * that only flips registry flags invents a green "gateway off" while the
+   * proxy still serves.
+   */
+  it('names edge.gateway as unenforced and points at the operator kill surface', () => {
+    const { admin } = api();
+    const h = admin.honesty();
+    expect(h.liveKillControl).toBe('operator-kill-switch');
+    expect(h.flagEdgeGateway.key).toBe('edge.gateway');
+    expect(h.flagEdgeGateway.enforced).toBe(false);
+    expect(h.flagEdgeGateway.note).toMatch(/NOT_ENFORCED|does not stop the proxy/i);
+    expect(h.flagEdgeGateway.note).toMatch(/kill-switches|operator/i);
+  });
+});
+
 describe('applying a toggle', () => {
   const operator = { userId: OPERATOR } as never;
 
@@ -203,6 +230,65 @@ describe('the audit trail', () => {
       admin.apply({ module: 'trade', disabled: i % 2 === 0, reason: `load test iteration number ${i}` }, operator);
     }
     expect(admin.read().audit).toHaveLength(KillSwitchState.AUDIT_LIMIT);
+  });
+});
+
+describe('ops honesty residual on the admin door', () => {
+  it('surfaces network unset ≠ clear and invent freeze refuse', () => {
+    const { admin } = api();
+    const ops = admin.opsHonesty();
+    expect(ops.network.signal.declaration).toBe('unset');
+    expect(ops.network.signal.partnerConfigured).toBe(false);
+    expect(ops.freeze.soleKey).toBe('ledger.posting');
+    expect(ops.freeze.inventProbes['trade freeze'].ok).toBe(false);
+    expect(ops.freeze.inventProbes['ledger.posting'].ok).toBe(true);
+    expect(ops.analytics.surface.mayLabelLive).toBe(false);
+  });
+
+  it('refuses partner_cleared without a screening partner and keeps the case', () => {
+    const { admin } = api();
+    admin.openComplianceCase({
+      id: 'hit-1',
+      kind: 'screening_hit',
+      subjectId: 'u1',
+      openedAt: '2026-08-09T00:00:00.000Z',
+    });
+    const r = admin.disposeComplianceCase('hit-1', { status: 'partner_cleared', partnerRef: 'slot' });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('refuse.partner_absent');
+    expect(admin.complianceQueueSnapshot().items.map((i) => i.id)).toEqual(['hit-1']);
+  });
+
+  it('probeWarehouse with injected SQL reading stamps lagSource=probed', async () => {
+    const prev = process.env.ANALYTICS_REPLICA_LEDGER_URL;
+    process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://analytics_ro:x@replica:5432/ledger';
+    try {
+      const state = new KillSwitchState();
+      const admin = createAdminApi(state, {
+        tokens,
+        ledger: null,
+        warehouseLagProbe: ({ nowMs }) => ({ lagSeconds: 4, measuredAt: nowMs }),
+      });
+      const door = await admin.probeWarehouse();
+      expect(door.lagSource).toBe('probed');
+      expect(door.lagSeconds).toBe(4);
+      expect(typeof door.lagMeasuredAt).toBe('number');
+      expect(door.replicaConfigured).toBe(true);
+      // No fixture facts on the door — empty, never invented volume.
+      expect(door.surfaceStatus).toBe('empty');
+      expect(door.mayLabelLive).toBe(false);
+    } finally {
+      if (prev === undefined) delete process.env.ANALYTICS_REPLICA_LEDGER_URL;
+      else process.env.ANALYTICS_REPLICA_LEDGER_URL = prev;
+    }
+  });
+
+  it('probeWarehouse with no replica URL stays unconfigured — no sockets', async () => {
+    const door = await api().admin.probeWarehouse();
+    expect(door.replicaConfigured).toBe(false);
+    expect(door.lagSource).toBe('unknown');
+    expect(door.mayLabelLive).toBe(false);
+    expect(door.surfaceStatus).not.toBe('ok');
   });
 });
 

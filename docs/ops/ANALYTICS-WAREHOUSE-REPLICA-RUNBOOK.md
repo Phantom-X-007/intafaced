@@ -32,14 +32,21 @@ Code gate: `assertAnalyticsReplicaRole(url, 'readonly')` refuses writer-looking 
 
 ## 3 · Lag SLO
 
-| Observed lag | Label   | Operator "live" badge             |
-| ------------ | ------- | --------------------------------- |
-| ≤ 30s        | live    | allowed only with real facts      |
-| ≤ 60s        | delayed | forbidden                         |
-| > 60s        | stale   | forbidden → surface `unavailable` |
-| unknown      | unknown | forbidden → surface `unavailable` |
+| Observed lag | Label   | Operator "live" badge                                             |
+| ------------ | ------- | ----------------------------------------------------------------- |
+| ≤ 30s        | live    | allowed only with **probed** lag + fresh measurement + real facts |
+| ≤ 60s        | delayed | forbidden                                                         |
+| > 60s        | stale   | forbidden → surface `unavailable`                                 |
+| unknown      | unknown | forbidden → surface `unavailable`                                 |
 
-Measure lag from the replica (`pg_stat_replication` / publisher apply lag). If you cannot measure it, treat as unknown.
+**Measurement law (wave-3):**
+
+- `lagSource=probed` + `lagMeasuredAt` within 60s → may claim live when lag ≤ 30s.
+- `ANALYTICS_REPLICA_LAG_SECONDS` alone is `lagSource=configured` — **never** `mayLabelLive` (a typed env number is not a measurement).
+- Stale measurement age (>60s) → lag **unknown**, even if the number said 5s.
+- SQL helper: `ANALYTICS_REPLICA_LAG_SQL` / `pg_last_xact_replay_timestamp` via injected probe (no DB socket inside contracts).
+
+If you cannot measure lag, treat as unknown.
 
 ---
 

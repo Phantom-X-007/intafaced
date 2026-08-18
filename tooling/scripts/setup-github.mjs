@@ -96,7 +96,7 @@ console.log('  ✓ squash-only · auto-delete merged branches · auto-merge enab
 const labels = [
   ['money-path', 'B60205', 'Touches the ledger, orders, or payments — review every line'],
   ['doctrine', '5319E7', 'Changes the rules themselves'],
-  ['blocked-main', 'D93F0B', 'main is red — highest priority in the repo'],
+  ['blocked-main', 'D93F0B', 'main is red — claim single main-heal lane; no product merges'],
   ['core', '0E8A16', 'Phase 1 — identity, ledger, token'],
   ['protocol-plane', '1D76DB', 'Non-custodial side — custody-scan applies'],
 ];

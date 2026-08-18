@@ -59,6 +59,7 @@ const SERVICES = [
   ['svc-protocol', 'protocol'],
   ['svc-indexer', 'indexer'],
   ['svc-notify', 'notify'],
+  ['svc-support', 'support'],
   ['svc-academy', 'academy'],
   ['svc-market', 'market'],
 ];

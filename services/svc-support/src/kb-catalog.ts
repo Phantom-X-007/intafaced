@@ -1,8 +1,9 @@
 /**
- * Support Stage-2 — KB catalog (TRK-ops.support).
+ * Support Stage-2 — KB catalog (TRK-ops.support / ops.kb-workflow content).
  *
  * i18n-keyed articles only. No third-party product/vendor names in keys.
  * No money advice that invents rates or refund amounts.
+ * No SLA timings.
  */
 
 import type { SupportKbArticle } from '@intafaced/contracts';
@@ -16,32 +17,91 @@ export const PLATFORM_KB_SPINE: readonly SupportKbArticle[] = [
     id: 'kb-account-access',
     titleKey: 'support.kb.account_access.title',
     bodyKey: 'support.kb.account_access.body',
+    version: 1,
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-security-basics',
     titleKey: 'support.kb.security_basics.title',
     bodyKey: 'support.kb.security_basics.body',
+    version: 1,
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-orders-status',
     titleKey: 'support.kb.orders_status.title',
     bodyKey: 'support.kb.orders_status.body',
+    version: 1,
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-deposit-withdraw-honest',
     titleKey: 'support.kb.deposit_withdraw.title',
     bodyKey: 'support.kb.deposit_withdraw.body',
+    version: 1,
+    revision: 1,
+    published: true,
   },
   {
     id: 'kb-paper-vs-live',
     titleKey: 'support.kb.paper_vs_live.title',
     bodyKey: 'support.kb.paper_vs_live.body',
+    version: 1,
+    revision: 1,
+    published: true,
   },
 ] as const;
 
+/** Identity stays `id`; content generations are integer versions ≥ 1. */
+export function kbVersionOf(article: Pick<SupportKbArticle, 'version' | 'revision'>): number {
+  return article.version ?? article.revision ?? 1;
+}
+
+function isPublished(article: SupportKbArticle): boolean {
+  return article.published !== false;
+}
+
+/**
+ * One row per id — the highest version. Search/list never duplicate identities.
+ */
+export function latestById(catalog: readonly SupportKbArticle[]): SupportKbArticle[] {
+  const best = new Map<string, SupportKbArticle>();
+  const order: string[] = [];
+  for (const article of catalog) {
+    if (!best.has(article.id)) order.push(article.id);
+    const current = best.get(article.id);
+    if (!current || kbVersionOf(article) >= kbVersionOf(current)) best.set(article.id, article);
+  }
+  return order.map((id) => ({ ...best.get(id)! }));
+}
+
+/** Public doors: published === true only. Missing flag is not a public article. */
+export function publishedOnly(catalog: readonly SupportKbArticle[]): SupportKbArticle[] {
+  return latestById(catalog.filter((a) => a.published === true)).map(toPublicKb);
+}
+
+/**
+ * Public wire: every article carries `version` (≥ 1). `revision` stays as the
+ * operator CAS alias of the same integer. Store-only columns stay off the wire.
+ */
+export function toPublicKb(article: SupportKbArticle): SupportKbArticle {
+  const version = kbVersionOf(article);
+  return {
+    id: article.id,
+    titleKey: article.titleKey,
+    bodyKey: article.bodyKey,
+    version,
+    revision: article.revision ?? version,
+    ...(article.published != null ? { published: article.published } : {}),
+  };
+}
+
 const VENDOR_SMELL = /\b(binance|coinbase|kraken|okx|bybit|deriv|metatrader|tradingview)\b/i;
 
-export type KbCatalogErrorCode = 'support.kb_invalid' | 'support.kb_vendor_name';
+export type KbCatalogErrorCode = 'support.kb_invalid' | 'support.kb_vendor_name' | 'support.kb_version_unknown';
 
 export class KbCatalogError extends Error {
   constructor(
@@ -53,11 +113,20 @@ export class KbCatalogError extends Error {
   }
 }
 
+function assertVersionNumber(value: number | undefined, label: string): void {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new KbCatalogError(`KB article ${label} must be an integer ≥ 1`, 'support.kb_invalid');
+  }
+}
+
 /** Validate a single article shape — refuse empty keys and vendor smuggle in keys. */
 export function assertKbArticle(article: SupportKbArticle): SupportKbArticle {
   if (!article.id?.trim() || !article.titleKey?.trim() || !article.bodyKey?.trim()) {
     throw new KbCatalogError('KB article requires id, titleKey, bodyKey', 'support.kb_invalid');
   }
+  assertVersionNumber(article.version, 'version');
+  assertVersionNumber(article.revision, 'revision');
   const blob = `${article.id} ${article.titleKey} ${article.bodyKey}`;
   if (VENDOR_SMELL.test(blob)) {
     throw new KbCatalogError('KB keys must stay vendor-clean', 'support.kb_vendor_name');
@@ -68,24 +137,50 @@ export function assertKbArticle(article: SupportKbArticle): SupportKbArticle {
   return article;
 }
 
-/** List platform spine (immutable copy). */
+/** List platform spine (immutable copy of latest published). */
 export function listPlatformKb(): readonly SupportKbArticle[] {
-  return PLATFORM_KB_SPINE.map((a) => assertKbArticle({ ...a }));
+  return publishedOnly(PLATFORM_KB_SPINE).map((a) => assertKbArticle({ ...a }));
 }
 
 /**
- * Search by id substring or key fragment. Empty query → full spine.
- * Never invents articles for unknown queries.
+ * Search by id substring or key fragment. Empty query → latest per id.
+ * Empty catalog and unknown queries stay empty — never a default article.
+ * Duplicate ids collapse to the highest version (search is latest-only).
  */
 export function searchKb(query: string, catalog: readonly SupportKbArticle[] = PLATFORM_KB_SPINE): readonly SupportKbArticle[] {
+  if (catalog.length === 0) return [];
+  const unique = latestById(catalog);
   const q = query.trim().toLowerCase();
-  if (!q) return catalog.map((a) => ({ ...a }));
-  return catalog.filter(
+  if (!q) return unique.map((a) => ({ ...a }));
+  return unique.filter(
     (a) => a.id.toLowerCase().includes(q) || a.titleKey.toLowerCase().includes(q) || a.bodyKey.toLowerCase().includes(q),
   );
 }
 
+/**
+ * Read one article.
+ * - omitted version → latest published (null when missing / unpublished)
+ * - explicit version → that immutable body, or named refuse (never a silent older body)
+ */
+export function getKb(
+  query: { id: string; version?: number },
+  catalog: readonly SupportKbArticle[] = PLATFORM_KB_SPINE,
+): SupportKbArticle | null {
+  const id = query.id.trim();
+  if (!id || catalog.length === 0) return null;
+  const rows = catalog.filter((a) => a.id === id);
+  if (query.version === undefined) {
+    const published = rows.filter(isPublished);
+    if (published.length === 0) return null;
+    return { ...latestById(published)[0]! };
+  }
+  const hit = rows.find((a) => kbVersionOf(a) === query.version);
+  if (!hit) {
+    throw new KbCatalogError('support.kb_version_unknown', 'support.kb_version_unknown');
+  }
+  return { ...hit };
+}
+
 export function getKbById(id: string, catalog: readonly SupportKbArticle[] = PLATFORM_KB_SPINE): SupportKbArticle | null {
-  const hit = catalog.find((a) => a.id === id);
-  return hit ? { ...hit } : null;
+  return getKb({ id }, catalog);
 }

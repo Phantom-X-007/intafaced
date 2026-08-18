@@ -44,9 +44,12 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
-import { methodIdKey } from './instruments.js';
+import { InstrumentError, methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
+import { affiliateLegAfterP2pRelease, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 
 /**
  * svc-p2p — PEER-TO-PEER TRADING WITH ESCROW (§6.2).
@@ -122,6 +125,11 @@ export type P2pErrorCode =
   | 'p2p.merchant_reason_required'
   | 'p2p.merchant_transition_invalid'
   | 'p2p.offer_limit_exceeded'
+  // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
+  | 'p2p.invalid_fee_bps'
+  // amount - ceil(fee) would leave the buyer with nothing — ledger refuses the
+  // release recipe forever after a decision would strand the pot as late.
+  | 'p2p.release_unpostable'
   // Deployment has no moderator allowlist and the caller does not hold
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'
@@ -159,6 +167,28 @@ export class P2pError extends Error {
   ) {
     super(message);
     this.name = 'P2pError';
+  }
+}
+
+/**
+ * A release must leave the buyer a positive leg after the house fee.
+ *
+ * `mulBps` ceils: amount = 1 scaled unit with any fee_bps ≥ 1 yields fee = 1 and
+ * buyer = 0. The ledger recipe then throws InvalidEntryError. If we wrote
+ * resolution=released first, settle would fail forever and the pot would sit
+ * as "late" with no postable terminal. Refuse before the decision (and at take,
+ * before any inventory is reserved).
+ */
+export function assertReleasePostable(amount: Amount, feeBps: number): void {
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+    throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+  }
+  const fee = mulBps(amount, feeBps);
+  if (amount - fee <= 0n) {
+    throw new P2pError(
+      `Trade amount is too small for a ${feeBps} bps fee — after the fee the buyer would receive nothing. Raise the size or set fee to 0.`,
+      'p2p.release_unpostable',
+    );
   }
 }
 
@@ -204,6 +234,22 @@ export interface TradeInstrumentAttacher {
    * `duringTake` scope that ends by writing it down.
    */
   refuseTake(input: { takerId: string; sellerId: string; tradeId?: string; sink: DenialSink }): Promise<never>;
+
+  /**
+   * Method ids the owner can actually be paid on right now, for one fiat.
+   *
+   * Keys are lowercased (same rule as `methodIdKey` / instrument storage). Used
+   * by sell-offer create and the board so a method with no live destination is
+   * never advertised — closing the residual named on `TAKE_REFUSED_MESSAGE`.
+   * Empty operator registry ⇒ empty set: a leftover destination is not a rail.
+   */
+  liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>>;
+
+  /**
+   * Method ids an operator has registered and left enabled. Empty = no payable
+   * rail exists yet — not "any string the maker types is a method".
+   */
+  enabledMethodKeys(): Promise<ReadonlySet<string>>;
 }
 
 export interface P2pServiceOptions {
@@ -236,6 +282,16 @@ export interface P2pServiceOptions {
    * it. `index.ts` supplies it from `MerchantService`; tests supply a stub.
    */
   merchantStatusOf?: (userId: string) => Promise<MerchantStatus | null>;
+  /**
+   * Identity affiliate accrue after house p2p fees post. Default noop.
+   * Failures must not unwind escrowRelease.
+   */
+  affiliateAccrue?: AffiliateAccruePort;
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind escrowRelease. Body is `{ feeEventId }` only.
+   */
+  affiliatePayout?: AffiliatePayoutPort;
 }
 
 /**
@@ -314,6 +370,12 @@ export interface DisputeRecord {
   id: string;
   tradeId: string;
   openedBy: string;
+  /**
+   * `party` — a natural person called `disputes.open`.
+   * `timeout` — the fiat_sent clock opened it; `openedBy` is the party of
+   * interest (buyer who marked fiat sent), not a filing attribution.
+   */
+  openedVia: 'party' | 'timeout';
   reason: string;
   evidence: readonly EvidenceEntry[];
   moderatorId: string | null;
@@ -378,6 +440,7 @@ interface DisputeRow {
   id: string;
   trade_id: string;
   opened_by: string;
+  opened_via: 'party' | 'timeout';
   reason: string;
   evidence: unknown;
   moderator_id: string | null;
@@ -487,6 +550,8 @@ export class P2pService {
   private readonly offerLimits: OfferLimitPolicy;
   private readonly merchantStatusOf: ((userId: string) => Promise<MerchantStatus | null>) | undefined;
   private readonly instruments: TradeInstrumentAttacher;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
   private tradingEnabled: boolean;
 
   constructor(
@@ -496,13 +561,19 @@ export class P2pService {
     options: P2pServiceOptions,
   ) {
     this.instruments = options.instruments;
-    this.feeBps = options.feeBps ?? 0;
+    const feeBps = options.feeBps ?? 0;
+    if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
+      throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+    }
+    this.feeBps = feeBps;
     this.deadlines = options.deadlines ?? DEFAULT_DEADLINES;
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
     this.tradingEnabled = options.tradingEnabled ?? true;
     this.referencePrices = options.referencePrices;
     this.offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
     this.merchantStatusOf = options.merchantStatusOf;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   /**
@@ -557,7 +628,39 @@ export class P2pService {
     // refuse at take, honestly — breaking live offers to close a hole would
     // cost makers real liquidity for a fix they did not ask for.
     if (!Array.isArray(input.methods) || input.methods.length === 0) {
-      throw new PricingError('An offer must declare at least one payment method it accepts', 'p2p.offer_methods_required');
+      throw new PricingError(resolveP2pCopy(P2P_COPY.offerMethodsRequired), 'p2p.offer_methods_required');
+    }
+
+    /**
+     * AN EMPTY REGISTRY IS NOT A PAYABLE RAIL.
+     *
+     * `offer_method_no_destination` says "this method exists; go register a
+     * destination." That is the wrong sentence when no operator has registered
+     * a schema: it makes an invented string look like a live rail the seller
+     * merely forgot to fill in. Buy offers used to skip every method check, so
+     * the public board could advertise whatever the maker typed. Both sides
+     * now require an enabled operator schema first. Destinations stay the
+     * second gate, and only for sell.
+     */
+    const registered = await this.instruments.enabledMethodKeys();
+    if (missingSellDestinations(input.methods, registered).length > 0) {
+      throw new InstrumentError(resolveP2pCopy(P2P_COPY.methodUnknown), 'p2p.instrument_method_unknown');
+    }
+
+    /**
+     * SELL OFFERS ONLY LIST METHODS THE MAKER CAN BE PAID ON.
+     *
+     * A sell maker is the seller. Advertising a method with no active destination
+     * turns every take attempt into a confirm/deny of "do they hold details for
+     * this rail" — the residual left after take refusals became uniform. Buy
+     * offers skip this: the seller is the taker, unknown at post time.
+     */
+    if (input.side === 'sell') {
+      const live = await this.instruments.liveMethodKeys(input.makerId, fiatCurrency);
+      const missing = missingSellDestinations(input.methods, live);
+      if (missing.length > 0) {
+        throw new PricingError(resolveP2pCopy(P2P_COPY.offerMethodNoDestination), 'p2p.offer_method_no_destination');
+      }
     }
 
     /**
@@ -568,16 +671,16 @@ export class P2pService {
      * scams. The merchant programme is the record that justifies a bigger
      * promise, so the badge and the ceiling are one control seen from two sides.
      *
-     * CREATE only, and no ceiling is configured by default — `merchant-limits.ts`
-     * says why the numbers are an operator decision rather than invented here.
+     * CREATE only. Standing is read on every create (or treated as not-in-
+     * programme when no reader is wired) so a non-approved maker never inherits
+     * the merchant slot. Missing reader + armed policy still applies the
+     * standard band — skipping the check would let every size through.
      * Existing offers are never re-judged: breaking live liquidity to apply a
      * new rule costs makers real money for a change they did not ask for.
      */
-    if (this.merchantStatusOf) {
-      const standing = await this.merchantStatusOf(input.makerId);
-      const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
-      if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
-    }
+    const standing = this.merchantStatusOf ? await this.merchantStatusOf(input.makerId) : null;
+    const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
+    if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
 
     const totalAmt = input.totalAmt ?? input.maxAmt;
     const offerId = input.offerId ?? crypto.randomUUID();
@@ -639,14 +742,67 @@ export class P2pService {
        ORDER BY price ASC, created_at ASC
        LIMIT ${limit}
     `;
-    return rows.map(toOffer);
+    const offers = rows.map(toOffer);
+    return this.projectBoardMethods(offers);
   }
 
   async getOffer(offerId: string): Promise<OfferRecord> {
+    const offer = await this.loadOfferRaw(offerId);
+    const [projected] = await this.projectBoardMethods([offer]);
+    // Zero payable methods is not on the public board — same answer as missing,
+    // so get-by-id cannot confirm "listed rails, no destination / no schema".
+    if (!projected) throw new P2pError(`Offer ${offerId} not found`, 'p2p.offer_not_found');
+    return projected;
+  }
+
+  /** Maker management / take path — unfiltered methods as stored. */
+  private async loadOfferRaw(offerId: string): Promise<OfferRecord> {
     const rows = await this.sql<OfferRow[]>`SELECT * FROM p2p.offers WHERE id = ${offerId}`;
     const row = rows[0];
     if (!row) throw new P2pError(`Offer ${offerId} not found`, 'p2p.offer_not_found');
     return toOffer(row);
+  }
+
+  /**
+   * Board honesty: only methods that are actually payable.
+   *
+   * Sell offers expose methods with a live destination on an enabled schema.
+   * Buy offers cannot advertise a destination (the seller is the taker) but
+   * they still must not list a method the operator has never registered —
+   * that is how an empty registry looks like a rail. Offers with zero payable
+   * methods drop off the board: an empty methods list would re-open the
+   * "accept anything" take oracle that create already refuses.
+   *
+   * Live lookup is cached per (maker, fiat) inside one call so a 50-row board
+   * does not issue 50 identical queries for one maker.
+   */
+  private async projectBoardMethods(offers: OfferRecord[]): Promise<OfferRecord[]> {
+    const registered = await this.instruments.enabledMethodKeys();
+    const cache = new Map<string, ReadonlySet<string>>();
+    const liveFor = async (ownerId: string, fiat: string): Promise<ReadonlySet<string>> => {
+      const key = `${ownerId}\0${fiat}`;
+      let hit = cache.get(key);
+      if (!hit) {
+        hit = await this.instruments.liveMethodKeys(ownerId, fiat);
+        cache.set(key, hit);
+      }
+      return hit;
+    };
+
+    const out: OfferRecord[] = [];
+    for (const offer of offers) {
+      if (offer.side !== 'sell') {
+        const methods = methodsWithLiveDestination(offer.methods, registered);
+        if (methods.length === 0) continue;
+        out.push(methods === offer.methods ? offer : { ...offer, methods });
+        continue;
+      }
+      const live = await liveFor(offer.makerId, offer.fiatCurrency);
+      if (!sellOfferBoardable(offer.methods, live)) continue;
+      const methods = methodsWithLiveDestination(offer.methods, live);
+      out.push(methods === offer.methods ? offer : { ...offer, methods });
+    }
+    return out;
   }
 
   /**
@@ -660,9 +816,59 @@ export class P2pService {
       RETURNING *
     `;
     if (!rows[0]) {
-      const existing = await this.getOffer(offerId);
+      const existing = await this.loadOfferRaw(offerId);
       if (existing.makerId !== makerId) throw new P2pError('Only the maker can close an offer', 'p2p.not_a_party');
       return existing;
+    }
+    return toOffer(rows[0]);
+  }
+
+  /**
+   * Pause an active offer — hide remaining liquidity without closing.
+   *
+   * The schema has always carried `paused` as a distinct status (not a flag): a
+   * paused offer is invisible on the board and cannot be taken, but open trades
+   * against it continue and the maker can resume. Closing withdraws inventory
+   * permanently; pausing is the reversible cousin the enum promised and the
+   * API never exposed.
+   */
+  async pauseOffer(offerId: string, makerId: string): Promise<OfferRecord> {
+    const rows = await this.sql<OfferRow[]>`
+      UPDATE p2p.offers SET status = 'paused', updated_at = now()
+       WHERE id = ${offerId} AND maker_id = ${makerId} AND status = 'active'
+      RETURNING *
+    `;
+    if (!rows[0]) {
+      const existing = await this.loadOfferRaw(offerId);
+      if (existing.makerId !== makerId) throw new P2pError('Only the maker can pause an offer', 'p2p.not_a_party');
+      if (existing.status === 'paused') return existing;
+      if (existing.status === 'closed') {
+        throw new P2pError(`Offer ${offerId} is closed and cannot be paused`, 'p2p.offer_not_active');
+      }
+      throw new P2pError(`Offer ${offerId} is ${existing.status} and cannot be paused`, 'p2p.offer_not_active');
+    }
+    return toOffer(rows[0]);
+  }
+
+  /**
+   * Resume a paused offer onto the board. Closed stays closed — re-list is a
+   * new offer, not a resume of one the maker already withdrew.
+   */
+  async resumeOffer(offerId: string, makerId: string): Promise<OfferRecord> {
+    this.assertTradingEnabled();
+    const rows = await this.sql<OfferRow[]>`
+      UPDATE p2p.offers SET status = 'active', updated_at = now()
+       WHERE id = ${offerId} AND maker_id = ${makerId} AND status = 'paused'
+      RETURNING *
+    `;
+    if (!rows[0]) {
+      const existing = await this.loadOfferRaw(offerId);
+      if (existing.makerId !== makerId) throw new P2pError('Only the maker can resume an offer', 'p2p.not_a_party');
+      if (existing.status === 'active') return existing;
+      if (existing.status === 'closed') {
+        throw new P2pError(`Offer ${offerId} is closed and cannot be resumed`, 'p2p.offer_not_active');
+      }
+      throw new P2pError(`Offer ${offerId} is ${existing.status} and cannot be resumed`, 'p2p.offer_not_active');
     }
     return toOffer(rows[0]);
   }
@@ -701,8 +907,12 @@ export class P2pService {
     takerId: string;
     amount: Amount;
     method: string;
-    /** Overrides the service default — e.g. after applying a rank fee discount (§4.1). */
-    feeBps?: number;
+    /**
+     * No per-take fee override. Fee is the service default only (`P2P_FEE_BPS` /
+     * constructor). Rank discounts (§4.1) are product law not yet wired — when
+     * they land, they must change the service fee policy, not a caller field
+     * that lets a hostile take set fee to zero.
+     */
     tradeId?: string;
   }): Promise<TradeRecord> {
     this.assertTradingEnabled();
@@ -730,12 +940,14 @@ export class P2pService {
     takerId: string;
     amount: Amount;
     method: string;
-    feeBps?: number;
   }): Promise<TradeRecord> {
     // Read the offer once, unlocked, purely to decide whether a reference price
     // is needed. Fetching a mark price is a network call; holding the offer's
     // row lock across it would serialise every taker behind the slowest feed.
-    const preview = await this.getOffer(input.offerId);
+    // Raw load: board projection must not make an unboardable sell look like a
+    // missing offer mid-take. Take still refuses with the uniform message when
+    // the destination is gone; get/list stay honest for strangers.
+    const preview = await this.loadOfferRaw(input.offerId);
     const referencePrice =
       preview.priceType === 'float' ? ((await this.referencePrices?.price(preview.asset, preview.fiatCurrency)) ?? null) : null;
 
@@ -816,7 +1028,12 @@ export class P2pService {
           const now = await txNow(tx);
           const deadlineAt = deadlineFor('created', now, this.deadlines);
           const deadlines = withDeadline({}, 'created', deadlineAt);
-          const feeBps = input.feeBps ?? this.feeBps;
+          // Fee is constructor/`P2P_FEE_BPS` only — never a take-time argument.
+          // Integer range already validated in the constructor.
+          const feeBps = this.feeBps;
+          // Before inventory moves: a dust take that cannot post a release would
+          // lock value into a trade that can never settle.
+          assertReleasePostable(input.amount, feeBps);
 
           await tx`
             UPDATE p2p.offers
@@ -1011,6 +1228,16 @@ export class P2pService {
       if (trade.sellerId !== actorId) {
         throw new P2pError('Only the seller can confirm the fiat was received', 'p2p.not_the_seller');
       }
+      // Same legible refuse as cancel: a disputed escrow terminates only on a
+      // human ruling. Without this, the seller hits the DB trigger as a raw
+      // check_violation instead of `p2p.dispute_already_open` — money still
+      // safe, but the API lied about which path failed.
+      if (trade.status === 'disputed') {
+        throw new P2pError('A disputed trade is resolved by a moderator, not by the seller confirming receipt', 'p2p.dispute_already_open');
+      }
+      // Defense in depth: take already refuses unpostable dust, but a trade row
+      // could predate the gate or arrive via a future writer.
+      assertReleasePostable(trade.amount, trade.feeBps);
       await this.recordDecision({ tradeId, to: 'released', resolution: 'released', reason: 'seller.confirmed' });
       return this.settle(tradeId);
     });
@@ -1130,9 +1357,9 @@ export class P2pService {
         const opening = envelopesFor(supplied, input.openedBy, now, 0);
 
         const rows = await tx<DisputeRow[]>`
-          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, reason, evidence, status, deadline_at, opened_at)
+          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, opened_via, reason, evidence, status, deadline_at, opened_at)
           VALUES (
-            ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${input.reason ?? ''},
+            ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${origin}, ${input.reason ?? ''},
             ${tx.json(opening as never)}, 'open', ${deadlineAt}, ${now}
           )
           ON CONFLICT (trade_id) DO NOTHING
@@ -1382,6 +1609,13 @@ export class P2pService {
       );
     }
 
+    // Release path must post; refuse before the ruling transaction if the fee
+    // would zero the buyer leg (same dust trap as confirmFiatReceived).
+    if (input.resolution === 'release') {
+      const trade = await this.getTrade(input.tradeId);
+      assertReleasePostable(trade.amount, trade.feeBps);
+    }
+
     return withMoneySpan(
       'p2p.resolveDispute',
       {
@@ -1583,6 +1817,16 @@ export class P2pService {
    * responsibility.
    */
   async settle(tradeId: string): Promise<TradeRecord> {
+    try {
+      return await this.settleOnce(tradeId);
+    } catch (err) {
+      // Durable reason for late pots — survives process restart; cleared on stamp.
+      await this.persistSettleFailure(tradeId, err);
+      throw err;
+    }
+  }
+
+  private async settleOnce(tradeId: string): Promise<TradeRecord> {
     const trade = await this.getTrade(tradeId);
 
     if (!trade.resolution) throw new P2pError(`Trade ${tradeId} has no recorded resolution to settle`, 'p2p.escrow_missing');
@@ -1602,6 +1846,8 @@ export class P2pService {
           feeBps: trade.feeBps,
         }),
       );
+      await this.notifyP2pAffiliateAccrue(trade, fee);
+      await this.notifyP2pAffiliatePayout(trade, fee);
     } else if (trade.resolution === 'refunded') {
       await this.ledger.post(
         recipes.escrowRefund({
@@ -1635,10 +1881,60 @@ export class P2pService {
     await this.announceSettlement(trade, fee);
 
     const rows = await this.sql<TradeRow[]>`
-      UPDATE p2p.p2p_trades SET settled_at = now() WHERE id = ${tradeId} AND settled_at IS NULL
+      UPDATE p2p.p2p_trades
+         SET settled_at = now(),
+             last_settle_error = NULL,
+             last_settle_error_at = NULL
+       WHERE id = ${tradeId} AND settled_at IS NULL
       RETURNING *
     `;
     return rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
+  }
+
+  /** Best-effort; never throws. escrowRelease already posted. */
+  private async notifyP2pAffiliateAccrue(trade: TradeRecord, fee: Amount): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterP2pRelease({
+        tradeId: trade.id,
+        sellerId: trade.sellerId,
+        feeAmount: fee,
+        feeAsset: trade.asset,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. escrowRelease already posted. */
+  private async notifyP2pAffiliatePayout(trade: TradeRecord, fee: Amount): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterP2pRelease({
+        tradeId: trade.id,
+        sellerId: trade.sellerId,
+        feeAmount: fee,
+        feeAsset: trade.asset,
+      }),
+    );
+  }
+
+  /**
+   * Write the last settle failure onto the late row. Never throws: a secondary
+   * write failure must not mask the original settle error the caller needs.
+   */
+  private async persistSettleFailure(tradeId: string, err: unknown): Promise<void> {
+    const message = (err instanceof Error ? err.message : String(err)).slice(0, 2000);
+    try {
+      await this.sql`
+        UPDATE p2p.p2p_trades
+           SET last_settle_error = ${message},
+               last_settle_error_at = now()
+         WHERE id = ${tradeId}
+           AND resolved_at IS NOT NULL
+           AND settled_at IS NULL
+      `;
+    } catch {
+      // best-effort — the throw from settle still surfaces
+    }
   }
 
   private async announceSettlement(trade: TradeRecord, fee: Amount): Promise<void> {
@@ -1933,6 +2229,9 @@ export class P2pService {
       resolutionReason: string | null;
       resolvedAt: Date;
       ageSeconds: number;
+      /** Last settle failure if any attempt ran; null if not yet re-driven. */
+      lastSettleError: string | null;
+      lastSettleErrorAt: Date | null;
     }>
   > {
     const lim = Math.min(Math.max(limit, 1), 200);
@@ -1943,9 +2242,12 @@ export class P2pService {
         resolution: TradeResolution | null;
         resolution_reason: string | null;
         resolved_at: Date;
+        last_settle_error: string | null;
+        last_settle_error_at: Date | null;
       }>
     >`
-      SELECT id, status, resolution, resolution_reason, resolved_at
+      SELECT id, status, resolution, resolution_reason, resolved_at,
+             last_settle_error, last_settle_error_at
         FROM p2p.p2p_trades
        WHERE resolved_at IS NOT NULL AND settled_at IS NULL
        ORDER BY resolved_at ASC
@@ -1954,6 +2256,12 @@ export class P2pService {
     const nowMs = now.getTime();
     return rows.map((r) => {
       const resolvedAt = r.resolved_at instanceof Date ? r.resolved_at : new Date(r.resolved_at);
+      const lastSettleErrorAt =
+        r.last_settle_error_at == null
+          ? null
+          : r.last_settle_error_at instanceof Date
+            ? r.last_settle_error_at
+            : new Date(r.last_settle_error_at);
       return {
         tradeId: r.id,
         status: r.status,
@@ -1961,6 +2269,8 @@ export class P2pService {
         resolutionReason: r.resolution_reason,
         resolvedAt,
         ageSeconds: Math.max(0, Math.floor((nowMs - resolvedAt.getTime()) / 1000)),
+        lastSettleError: r.last_settle_error,
+        lastSettleErrorAt,
       };
     });
   }
@@ -2026,18 +2336,22 @@ export class P2pService {
   /**
    * DOCTRINE §0.6, as a query.
    *
-   * "How much is in P2P escrow" has two independent answers: sum the trades
-   * this service believes hold escrow, and read the ledger's `escrow` accounts.
-   * They must agree per (seller, asset). That they CAN be compared is the whole
-   * reason value lives in the ledger and only terms live here.
+   * "How much is in P2P escrow" has two independent answers: this service's
+   * trade terms, and the ledger's per-trade escrow pots. They must agree
+   * **per trade**. Aggregating by (seller, asset) first would hide
+   * equal-and-opposite cross-trade theft — the pots are purpose-keyed for a
+   * reason, and the alarm has to use the same grain.
    *
    * A trade that is decided but not yet settled still holds escrow — the post
    * has not happened — so it counts on this side too.
    */
   async escrowIntegrity(): Promise<
-    { ok: true } | { ok: false; drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> }
+    | { ok: true }
+    | {
+        ok: false;
+        drift: Array<{ tradeId: string; sellerId: string; asset: string; expected: string; actual: string }>;
+      }
   > {
-    // Per-trade pots (L3-4). Aggregate-by-seller would hide cross-trade theft.
     const rows = await this.sql<Array<{ id: string; seller_id: string; asset: string; amount: string }>>`
       SELECT id, seller_id, asset, amount
         FROM p2p.p2p_trades
@@ -2045,26 +2359,17 @@ export class P2pService {
           OR (resolution IN ('released', 'refunded') AND settled_at IS NULL)
     `;
 
-    const bySeller = new Map<string, { expected: bigint; actual: bigint; sellerId: string; asset: string }>();
-
+    const drift: Array<{ tradeId: string; sellerId: string; asset: string; expected: string; actual: string }> = [];
     for (const row of rows) {
-      const key = `${row.seller_id}\0${row.asset}`;
-      const expectedPart = parseAmount(row.amount);
-      const actualPart = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
-      const cur = bySeller.get(key) ?? { expected: 0n, actual: 0n, sellerId: row.seller_id, asset: row.asset };
-      cur.expected += expectedPart;
-      cur.actual += actualPart;
-      bySeller.set(key, cur);
-    }
-
-    const drift: Array<{ sellerId: string; asset: string; expected: string; actual: string }> = [];
-    for (const row of bySeller.values()) {
-      if (row.expected !== row.actual) {
+      const expected = parseAmount(row.amount);
+      const actual = (await this.ledger.balance(tradeEscrowAccount(row.seller_id, row.asset, row.id))).amount;
+      if (expected !== actual) {
         drift.push({
-          sellerId: row.sellerId,
+          tradeId: row.id,
+          sellerId: row.seller_id,
           asset: row.asset,
-          expected: formatAmount(row.expected),
-          actual: formatAmount(row.actual),
+          expected: formatAmount(expected),
+          actual: formatAmount(actual),
         });
       }
     }
@@ -2206,6 +2511,9 @@ function toDispute(row: DisputeRow): DisputeRecord {
     id: row.id,
     tradeId: row.trade_id,
     openedBy: row.opened_by,
+    // Pre-0006 rows defaulted to 'party' in the column; treat any unexpected
+    // value as party rather than inventing a third origin on the wire.
+    openedVia: row.opened_via === 'timeout' ? 'timeout' : 'party',
     reason: row.reason,
     evidence: normaliseEvidence(row.evidence),
     moderatorId: row.moderator_id,

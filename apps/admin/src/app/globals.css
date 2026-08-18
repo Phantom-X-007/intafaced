@@ -99,7 +99,9 @@ code {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--if-text-muted);
-  transition: color var(--if-motion-base), border-color var(--if-motion-base);
+  transition:
+    color var(--if-motion-base),
+    border-color var(--if-motion-base);
 }
 
 .adm-nav a:hover {
@@ -516,7 +518,9 @@ code {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: border-color var(--if-motion-base), color var(--if-motion-base);
+  transition:
+    border-color var(--if-motion-base),
+    color var(--if-motion-base);
 }
 
 .adm-btn:hover:not(:disabled) {
@@ -565,7 +569,9 @@ code {
 
 .adm-switch span {
   padding: 3px 8px;
-  transition: background var(--if-motion-base), color var(--if-motion-base);
+  transition:
+    background var(--if-motion-base),
+    color var(--if-motion-base);
 }
 
 .adm-switch[data-on='true'] span:first-child,
@@ -737,6 +743,95 @@ code {
   font-variant-numeric: tabular-nums;
   color: var(--if-text);
   overflow-wrap: anywhere;
+}
+
+/* ── Operator tools ─────────────────────────────────────────────────────── */
+
+.adm-split--tools {
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr);
+}
+
+.adm-tool-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.adm-tool-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: var(--adm-row);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.adm-tool-row:hover {
+  background: var(--if-glass);
+}
+
+.adm-tool-row[data-active='true'] {
+  background: color-mix(in srgb, var(--if-phosphor) 8%, transparent);
+  border-left: 2px solid var(--if-phosphor);
+}
+
+.adm-tool-row[data-wire='not-wired'] .adm-tool-row__label {
+  color: var(--if-text-muted);
+}
+
+.adm-tool-row__label {
+  font-size: 12px;
+  color: var(--if-text);
+}
+
+.adm-tool-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-family: var(--if-font-mono);
+  font-size: 10px;
+  color: var(--if-text-faint);
+}
+
+.adm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.adm-btn--primary {
+  border-color: var(--if-glass-border-strong);
+  background: color-mix(in srgb, var(--if-phosphor) 14%, transparent);
+  color: var(--if-phosphor);
+}
+
+.adm-btn--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--if-phosphor) 22%, transparent);
+}
+
+.adm-pre {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--if-glass-border);
+  border-radius: var(--if-radius-md);
+  background: var(--if-black);
+  font-family: var(--if-font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--if-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,9 +15,9 @@ import { serviceAuthHeadersForBody } from '@intafaced/contracts';
  * strings are parsed into `Amount` the moment they cross into `trade-service.ts`
  * and never travel further as strings.
  *
- * What this port deliberately does NOT expose: anything that would let this
- * service reason about the book's contents. It submits, it cancels, and it asks
- * for the best ask so a market buy can be funded. The book is svc-matching's.
+ * What this port exposes for money-safe recovery: submit, cancel, depth, the
+ * non-destructive live-order list (GET), and scheduled reconcile. It does not
+ * import matching source (§15.2).
  */
 
 export type EngineOrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
@@ -114,10 +114,91 @@ export interface EngineDepth {
   readonly sequence: number;
 }
 
+/**
+ * One resting / stop order on the engine (GET /markets/:id/orders wire).
+ * Amounts are decimal strings — never JSON numbers.
+ */
+export interface EngineLiveOrder {
+  readonly marketId: string;
+  readonly orderId: string;
+  readonly accountId: string;
+  readonly kind: 'book' | 'stop';
+  readonly side: EngineSide;
+  readonly price: string;
+  readonly remaining: string;
+  readonly sequence: number;
+}
+
+export interface EngineLiveOrders {
+  readonly marketId: string;
+  readonly orders: readonly EngineLiveOrder[];
+}
+
+/**
+ * Caller's view of one order for `POST /reconcile` (svc-matching wire shape).
+ * Declared here so trade never imports matching source (§15.2).
+ */
+export type CounterpartOrderState = 'pending' | 'open' | 'terminal';
+
+export interface CounterpartOrder {
+  readonly orderId: string;
+  readonly marketId: string;
+  readonly state: CounterpartOrderState;
+  /** Decimal string. */
+  readonly remaining: string;
+  /** Live hold > 0 — asserted by trade from ledger, never computed by engine. */
+  readonly funded: boolean;
+  readonly detail?: string;
+}
+
+export type ReconcileVerdict = 'clean' | 'auto' | 'refuse';
+
+export interface ReconcileFinding {
+  readonly orderId: string;
+  readonly case: string;
+  readonly verdict: ReconcileVerdict;
+  readonly engine: string;
+  readonly counterpart: string;
+  readonly reason: string;
+}
+
+export interface ReconcileReport {
+  readonly checked: number;
+  readonly agreed: number;
+  readonly findings: readonly ReconcileFinding[];
+  readonly refusals: number;
+  readonly ok: boolean;
+}
+
+/**
+ * Engine market-id set (GET /markets wire). Ids only — never invent listings.
+ * Empty array = engine has no books yet (honest empty, not an outage).
+ */
+export interface EngineMarketList {
+  readonly markets: readonly string[];
+}
+
 export interface MatchingClient {
   submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult>;
   cancel(marketId: string, orderId: string): Promise<EngineCancelResult>;
   depth(marketId: string, limit?: number): Promise<EngineDepth>;
+  /**
+   * Non-destructive liveness read — GET /markets/:marketId/orders.
+   * Prefer this over cancel when only asking "is order X live?".
+   * Empty market / never-traded → empty orders (not an outage).
+   */
+  listOrders(marketId: string): Promise<EngineLiveOrders>;
+  /**
+   * Whole-engine market id set — GET /markets.
+   * Used for market-id drift alarm vs trade.markets (handoff §4.5).
+   * Never mutates books; empty list is honest.
+   */
+  listMarkets(): Promise<EngineMarketList>;
+  /**
+   * Non-destructive engine↔counterpart compare. Service-auth only.
+   * Returns 200 with `ok: false` on refusals — that is a report, not an outage.
+   */
+  reconcile(orders: readonly CounterpartOrder[]): Promise<ReconcileReport>;
 }
 
 export class MatchingUnavailableError extends Error {
@@ -235,6 +316,55 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       }
 
       return (await response.json()) as EngineDepth;
+    },
+
+    /**
+     * Non-destructive live book read. Same 404-vs-empty discipline as depth:
+     * a market that never traded is `orders: []`, not MatchingUnavailable.
+     */
+    async listOrders(marketId) {
+      const path = `/markets/${encodeURIComponent(marketId)}/orders`;
+      let response: Response;
+      try {
+        response = await fetch(`${url}${path}`, { method: 'GET', headers: authHeaders('') });
+      } catch (err) {
+        throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
+      }
+
+      if (response.status === 404) {
+        return { marketId, orders: [] } satisfies EngineLiveOrders;
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new MatchingUnavailableError(`svc-matching ${path} failed (${response.status}): ${detail}`);
+      }
+
+      return (await response.json()) as EngineLiveOrders;
+    },
+
+    /**
+     * Market-id set for drift alarm. Always a list of ids — never invents a
+     * market row on either side. Transport failure throws MatchingUnavailable;
+     * empty markets is a valid 200.
+     */
+    async listMarkets() {
+      return call<EngineMarketList>('/markets', {
+        method: 'GET',
+        headers: authHeaders(''),
+      });
+    },
+
+    /**
+     * Scheduled / operator sweep. Body is the trade-side counterpart view;
+     * engine compares against resting books and writes nothing.
+     */
+    async reconcile(orders) {
+      const payload = JSON.stringify({ orders });
+      return call<ReconcileReport>('/reconcile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+        body: payload,
+      });
     },
   };
 }

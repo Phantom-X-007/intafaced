@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +35,14 @@ import { describe, expect, it } from 'vitest';
  * asserts that the same environment WITH the credentials gets past the gate and
  * dies at the database probe instead. Together they say: the gate is what
  * stopped it, and the gate is the only thing that stopped it.
+ *
+ * ASYNC SPAWN (not spawnSync)
+ *
+ * Cold CI can spend ~10s per case on the tsx import graph. `spawnSync` blocks
+ * the vitest worker event loop for that whole window, so the worker cannot
+ * answer birpc `onTaskUpdate` and the suite exits 1 with every assertion green
+ * (`[vitest-worker]: Timeout calling "onTaskUpdate"`). Async `spawn` keeps the
+ * same process-refuse proof without starving the worker.
  */
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -63,14 +71,10 @@ const SMS_CREDS = {
  * the suite would pass or fail on the developer's machine rather than on the
  * code. Only `PATH` and `SystemRoot` are carried, because node needs them.
  */
-function boot(over: Record<string, string>): { code: number | null; stderr: string } {
-  const result = spawnSync(
-    process.execPath,
-    ['--import', 'tsx', ENTRYPOINT],
-    {
+function boot(over: Record<string, string>): Promise<{ code: number | null; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--import', 'tsx', ENTRYPOINT], {
       cwd: PKG,
-      encoding: 'utf8',
-      timeout: 60_000,
       env: {
         PATH: process.env.PATH ?? '',
         ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
@@ -79,10 +83,30 @@ function boot(over: Record<string, string>): { code: number | null; stderr: stri
         EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
         ...over,
       },
-    },
-    BOOT_TIMEOUT_MS,
-  );
-  return { code: result.status, stderr: result.stderr ?? '' };
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve({ code: null, stderr });
+    }, BOOT_TIMEOUT_MS);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stderr });
+    });
+  });
 }
 
 /**
@@ -94,15 +118,16 @@ function boot(over: Record<string, string>): { code: number | null; stderr: stri
  * Raised deliberately rather than by making the tests cheaper: the thing worth
  * asserting is that the real process refuses to start, and a test that stopped
  * spawning it would pass without proving that. The spawn itself already caps at
- * 60s, so a genuinely hung boot still fails rather than hanging the suite.
+ * BOOT_TIMEOUT_MS, so a genuinely hung boot still fails rather than hanging the
+ * suite.
  */
 const BOOT_TIMEOUT_MS = 30_000;
 
 describe('svc-notify does not start when a channel it depends on has no credentials', () => {
   it(
     'refuses to boot, names both missing variables, and never reaches the database',
-    () => {
-      const { code, stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms' });
+    async () => {
+      const { code, stderr } = await boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms' });
 
       expect(code).not.toBe(0);
       expect(stderr).toContain(REFUSED_AT_THE_GATE);
@@ -119,8 +144,12 @@ describe('svc-notify does not start when a channel it depends on has no credenti
 
   it(
     'gets past the gate once the credentials are set — proving the gate is what stopped it',
-    () => {
-      const { code, stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'sms', ...SMS_CREDS });
+    async () => {
+      const { code, stderr } = await boot({
+        APP_ENV: 'prod',
+        NOTIFY_REQUIRED_CHANNELS: 'sms',
+        ...SMS_CREDS,
+      });
 
       expect(code).not.toBe(0); // the dead database port, deliberately
       expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
@@ -131,8 +160,8 @@ describe('svc-notify does not start when a channel it depends on has no credenti
 
   it(
     'refuses in prod when nothing is declared at all',
-    () => {
-      const { stderr } = boot({ APP_ENV: 'prod' });
+    async () => {
+      const { stderr } = await boot({ APP_ENV: 'prod' });
 
       expect(stderr).toContain(REFUSED_AT_THE_GATE);
       expect(stderr).toContain('must state which out-of-app channels');
@@ -143,11 +172,11 @@ describe('svc-notify does not start when a channel it depends on has no credenti
 
   it(
     'refuses a declaration made of separators — punctuation is not a stated posture',
-    () => {
+    async () => {
       // `blankAsAbsent` catches `""`. `","` is typed, so without the guard in
       // `parseRequiredChannels` it satisfies "you must declare something" while
       // declaring nothing, and prod boots depending on no channel.
-      const { stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: ',' });
+      const { stderr } = await boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: ',' });
 
       expect(stderr).toContain(REFUSED_AT_THE_GATE);
       expect(stderr).toContain('NOTIFY_REQUIRED_CHANNELS');
@@ -158,8 +187,8 @@ describe('svc-notify does not start when a channel it depends on has no credenti
 
   it(
     'boots past the gate on an explicit `none` — a decision is allowed to be recorded',
-    () => {
-      const { stderr } = boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'none' });
+    async () => {
+      const { stderr } = await boot({ APP_ENV: 'prod', NOTIFY_REQUIRED_CHANNELS: 'none' });
 
       expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
       expect(stderr).toContain(PAST_THE_GATE);
@@ -169,8 +198,8 @@ describe('svc-notify does not start when a channel it depends on has no credenti
 
   it(
     'leaves dev frictionless — no gateway credentials are needed to run the stack',
-    () => {
-      const { stderr } = boot({ APP_ENV: 'dev' });
+    async () => {
+      const { stderr } = await boot({ APP_ENV: 'dev' });
 
       expect(stderr).not.toContain(REFUSED_AT_THE_GATE);
       expect(stderr).toContain(PAST_THE_GATE);

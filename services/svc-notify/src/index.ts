@@ -5,13 +5,18 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { PostgresNotifyStore } from './store.js';
-import { DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
+import { claimLeaseMsFromGatewayTimeout, DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
 import { PostgresMuteStore } from './preferences/mute-store.js';
+import { PostgresTargetRateLimiter } from './target-rate-limit.js';
 import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
+import { ALERT_SWEEP_INTERVAL_MS, AlertService, type AlertSweepReport } from './alerts/service.js';
+import { PostgresAlertStore } from './alerts/store.js';
+import { createTradeHttpMarkSource } from './alerts/trade-http-mark.js';
+import { ALERT_KIND_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -75,6 +80,12 @@ await sql`SELECT 1 FROM notify.deliveries LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM notify.channel_mutes LIMIT 1`.catch(() => {
   throw new Error('notify.channel_mutes is missing — run migration 0003_notify_mute_prefs before starting svc-notify');
 });
+await sql`SELECT 1 FROM notify.target_rate_windows LIMIT 1`.catch(() => {
+  throw new Error('notify.target_rate_windows is missing — run migration 0005_notify_target_rate_windows before starting svc-notify');
+});
+await sql`SELECT 1 FROM notify.price_alerts LIMIT 1`.catch(() => {
+  throw new Error('notify.price_alerts is missing — run migration 0006_notify_price_alerts before starting svc-notify');
+});
 
 // Consumer only — trade / p2p / identity / token / bank own their streams.
 // `ownedStreams: []` matches svc-ws: we never create a stream for subjects we do
@@ -90,9 +101,14 @@ const bus = await JetStreamEventBus.connect({
 const store = new PostgresNotifyStore(sql);
 const targets = new PostgresTargetStore(sql);
 // The claim lease has to outlast one gateway attempt and stay under the bus
-// `ack_wait`. Deriving it from the configured timeout keeps the first half true
-// when an operator changes that timeout — see DEFAULT_CLAIM_LEASE_MS.
-const deliveries = new PostgresDeliveryStore(sql, { leaseMs: env.NOTIFY_GATEWAY_TIMEOUT_MS * 2 });
+// `ack_wait`. `claimLeaseMsFromGatewayTimeout` keeps both bounds when an
+// operator raises NOTIFY_GATEWAY_TIMEOUT_MS toward MAX_GATEWAY_TIMEOUT_MS.
+const deliveries = new PostgresDeliveryStore(sql, {
+  leaseMs: claimLeaseMsFromGatewayTimeout(env.NOTIFY_GATEWAY_TIMEOUT_MS),
+});
+/** Last sweep result — surface on /ready so "is the stuck-pending reaper running?" is observable without log diving. */
+let lastReapRetired = 0;
+let lastReapAt: string | null = null;
 const channels = channelsFromEnv(env);
 const muteStore = new PostgresMuteStore(sql);
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
@@ -101,13 +117,42 @@ const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
   mutePrefsOf: (userId) => muteStore.get(userId),
 });
 
+const targetRateLimiter = new PostgresTargetRateLimiter(sql);
 const notify = new NotifyService(
   store,
-  { fanoutEnabled: env.NOTIFY_FANOUT_ENABLED, verifyTtlMinutes: env.NOTIFY_VERIFY_TTL_MINUTES },
+  {
+    fanoutEnabled: env.NOTIFY_FANOUT_ENABLED,
+    verifyTtlMinutes: env.NOTIFY_VERIFY_TTL_MINUTES,
+    targetRateLimiter,
+  },
   { targets, deliveries, channels, dispatcher, muteStore },
 );
 
-export const appRouter = createNotifyRouter(notify);
+/**
+ * v22.alerts mark port.
+ *
+ * Dark when TRADE_URL is unset — refuse rather than invent. Live when TRADE_URL
+ * points at svc-trade's public REST (same ticker bank already uses for loan
+ * marks). The live claim is never written as a literal on this entrypoint —
+ * only createTradeHttpMarkSource does that, and only when a base URL is set.
+ */
+const darkMarks: MarkSource = {
+  kind: 'dark',
+  async quote() {
+    return {
+      kind: 'unavailable',
+      reason: 'dark',
+      detail: 'no mark source configured — refuse rather than invent',
+    };
+  },
+};
+const alertMarks: MarkSource = env.TRADE_URL ? createTradeHttpMarkSource({ baseUrl: env.TRADE_URL }) : darkMarks;
+const alerts = new AlertService(new PostgresAlertStore(sql), alertMarks, notify);
+/** Last alert sweep — see the interval below. Null until the first pass completes. */
+let lastAlertSweep: AlertSweepReport | null = null;
+let lastAlertSweepAt: string | null = null;
+
+export const appRouter = createNotifyRouter(notify, alerts);
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
@@ -128,6 +173,20 @@ app.get('/ready', async () => ({
   // making a monitor parse the array to find out.
   pendingConsumers: pending,
   undeclaredPendingConsumers: pending.filter((c) => c.socket === null).length,
+  // Observability for the stuck-pending reaper (#1187): last tick's retired count
+  // and when it ran. Zero forever + null means the interval never completed.
+  deliveryReap: { lastRetired: lastReapRetired, lastAt: lastReapAt },
+  // v22.alerts honesty, both halves. `markSource: dark` means every evaluation
+  // refuses rather than invents a price. `sweep` is the proof the evaluation job
+  // RUNS: a null `lastAt` means the driver never completed a pass, which is the
+  // state this service shipped in before the sweep was mounted — the surface
+  // promised evaluation and nothing evaluated.
+  alerts: {
+    ...alerts.evaluationStatus(),
+    unpublishedKinds: UNPUBLISHED_ALERT_KINDS,
+    unpublishedCode: ALERT_KIND_UNPUBLISHED,
+    sweep: { lastAt: lastAlertSweepAt, ...(lastAlertSweep ?? { markets: 0, fired: 0, held: 0, refused: 0, refusals: {} }) },
+  },
 }));
 
 await app.register(fastifyTRPCPlugin, {
@@ -155,6 +214,10 @@ const reaper = setInterval(() => {
   void deliveries
     .reapExhausted(env.NOTIFY_MAX_DELIVERY_ATTEMPTS)
     .then((retired) => {
+      // Always stamp the tick — zero is a successful run that found nothing, and
+      // is how an operator distinguishes "reaper healthy" from "reaper never ran".
+      lastReapRetired = retired;
+      lastReapAt = new Date().toISOString();
       if (retired > 0) {
         app.log.info(
           { retired, maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS },
@@ -167,6 +230,41 @@ const reaper = setInterval(() => {
     });
 }, DELIVERY_REAP_INTERVAL_MS);
 reaper.unref();
+
+/**
+ * THE ALERT SWEEP — the job path the alert surface always claimed to have.
+ *
+ * `AlertService.evaluateMarket` shipped complete, tested, and with NO CALLER.
+ * `router.ts` described it as "an internal job path"; there was no job. A user
+ * created a price watch, got `status: 'active'` back, and nothing in this process
+ * would ever look at that row again. That is D-S-13's Class B — a promise with no
+ * delivery — and it is the same failure as `bankMarginCalled`, whose consumer sat
+ * finished and parked while the borrowers it was written for went untold.
+ *
+ * WHAT IT DOES WHILE THE MARK SOURCE IS DARK: nothing, loudly. Every evaluation
+ * refuses `alert.price_unavailable`, no watch is marked fired, and no inbox row
+ * is written — a price the platform cannot source is never treated as zero and
+ * never invented. The counts land on `/ready` so "no alerts fired" is a number
+ * with a reason next to it instead of an absence.
+ *
+ * FAIL-SAFE, like the reaper. A sweep that cannot run must not take the inbox
+ * down with it, so it logs and waits for the next tick.
+ */
+const alertSweep = setInterval(() => {
+  void alerts
+    .evaluateDueAlerts()
+    .then((report) => {
+      lastAlertSweep = report;
+      lastAlertSweepAt = new Date().toISOString();
+      if (report.fired > 0) {
+        app.log.info({ ...report }, 'svc-notify alert sweep fired price watches into the notification fan-out');
+      }
+    })
+    .catch((err) => {
+      app.log.error({ err }, 'svc-notify alert sweep failed — active price watches were not evaluated on this tick');
+    });
+}, ALERT_SWEEP_INTERVAL_MS);
+alertSweep.unref();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
@@ -213,6 +311,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       clearInterval(reaper);
+      clearInterval(alertSweep);
       for (const sub of subscriptions) await sub.unsubscribe().catch(() => undefined);
       await app.close();
       await bus.close();

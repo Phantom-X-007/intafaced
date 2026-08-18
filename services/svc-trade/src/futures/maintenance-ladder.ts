@@ -95,14 +95,19 @@
  * · It does not deliver a margin call, and therefore it does not run a grace
  *   clock. The ADR is explicit that "a margin call that cannot be delivered is
  *   not a margin call" and that grace must not start without a transport. There
- *   is no margin-call transport in `svc-trade` today, so this file reports the
- *   `margin-call` rung and stops there rather than shipping a grace timer that
- *   would silently authorise seizures off an undelivered notice.
- * · It does not choose the numbers. Every value in `DEFAULT_FUTURES_LADDER_POLICY`
- *   is a placeholder for a `DIRECTION` §8 item 8 ruling — "any leverage or margin
- *   parameter beyond §1's stated defaults" is the owner's. The MECHANISM is
- *   agent-implementable per the ADR; the tier table is not, so it lives in one
- *   named constant with somewhere for the owner's answer to land.
+ *   is no production margin-call transport in `svc-trade` today, so this file
+ *   reports the `margin-call` rung and stops there rather than shipping a grace
+ *   timer that would silently authorise seizures off an undelivered notice.
+ *   Delivery is a SEPARATE port (`notifyMarginCall` on the liquidation tick);
+ *   the pure seals below (`mayStartMarginCallGrace` /
+ *   `mayLiquidateFromExpiredMarginCallGrace`) are the only lawful way a future
+ *   grace field may start or expire into seizure. Grace *duration* numbers are
+ *   DIRECTION §8 / D3 owner-reserved — never invent them here.
+ * · It does not choose the numbers. Owner D3 / DIRECTION §8 item 8 names the
+ *   tier table. The MECHANISM is agent-implementable per the ADR; this module
+ *   takes `FuturesLadderPolicy` as an argument. Live jobs omit the policy
+ *   (`skipped_d3_unset`) until that ruling exists. A numeric placeholder table
+ *   must not ship from this file — test harnesses may hold one.
  * · It adds no ledger recipe. Partial rungs post through `futuresRealizeLoss` and
  *   `futuresMarginRelease`, which already exist. Adding a recipe is a
  *   `DIRECTION` §3 carve-out reserved to the owner.
@@ -127,6 +132,58 @@ export class FuturesLadderError extends Error {
 
 export const LADDER_POLICY_INCOHERENT = 'trade.ladder_policy_incoherent';
 export const DEPTH_UNKNOWN = 'trade.depth_unknown';
+
+// ── C15: margin-call delivery before grace / seizure ─────────────────────────
+
+/**
+ * C15 / ADR done bar 6: "A margin call with no transport does not start a grace
+ * clock." `bankMarginCalled` was published into a void for weeks; futures must
+ * not repeat that by starting grace (or seizing "from grace") off an undelivered
+ * notice.
+ *
+ * These helpers are pure law. They take no grace-duration number — inventing one
+ * would be D3 (owner-reserved ladder parameters). When a real grace clock is
+ * added, write `graceExpiresAt` only after `mayStartMarginCallGrace` returns
+ * true, and only escalate seizure through
+ * `mayLiquidateFromExpiredMarginCallGrace`.
+ */
+
+/** Fact returned by the `notifyMarginCall` port on the liquidation tick. */
+export interface MarginCallDelivery {
+  readonly delivered: boolean;
+}
+
+/**
+ * May a grace clock start after this margin-call attempt?
+ *
+ * Only when transport accepted delivery. Undelivered → never. Does not invent a
+ * grace length — that stays owner-reserved (D3).
+ */
+export function mayStartMarginCallGrace(delivery: MarginCallDelivery): boolean {
+  return delivery.delivered === true;
+}
+
+/**
+ * May the liquidation path seize because "margin-call grace has expired"?
+ *
+ * Today futures has no grace field. A missing `graceExpiresAt` means grace never
+ * started, so this always returns false on the live path — which is the honest
+ * product state, not a silent seizure.
+ *
+ * Seal for future work: even if someone passes a past `graceExpiresAt`, an
+ * undelivered call STILL cannot liquidate "from grace". That is the regression
+ * the unit-9 test pins.
+ */
+export function mayLiquidateFromExpiredMarginCallGrace(input: {
+  readonly delivered: boolean;
+  /** Instant grace ends. Null/undefined = grace never started (current product). */
+  readonly graceExpiresAt?: Date | null;
+  readonly now: Date;
+}): boolean {
+  if (!mayStartMarginCallGrace({ delivered: input.delivered })) return false;
+  if (input.graceExpiresAt == null) return false;
+  return input.now.getTime() >= input.graceExpiresAt.getTime();
+}
 
 // ── The depth-referenced tier table ──────────────────────────────────────────
 
@@ -179,26 +236,6 @@ export interface FuturesLadderPolicy {
   /** Ceiling on ONE rung, as bps of the position's remaining size. */
   readonly maxTrancheBps: number;
 }
-
-/**
- * PLACEHOLDERS. Not a risk opinion — see the file header.
- *
- * The tiers are deliberately coarse and the steps deliberately large, so that
- * nothing downstream reads them as a calibrated table: a position under 5% of
- * the depth it must be sold into is treated as ordinary, and one over half of it
- * is treated as barely closable.
- */
-export const DEFAULT_FUTURES_LADDER_POLICY: FuturesLadderPolicy = {
-  tiers: [
-    { uptoDepthBps: 500, maintenanceBps: 50 },
-    { uptoDepthBps: 2_000, maintenanceBps: 100 },
-    { uptoDepthBps: 5_000, maintenanceBps: 250 },
-    { uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 500 },
-  ],
-  marginCallBps: 12_000,
-  targetBps: 15_000,
-  maxTrancheBps: 2_500,
-};
 
 export function assertLadderPolicyCoherent(policy: FuturesLadderPolicy): void {
   if (policy.tiers.length === 0) {
@@ -610,6 +647,16 @@ export function planLadderLiquidation(input: LadderPlanInput): LadderDecision {
 
   const posts: PostRequest[] = [];
   if (fromMargin > 0n || fromInsurance > 0n) {
+    /**
+     * LOSS ID MUST BE UNIQUE PER RUNG. A stable lifecycle liquidationId
+     * (`liq:{positionId}`) is correct for a single full close; partial rungs
+     * on the same position re-use that prefix, so the closed size is part of
+     * the key — otherwise the second partial is a ledger no-op and margin
+     * never leaves the pot while the row shrinks.
+     */
+    const lossId = rung.closesPosition
+      ? `${input.liquidationId}:loss`
+      : `${input.liquidationId}:loss:partial:${formatAmount(sizeClosed)}:${formatAmount(position.size)}`;
     posts.push(
       recipes.futuresRealizeLoss({
         positionId: position.positionId,
@@ -617,7 +664,7 @@ export function planLadderLiquidation(input: LadderPlanInput): LadderDecision {
         assetId: position.marginAsset,
         fromMargin,
         fromInsurance,
-        lossId: `${input.liquidationId}:loss`,
+        lossId,
       }),
     );
   }

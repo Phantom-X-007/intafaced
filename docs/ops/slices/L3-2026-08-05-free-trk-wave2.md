@@ -1,4 +1,4 @@
-# L3 pack — free TRK wave 2 (fat, thrift soft)
+# L3 pack — free TRK wave 2 (historical pack)
 
 **Class:** N  
 **Does NOT invent L1/L2.** No pay, no multi-tier invent as followers, no cube invent.

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, houseFees, userAvailable } from '@intafaced/ledger-client';
 import { ModelGateway } from './gateway/gateway.js';
@@ -15,6 +17,8 @@ import type { CompletionRequest } from './providers/provider.js';
 import { ProviderError, AgentError } from './errors.js';
 import { AgentRuntime, RefusedError } from './runtime.js';
 import { hashAction } from './fleet/audit.js';
+import { createAgentsRouter } from './router.js';
+import type { AgentsRouterDeps } from './router.js';
 
 /**
  * svc-agents — the fleet runtime end to end.
@@ -330,18 +334,19 @@ if (!available) {
       expect(ledger.totalsByAsset().IFC).toBe('0');
     });
 
-    it('bills a retried completion exactly once', async () => {
+    it('bills a completion exactly once and refuses a free request-id replay', async () => {
       const session = await open();
 
       const first = await runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES });
-      const second = await runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES });
-
-      // The engine really was called twice — the caller did not get its answer
-      // the first time — but only the first call added to the bill.
-      expect(provider.callCount).toBe(2);
       expect(first.metered).toBe(true);
-      expect(second.metered).toBe(false);
-      expect(second.cost).toBe(0n);
+      expect(provider.callCount).toBe(1);
+
+      // Reusing the request id must not re-enter the engine free of charge
+      // (spend-cap bypass / unlimited unbilled inference).
+      await expect(runtime.think({ sessionId: session.id, requestId: 'retry-me', task: 'plan', messages: MESSAGES })).rejects.toMatchObject(
+        { code: 'agents.request_id_replay' },
+      );
+      expect(provider.callCount).toBe(1);
 
       const rows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
       expect(rows).toHaveLength(1);
@@ -367,6 +372,48 @@ if (!available) {
 
       expect(await houseOf()).toBe(formatAmount(first.amount));
       expect(ledger.journal()).toHaveLength(3); // two deposits + one fee charge
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('recovers a sealed-but-unbilled window on session settle (seal → post crash resume)', async () => {
+      // Crash between seal and ledger post leaves sealed_at set, charge_tx_id
+      // null, and a positive charged_amount. openWindows must still list that
+      // window so settleSession / session.close can finish the feeCharge.
+      const session = await open();
+      const call = await runtime.think({ sessionId: session.id, requestId: 'r-orphan', task: 'plan', messages: MESSAGES });
+      const windowId = call.windowId!;
+
+      // Manually seal with a known positive amount and NO charge_tx_id — the
+      // state a process death between seal and post produces.
+      const expected = usageCost(call.usage, call.route.price);
+      expect(expected).toBeGreaterThan(0n);
+      await sql`
+        UPDATE agents.usage_windows
+           SET sealed_at = now(),
+               charged_amount = ${formatAmount(expected)}::numeric,
+               charge_key = ${chargeKeyFor(session.id, windowId)},
+               charge_tx_id = NULL
+         WHERE session_id = ${session.id} AND window_id = ${windowId}
+      `;
+
+      // Before the fix, openWindows only selected sealed_at IS NULL and this
+      // would return [] — house never paid, user never charged, invisible.
+      const pending = await meter.openWindows(session.id);
+      expect(pending).toContain(windowId);
+
+      const settlements = await runtime.settleSession(session.id);
+      expect(settlements).toHaveLength(1);
+      expect(settlements[0]!.windowId).toBe(windowId);
+      expect(settlements[0]!.amount).toBe(expected);
+      expect(settlements[0]!.settled).toBe(true);
+      expect(settlements[0]!.chargeTxId).not.toBeNull();
+
+      // Idempotent resume: second settle finds nothing left.
+      expect(await meter.openWindows(session.id)).toEqual([]);
+      const again = await runtime.settleSession(session.id);
+      expect(again).toEqual([]);
+
+      expect(await houseOf()).toBe(formatAmount(expected));
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -412,19 +459,103 @@ if (!available) {
       expect(await houseOf()).toBe('0');
     });
 
-    it('records usage even when billing is switched off, so the cost is still knowable', async () => {
+    it('keeps the audit when billing is off, and never writes usage_records or a charge', async () => {
       const unbilled = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
       const session = await unbilled.openSession({ userId: USER_A, agentId: 'probe' });
       const result = await unbilled.think({ sessionId: session.id, requestId: 'r-off', task: 'plan', messages: MESSAGES });
 
-      // Nothing was metered into a billing window…
+      // Kill-switch: no bill window, no ledger post, no usage_records row.
       expect(result.metered).toBe(false);
+      expect(result.windowId).toBeNull();
       expect(await balanceOf(USER_A)).toBe('1000');
-      // …but the action, its token counts and its model are all on the record.
+      expect(await houseOf()).toBe('0');
+      expect(await unbilled.settleSession(session.id)).toEqual([]);
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+      const windows = await sql`SELECT window_id FROM agents.usage_windows WHERE session_id = ${session.id}`;
+      expect(windows).toHaveLength(0);
+
+      // Audit still holds token counts — "what did the fleet cost while off".
       const log = await unbilled.sessionLog(session.id);
       const completion = log.find((a) => a.kind === 'completion')!;
       expect(completion.inputTokens).toBe(BigInt(result.usage.inputTokens));
       expect(completion.outputTokens).toBe(BigInt(result.usage.outputTokens));
+      expect(completion.cost).toBe(0n);
+    });
+
+    it('metering-off allows the same requestId twice and never invents request_id_replay', async () => {
+      // Unit card done bar (#1434 residual): when billing is off, replaying a
+      // request id must not pretend a charge existed.
+      const unbilled = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await unbilled.openSession({ userId: USER_A, agentId: 'probe' });
+      const first = await unbilled.think({
+        sessionId: session.id,
+        requestId: 'r-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      const second = await unbilled.think({
+        sessionId: session.id,
+        requestId: 'r-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(first.metered).toBe(false);
+      expect(second.metered).toBe(false);
+      expect(first.cost).toBe(0n);
+      expect(second.cost).toBe(0n);
+      expect(provider.callCount).toBe(2);
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+    });
+
+    it('metering-off settle refuses feeCharge for windows left from metering-on', async () => {
+      // Kill-switch must halt bill posts, not only new usage_records. A process
+      // that flipped AGENTS_METERING_ENABLED=false still sees leftover windows.
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({ sessionId: session.id, requestId: 'r-then-off', task: 'plan', messages: MESSAGES });
+      expect(call.metered).toBe(true);
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const attempt = await off.settleWindow(session.id, call.windowId!);
+      expect(attempt.settled).toBe(false);
+      expect(attempt.amount).toBe(0n);
+      expect(attempt.chargeTxId).toBeNull();
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+
+      // Window remains open — when metering returns, settle can finish honestly.
+      const stillOpen = await meter.openWindows(session.id);
+      expect(stillOpen).toContain(call.windowId!);
+    });
+
+    it('metering-off settleSession also refuses feeCharge for leftover windows', async () => {
+      // D26-P1-A6: admin/session.close settleSession must inherit the same gate.
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({
+        sessionId: session.id,
+        requestId: 'r-then-off-session',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const results = await off.settleSession(session.id);
+      expect(results.length).toBeGreaterThan(0);
+      for (const r of results) {
+        expect(r.settled).toBe(false);
+        expect(r.amount).toBe(0n);
+        expect(r.chargeTxId).toBeNull();
+      }
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      expect(await meter.openWindows(session.id)).toContain(call.windowId!);
     });
 
     it('keeps each user’s meter to themselves', async () => {
@@ -549,6 +680,28 @@ if (!available) {
       const next = await open();
       expect(next.guardrailVersion).toBe(2);
       await expect(runtime.act({ sessionId: next.id, tool: 'trade.close', execute: async () => 'closed' })).resolves.toBeTruthy();
+    });
+
+    it('operator kill (enabled=false) survives boot re-register of the guardrail', async () => {
+      // Kill-switch: DB flag stops new sessions. Boot re-upsert must refresh
+      // the factory snapshot without flipping the agent back on.
+      await sql`UPDATE agents.agent_definitions SET enabled = false WHERE agent_id = ${PROBE.agentId}`;
+      await expect(runtime.openSession({ userId: USER_A, agentId: PROBE.agentId })).rejects.toMatchObject({
+        code: 'agents.agent_not_found',
+      });
+
+      await runtime.registerAgent({
+        ...PROBE,
+        version: 9,
+        tools: [...PROBE.tools, { name: 'trade.close', module: 'trade', mode: 'write' }],
+      });
+
+      const def = await runtime.agentDefinition(PROBE.agentId);
+      expect(def?.enabled).toBe(false);
+      expect(def?.guardrail.version).toBe(9);
+      await expect(runtime.openSession({ userId: USER_A, agentId: PROBE.agentId })).rejects.toMatchObject({
+        code: 'agents.agent_not_found',
+      });
     });
 
     it('refuses everything on a closed session', async () => {
@@ -798,6 +951,119 @@ if (!available) {
       // The routing task travels; the model does not.
       expect(serialised).toContain('plan');
       expect(serialised).not.toContain('reasoning-lg');
+    });
+  });
+
+  // ── D26-P2-01h: real metering-off kill-switch through public tRPC doors ───
+  // Paired with metering-public-doors-promise-falsify.test.ts (DB-free createCaller
+  // matrix). Lives here so TRUNCATE stays single-owner with this Postgres suite.
+
+  describe('D26-P2-01h public doors — real AgentRuntime metering-off', () => {
+    const DOORS_SECRET = 'an-agents-runtime-metering-doors-secret';
+    const doorsEdge = createEdgeContext({ secret: DOORS_SECRET, serviceName: 'svc-agents' });
+
+    function doorsPrincipal(overrides: Partial<Principal> = {}): Principal {
+      return {
+        sub: USER_A,
+        userId: USER_A,
+        sid: '22222222-2222-4222-8222-222222222222',
+        scopes: ['agents:read', 'agents:execute', 'admin:write'],
+        tier: 'none',
+        mfa: false,
+        expiresAt: new Date(Date.now() + 60_000),
+        ...overrides,
+      } as Principal;
+    }
+
+    function doorsSigned(p: Principal = doorsPrincipal()) {
+      const raw = encodePrincipal(p);
+      return doorsEdge({
+        headers: {
+          'x-intafaced-principal': raw,
+          'x-intafaced-principal-sig': signPrincipalHeader(raw, DOORS_SECRET, 'DE'),
+          'x-intafaced-region': 'DE',
+        },
+        id: 'req-doors',
+      });
+    }
+
+    function routerDeps(rt: AgentRuntime): AgentsRouterDeps {
+      return { runtime: rt, gateway, meter, feeAssetId: 'IFC' };
+    }
+
+    it('run.complete through createCaller never bills / never feeCharges', async () => {
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await off.openSession({ userId: USER_A, agentId: 'probe' });
+      const result = await createAgentsRouter(routerDeps(off)).createCaller(doorsSigned()).run.complete({
+        sessionId: session.id,
+        requestId: 'doors-off-complete-1',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+
+      expect(result.metered).toBe(false);
+      expect(result.cost).toBe('0');
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+    });
+
+    it('run.complete same requestId twice through createCaller never invents a charge or request_id_replay', async () => {
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const session = await off.openSession({ userId: USER_A, agentId: 'probe' });
+      const caller = createAgentsRouter(routerDeps(off)).createCaller(doorsSigned());
+      const first = await caller.run.complete({
+        sessionId: session.id,
+        requestId: 'doors-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      const second = await caller.run.complete({
+        sessionId: session.id,
+        requestId: 'doors-off-replay',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+
+      expect(first.metered).toBe(false);
+      expect(second.metered).toBe(false);
+      expect(first.cost).toBe('0');
+      expect(second.cost).toBe('0');
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
+    });
+
+    it('usage.settle / settleSession / session.close refuse leftover windows without feeCharge', async () => {
+      const on = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
+      const session = await on.openSession({ userId: USER_A, agentId: 'probe' });
+      const call = await on.think({
+        sessionId: session.id,
+        requestId: 'doors-then-off',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+      expect(call.metered).toBe(true);
+      expect(call.windowId).not.toBeNull();
+
+      const off = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: false });
+      const caller = createAgentsRouter(routerDeps(off)).createCaller(doorsSigned());
+
+      const settle = await caller.usage.settle({ sessionId: session.id, windowId: call.windowId! });
+      expect(settle).toMatchObject({ amount: '0', settled: false, assetId: 'IFC' });
+
+      const settleAll = await caller.usage.settleSession({ sessionId: session.id });
+      expect(settleAll.settlements.every((s) => s.settled === false && s.amount === '0')).toBe(true);
+
+      const closed = await caller.session.close({ sessionId: session.id });
+      expect(closed.status).toBe('closed');
+
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const stillOpen = await meter.openWindows(session.id);
+      expect(stillOpen).toContain(call.windowId!);
     });
   });
 }

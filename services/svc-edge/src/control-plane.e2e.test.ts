@@ -140,6 +140,103 @@ describe('/admin/status — control-plane summary', () => {
     expect(body.auditCount).toBeGreaterThanOrEqual(1);
     expect(body.lastChange?.module).toBe('trade');
   });
+
+  /**
+   * THE residual that made a green console a lie: `ws` is not behind this edge.
+   * Status must name the gap so an operator never reads "disabledModules"
+   * and invents a halted market-data socket. Multi-replica share must stay
+   * explicitly false — inventing a shared store is fenced (§13).
+   */
+  it('names modules outside the door and process-local kill durability', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      outsideTheDoor: Record<string, string>;
+      enforceableModules: string[];
+      killState: { persistence: string; multiReplicaShared: boolean; note: string };
+      disabledModules: string[];
+    };
+
+    expect(body.outsideTheDoor.ws).toMatch(/socket\.ws-behind-the-edge|not through this edge/i);
+    expect(body.outsideTheDoor.ledger).toMatch(/posting_freeze|admin\/ledger\/freeze/i);
+    expect(body.outsideTheDoor.matching).toBeTruthy();
+    // A halted list that contains `ws` would be the old green-while-live failure.
+    expect(body.disabledModules).not.toContain('ws');
+    expect(body.enforceableModules).toContain('trade');
+    expect(body.enforceableModules).not.toContain('ws');
+    expect(body.killState.multiReplicaShared).toBe(false);
+    expect(body.killState.persistence === 'file' || body.killState.persistence === 'memory').toBe(true);
+    expect(body.killState.note.length).toBeGreaterThan(20);
+  });
+
+  it('names edge.gateway as unenforced so status cannot invent a flag-only halt', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      liveKillControl: string;
+      flagEdgeGateway: { key: string; enforced: boolean; note: string };
+    };
+    expect(body.liveKillControl).toBe('operator-kill-switch');
+    expect(body.flagEdgeGateway).toMatchObject({ key: 'edge.gateway', enforced: false });
+    expect(body.flagEdgeGateway.note).toMatch(/NOT_ENFORCED|does not stop the proxy/i);
+  });
+
+  /**
+   * Wave 10 ops residual: #1551 config honesty must reach the door.
+   * unset network ≠ clear; invent freezes refused; analytics never live without lag.
+   */
+  it('surfaces network/freeze/compliance/analytics honesty on status', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      networkSignal: { declaration: string; partnerConfigured: boolean; accessCode: string };
+      freezeAuthority: {
+        soleKey: string;
+        inventTradeFreezeOk: boolean;
+        ledgerPostingOk: boolean;
+      };
+      complianceQueue: { empty: boolean; partnerConfigured: boolean };
+      analytics: { mayLabelLive: boolean; surfaceStatus: string };
+    };
+    expect(body.networkSignal.declaration).toBe('unset');
+    expect(body.networkSignal.partnerConfigured).toBe(false);
+    expect(body.freezeAuthority.soleKey).toBe('ledger.posting');
+    expect(body.freezeAuthority.inventTradeFreezeOk).toBe(false);
+    expect(body.freezeAuthority.ledgerPostingOk).toBe(true);
+    expect(body.complianceQueue.empty).toBe(true);
+    expect(body.analytics.mayLabelLive).toBe(false);
+    expect(body.analytics.surfaceStatus).not.toBe('ok');
+  });
+
+  it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
+    const h = await edge();
+    // Seed via admin API method through status surface — open is not HTTP yet
+    // for thrift; disposition is. Open case via the same process's createAdminApi
+    // is only unit-tested; here we prove HTTP refuse shape when item missing first.
+    const missing = await h.app.inject({
+      method: 'POST',
+      url: '/admin/compliance/queue/disposition',
+      headers: { authorization: await asOperator(), 'content-type': 'application/json' },
+      payload: { itemId: 'no-such', status: 'partner_cleared', partnerRef: 'slot' },
+    });
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json()).toMatchObject({ ok: false, code: 'refuse.unknown_item' });
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,10 +360,32 @@ describe('emissions off: the mint fails closed', () => {
     const h = await edge();
     await flip(h, 'token', true, 'emission curve under review, stop minting');
 
-    for (const url of ['/api/token/trpc/emissions.mintEpoch', '/api/token/internal/emissions/mint-next']) {
+    const res = await h.app.inject({ method: 'POST', url: '/api/token/trpc/emissions.mintEpoch' });
+    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    // The S2S mint is not a public door — 404 here, never a 200 that reached token.
+    const s2s = await h.app.inject({ method: 'POST', url: '/api/token/internal/emissions/mint-next' });
+    expect(s2s.statusCode).toBe(404);
+    expect(s2s.json()).toMatchObject({ code: 'edge.s2s_not_proxied' });
+    expect(h.reached).toEqual([]);
+  });
+});
+
+describe('S2S /internal/ is not a public door', () => {
+  it('404s pay/identity/token internals even when the module is live', async () => {
+    const h = await edge();
+    for (const url of [
+      '/api/token/internal/emissions/mint-next',
+      '/api/token/internal/stake/11111111-1111-4111-8111-111111111111',
+      '/api/identity/internal/rank/11111111-1111-4111-8111-111111111111/perks',
+      '/api/pay/internal/jobs/run-due-subscriptions',
+      '/api/academy/internal/anything',
+      '/api/support/internal/anything',
+    ]) {
       const res = await h.app.inject({ method: 'POST', url });
-      expect(res.statusCode, url).toBeGreaterThanOrEqual(500);
+      expect(res.statusCode, url).toBe(404);
+      expect(res.json(), url).toMatchObject({ code: 'edge.s2s_not_proxied' });
     }
+    expect(h.reached).toEqual([]);
   });
 });
 
@@ -618,5 +737,58 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
       payload: { reason: WHY },
     });
     expect(res.statusCode).toBe(502);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// D26-P2-10 — every money module killable from the SAME surface, proven over HTTP
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('money modules — same kill surface (D26-P2-10)', () => {
+  /**
+   * Catalogue lives in `@intafaced/config` (`MONEY_PUBLIC_DOORS`). Arming is
+   * always `POST /admin/kill-switches` — the same route trade/token already use.
+   * Do not invent a second operator UX.
+   */
+  const MONEY_MODULES = ['trade', 'pay', 'bank', 'p2p', 'token', 'market', 'agents'] as const;
+
+  const SAMPLE_DOOR: Record<(typeof MONEY_MODULES)[number], string> = {
+    trade: '/api/trade/trpc/convert.execute',
+    // Public REST commit path (not only tRPC) — same /api/pay prefix kill.
+    pay: '/api/pay/v1/payments',
+    bank: '/api/bank/trpc/loans.open',
+    p2p: '/api/p2p/trpc/disputes.open',
+    token: '/api/token/trpc/unstake',
+    market: '/api/market/trpc/purchase',
+    agents: '/api/agents/trpc/run.complete',
+  };
+
+  it('arms every live money module from POST /admin/kill-switches', async () => {
+    const h = await edge();
+    for (const module of MONEY_MODULES) {
+      const res = await flip(h, module, true, `D26-P2-10 halt ${module} money door during completeness drill`);
+      expect(res.statusCode, module).toBe(200);
+      expect(h.state.isKilled(module), module).toBe(true);
+    }
+  });
+
+  it('REFUSES each money module sample door once killed — upstream never reached', async () => {
+    const h = await edge();
+    for (const module of MONEY_MODULES) {
+      h.reached.length = 0;
+      await flip(h, module, true, `D26-P2-10 refuse proof for ${module} public money door`);
+      const res = await h.app.inject({ method: 'POST', url: SAMPLE_DOOR[module] });
+      expect(res.statusCode, module).toBe(503);
+      expect(res.json(), module).toMatchObject({ code: 'edge.module_killed', module });
+      expect(h.reached, module).toEqual([]);
+      await flip(h, module, false, `D26-P2-10 resume ${module} after refuse proof`);
+    }
+  });
+
+  it('still points ledger at /admin/ledger/freeze — not a module flag on the same board family', async () => {
+    const h = await edge();
+    const res = await flip(h, 'ledger', true, 'D26-P2-10 must not arm a fake ledger module kill');
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('/admin/ledger/freeze');
   });
 });

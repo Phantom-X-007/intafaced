@@ -1,3 +1,5 @@
+> **Supersession (2026-08-09):** Any line that treats **Actions thrift**, run-count caps, `THRIFT_ALLOW`, or holding PRs for CI spend as current law is **void**. The repo is public; thrift was deleted 2026-08-07. See [`GITHUB-CI-SPEND-CONTROL-2026-07-31.md`](GITHUB-CI-SPEND-CONTROL-2026-07-31.md).
+
 # AFK residual STOP — 2026-08-07 (overnight)
 
 **Tip at stop:** `5ede426f` — `fix(notify): the new claim lease acked the margin call it was meant to protect (#1037)`  
@@ -28,7 +30,7 @@
 | O4 p2p after disputes    | **On tip** (#1028 late settlements). Admin dispute console / Class X content remain human                                                                                                    |
 | O5 ops.analytics deepen  | **On tip** (#1032 admin surface). Live ETL/warehouse wiring not agent-done                                                                                                                   |
 | O6 money/doctrine guards | **On tip** (#1033 lease, #1034 margin_current, prior #1018/#1019). Leverage **max number** not inventable without DIRECTION/doctrine source                                                  |
-| O7 hygiene               | Worktree GC applied (31 safe trees). Thrift deleted on tip — ignored                                                                                                                         |
+| O7 hygiene               | Worktree GC applied (31 safe trees). Thrift deleted on tip (correct)                                                                                                                         |
 
 ## Human-only leftovers (do not agent-fake)
 

@@ -109,10 +109,18 @@ const MUTANTS = [
   },
   {
     id: 'probe-claim-orphaned',
-    from: "${claim('probes')} — proof-of-life for the rules the tree gives ",
-    to: "'nothing to freeze.';",
+    from: "${claim('probes')} — proof-of-life for the ",
+    to: "'rules the tree gives nothing to freeze.';",
     detected: true,
     why: 'the other direction: the harness runs and the summary stops reporting it. An orphaned claim is a check whose verdict reaches nobody, which is how a gate quietly stops saying what it still measures',
+  },
+  {
+    id: 'perimeter-claim-orphaned',
+    from: "${claim('perimeter')}. ${claim('probes')}",
+    to: ' — proof-of-life for the ',
+    replace: "${claim('probes')}",
+    detected: true,
+    why: 'D26-P2-09: continuous refuse for mainnet/sign/width must reach the summary — deleting the clause while leaving the mint is an orphaned claim; deleting both without the suite noticing is how a class stops being refused',
   },
 
   // ── defect 4b: the occurrence-drift check could not detect its own removal ─
@@ -258,5 +266,5 @@ if (inapplicable.length > 0 || brokenControl.length > 0 || survivors.length > 0)
 console.log(
   `✓ wallet-rpc-mainnet-scan mutation test — ${killed}/${scored.length} deletions detected ` +
     '(probe harness, probe loop, probe assertion counting, occurrence drift, barrier report, walk guard, M11 ratchet, ' +
-    'both orphaned claims, and the defaulted-placeholder resolution), control run clean',
+    'orphaned claims incl. perimeter, and the defaulted-placeholder resolution), control run clean',
 );

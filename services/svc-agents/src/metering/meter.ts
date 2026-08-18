@@ -1,6 +1,13 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  affiliateLegAfterUsageFeeCharge,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
 import { AgentError } from '../errors.js';
 import type { ModelPrice } from '../gateway/routing.js';
 import type { TokenUsage } from '../providers/provider.js';
@@ -52,6 +59,10 @@ export interface UsageMeterOptions {
   readonly windowMinutes: number;
   /** Ledger `module` for the charge. Always 'agents' in production. */
   readonly module?: string;
+  /** Identity accrue after feeCharge. Default noop when IDENTITY_URL is unset. */
+  readonly affiliateAccrue?: AffiliateAccruePort;
+  /** Identity payout after accrue. Default noop when IDENTITY_URL is unset. */
+  readonly affiliatePayout?: AffiliatePayoutPort;
 }
 
 export interface RecordUsageInput {
@@ -103,6 +114,8 @@ export class UsageMeter {
   private readonly assetId: string;
   private readonly windowMinutes: number;
   private readonly module: string;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
 
   constructor(
     private readonly sql: Sql,
@@ -112,6 +125,8 @@ export class UsageMeter {
     this.assetId = options.assetId;
     this.windowMinutes = options.windowMinutes;
     this.module = options.module ?? 'agents';
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   windowFor(at: Date = new Date()): string {
@@ -166,6 +181,22 @@ export class UsageMeter {
     }
 
     return { windowId, recorded: rows.length > 0 };
+  }
+
+  /**
+   * True when this session already recorded a usage row for `requestId`.
+   *
+   * The anti-double-bill key is unique on `(session_id, request_id)`. A second
+   * `think` with the same id must not re-enter the engine free of charge —
+   * callers that lost a response open a new request id (or read the audit log).
+   */
+  async hasRequest(sessionId: string, requestId: string): Promise<boolean> {
+    const rows = await this.sql<Array<{ n: string }>>`
+      SELECT 1::text AS n FROM agents.usage_records
+       WHERE session_id = ${sessionId} AND request_id = ${requestId}
+       LIMIT 1
+    `;
+    return rows.length > 0;
   }
 
   /** Exact token totals per rate for one window. */
@@ -329,6 +360,9 @@ export class UsageMeter {
       }),
     );
 
+    await this.notifyAgentsAffiliateAccrue(chargeKey, input.userId, sealed.amount);
+    await this.notifyAgentsAffiliatePayout(chargeKey, input.userId, sealed.amount);
+
     // ── Step 3 · record the ledger id ───────────────────────────────────────
     await this.sql`
       UPDATE agents.usage_windows
@@ -346,11 +380,53 @@ export class UsageMeter {
     };
   }
 
-  /** Every window of a session that has not been settled yet. */
+  /** Best-effort; never throws. feeCharge already posted. */
+  private async notifyAgentsAffiliateAccrue(feeEventId: string, userId: string, feeAmount: Amount): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterUsageFeeCharge({
+        feeEventId,
+        userId,
+        feeAmount,
+        feeAsset: this.assetId,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. feeCharge already posted. */
+  private async notifyAgentsAffiliatePayout(feeEventId: string, userId: string, feeAmount: Amount): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterUsageFeeCharge({
+        feeEventId,
+        userId,
+        feeAmount,
+        feeAsset: this.assetId,
+      }),
+    );
+  }
+
+  /**
+   * Every window of a session that still needs settle work.
+   *
+   * Includes:
+   *   · unsealed windows (normal path), and
+   *   · sealed windows whose ledger post never landed (`charge_tx_id IS NULL`
+   *     with a positive amount still pending).
+   *
+   * A crash between seal and post used to drop the window forever from
+   * `settleSession` / `session.close`, because only `sealed_at IS NULL` was
+   * selected. Zero-amount windows seal with a sentinel charge id and are not
+   * returned here (nothing left to bill).
+   */
   async openWindows(sessionId: string): Promise<string[]> {
     const rows = await this.sql<Array<{ window_id: string }>>`
       SELECT window_id FROM agents.usage_windows
-       WHERE session_id = ${sessionId} AND sealed_at IS NULL
+       WHERE session_id = ${sessionId}
+         AND (
+           sealed_at IS NULL
+           OR (charge_tx_id IS NULL AND charged_amount IS NOT NULL AND charged_amount > 0)
+         )
        ORDER BY window_id ASC
     `;
     return rows.map((r) => r.window_id);

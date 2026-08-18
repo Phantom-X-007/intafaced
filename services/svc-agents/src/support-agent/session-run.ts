@@ -77,6 +77,7 @@
  * a fabricated answer.
  */
 
+import type { SupportAccountGrounding, SupportKbArticle } from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import type { CopyKey } from '../copy.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
@@ -86,10 +87,13 @@ import {
   type AccountProjectionFixture,
   type KbArticleFixture,
   type SupportDataToolOk,
+  type SupportDataToolRefuse,
   type SupportDataToolResult,
   type TicketFixture,
 } from './data-tools.js';
-import type { SupportDeskPlane } from './grounded.js';
+import type { SupportDeskPort } from './desk-port.js';
+import { supportGrounded, type SupportDeskPlane } from './grounded.js';
+import { resolveSupportAskFixtures } from './grounding-resolve.js';
 import { supportTierGate, type SupportTierLaw } from './tier-gate.js';
 
 /** The agent id the support guardrail is registered under. */
@@ -109,8 +113,12 @@ export const SUPPORT_KB_TOOL = 'support.kb.search';
 export type SupportAsk = {
   readonly tool: string;
   readonly articles?: readonly KbArticleFixture[] | null;
+  /** When set with run `kbCatalog`, resolve articles from the published catalog. */
+  readonly kbQuery?: string | null;
   readonly ticket?: TicketFixture | null;
   readonly account?: AccountProjectionFixture | null;
+  /** Contract grounding from ops.support — unread/plane-dark refuses invent. */
+  readonly accountGrounding?: SupportAccountGrounding | null;
 };
 
 /** Who said no. `guardrail` is the runtime; `tool` is the data tool itself. */
@@ -152,9 +160,29 @@ export type SupportRunMetering = {
   readonly settlements: readonly SupportRunSettlement[];
 };
 
-export type SupportRunRefuseReason = 'desk_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'no_grounded_read';
+export type SupportRunRefuseReason =
+  | 'desk_plane_dark'
+  | 'tier_law_blank'
+  | 'tier_not_granted'
+  | 'no_grounded_read'
+  /** Account read was asked and missing/incomplete/invent — do not answer as if it existed. */
+  | 'account_state_missing'
+  /** Live plane claimed, but no published KB catalog — do not invent ops.support answers. */
+  | 'kb_plane_ungrounded'
+  /** Live plane claimed, but no SUPPORT_URL / desk port — do not invent KB hits. */
+  | 'no_live_kb';
 
 export type SupportRunEscalateReason = 'kb_no_hit' | 'money_request' | 'desk_refused';
+
+/** Reasons an account-state ask counts as "missing" for grounding honesty. */
+const ACCOUNT_STATE_MISSING_REASONS = new Set([
+  'missing_fixture',
+  'incomplete_account',
+  'balance_field_forbidden',
+  'account_owner_mismatch',
+  'account_plane_dark',
+  'account_not_attempted',
+]);
 
 export type SupportRunOk = {
   readonly status: 'ok';
@@ -172,12 +200,72 @@ export type SupportRunOk = {
 };
 
 /**
+ * Case file for a human desk handoff (doctrine §8.2: "escalation w/ case file").
+ *
+ * Pure projection of what the agent already read — never invents balances,
+ * refund amounts, or policy. Account rows carry status + KYC only (§0.6).
+ * `ops.support` owns durable ticket write; this is the agent-side package a
+ * person (or Denon's desk once #1626 lands) can attach without dual-editing
+ * the support service.
+ */
+export type SupportCaseFile = {
+  readonly reason: SupportRunEscalateReason;
+  /** True when the user asked money to move — person uses ops/ledger recipes. */
+  readonly moneyRequest: boolean;
+  readonly findings: readonly SupportDataToolOk[];
+  readonly unanswered: readonly SupportUnanswered[];
+  readonly ticketIds: readonly string[];
+  readonly citedArticleKeys: readonly string[];
+  /** Status + KYC only — no balance field exists on this shape. */
+  readonly accounts: readonly {
+    readonly userId: string;
+    readonly status: 'active' | 'frozen' | 'closed';
+    readonly kycTier: string;
+  }[];
+};
+
+/** Build the escalate case file from findings already in hand. */
+export function buildSupportCaseFile(input: {
+  reason: SupportRunEscalateReason;
+  findings?: readonly SupportDataToolOk[];
+  unanswered?: readonly SupportUnanswered[];
+  moneyRequest?: boolean;
+}): SupportCaseFile {
+  const findings = input.findings ?? [];
+  const ticketIds: string[] = [];
+  const citedArticleKeys: string[] = [];
+  const accounts: SupportCaseFile['accounts'][number][] = [];
+  for (const f of findings) {
+    if (f.tool === 'support.ticket.read') {
+      ticketIds.push(f.ticket.ticketId);
+    } else if (f.tool === 'support.kb.search') {
+      for (const a of f.articles) citedArticleKeys.push(a.articleKey);
+    } else if (f.tool === 'identity.account.read') {
+      accounts.push({
+        userId: f.account.userId,
+        status: f.account.status,
+        kycTier: f.account.kycTier,
+      });
+    }
+  }
+  return {
+    reason: input.reason,
+    moneyRequest: input.moneyRequest === true || input.reason === 'money_request',
+    findings,
+    unanswered: input.unanswered ?? [],
+    ticketIds,
+    citedArticleKeys,
+    accounts,
+  };
+}
+
+/**
  * The typed "this goes to a person".
  *
  * A first-class product outcome, not an error: the desk reached far enough to
  * know it cannot ground an answer, so it hands over rather than improvising.
- * `findings` still travels, because a human picking up the ticket should see
- * what the agent could read before it stopped.
+ * `caseFile` packages what the agent could read so a human does not start from
+ * a blank ticket.
  */
 export type SupportRunEscalate = {
   readonly status: 'escalate';
@@ -185,6 +273,7 @@ export type SupportRunEscalate = {
   readonly userMessageKey: 'agents.support.escalated';
   readonly findings: readonly SupportDataToolOk[];
   readonly unanswered: readonly SupportUnanswered[];
+  readonly caseFile: SupportCaseFile;
   readonly metering: SupportRunMetering;
 };
 
@@ -202,7 +291,24 @@ export type SupportRunEmpty = {
   readonly metering: SupportRunMetering;
 };
 
-export type SupportRunResult = SupportRunOk | SupportRunEscalate | SupportRunRefuse | SupportRunEmpty;
+/**
+ * Caller aborted mid-run. Remaining tools did not execute; session still
+ * settles/closes so there is no silent leftover feeCharge.
+ */
+export type SupportRunStopped = {
+  readonly status: 'stopped';
+  readonly reason: 'aborted';
+  /**
+   * Reuses `unavailable` so this ship stays off `packages/i18n` (FE fence).
+   * Distinguisher is `status: 'stopped'` + `reason: 'aborted'`, not a new key.
+   */
+  readonly userMessageKey: 'agents.support.unavailable';
+  readonly findings: readonly SupportDataToolOk[];
+  readonly unanswered: readonly SupportUnanswered[];
+  readonly metering: SupportRunMetering;
+};
+
+export type SupportRunResult = SupportRunOk | SupportRunEscalate | SupportRunRefuse | SupportRunEmpty | SupportRunStopped;
 
 function unmetered(assetId: string): SupportRunMetering {
   return { sessionId: null, billedAmount: '0', assetId, sessionClosed: false, settlements: [] };
@@ -254,6 +360,20 @@ export type SupportRunInput = {
    * no money tool and cannot acquire one by being asked nicely.
    */
   readonly moneyRequest?: boolean;
+  /**
+   * Optional abort — tool calls are stoppable. When aborted, the run settles
+   * and closes what it opened; it does not invent a feeCharge and does not
+   * continue unread asks.
+   */
+  readonly signal?: AbortSignal;
+  /**
+   * Published ops.support KB catalog. Used when an ask carries `kbQuery`.
+   * Absent/empty catalog + kbQuery → refuse (`kb_plane_ungrounded`), never invented articles.
+   */
+  readonly kbCatalog?: readonly SupportKbArticle[] | null;
+  /** Live ops.support desk. Absent on live → `no_live_kb` (billedAmount 0). */
+  readonly desk?: SupportDeskPort | null;
+  readonly deskHeaders?: Readonly<Record<string, string>>;
 };
 
 /**
@@ -273,6 +393,17 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
   // before any tool is touched. Opening a metered session to discover them would
   // bill a user for the platform's own unreadiness, and would leave an audit
   // trail implying the desk tried. It did not try — it stopped, for free.
+  if (input.signal?.aborted) {
+    return {
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.unavailable',
+      findings: [],
+      unanswered: [],
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
   if (input.plane === 'dark') {
     return {
       status: 'refuse',
@@ -282,6 +413,22 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
       metering: unmetered(input.feeAssetId),
     };
   }
+
+  // Checked before the KB-plane gate, because a money request needs no lookup
+  // to be answered: the answer is "a person handles this", even when the KB is dark.
+  if (input.moneyRequest === true) {
+    return {
+      status: 'escalate',
+      reason: 'money_request',
+      userMessageKey: 'agents.support.escalated',
+      findings: [],
+      unanswered: [],
+      caseFile: buildSupportCaseFile({ reason: 'money_request', moneyRequest: true }),
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
+  const catalogCount = input.kbCatalog?.length ?? 0;
 
   const tier = supportTierGate({ law: input.tierLaw ?? null, userTier: input.userTier });
   if (tier.status === 'refuse') {
@@ -294,17 +441,25 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     };
   }
 
-  // Checked before the ask list, because a refund request needs no lookup to be
-  // answered: the answer is "a person handles this", whatever the KB says.
-  if (input.moneyRequest === true) {
-    return {
-      status: 'escalate',
-      reason: 'money_request',
-      userMessageKey: 'agents.support.escalated',
-      findings: [],
-      unanswered: [],
-      metering: unmetered(input.feeAssetId),
-    };
+  // Any KB search — kbQuery *or* smuggled article fixtures — needs a published
+  // catalog. Fixture articles are not a live ops.support KB plane.
+  const kbAsked = input.asks.some((ask) => ask.tool.trim() === SUPPORT_KB_TOOL);
+  if (kbAsked) {
+    const grounded = supportGrounded({
+      plane: input.plane,
+      kbPlane: catalogCount > 0 ? 'live' : 'dark',
+      requireKb: true,
+      kbHitCount: catalogCount,
+    });
+    if (grounded.status === 'refuse') {
+      return {
+        status: 'refuse',
+        reason: grounded.reason === 'kb_empty' ? 'kb_plane_ungrounded' : grounded.reason,
+        userMessageKey: grounded.userMessageKey,
+        unanswered: [],
+        metering: unmetered(input.feeAssetId),
+      };
+    }
   }
 
   if (input.asks.length === 0) {
@@ -313,6 +468,16 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     return {
       status: 'empty',
       userMessageKey: 'agents.support.empty',
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
+  if (input.plane === 'live' && !input.desk) {
+    return {
+      status: 'refuse',
+      reason: 'no_live_kb',
+      userMessageKey: 'agents.support.unavailable',
+      unanswered: [],
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -342,6 +507,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
       userMessageKey: 'agents.support.escalated',
       findings: [],
       unanswered: [],
+      caseFile: buildSupportCaseFile({ reason: 'kb_no_hit' }),
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -366,6 +532,19 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
     let kb: { readonly by: 'guardrail' } | { readonly by: 'tool'; readonly result: SupportDataToolResult } | null = null;
 
     for (const ask of input.asks) {
+      // Tool calls are stoppable: abort mid-loop, settle what ran, no silent fee.
+      if (input.signal?.aborted) {
+        metering = await settleAndClose(input.runtime, session.id, input.feeAssetId);
+        return {
+          status: 'stopped',
+          reason: 'aborted',
+          userMessageKey: 'agents.support.unavailable',
+          findings,
+          unanswered,
+          metering,
+        };
+      }
+
       const tool = ask.tool.trim();
       let toolResult: SupportDataToolResult;
 
@@ -375,17 +554,36 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
           tool,
           // Reached only after the guardrail has allowed the call. An undeclared
           // tool — including every money one — never gets this far.
-          execute: async () =>
-            invokeSupportDataTool({
+          execute: async () => {
+            const resolved = resolveSupportAskFixtures({
+              ask,
+              requesterUserId: input.userId,
+              kbCatalog: input.kbCatalog ?? null,
+            });
+            if (resolved.status === 'refuse') {
+              const refuse: SupportDataToolRefuse = {
+                status: 'refuse',
+                tool,
+                reason: resolved.reason,
+                userMessageKey: 'agents.support.unavailable',
+              };
+              return refuse;
+            }
+            return invokeSupportDataTool({
               tool,
               plane: input.plane,
+              kbPlane: catalogCount > 0 ? 'live' : 'dark',
               requesterUserId: input.userId,
               tierLaw: input.tierLaw ?? null,
               userTier: input.userTier,
-              articles: ask.articles ?? null,
-              ticket: ask.ticket ?? null,
-              account: ask.account ?? null,
-            }),
+              desk: input.desk ?? null,
+              ...(input.deskHeaders === undefined ? {} : { deskHeaders: input.deskHeaders }),
+              kbQuery: ask.kbQuery ?? '',
+              articles: resolved.articles,
+              ticket: resolved.ticket,
+              account: resolved.account,
+            });
+          },
         });
         toolResult = act.result as SupportDataToolResult;
       } catch (err) {
@@ -438,18 +636,34 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
       };
     }
 
+    // Account-state was asked and missing/invent — refuse invent. A KB cite with
+    // complete:false would still read like the desk checked the account.
+    const accountAsked = asked.includes('identity.account.read');
+    const accountMissing = unanswered.some((u) => u.tool === 'identity.account.read' && ACCOUNT_STATE_MISSING_REASONS.has(u.reason));
+    if (accountAsked && accountMissing) {
+      return {
+        status: 'refuse',
+        reason: 'account_state_missing',
+        userMessageKey: 'agents.support.unavailable',
+        unanswered,
+        metering,
+      };
+    }
+
     // A KB read the guardrail refused is a closed door, not a KB that was
     // searched and missed. `kb === null` cannot happen — a KB ask is a
     // precondition of reaching this loop — but the default if it ever did is to
     // hand over to a person, because "we do not know what the KB said" is never
     // a licence to compose a reply.
     if (kb === null || kb.by === 'guardrail') {
+      const reason = kb === null ? 'kb_no_hit' : 'desk_refused';
       return {
         status: 'escalate',
-        reason: kb === null ? 'kb_no_hit' : 'desk_refused',
+        reason,
         userMessageKey: 'agents.support.escalated',
         findings,
         unanswered,
+        caseFile: buildSupportCaseFile({ reason, findings, unanswered }),
         metering,
       };
     }
@@ -464,6 +678,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
         userMessageKey: decision.userMessageKey,
         findings,
         unanswered,
+        caseFile: buildSupportCaseFile({ reason: decision.reason, findings, unanswered }),
         metering,
       };
     }

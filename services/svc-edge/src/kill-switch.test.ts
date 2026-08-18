@@ -239,6 +239,22 @@ describe('optional restart durability (EDGE_KILL_STATE_PATH)', () => {
     expect(b.isKilled('trade')).toBe(true);
     expect(b.decide('/api/v1/orders', 'POST')).toMatchObject({ refused: true, reason: 'module-killed' });
   });
+
+  it('reports file durability as process-local, never multi-replica shared', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'edge-kill-'));
+    const path = join(dir, 'state.json');
+    const d = new KillSwitchState({ statePath: path }).durability();
+    expect(d.persistence).toBe('file');
+    expect(d.multiReplicaShared).toBe(false);
+    expect(d.note).toMatch(/§13|replica/i);
+  });
+
+  it('reports memory durability as process-local, never multi-replica shared', () => {
+    const d = new KillSwitchState().durability();
+    expect(d.persistence).toBe('memory');
+    expect(d.multiReplicaShared).toBe(false);
+    expect(d.note).toMatch(/Memory only|§13/i);
+  });
 });
 
 /**

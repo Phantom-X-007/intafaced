@@ -14,10 +14,16 @@ import type { RankedStanding, SeasonRecord, SeasonStatus, StandingRecord } from 
 import { rankStandings, TournamentError } from './ladder.js';
 import { assertNoPrizeAttachment } from './prize-refuse.js';
 
+/**
+ * Legal edges only. `frozen → live` is deliberately closed:
+ * RULES-STAGE1 forbids silent re-rank after freeze without a new season, and
+ * freeze snapshots are immutable (season_id PK + ON CONFLICT DO NOTHING).
+ * Re-opening would let scores diverge from the durable audit snapshot.
+ */
 const ALLOWED: Readonly<Record<SeasonStatus, readonly SeasonStatus[]>> = {
   scheduled: ['live', 'ended'],
   live: ['frozen', 'ended'],
-  frozen: ['ended', 'live'],
+  frozen: ['ended'],
   ended: [],
 };
 
