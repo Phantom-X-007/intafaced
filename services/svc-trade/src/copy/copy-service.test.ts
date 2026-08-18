@@ -164,6 +164,61 @@ describe('CopyService', () => {
     expect(store.listFollowsCalls).toBe(0);
   });
 
+  it('listMyFollows optional leaderId exact-matches in the store, never another follower', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    class SpyStore extends MemoryCopyFollowStore {
+      lastArgs: [string, string | undefined] | null = null;
+      override async listFollowsByFollower(followerId: string, leaderId?: string) {
+        this.lastArgs = [followerId, leaderId];
+        return super.listFollowsByFollower(followerId, leaderId);
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    const mineA = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.follow(principal, {
+      leaderId: LEADER_B,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+
+    const all = await svc.listMyFollows(principal);
+    expect(all).toHaveLength(2);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined]);
+
+    const one = await svc.listMyFollows(principal, { leaderId: LEADER });
+    expect(one).toHaveLength(1);
+    expect(one[0]?.followId).toBe(mineA.followId);
+    expect(one[0]?.leaderId).toBe(LEADER);
+    expect(store.lastArgs).toEqual([FOLLOWER, LEADER]);
+
+    expect(await svc.listMyFollows(principal, { leaderId: 'no-such-leader' })).toEqual([]);
+    expect(store.lastArgs).toEqual([FOLLOWER, 'no-such-leader']);
+  });
+
   it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {
     class RaceStore extends MemoryCopyFollowStore {
       override async listFollowsByFollower() {

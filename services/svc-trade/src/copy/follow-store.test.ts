@@ -53,3 +53,29 @@ describe('CopyFollowStore unique (follower, leader)', () => {
     }
   });
 });
+
+describe('listFollowsByFollower', () => {
+  it('scopes by followerId first; optional leaderId exact-matches', async () => {
+    const store = new MemoryCopyFollowStore();
+    const other = '00000000-0000-4000-8000-000000000099';
+    const leaderB = '00000000-0000-4000-8000-000000000003';
+    await store.saveFollow(follow('aaaa1111-1111-4111-8111-111111111111'));
+    await store.saveFollow(follow('bbbb2222-2222-4222-8222-222222222222', leaderB));
+    await store.saveFollow({ ...follow('cccc3333-3333-4333-8333-333333333333'), followerId: other });
+
+    const mine = await store.listFollowsByFollower(FOLLOWER);
+    expect(mine).toHaveLength(2);
+
+    const one = await store.listFollowsByFollower(FOLLOWER, LEADER);
+    expect(one).toHaveLength(1);
+    expect(one[0]?.leaderId).toBe(LEADER);
+    expect(one[0]?.followerId).toBe(FOLLOWER);
+
+    expect(await store.listFollowsByFollower(FOLLOWER, 'no-such-leader')).toEqual([]);
+
+    const stranger = await store.listFollowsByFollower(other, LEADER);
+    expect(stranger).toHaveLength(1);
+    expect(stranger[0]?.followerId).toBe(other);
+    expect(stranger[0]?.leaderId).toBe(LEADER);
+  });
+});

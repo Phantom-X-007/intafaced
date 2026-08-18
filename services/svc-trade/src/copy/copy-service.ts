@@ -237,11 +237,13 @@ export class CopyService {
   }
 
   /**
-   * List the caller's own follows (product desk). Store filters by followerId —
-   * never loads another user's envelope into this process.
+   * List the caller's own follows (product desk). Store filters by followerId
+   * first — never loads another user's envelope. Optional leaderId is an exact
+   * match in the store (not a post-filter of a mixed page). Empty when none match.
    */
-  async listMyFollows(principal: Principal) {
-    const mine = await this.store.listFollowsByFollower(principal.userId);
+  async listMyFollows(principal: Principal, input?: { leaderId?: string }) {
+    const leaderId = input?.leaderId?.trim();
+    const mine = await this.store.listFollowsByFollower(principal.userId, leaderId ? leaderId : undefined);
     return mine.map(presentCopyFollow);
   }
 
@@ -269,10 +271,9 @@ export class CopyService {
       throw new CopyError('Cannot follow yourself', 'trade.copy_self_follow');
     }
 
-    for (const f of await this.store.listFollowsByFollower(principal.userId)) {
-      if (f.leaderId === leaderId) {
-        throw new CopyError('Already following this leader', 'trade.copy_already_following');
-      }
+    const already = await this.store.listFollowsByFollower(principal.userId, leaderId);
+    if (already.length > 0) {
+      throw new CopyError('Already following this leader', 'trade.copy_already_following');
     }
 
     const envelope = parseCopyEnvelope({

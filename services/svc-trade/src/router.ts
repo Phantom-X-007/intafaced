@@ -748,13 +748,15 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           }),
         ),
 
-      /** Caller's follows only — product desk list. */
-      listMyFollows: scopedProcedure('trade:read', { module: 'trade' }).query(({ ctx }) =>
-        guard(async () => {
-          if (!copy) return [];
-          return copy.listMyFollows(ctx.principal);
-        }),
-      ),
+      /** Caller's follows only — product desk list. Optional leaderId exact-match. */
+      listMyFollows: scopedProcedure('trade:read', { module: 'trade' })
+        .input(z.object({ leaderId: z.string().min(1).max(120).optional() }).optional())
+        .query(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) return [];
+            return copy.listMyFollows(ctx.principal, input);
+          }),
+        ),
 
       /**
        * Plan a mirror of a leader fill under one of the caller's follows.

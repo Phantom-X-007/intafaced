@@ -134,8 +134,12 @@ export interface CopyFollowStore {
   deleteFollow(followId: string): Promise<void>;
   /** All follows (hydrate / ops). Product desk uses listFollowsByFollower. */
   listFollows(): Promise<CopyFollow[]>;
-  /** Caller-scoped list — never loads another follower's envelope. */
-  listFollowsByFollower(followerId: string): Promise<CopyFollow[]>;
+  /**
+   * Caller-scoped list — followerId first, never another user's envelope.
+   * Optional leaderId is an exact match on follow.leaderId (SQL AND). Omitted
+   * returns every follow owned by that follower.
+   */
+  listFollowsByFollower(followerId: string, leaderId?: string): Promise<CopyFollow[]>;
   getExposure(followId: string): Promise<Amount>;
   setExposure(followId: string, amount: Amount): Promise<void>;
   /**
@@ -289,8 +293,12 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     return [...this.follows.values()];
   }
 
-  async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
-    return [...this.follows.values()].filter((f) => f.followerId === followerId);
+  async listFollowsByFollower(followerId: string, leaderId?: string): Promise<CopyFollow[]> {
+    return [...this.follows.values()].filter((f) => {
+      if (f.followerId !== followerId) return false;
+      if (leaderId) return f.leaderId === leaderId;
+      return true;
+    });
   }
 
   async getExposure(followId: string): Promise<Amount> {
@@ -609,13 +617,15 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     return rows.map(rowToFollow);
   }
 
-  async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
+  async listFollowsByFollower(followerId: string, leaderId?: string): Promise<CopyFollow[]> {
+    const leaderFilter = leaderId ? this.sql`leader_id = ${leaderId}` : this.sql`TRUE`;
     const rows = await this.sql<FollowRow[]>`
       SELECT follow_id, follower_id, leader_id, region, permitted_markets,
              max_notional_per_order::text, max_aggregate_exposure::text,
              expires_at, fee_share_killed, exposure::text, created_at
         FROM copy_follows
        WHERE follower_id = ${followerId}
+         AND ${leaderFilter}
     `;
     return rows.map(rowToFollow);
   }
