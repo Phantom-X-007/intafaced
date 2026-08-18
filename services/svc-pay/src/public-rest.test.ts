@@ -4,7 +4,7 @@ import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryMerchantWebhookStore, MerchantWebhookService } from './merchant-webhooks.js';
-import { PayError, type PayService } from './payment-service.js';
+import { PayError, type PayService, type PaymentView } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { MemoryRestIdempotencyStore } from './rest-idempotency.js';
 
@@ -804,6 +804,87 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
     });
     expect(forbidden.statusCode).toBe(403);
     expect(forbidden.json().error.code).toBe('pay.merchant_forbidden');
+  });
+
+  it('lists deliveries mixed when endpointId is omitted, exact-matches, miss [], invalid 400, ANDs status, no secret', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const webhooks = new MerchantWebhookService(store);
+    app = await build(stubPay(), new MemoryRestIdempotencyStore(), webhooks);
+
+    const a = await webhooks.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/a');
+    const b = await webhooks.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/b');
+    const paymentView = (over: Partial<PaymentView> = {}): PaymentView =>
+      ({
+        id: PAYMENT,
+        merchantId: MERCHANT,
+        profileId: null,
+        amount: parseAmount('1.10'),
+        assetId: 'USD',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        railRef: 'ref-1',
+        status: 'captured',
+        capturedAmount: parseAmount('1.10'),
+        refundedAmount: parseAmount('0'),
+        createdAt: new Date('2026-08-07T10:00:00.000Z'),
+        ...over,
+      }) as PaymentView;
+    await webhooks.enqueue({ type: 'payment.captured', payment: paymentView() });
+    await webhooks.enqueue({
+      type: 'payment.authorized',
+      payment: paymentView({
+        id: '88888888-8888-4888-8888-888888888888',
+        status: 'authorized',
+        capturedAmount: parseAmount('0'),
+      }),
+    });
+
+    const aCaptured = [...store.deliveries.values()].find((d) => d.endpointId === a.id && d.eventType === 'payment.captured')!;
+    aCaptured.status = 'failed';
+
+    const mixed = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+    expect(mixed.statusCode).toBe(200);
+    const mixedRows = mixed.json() as Array<{ endpointId: string; secret?: string }>;
+    expect(mixedRows.map((r) => r.endpointId).sort()).toEqual([a.id, a.id, b.id, b.id].sort());
+    expect(mixedRows.every((r) => r.secret === undefined)).toBe(true);
+    expect(mixed.body).not.toContain(a.secret);
+    expect(mixed.body).not.toContain('"secret"');
+
+    const onlyA = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&endpointId=${a.id}`,
+      headers: signed(),
+    });
+    expect(onlyA.statusCode).toBe(200);
+    expect((onlyA.json() as Array<{ endpointId: string }>).every((r) => r.endpointId === a.id)).toBe(true);
+    expect(onlyA.json()).toHaveLength(2);
+
+    const miss = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&endpointId=77777777-7777-4777-8777-777777777777`,
+      headers: signed(),
+    });
+    expect(miss.statusCode).toBe(200);
+    expect(miss.json()).toEqual([]);
+
+    const invalid = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&endpointId=not-a-uuid`,
+      headers: signed(),
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const andFailed = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&endpointId=${a.id}&status=failed`,
+      headers: signed(),
+    });
+    expect(andFailed.statusCode).toBe(200);
+    expect(andFailed.json()).toEqual([expect.objectContaining({ id: aCaptured.id, endpointId: a.id, status: 'failed' })]);
   });
 });
 

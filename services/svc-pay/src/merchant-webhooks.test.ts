@@ -326,6 +326,83 @@ describe('MerchantWebhookService', () => {
     expect(outer.values[1]).toMatchObject({ values: ['disabled'] });
   });
 
+  it('listDeliveries omits endpointId as mixed, exact-matches, misses as [], ANDs status, no secrets', async () => {
+    const OTHER = '55555555-5555-4555-8555-555555555555';
+    const UNKNOWN = '77777777-7777-4777-8777-777777777777';
+    const store = new MemoryMerchantWebhookStore();
+    const svc = new MerchantWebhookService(store);
+    const a = await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/a');
+    const b = await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/b');
+    await svc.registerEndpoint(OTHER, 'https://other.example/hooks');
+
+    await svc.enqueue({ type: 'payment.captured', payment: payment() });
+    await svc.enqueue({
+      type: 'payment.authorized',
+      payment: payment({ id: '88888888-8888-4888-8888-888888888888', status: 'authorized' }),
+    });
+
+    const deliveries = [...store.deliveries.values()];
+    expect(deliveries).toHaveLength(4);
+    const aCaptured = deliveries.find((d) => d.endpointId === a.id && d.eventType === 'payment.captured')!;
+    const bCaptured = deliveries.find((d) => d.endpointId === b.id && d.eventType === 'payment.captured')!;
+    aCaptured.status = 'failed';
+    bCaptured.status = 'failed';
+    aCaptured.createdAt = new Date('2026-08-18T12:00:00.000Z');
+    bCaptured.createdAt = new Date('2026-08-18T11:00:00.000Z');
+
+    const mixed = await svc.listDeliveries(MERCHANT);
+    expect(mixed.map((d) => d.endpointId).sort()).toEqual([a.id, a.id, b.id, b.id].sort());
+    expect(mixed.every((d) => d.merchantId === MERCHANT)).toBe(true);
+    expect(mixed.every((d) => !('secret' in d))).toBe(true);
+    expect(JSON.stringify(mixed)).not.toContain(a.secret);
+    expect(JSON.stringify(mixed)).not.toContain('"secret"');
+
+    const onlyA = await svc.listDeliveries(MERCHANT, { endpointId: a.id });
+    expect(onlyA.every((d) => d.endpointId === a.id)).toBe(true);
+    expect(onlyA).toHaveLength(2);
+
+    expect(await svc.listDeliveries(MERCHANT, { endpointId: UNKNOWN })).toEqual([]);
+
+    const andFailed = await svc.listDeliveries(MERCHANT, { endpointId: a.id, status: 'failed' });
+    expect(andFailed).toHaveLength(1);
+    expect(andFailed[0]?.id).toBe(aCaptured.id);
+    expect(andFailed[0]?.status).toBe('failed');
+    expect(andFailed[0]?.endpointId).toBe(a.id);
+  });
+
+  it('PostgresMerchantWebhookStore nests AND endpoint_id = $endpointId under merchant_id', async () => {
+    const ENDPOINT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    type Frag = { strings: string[]; values: unknown[] };
+    const calls: Frag[] = [];
+    const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const frag: Frag = { strings: [...strings], values };
+      calls.push(frag);
+      return Object.assign(Promise.resolve([] as const), frag);
+    };
+    const store = new PostgresMerchantWebhookStore(sql);
+
+    await store.listDeliveries(MERCHANT, { limit: 50 });
+    const mixed = calls[calls.length - 1]!;
+    expect(mixed.strings.join('?')).toMatch(/merchant_id\s*=\s*\?/i);
+    expect(mixed.strings.join('?')).not.toMatch(/AND endpoint_id/i);
+    expect(mixed.strings.join('?')).not.toMatch(/AND status/i);
+    expect(mixed.values[0]).toBe(MERCHANT);
+
+    calls.length = 0;
+    await store.listDeliveries(MERCHANT, { endpointId: ENDPOINT, limit: 50 });
+    const endpointFrag = calls.find((c) => c.strings.join('?').match(/AND endpoint_id\s*=\s*\?/i));
+    expect(endpointFrag).toBeTruthy();
+    expect(endpointFrag!.values).toEqual([ENDPOINT]);
+    const outer = calls[calls.length - 1]!;
+    expect(outer.values[0]).toBe(MERCHANT);
+    expect(outer.values.some((v) => v && typeof v === 'object' && 'values' in v && (v as Frag).values[0] === ENDPOINT)).toBe(true);
+
+    calls.length = 0;
+    await store.listDeliveries(MERCHANT, { status: 'failed', endpointId: ENDPOINT, limit: 10 });
+    expect(calls.some((c) => c.strings.join('?').match(/AND status\s*=\s*\?/i) && c.values[0] === 'failed')).toBe(true);
+    expect(calls.some((c) => c.strings.join('?').match(/AND endpoint_id\s*=\s*\?/i) && c.values[0] === ENDPOINT)).toBe(true);
+  });
+
   it('processDue with a blank signing secret refuses by name and does not POST', async () => {
     const store = new MemoryMerchantWebhookStore();
     let posts = 0;

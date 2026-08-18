@@ -182,7 +182,10 @@ export interface MerchantWebhookStore {
   claimDue(limit: number, now: Date): Promise<Array<MerchantWebhookDelivery & { secret: string; url: string }>>;
   markDelivered(id: string, statusCode: number, deliveredAt: Date): Promise<void>;
   markRetry(id: string, attempts: number, nextAttemptAt: Date, statusCode: number | null, error: string, dead: boolean): Promise<void>;
-  listDeliveries(merchantId: string, opts: { status?: WebhookDeliveryStatus; limit: number }): Promise<MerchantWebhookDelivery[]>;
+  listDeliveries(
+    merchantId: string,
+    opts: { status?: WebhookDeliveryStatus; endpointId?: string; limit: number },
+  ): Promise<MerchantWebhookDelivery[]>;
 }
 
 type MemEndpoint = {
@@ -355,10 +358,14 @@ export class MemoryMerchantWebhookStore implements MerchantWebhookStore {
     d.status = dead ? 'dead' : 'failed';
   }
 
-  async listDeliveries(merchantId: string, opts: { status?: WebhookDeliveryStatus; limit: number }): Promise<MerchantWebhookDelivery[]> {
+  async listDeliveries(
+    merchantId: string,
+    opts: { status?: WebhookDeliveryStatus; endpointId?: string; limit: number },
+  ): Promise<MerchantWebhookDelivery[]> {
     return [...this.deliveries.values()]
       .filter((d) => d.merchantId === merchantId)
       .filter((d) => (opts.status ? d.status === opts.status : true))
+      .filter((d) => (opts.endpointId ? d.endpointId === opts.endpointId : true))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, opts.limit);
   }
@@ -555,23 +562,17 @@ export class PostgresMerchantWebhookStore implements MerchantWebhookStore {
     `;
   }
 
-  async listDeliveries(merchantId: string, opts: { status?: WebhookDeliveryStatus; limit: number }): Promise<MerchantWebhookDelivery[]> {
-    if (opts.status) {
-      const rows = (await this.sql`
-        SELECT id, endpoint_id, merchant_id, event_id, event_type, payload, status, attempts,
-               next_attempt_at, last_status_code, last_error, created_at, delivered_at
-          FROM pay.merchant_webhook_deliveries
-         WHERE merchant_id = ${merchantId} AND status = ${opts.status}
-         ORDER BY created_at DESC
-         LIMIT ${opts.limit}
-      `) as ReadonlyArray<DeliveryRow>;
-      return rows.map(mapDelivery);
-    }
+  async listDeliveries(
+    merchantId: string,
+    opts: { status?: WebhookDeliveryStatus; endpointId?: string; limit: number },
+  ): Promise<MerchantWebhookDelivery[]> {
     const rows = (await this.sql`
       SELECT id, endpoint_id, merchant_id, event_id, event_type, payload, status, attempts,
              next_attempt_at, last_status_code, last_error, created_at, delivered_at
         FROM pay.merchant_webhook_deliveries
        WHERE merchant_id = ${merchantId}
+         ${opts.status === undefined ? this.sql`` : this.sql`AND status = ${opts.status}`}
+         ${opts.endpointId === undefined ? this.sql`` : this.sql`AND endpoint_id = ${opts.endpointId}`}
        ORDER BY created_at DESC
        LIMIT ${opts.limit}
     `) as ReadonlyArray<DeliveryRow>;
@@ -733,10 +734,11 @@ export class MerchantWebhookService {
   /** Failure dashboard — dead + failed deliveries newest first. */
   async listDeliveries(
     merchantId: string,
-    opts: { status?: WebhookDeliveryStatus; limit?: number } = {},
+    opts: { status?: WebhookDeliveryStatus; endpointId?: string; limit?: number } = {},
   ): Promise<MerchantWebhookDelivery[]> {
     return this.store.listDeliveries(merchantId, {
       status: opts.status,
+      endpointId: opts.endpointId,
       limit: Math.min(opts.limit ?? 50, 200),
     });
   }

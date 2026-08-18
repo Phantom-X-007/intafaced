@@ -1277,13 +1277,14 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           tags: ['webhooks'],
           summary: 'Webhook delivery dashboard (failures / dead / all)',
           description:
-            'Permanently failing endpoints are disabled rather than silently dropped (ADR §2.4). Filter with `status=failed` or `status=dead`.',
+            'Permanently failing endpoints are disabled rather than silently dropped (ADR §2.4). Filter with `status=failed` or `status=dead`, and optionally `endpointId`.',
           querystring: {
             type: 'object',
             required: ['merchantId'],
             properties: {
               merchantId: { type: 'string', format: 'uuid' },
               status: { type: 'string', enum: ['pending', 'delivered', 'failed', 'dead'] },
+              endpointId: { type: 'string', format: 'uuid' },
               limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
             },
           },
@@ -1292,7 +1293,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       },
       async (
         req: FastifyRequest<{
-          Querystring: { merchantId: string; status?: WebhookDeliveryStatus; limit?: number };
+          Querystring: { merchantId: string; status?: WebhookDeliveryStatus; endpointId?: string; limit?: number };
         }>,
         reply,
       ) => {
@@ -1302,6 +1303,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.webhooks.read'));
           const rows = await webhooks.listDeliveries(req.query.merchantId, {
             status: req.query.status,
+            endpointId: req.query.endpointId,
             limit: req.query.limit,
           });
           return reply.send(
