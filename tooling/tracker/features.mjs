@@ -1917,7 +1917,7 @@ export const FEATURES = [
     dependsOn: ['dex.quote-router'],
     requires: ['services/svc-dex/src/quote/clob-costs.ts'],
     note:
-      "Owner set 2026-08-07 (board S-I3). S-C1 2026-08-18: SovereignVenue publishes takerFeeBps + settlementCostQuote()=0. " +
+      'Owner set 2026-08-07 (board S-I3). S-C1 2026-08-18: SovereignVenue publishes takerFeeBps + settlementCostQuote()=0. ' +
       "S-I3 2026-08-18: CLOB knobs no longer default to 0 / '0' — that understated every on-chain quote. " +
       'DEX_CLOB_FEE_BPS and DEX_CLOB_SETTLEMENT_COST must be set together (operator copies SovereignVenue.takerFeeBps / settlementCostQuote) or omitted together; omitted means intachain-clob is not quoted. One-sided config fails boot. ' +
       'Quote path still reads projections, never eth_call (doctrine). Internal-book DEX_INTERNAL_BOOK_FEE_BPS default 20 remains a configured guess (ledger post has no gas leg; svc-trade markets still unreadable across services §2). ' +
