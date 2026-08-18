@@ -5,13 +5,18 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
+> ### 2026-08-18 delta — S-C1 + S-L4 (this PR)
+>
+> **S-C1 SovereignVenue:** real single-market CLOB (deposit / place / cancel, price-time match, token custody). Fill emits only from matching — not DevVenue. Event surface matches the indexer ABI. `audited` stays false (external audit = Nitro). Tracker `socket.clob-contracts` → **ready**.
+> **S-L4:** LaunchVesting (cliff + linear, no revoke) + DeployerReputation (raw counts; empty = zeros, no isSafe). LaunchLpLock already on tip. Tracker `launch.trust-layer` → **done**.
+> **S-I3:** venue now _publishes_ `takerFeeBps` + `settlementCostQuote()=0`. svc-dex still quotes from env — socket stays until a dex PR reads the contract.
+>
 > ### 2026-08-08 delta — P0 wave (tip)
 >
-> **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar.
-> **S-L2 (this PR):** LegacyVault — heirs + timelocks the user sets/revokes; heartbeat aborts succession; staged heir claim. Platform never a guardian (S-K7).
+> **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar · #2362 S-L2 LegacyVault.
 > **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
 >
-> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · EntryPoint differential · S-C1 venue · S-I3/I4 · S-L3/L5/L6 · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows.
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · EntryPoint differential · S-I3/I4 (dex read + OMS) · S-L3/L5/L6 (open #2363) · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows.
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -136,11 +141,11 @@ This board was written on 2026-08-03 against a picture that was already out of d
 
 ### Tier C — Indexer / venue contracts (chain → read models)
 
-| ID       | Outcome                                 | Done bar                                                                  | Collision                                                            |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **S-C1** | **Real venue contracts (not DevVenue)** | Auditable venue events matching indexer ABI · or explicit socket residual | Indexer adapter exists; **contracts** are the hole (tracker honesty) |
-| **S-C2** | **Reorg-safe event surface**            | Property tests: reorg deeper than history · tip replace                   | Pair with indexer owners; you own Solidity venue                     |
-| **S-C3** | **Permissionless position/fill events** | Document event matrix for agents to WS later                              | Don’t invent futures mids                                            |
+| ID       | Outcome                                 | Done bar                                                                                                                                              | Collision                                         |
+| -------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| **S-C1** | **Real venue contracts (not DevVenue)** | **Shipped this PR.** `SovereignVenue` — matching CLOB, same BookLevel/Fill/Position as the indexer. Residual: external audit + public deploy address. | Indexer adapter exists; DevVenue stays a fixture  |
+| **S-C2** | **Reorg-safe event surface**            | Property tests: reorg deeper than history · tip replace                                                                                               | Pair with indexer owners; you own Solidity venue  |
+| **S-C3** | **Permissionless position/fill events** | Event matrix is the three events on `SovereignVenue` (same as indexer ABI). Don’t invent futures mids.                                                | WS transport is `socket.indexer-stream` (unowned) |
 
 ### Tier D — INTACHAIN L1 epic (honest sequencing · §17 — YOU OWN THIS)
 
@@ -231,7 +236,7 @@ Every row here was a **counted gap** in `tooling/coverage.yaml`: the law named t
 | **S-L1** | **Crew vaults** (§33)           | Crews are `done` as a social object; a shared treasury for one is a contract and had no row in any form                                  | Member shares · M-of-N spend threshold · **a defined split on exit, designed before anyone deposits** · money-path invariant tests                                                                                                              |
 | **S-L2** | **Legacy vaults** (§34)         | **Arrived with a contradiction.** §34 describes guardian M-of-N recovery; `socket.social-recovery` forbids the platform being a guardian | **Shipped this PR.** S-K7 ADR then LegacyVault: user-set/revocable heirs, inactivity + challenge-window abort via heartbeat, staged tranche claim. No platform key, no guardian role. Residuals: multi-asset, attestation claims, public deploy |
 | **S-L3** | **Stealth handles** (§26)       | `blueprint.attestations` covered the zero-PII half; the receiving half had no row                                                        | One human, two unlinkable presentations · indexer analytics stay aggregate-only · **cannot be retrofitted once addresses are public**                                                                                                           |
-| **S-L4** | **Launch trust layer** (§35)    | The law calls trust the moat in meme season; the anti-rug architecture was missing without being recorded as missing                     | LP locks and vesting **enforced by contract, not promised in a listing** · deployer reputation · a badge that would be false must be unissuable                                                                                                 |
+| **S-L4** | **Launch trust layer** (§35)    | The law calls trust the moat in meme season; the anti-rug architecture was missing without being recorded as missing                     | **Shipped this PR.** LaunchLpLock + LaunchVesting (no admin unlock) + DeployerReputation counts. Empty history cannot render as a clean badge.                                                                                                  |
 | **S-L5** | **Treasury yield vaults** (§36) | `launch.rwa` recorded the licence blocker for one half of the pair and nothing recorded the other                                        | Contract half yours · **licence is Class X, Nitro human** — no contract makes that go away                                                                                                                                                      |
 | **S-L6** | **Venue Vault** (§27) 🔴        | `venue.aggregation` has admitted "Venue Vault absent" in its own note since 2026-08-02 with no row behind it                             | Per-user encrypted external venue keys · **a key carrying withdrawal permission refused at registration, not filtered at use** · this is the hard blocker under S-I4                                                                            |
 

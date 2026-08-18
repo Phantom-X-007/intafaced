@@ -195,8 +195,26 @@ export const SUITES = [
   {
     name: 'vaults',
     expect: 'compiles',
-    /** S-L1 crew vault + S-L2 legacy vault + S-L4 LP lock (trust). */
-    sources: ['vaults/CrewVault.sol', 'vaults/LegacyVault.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+    /** S-L1 crew vault + S-L2 legacy vault + S-L4 LP lock / vesting / reputation. */
+    sources: [
+      'vaults/CrewVault.sol',
+      'vaults/LegacyVault.sol',
+      'trust/LaunchLpLock.sol',
+      'trust/LaunchVesting.sol',
+      'trust/DeployerReputation.sol',
+      'amm/IERC20Minimal.sol',
+      'test/MockERC20.sol',
+    ],
+  },
+  {
+    name: 'venue',
+    expect: 'compiles',
+    /**
+     * S-C1 — real CLOB (not DevVenue). Own suite so a book edit does not stale
+     * vault bytecode. MockERC20 is test-only; artefact name collides with
+     * lending/vaults so those suites still own MockERC20.json.
+     */
+    sources: ['venue/SovereignVenue.sol', 'amm/IERC20Minimal.sol'],
   },
 ];
 

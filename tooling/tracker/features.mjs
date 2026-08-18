@@ -1377,13 +1377,18 @@ export const FEATURES = [
     module: 'launch',
     phase: '5',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['launch.token-factory'],
-    requires: ['services/svc-protocol/contracts/trust/LaunchLpLock.sol'],
+    requires: [
+      'services/svc-protocol/contracts/trust/LaunchLpLock.sol',
+      'services/svc-protocol/contracts/trust/LaunchVesting.sol',
+      'services/svc-protocol/contracts/trust/DeployerReputation.sol',
+    ],
     note:
-      'S-L4 LP leg 2026-08-08: LaunchLpLock — immutable unlockTime, no admin early exit. STATUS ready (not done): ' +
-      'vesting proofs + deployer reputation badge still residual; badge-false must stay unissuable.',
+      'S-L4 2026-08-18: LaunchLpLock (immutable unlockTime, no admin exit) + LaunchVesting (cliff/linear, no revoke) + ' +
+      'DeployerReputation (raw lock/vest counts only — empty history is zeros, no isSafe/score). ' +
+      'A listing badge is still a UI concern; this contract will not issue one that would be false.',
   }),
   f('launch.treasury-yield', 'Tokenized T-bill vaults — stable balances opt into RWA yield (§36)', {
     module: 'launch',
@@ -1905,7 +1910,12 @@ export const FEATURES = [
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['dex.quote-router'],
-    note: "Owner set 2026-08-07 (board S-I3). §13 — named in services/svc-dex/src/env.ts and never tracked until 2026-08-03. Fees are CONFIGURED, not sourced: DEX_CLOB_FEE_BPS (0), DEX_INTERNAL_BOOK_FEE_BPS (20) and DEX_CLOB_SETTLEMENT_COST ('0'). Understate either and the effective price reported is better than the one the user actually gets. The authoritative figures cannot be read yet — the per-market spot schedule lives in svc-trade's own `markets` row and §2 forbids reading another service's tables, and the on-chain CLOB has no deployed contract to publish one. The settlement cost of '0' is a DECLARED UNDERSTATEMENT: converting gas into the quote asset needs a gas oracle and a native-token price and neither exists in this stack. It costs nothing today because that venue has no chain to read, and it must be set before the first real on-chain quote is served. What keeps this honest rather than hidden is that every quote response discloses the exact feeBps and settlementCost applied per venue, so a caller can check the arithmetic against the venue's real schedule.",
+    note:
+      'Owner set 2026-08-07 (board S-I3). S-C1 2026-08-18: SovereignVenue now publishes takerFeeBps (immutable) and ' +
+      'settlementCostQuote()=0 (honest for this venue — gas is the matching tx, no second quote-asset surcharge). ' +
+      'svc-dex STILL quotes from env guesses (DEX_CLOB_FEE_BPS / DEX_CLOB_SETTLEMENT_COST) until a dex PR reads the contract. ' +
+      'Socket stays until that read path exists — publishing on-chain is not the same as quoting from it. ' +
+      'Internal-book 20bps remains a configured guess; svc-trade markets are still unreadable across services (§2).',
   }),
   f('socket.dex-execution', 'Order execution against a quoted venue (§27 vault, §28 OMS)', {
     module: 'dex',
@@ -2233,10 +2243,16 @@ export const FEATURES = [
     module: 'indexer',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'ready',
     owner: 'shehzad002',
     dependsOn: ['indexer.readmodels'],
-    note: 'Owner set 2026-08-07 — the CONTRACT is the chain owner\'s (board S-C1); the indexer adapter that reads it stays agent residual, and the two must not be confused. services/svc-indexer/src/chain/evm/abi.ts declares three events — BookLevel, Fill, Position — and abi.test.ts holds them to the compiled ABI of contracts/dev/DevVenue.sol. DevVenue is a DEV FIXTURE and says so in its own header: no order book, no matching, no custody, and no access control at all (anyone can publish any trade). It exists so the adapter decodes logs a real chain produced. INDEXER_VENUE_ADDRESS therefore has no honest default — it is the zero address, EvmChainSource refuses to construct on it (eth_getLogs against 0x0 returns [] forever, which would fill the read model with a confident permanent "no liquidity"), and docker-compose.apps.yml leaves INDEXER_RPC_URL empty so the shipped stack still boots NullChainSource. Blocked on there being a venue contract to read, which is a contracts decision and not an indexer one: the adapter does not depend on which events it decodes.',
+    requires: ['services/svc-protocol/contracts/venue/SovereignVenue.sol'],
+    note:
+      'S-C1 2026-08-18: SovereignVenue is a real single-market CLOB — deposit/place/cancel, price-time matching, ' +
+      'custody of base+quote, Fill only from a match (no recordFill). Event surface is the indexer ABI ' +
+      '(BookLevel absolute qty, Fill, Position). DevVenue stays a decoder fixture in svc-indexer. ' +
+      'STATUS ready (not done): not externally audited; INDEXER_VENUE_ADDRESS stays zero until a public deploy (Nitro RPC). ' +
+      'socket.contract-audit still gates audited:true.',
   }),
   f('socket.indexer-stream', 'Live book/tape feed from the projection (§5.2 ws-gateway)', {
     module: 'indexer',
