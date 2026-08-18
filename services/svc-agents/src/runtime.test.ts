@@ -957,6 +957,55 @@ if (!available) {
       expect(await runtime.sessionLog(session.id, 'embedding')).toEqual([]);
     });
 
+    it('omits a tool filter so one session log still mixes tools in sequence', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.map((entry) => entry.tool)).toEqual([null, 'trade.quote', 'trade.order']);
+      expect(log.map((entry) => entry.sequence)).toEqual([0, 1, 2]);
+      expect(log.every((entry) => entry.sessionId === session.id)).toBe(true);
+    });
+
+    it('filters one session log to an exact tool, still sequence ASC', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.sessionLog(session.id, undefined, 'trade.quote');
+      expect(log.length).toBe(2);
+      expect(log.every((entry) => entry.tool === 'trade.quote' && entry.sessionId === session.id)).toBe(true);
+      expect(log.map((entry) => entry.sequence)).toEqual([1, 3]);
+    });
+
+    it('returns an empty session log when no row matches the tool', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      expect(await runtime.sessionLog(session.id, undefined, 'trade.order')).toEqual([]);
+    });
+
+    it('ANDs kind with tool on one session log', async () => {
+      const session = await open(USER_A);
+      await runtime.think({ sessionId: session.id, requestId: 'r-sess-tool-and', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.sessionLog(session.id, 'tool_call', 'trade.quote');
+      expect(log.length).toBe(1);
+      expect(log.every((entry) => entry.kind === 'tool_call' && entry.tool === 'trade.quote' && entry.sessionId === session.id)).toBe(true);
+      expect(await runtime.sessionLog(session.id, 'completion', 'trade.quote')).toEqual([]);
+    });
+
+    it('still verifies the full mixed-tool hash chain when the list is filtered', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+
+      expect(await runtime.audit.verifyChain(session.id)).toEqual({ ok: true });
+      expect((await runtime.sessionLog(session.id, undefined, 'trade.quote')).map((entry) => entry.sequence)).toEqual([1]);
+    });
+
     it('keys every log line for i18n rather than shipping prose', async () => {
       const session = await open();
       await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });

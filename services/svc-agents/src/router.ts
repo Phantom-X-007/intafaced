@@ -447,13 +447,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           z.object({
             sessionId: z.string().uuid(),
             kind: z.enum(['session_open', 'session_close', 'completion', 'embedding', 'tool_call', 'usage_settlement']).optional(),
+            tool: z.string().trim().min(1).max(64).optional(),
           }),
         )
         .output(z.array(actionOutput))
         .query(({ ctx, input }) =>
           guard(async () => {
             await ownedSession(input.sessionId, ctx.principal.userId);
-            return (await runtime.sessionLog(input.sessionId, input.kind)).map(toActionOutput);
+            return (await runtime.sessionLog(input.sessionId, input.kind, input.tool)).map(toActionOutput);
           }),
         ),
     }),
