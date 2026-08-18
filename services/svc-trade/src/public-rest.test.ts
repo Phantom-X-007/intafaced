@@ -13,6 +13,7 @@ import {
   presentPublicTrade,
   presentTicker,
   parseUntil,
+  parseTickerSymbol,
   registerPublicRest,
   OPEN_POSITION_GATES_NOTE,
   type PublicRestDeps,
@@ -34,6 +35,20 @@ describe('bpsToRate / decimalPlaces', () => {
     expect(decimalPlaces('0.0001')).toBe(4);
     expect(decimalPlaces('1')).toBe(0);
     expect(decimalPlaces('0.0100')).toBe(2);
+  });
+});
+
+describe('parseTickerSymbol', () => {
+  it('treats absent or empty as omitted (full venue map)', () => {
+    expect(parseTickerSymbol(undefined)).toEqual({ ok: true, symbol: undefined });
+    expect(parseTickerSymbol('')).toEqual({ ok: true, symbol: undefined });
+  });
+
+  it('trims a unified symbol and rejects whitespace or oversized garbage', () => {
+    expect(parseTickerSymbol(' BTC/USDT ')).toEqual({ ok: true, symbol: 'BTC/USDT' });
+    expect(parseTickerSymbol('   ').ok).toBe(false);
+    expect(parseTickerSymbol('X'.repeat(65)).ok).toBe(false);
+    expect(parseTickerSymbol(['BTC/USDT']).ok).toBe(false);
   });
 });
 
@@ -928,6 +943,140 @@ describe('public REST routes', () => {
     expect(body['BTC/USDT']!.bid).toBeNull();
     // Tape still available — last print is honest.
     expect(body['BTC/USDT']!.last).toBe('100.5');
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol= exact-matches one market and does not list the rest', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    let listed = false;
+    let lookedUp: string | undefined;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market, eth];
+        },
+        marketBySymbol: async (symbol) => {
+          lookedUp = symbol;
+          return symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : null;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('ETH/USDT')}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(listed).toBe(false);
+    expect(lookedUp).toBe('ETH/USDT');
+    const body = res.json() as Record<string, { symbol: string; high: null; average: null; last: string }>;
+    expect(Object.keys(body)).toEqual(['ETH/USDT']);
+    expect(tickerSchema.safeParse(body['ETH/USDT']).success).toBe(true);
+    expect(body['ETH/USDT']!.symbol).toBe('ETH/USDT');
+    expect(body['ETH/USDT']!.high).toBeNull();
+    expect(body['ETH/USDT']!.average).toBeNull();
+    expect(body['ETH/USDT']!.last).toBe('100.5');
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol= unknown spelling → honest empty map, not 404', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('NOPE/USDT')}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(listed).toBe(false);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol= empty string is omitted (full venue map)', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const app = await build(
+      deps({
+        markets: async () => [market, eth],
+        marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : null),
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?symbol=' });
+    expect(res.statusCode).toBe(200);
+    expect(Object.keys(res.json() as Record<string, unknown>).sort()).toEqual(['BTC/USDT', 'ETH/USDT']);
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol= whitespace or oversized garbage → 400', async () => {
+    let listed = false;
+    let lookedUp = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+        marketBySymbol: async () => {
+          lookedUp = true;
+          return market;
+        },
+      }),
+    );
+    for (const symbol of ['   ', 'X'.repeat(65)]) {
+      listed = false;
+      lookedUp = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/tickers?symbol=${encodeURIComponent(symbol)}`,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(res.json().intafacedCode).toBe('trade.invalid_ticker_symbol');
+      expect(res.json().message).toBe('symbol must be 1-64 characters');
+      expect(listed).toBe(false);
+      expect(lookedUp).toBe(false);
+    }
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol= still returns empty BBO when the book is down', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingUnavailableError('svc-matching down');
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('BTC/USDT')}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, { bid: null; last: string; average: null }>;
+    expect(Object.keys(body)).toEqual(['BTC/USDT']);
+    expect(body['BTC/USDT']!.bid).toBeNull();
+    expect(body['BTC/USDT']!.last).toBe('100.5');
+    expect(body['BTC/USDT']!.average).toBeNull();
+    await app.close();
+  });
+
+  it('GET /api/v1/ticker/:symbol still 404s for unknown (bulk path does not)', async () => {
+    const app = await build();
+    const single = await app.inject({ method: 'GET', url: '/api/v1/ticker/NOPE%2FUSDT' });
+    expect(single.statusCode).toBe(404);
+    expect(single.json().code).toBe('BadSymbol');
+    const bulk = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('NOPE/USDT')}`,
+    });
+    expect(bulk.statusCode).toBe(200);
+    expect(bulk.json()).toEqual({});
     await app.close();
   });
 

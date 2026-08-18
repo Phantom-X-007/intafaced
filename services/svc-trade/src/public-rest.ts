@@ -17,7 +17,7 @@ import type { Candle, Market, MarketKind, MarketStatus, PublicTapePrint } from '
  *   GET /api/v1/markets?status=&kind=&quote=&base=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
- *   GET /api/v1/tickers
+ *   GET /api/v1/tickers?symbol=
  *   GET /api/v1/trades/:symbol?limit=&since=&until=&side=
  *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&until=&limit=
  *   GET /api/v1/funding-rate/:symbol
@@ -549,6 +549,23 @@ export function parseMarketBase(raw: unknown): { ok: true; base?: string } | { o
   return { ok: true, base };
 }
 
+const MAX_TICKER_SYMBOL_LEN = 64;
+
+/**
+ * Optional exact-match filter for `GET /api/v1/tickers?symbol=`.
+ * Absent or empty → full venue map. Whitespace / oversized garbage → 400.
+ * A well-formed spelling the listing misses is not invalid — that is `{}`.
+ */
+export function parseTickerSymbol(raw: unknown): { ok: true; symbol?: string } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, symbol: undefined };
+  if (typeof raw !== 'string') return { ok: false, message: 'symbol must be 1-64 characters' };
+  const symbol = raw.trim();
+  if (symbol.length < 1 || symbol.length > MAX_TICKER_SYMBOL_LEN) {
+    return { ok: false, message: 'symbol must be 1-64 characters' };
+  }
+  return { ok: true, symbol };
+}
+
 /**
  * Register the public REST routes on a Fastify instance.
  * Mount alongside `/trpc` — no auth middleware.
@@ -642,28 +659,42 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
   /**
    * All-market tickers. Record keyed by unified symbol (CCXT `fetchTickers`).
    *
+   * Optional `symbol=` is an exact match via `marketBySymbol`. Unknown or
+   * unlistable → honest `{}` (not a 404 — that stays on `GET /ticker/:symbol`).
+   * Empty `symbol=` is omitted: the full venue map.
+   *
    * Markets with no book (or a matching hop that is down for that market) still
-   * appear — empty BBO + last from the tape if any. Never invent 24h stats.
+   * appear — empty BBO + last from the tape if any. Never invent 24h stats or a mid.
    */
-  app.get('/api/v1/tickers', async (_req, reply) => {
-    const markets = await deps.markets();
+  app.get<{ Querystring: { symbol?: string } }>('/api/v1/tickers', async (req, reply) => {
+    const symbolParsed = parseTickerSymbol(req.query.symbol);
+    if (!symbolParsed.ok) {
+      return sendCcxt(reply, badRequest(symbolParsed.message, 'trade.invalid_ticker_symbol'));
+    }
+
     const ts = now();
     const out: Record<string, ReturnType<typeof presentTicker>> = {};
 
-    await Promise.all(
-      markets.map(async (market) => {
-        let depth: EngineDepth = EMPTY_DEPTH;
-        try {
-          depth = await deps.depth(market.id, 1);
-        } catch (err) {
-          // Bulk path: a missing book must not 502 the whole venue map.
-          if (!(err instanceof MatchingUnavailableError)) throw err;
-        }
-        const tape = await deps.publicTape(market.id, 1);
-        out[market.symbol] = presentTicker(market.symbol, depth, tape[0] ?? null, ts);
-      }),
-    );
+    const tickerFor = async (market: Market) => {
+      let depth: EngineDepth = EMPTY_DEPTH;
+      try {
+        depth = await deps.depth(market.id, 1);
+      } catch (err) {
+        // Bulk path: a missing book must not 502 the whole venue map.
+        if (!(err instanceof MatchingUnavailableError)) throw err;
+      }
+      const tape = await deps.publicTape(market.id, 1);
+      out[market.symbol] = presentTicker(market.symbol, depth, tape[0] ?? null, ts);
+    };
 
+    if (symbolParsed.symbol !== undefined) {
+      const market = await deps.marketBySymbol(symbolParsed.symbol);
+      if (market) await tickerFor(market);
+      return reply.code(200).send(out);
+    }
+
+    const markets = await deps.markets();
+    await Promise.all(markets.map((market) => tickerFor(market)));
     return reply.code(200).send(out);
   });
 
