@@ -64,7 +64,8 @@ export type ArtifactName =
   | 'SovereignNft'
   | 'RoyaltyMarket'
   | 'MemeLaunch'
-  | 'RankAttestation';
+  | 'RankAttestation'
+  | 'FairLaunch';
 
 export interface ContractArtifact {
   readonly contractName: string;
