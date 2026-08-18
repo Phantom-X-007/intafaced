@@ -238,3 +238,27 @@ describe('committed AMM artefacts match the Solidity in this tree', () => {
     }
   });
 });
+
+describe('committed vault artefacts match the Solidity in this tree', () => {
+  const vaults = (SUITES as Suite[]).find((s) => s.name === 'vaults');
+
+  it('compiles CrewVault + LegacyVault + LaunchLpLock', () => {
+    expect(vaults?.expect).toBe('compiles');
+    for (const name of ['CrewVault', 'LegacyVault', 'LaunchLpLock'] as const) {
+      const artefact = loadArtifact(name);
+      expect(artefact.contractName).toBe(name);
+      expect(artefact.suite).toBe('vaults');
+      expect(artefact.bytecode.length).toBeGreaterThan(2);
+      expect(artefact.bytecode).not.toContain('__$');
+    }
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(vaults, collectSources()));
+    for (const name of ['CrewVault', 'LegacyVault', 'LaunchLpLock'] as const) {
+      expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
+        expected,
+      );
+    }
+  });
+});

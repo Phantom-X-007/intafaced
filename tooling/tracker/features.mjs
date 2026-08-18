@@ -1989,13 +1989,15 @@ export const FEATURES = [
     module: 'protocol',
     phase: '5P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
+    requires: ['services/svc-protocol/contracts/vaults/LegacyVault.sol'],
     note:
-      'S-K7 ADR accepted 2026-08-08 (docs/adr/2026-08-08-inheritance-never-platform-guardian.md): platform never a guardian. ' +
-      'S-L2 contract code deliberately NOT started until an heir/time-lock design matches that ADR without a platform key. ' +
-      'Stays socket — honest.',
+      'CLOSED engineering bar 2026-08-18 (S-L2): LegacyVault — owner is constructor msg.sender, user-set/revocable heirs, ' +
+      'inactivity delay + challenge-window abort via heartbeat, staged tranche claim. Matches S-K7 ADR ' +
+      '(docs/adr/2026-08-08-inheritance-never-platform-guardian.md): no platform key, no guardian role. ' +
+      'Residuals: multi-asset, attestation-based beneficiary claims, public Base Sepolia deploy (Nitro RPC). Unaudited.',
   }),
 
   f('socket.options-settlement-asset-law', 'Options / forex settlement asset law (D26-P0-05 ADR)', {

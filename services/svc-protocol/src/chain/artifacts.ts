@@ -47,6 +47,7 @@ export type ArtifactName =
   | 'MerchantAccept'
   | 'SovereignRouter'
   | 'CrewVault'
+  | 'LegacyVault'
   | 'LaunchLpLock'
   | 'SovereignEscrow'
   | 'MockERC20'
