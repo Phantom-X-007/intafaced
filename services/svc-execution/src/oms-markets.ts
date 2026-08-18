@@ -12,7 +12,9 @@
  * Optional settle forwards USDT/…; omitted still observes null settle (spot).
  * Optional symbol forwards the unified BASE/QUOTE; omitted still observes every listing.
  * Optional venueSymbol forwards the venue's own spelling; omitted still observes every listing.
- * Inactive listings stay inactive. Null settle stays null.
+ * Optional expiry forwards a Date; omitted still observes every listing including
+ * null expiry (spot) and inactive listings. Provided expiry is an exact Date.getTime() match.
+ * Inactive listings stay inactive. Null settle stays null. Do not filter contractSize.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueInstrumentType, VenueMarket } from '@intafaced/venue-contracts';
@@ -25,6 +27,7 @@ export type OmsMarketsFn = (
   settle?: string,
   symbol?: string,
   venueSymbol?: string,
+  expiry?: Date,
 ) => Promise<readonly VenueMarket[]>;
 
 export type OmsMarketsInput = {
@@ -36,6 +39,7 @@ export type OmsMarketsInput = {
   readonly settle?: string;
   readonly symbol?: string;
   readonly venueSymbol?: string;
+  readonly expiry?: Date;
   readonly kind?: VenueKind;
   readonly marketsByVenue?: Readonly<Record<string, OmsMarketsFn>>;
 };
@@ -81,6 +85,7 @@ export async function observeOmsMarkets(input: OmsMarketsInput): Promise<OmsMark
         input.settle?.trim() || undefined,
         input.symbol?.trim() || undefined,
         input.venueSymbol?.trim() || undefined,
+        input.expiry,
       ),
     };
   } catch (err) {

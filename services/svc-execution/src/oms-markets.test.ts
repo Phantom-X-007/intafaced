@@ -61,8 +61,9 @@ class FakeMarkets {
   readonly settles: (string | undefined)[] = [];
   readonly symbols: (string | undefined)[] = [];
   readonly venueSymbols: (string | undefined)[] = [];
+  readonly expiries: (Date | undefined)[] = [];
   constructor(private readonly next: readonly VenueMarket[] | Error) {}
-  fn: OmsMarketsFn = async (type, quote, base, active, settle, symbol, venueSymbol) => {
+  fn: OmsMarketsFn = async (type, quote, base, active, settle, symbol, venueSymbol, expiry) => {
     this.calls += 1;
     this.types.push(type);
     this.quotes.push(quote);
@@ -71,6 +72,7 @@ class FakeMarkets {
     this.settles.push(settle);
     this.symbols.push(symbol);
     this.venueSymbols.push(venueSymbol);
+    this.expiries.push(expiry);
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -88,6 +90,7 @@ describe('observeOmsMarkets', () => {
     expect(result.markets).toEqual([]);
     expect(street.calls).toBe(1);
     expect(street.types).toEqual([undefined]);
+    expect(street.expiries).toEqual([undefined]);
   });
 
   it('passes an optional type through and does not invent a missing listing', async () => {
@@ -139,7 +142,10 @@ describe('observeOmsMarkets', () => {
     if (!result.ok) return;
     expect(result.markets[0]?.active).toBe(false);
     expect(result.markets[0]?.symbol).toBe('BTC/USDT');
+    expect(result.markets[0]?.settle).toBeNull();
+    expect(result.markets[0]?.expiry).toBeNull();
     expect(street.actives).toEqual([undefined]);
+    expect(street.expiries).toEqual([undefined]);
   });
 
   it('passes an optional active through and does not invent a missing listing', async () => {
@@ -192,6 +198,21 @@ describe('observeOmsMarkets', () => {
     expect(street.venueSymbols).toEqual(['ETHUSDT']);
     if (!result.ok) return;
     expect(result.markets[0]?.venueSymbol).toBe('ETHUSDT');
+  });
+
+  it('passes an optional expiry through by Date.getTime and does not invent a missing listing', async () => {
+    const expiry = new Date('2026-12-26T08:00:00.000Z');
+    const street = new FakeMarkets([listed({ type: 'future', symbol: 'BTC/USDT:USDT', venueSymbol: 'BTCUSDT', settle: 'USDT', expiry })]);
+    const result = await observeOmsMarkets({
+      venueId: 'street',
+      expiry,
+      marketsByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.expiries).toHaveLength(1);
+    expect(street.expiries[0]?.getTime()).toBe(expiry.getTime());
+    if (!result.ok) return;
+    expect(result.markets[0]?.expiry?.getTime()).toBe(expiry.getTime());
   });
 
   it('refuses internal venues and does not observe', async () => {
@@ -261,6 +282,7 @@ describe('execution.oms.markets tRPC', () => {
       settle: 'USDT',
       symbol: 'ETH/USDT',
       venueSymbol: 'ETHUSDT',
+      expiry: new Date('2026-12-26T08:00:00.000Z'),
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -272,5 +294,6 @@ describe('execution.oms.markets tRPC', () => {
     expect(street.settles).toEqual(['USDT']);
     expect(street.symbols).toEqual(['ETH/USDT']);
     expect(street.venueSymbols).toEqual(['ETHUSDT']);
+    expect(street.expiries[0]?.getTime()).toBe(new Date('2026-12-26T08:00:00.000Z').getTime());
   });
 });
