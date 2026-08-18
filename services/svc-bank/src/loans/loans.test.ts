@@ -1999,6 +1999,64 @@ if (!available) {
       expect(await loans.loansOf(BORROWER)).toHaveLength(1);
     });
 
+    describe('loansOf filters by status without inventing outstanding', () => {
+      async function mixedOwnedLoans() {
+        await fund(BORROWER, 'BTC', '3');
+        await fund(OTHER, 'BTC', '1');
+        const product = await makeProduct();
+        await loans
+          .open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now })
+          .catch(() => undefined);
+        const pending = (await loans.loansOf(BORROWER)).find((loan) => loan.status === 'pending')!;
+        await fundReserve('USDT', '100000');
+        const { loan: active } = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+        const { loan: toRepay } = await loans.open({
+          productId: product.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('1000'),
+          now,
+        });
+        await loans.repay({ loanId: toRepay.id, amount: amt('1000') });
+        await loans.open({ productId: product.id, userId: OTHER, collateralAmount: amt('1'), principal: amt('5000'), now });
+        const repaid = await loans.loan(toRepay.id);
+        return { pending, active, repaid };
+      }
+
+      it('returns mixed pending/active/repaid when status is omitted', async () => {
+        const { pending, active, repaid } = await mixedOwnedLoans();
+        const listed = await loans.loansOf(BORROWER);
+        expect(listed.map((loan) => loan.id).sort()).toEqual([pending.id, active.id, repaid.id].sort());
+        expect(new Set(listed.map((loan) => loan.status))).toEqual(new Set(['pending', 'active', 'repaid']));
+        expect(formatAmount((await loans.outstanding(active.id)).principal)).toBe('5000');
+      });
+
+      it('exact-matches status and keeps the list scoped to the caller', async () => {
+        const { repaid } = await mixedOwnedLoans();
+        const onlyRepaid = await loans.loansOf(BORROWER, 'repaid');
+        expect(onlyRepaid).toHaveLength(1);
+        expect(onlyRepaid[0]!.id).toBe(repaid.id);
+        expect(onlyRepaid[0]!.status).toBe('repaid');
+        expect(onlyRepaid[0]!.userId).toBe(BORROWER);
+        expect(await loans.loansOf(BORROWER, 'active')).toEqual([expect.objectContaining({ status: 'active', userId: BORROWER })]);
+      });
+
+      it('returns an empty array when no loan has that status', async () => {
+        await fundReserve('USDT', '100000');
+        await fund(BORROWER, 'BTC', '1');
+        const product = await makeProduct();
+        await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
+        expect(await loans.loansOf(BORROWER, 'liquidated')).toEqual([]);
+        expect(await loans.loansOf(BORROWER, 'margin_call')).toEqual([]);
+      });
+    });
+
     it('marks a portfolio, reporting the aggregate AND each loan on its own', async () => {
       await fundReserve('USDT', '100000');
       await fund(BORROWER, 'BTC', '2');

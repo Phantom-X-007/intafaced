@@ -18,7 +18,8 @@ import {
   userStake,
   type LedgerClient,
 } from '@intafaced/ledger-client';
-import { createBankServices, type BankServices } from './bank-service.js';
+import { createBankServices, DEFAULT_LIQUIDATION_POLICY, type BankServices } from './bank-service.js';
+import { fixedPriceSource } from './loans/prices.js';
 import { createBankRouter } from './router.js';
 import { accountForSpace } from './spaces/space-service.js';
 import { memoryLedgerHistory } from './analytics/ledger-history.js';
@@ -2609,6 +2610,92 @@ if (!available) {
       const pausedOnly = await api.transfers.listSchedules({ status: 'paused' });
       expect(pausedOnly).toEqual([expect.objectContaining({ id: paused.id, status: 'paused', amount: '20' })]);
       expect(await api.transfers.listSchedules({ status: 'cancelled' })).toEqual([]);
+    });
+  });
+
+  describe('loans.list filters by status without inventing outstanding', () => {
+    const markNow = new Date('2026-06-01T12:00:00Z');
+
+    beforeEach(async () => {
+      await sql`
+        TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+                 bank.loan_reserve_fundings
+        RESTART IDENTITY CASCADE
+      `;
+      bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        nativeAssetId: 'IFC',
+        loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => markNow) },
+      });
+      router = createBankRouter(bank);
+    });
+
+    async function fundReserve(assetId: string, value: string) {
+      const payer = '99999999-9999-4999-8999-999999999999';
+      await fund(payer, assetId, value);
+      await bank.loans.fundReserve({
+        debtAssetId: assetId,
+        fundingId: `f:${Math.random()}`,
+        amount: amt(value),
+        from: userAvailable(payer, assetId),
+      });
+    }
+
+    async function mixedOwnedLoans() {
+      await fund(USER_A, 'BTC', '3');
+      const product = await bank.loans.createProduct({
+        name: 'BTC-backed USDT',
+        debtAssetId: 'USDT',
+        collateralAssetId: 'BTC',
+        quoteAssetId: 'USDT',
+        aprBps: 1_000,
+        maxLtvBps: 5_000,
+        policy: DEFAULT_LIQUIDATION_POLICY,
+      });
+      await bank.loans
+        .open({ productId: product.id, userId: USER_A, collateralAmount: amt('1'), principal: amt('5000'), now: markNow })
+        .catch(() => undefined);
+      const pending = (await bank.loans.loansOf(USER_A)).find((loan) => loan.status === 'pending')!;
+      await fundReserve('USDT', '100000');
+      const { loan: active } = await bank.loans.open({
+        productId: product.id,
+        userId: USER_A,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now: markNow,
+      });
+      const { loan: toRepay } = await bank.loans.open({
+        productId: product.id,
+        userId: USER_A,
+        collateralAmount: amt('1'),
+        principal: amt('1000'),
+        now: markNow,
+      });
+      await bank.loans.repay({ loanId: toRepay.id, amount: amt('1000') });
+      return { pending, active, repaidId: toRepay.id };
+    }
+
+    it('omitted status still returns mixed pending/active/repaid', async () => {
+      const { pending, active, repaidId } = await mixedOwnedLoans();
+      const listed = await (await caller(USER_A, ['bank:read'])).loans.list();
+      expect(listed.map((loan) => loan.id).sort()).toEqual([pending.id, active.id, repaidId].sort());
+      expect(new Set(listed.map((loan) => loan.status))).toEqual(new Set(['pending', 'active', 'repaid']));
+      expect(listed.every((loan) => typeof loan.outstandingPrincipal === 'string')).toBe(true);
+    });
+
+    it('filters to the requested status and returns [] when none match', async () => {
+      const { repaidId } = await mixedOwnedLoans();
+      const api = await caller(USER_A, ['bank:read']);
+      expect(await api.loans.list({ status: 'repaid' })).toEqual([
+        expect.objectContaining({ id: repaidId, status: 'repaid', outstandingPrincipal: '0' }),
+      ]);
+      expect(await api.loans.list({ status: 'liquidated' })).toEqual([]);
+    });
+
+    it('rejects an invalid status at zod before the service', async () => {
+      const api = await caller(USER_A, ['bank:read']);
+      const err = await api.loans.list({ status: 'completed' } as never).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('BAD_REQUEST');
     });
   });
 

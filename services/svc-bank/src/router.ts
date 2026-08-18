@@ -1011,6 +1011,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     list: scopedProcedure('bank:read', { module: 'bank' })
+      .input(
+        z
+          .object({
+            status: z.enum(['pending', 'active', 'margin_call', 'liquidating', 'repaid', 'liquidated']).optional(),
+          })
+          .optional(),
+      )
       .output(
         z.array(
           z.object({
@@ -1028,9 +1035,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }),
         ),
       )
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const rows = await bank.loans.loansOf(ctx.principal.userId);
+          const rows = await bank.loans.loansOf(ctx.principal.userId, input?.status);
           return Promise.all(
             rows.map(async (loan) => {
               const debt = await bank.loans.outstanding(loan.id);

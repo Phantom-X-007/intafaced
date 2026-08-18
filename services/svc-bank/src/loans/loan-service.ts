@@ -390,9 +390,12 @@ export class LoanService {
     return toLoan(rows[0]!);
   }
 
-  async loansOf(userId: string): Promise<LoanRecord[]> {
+  async loansOf(userId: string, status?: LoanRecord['status']): Promise<LoanRecord[]> {
     const rows = await this.sql<Array<Record<string, unknown>>>`
-      SELECT * FROM bank.loans WHERE user_id = ${userId} ORDER BY opened_at DESC
+      SELECT * FROM bank.loans
+       WHERE user_id = ${userId}
+             ${status ? this.sql`AND status = ${status}` : this.sql``}
+       ORDER BY opened_at DESC
     `;
     return rows.map(toLoan);
   }
