@@ -801,6 +801,48 @@ if (!available) {
       expect(await auth.listSubAccounts(stranger.userId, { revoked: false })).toEqual([]);
     });
 
+    it('filters listSubAccounts by purpose in SQL; omitted keeps mixed and null-purpose rows', async () => {
+      const owner = await register();
+      const other = await register();
+      const trading = await auth.createSubAccount(owner.userId, 'live-trading', 'trading');
+      const mm = await auth.createSubAccount(owner.userId, 'live-mm', 'mm');
+      const unlabeled = await auth.createSubAccount(owner.userId, 'no-purpose');
+      const retiredTrading = await auth.createSubAccount(owner.userId, 'retired-trading', 'trading');
+      await auth.revokeSubAccount(owner.userId, retiredTrading.id);
+      const foreignTrading = await auth.createSubAccount(other.userId, 'foreign-trading', 'trading');
+
+      const omitted = await auth.listSubAccounts(owner.userId);
+      expect(omitted.map((r) => r.id).sort()).toEqual([trading.id, mm.id, unlabeled.id, retiredTrading.id].sort());
+      expect(omitted.find((r) => r.id === unlabeled.id)?.purpose).toBeNull();
+
+      const onlyTrading = await auth.listSubAccounts(owner.userId, { purpose: 'trading' });
+      expect(onlyTrading.map((r) => r.id).sort()).toEqual([trading.id, retiredTrading.id].sort());
+      expect(onlyTrading.every((r) => r.purpose === 'trading')).toBe(true);
+
+      const padded = await auth.listSubAccounts(owner.userId, { purpose: '  trading  ' });
+      expect(padded.map((r) => r.id).sort()).toEqual([trading.id, retiredTrading.id].sort());
+
+      expect(await auth.listSubAccounts(owner.userId, { purpose: 'ghost' })).toEqual([]);
+
+      await expect(auth.listSubAccounts(owner.userId, { purpose: '   ' })).rejects.toMatchObject({
+        code: 'auth.sub_account_purpose',
+      });
+      await expect(auth.listSubAccounts(owner.userId, { purpose: 'x'.repeat(65) })).rejects.toMatchObject({
+        code: 'auth.sub_account_purpose',
+      });
+
+      const liveTrading = await auth.listSubAccounts(owner.userId, { revoked: false, purpose: 'trading' });
+      expect(liveTrading).toEqual([expect.objectContaining({ id: trading.id, purpose: 'trading', revoked: false })]);
+      expect(liveTrading.some((r) => r.id === retiredTrading.id)).toBe(false);
+
+      expect(onlyTrading.some((r) => r.id === foreignTrading.id)).toBe(false);
+      const stranger = await register();
+      expect(await auth.listSubAccounts(stranger.userId, { purpose: 'trading' })).toEqual([]);
+      expect(await auth.listSubAccounts(other.userId, { purpose: 'trading' })).toEqual([
+        expect.objectContaining({ id: foreignTrading.id }),
+      ]);
+    });
+
     it('soft-revokes without deleting the row (ledger owner id must survive)', async () => {
       const session = await register();
       const { id } = await auth.createSubAccount(session.userId, 'retire-me');

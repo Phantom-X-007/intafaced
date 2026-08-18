@@ -196,6 +196,7 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
     case 'auth.sub_account_required':
     case 'auth.sub_account_same':
+    case 'auth.sub_account_purpose':
       return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
@@ -1102,7 +1103,14 @@ export function createIdentityRouter(
         .mutation(({ ctx, input }) => auth.createSubAccount(ctx.principal.userId, input.label, input.purpose)),
 
       list: scopedProcedure('identity:read')
-        .input(z.object({ revoked: z.boolean().optional() }).optional())
+        .input(
+          z
+            .object({
+              revoked: z.boolean().optional(),
+              purpose: z.string().trim().min(1).max(64).optional(),
+            })
+            .optional(),
+        )
         .output(
           z.array(
             z.object({
@@ -1115,14 +1123,18 @@ export function createIdentityRouter(
           ),
         )
         .query(async ({ ctx, input }) => {
-          const rows = await auth.listSubAccounts(ctx.principal.userId, input);
-          return rows.map((r) => ({
-            id: r.id,
-            label: r.label,
-            purpose: r.purpose,
-            revoked: r.revoked,
-            createdAt: r.createdAt.toISOString(),
-          }));
+          try {
+            const rows = await auth.listSubAccounts(ctx.principal.userId, input);
+            return rows.map((r) => ({
+              id: r.id,
+              label: r.label,
+              purpose: r.purpose,
+              revoked: r.revoked,
+              createdAt: r.createdAt.toISOString(),
+            }));
+          } catch (err) {
+            throw toTrpcError(err);
+          }
         }),
 
       /**

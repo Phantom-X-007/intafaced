@@ -83,8 +83,19 @@ class MemorySubAccountAuth {
     return { id };
   }
 
-  async listSubAccounts(userId: string): Promise<Book[]> {
-    return [...this.books.values()].filter((b) => b.parentUserId === userId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  async listSubAccounts(userId: string, opts?: { revoked?: boolean; purpose?: string }): Promise<Book[]> {
+    let purpose: string | undefined;
+    if (opts?.purpose !== undefined) {
+      purpose = opts.purpose.trim();
+      if (purpose.length < 1 || purpose.length > 64) {
+        throw new AuthError('Sub-account purpose filter must be 1–64 characters after trim', 'auth.sub_account_purpose');
+      }
+    }
+    return [...this.books.values()]
+      .filter((b) => b.parentUserId === userId)
+      .filter((b) => (opts?.revoked === undefined ? true : b.revoked === opts.revoked))
+      .filter((b) => (purpose === undefined ? true : b.purpose === purpose))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async revokeSubAccount(userId: string, subAccountId: string): Promise<boolean> {
@@ -405,6 +416,22 @@ describe('D26-P2-12 public doors — cross-sub-account leak refuse', () => {
     const data = unwrapData(body);
     expect(data).toEqual({ fromId: a.id, toId: b.id });
     assertNoInventedBalance(data);
+  });
+
+  it('list refuses empty-after-trim and too-long purpose at the door', async () => {
+    const empty = await app.inject({
+      method: 'GET',
+      url: `/trpc/subAccounts.list?input=${encodeURIComponent(JSON.stringify({ purpose: '   ' }))}`,
+      headers: signedHeaders(),
+    });
+    expect(empty.statusCode).toBe(400);
+
+    const tooLong = await app.inject({
+      method: 'GET',
+      url: `/trpc/subAccounts.list?input=${encodeURIComponent(JSON.stringify({ purpose: 'x'.repeat(65) }))}`,
+      headers: signedHeaders(),
+    });
+    expect(tooLong.statusCode).toBe(400);
   });
 
   it('list is parent-scoped — stranger does not see owner books; no balance fields', async () => {

@@ -91,6 +91,11 @@ export class AuthError extends Error {
        */
       | 'auth.sub_account_limit'
       /**
+       * listSubAccounts purpose filter empty after trim or longer than 64.
+       * 400 at the door — do not invent a purpose label or match null rows.
+       */
+      | 'auth.sub_account_purpose'
+      /**
        * TOTP encrypt-at-rest key missing/invalid. Enrol refuses rather than
        * writing base32 plaintext to users.totp_secret (IDENTITY_TOTP_SECRET_KEY).
        */
@@ -1447,13 +1452,21 @@ export class AuthService {
 
   async listSubAccounts(
     userId: string,
-    opts?: { revoked?: boolean },
+    opts?: { revoked?: boolean; purpose?: string },
   ): Promise<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; createdAt: Date }>> {
     const revoked = opts?.revoked;
+    let purpose: string | undefined;
+    if (opts?.purpose !== undefined) {
+      purpose = opts.purpose.trim();
+      if (purpose.length < 1 || purpose.length > 64) {
+        throw new AuthError('Sub-account purpose filter must be 1–64 characters after trim', 'auth.sub_account_purpose');
+      }
+    }
     const rows = await this.sql<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>>`
       SELECT id, label, purpose, revoked, created_at FROM sub_accounts
        WHERE parent_user_id = ${userId}
        ${revoked === undefined ? this.sql`` : this.sql`AND revoked = ${revoked}`}
+       ${purpose === undefined ? this.sql`` : this.sql`AND purpose = ${purpose}`}
        ORDER BY created_at DESC
     `;
     return rows.map((r) => ({
