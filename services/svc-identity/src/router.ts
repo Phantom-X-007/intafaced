@@ -803,11 +803,18 @@ export function createIdentityRouter(
           }
         }),
 
-      /** The review queue. Without it `approve` needs a record id nobody can find. */
+      /** The review queue. Without it `approve` needs a record id nobody can find. Always pending. */
       pending: scopedProcedure('admin:compliance')
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              limit: z.number().int().min(1).max(200).optional(),
+              tier: z.enum(['none', 'basic', 'full', 'institutional']).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(kycRecordOutput))
-        .query(async ({ input }) => (await auth.listPendingKyc(input?.limit ?? 50)).map(presentKyc)),
+        .query(async ({ input }) => (await auth.listPendingKyc(input?.limit ?? 50, { tier: input?.tier })).map(presentKyc)),
 
       /**
        * §10 — operator stores a KYC document into the encrypted vault.

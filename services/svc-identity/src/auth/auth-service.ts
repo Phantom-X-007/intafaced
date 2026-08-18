@@ -1121,12 +1121,15 @@ export class AuthService {
     return rows.map(toKycRecord);
   }
 
-  /** The operator review queue — oldest first, because a queue that is not FIFO is a backlog. */
-  async listPendingKyc(limit = 50): Promise<KycRecordView[]> {
+  /** The operator review queue — oldest first, because a queue that is not FIFO is a backlog. Always pending. */
+  async listPendingKyc(limit = 50, opts?: { tier?: KycTier }): Promise<KycRecordView[]> {
+    const tier = opts?.tier;
     const rows = await this.sql<KycRow[]>`
       SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at
         FROM kyc_records
-       WHERE status = 'pending' ORDER BY created_at ASC LIMIT ${limit}
+       WHERE status = 'pending'
+       ${tier === undefined ? this.sql`` : this.sql`AND tier = ${tier}`}
+       ORDER BY created_at ASC LIMIT ${limit}
     `;
     return rows.map(toKycRecord);
   }

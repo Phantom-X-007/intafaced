@@ -335,6 +335,27 @@ describe('kyc.approve is the operator action that grants custodial access', () =
     await expect(operator.kyc.pending()).resolves.toHaveLength(1);
   });
 
+  it('passes an omitted tier through as undefined so the queue stays mixed pending', async () => {
+    const operator = await caller(['admin:compliance'], { userId: OPERATOR });
+    await operator.kyc.pending({ limit: 25 });
+    const call = stub.calls.find((c) => c.method === 'listPendingKyc')!;
+    expect(call.args).toEqual([25, { tier: undefined }]);
+  });
+
+  it('filters the pending queue by exact tier', async () => {
+    const operator = await caller(['admin:compliance'], { userId: OPERATOR });
+    await operator.kyc.pending({ tier: 'full' });
+    const call = stub.calls.find((c) => c.method === 'listPendingKyc')!;
+    expect(call.args).toEqual([50, { tier: 'full' }]);
+  });
+
+  it('rejects an invalid pending-queue tier with BAD_REQUEST', async () => {
+    const operator = await caller(['admin:compliance'], { userId: OPERATOR });
+    const err = await operator.kyc.pending({ tier: 'gold' as 'basic' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(stub.calls.some((c) => c.method === 'listPendingKyc')).toBe(false);
+  });
+
   it('maps a record that cannot be approved to CONFLICT, not to a 500', async () => {
     stub.fail(new AuthError('KYC record is rejected', 'auth.kyc_not_pending'));
     const api = await caller(['admin:compliance'], { userId: OPERATOR });

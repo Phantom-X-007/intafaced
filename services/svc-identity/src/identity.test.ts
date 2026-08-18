@@ -1446,6 +1446,45 @@ if (!available) {
       await auth.approveKycRecord({ recordId: first.id, reviewerId: operator.userId });
       expect((await auth.listPendingKyc(200)).map((r) => r.id)).not.toContain(first.id);
     });
+
+    it('filters listPendingKyc by tier in SQL; omitted still returns mixed pending tiers', async () => {
+      const basicUser = await register();
+      const fullUser = await register();
+      const instUser = await register();
+      const approvedUser = await register();
+      const operator = await register();
+
+      const pendingBasic = await auth.submitKyc({ userId: basicUser.userId, tier: 'basic', jurisdiction: 'DE' });
+      const pendingFull = await auth.submitKyc({ userId: fullUser.userId, tier: 'full', jurisdiction: 'DE' });
+      const pendingInst = await auth.submitKyc({
+        userId: instUser.userId,
+        tier: 'institutional',
+        jurisdiction: 'DE',
+      });
+      const approvedBasic = await auth.submitKyc({ userId: approvedUser.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.approveKycRecord({ recordId: approvedBasic.id, reviewerId: operator.userId });
+
+      const ours = new Set([pendingBasic.id, pendingFull.id, pendingInst.id, approvedBasic.id]);
+      const omitted = (await auth.listPendingKyc(200)).filter((r) => ours.has(r.id));
+      expect(omitted.map((r) => r.id)).toEqual([pendingBasic.id, pendingFull.id, pendingInst.id]);
+      expect(omitted.map((r) => r.tier).sort()).toEqual(['basic', 'full', 'institutional']);
+      expect(omitted.every((r) => r.status === 'pending')).toBe(true);
+      expect(omitted.some((r) => r.id === approvedBasic.id)).toBe(false);
+
+      const onlyBasic = await auth.listPendingKyc(200, { tier: 'basic' });
+      expect(onlyBasic.every((r) => r.status === 'pending' && r.tier === 'basic')).toBe(true);
+      const onlyBasicOurs = onlyBasic.filter((r) => ours.has(r.id));
+      expect(onlyBasicOurs).toEqual([expect.objectContaining({ id: pendingBasic.id, status: 'pending', tier: 'basic' })]);
+
+      const onlyFull = await auth.listPendingKyc(200, { tier: 'full' });
+      expect(onlyFull.every((r) => r.status === 'pending' && r.tier === 'full')).toBe(true);
+      expect(onlyFull.filter((r) => ours.has(r.id))).toEqual([
+        expect.objectContaining({ id: pendingFull.id, status: 'pending', tier: 'full' }),
+      ]);
+
+      expect(await auth.listPendingKyc(200, { tier: 'none' })).toEqual([]);
+      expect((await auth.listPendingKyc(200, { tier: 'basic' })).map((r) => r.id)).not.toContain(approvedBasic.id);
+    });
   });
 
   /**
