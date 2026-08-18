@@ -45,3 +45,30 @@ import { userCopy } from './user-copy.js';
  * breaking change there is a compile error here, caught in the contracts PR
  * before any consumer is touched (§15.2).
  */
+
+function toTrpcError(err: unknown): TRPCError {
+  // Already shaped for the wire — do not re-wrap.
+  if (err instanceof TRPCError) return err;
+
+  // A guard rejection (`requireMfa`) is not a server fault. It arrives as the
+  // shared package's AuthError, which is a different class from this service's.
+  if (err instanceof GuardError) {
+    return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
+  }
+
+  if (err instanceof KycDocumentError) {
+    switch (err.code) {
+      case 'kyc_doc.not_found':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'kyc_doc.key_missing':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      case 'kyc_doc.forbidden':
+      case 'kyc_doc.reader_missing':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'kyc_doc.too_large':
+      case 'kyc_doc.bad_content_type':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      case 'kyc_doc.decrypt_failed':
+        return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+    }
+  }
