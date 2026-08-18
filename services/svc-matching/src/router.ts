@@ -33,6 +33,9 @@ const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive dec
 /** §5.1 order types. `take_profit` is mapped down by svc-trade before it reaches here. */
 const engineOrderTypeSchema = z.enum(['market', 'limit', 'stop', 'stop_limit']);
 
+/** Live resting location on `EngineLiveOrder.kind` — the book, or a pending stop. */
+const engineLiveKindSchema = z.enum(['book', 'stop']);
+
 const submitBodySchema = z.object({
   orderId: z.string().uuid(),
   /** §5.1: account ids only. This service never learns whose account it is. */
@@ -287,9 +290,10 @@ export function registerRoutes(
    * market with nothing resting" are different answers and a reconciler that
    * cannot tell them apart will report a whole book as missing.
    *
-   * Optional `?side=buy|sell` filters the list after the engine answers. An
-   * unknown value is 400 before `restingOrders` is called — the engine is not
-   * asked to invent a book, and an empty match is still `[]`.
+   * Optional `?side=buy|sell` and `?kind=book|stop` filter after the engine
+   * answers. Side is parsed first. An unknown value is 400 before
+   * `restingOrders` is called — the engine is not asked to invent a book, and
+   * an empty match is still `[]`. Both filters compose when both are present.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -303,7 +307,9 @@ export function registerRoutes(
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
 
-    const sideRaw = (req.query as { side?: string | string[] }).side;
+    const query = req.query as { side?: string | string[]; kind?: string | string[] };
+
+    const sideRaw = query.side;
     const sideParam = Array.isArray(sideRaw) ? sideRaw[0] : sideRaw;
     let sideFilter: z.infer<typeof orderSideSchema> | undefined;
     if (sideParam !== undefined) {
@@ -314,10 +320,23 @@ export function registerRoutes(
       sideFilter = parsed.data;
     }
 
+    const kindRaw = query.kind;
+    const kindParam = Array.isArray(kindRaw) ? kindRaw[0] : kindRaw;
+    let kindFilter: z.infer<typeof engineLiveKindSchema> | undefined;
+    if (kindParam !== undefined) {
+      const parsed = engineLiveKindSchema.safeParse(kindParam);
+      if (!parsed.success) {
+        return reply.code(400).send({ code: 'InvalidKind', message: 'kind must be book or stop' });
+      }
+      kindFilter = parsed.data;
+    }
+
     const orders = engine.restingOrders(marketId);
     return reply.code(200).send({
       marketId,
-      orders: sideFilter === undefined ? orders : orders.filter((order) => order.side === sideFilter),
+      orders: orders.filter(
+        (order) => (sideFilter === undefined || order.side === sideFilter) && (kindFilter === undefined || order.kind === kindFilter),
+      ),
     });
   });
 

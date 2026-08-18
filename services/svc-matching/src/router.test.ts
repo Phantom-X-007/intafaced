@@ -440,6 +440,88 @@ describe('the reconciliation routes', () => {
     await app.close();
   });
 
+  it('keeps only stop orders when kind=stop, including an honest empty list', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const stops = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?kind=stop', headers });
+    const books = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?kind=book', headers });
+
+    expect(stops.statusCode).toBe(200);
+    expect(stops.json().orders).toEqual([RESTING_SELL]);
+    expect(books.statusCode).toBe(200);
+    expect(books.json().orders).toEqual([RESTING]);
+
+    await app.close();
+
+    const emptyApp = await mount(fakeEngine({ restingOrders: () => [RESTING] }));
+    const none = await emptyApp.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?kind=stop',
+      headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
+    });
+    expect(none.statusCode).toBe(200);
+    expect(none.json().orders).toEqual([]);
+    await emptyApp.close();
+  });
+
+  it('refuses an invalid kind with 400 and never asks restingOrders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?kind=limit', headers });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidKind');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('parses side before kind — a bad side is 400 even when kind is also bad', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?side=bid&kind=limit', headers });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidSide');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('applies side and kind together after the engine answers', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const sellStop = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=sell&kind=stop',
+      headers,
+    });
+    const buyStop = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=stop',
+      headers,
+    });
+    const buyBook = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=book',
+      headers,
+    });
+
+    expect(sellStop.statusCode).toBe(200);
+    expect(sellStop.json().orders).toEqual([RESTING_SELL]);
+    expect(buyStop.statusCode).toBe(200);
+    expect(buyStop.json().orders).toEqual([]);
+    expect(buyBook.statusCode).toBe(200);
+    expect(buyBook.json().orders).toEqual([RESTING]);
+    await app.close();
+  });
+
   // ── POST /reconcile ────────────────────────────────────────────────────────
 
   it('refuses an unauthenticated reconcile', async () => {
