@@ -426,6 +426,7 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
           .object({
             status: z.enum(['active', 'archived']).optional(),
             offerType: z.enum(['one_time', 'subscription']).optional(),
+            assetId: z.string().min(1).max(32).optional(),
           })
           .optional(),
       )

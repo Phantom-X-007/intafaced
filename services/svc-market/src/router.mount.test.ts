@@ -676,6 +676,26 @@ describe('svc-market mount — commerce scopes', () => {
     });
   });
 
+  it('forwards optional myListings assetId and refuses empty or overlong at the door', async () => {
+    const commerce = stubCommerce();
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await caller.myListings({ assetId: 'USDT' });
+    expect(commerce.myListings).toHaveBeenCalledWith(USER, { assetId: 'USDT' });
+    await caller.myListings({ status: 'active', offerType: 'one_time', assetId: 'INTA' });
+    expect(commerce.myListings).toHaveBeenCalledWith(USER, {
+      status: 'active',
+      offerType: 'one_time',
+      assetId: 'INTA',
+    });
+    await expect(caller.myListings({ assetId: '' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    await expect(caller.myListings({ assetId: 'x'.repeat(33) })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(commerce.myListings).not.toHaveBeenCalledWith(USER, { assetId: '' });
+  });
+
   it('forwards optional myPurchases status and refuses an invalid enum', async () => {
     const commerce = stubCommerce();
     const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());

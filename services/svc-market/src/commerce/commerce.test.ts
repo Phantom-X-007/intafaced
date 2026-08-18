@@ -615,6 +615,91 @@ if (!available) {
       });
       expect(await commerce.myListings(VENDOR_USER, { offerType: 'subscription' })).toEqual([]);
     });
+
+    it('myListings omits assetId to mix assets; filter is exact; miss is []; AND with status/offerType; other vendor not leaked; public catalogue unchanged', async () => {
+      const OTHER_VENDOR = '55555555-5555-4555-8555-555555555555';
+      await approvedVendor(VENDOR_USER);
+      await approvedVendor(OTHER_VENDOR);
+
+      const usdt = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'USDT pack',
+        description: 'one time usdt',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10.50',
+      });
+      const inta = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'INTA pack',
+        description: 'subscription inta',
+        offerType: 'subscription',
+        assetId: 'INTA',
+        price: '12.00',
+        periodSeconds: 86400,
+      });
+      const otherUsdt = await commerce.createListing({
+        userId: OTHER_VENDOR,
+        title: 'Other USDT',
+        description: 'not ours',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '9.00',
+      });
+
+      const omitted = await commerce.myListings(VENDOR_USER);
+      expect(omitted.map((l) => l.id).sort()).toEqual([usdt.id, inta.id].sort());
+      expect(omitted.map((l) => l.assetId).sort()).toEqual(['INTA', 'USDT']);
+      expect(omitted.map((l) => l.id)).not.toContain(otherUsdt.id);
+      expect(omitted.every((l) => typeof l.price === 'string')).toBe(true);
+      expect(formatAmount(amt(omitted.find((l) => l.id === usdt.id)!.price))).toBe(formatAmount(amt(usdt.price)));
+      expect(formatAmount(amt(omitted.find((l) => l.id === inta.id)!.price))).toBe(formatAmount(amt(inta.price)));
+
+      expect(await commerce.myListings(VENDOR_USER, { status: 'active' })).toHaveLength(2);
+      expect((await commerce.myListings(VENDOR_USER, { offerType: 'one_time' })).map((l) => l.id)).toEqual([usdt.id]);
+
+      const exactUsdt = await commerce.myListings(VENDOR_USER, { assetId: 'USDT' });
+      expect(exactUsdt.map((l) => l.id)).toEqual([usdt.id]);
+      expect(exactUsdt.every((l) => l.assetId === 'USDT')).toBe(true);
+      expect(typeof exactUsdt[0]?.price).toBe('string');
+      expect(formatAmount(amt(exactUsdt[0]!.price))).toBe(formatAmount(amt(usdt.price)));
+
+      const exactInta = await commerce.myListings(VENDOR_USER, { assetId: 'INTA' });
+      expect(exactInta.map((l) => l.id)).toEqual([inta.id]);
+      expect(exactInta.every((l) => l.assetId === 'INTA')).toBe(true);
+
+      expect(await commerce.myListings(VENDOR_USER, { assetId: 'BTC' })).toEqual([]);
+      expect((await commerce.myListings(OTHER_VENDOR, { assetId: 'USDT' })).map((l) => l.id)).toEqual([otherUsdt.id]);
+
+      await commerce.archiveListing({ userId: VENDOR_USER, listingId: inta.id });
+      const nested = await commerce.myListings(VENDOR_USER, {
+        assetId: 'INTA',
+        status: 'archived',
+        offerType: 'subscription',
+      });
+      expect(nested.map((l) => l.id)).toEqual([inta.id]);
+      expect(await commerce.myListings(VENDOR_USER, { assetId: 'INTA', status: 'active', offerType: 'subscription' })).toEqual([]);
+      expect(await commerce.myListings(VENDOR_USER, { assetId: 'USDT', status: 'archived' })).toEqual([]);
+
+      expect((await commerce.publicListings()).map((l) => l.id).sort()).toEqual([usdt.id, otherUsdt.id].sort());
+      expect((await commerce.publicListings()).map((l) => l.id)).not.toContain(inta.id);
+    });
+
+    it('myListings returns [] when the user has no vendor, or when the assetId filter matches none', async () => {
+      expect(await commerce.myListings(VENDOR_USER)).toEqual([]);
+      expect(await commerce.myListings(VENDOR_USER, { assetId: 'USDT' })).toEqual([]);
+
+      await approvedVendor(VENDOR_USER);
+      await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Only USDT',
+        description: 'no inta',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      expect(await commerce.myListings(VENDOR_USER, { assetId: 'INTA' })).toEqual([]);
+    });
   });
 
   describe('purchases honesty residual', () => {

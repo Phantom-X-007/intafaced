@@ -308,16 +308,18 @@ export class CommerceService {
     return toListing(row);
   }
 
-  async myListings(userId: string, opts?: { status?: ListingStatus; offerType?: OfferType }): Promise<ListingRecord[]> {
+  async myListings(userId: string, opts?: { status?: ListingStatus; offerType?: OfferType; assetId?: string }): Promise<ListingRecord[]> {
     const mine = await this.vendors.myVendor(userId);
     if (!mine) return [];
     const status = opts?.status ?? null;
     const offerType = opts?.offerType ?? null;
+    const assetId = opts?.assetId ?? null;
     const rows = await this.sql<ListingRow[]>`
       SELECT * FROM market.listings
        WHERE vendor_id = ${mine.id}
          AND ${status === null ? this.sql`true` : this.sql`status = ${status}`}
          AND ${offerType === null ? this.sql`true` : this.sql`offer_type = ${offerType}`}
+         AND ${assetId === null ? this.sql`true` : this.sql`asset_id = ${assetId}`}
        ORDER BY created_at DESC
     `;
     return rows.map(toListing);
