@@ -66,40 +66,34 @@ const schema = baseEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
-       * ── Venue cost parameters ─────────────────────────────────────────────
+       * ── Venue cost parameters (S-I3 / `socket.dex-fee-source`) ────────────
        *
-       * SOCKET §13 — `socket.dex-fee-source`. These are CONFIGURED, not sourced.
+       * CLOB knobs have NO default. A default of 0 / '0' understates the user's
+       * cost. Set both from the venue (SovereignVenue.takerFeeBps and
+       * settlementCostQuote) or omit both — omitted means intachain-clob is not
+       * quoted. One-sided config fails boot.
        *
-       * A taker fee and a settlement cost are both price components: understate
-       * either and the effective price reported is better than the one the user
-       * actually gets. The authoritative figures cannot be read yet — the
-       * per-market spot schedule lives in svc-trade's own `markets` row (§2
-       * forbids reading another service's tables), and the on-chain CLOB has no
-       * deployed contract to publish one.
-       *
-       * So they are stated here, and every response discloses the exact `feeBps`
-       * and `settlementCost` applied per venue. A caller can check the arithmetic
-       * against the venue's real schedule; nobody is silently quoted a fee we
-       * chose, because the response says which one was used.
+       * Internal-book bps remain configured (ledger post has no gas leg).
        */
 
-      /** Taker fee on the on-chain CLOB, in bps. */
-      DEX_CLOB_FEE_BPS: z.coerce.number().int().min(0).max(9_999).default(0),
+      /** Taker fee on the on-chain CLOB, in bps. Unset = do not quote that venue. */
+      DEX_CLOB_FEE_BPS: z.preprocess(
+        (v) => (v === undefined || v === null || v === '' ? undefined : v),
+        z.coerce.number().int().min(0).max(9_999).optional(),
+      ),
 
       /**
-       * Gas for an on-chain fill, in the QUOTE asset, as a decimal string.
-       *
-       * `'0'` today, and that is an UNDERSTATEMENT declared rather than hidden:
-       * converting gas into the quote asset needs a gas oracle and a
-       * native-token price, and neither exists in this stack. It costs nothing
-       * in practice because there is no chain for that venue to read
-       * (`socket.evm-rpc`), and it must be set before the first real on-chain
-       * quote is served.
+       * Quote-asset settlement surcharge for an on-chain fill, decimal string.
+       * SovereignVenue.settlementCostQuote is 0 (gas is the user's tx). Unset
+       * with the fee bps = do not quote intachain-clob.
        */
-      DEX_CLOB_SETTLEMENT_COST: z
-        .string()
-        .regex(/^\d+(\.\d{1,18})?$/, 'settlement cost is a decimal string with at most 18 decimal places')
-        .default('0'),
+      DEX_CLOB_SETTLEMENT_COST: z.preprocess(
+        (v) => (v === undefined || v === null || v === '' ? undefined : v),
+        z
+          .string()
+          .regex(/^\d+(\.\d{1,18})?$/, 'settlement cost is a decimal string with at most 18 decimal places')
+          .optional(),
+      ),
 
       /**
        * Taker fee on the internal book, in bps.

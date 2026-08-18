@@ -5,18 +5,17 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-18 delta — S-C1 + S-L4 (this PR)
+> ### 2026-08-18 delta — S-I3 (this PR)
 >
-> **S-C1 SovereignVenue:** real single-market CLOB (deposit / place / cancel, price-time match, token custody). Fill emits only from matching — not DevVenue. Event surface matches the indexer ABI. `audited` stays false (external audit = Nitro). Tracker `socket.clob-contracts` → **ready**.
-> **S-L4:** LaunchVesting (cliff + linear, no revoke) + DeployerReputation (raw counts; empty = zeros, no isSafe). LaunchLpLock already on tip. Tracker `launch.trust-layer` → **done**.
-> **S-I3:** venue now _publishes_ `takerFeeBps` + `settlementCostQuote()=0`. svc-dex still quotes from env — socket stays until a dex PR reads the contract.
+> **S-I3 dex fees:** CLOB knobs no longer default to 0 / `'0'`. Set both from the venue or omit both — omitted means `intachain-clob` is not quoted. Quote path still uses projections, never `eth_call`. Internal-book 20bps remains a configured guess. Tracker `socket.dex-fee-source` → **ready**.
+> **#2364 merged** (S-C1 SovereignVenue + S-L4 trust). Venue publishes `takerFeeBps` + `settlementCostQuote()=0`; this PR makes svc-dex refuse silent zeros instead of quoting from them.
 >
 > ### 2026-08-08 delta — P0 wave (tip)
 >
 > **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar · #2362 S-L2 LegacyVault · #2363 S-L6/L3/L5.
 > **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
 >
-> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · EntryPoint differential · S-I3/I4 (dex read + OMS) · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · EIP-5564 scanner.
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · EntryPoint differential · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · EIP-5564 scanner.
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -200,12 +199,12 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier I — DEX self-custody surface (`svc-dex`)
 
-| ID       | Outcome                                           | Done bar                                                                                                                                                                                                                                                                                                                                                         |
-| -------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S-I1** | **Pool interface + self-custody flows**           | Contract-held liquidity · no platform custody masquerade                                                                                                                                                                                                                                                                                                         |
-| **S-I2** | **Quote integrity**                               | Fail closed without invent. **Already true on main** — `dex.quote-router` sources live prices, enforces a staleness bound against its own read, has no cache and no fallback, and refuses 503 naming every dead venue. What it lacks is a venue that answers, and that is Nitro's decision (§0.5)                                                                |
-| **S-I3** | **Authoritative venue fees + settlement cost** 🔴 | `socket.dex-fee-source` — fees are configured guesses (`DEX_CLOB_FEE_BPS` 0, internal book 20bps) and settlement cost is a **declared understatement of zero**. Understate either and every quote promises a better price than the user gets. Must be set before the first real on-chain quote                                                                   |
-| **S-I4** | **Execution against a quoted venue** 🔴           | `socket.dex-execution` — and note the size the one-line title hides: this needs a **Venue Vault** (§27) and an **OMS service that does not exist** (§28, `services/svc-execution`). Today every adapter declares quote-only and `submit()` throws loudly rather than returning a plausible rejection. Keep the refusal loud until the vault and the OMS are real |
+| ID       | Outcome                                        | Done bar                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-I1** | **Pool interface + self-custody flows**        | Contract-held liquidity · no platform custody masquerade                                                                                                                                                                                                                                                                                                         |
+| **S-I2** | **Quote integrity**                            | Fail closed without invent. **Already true on main** — `dex.quote-router` sources live prices, enforces a staleness bound against its own read, has no cache and no fallback, and refuses 503 naming every dead venue. What it lacks is a venue that answers, and that is Nitro's decision (§0.5)                                                                |
+| **S-I3** | **Authoritative venue fees + settlement cost** | **Shipped this PR (dex).** CLOB no silent 0: both knobs from the venue or omit both. Residual: internal-book 20bps still configured; quote path does not `eth_call`.                                                                                                                                                                                             |
+| **S-I4** | **Execution against a quoted venue** 🔴        | `socket.dex-execution` — and note the size the one-line title hides: this needs a **Venue Vault** (§27) and an **OMS service that does not exist** (§28, `services/svc-execution`). Today every adapter declares quote-only and `submit()` throws loudly rather than returning a plausible rejection. Keep the refusal loud until the vault and the OMS are real |
 
 ### Tier J — Security / audit factory (your senior edge)
 
