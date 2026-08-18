@@ -164,7 +164,7 @@ export interface MerchantWebhookStore {
     secretHash: string;
     secretEncrypted: string;
   }): Promise<MerchantWebhookEndpoint>;
-  listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]>;
+  listEndpoints(merchantId: string, status?: WebhookEndpointStatus): Promise<MerchantWebhookEndpoint[]>;
   getEndpoint(id: string): Promise<(MerchantWebhookEndpoint & { secret: string }) | null>;
   setEndpointStatus(id: string, status: WebhookEndpointStatus, reason: string | null, consecutiveFailures: number): Promise<void>;
   bumpEndpointFailure(id: string): Promise<number>;
@@ -242,8 +242,10 @@ export class MemoryMerchantWebhookStore implements MerchantWebhookStore {
     return publicEndpoint(ep);
   }
 
-  async listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
-    return [...this.endpoints.values()].filter((e) => e.merchantId === merchantId).map(publicEndpoint);
+  async listEndpoints(merchantId: string, status?: WebhookEndpointStatus): Promise<MerchantWebhookEndpoint[]> {
+    return [...this.endpoints.values()]
+      .filter((e) => e.merchantId === merchantId && (status === undefined || e.status === status))
+      .map(publicEndpoint);
   }
 
   async getEndpoint(id: string): Promise<(MerchantWebhookEndpoint & { secret: string }) | null> {
@@ -376,8 +378,9 @@ function publicEndpoint(ep: MemEndpoint): MerchantWebhookEndpoint {
 }
 
 export type WebhookSql = {
+  // Nested fragments (`sql`AND status = ${status}``) must not execute a query.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (strings: TemplateStringsArray, ...values: any[]): Promise<readonly any[]>;
+  (strings: TemplateStringsArray, ...values: any[]): any;
 };
 
 /**
@@ -405,11 +408,12 @@ export class PostgresMerchantWebhookStore implements MerchantWebhookStore {
     return mapEndpoint(rows[0]!);
   }
 
-  async listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
+  async listEndpoints(merchantId: string, status?: WebhookEndpointStatus): Promise<MerchantWebhookEndpoint[]> {
     const rows = (await this.sql`
       SELECT id, merchant_id, url, status, disabled_reason, consecutive_failures, created_at, updated_at
         FROM pay.merchant_webhook_endpoints
        WHERE merchant_id = ${merchantId}
+         ${status === undefined ? this.sql`` : this.sql`AND status = ${status}`}
        ORDER BY created_at DESC
     `) as ReadonlyArray<EndpointRow>;
     return rows.map(mapEndpoint);
@@ -665,8 +669,8 @@ export class MerchantWebhookService {
     return { ...endpoint, secret };
   }
 
-  async listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
-    return this.store.listEndpoints(merchantId);
+  async listEndpoints(merchantId: string, status?: WebhookEndpointStatus): Promise<MerchantWebhookEndpoint[]> {
+    return this.store.listEndpoints(merchantId, status);
   }
 
   async disableEndpoint(merchantId: string, endpointId: string, reason = 'disabled_by_merchant'): Promise<void> {

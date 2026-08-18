@@ -5,6 +5,7 @@ import { verifySignature } from './rails/webhook-signature.js';
 import {
   MemoryMerchantWebhookStore,
   MerchantWebhookService,
+  PostgresMerchantWebhookStore,
   WEBHOOK_CLAIM_LEASE_MS,
   buildSignedHeaders,
   eventIdFor,
@@ -267,6 +268,62 @@ describe('MerchantWebhookService', () => {
     expect(enabled.status).toBe('active');
     expect(enabled.consecutiveFailures).toBe(0);
     expect(enabled.disabledReason).toBeNull();
+  });
+
+  it('listEndpoints omits status as mixed, exact-matches active/disabled, and returns [] when none', async () => {
+    const OTHER = '55555555-5555-4555-8555-555555555555';
+    const store = new MemoryMerchantWebhookStore();
+    const svc = new MerchantWebhookService(store);
+    const active = await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/a');
+    const disabled = await svc.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/b');
+    await svc.disableEndpoint(MERCHANT, disabled.id, 'disabled_by_merchant');
+    await svc.registerEndpoint(OTHER, 'https://other.example/hooks');
+
+    const mixed = await svc.listEndpoints(MERCHANT);
+    expect(mixed.map((e) => e.id).sort()).toEqual([active.id, disabled.id].sort());
+    expect(mixed.map((e) => e.status).sort()).toEqual(['active', 'disabled']);
+    expect(mixed.every((e) => !('secret' in e))).toBe(true);
+
+    const onlyActive = await svc.listEndpoints(MERCHANT, 'active');
+    expect(onlyActive).toHaveLength(1);
+    expect(onlyActive[0]?.id).toBe(active.id);
+    expect(onlyActive[0]?.status).toBe('active');
+
+    const onlyDisabled = await svc.listEndpoints(MERCHANT, 'disabled');
+    expect(onlyDisabled).toHaveLength(1);
+    expect(onlyDisabled[0]?.id).toBe(disabled.id);
+    expect(onlyDisabled[0]?.status).toBe('disabled');
+
+    expect(await svc.listEndpoints(MERCHANT, 'active')).not.toEqual([]);
+    const emptyMerchant = '66666666-6666-4666-8666-666666666666';
+    expect(await svc.listEndpoints(emptyMerchant)).toEqual([]);
+    expect(await svc.listEndpoints(emptyMerchant, 'disabled')).toEqual([]);
+  });
+
+  it('PostgresMerchantWebhookStore nests AND status = $status under merchant_id', async () => {
+    type Frag = { strings: string[]; values: unknown[] };
+    const calls: Frag[] = [];
+    const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const frag: Frag = { strings: [...strings], values };
+      calls.push(frag);
+      return Object.assign(Promise.resolve([] as const), frag);
+    };
+    const store = new PostgresMerchantWebhookStore(sql);
+
+    await store.listEndpoints(MERCHANT);
+    const mixed = calls[calls.length - 1]!;
+    expect(mixed.strings.join('?')).toMatch(/merchant_id\s*=\s*\?/i);
+    expect(mixed.strings.join('?')).not.toMatch(/AND status/i);
+    expect(mixed.values[0]).toBe(MERCHANT);
+
+    calls.length = 0;
+    await store.listEndpoints(MERCHANT, 'disabled');
+    const inner = calls[0]!;
+    const outer = calls[1]!;
+    expect(inner.strings.join('?')).toMatch(/AND status\s*=\s*\?/i);
+    expect(inner.values).toEqual(['disabled']);
+    expect(outer.values[0]).toBe(MERCHANT);
+    expect(outer.values[1]).toMatchObject({ values: ['disabled'] });
   });
 
   it('processDue with a blank signing secret refuses by name and does not POST', async () => {

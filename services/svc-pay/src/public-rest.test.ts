@@ -742,6 +742,69 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
     expect(body.consecutiveFailures).toBe(0);
     expect(body.disabledReason).toBeNull();
   });
+
+  it('lists endpoints mixed when status is omitted, exact-matches, empty [], invalid 400, and never returns secret', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const webhooks = new MerchantWebhookService(store);
+    app = await build(stubPay(), new MemoryRestIdempotencyStore(), webhooks);
+
+    const active = await webhooks.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/a');
+    const disabled = await webhooks.registerEndpoint(MERCHANT, 'https://merchant.example/hooks/b');
+    await webhooks.disableEndpoint(MERCHANT, disabled.id, 'disabled_by_merchant');
+
+    const mixed = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+    expect(mixed.statusCode).toBe(200);
+    const mixedRows = mixed.json() as Array<{ id: string; status: string; secret?: string }>;
+    expect(mixedRows.map((r) => r.id).sort()).toEqual([active.id, disabled.id].sort());
+    expect(mixedRows.map((r) => r.status).sort()).toEqual(['active', 'disabled']);
+    expect(mixedRows.every((r) => r.secret === undefined)).toBe(true);
+    expect(mixed.body).not.toContain(active.secret);
+    expect(mixed.body).not.toContain('"secret"');
+
+    const onlyActive = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}&status=active`,
+      headers: signed(),
+    });
+    expect(onlyActive.statusCode).toBe(200);
+    expect(onlyActive.json()).toEqual([expect.objectContaining({ id: active.id, status: 'active' })]);
+
+    const onlyDisabled = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}&status=disabled`,
+      headers: signed(),
+    });
+    expect(onlyDisabled.statusCode).toBe(200);
+    expect(onlyDisabled.json()).toEqual([expect.objectContaining({ id: disabled.id, status: 'disabled' })]);
+
+    await webhooks.enableEndpoint(MERCHANT, disabled.id);
+    const noneDisabled = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}&status=disabled`,
+      headers: signed(),
+    });
+    expect(noneDisabled.statusCode).toBe(200);
+    expect(noneDisabled.json()).toEqual([]);
+
+    const invalid = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}&status=pending`,
+      headers: signed(),
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const forbidden = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}&status=active`,
+      headers: signed(principal({ sub: STRANGER, userId: STRANGER })),
+    });
+    expect(forbidden.statusCode).toBe(403);
+    expect(forbidden.json().error.code).toBe('pay.merchant_forbidden');
+  });
 });
 
 describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {

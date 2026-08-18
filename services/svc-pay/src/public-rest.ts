@@ -7,7 +7,7 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import { areaForSurface, isPayfacPermissionPort, resolveActorMerchantId, type PayfacPermissionPort } from './payfac-permissions.js';
 import { PERMISSION_AREAS, SubMerchantError, type PermissionArea } from './submerchants.js';
-import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merchant-webhooks.js';
+import { type MerchantWebhookService, type WebhookDeliveryStatus, type WebhookEndpointStatus } from './merchant-webhooks.js';
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
@@ -1166,17 +1166,20 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           querystring: {
             type: 'object',
             required: ['merchantId'],
-            properties: { merchantId: { type: 'string', format: 'uuid' } },
+            properties: {
+              merchantId: { type: 'string', format: 'uuid' },
+              status: { type: 'string', enum: ['active', 'disabled'] },
+            },
           },
           response: { 200: { type: 'array', items: endpointSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
         },
       },
-      async (req: FastifyRequest<{ Querystring: { merchantId: string } }>, reply) => {
+      async (req: FastifyRequest<{ Querystring: { merchantId: string; status?: WebhookEndpointStatus } }>, reply) => {
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
           await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.webhooks.read'));
-          const rows = await webhooks.listEndpoints(req.query.merchantId);
+          const rows = await webhooks.listEndpoints(req.query.merchantId, req.query.status);
           return reply.send(
             rows.map((e) => ({
               id: e.id,
