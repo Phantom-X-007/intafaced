@@ -1422,7 +1422,7 @@ export class AcademyService {
     return this.toResidency(rows[0]);
   }
 
-  async myResidencies(userId: string): Promise<ResidencyApplication[]> {
+  async myResidencies(userId: string, filter: { status?: ResidencyStatus } = {}): Promise<ResidencyApplication[]> {
     const rows = await this.sql<
       Array<{
         id: string;
@@ -1439,6 +1439,7 @@ export class AcademyService {
       SELECT id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
         FROM academy.residency_applications
        WHERE user_id = ${userId}
+         AND ${filter.status == null ? this.sql`true` : this.sql`status::text = ${filter.status}`}
        ORDER BY applied_at DESC
     `;
     return rows.map((r) => this.toResidency(r));

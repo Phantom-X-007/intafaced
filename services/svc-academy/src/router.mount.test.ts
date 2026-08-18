@@ -537,6 +537,74 @@ describe('svc-academy mount — room sessions may filter by status', () => {
   });
 });
 
+const APPLIED = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const ACCEPTED = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+const REJECTED = 'abababab-abab-4aba-8aba-abababababab';
+
+function residencyRecord(overrides: { id: string; status: 'applied' | 'accepted' | 'rejected' | 'withdrawn'; cohortSlug: string }) {
+  return {
+    userId: USER,
+    statement: 'I want a desk.',
+    appliedAt: new Date('2026-08-18T12:00:00.000Z'),
+    decidedAt: null,
+    decidedBy: null,
+    decisionNote: null,
+    ...overrides,
+  };
+}
+
+const mixedMyResidencies = [
+  residencyRecord({ id: APPLIED, status: 'applied', cohortSlug: 'cohort-applied' }),
+  residencyRecord({ id: ACCEPTED, status: 'accepted', cohortSlug: 'cohort-accepted' }),
+  residencyRecord({ id: REJECTED, status: 'rejected', cohortSlug: 'cohort-rejected' }),
+];
+
+describe('svc-academy mount — my residencies may filter by status', () => {
+  it('omits status and returns mixed statuses for that user', async () => {
+    const myResidencies = vi.fn(async () => mixedMyResidencies);
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myResidencies();
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, {});
+    expect(out.map((r) => r.status).sort()).toEqual(['accepted', 'applied', 'rejected']);
+  });
+
+  it("forwards status: 'accepted' and returns only accepted applications", async () => {
+    const myResidencies = vi.fn(async (_userId: string, filter: { status?: string } = {}) =>
+      mixedMyResidencies.filter((r) => (filter.status ? r.status === filter.status : true)),
+    );
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myResidencies({ status: 'accepted' });
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, { status: 'accepted' });
+    expect(out).toEqual([expect.objectContaining({ id: ACCEPTED, status: 'accepted' })]);
+  });
+
+  it('returns an empty list when no application matches the status', async () => {
+    const myResidencies = vi.fn(async () => []);
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myResidencies({ status: 'withdrawn' });
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, { status: 'withdrawn' });
+    expect(out).toEqual([]);
+  });
+
+  it('rejects an unknown status at the door before the service', async () => {
+    const myResidencies = vi.fn(async () => mixedMyResidencies);
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    await expect(
+      createAcademyRouter(academy)
+        .createCaller(signed())
+        .myResidencies({ status: 'bogus' as never }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(myResidencies).not.toHaveBeenCalled();
+  });
+});
+
 describe('svc-academy mount — no SFU means an error, never a fake token', () => {
   it('reports stream_unavailable as a 500 rather than returning a credential', async () => {
     const academy = stubAcademy({

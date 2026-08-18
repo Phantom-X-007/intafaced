@@ -1344,8 +1344,15 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
       .mutation(({ input, ctx }) => guard(() => academy.withdrawResidency({ id: input.id, userId: ctx.principal!.userId }))),
 
     myResidencies: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ status: residencyStatus.optional() }).optional())
       .output(z.array(residencyOut))
-      .query(({ ctx }) => guard(() => academy.myResidencies(ctx.principal!.userId))),
+      .query(({ input, ctx }) =>
+        guard(() =>
+          academy.myResidencies(ctx.principal!.userId, {
+            ...(input?.status ? { status: input.status } : {}),
+          }),
+        ),
+      ),
 
     openResidencies: scopedProcedure('admin:read', { module: 'academy' })
       .input(z.object({ cohortSlug: z.string().min(3).max(48).optional() }).optional())
