@@ -2256,10 +2256,11 @@ export const FEATURES = [
     module: 'protocol',
     phase: '5P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'DOCTRINE, not a backlog item, and the blockchain task board contradicted it until 2026-08-07 (board S-A1 invited a guardian/multi-sig design; this row forbids one). RESOLVED IN FAVOUR OF THIS ROW: the platform must NEVER be a guardian, because a guardian is a second party who can take the account. What is permitted, and is the only shape worth designing: guardians the USER elects and can revoke, where no platform-controlled key is ever eligible, no platform quorum can move funds, and the recovery path is provable to the user without trusting us. If that cannot be built without the platform being a party, the honest answer is that this stays a socket.',
+    requires: ['services/svc-protocol/contracts/recovery/UserElectedRecovery.sol'],
+    note: 'CLOSED 2026-08-18 (S-A1 permitted shape). UserElectedRecovery.sol is an ERC-1271 owner a SmartAccount may set: the USER elects guardians and threshold (M-of-N), can revoke either, and can cancelRecovery during the delay; after delay + M guardian calls/signatures the owner rotates. Platform is never a guardian — no hardcoded platform address, no admin, no upgrade, no platform quorum. Residual: not wired as the default SmartAccount owner (factory still takes the key it is given). Unaudited; no audited:true.',
   }),
 
   // §13 socket CLOSED 2026-07-30 by indexer.readmodels. Kept as a `done` entry
