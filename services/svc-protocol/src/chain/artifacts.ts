@@ -63,7 +63,8 @@ export type ArtifactName =
   | 'EntryPointGetUserOpHash'
   | 'SovereignNft'
   | 'RoyaltyMarket'
-  | 'MemeLaunch';
+  | 'MemeLaunch'
+  | 'RankAttestation';
 
 export interface ContractArtifact {
   readonly contractName: string;
