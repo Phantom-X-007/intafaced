@@ -500,6 +500,26 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('GET /orders/open omitted status: does not pass a status into openOrders', async () => {
+    let seenStatus: string | undefined = 'unset';
+    const app = await build(
+      deps({
+        openOrders: async (_p, _marketId, status) => {
+          seenStatus = status;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenStatus).toBeUndefined();
+    await app.close();
+  });
+
   it('GET /orders/open?status=pending: passes status into openOrders', async () => {
     let seen: { marketId?: string; status?: string } = {};
     const app = await build(
@@ -516,6 +536,47 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
+    expect(seen.status).toBe('pending');
+    await app.close();
+  });
+
+  it('GET /orders/open?status=open: passes status into openOrders', async () => {
+    let seenStatus: string | undefined;
+    const app = await build(
+      deps({
+        openOrders: async (_p, _marketId, status) => {
+          seenStatus = status;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?status=open',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenStatus).toBe('open');
+    await app.close();
+  });
+
+  it('GET /orders/open?symbol=&status=: ANDs marketId with exact status', async () => {
+    let seen: { marketId?: string; status?: string } = {};
+    const app = await build(
+      deps({
+        openOrders: async (_p, marketId, status) => {
+          seen = { marketId, status };
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?symbol=BTC%2FUSDT&status=pending',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen.marketId).toBe(market.id);
     expect(seen.status).toBe('pending');
     await app.close();
   });
@@ -681,23 +742,25 @@ describe('private REST — mount boundary + order write path', () => {
   });
 
   it('GET /orders/open?status=: invalid → 400 without openOrders', async () => {
-    let listed = false;
-    const app = await build(
-      deps({
-        openOrders: async () => {
-          listed = true;
-          return [];
-        },
-      }),
-    );
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/orders/open?status=filled',
-      headers: signedHeaders(),
-    });
-    expect(res.statusCode).toBe(400);
-    expect(listed).toBe(false);
-    await app.close();
+    for (const status of ['filled', 'cancelled', 'garbage']) {
+      let listed = false;
+      const app = await build(
+        deps({
+          openOrders: async () => {
+            listed = true;
+            return [];
+          },
+        }),
+      );
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/orders/open?status=${status}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(listed).toBe(false);
+      await app.close();
+    }
   });
 
   it('404s when symbol filter names an unknown market', async () => {
@@ -1375,7 +1438,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.status).toBe('cancelled');
+    expect(seen).toMatchObject({ status: 'cancelled' });
     await app.close();
   });
 
@@ -1395,7 +1458,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.side).toBe('buy');
+    expect(seen).toMatchObject({ side: 'buy' });
     await app.close();
   });
 
@@ -1415,7 +1478,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.type).toBe('limit');
+    expect(seen).toMatchObject({ type: 'limit' });
     await app.close();
   });
 
@@ -1435,7 +1498,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.tif).toBe('GTC');
+    expect(seen).toMatchObject({ tif: 'GTC' });
     await app.close();
   });
 
@@ -1455,7 +1518,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.clientOrderId).toBe('alice-1');
+    expect(seen).toMatchObject({ clientOrderId: 'alice-1' });
     await app.close();
   });
 
@@ -1986,7 +2049,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.side).toBe('long');
+    expect(seen).toMatchObject({ side: 'long' });
     await app.close();
   });
 
@@ -2136,7 +2199,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.status).toBe('liquidated');
+    expect(seen).toMatchObject({ status: 'liquidated' });
     await app.close();
   });
 
@@ -2156,7 +2219,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen?.side).toBe('long');
+    expect(seen).toMatchObject({ side: 'long' });
     await app.close();
   });
 

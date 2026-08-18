@@ -1977,12 +1977,7 @@ export class TradeService {
     clientOrderId?: string,
   ): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
-    const statusFilter =
-      status === 'pending'
-        ? this.sql`status = 'pending'`
-        : status === 'open'
-          ? this.sql`status = 'open'`
-          : this.sql`status IN ('pending', 'open')`;
+    const statusFilter = status === 'pending' || status === 'open' ? this.sql`status = ${status}` : this.sql`status IN ('pending', 'open')`;
     const sideFilter = side === 'buy' ? this.sql`side = 'buy'` : side === 'sell' ? this.sql`side = 'sell'` : this.sql`TRUE`;
     const typeFilter = type === 'limit' ? this.sql`type = 'limit'` : type === 'market' ? this.sql`type = 'market'` : this.sql`TRUE`;
     const tifFilter =

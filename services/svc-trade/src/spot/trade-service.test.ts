@@ -459,6 +459,19 @@ if (!available) {
       ).toEqual([live.id]);
     });
 
+    it('openOrders status exact-match still ANDs marketId and returns [] when none', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const live = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-open-and');
+      const heldPending = await rest(ALICE, btcusdt, 'buy', '1', '100', 'alice-pending-and');
+      await sql`UPDATE trade.orders SET status = 'pending' WHERE id = ${heldPending.id}`;
+
+      const alice = principalFor(ALICE);
+      expect((await trade.openOrders(alice, btcusdt.id, 'open')).map((row) => row.id)).toEqual([live.id]);
+      expect((await trade.openOrders(alice, btcusdt.id, 'pending')).map((row) => row.id)).toEqual([heldPending.id]);
+      expect(await trade.openOrders(alice, '00000000-0000-4000-8000-000000000000', 'open')).toEqual([]);
+      expect(await trade.openOrders(principalFor(BOB), undefined, 'pending')).toEqual([]);
+    });
+
     it('releases a sell hold in the base asset', async () => {
       await fund(BOB, 'BTC', '5');
       const order = await rest(BOB, btcusdt, 'sell', '2', '100', 'bob-1');
