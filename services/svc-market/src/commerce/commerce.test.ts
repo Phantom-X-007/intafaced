@@ -833,6 +833,110 @@ if (!available) {
       `;
       expect(await commerce.purchasesOf(BUYER, { offerType: 'subscription' })).toEqual([]);
     });
+
+    it('purchasesOf omits listingId to mix listings; filter is exact; miss is []; AND with offerType/status; other buyer not leaked; prices stay decimal strings', async () => {
+      await approvedVendor(VENDOR_USER);
+      const listingA = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Pack A',
+        description: 'first listing',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10.50',
+      });
+      const listingB = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Pack B',
+        description: 'second listing',
+        offerType: 'subscription',
+        assetId: 'USDT',
+        price: '12.00',
+        periodSeconds: 86400,
+      });
+
+      await ledger.post(
+        recipes.deposit({
+          userId: BUYER,
+          assetId: 'USDT',
+          amount: amt('1000'),
+          rail: 'test',
+          railRef: 'buyer-seed-purchases-listing-id',
+        }),
+      );
+      const buyA = await commerce.purchase({
+        buyerId: BUYER,
+        listingId: listingA.id,
+        purchaseId: randomUUID(),
+      });
+      const buyB = await commerce.purchase({
+        buyerId: BUYER,
+        listingId: listingB.id,
+        purchaseId: randomUUID(),
+      });
+
+      const pendingAId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${pendingAId}, ${listingA.id}, ${BUYER}, id, ${VENDOR_USER},
+               'USDT', ${listingA.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+
+      const otherBuyerSameListingId = randomUUID();
+      await sql`
+        INSERT INTO market.purchases (
+          id, listing_id, buyer_id, vendor_id, vendor_user_id,
+          asset_id, price, commission_bps, status
+        )
+        SELECT ${otherBuyerSameListingId}, ${listingA.id}, ${OTHER_BUYER}, id, ${VENDOR_USER},
+               'USDT', ${listingA.price}::numeric, 500, 'pending'
+          FROM market.vendors WHERE user_id = ${VENDOR_USER}
+      `;
+
+      const omitted = await commerce.purchasesOf(BUYER);
+      expect(omitted.map((p) => p.id).sort()).toEqual([buyA.id, buyB.id, pendingAId].sort());
+      expect(omitted.map((p) => p.listingId).sort()).toEqual([listingA.id, listingA.id, listingB.id].sort());
+      expect(omitted.every((p) => p.buyerId === BUYER)).toBe(true);
+      expect(omitted.map((p) => p.id)).not.toContain(otherBuyerSameListingId);
+      expect(omitted.every((p) => typeof p.price === 'string')).toBe(true);
+      expect(formatAmount(amt(omitted.find((p) => p.id === buyA.id)!.price))).toBe(formatAmount(amt(listingA.price)));
+      expect(formatAmount(amt(omitted.find((p) => p.id === buyB.id)!.price))).toBe(formatAmount(amt(listingB.price)));
+
+      const exactA = await commerce.purchasesOf(BUYER, { listingId: listingA.id });
+      expect(exactA.map((p) => p.id).sort()).toEqual([buyA.id, pendingAId].sort());
+      expect(exactA.every((p) => p.listingId === listingA.id)).toBe(true);
+      expect(exactA.every((p) => p.buyerId === BUYER)).toBe(true);
+      expect(exactA.map((p) => p.id)).not.toContain(otherBuyerSameListingId);
+      expect(exactA.every((p) => typeof p.price === 'string')).toBe(true);
+
+      const exactB = await commerce.purchasesOf(BUYER, { listingId: listingB.id });
+      expect(exactB.map((p) => p.id)).toEqual([buyB.id]);
+      expect(exactB.every((p) => p.listingId === listingB.id)).toBe(true);
+
+      const unknownListing = randomUUID();
+      expect(await commerce.purchasesOf(BUYER, { listingId: unknownListing })).toEqual([]);
+
+      const nested = await commerce.purchasesOf(BUYER, {
+        listingId: listingA.id,
+        status: 'settled',
+        offerType: 'one_time',
+      });
+      expect(nested.map((p) => p.id)).toEqual([buyA.id]);
+      expect(nested.every((p) => p.status === 'settled')).toBe(true);
+      expect(nested.every((p) => p.listingId === listingA.id)).toBe(true);
+      expect(
+        await commerce.purchasesOf(BUYER, {
+          listingId: listingA.id,
+          status: 'pending',
+          offerType: 'subscription',
+        }),
+      ).toEqual([]);
+
+      expect((await commerce.publicListings()).map((l) => l.id).sort()).toEqual([listingA.id, listingB.id].sort());
+    });
   });
 
   describe('listings honesty residual', () => {

@@ -700,6 +700,23 @@ describe('svc-market mount — commerce scopes', () => {
     });
   });
 
+  it('forwards optional myPurchases listingId and refuses a non-uuid at the door', async () => {
+    const commerce = stubCommerce();
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await caller.myPurchases({ listingId });
+    expect(commerce.purchasesOf).toHaveBeenCalledWith(USER, { listingId });
+    await caller.myPurchases({ status: 'settled', offerType: 'one_time', listingId });
+    expect(commerce.purchasesOf).toHaveBeenCalledWith(USER, {
+      status: 'settled',
+      offerType: 'one_time',
+      listingId,
+    });
+    await expect(caller.myPurchases({ listingId: 'not-a-uuid' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(commerce.purchasesOf).not.toHaveBeenCalledWith(USER, { listingId: 'not-a-uuid' });
+  });
+
   it('refuses archiveListing without market:write', async () => {
     const commerce = stubCommerce();
     const reader = principal({ scopes: ['market:read'] });

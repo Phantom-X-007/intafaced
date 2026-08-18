@@ -489,6 +489,7 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
           .object({
             status: z.enum(['pending', 'settled', 'rejected']).optional(),
             offerType: z.enum(['one_time', 'subscription']).optional(),
+            listingId: z.string().uuid().optional(),
           })
           .optional(),
       )
