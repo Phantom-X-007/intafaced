@@ -45,8 +45,8 @@ describeOnChain('LegacyVault on chain (S-L2)', () => {
       throw new Error('REQUIRE_EVM_CHAIN=1 but no RPC at ' + devChainMod.devRpcUrl());
     }
     owner = await devChainMod.devSuiteClients(import.meta.url);
-    heirA = await devChainMod.devSuiteClients(\`\${import.meta.url}#heirA\`);
-    heirB = await devChainMod.devSuiteClients(\`\${import.meta.url}#heirB\`);
+    heirA = await devChainMod.devSuiteClients(`${import.meta.url}#heirA`);
+    heirB = await devChainMod.devSuiteClients(`${import.meta.url}#heirB`);
 
     const mock = loadArtifact('MockERC20');
     tokenAbi = mock.abi;
