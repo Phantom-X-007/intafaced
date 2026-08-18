@@ -18,6 +18,7 @@ import {
   AlertPortfolioUnpublishedError,
   type AlertEvalOutcome,
   type AlertRefuseCode,
+  type AlertStatus,
   type CreatePortfolioAlertInput,
   type CreatePriceAlertInput,
   type CreateUnpublishedAlertInput,
@@ -131,8 +132,8 @@ export class AlertService {
     return unpublishedKindOutcome(kind);
   }
 
-  list(userId: string): Promise<readonly PriceAlert[]> {
-    return this.store.list(userId);
+  list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]> {
+    return this.store.list(userId, status);
   }
 
   cancel(userId: string, id: string): Promise<PriceAlert | null> {

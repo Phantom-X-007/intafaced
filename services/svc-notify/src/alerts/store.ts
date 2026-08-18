@@ -20,7 +20,8 @@ export class AlertValidationError extends Error {
 
 export interface AlertStore {
   create(input: CreatePriceAlertInput): Promise<PriceAlert>;
-  list(userId: string): Promise<readonly PriceAlert[]>;
+  /** Self-only. Omitted status returns every owned watch; provided status exact-matches in the store. */
+  list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]>;
   get(userId: string, id: string): Promise<PriceAlert | null>;
   /** Active alerts for a market — evaluation fan-in. */
   listActiveByMarket(marketId: string): Promise<readonly PriceAlert[]>;
@@ -67,8 +68,10 @@ export class MemoryAlertStore implements AlertStore {
     return row;
   }
 
-  async list(userId: string): Promise<readonly PriceAlert[]> {
-    return [...this.byId.values()].filter((r) => r.userId === userId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  async list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]> {
+    return [...this.byId.values()]
+      .filter((r) => r.userId === userId && (status === undefined || r.status === status))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
   async get(userId: string, id: string): Promise<PriceAlert | null> {
@@ -131,7 +134,8 @@ export class PostgresAlertStore implements AlertStore {
     return mapRow(rows[0]!);
   }
 
-  async list(userId: string): Promise<readonly PriceAlert[]> {
+  async list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]> {
+    const statusMatch = status !== undefined ? this.sql`AND status = ${status}` : this.sql``;
     const rows = await this.sql<
       {
         id: string;
@@ -147,6 +151,7 @@ export class PostgresAlertStore implements AlertStore {
       SELECT id, user_id, market_id, direction, target_price, status, fired_at, created_at
       FROM notify.price_alerts
       WHERE user_id = ${userId}
+        ${statusMatch}
       ORDER BY created_at DESC
     `;
     return rows.map(mapRow);

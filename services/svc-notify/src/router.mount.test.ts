@@ -213,6 +213,49 @@ describe('svc-notify mount — authorisation', () => {
     });
     expect(markFor).toBe(USER);
   });
+
+  it('alerts omits status and still asks for every watch owned by the principal', async () => {
+    let listed: { userId: string; status?: string } | null = null;
+    const alerts = {
+      list: async (userId: string, status?: string) => {
+        listed = { userId, ...(status !== undefined ? { status } : {}) };
+        return [];
+      },
+      evaluationStatus: () => ({ markSource: 'dark' as const, canFire: false, code: 'alert.price_unavailable' as const }),
+    };
+    const page = await createNotifyRouter(stubNotify(), alerts as never)
+      .createCaller(signed())
+      .notify.alerts();
+    expect(page.items).toEqual([]);
+    expect(page.evaluation).toEqual({ markSource: 'dark', canFire: false, code: 'alert.price_unavailable' });
+    expect(listed).toEqual({ userId: USER });
+    expect(listed).not.toHaveProperty('status');
+  });
+
+  it('alerts forwards status exact-match to list(userId, status)', async () => {
+    let listed: { userId: string; status?: string } | null = null;
+    const alerts = {
+      list: async (userId: string, status?: string) => {
+        listed = { userId, ...(status !== undefined ? { status } : {}) };
+        return [];
+      },
+      evaluationStatus: () => ({ markSource: 'dark' as const, canFire: false, code: 'alert.price_unavailable' as const }),
+    };
+    await createNotifyRouter(stubNotify(), alerts as never)
+      .createCaller(signed())
+      .notify.alerts({ status: 'fired' });
+    expect(listed).toEqual({ userId: USER, status: 'fired' });
+  });
+
+  it('alerts refuses a status outside active|fired|cancelled', async () => {
+    await expect(
+      createNotifyRouter(stubNotify())
+        .createCaller(signed())
+        .notify.alerts({ status: 'pending' as unknown as 'active' }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
 });
 
 describe('svc-notify mount — public surface', () => {

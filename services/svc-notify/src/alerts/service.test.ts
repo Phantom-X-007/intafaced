@@ -50,6 +50,29 @@ describe('AlertService — rides notify fan-out, refuses dark marks', () => {
     expect(await alerts.list('u2')).toHaveLength(0);
   });
 
+  it('list omits status and returns every owned watch; status exact-matches; miss is empty', async () => {
+    const { alerts } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    await alerts.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' });
+    const toCancel = await alerts.create({ userId: 'u1', marketId: 'ETH-USD', direction: 'below', targetPrice: '50' });
+    await alerts.create({ userId: 'u2', marketId: 'BTC-USD', direction: 'above', targetPrice: '90' });
+    await alerts.cancel('u1', toCancel.id);
+    await alerts.evaluateMarket('BTC-USD');
+
+    const unfiltered = await alerts.list('u1');
+    expect(unfiltered.map((r) => r.status).sort()).toEqual(['cancelled', 'fired']);
+    expect(unfiltered.every((r) => r.userId === 'u1')).toBe(true);
+
+    const fired = await alerts.list('u1', 'fired');
+    expect(fired).toHaveLength(1);
+    expect(fired[0]!.status).toBe('fired');
+    expect(fired[0]!.marketId).toBe('BTC-USD');
+
+    expect(await alerts.list('u1', 'active')).toEqual([]);
+    expect(await alerts.list('u1', 'cancelled')).toHaveLength(1);
+    expect((await alerts.list('u1', 'cancelled'))[0]!.id).toBe(toCancel.id);
+    expect(await alerts.list('u2', 'cancelled')).toEqual([]);
+  });
+
   it('dark mark refuses every active alert and writes no notification', async () => {
     const { alerts, notifyStore } = harness({ kind: 'unavailable', reason: 'dark' });
     const row = await alerts.create({
