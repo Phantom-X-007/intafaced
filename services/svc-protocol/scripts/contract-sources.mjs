@@ -256,6 +256,15 @@ export const SUITES = [
     sources: ['attestations/RankAttestation.sol'],
   },
   {
+    name: 'launchpad',
+    expect: 'compiles',
+    /**
+     * S-G2 / `launch.launchpad` — fair launch + in-contract cliff/linear vest.
+     * Own suite so editing this file cannot stale TokenFactory.json (launch suite).
+     */
+    sources: ['launch/FairLaunch.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**

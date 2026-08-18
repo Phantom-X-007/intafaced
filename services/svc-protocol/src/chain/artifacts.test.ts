@@ -417,3 +417,51 @@ describe('committed attestation artefacts match the Solidity in this tree', () =
     expect(names).toContain('revoke');
   });
 });
+
+describe('committed launchpad artefacts match the Solidity in this tree', () => {
+  const launchpad = (SUITES as Suite[]).find((s) => s.name === 'launchpad');
+
+  it('compiles FairLaunch in its own suite (TokenFactory artefact untouched)', () => {
+    expect(launchpad?.expect).toBe('compiles');
+    const artefact = loadArtifact('FairLaunch');
+    expect(artefact.contractName).toBe('FairLaunch');
+    expect(artefact.suite).toBe('launchpad');
+    expect(artefact.sourceName).toBe('launch/FairLaunch.sol');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+    expect(loadArtifact('TokenFactory').suite).toBe('launch');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(launchpad, collectSources()));
+    expect(
+      loadArtifact('FairLaunch').sourceHash,
+      'FairLaunch.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build',
+    ).toBe(expected);
+  });
+
+  it('hashes the launchpad suite independently of the launch (factory) suite', () => {
+    expect(loadArtifact('FairLaunch').sourceHash).not.toBe(loadArtifact('TokenFactory').sourceHash);
+  });
+
+  it('pins the same compiler and EVM version as the rest of the tree', () => {
+    const artefact = loadArtifact('FairLaunch');
+    expect(artefact.solcVersion).toBe('0.8.28');
+    expect(artefact.evmVersion).toBe('paris');
+    expect(artefact.optimizer).toEqual({ enabled: true, runs: 200 });
+  });
+
+  it('exposes no pause, whitelist, fee, revoke, or admin unlock', () => {
+    const names = loadArtifact('FairLaunch')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+
+    for (const forbidden of ['pause', 'unpause', 'owner', 'transferOwnership', 'revoke', 'unlock', 'setWhitelist', 'whitelist']) {
+      expect(names, `FairLaunch must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    expect(names).toContain('contribute');
+    expect(names).toContain('finalize');
+    expect(names).toContain('claim');
+    expect(names).toContain('refund');
+  });
+});

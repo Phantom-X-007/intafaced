@@ -1364,11 +1364,13 @@ export const FEATURES = [
   }),
   f('launch.launchpad', 'Presale / fair launch, vesting, staked allocation tiers', {
     owner: 'shehzad002',
-    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only. Plane corrected to P 2026-08-07 — presale, vesting and allocation are contracts, and this row rendered as Fiat Plane on the board its own owner reads.',
     module: 'launch',
     phase: '5',
     plane: 'P',
+    status: 'done',
     dependsOn: ['launch.token-factory', 'token.staking'],
+    requires: ['services/svc-protocol/contracts/launch/FairLaunch.sol', 'services/svc-protocol/src/launch/fair-launch.onchain.test.ts'],
+    note: 'CLOSED 2026-08-18 (S-G2): FairLaunch.sol — creator-set sale/quote, raise cap, window, per-wallet cap, minRaise, cliff+linear vest in-contract (no revoke, no admin unlock, no pause, no whitelist, no platform fee). contribute → finalize → claim; unmet minRaise refunds quote. On-chain: fair-launch.onchain.test.ts. Residual: staked allocation tiers not in this PR (needs stakeOf). Unaudited.',
   }),
   f('launch.nft', 'NFT mint / list / auction, on-chain royalties', {
     owner: 'shehzad002',
