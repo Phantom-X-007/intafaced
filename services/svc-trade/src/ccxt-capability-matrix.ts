@@ -309,7 +309,7 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
   route('fetchTicker', 'supported', [], 'BBO + last from book/tape; never invents 24h stats'),
   route('fetchTickers', 'supported', [], 'All-market ticker map; missing book → empty BBO, not 502'),
   route('fetchOrderBook', 'supported', [], 'Depth from matching; empty [] is honest no-book'),
-  route('fetchOHLCV', 'supported', [], 'Candles from real fill tape only; gap ≠ zero candle'),
+  route('fetchOHLCV', 'supported', [], 'Candles from real fill tape only; gap ≠ zero candle; optional until= ms'),
   route('fetchTrades', 'supported', [], 'Public tape; optional since= ms / side=buy|sell'),
   route(
     'fetchFundingRate',

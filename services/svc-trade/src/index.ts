@@ -534,7 +534,7 @@ registerPublicRest(app, {
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs, side) => trade.publicTape(marketId, limit, sinceMs, side),
-  candles: (marketId, timeframe, limit, sinceMs) => trade.candles(marketId, timeframe, limit, sinceMs),
+  candles: (marketId, timeframe, limit, sinceMs, untilMs) => trade.candles(marketId, timeframe, limit, sinceMs, untilMs),
   fundingRateForMarket: async (marketId, _symbol) => {
     const entry = futuresJobs.getPublishedRate(marketId);
     if (!entry) return null;

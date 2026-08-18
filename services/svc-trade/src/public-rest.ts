@@ -19,7 +19,7 @@ import type { Candle, Market, MarketKind, MarketStatus, PublicTapePrint } from '
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
  *   GET /api/v1/trades/:symbol?limit=&since=&side=
- *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&limit=
+ *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&until=&limit=
  *   GET /api/v1/funding-rate/:symbol
  *
  * No auth — public market data. Amounts are decimal strings on the wire.
@@ -54,7 +54,7 @@ export interface PublicRestDeps {
    * Candles aggregated from the real taker fill tape. Empty when the market has
    * never traded — an honest empty chart, not a fabricated one.
    */
-  candles(marketId: string, timeframe: Timeframe, limit: number, sinceMs?: number): Promise<Candle[]>;
+  candles(marketId: string, timeframe: Timeframe, limit: number, sinceMs?: number, untilMs?: number): Promise<Candle[]>;
   /** Injectable clock for tests. */
   now?: () => number;
   /**
@@ -485,16 +485,28 @@ function parseLimit(raw: unknown, fallback: number, max: number): number {
 }
 
 /**
- * Optional CCXT `since` (unix ms). Absent/empty → no filter.
+ * Optional unix-ms bound (`since` / `until`). Absent/empty → no filter.
  * NaN or negative → invalid (caller returns 400). Zero is valid (epoch).
  */
-export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok: false; message: string } {
-  if (raw === undefined || raw === null || raw === '') return { ok: true, sinceMs: undefined };
+function parseUnixMsBound(raw: unknown, name: 'since' | 'until'): { ok: true; ms?: number } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, ms: undefined };
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) {
-    return { ok: false, message: 'since must be a non-negative unix timestamp in milliseconds' };
+    return { ok: false, message: `${name} must be a non-negative unix timestamp in milliseconds` };
   }
-  return { ok: true, sinceMs: Math.floor(n) };
+  return { ok: true, ms: Math.floor(n) };
+}
+
+export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok: false; message: string } {
+  const parsed = parseUnixMsBound(raw, 'since');
+  if (!parsed.ok) return parsed;
+  return { ok: true, sinceMs: parsed.ms };
+}
+
+export function parseUntil(raw: unknown): { ok: true; untilMs?: number } | { ok: false; message: string } {
+  const parsed = parseUnixMsBound(raw, 'until');
+  if (!parsed.ok) return parsed;
+  return { ok: true, untilMs: parsed.ms };
 }
 
 /** Optional public-tape side filter. Absent → both buy and sell taker prints. */
@@ -691,11 +703,11 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
    * gap as a gap; a zero-volume candle at price 0 would be a fabricated print,
    * and a client computing an indicator over it gets a number we invented.
    *
-   * Query: timeframe (default 1m), since (ms), limit (default 500, max 1000).
+   * Query: timeframe (default 1m), since (ms), until (ms), limit (default 500, max 1000).
    */
   app.get<{
     Params: { symbol: string };
-    Querystring: { timeframe?: string; since?: string; limit?: string };
+    Querystring: { timeframe?: string; since?: string; until?: string; limit?: string };
   }>('/api/v1/ohlcv/:symbol', async (req, reply) => {
     const symbol = decodeURIComponent(req.params.symbol);
     const market = await deps.marketBySymbol(symbol);
@@ -709,10 +721,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
 
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+    const untilParsed = parseUntil(req.query.until);
+    if (!untilParsed.ok) return sendCcxt(reply, badRequest(untilParsed.message, 'trade.invalid_until'));
     const limit = parseLimit(req.query.limit, DEFAULT_CANDLES, MAX_CANDLES);
 
     try {
-      const candles = await deps.candles(market.id, tf.data, limit, sinceParsed.sinceMs);
+      const candles = await deps.candles(market.id, tf.data, limit, sinceParsed.sinceMs, untilParsed.untilMs);
       return reply.code(200).send(candles.map(presentOhlcv));
     } catch (err) {
       return sendMapped(reply, err);

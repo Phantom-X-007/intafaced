@@ -2399,8 +2399,8 @@ export class TradeService {
    * Never invents empty buckets; SD-3 excludes seeded volume. Optional durable
    * materialization is a separate job (`startCandleJobs`, default OFF).
    */
-  async candles(marketId: string, timeframe: Timeframe, limit = 500, sinceMs?: number): Promise<Candle[]> {
-    return queryCandlesFromFills(this.sql, { marketId, timeframe, limit, sinceMs });
+  async candles(marketId: string, timeframe: Timeframe, limit = 500, sinceMs?: number, untilMs?: number): Promise<Candle[]> {
+    return queryCandlesFromFills(this.sql, { marketId, timeframe, limit, sinceMs, untilMs });
   }
 
   // ── Algo TWAP (D-S-04) — schedule emits children; parent holds no value ─────

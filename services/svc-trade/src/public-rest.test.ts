@@ -12,6 +12,7 @@ import {
   presentOrderBook,
   presentPublicTrade,
   presentTicker,
+  parseUntil,
   registerPublicRest,
   OPEN_POSITION_GATES_NOTE,
   type PublicRestDeps,
@@ -33,6 +34,29 @@ describe('bpsToRate / decimalPlaces', () => {
     expect(decimalPlaces('0.0001')).toBe(4);
     expect(decimalPlaces('1')).toBe(0);
     expect(decimalPlaces('0.0100')).toBe(2);
+  });
+});
+
+describe('parseUntil', () => {
+  it('treats absent or empty as no bound', () => {
+    expect(parseUntil(undefined)).toEqual({ ok: true, untilMs: undefined });
+    expect(parseUntil('')).toEqual({ ok: true, untilMs: undefined });
+  });
+
+  it('accepts zero and floors a finite non-negative ms', () => {
+    expect(parseUntil('0')).toEqual({ ok: true, untilMs: 0 });
+    expect(parseUntil('1700000000000.9')).toEqual({ ok: true, untilMs: 1_700_000_000_000 });
+  });
+
+  it('rejects NaN and negative', () => {
+    expect(parseUntil('nope')).toEqual({
+      ok: false,
+      message: 'until must be a non-negative unix timestamp in milliseconds',
+    });
+    expect(parseUntil('-1')).toEqual({
+      ok: false,
+      message: 'until must be a non-negative unix timestamp in milliseconds',
+    });
   });
 });
 
@@ -889,22 +913,22 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  it('GET /api/v1/ohlcv/:symbol passes timeframe, since and limit through to the aggregator', async () => {
-    let seen: { tf: string; limit: number; since?: number } | null = null;
+  it('GET /api/v1/ohlcv/:symbol passes timeframe, since, until and limit through to the aggregator', async () => {
+    let seen: { tf: string; limit: number; since?: number; until?: number } | null = null;
     const app = await build(
       deps({
-        candles: async (_id, timeframe, limit, sinceMs) => {
-          seen = { tf: timeframe, limit, since: sinceMs };
+        candles: async (_id, timeframe, limit, sinceMs, untilMs) => {
+          seen = { tf: timeframe, limit, since: sinceMs, until: untilMs };
           return [];
         },
       }),
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1h&since=1700000000000&limit=100',
+      url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1h&since=1700000000000&until=1700003600000&limit=100',
     });
     expect(res.statusCode).toBe(200);
-    expect(seen).toEqual({ tf: '1h', limit: 100, since: 1_700_000_000_000 });
+    expect(seen).toEqual({ tf: '1h', limit: 100, since: 1_700_000_000_000, until: 1_700_003_600_000 });
     await app.close();
   });
 
@@ -977,6 +1001,28 @@ describe('public REST routes', () => {
       const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?since=${since}` });
       expect(res.statusCode).toBe(400);
       expect(res.json().code).toBe('BadRequest');
+      expect(called).toBe(false);
+    }
+    await app.close();
+  });
+
+  it('GET /api/v1/ohlcv/:symbol 400s for an invalid until, without aggregating', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        candles: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    for (const until of ['nope', '-1']) {
+      called = false;
+      const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?until=${until}` });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(res.json().intafacedCode).toBe('trade.invalid_until');
+      expect(res.json().message).toBe('until must be a non-negative unix timestamp in milliseconds');
       expect(called).toBe(false);
     }
     await app.close();

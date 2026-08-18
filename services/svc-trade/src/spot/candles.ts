@@ -21,6 +21,8 @@ export interface QueryCandlesOpts {
   limit?: number;
   /** Inclusive lower bound on fill `ts` (unix ms). */
   sinceMs?: number;
+  /** Inclusive upper bound on fill `ts` (unix ms). */
+  untilMs?: number;
 }
 
 /**
@@ -34,6 +36,7 @@ export async function queryCandlesFromFills(sql: Sql, opts: QueryCandlesOpts): P
   const capped = Math.min(Math.max(Math.floor(opts.limit ?? 500), 1), 1000);
   const spanMs = TIMEFRAME_MS[opts.timeframe];
   const sinceDate = opts.sinceMs !== undefined ? new Date(opts.sinceMs) : undefined;
+  const untilDate = opts.untilMs !== undefined ? new Date(opts.untilMs) : undefined;
 
   type CandleRow = { bucket_ms: string; open: string; high: string; low: string; close: string; volume: string };
 
@@ -59,6 +62,7 @@ export async function queryCandlesFromFills(sql: Sql, opts: QueryCandlesOpts): P
            AND o.seeded = false
            AND c.seeded = false
            ${sinceDate ? sql`AND f.ts >= ${sinceDate}` : sql``}
+           ${untilDate ? sql`AND f.ts <= ${untilDate}` : sql``}
       ) AS binned
      GROUP BY bucket_ms
      -- Newest buckets are the ones a chart opens on; LIMIT keeps those.

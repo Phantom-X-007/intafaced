@@ -2115,6 +2115,23 @@ if (!available) {
       expect(limited.map((c) => c.openTimeMs)).toEqual([T0 + 60_000, T0 + 120_000]);
     });
 
+    it('honours until as an inclusive SQL bound on fill ts, not a post-filter of buckets', async () => {
+      await tradeOne('100', '1', T0 + 1_000, 'a');
+      await tradeOne('105', '2', T0 + 30_000, 'b');
+      await tradeOne('99', '1', T0 + 61_000, 'c');
+      await tradeOne('102', '1', T0 + 121_000, 'd');
+
+      // Cut inside the first minute: later fills in that bucket must not appear.
+      const midBucket = await trade.candles(btcusdt.id, '1m', 500, undefined, T0 + 10_000);
+      expect(midBucket).toHaveLength(1);
+      expect(midBucket[0]!.openTimeMs).toBe(T0);
+      expect(formatAmount(midBucket[0]!.high)).toBe('100');
+      expect(formatAmount(midBucket[0]!.volume)).toBe('1');
+
+      const until = await trade.candles(btcusdt.id, '1m', 500, undefined, T0 + 61_000);
+      expect(until.map((c) => c.openTimeMs)).toEqual([T0, T0 + 60_000]);
+    });
+
     it('never mixes another market into a candle', async () => {
       await tradeOne('100', '1', T0 + 1_000, 'a');
       expect(await trade.candles(ethusdt.id, '1m')).toEqual([]);
