@@ -494,6 +494,7 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           z.object({
             subscriptionId: z.string().uuid(),
             limit: z.number().int().min(1).max(200).optional(),
+            status: z.enum(['pending', 'invoiced', 'settled', 'rejected', 'skipped']).optional(),
           }),
         )
         .output(z.array(executionView))
@@ -501,7 +502,10 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           wrap(async () => {
             const sub = await subscriptions.getSubscription(input.subscriptionId);
             await assertPaymentArea(ctx.principal?.userId, sub.merchantId);
-            const rows = await subscriptions.listExecutions(input.subscriptionId, { limit: input.limit });
+            const rows = await subscriptions.listExecutions(input.subscriptionId, {
+              limit: input.limit,
+              status: input.status,
+            });
             return rows.map(toExecutionOut);
           }),
         ),

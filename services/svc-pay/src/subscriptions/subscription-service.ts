@@ -575,10 +575,12 @@ export class SubscriptionService {
   /**
    * Merchant-facing firing history. Rows already exist from the due runner;
    * this only reads them. No dunning invent, no auto-retry, no ledger posts.
+   * Optional exact status; omit it and every execution of this subscription is returned.
    */
-  async listExecutions(subscriptionId: string, options: { limit?: number } = {}): Promise<ExecutionRecord[]> {
+  async listExecutions(subscriptionId: string, options: { limit?: number; status?: ExecutionStatus } = {}): Promise<ExecutionRecord[]> {
     await this.getSubscription(subscriptionId);
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const status = options.status;
     const rows = await this.sql<
       Array<{
         id: string;
@@ -601,6 +603,7 @@ export class SubscriptionService {
              settled_at, created_at, notify_status, notify_code
         FROM pay.subscription_executions
        WHERE subscription_id = ${subscriptionId}
+         ${status === undefined ? this.sql`` : this.sql`AND status = ${status}`}
        ORDER BY occurrence DESC
        LIMIT ${limit}
     `;

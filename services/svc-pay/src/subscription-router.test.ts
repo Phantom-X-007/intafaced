@@ -115,24 +115,39 @@ describe('subscription merchant surface', () => {
         calls.push('cancelSubscription');
         return subRecord({ status: 'cancelled', cancelledAt: new Date('2026-08-09T00:00:00.000Z') });
       },
-      listExecutions: async () => {
-        calls.push('listExecutions');
-        return [
+      listExecutions: async (_subscriptionId: string, options: { limit?: number; status?: string } = {}) => {
+        calls.push(options.status === undefined ? 'listExecutions' : `listExecutions:${options.status}`);
+        const rows = [
           {
             id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
             subscriptionId: SUB,
-            occurrence: 0,
-            amount: amt('10'),
+            occurrence: 1,
+            amount: amt('10.5'),
             status: 'settled' as const,
             paymentId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
             rejectionCode: null,
-            attemptedAt: new Date('2026-08-01T00:00:00.000Z'),
+            attemptedAt: new Date('2026-08-01T01:00:00.000Z'),
             settledAt: new Date('2026-08-01T01:00:00.000Z'),
             createdAt: new Date('2026-08-01T00:00:00.000Z'),
             notifyStatus: 'skipped_unwired' as const,
             notifyCode: 'pay.subscription_notify_unwired',
           },
+          {
+            id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            subscriptionId: SUB,
+            occurrence: 0,
+            amount: amt('10.5'),
+            status: 'pending' as const,
+            paymentId: null,
+            rejectionCode: null,
+            attemptedAt: new Date('2026-08-01T00:00:00.000Z'),
+            settledAt: null,
+            createdAt: new Date('2026-08-01T00:00:00.000Z'),
+            notifyStatus: null,
+            notifyCode: null,
+          },
         ];
+        return options.status === undefined ? rows : rows.filter((row) => row.status === options.status);
       },
       listMandates: async () => {
         calls.push('listMandates');
@@ -230,13 +245,38 @@ describe('subscription merchant surface', () => {
     expect(calls).toContain('createSubscription');
   });
 
-  it('owner can list executions (firing history)', async () => {
+  it('omitted status returns mixed executions; amounts stay decimal strings', async () => {
     const api = await caller(['pay:read']);
     const rows = await api.subscription.listExecutions({ subscriptionId: SUB });
+    expect(rows.map((row) => row.status)).toEqual(['settled', 'pending']);
+    expect(rows[0]!.amount).toBe('10.5');
+    expect(typeof rows[0]!.amount).toBe('string');
+    expect(typeof rows[1]!.amount).toBe('string');
+    expect(calls).toContain('listExecutions');
+  });
+
+  it('filters executions by exact status', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.listExecutions({ subscriptionId: SUB, status: 'settled' });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('settled');
-    expect(rows[0]!.amount).toBe('10');
-    expect(calls).toContain('listExecutions');
+    expect(rows[0]!.amount).toBe('10.5');
+    expect(calls).toContain('listExecutions:settled');
+  });
+
+  it('empty execution filter is []', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.subscription.listExecutions({ subscriptionId: SUB, status: 'skipped' });
+    expect(rows).toEqual([]);
+    expect(calls).toContain('listExecutions:skipped');
+  });
+
+  it('rejects an execution status that is not in the enum', async () => {
+    const api = await caller(['pay:read']);
+    await expect(api.subscription.listExecutions({ subscriptionId: SUB, status: 'active' as 'pending' })).rejects.toThrow(
+      /BAD_REQUEST|invalid/i,
+    );
+    expect(calls.filter((c) => c.startsWith('listExecutions'))).toHaveLength(0);
   });
 
   it('stranger cannot list executions', async () => {
