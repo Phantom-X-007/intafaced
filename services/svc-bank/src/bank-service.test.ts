@@ -2810,6 +2810,70 @@ if (!available) {
     });
   });
 
+  describe('business.list filters by assetId without inventing a ledger balance', () => {
+    async function mixedMemberAccounts() {
+      const usdt = await bank.business.createAccount({
+        name: 'USDT Ops',
+        assetId: 'USDT',
+        spendThreshold: amt('100'),
+        creatorUserId: USER_A,
+      });
+      const eur = await bank.business.createAccount({
+        name: 'EUR Ops',
+        assetId: 'EUR',
+        spendThreshold: amt('50'),
+        creatorUserId: USER_A,
+      });
+      const closed = await bank.business.createAccount({
+        name: 'Closed USDT',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: USER_A,
+      });
+      await sql`UPDATE bank.business_accounts SET status = 'closed' WHERE id = ${closed.id}::uuid`;
+      const other = await bank.business.createAccount({
+        name: 'Other USDT',
+        assetId: 'USDT',
+        spendThreshold: amt('25'),
+        creatorUserId: USER_B,
+      });
+      return { usdt, eur, closed, other };
+    }
+
+    it('omitted assetId still returns mixed active member accounts', async () => {
+      const { usdt, eur } = await mixedMemberAccounts();
+      const listed = await (await caller(USER_A, ['bank:read'])).business.list();
+      expect(listed.map((a) => a.id).sort()).toEqual([usdt.id, eur.id].sort());
+      expect(new Set(listed.map((a) => a.assetId))).toEqual(new Set(['USDT', 'EUR']));
+      expect(listed.every((a) => a.status === 'active')).toBe(true);
+      expect(listed.find((a) => a.id === usdt.id)?.spendThreshold).toBe('100');
+      expect(listed.every((a) => !('balance' in a))).toBe(true);
+    });
+
+    it('filters to the requested asset, keeps closed off the list, and does not leak another org', async () => {
+      const { usdt, other } = await mixedMemberAccounts();
+      const api = await caller(USER_A, ['bank:read']);
+      expect(await api.business.list({ assetId: 'USDT' })).toEqual([
+        expect.objectContaining({ id: usdt.id, assetId: 'USDT', status: 'active', spendThreshold: '100' }),
+      ]);
+      expect(await api.business.list({ assetId: 'BTC' })).toEqual([]);
+      expect(await (await caller(USER_B, ['bank:read'])).business.list({ assetId: 'USDT' })).toEqual([
+        expect.objectContaining({ id: other.id, assetId: 'USDT', spendThreshold: '25' }),
+      ]);
+      expect(await (await caller(USER_B, ['bank:read'])).business.list({ assetId: 'EUR' })).toEqual([]);
+    });
+
+    it('rejects an empty, whitespace-only, or too-long assetId at zod before the service', async () => {
+      const api = await caller(USER_A, ['bank:read']);
+      const empty = await api.business.list({ assetId: '' }).catch((e: unknown) => e);
+      expect(codeOf(empty)).toBe('BAD_REQUEST');
+      const whitespace = await api.business.list({ assetId: '   ' }).catch((e: unknown) => e);
+      expect(codeOf(whitespace)).toBe('BAD_REQUEST');
+      const tooLong = await api.business.list({ assetId: '12345678901234567' }).catch((e: unknown) => e);
+      expect(codeOf(tooLong)).toBe('BAD_REQUEST');
+    });
+  });
+
   describe('transfers.executions is not readable by another user', () => {
     it('refuses user B the firing history of user A’s standing order', async () => {
       const schedule = await firedStandingOrder(USER_A);

@@ -270,4 +270,55 @@ if (!available) {
       });
     });
   });
+
+  describe('accountsOf filters by assetId without inventing a ledger balance', () => {
+    async function mixedMemberAccounts() {
+      const usdt = await bank.business.createAccount({
+        name: 'USDT Ops',
+        assetId: 'USDT',
+        spendThreshold: amt('100'),
+        creatorUserId: MAKER,
+      });
+      const eur = await bank.business.createAccount({
+        name: 'EUR Ops',
+        assetId: 'EUR',
+        spendThreshold: amt('50'),
+        creatorUserId: MAKER,
+      });
+      const closed = await bank.business.createAccount({
+        name: 'Closed USDT',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: MAKER,
+      });
+      await sql`UPDATE bank.business_accounts SET status = 'closed' WHERE id = ${closed.id}::uuid`;
+      const other = await bank.business.createAccount({
+        name: 'Other USDT',
+        assetId: 'USDT',
+        spendThreshold: amt('25'),
+        creatorUserId: CHECKER,
+      });
+      return { usdt, eur, closed, other };
+    }
+
+    it('returns mixed active member accounts when assetId is omitted', async () => {
+      const { usdt, eur } = await mixedMemberAccounts();
+      const listed = await bank.business.accountsOf(MAKER);
+      expect(listed.map((a) => a.id).sort()).toEqual([usdt.id, eur.id].sort());
+      expect(new Set(listed.map((a) => a.assetId))).toEqual(new Set(['USDT', 'EUR']));
+      expect(listed.every((a) => a.status === 'active')).toBe(true);
+      expect(listed.every((a) => typeof a.spendThreshold === 'bigint')).toBe(true);
+      expect(listed.every((a) => !('balance' in a))).toBe(true);
+    });
+
+    it('exact-matches assetId, excludes closed, and does not leak another org', async () => {
+      const { usdt, other } = await mixedMemberAccounts();
+      expect(await bank.business.accountsOf(MAKER, 'USDT')).toEqual([
+        expect.objectContaining({ id: usdt.id, assetId: 'USDT', status: 'active' }),
+      ]);
+      expect(await bank.business.accountsOf(MAKER, 'BTC')).toEqual([]);
+      expect(await bank.business.accountsOf(CHECKER, 'USDT')).toEqual([expect.objectContaining({ id: other.id, assetId: 'USDT' })]);
+      expect(await bank.business.accountsOf(CHECKER, 'EUR')).toEqual([]);
+    });
+  });
 }

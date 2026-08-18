@@ -173,12 +173,13 @@ export class BusinessService {
     return rows.map(toMember);
   }
 
-  async accountsOf(userId: string): Promise<BusinessAccount[]> {
+  async accountsOf(userId: string, assetId?: string): Promise<BusinessAccount[]> {
     const rows = await this.sql<AccountRow[]>`
       SELECT a.id, a.name, a.asset_id, a.spend_threshold, a.status, a.created_at
         FROM bank.business_accounts a
         JOIN bank.business_members m ON m.account_id = a.id
        WHERE m.user_id = ${userId} AND a.status = 'active'
+             ${assetId ? this.sql`AND a.asset_id = ${assetId}` : this.sql``}
        ORDER BY a.created_at DESC
     `;
     return rows.map(toAccount);

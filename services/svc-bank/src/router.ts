@@ -2322,10 +2322,11 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
   const business = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ assetId: z.string().trim().min(1).max(16).optional() }).optional())
       .output(z.array(businessAccountOutput))
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const rows = await bank.business.accountsOf(ctx.principal.userId);
+          const rows = await bank.business.accountsOf(ctx.principal.userId, input?.assetId);
           return rows.map((a) => ({
             id: a.id,
             name: a.name,
