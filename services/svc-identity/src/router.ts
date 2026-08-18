@@ -72,3 +72,16 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
     }
   }
+
+  if (err instanceof ProviderRefBindError) {
+    switch (err.code) {
+      case 'kyc_bind.record_not_found':
+      case 'kyc_bind.doc_mismatch':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'kyc_bind.record_not_pending':
+      case 'kyc_bind.already_set':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'kyc_bind.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
