@@ -108,4 +108,46 @@ describe('listFollowsByFollower', () => {
     expect(stranger).toHaveLength(1);
     expect(stranger[0]?.followerId).toBe(other);
   });
+
+  it('scopes by followerId first; optional feeShareKilled exact-matches and composes with leaderId and region', async () => {
+    const store = new MemoryCopyFollowStore();
+    const other = '00000000-0000-4000-8000-000000000099';
+    const leaderB = '00000000-0000-4000-8000-000000000003';
+    await store.saveFollow(follow('aaaa1111-1111-4111-8111-111111111111', LEADER, 'SG'));
+    await store.saveFollow({
+      ...follow('bbbb2222-2222-4222-8222-222222222222', leaderB, 'AE'),
+      feeShareKilled: true,
+    });
+    await store.saveFollow({
+      ...follow('cccc3333-3333-4333-8333-333333333333', LEADER, 'SG'),
+      followerId: other,
+      feeShareKilled: true,
+    });
+
+    const omitted = await store.listFollowsByFollower(FOLLOWER);
+    expect(omitted).toHaveLength(2);
+    expect(omitted.some((f) => f.feeShareKilled)).toBe(true);
+    expect(omitted.some((f) => !f.feeShareKilled)).toBe(true);
+
+    const live = await store.listFollowsByFollower(FOLLOWER, undefined, undefined, false);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.feeShareKilled).toBe(false);
+    expect(live[0]?.leaderId).toBe(LEADER);
+    expect(live[0]?.followerId).toBe(FOLLOWER);
+
+    const killed = await store.listFollowsByFollower(FOLLOWER, undefined, undefined, true);
+    expect(killed).toHaveLength(1);
+    expect(killed[0]?.feeShareKilled).toBe(true);
+    expect(killed[0]?.leaderId).toBe(leaderB);
+
+    expect(await store.listFollowsByFollower(FOLLOWER, LEADER, 'SG', true)).toEqual([]);
+    const composed = await store.listFollowsByFollower(FOLLOWER, LEADER, 'SG', false);
+    expect(composed).toHaveLength(1);
+    expect(composed[0]?.leaderId).toBe(LEADER);
+
+    const stranger = await store.listFollowsByFollower(other, undefined, undefined, true);
+    expect(stranger).toHaveLength(1);
+    expect(stranger[0]?.followerId).toBe(other);
+    expect(await store.listFollowsByFollower(FOLLOWER, 'no-such-leader', undefined, true)).toEqual([]);
+  });
 });

@@ -295,6 +295,100 @@ describe('CopyService', () => {
     expect(store.lastArgs).toEqual([FOLLOWER, LEADER, undefined]);
   });
 
+  it('listMyFollows optional feeShareKilled exact-matches in the store; composes with leaderId and region; follow uniqueness omits killed', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    const twoRegions: CopyJurisdictionLaw = { published: true, allowedRegions: ['SG', 'AE'] };
+    class SpyStore extends MemoryCopyFollowStore {
+      lastArgs: [string, string | undefined, string | undefined, boolean | undefined] | null = null;
+      override async listFollowsByFollower(followerId: string, leaderId?: string, region?: string, feeShareKilled?: boolean) {
+        this.lastArgs = [followerId, leaderId, region, feeShareKilled];
+        return super.listFollowsByFollower(followerId, leaderId, region, feeShareKilled);
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: twoRegions,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    const mineLive = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const mineKilled = await svc.follow(principal, {
+      leaderId: LEADER_B,
+      region: 'AE',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.killFeeShare(principal, { followId: mineKilled.followId });
+
+    expect(await svc.listMyFollows(principal)).toHaveLength(2);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined, undefined]);
+
+    const live = await svc.listMyFollows(principal, { feeShareKilled: false });
+    expect(live).toHaveLength(1);
+    expect(live[0]?.followId).toBe(mineLive.followId);
+    expect(live[0]?.feeShareKilled).toBe(false);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined, false]);
+
+    const killed = await svc.listMyFollows(principal, { feeShareKilled: true });
+    expect(killed).toHaveLength(1);
+    expect(killed[0]?.followId).toBe(mineKilled.followId);
+    expect(killed[0]?.feeShareKilled).toBe(true);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined, true]);
+
+    expect(await svc.listMyFollows(principal, { leaderId: LEADER, region: 'SG', feeShareKilled: true })).toEqual([]);
+    const composed = await svc.listMyFollows(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      feeShareKilled: false,
+    });
+    expect(composed).toHaveLength(1);
+    expect(composed[0]?.followId).toBe(mineLive.followId);
+
+    store.lastArgs = null;
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'AE',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.lastArgs).toEqual([FOLLOWER, LEADER, undefined, undefined]);
+
+    store.lastArgs = null;
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER_B,
+        region: 'SG',
+        permittedMarkets: ['ETH-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.lastArgs).toEqual([FOLLOWER, LEADER_B, undefined, undefined]);
+  });
+
   it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {
     class RaceStore extends MemoryCopyFollowStore {
       override async listFollowsByFollower() {

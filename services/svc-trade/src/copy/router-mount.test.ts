@@ -406,6 +406,39 @@ describe('trade.copy product mount', () => {
     expect(await caller.copy.listMyFollows({ leaderId: LEADER, region: 'AE' })).toEqual([]);
   });
 
+  it('listMyFollows optional feeShareKilled returns matching follows or []; composes with leaderId and region', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const jur: CopyJurisdictionLaw = { published: true, allowedRegions: ['SG', 'AE'] };
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur }));
+    const caller = router.createCaller(signed());
+    const live = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const killed = await caller.copy.follow({
+      leaderId: LEADER_B,
+      region: 'AE',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await caller.copy.killFeeShare({ followId: killed.followId });
+    expect(await caller.copy.listMyFollows()).toHaveLength(2);
+    const onlyLive = await caller.copy.listMyFollows({ feeShareKilled: false });
+    expect(onlyLive).toHaveLength(1);
+    expect(onlyLive[0]?.followId).toBe(live.followId);
+    const onlyKilled = await caller.copy.listMyFollows({ feeShareKilled: true });
+    expect(onlyKilled).toHaveLength(1);
+    expect(onlyKilled[0]?.followId).toBe(killed.followId);
+    expect(await caller.copy.listMyFollows({ leaderId: LEADER, region: 'SG', feeShareKilled: true })).toEqual([]);
+    expect(await caller.copy.listMyFollows({ leaderId: LEADER, region: 'SG', feeShareKilled: false })).toHaveLength(1);
+  });
+
   it('planMirror plans within envelope and redelivers the same fillId', async () => {
     const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
     const caller = router.createCaller(signed());
