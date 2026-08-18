@@ -421,10 +421,11 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       }),
 
     myListings: scopedProcedure('market:read', { module: 'market' })
+      .input(z.object({ status: z.enum(['active', 'archived']).optional() }).optional())
       .output(z.array(listingOut))
-      .query(async ({ ctx }) => {
+      .query(async ({ ctx, input }) => {
         requireCommerce(commerce);
-        return commerce.myListings(ctx.principal!.userId);
+        return commerce.myListings(ctx.principal!.userId, input);
       }),
 
     /** Public catalogue — empty when commission blank; else listed vendors only. */

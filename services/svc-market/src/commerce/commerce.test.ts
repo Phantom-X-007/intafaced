@@ -500,6 +500,59 @@ if (!available) {
   });
 
   describe('listings honesty residual', () => {
+    it('myListings omits status to include both active and archived; filter is exact; public catalogue excludes archived', async () => {
+      await approvedVendor(VENDOR_USER);
+      const keep = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Live pack',
+        description: 'stays active',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      const drop = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Old pack',
+        description: 'will archive',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '11',
+      });
+      await commerce.archiveListing({ userId: VENDOR_USER, listingId: drop.id });
+
+      const all = await commerce.myListings(VENDOR_USER);
+      expect(all.map((l) => l.id).sort()).toEqual([keep.id, drop.id].sort());
+      expect(all.find((l) => l.id === keep.id)?.status).toBe('active');
+      expect(all.find((l) => l.id === drop.id)?.status).toBe('archived');
+
+      const activeOnly = await commerce.myListings(VENDOR_USER, { status: 'active' });
+      expect(activeOnly.map((l) => l.id)).toEqual([keep.id]);
+      expect(activeOnly.every((l) => l.status === 'active')).toBe(true);
+
+      const archivedOnly = await commerce.myListings(VENDOR_USER, { status: 'archived' });
+      expect(archivedOnly.map((l) => l.id)).toEqual([drop.id]);
+      expect(archivedOnly.every((l) => l.status === 'archived')).toBe(true);
+
+      expect((await commerce.publicListings()).map((l) => l.id)).toEqual([keep.id]);
+      expect((await commerce.publicListings()).map((l) => l.id)).not.toContain(drop.id);
+    });
+
+    it('myListings returns [] when the user has no vendor, or when the status filter matches none', async () => {
+      expect(await commerce.myListings(VENDOR_USER)).toEqual([]);
+      expect(await commerce.myListings(VENDOR_USER, { status: 'archived' })).toEqual([]);
+
+      await approvedVendor(VENDOR_USER);
+      await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'Only live',
+        description: 'no archive yet',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      expect(await commerce.myListings(VENDOR_USER, { status: 'archived' })).toEqual([]);
+    });
+
     it('archive releases the listing slot so capacity returns', async () => {
       await approvedVendor(VENDOR_USER);
       const listing = await commerce.createListing({

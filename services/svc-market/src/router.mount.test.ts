@@ -652,6 +652,18 @@ describe('svc-market mount — commerce scopes', () => {
     expect(Object.keys({ listingId, purchaseId }).sort()).toEqual(['listingId', 'purchaseId']);
   });
 
+  it('forwards optional myListings status and refuses an invalid enum', async () => {
+    const commerce = stubCommerce();
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await caller.myListings();
+    expect(commerce.myListings).toHaveBeenCalledWith(USER, undefined);
+    await caller.myListings({ status: 'archived' });
+    expect(commerce.myListings).toHaveBeenCalledWith(USER, { status: 'archived' });
+    await expect(caller.myListings({ status: 'draft' as 'active' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('refuses archiveListing without market:write', async () => {
     const commerce = stubCommerce();
     const reader = principal({ scopes: ['market:read'] });
