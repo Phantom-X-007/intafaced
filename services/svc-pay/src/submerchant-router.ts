@@ -309,12 +309,12 @@ export function createSubMerchantRouter(subMerchants: SubMerchantService, mercha
 
       /** The live grants over one node. Implicit authority is not listed — it is not a grant. */
       list: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ subjectMerchantId: z.string().uuid() }))
+        .input(z.object({ subjectMerchantId: z.string().uuid(), area: areaSchema.optional() }))
         .output(z.array(grantView))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const actorMerchantId = await actor(ctx.principal?.userId);
-            const rows = await subMerchants.listPermissions(actorMerchantId, input.subjectMerchantId);
+            const rows = await subMerchants.listPermissions(actorMerchantId, input.subjectMerchantId, input.area);
             return rows.map((r) => ({ ...r, grantedAt: r.grantedAt.toISOString() }));
           }),
         ),

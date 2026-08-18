@@ -77,6 +77,7 @@ interface Seen {
   getActorMerchantId?: string;
   grantActorMerchantId?: string;
   listArgs?: unknown[];
+  listPermissionArgs?: unknown[];
 }
 
 function harness(
@@ -129,8 +130,9 @@ function harness(
     revokePermission: async () => {
       throw opts.throws ?? new Error('not exercised');
     },
-    listPermissions: async () => {
+    listPermissions: async (...args: unknown[]) => {
       if (opts.throws) throw opts.throws;
+      seen.listPermissionArgs = args;
       return [];
     },
     permissionHistory: async () => {
@@ -293,6 +295,26 @@ describe('the wire shape', () => {
       caller(await ctx(['pay:read'])).submerchant.list({ merchantId: PLATFORM_MERCHANT, status: 'alive' as never }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(seen.listArgs).toBeUndefined();
+  });
+
+  it('forwards optional area on permission list and keeps omitted unfiltered', async () => {
+    const { caller, seen } = harness();
+    await caller(await ctx(['pay:read'])).submerchantPermission.list({ subjectMerchantId: SUB_MERCHANT });
+    expect(seen.listPermissionArgs).toEqual([PLATFORM_MERCHANT, SUB_MERCHANT, undefined]);
+
+    await caller(await ctx(['pay:read'])).submerchantPermission.list({ subjectMerchantId: SUB_MERCHANT, area: 'payment' });
+    expect(seen.listPermissionArgs).toEqual([PLATFORM_MERCHANT, SUB_MERCHANT, 'payment']);
+  });
+
+  it('rejects an area outside the published vocabulary before the service is called', async () => {
+    const { caller, seen } = harness();
+    await expect(
+      caller(await ctx(['pay:read'])).submerchantPermission.list({
+        subjectMerchantId: SUB_MERCHANT,
+        area: 'everything' as never,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(seen.listPermissionArgs).toBeUndefined();
   });
 
   it('records the granting NODE on the event, resolved from the principal', async () => {

@@ -698,6 +698,56 @@ if (!available) {
       expect(live.map((g) => g.area).sort()).toEqual(['merchant.profile']);
       expect(live.every((g) => g.granteeMerchantId === mid.id)).toBe(true);
     });
+
+    it('lists mixed areas when omitted, exact matches when given, and [] when none', async () => {
+      const platform = await root();
+      const mid = await child(platform.merchantId, platform.merchantId);
+      const leaf = await child(mid.id, mid.id);
+
+      await trees.grantPermission({
+        actorMerchantId: platform.merchantId,
+        granteeMerchantId: mid.id,
+        subjectMerchantId: leaf.id,
+        area: 'payment',
+        reason: 'mid captures for this cohort',
+        actorId: 'platform-user',
+        actorScope: 'pay:write',
+      });
+
+      const mixed = await trees.listPermissions(platform.merchantId, leaf.id);
+      expect(mixed.map((g) => g.area).sort()).toEqual(['merchant.profile', 'payment', 'submerchant']);
+      expect(mixed.every((g) => g.granteeMerchantId === mid.id)).toBe(true);
+      expect(mixed.some((g) => g.granteeMerchantId === platform.merchantId)).toBe(false);
+
+      const onlyPayment = await trees.listPermissions(platform.merchantId, leaf.id, 'payment');
+      expect(onlyPayment.map((g) => g.area)).toEqual(['payment']);
+      expect(onlyPayment.every((g) => g.granteeMerchantId === mid.id)).toBe(true);
+
+      expect(await trees.listPermissions(platform.merchantId, leaf.id, 'settlement')).toEqual([]);
+
+      await trees.revokePermission({
+        actorMerchantId: platform.merchantId,
+        granteeMerchantId: mid.id,
+        subjectMerchantId: leaf.id,
+        area: 'payment',
+        reason: 'capture rights withdrawn',
+        actorId: 'platform-user',
+        actorScope: 'pay:write',
+      });
+      expect(await trees.listPermissions(platform.merchantId, leaf.id, 'payment')).toEqual([]);
+
+      const afterRevoke = await trees.listPermissions(platform.merchantId, leaf.id);
+      expect(afterRevoke.map((g) => g.area).sort()).toEqual(['merchant.profile', 'submerchant']);
+
+      expect((await rejection(trees.listPermissions(mid.id, leaf.id), SubMerchantError)).code).toBe('pay.submerchant_permission_denied');
+      expect((await rejection(trees.listPermissions(mid.id, leaf.id, 'merchant.profile'), SubMerchantError)).code).toBe(
+        'pay.submerchant_permission_denied',
+      );
+
+      expect((await rejection(trees.listPermissions(platform.merchantId, leaf.id, 'everything' as never), SubMerchantError)).code).toBe(
+        'pay.submerchant_area_unknown',
+      );
+    });
   });
 
   // ══ LISTING ═══════════════════════════════════════════════════════════════

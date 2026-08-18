@@ -717,10 +717,21 @@ export class SubMerchantService {
    * about who holds what. Implicit authority (the root's, and the node's over
    * itself) is deliberately NOT synthesised into this list: it is not a grant,
    * it cannot be revoked, and printing it as a row would suggest otherwise.
+   *
+   * Optional `area` is an exact match against `PERMISSION_AREAS`. It only
+   * filters which live grant rows are returned; it does not invent a row for
+   * implicit root (or self) authority, and a latest revoke for that area still
+   * drops the pair.
    */
-  async listPermissions(actorMerchantId: string, subjectMerchantId: string): Promise<PermissionGrantRecord[]> {
+  async listPermissions(actorMerchantId: string, subjectMerchantId: string, area?: PermissionArea): Promise<PermissionGrantRecord[]> {
     const chain = await this.assertWithinSubtree(actorMerchantId, subjectMerchantId);
     await this.assertHolds(actorMerchantId, subjectMerchantId, 'permission', this.sql, chain);
+
+    if (area !== undefined && !isPermissionArea(area)) {
+      throw new SubMerchantError(`Unknown permission area "${area}"`, 'pay.submerchant_area_unknown', {
+        known: PERMISSION_AREAS,
+      });
+    }
 
     const rows = await this.sql<PermissionEventRow[]>`
       SELECT DISTINCT ON (grantee_merchant_id, area)
@@ -728,6 +739,7 @@ export class SubMerchantService {
              actor_id, actor_merchant_id, actor_scope, created_at
         FROM pay.merchant_permission_events
        WHERE subject_merchant_id = ${subjectMerchantId}
+         ${area === undefined ? this.sql`` : this.sql`AND area = ${area}`}
        ORDER BY grantee_merchant_id, area, seq DESC
     `;
 
