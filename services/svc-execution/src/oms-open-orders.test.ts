@@ -4,7 +4,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { VenueOrder } from '@intafaced/venue-contracts';
-import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
+import { listOmsOpenOrders, type OmsOpenOrdersFn, type OmsOpenOrdersStatus } from './oms-open-orders.js';
 import { createExecutionRouter } from './router.js';
 
 const SECRET = 'a-execution-oms-open-orders-test-edge-secret';
@@ -59,7 +59,7 @@ function openOrder(over: Partial<VenueOrder> = {}): VenueOrder {
   };
 }
 
-class FakeList {
+class FakeOpenOrders {
   readonly calls: Array<{
     symbol?: string;
     side?: 'buy' | 'sell';
@@ -67,10 +67,11 @@ class FakeList {
     clientOrderId?: string;
     venueOrderId?: string;
     feeAsset?: string;
+    status?: OmsOpenOrdersStatus;
   }> = [];
   constructor(private readonly next: VenueOrder[] | Error) {}
-  fn: OmsOpenOrdersFn = async (symbol, side, type, clientOrderId, venueOrderId, feeAsset) => {
-    this.calls.push({ symbol, side, type, clientOrderId, venueOrderId, feeAsset });
+  fn: OmsOpenOrdersFn = async (symbol, side, type, clientOrderId, venueOrderId, feeAsset, status) => {
+    this.calls.push({ symbol, side, type, clientOrderId, venueOrderId, feeAsset, status });
     if (this.next instanceof Error) throw this.next;
     return this.next;
   };
@@ -78,7 +79,7 @@ class FakeList {
 
 describe('listOmsOpenOrders', () => {
   it('lists acknowledged opens on the injected venue', async () => {
-    const street = new FakeList([openOrder()]);
+    const street = new FakeOpenOrders([openOrder()]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       symbol: 'BTC/USDT',
@@ -89,12 +90,20 @@ describe('listOmsOpenOrders', () => {
     expect(result.orders).toHaveLength(1);
     expect(result.orders[0]!.status).toBe('open');
     expect(street.calls).toEqual([
-      { symbol: 'BTC/USDT', side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: undefined, feeAsset: undefined },
+      {
+        symbol: 'BTC/USDT',
+        side: undefined,
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: undefined,
+      },
     ]);
   });
 
   it('passes an optional side through and does not invent the other', async () => {
-    const street = new FakeList([openOrder({ side: 'sell' })]);
+    const street = new FakeOpenOrders([openOrder({ side: 'sell' })]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       side: 'sell',
@@ -102,14 +111,22 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: 'sell', type: undefined, clientOrderId: undefined, venueOrderId: undefined, feeAsset: undefined },
+      {
+        symbol: undefined,
+        side: 'sell',
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: undefined,
+      },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.side).toBe('sell');
   });
 
   it('passes an optional type through and does not invent the other', async () => {
-    const street = new FakeList([openOrder({ type: 'market', price: null })]);
+    const street = new FakeOpenOrders([openOrder({ type: 'market', price: null })]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       type: 'market',
@@ -117,14 +134,22 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: undefined, type: 'market', clientOrderId: undefined, venueOrderId: undefined, feeAsset: undefined },
+      {
+        symbol: undefined,
+        side: undefined,
+        type: 'market',
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: undefined,
+      },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.type).toBe('market');
   });
 
   it('passes an optional clientOrderId through and still drops pending', async () => {
-    const street = new FakeList([openOrder({ clientOrderId: 'oms-street' })]);
+    const street = new FakeOpenOrders([openOrder({ clientOrderId: 'oms-street' })]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       clientOrderId: 'oms-street',
@@ -132,14 +157,22 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: undefined, type: undefined, clientOrderId: 'oms-street', venueOrderId: undefined, feeAsset: undefined },
+      {
+        symbol: undefined,
+        side: undefined,
+        type: undefined,
+        clientOrderId: 'oms-street',
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: undefined,
+      },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.clientOrderId).toBe('oms-street');
   });
 
   it('passes an optional venueOrderId through and still drops pending', async () => {
-    const street = new FakeList([openOrder({ venueOrderId: 'v-1' })]);
+    const street = new FakeOpenOrders([openOrder({ venueOrderId: 'v-1' })]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       venueOrderId: 'v-1',
@@ -147,14 +180,22 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: 'v-1', feeAsset: undefined },
+      {
+        symbol: undefined,
+        side: undefined,
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: 'v-1',
+        feeAsset: undefined,
+        status: undefined,
+      },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.venueOrderId).toBe('v-1');
   });
 
   it('passes an optional feeAsset through and still drops pending', async () => {
-    const street = new FakeList([openOrder({ feeAsset: 'USDT' })]);
+    const street = new FakeOpenOrders([openOrder({ feeAsset: 'USDT' })]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       feeAsset: 'USDT',
@@ -162,14 +203,75 @@ describe('listOmsOpenOrders', () => {
     });
     expect(result.ok).toBe(true);
     expect(street.calls).toEqual([
-      { symbol: undefined, side: undefined, type: undefined, clientOrderId: undefined, venueOrderId: undefined, feeAsset: 'USDT' },
+      {
+        symbol: undefined,
+        side: undefined,
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: 'USDT',
+        status: undefined,
+      },
     ]);
     if (!result.ok) return;
     expect(result.orders[0]?.feeAsset).toBe('USDT');
   });
 
+  it('omitted status lists every acknowledged open after dropping pending', async () => {
+    const street = new FakeOpenOrders([
+      openOrder(),
+      openOrder({ clientOrderId: 'partial', status: 'partially_filled', venueOrderId: 'v-2' }),
+      openOrder({ clientOrderId: 'pending-1', status: 'pending', venueOrderId: null }),
+    ]);
+    const result = await listOmsOpenOrders({
+      venueId: 'street',
+      openOrdersByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.calls).toEqual([
+      {
+        symbol: undefined,
+        side: undefined,
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: undefined,
+      },
+    ]);
+    if (!result.ok) return;
+    expect(result.orders.map((o) => o.clientOrderId)).toEqual(['oms-street', 'partial']);
+  });
+
+  it('passes an optional status through, exact-matches after dropping pending', async () => {
+    const street = new FakeOpenOrders([
+      openOrder(),
+      openOrder({ clientOrderId: 'partial', status: 'partially_filled', venueOrderId: 'v-2' }),
+      openOrder({ clientOrderId: 'pending-1', status: 'pending', venueOrderId: null }),
+    ]);
+    const result = await listOmsOpenOrders({
+      venueId: 'street',
+      status: 'open',
+      openOrdersByVenue: { street: street.fn },
+    });
+    expect(result.ok).toBe(true);
+    expect(street.calls).toEqual([
+      {
+        symbol: undefined,
+        side: undefined,
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: 'open',
+      },
+    ]);
+    if (!result.ok) return;
+    expect(result.orders.map((o) => o.clientOrderId)).toEqual(['oms-street']);
+  });
+
   it('refuses internal venues and does not call the list', async () => {
-    const book = new FakeList([openOrder()]);
+    const book = new FakeOpenOrders([openOrder()]);
     const result = await listOmsOpenOrders({
       venueId: 'book',
       kind: 'internal',
@@ -180,7 +282,7 @@ describe('listOmsOpenOrders', () => {
   });
 
   it('surfaces list throw as list_failed, never an invented book', async () => {
-    const street = new FakeList(new Error('venue 503'));
+    const street = new FakeOpenOrders(new Error('venue 503'));
     const result = await listOmsOpenOrders({
       venueId: 'street',
       openOrdersByVenue: { street: street.fn },
@@ -192,7 +294,7 @@ describe('listOmsOpenOrders', () => {
   });
 
   it('drops pending rows instead of rewriting them to open', async () => {
-    const street = new FakeList([openOrder(), openOrder({ clientOrderId: 'pending-1', status: 'pending', venueOrderId: null })]);
+    const street = new FakeOpenOrders([openOrder(), openOrder({ clientOrderId: 'pending-1', status: 'pending', venueOrderId: null })]);
     const result = await listOmsOpenOrders({
       venueId: 'street',
       openOrdersByVenue: { street: street.fn },
@@ -222,7 +324,7 @@ describe('execution.oms.openOrders tRPC', () => {
   });
 
   it('lists through the injected map', async () => {
-    const street = new FakeList([openOrder()]);
+    const street = new FakeOpenOrders([openOrder()]);
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(signed());
     const out = await caller.execution.oms.openOrders({
       venueId: 'street',
@@ -237,7 +339,42 @@ describe('execution.oms.openOrders tRPC', () => {
     if (!out.ok) return;
     expect(out.orders).toHaveLength(1);
     expect(street.calls).toEqual([
-      { symbol: 'BTC/USDT', side: 'buy', type: 'limit', clientOrderId: 'oms-street', venueOrderId: 'v-1', feeAsset: 'USDT' },
+      {
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        type: 'limit',
+        clientOrderId: 'oms-street',
+        venueOrderId: 'v-1',
+        feeAsset: 'USDT',
+        status: undefined,
+      },
+    ]);
+  });
+
+  it('forwards optional status through tRPC and still drops pending', async () => {
+    const street = new FakeOpenOrders([
+      openOrder({ status: 'partially_filled' }),
+      openOrder({ clientOrderId: 'pending-1', status: 'pending', venueOrderId: null }),
+    ]);
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(signed());
+    const out = await caller.execution.oms.openOrders({
+      venueId: 'street',
+      status: 'partially_filled',
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.orders).toHaveLength(1);
+    expect(out.orders[0]?.status).toBe('partially_filled');
+    expect(street.calls).toEqual([
+      {
+        symbol: undefined,
+        side: undefined,
+        type: undefined,
+        clientOrderId: undefined,
+        venueOrderId: undefined,
+        feeAsset: undefined,
+        status: 'partially_filled',
+      },
     ]);
   });
 });

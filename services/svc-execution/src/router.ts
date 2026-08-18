@@ -227,6 +227,7 @@ export function createExecutionRouter(
               clientOrderId: z.string().min(1).max(128).optional(),
               venueOrderId: z.string().min(1).max(128).optional(),
               feeAsset: z.string().min(1).max(32).optional(),
+              status: z.enum(['open', 'partially_filled']).optional(),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
             }),
           )
@@ -240,6 +241,7 @@ export function createExecutionRouter(
                 clientOrderId: input.clientOrderId,
                 venueOrderId: input.venueOrderId,
                 feeAsset: input.feeAsset,
+                status: input.status,
                 kind: input.kind,
                 openOrdersByVenue,
               });

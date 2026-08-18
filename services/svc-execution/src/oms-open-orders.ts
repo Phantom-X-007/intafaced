@@ -8,11 +8,14 @@
  * exact idempotency key; omitted still lists every acknowledged open.
  * Optional venueOrderId forwards the venue's id; omitted still lists every
  * acknowledged open. Optional feeAsset forwards the fee currency; omitted still
- * lists acknowledged opens with a null feeAsset. Pending rows stay dropped —
- * never rewritten to open.
+ * lists acknowledged opens with a null feeAsset. Optional status forwards
+ * open/partially_filled; omitted still lists every acknowledged open. Pending
+ * rows stay dropped — never rewritten to open — before any status match.
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import type { VenueOrder, VenueOrderType } from '@intafaced/venue-contracts';
+
+export type OmsOpenOrdersStatus = 'open' | 'partially_filled';
 
 export type OmsOpenOrdersFn = (
   symbol?: string,
@@ -21,6 +24,7 @@ export type OmsOpenOrdersFn = (
   clientOrderId?: string,
   venueOrderId?: string,
   feeAsset?: string,
+  status?: OmsOpenOrdersStatus,
 ) => Promise<VenueOrder[]>;
 
 export type OmsOpenOrdersInput = {
@@ -31,6 +35,7 @@ export type OmsOpenOrdersInput = {
   readonly clientOrderId?: string;
   readonly venueOrderId?: string;
   readonly feeAsset?: string;
+  readonly status?: OmsOpenOrdersStatus;
   readonly kind?: VenueKind;
   readonly openOrdersByVenue?: Readonly<Record<string, OmsOpenOrdersFn>>;
 };
@@ -75,10 +80,13 @@ export async function listOmsOpenOrders(input: OmsOpenOrdersInput): Promise<OmsO
       input.clientOrderId?.trim() || undefined,
       input.venueOrderId?.trim() || undefined,
       input.feeAsset?.trim() || undefined,
+      input.status,
     );
   } catch (err) {
     return { ok: false, reason: 'list_failed', detail: listErrorMessage(err) };
   }
 
-  return { ok: true, orders: orders.filter((order) => order.status !== 'pending') };
+  const acknowledged = orders.filter((order) => order.status !== 'pending');
+  const filtered = input.status ? acknowledged.filter((order) => order.status === input.status) : acknowledged;
+  return { ok: true, orders: filtered };
 }
