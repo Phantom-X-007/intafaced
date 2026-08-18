@@ -529,14 +529,42 @@ describe('svc-support mount', () => {
     });
     const trail = await createSupportRouter(support).createCaller(signed()).events({ ticketId: TICKET });
     expect(trail).toHaveLength(1);
-    expect(support.listTicketEvents).toHaveBeenCalledWith({ userId: USER, ticketId: TICKET, asOperator: false });
+    expect(support.listTicketEvents).toHaveBeenCalledWith({
+      userId: USER,
+      ticketId: TICKET,
+      asOperator: false,
+      kind: undefined,
+    });
   });
 
   it('an operator reading a trail is passed asOperator from the PRINCIPAL', async () => {
     const support = stubSupport();
     const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
     await createSupportRouter(support).createCaller(signed(op)).events({ ticketId: TICKET });
-    expect(support.listTicketEvents).toHaveBeenCalledWith({ userId: OP, ticketId: TICKET, asOperator: true });
+    expect(support.listTicketEvents).toHaveBeenCalledWith({
+      userId: OP,
+      ticketId: TICKET,
+      asOperator: true,
+      kind: undefined,
+    });
+
+    await createSupportRouter(support).createCaller(signed(op)).events({ ticketId: TICKET, kind: 'assigned' });
+    expect(support.listTicketEvents).toHaveBeenCalledWith({
+      userId: OP,
+      ticketId: TICKET,
+      asOperator: true,
+      kind: 'assigned',
+    });
+  });
+
+  it('rejects invalid kind on events', async () => {
+    const support = stubSupport();
+    await expect(
+      createSupportRouter(support)
+        .createCaller(signed())
+        .events({ ticketId: TICKET, kind: 'refunded' as 'opened' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(support.listTicketEvents).not.toHaveBeenCalled();
   });
 
   it('refuses accountState / escalate / caseFile without support:ops', async () => {

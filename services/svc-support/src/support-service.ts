@@ -11,6 +11,7 @@ import type {
   SupportTicket,
   SupportTicketCategory,
   SupportTicketEvent,
+  SupportTicketEventKind,
   SupportTicketStatus,
 } from '@intafaced/contracts';
 import { DarkAccountState, type AccountStateSource } from './account-state.js';
@@ -179,13 +180,18 @@ export class SupportService implements SupportContract {
   }
 
   /** The audit trail. Owner sees their own ticket's; operators see any. */
-  async listTicketEvents(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicketEvent[]> {
+  async listTicketEvents(input: {
+    userId: string;
+    ticketId: string;
+    asOperator?: boolean;
+    kind?: SupportTicketEventKind;
+  }): Promise<SupportTicketEvent[]> {
     return withSupportSpan('support.listTicketEvents', { op: 'listTicketEvents', ticketId: input.ticketId }, async () => {
       // Visibility is decided by getTicket, which answers "somebody else's" and
       // "no such thing" identically — so the trail cannot be used to probe for
       // ticket ids the caller may not see.
       await this.getTicket(input);
-      return this.store.listEvents(input.ticketId);
+      return this.store.listEvents(input.ticketId, input.kind);
     });
   }
 

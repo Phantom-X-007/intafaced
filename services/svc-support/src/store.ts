@@ -125,8 +125,11 @@ export interface SupportStore {
   claimTicket(input: { ticketId: string; operatorId: string }): Promise<ClaimResult>;
   /** Non-state-change trail row for a pure read: `grounding_read` only. */
   appendEvent(input: AppendEventInput): Promise<SupportTicketEvent>;
-  /** The trail, oldest first. */
-  listEvents(ticketId: string): Promise<SupportTicketEvent[]>;
+  /**
+   * The trail, oldest first (`sequence ASC`). Optional `kind` is an exact match
+   * in the store — omitted = the full trail, never a post-filter of a mixed page.
+   */
+  listEvents(ticketId: string, kind?: SupportTicketEventKind): Promise<SupportTicketEvent[]>;
   /**
    * Write a case file alone. Used by Postgres integrity tests that assert the
    * immutability trigger. Production escalation uses `putCaseFileWithEscalated`.
@@ -584,8 +587,10 @@ export class MemorySupportStore implements SupportStore {
     });
   }
 
-  async listEvents(ticketId: string): Promise<SupportTicketEvent[]> {
-    return [...(this.events.get(ticketId) ?? [])].sort((a, b) => a.sequence - b.sequence);
+  async listEvents(ticketId: string, kind?: SupportTicketEventKind): Promise<SupportTicketEvent[]> {
+    const trail = this.events.get(ticketId) ?? [];
+    const matched = kind === undefined ? trail : trail.filter((e) => e.kind === kind);
+    return [...matched].sort((a, b) => a.sequence - b.sequence);
   }
 
   async putCaseFile(caseFile: SupportCaseFile): Promise<SupportCaseFile> {
@@ -944,11 +949,12 @@ export class PostgresSupportStore implements SupportStore {
   }
 
   /** Ordered by `sequence`, not `occurred_at` — two rows can share a timestamp. */
-  async listEvents(ticketId: string): Promise<SupportTicketEvent[]> {
+  async listEvents(ticketId: string, kind?: SupportTicketEventKind): Promise<SupportTicketEvent[]> {
     const rows = await this.sql<PgEvent[]>`
       SELECT id, ticket_id, sequence, kind, actor_id, actor_role, from_status, to_status, note, occurred_at
       FROM support.ticket_events
       WHERE ticket_id = ${ticketId}
+      ${kind !== undefined ? this.sql`AND kind = ${kind}` : this.sql``}
       ORDER BY sequence ASC
     `;
     return rows.map(eventFromPg);

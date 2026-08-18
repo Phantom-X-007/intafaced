@@ -11,6 +11,7 @@ import {
   supportCaseFileSchema,
   supportCommentSchema,
   supportKbArticleSchema,
+  supportTicketEventKindSchema,
   supportTicketEventSchema,
   supportTicketCategorySchema,
   supportTicketSchema,
@@ -182,7 +183,13 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
      * Visibility is decided by the same owner-or-operator rule as `get`.
      */
     events: scopedProcedure('support:read')
-      .input(z.object({ ticketId: z.string().uuid() }))
+      .input(
+        z.object({
+          ticketId: z.string().uuid(),
+          /** Exact trail kind. Omitted = the full trail, ordered by sequence. */
+          kind: supportTicketEventKindSchema.optional(),
+        }),
+      )
       .output(z.array(supportTicketEventSchema))
       .query(async ({ ctx, input }) => {
         try {
@@ -190,6 +197,7 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
             userId: ctx.principal!.userId,
             ticketId: input.ticketId,
             asOperator: ctx.principal!.scopes.includes('support:ops'),
+            kind: input.kind,
           });
         } catch (err) {
           mapError(err);

@@ -133,6 +133,60 @@ describe('audit trail', () => {
     // Same answer as `get`, so the trail cannot be used to probe for ticket ids.
     expect(await codeOf(() => support.listTicketEvents({ userId: OTHER, ticketId: t.id }))).toBe('support.not_found');
   });
+
+  it('omitting kind still returns the mixed trail, ordered by sequence', async () => {
+    const { support } = desk();
+    const t = await openTicket(support);
+    await support.claimForOperator({ operatorId: OP, ticketId: t.id });
+    await support.readAccountState({ operatorId: OP, ticketId: t.id });
+
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    expect(trail.map((e) => e.kind)).toEqual(['opened', 'assigned', 'status_changed', 'grounding_read']);
+    expect(trail.map((e) => e.sequence)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('kind exact-matches in the store and keeps sequence order', async () => {
+    const { support } = desk();
+    const t = await openTicket(support);
+    await support.claimForOperator({ operatorId: OP, ticketId: t.id });
+    await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' });
+    await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'open' });
+
+    const assigned = await support.listTicketEvents({
+      userId: USER,
+      ticketId: t.id,
+      asOperator: true,
+      kind: 'assigned',
+    });
+    expect(assigned.map((e) => e.kind)).toEqual(['assigned']);
+    expect(assigned[0]!.sequence).toBe(2);
+
+    const changes = await support.listTicketEvents({
+      userId: USER,
+      ticketId: t.id,
+      asOperator: true,
+      kind: 'status_changed',
+    });
+    expect(changes.map((e) => e.kind)).toEqual(['status_changed', 'status_changed', 'status_changed']);
+    expect(changes.map((e) => e.sequence)).toEqual([3, 4, 5]);
+    expect(changes.map((e) => ({ from: e.fromStatus, to: e.toStatus }))).toEqual([
+      { from: 'open', to: 'pending' },
+      { from: 'pending', to: 'resolved' },
+      { from: 'resolved', to: 'open' },
+    ]);
+  });
+
+  it('kind with no matching rows returns empty, not a mixed leftover', async () => {
+    const { support } = desk();
+    const t = await openTicket(support);
+    expect(await support.listTicketEvents({ userId: USER, ticketId: t.id, kind: 'escalated' })).toEqual([]);
+  });
+
+  it('a stranger still cannot probe by kind — not_found, not empty', async () => {
+    const { support } = desk();
+    const t = await openTicket(support);
+    expect(await codeOf(() => support.listTicketEvents({ userId: OTHER, ticketId: t.id, kind: 'opened' }))).toBe('support.not_found');
+  });
 });
 
 describe('account-state grounding', () => {

@@ -193,6 +193,16 @@ describe.skipIf(!available)('audit trail and case file — enforced in Postgres'
     expect(trail[0]).toMatchObject({ sequence: 1, kind: 'opened', actorRole: 'user' });
   });
 
+  it('listEvents exact-matches optional kind in SQL, not a post-filter', async () => {
+    const s = store();
+    const t = await open();
+    await s.claimTicket({ ticketId: t.id, operatorId: OP_A });
+    const mixed = await s.listEvents(t.id);
+    expect(mixed.map((e) => e.kind)).toEqual(['opened', 'assigned', 'status_changed']);
+    expect((await s.listEvents(t.id, 'assigned')).map((e) => e.kind)).toEqual(['assigned']);
+    expect(await s.listEvents(t.id, 'escalated')).toEqual([]);
+  });
+
   it('the trail cannot be UPDATEd', async () => {
     const t = await open();
     await expect(sql!`UPDATE support.ticket_events SET note = 'rewritten' WHERE ticket_id = ${t.id}`).rejects.toMatchObject({
