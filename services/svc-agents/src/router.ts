@@ -443,12 +443,17 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         ),
 
       log: scopedProcedure('agents:read', { module: 'agents' })
-        .input(z.object({ sessionId: z.string().uuid() }))
+        .input(
+          z.object({
+            sessionId: z.string().uuid(),
+            kind: z.enum(['session_open', 'session_close', 'completion', 'embedding', 'tool_call', 'usage_settlement']).optional(),
+          }),
+        )
         .output(z.array(actionOutput))
         .query(({ ctx, input }) =>
           guard(async () => {
             await ownedSession(input.sessionId, ctx.principal.userId);
-            return (await runtime.sessionLog(input.sessionId)).map(toActionOutput);
+            return (await runtime.sessionLog(input.sessionId, input.kind)).map(toActionOutput);
           }),
         ),
     }),

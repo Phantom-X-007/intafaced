@@ -929,6 +929,34 @@ if (!available) {
       expect(log.every((entry) => entry.userId === USER_A && entry.kind === 'tool_call')).toBe(true);
     });
 
+    it('omits a kind filter so one session log still mixes kinds in sequence', async () => {
+      const session = await open(USER_A);
+      await runtime.think({ sessionId: session.id, requestId: 'r-sess-kind-mix', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.map((entry) => entry.kind)).toEqual(['session_open', 'completion', 'tool_call']);
+      expect(log.map((entry) => entry.sequence)).toEqual([0, 1, 2]);
+      expect(log.every((entry) => entry.sessionId === session.id)).toBe(true);
+    });
+
+    it('filters one session log to an exact kind, still sequence ASC', async () => {
+      const session = await open(USER_A);
+      await runtime.think({ sessionId: session.id, requestId: 'r-sess-kind-exact', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+
+      const log = await runtime.sessionLog(session.id, 'tool_call');
+      expect(log.length).toBe(2);
+      expect(log.every((entry) => entry.kind === 'tool_call' && entry.sessionId === session.id)).toBe(true);
+      expect(log.map((entry) => entry.sequence)).toEqual([2, 3]);
+    });
+
+    it('returns an empty session log when no row matches the kind', async () => {
+      const session = await open(USER_A);
+      expect(await runtime.sessionLog(session.id, 'embedding')).toEqual([]);
+    });
+
     it('keys every log line for i18n rather than shipping prose', async () => {
       const session = await open();
       await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });

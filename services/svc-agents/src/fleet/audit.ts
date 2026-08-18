@@ -177,10 +177,11 @@ export class AuditLog {
     return toAction(rows[0]!);
   }
 
-  /** Everything one session did, in order. */
-  async forSession(sessionId: string): Promise<AuditedAction[]> {
+  /** Everything one session did, in order. Optional exact `kind` nests `AND kind = $kind`. */
+  async forSession(sessionId: string, kind?: ActionKind): Promise<AuditedAction[]> {
+    const kindFilter = kind === undefined ? this.sql`` : this.sql`AND kind = ${kind}`;
     const rows = await this.sql<ActionRow[]>`
-      SELECT * FROM agents.agent_actions WHERE session_id = ${sessionId} ORDER BY sequence ASC
+      SELECT * FROM agents.agent_actions WHERE session_id = ${sessionId} ${kindFilter} ORDER BY sequence ASC
     `;
     return rows.map(toAction);
   }
