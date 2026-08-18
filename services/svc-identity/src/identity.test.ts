@@ -1225,6 +1225,44 @@ if (!available) {
       expect(again.reviewedAt?.getTime()).toBe(rejected.reviewedAt?.getTime());
     });
 
+    it('filters listKycRecords by status in SQL; omitted still returns mixed pending and approved', async () => {
+      const owner = await register();
+      const other = await register();
+      const operator = await register();
+
+      const approved = await auth.submitKyc({ userId: owner.userId, tier: 'basic', jurisdiction: 'DE' });
+      await auth.approveKycRecord({ recordId: approved.id, reviewerId: operator.userId });
+      const rejected = await auth.submitKyc({ userId: owner.userId, tier: 'full', jurisdiction: 'DE' });
+      await auth.rejectKycRecord({ recordId: rejected.id, reviewerId: operator.userId });
+      const pending = await auth.submitKyc({ userId: owner.userId, tier: 'full', jurisdiction: 'DE' });
+      const foreign = await auth.submitKyc({ userId: other.userId, tier: 'basic', jurisdiction: 'DE' });
+
+      expect(await auth.kycTier(owner.userId)).toBe('basic');
+
+      const omitted = await auth.listKycRecords(owner.userId);
+      expect(omitted.map((r) => r.id).sort()).toEqual([approved.id, rejected.id, pending.id].sort());
+      expect(omitted.map((r) => r.status).sort()).toEqual(['approved', 'pending', 'rejected']);
+      expect(omitted.some((r) => r.id === foreign.id)).toBe(false);
+
+      const onlyPending = await auth.listKycRecords(owner.userId, { status: 'pending' });
+      expect(onlyPending).toEqual([expect.objectContaining({ id: pending.id, status: 'pending' })]);
+      expect(onlyPending.every((r) => r.status === 'pending')).toBe(true);
+
+      const onlyApproved = await auth.listKycRecords(owner.userId, { status: 'approved' });
+      expect(onlyApproved).toEqual([expect.objectContaining({ id: approved.id, status: 'approved' })]);
+
+      const onlyRejected = await auth.listKycRecords(owner.userId, { status: 'rejected' });
+      expect(onlyRejected).toEqual([expect.objectContaining({ id: rejected.id, status: 'rejected' })]);
+
+      expect(await auth.listKycRecords(owner.userId, { status: 'expired' })).toEqual([]);
+      // Filtering the list does not invent a different current tier.
+      expect(await auth.kycTier(owner.userId)).toBe('basic');
+
+      const stranger = await register();
+      expect(await auth.listKycRecords(stranger.userId, { status: 'pending' })).toEqual([]);
+      expect(await auth.listKycRecords(stranger.userId)).toEqual([]);
+    });
+
     it('after reject, a new submit can open a fresh pending without touching the old row', async () => {
       const session = await register();
       const operator = await register();

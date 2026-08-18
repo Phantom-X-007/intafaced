@@ -1108,10 +1108,13 @@ export class AuthService {
   }
 
   /** Every record for one user, newest first. What `kyc.status` renders. */
-  async listKycRecords(userId: string): Promise<KycRecordView[]> {
+  async listKycRecords(userId: string, opts?: { status?: KycRecordView['status'] }): Promise<KycRecordView[]> {
+    const status = opts?.status;
     const rows = await this.sql<KycRow[]>`
       SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records
-       WHERE user_id = ${userId} ORDER BY created_at DESC
+       WHERE user_id = ${userId}
+       ${status === undefined ? this.sql`` : this.sql`AND status = ${status}`}
+       ORDER BY created_at DESC
     `;
     return rows.map(toKycRecord);
   }

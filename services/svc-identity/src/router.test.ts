@@ -427,6 +427,25 @@ describe('kyc.status', () => {
     expect(stub.calls.find((c) => c.method === 'listKycRecords')!.args[0]).toBe(USER);
   });
 
+  it('filters records by status without changing how tier is computed', async () => {
+    const api = await caller(['identity:read']);
+    const status = await api.kyc.status({ status: 'pending' });
+
+    expect(status.tier).toBe('none');
+    const listCall = stub.calls.find((c) => c.method === 'listKycRecords')!;
+    expect(listCall.args[0]).toBe(USER);
+    expect(listCall.args[1]).toEqual({ status: 'pending' });
+    const tierCall = stub.calls.find((c) => c.method === 'kycTier')!;
+    expect(tierCall.args).toEqual([USER]);
+  });
+
+  it('rejects an invalid status with BAD_REQUEST', async () => {
+    const api = await caller(['identity:read']);
+    const err = await api.kyc.status({ status: 'nope' as 'pending' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(stub.calls.some((c) => c.method === 'listKycRecords')).toBe(false);
+  });
+
   it('NEVER RETURNS THE PROVIDER POINTER OR THE REVIEWER (§10 PII isolation)', async () => {
     const api = await caller(['identity:read']);
     const status = await api.kyc.status();
