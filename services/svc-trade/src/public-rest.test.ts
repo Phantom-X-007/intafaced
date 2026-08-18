@@ -842,6 +842,50 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/trades/:symbol?until=: passes untilMs into publicTape', async () => {
+    let seenUntil: number | undefined = -1;
+    const app = await build(
+      deps({
+        publicTape: async (_id, _limit, _sinceMs, _side, untilMs) => {
+          seenUntil = untilMs;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/trades/BTC%2FUSDT?until=1700000000000&limit=50',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenUntil).toBe(1_700_000_000_000);
+    await app.close();
+  });
+
+  it('GET /api/v1/trades/:symbol?until=: invalid (NaN / negative) → 400 without publicTape', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        publicTape: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    for (const until of ['nope', '-1']) {
+      called = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/trades/BTC%2FUSDT?until=${encodeURIComponent(until)}`,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(res.json().intafacedCode).toBe('trade.invalid_until');
+      expect(res.json().message).toBe('until must be a non-negative unix timestamp in milliseconds');
+      expect(called).toBe(false);
+    }
+    await app.close();
+  });
+
   it('GET /api/v1/tickers returns a record of tickers keyed by symbol', async () => {
     const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
     const app = await build(

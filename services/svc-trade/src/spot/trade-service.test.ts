@@ -2154,6 +2154,42 @@ if (!available) {
     });
   });
 
+  describe('publicTape (fetchTrades until)', () => {
+    const T0 = 1_699_999_200_000;
+
+    async function tradeOne(price: string, qty: string, atMs: number, tag: string) {
+      const [before] = await sql<Array<{ n: string }>>`
+        SELECT coalesce(max(sequence), -1)::text AS n FROM trade.fills
+      `;
+      const from = Number(before!.n);
+
+      await fund(BOB, 'BTC', qty);
+      await fund(ALICE, 'USDT', String(Number(price) * Number(qty)));
+      const maker = await rest(BOB, btcusdt, 'sell', qty, price, `bob-tape-${tag}`);
+      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price, qty }]);
+      await rest(ALICE, btcusdt, 'buy', qty, price, `alice-tape-${tag}`);
+
+      await sql`UPDATE trade.fills SET ts = ${new Date(atMs)} WHERE sequence > ${from}`;
+    }
+
+    it('honours until as an inclusive SQL bound on fill ts, not a post-filter of a mixed page', async () => {
+      await tradeOne('100', '1', T0 + 1_000, 'a');
+      await tradeOne('105', '2', T0 + 30_000, 'b');
+      await tradeOne('99', '1', T0 + 61_000, 'c');
+
+      const unfiltered = await trade.publicTape(btcusdt.id);
+      expect(unfiltered.map((p) => p.ts.getTime()).sort((a, b) => a - b)).toEqual([T0 + 1_000, T0 + 30_000, T0 + 61_000]);
+
+      const until = await trade.publicTape(btcusdt.id, 100, undefined, undefined, T0 + 30_000);
+      expect(until.map((p) => p.ts.getTime()).sort((a, b) => a - b)).toEqual([T0 + 1_000, T0 + 30_000]);
+
+      expect(await trade.publicTape(btcusdt.id, 100, undefined, undefined, T0)).toEqual([]);
+
+      const since = await trade.publicTape(btcusdt.id, 100, T0 + 30_000);
+      expect(since.map((p) => p.ts.getTime()).sort((a, b) => a - b)).toEqual([T0 + 30_000, T0 + 61_000]);
+    });
+  });
+
   /**
    * academy.paper-trading Stage-1 — paper market flag + ledger isolation.
    * Live markets keep the funded placeOrder path; paper never posts holds.

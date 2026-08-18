@@ -2337,11 +2337,13 @@ export class TradeService {
    * User ids and order ids are intentionally omitted; this is the public print,
    * not `myFills`. Empty market → empty array (honest 200, not an error).
    * Optional `sinceMs` filters `fills.ts >= since` in SQL (timestamptz via Date).
+   * Optional `untilMs` filters `fills.ts <= until` in SQL (timestamptz via Date).
    * Optional `side` narrows buy/sell in SQL — never invents a print.
    */
-  async publicTape(marketId: string, limit = 100, sinceMs?: number, side?: 'buy' | 'sell'): Promise<PublicTapePrint[]> {
+  async publicTape(marketId: string, limit = 100, sinceMs?: number, side?: 'buy' | 'sell', untilMs?: number): Promise<PublicTapePrint[]> {
     const capped = Math.min(Math.max(Math.floor(limit), 1), 500);
     const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
+    const untilDate = untilMs !== undefined ? new Date(untilMs) : undefined;
     const sideFilter = side === 'buy' ? this.sql`f.side = 'buy'` : side === 'sell' ? this.sql`f.side = 'sell'` : this.sql`TRUE`;
     type TapeRow = {
       id: string;
@@ -2353,28 +2355,15 @@ export class TradeService {
       ts: Date;
     };
     // SD-3: exclude prints involving any seeded order (seed volume is not "real activity").
-    const rows = sinceDate
-      ? await this.sql<TapeRow[]>`
+    const rows = await this.sql<TapeRow[]>`
           SELECT f.id, f.side, f.price, f.qty, f.quote_amount, f.sequence, f.ts
             FROM trade.fills f
             INNER JOIN trade.orders o ON o.id = f.order_id
             INNER JOIN trade.orders c ON c.id = f.counter_order_id
            WHERE f.market_id = ${marketId}
              AND f.liquidity = 'taker'
-             AND f.ts >= ${sinceDate}
-             AND ${sideFilter}
-             AND o.seeded = false
-             AND c.seeded = false
-           ORDER BY f.sequence DESC
-           LIMIT ${capped}
-        `
-      : await this.sql<TapeRow[]>`
-          SELECT f.id, f.side, f.price, f.qty, f.quote_amount, f.sequence, f.ts
-            FROM trade.fills f
-            INNER JOIN trade.orders o ON o.id = f.order_id
-            INNER JOIN trade.orders c ON c.id = f.counter_order_id
-           WHERE f.market_id = ${marketId}
-             AND f.liquidity = 'taker'
+             ${sinceDate ? this.sql`AND f.ts >= ${sinceDate}` : this.sql``}
+             ${untilDate ? this.sql`AND f.ts <= ${untilDate}` : this.sql``}
              AND ${sideFilter}
              AND o.seeded = false
              AND c.seeded = false

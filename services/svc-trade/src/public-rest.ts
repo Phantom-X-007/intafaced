@@ -18,7 +18,7 @@ import type { Candle, Market, MarketKind, MarketStatus, PublicTapePrint } from '
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
- *   GET /api/v1/trades/:symbol?limit=&since=&side=
+ *   GET /api/v1/trades/:symbol?limit=&since=&until=&side=
  *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&until=&limit=
  *   GET /api/v1/funding-rate/:symbol
  *
@@ -47,9 +47,10 @@ export interface PublicRestDeps {
    * Recent public prints for a market (no user/order ids). Empty when nothing
    * has traded — callers return honest 200 + [].
    * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
+   * Optional untilMs (unix ms) filters fills.ts <= until in SQL.
    * Optional side filters fills.side in SQL (taker prints only).
    */
-  publicTape(marketId: string, limit: number, sinceMs?: number, side?: 'buy' | 'sell'): Promise<PublicTapePrint[]>;
+  publicTape(marketId: string, limit: number, sinceMs?: number, side?: 'buy' | 'sell', untilMs?: number): Promise<PublicTapePrint[]>;
   /**
    * Candles aggregated from the real taker fill tape. Empty when the market has
    * never traded — an honest empty chart, not a fabricated one.
@@ -666,7 +667,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     return reply.code(200).send(out);
   });
 
-  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string; side?: string } }>(
+  app.get<{ Params: { symbol: string }; Querystring: { limit?: string; since?: string; until?: string; side?: string } }>(
     '/api/v1/trades/:symbol',
     async (req, reply) => {
       const symbol = decodeURIComponent(req.params.symbol);
@@ -676,10 +677,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
       const sinceParsed = parseSince(req.query.since);
       if (!sinceParsed.ok) return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+      const untilParsed = parseUntil(req.query.until);
+      if (!untilParsed.ok) return sendCcxt(reply, badRequest(untilParsed.message, 'trade.invalid_until'));
       const sideParsed = parseTapeSide(req.query.side);
       if (!sideParsed.ok) return sendCcxt(reply, badRequest(sideParsed.message, 'trade.invalid_tape_side'));
-      // since / side → SQL on fills via publicTape — not a post-filter of a mixed page.
-      const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs, sideParsed.side);
+      // since / until / side → SQL on fills via publicTape — not a post-filter of a mixed page.
+      const tape = await deps.publicTape(market.id, limit, sinceParsed.sinceMs, sideParsed.side, untilParsed.untilMs);
       return reply.code(200).send(tape.map((print) => presentPublicTrade(market.symbol, print)));
     },
   );
