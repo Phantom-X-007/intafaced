@@ -605,6 +605,66 @@ describe('svc-academy mount — my residencies may filter by status', () => {
   });
 });
 
+describe('svc-academy mount — my residencies may filter by cohort slug', () => {
+  it('omits cohortSlug and returns mixed cohorts for that user', async () => {
+    const myResidencies = vi.fn(async () => mixedMyResidencies);
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myResidencies();
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, {});
+    expect(out.map((r) => r.cohortSlug).sort()).toEqual(['cohort-accepted', 'cohort-applied', 'cohort-rejected']);
+  });
+
+  it('forwards an exact cohortSlug and returns only that cohort', async () => {
+    const myResidencies = vi.fn(async (_userId: string, filter: { status?: string; cohortSlug?: string } = {}) =>
+      mixedMyResidencies.filter((r) => (filter.cohortSlug ? r.cohortSlug === filter.cohortSlug : true)),
+    );
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myResidencies({ cohortSlug: 'cohort-accepted' });
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, { cohortSlug: 'cohort-accepted' });
+    expect(out).toEqual([expect.objectContaining({ id: ACCEPTED, cohortSlug: 'cohort-accepted' })]);
+  });
+
+  it('ANDs cohortSlug with status when both are present', async () => {
+    const myResidencies = vi.fn(async (_userId: string, filter: { status?: string; cohortSlug?: string } = {}) =>
+      mixedMyResidencies.filter(
+        (r) => (filter.status ? r.status === filter.status : true) && (filter.cohortSlug ? r.cohortSlug === filter.cohortSlug : true),
+      ),
+    );
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy)
+      .createCaller(signed())
+      .myResidencies({ status: 'applied', cohortSlug: 'cohort-applied' });
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, { status: 'applied', cohortSlug: 'cohort-applied' });
+    expect(out).toEqual([expect.objectContaining({ id: APPLIED, status: 'applied', cohortSlug: 'cohort-applied' })]);
+  });
+
+  it('returns an empty list when no application matches the cohort', async () => {
+    const myResidencies = vi.fn(async () => []);
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).myResidencies({ cohortSlug: 'cohort-missing' });
+
+    expect(myResidencies).toHaveBeenCalledWith(USER, { cohortSlug: 'cohort-missing' });
+    expect(out).toEqual([]);
+  });
+
+  it('rejects a too-short cohortSlug at the door before the service', async () => {
+    const myResidencies = vi.fn(async () => mixedMyResidencies);
+    const academy = stubAcademy({ myResidencies: myResidencies as AcademyService['myResidencies'] });
+
+    await expect(createAcademyRouter(academy).createCaller(signed()).myResidencies({ cohortSlug: 'xx' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(myResidencies).not.toHaveBeenCalled();
+  });
+});
+
 describe('svc-academy mount — no SFU means an error, never a fake token', () => {
   it('reports stream_unavailable as a 500 rather than returning a credential', async () => {
     const academy = stubAcademy({

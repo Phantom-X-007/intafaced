@@ -1422,7 +1422,8 @@ export class AcademyService {
     return this.toResidency(rows[0]);
   }
 
-  async myResidencies(userId: string, filter: { status?: ResidencyStatus } = {}): Promise<ResidencyApplication[]> {
+  async myResidencies(userId: string, filter: { status?: ResidencyStatus; cohortSlug?: string } = {}): Promise<ResidencyApplication[]> {
+    const cohortSlug = filter.cohortSlug == null ? undefined : filter.cohortSlug.trim().toLowerCase();
     const rows = await this.sql<
       Array<{
         id: string;
@@ -1440,6 +1441,7 @@ export class AcademyService {
         FROM academy.residency_applications
        WHERE user_id = ${userId}
          AND ${filter.status == null ? this.sql`true` : this.sql`status::text = ${filter.status}`}
+         AND ${cohortSlug == null ? this.sql`true` : this.sql`cohort_slug = ${cohortSlug}`}
        ORDER BY applied_at DESC
     `;
     return rows.map((r) => this.toResidency(r));
