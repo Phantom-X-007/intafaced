@@ -417,18 +417,26 @@ export class PositionService {
 
   /**
    * Settled history: `closed` and `liquidated`. Empty [] when none — never
-   * invents a mark. Open/closing rows stay on listOpen. Optional since is SQL
-   * on COALESCE(closed_at, opened_at); limit is capped like orderHistory.
+   * invents a mark. Open/closing rows stay on listOpen. Optional since/until
+   * are SQL on COALESCE(closed_at, opened_at); limit is capped like orderHistory.
    * Optional status='closed'|'liquidated' narrows the IN-list — never invents
    * a status, and unknown values are the caller's to refuse before this.
    * Optional side='long'|'short' narrows in SQL — never invents a side.
    */
   async listClosed(
     userId: string,
-    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated'; side?: 'long' | 'short' } = {},
+    input: {
+      symbol?: string;
+      limit?: number;
+      sinceMs?: number;
+      untilMs?: number;
+      status?: 'closed' | 'liquidated';
+      side?: 'long' | 'short';
+    } = {},
   ): Promise<Position[]> {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
     const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
+    const untilDate = input.untilMs !== undefined ? new Date(input.untilMs) : undefined;
     const symbol = input.symbol?.trim() || undefined;
     const statusFilter =
       input.status === 'closed'
@@ -438,54 +446,22 @@ export class PositionService {
           : this.sql`p.status IN ('closed', 'liquidated')`;
     const sideFilter =
       input.side === 'long' ? this.sql`p.side = 'long'` : input.side === 'short' ? this.sql`p.side = 'short'` : this.sql`TRUE`;
-    const rows =
-      symbol && sinceDate
-        ? await this.sql<PositionRow[]>`
-            SELECT p.*, m.symbol
-            FROM trade.positions p
-            JOIN trade.markets m ON m.id = p.market_id
-            WHERE p.user_id = ${userId}
-              AND ${statusFilter}
-              AND ${sideFilter}
-              AND m.symbol = ${symbol}
-              AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
-            ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
-            LIMIT ${limit}
-          `
-        : symbol
-          ? await this.sql<PositionRow[]>`
-              SELECT p.*, m.symbol
-              FROM trade.positions p
-              JOIN trade.markets m ON m.id = p.market_id
-              WHERE p.user_id = ${userId}
-                AND ${statusFilter}
-                AND ${sideFilter}
-                AND m.symbol = ${symbol}
-              ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
-              LIMIT ${limit}
-            `
-          : sinceDate
-            ? await this.sql<PositionRow[]>`
-                SELECT p.*, m.symbol
-                FROM trade.positions p
-                JOIN trade.markets m ON m.id = p.market_id
-                WHERE p.user_id = ${userId}
-                  AND ${statusFilter}
-                  AND ${sideFilter}
-                  AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
-                ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
-                LIMIT ${limit}
-              `
-            : await this.sql<PositionRow[]>`
-                SELECT p.*, m.symbol
-                FROM trade.positions p
-                JOIN trade.markets m ON m.id = p.market_id
-                WHERE p.user_id = ${userId}
-                  AND ${statusFilter}
-                  AND ${sideFilter}
-                ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
-                LIMIT ${limit}
-              `;
+    const sinceFilter = sinceDate ? this.sql`COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}` : this.sql`TRUE`;
+    const untilFilter = untilDate ? this.sql`COALESCE(p.closed_at, p.opened_at) <= ${untilDate}` : this.sql`TRUE`;
+    const symbolFilter = symbol ? this.sql`m.symbol = ${symbol}` : this.sql`TRUE`;
+    const rows = await this.sql<PositionRow[]>`
+      SELECT p.*, m.symbol
+      FROM trade.positions p
+      JOIN trade.markets m ON m.id = p.market_id
+      WHERE p.user_id = ${userId}
+        AND ${statusFilter}
+        AND ${sideFilter}
+        AND ${symbolFilter}
+        AND ${sinceFilter}
+        AND ${untilFilter}
+      ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+      LIMIT ${limit}
+    `;
     return rows.map((row) => presentPosition(row));
   }
 

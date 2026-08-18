@@ -146,7 +146,14 @@ export interface PrivateRestDeps {
   /** Closed/liquidated rows for the principal (empty [] when none). */
   listClosedPositions(
     principal: Principal,
-    input: { symbol?: string; limit?: number; sinceMs?: number; status?: 'closed' | 'liquidated'; side?: 'long' | 'short' },
+    input: {
+      symbol?: string;
+      limit?: number;
+      sinceMs?: number;
+      untilMs?: number;
+      status?: 'closed' | 'liquidated';
+      side?: 'long' | 'short';
+    },
   ): Promise<Position[]>;
   /** One owned futures row. Missing / not theirs → 404, never another user's row. */
   getPosition(principal: Principal, positionId: string): Promise<Position>;
@@ -486,6 +493,19 @@ export function parseSince(raw: unknown): { ok: true; sinceMs?: number } | { ok:
     return { ok: false, message: 'since must be a non-negative unix timestamp in milliseconds' };
   }
   return { ok: true, sinceMs: Math.floor(n) };
+}
+
+/**
+ * Optional CCXT `until` (unix ms). Absent/empty → no filter.
+ * NaN or negative → invalid (caller returns 400). Zero is valid (epoch).
+ */
+export function parseUntil(raw: unknown): { ok: true; untilMs?: number } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, untilMs: undefined };
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) {
+    return { ok: false, message: 'until must be a non-negative unix timestamp in milliseconds' };
+  }
+  return { ok: true, untilMs: Math.floor(n) };
 }
 
 /** Optional fill orderId filter. Absent → every order's fills. */
@@ -1009,7 +1029,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
    * Settled futures history. Mounted as `/closed` (not `:id`) so it cannot be
    * swallowed by GET /positions/:id. Empty [] when none — no invented mark.
    */
-  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; status?: string; side?: string } }>(
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string; until?: string; status?: string; side?: string } }>(
     '/api/v1/positions/closed',
     async (req, reply) => {
       const principal = requirePrincipal(req, reply);
@@ -1019,6 +1039,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const sinceParsed = parseSince(req.query.since);
       if (!sinceParsed.ok) {
         return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+      }
+      const untilParsed = parseUntil(req.query.until);
+      if (!untilParsed.ok) {
+        return sendCcxt(reply, badRequest(untilParsed.message, 'trade.invalid_until'));
       }
       const statusParsed = parseClosedPositionStatus(req.query.status);
       if (!statusParsed.ok) {
@@ -1035,6 +1059,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
           symbol: req.query.symbol,
           limit,
           sinceMs: sinceParsed.sinceMs,
+          untilMs: untilParsed.untilMs,
           status: statusParsed.status,
           side: sideParsed.side,
         });

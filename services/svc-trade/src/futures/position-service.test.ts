@@ -291,6 +291,31 @@ if (!available) {
     expect(await positions.listClosed(ALICE, { sinceMs: 0 })).toHaveLength(2);
   });
 
+  it('listClosed pages with until in SQL', async () => {
+    feed('50000');
+    const first = await positions.open({
+      clientOpenId: 't-list-closed-until-1',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, first.id!);
+    const second = await positions.open({
+      clientOpenId: 't-list-closed-until-2',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.close(ALICE, second.id!);
+    expect(await positions.listClosed(ALICE)).toHaveLength(2);
+    expect(await positions.listClosed(ALICE, { untilMs: 0 })).toEqual([]);
+    expect(await positions.listClosed(ALICE, { untilMs: Date.now() + 86_400_000 })).toHaveLength(2);
+  });
+
   it('listClosed status=closed excludes a liquidated row', async () => {
     feed('50000');
     const closed = await positions.open({

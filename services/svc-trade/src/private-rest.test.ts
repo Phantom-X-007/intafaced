@@ -2065,7 +2065,13 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(seen).toEqual({ symbol: 'BTC/USDT', limit: 2, sinceMs: 1_700_000_000_000, status: undefined });
+    expect(seen).toEqual({
+      symbol: 'BTC/USDT',
+      limit: 2,
+      sinceMs: 1_700_000_000_000,
+      untilMs: undefined,
+      status: undefined,
+    });
     await app.close();
   });
 
@@ -2166,6 +2172,55 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(listed).toBe(false);
+    await app.close();
+  });
+
+  it('GET /positions/closed?until=: passes untilMs into listClosedPositions', async () => {
+    let seen: { symbol?: string; limit?: number; sinceMs?: number; untilMs?: number } | null = null;
+    const app = await build(
+      deps({
+        listClosedPositions: async (_p, input) => {
+          seen = input;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/closed?until=1700000000000&limit=2&symbol=BTC%2FUSDT',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({
+      symbol: 'BTC/USDT',
+      limit: 2,
+      sinceMs: undefined,
+      untilMs: 1_700_000_000_000,
+      status: undefined,
+    });
+    await app.close();
+  });
+
+  it('GET /positions/closed?until=: invalid → 400 without listClosedPositions', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        listClosedPositions: async () => {
+          listed = true;
+          return [];
+        },
+      }),
+    );
+    for (const until of ['-1', 'NaN']) {
+      listed = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/positions/closed?until=${until}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(listed).toBe(false);
+    }
     await app.close();
   });
 
