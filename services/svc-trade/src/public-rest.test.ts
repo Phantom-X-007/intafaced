@@ -1080,6 +1080,135 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/tickers?quote=USDT keeps only USDT-quoted keys', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const btcBtc = fakeMarket({ id: 'm-btcbtc', symbol: 'ETH/BTC', baseAsset: 'ETH', quoteAsset: 'BTC' });
+    let seenQuote: string | undefined;
+    const app = await build(
+      deps({
+        markets: async (_status, _kind, quote) => {
+          seenQuote = quote;
+          return [market, eth, btcBtc];
+        },
+        marketBySymbol: async (symbol) =>
+          symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : symbol === 'ETH/BTC' ? btcBtc : null,
+      }),
+    );
+    const omitted = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    expect(omitted.statusCode).toBe(200);
+    expect(Object.keys(omitted.json() as Record<string, unknown>).sort()).toEqual(['BTC/USDT', 'ETH/BTC', 'ETH/USDT']);
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?quote=USDT' });
+    expect(res.statusCode).toBe(200);
+    expect(seenQuote).toBe('USDT');
+    const body = res.json() as Record<string, { high: null; average: null; last: string }>;
+    expect(Object.keys(body).sort()).toEqual(['BTC/USDT', 'ETH/USDT']);
+    expect(tickerSchema.safeParse(body['BTC/USDT']).success).toBe(true);
+    expect(body['BTC/USDT']!.high).toBeNull();
+    expect(body['BTC/USDT']!.average).toBeNull();
+    expect(typeof body['BTC/USDT']!.last).toBe('string');
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?quote= empty string is omitted (full venue map)', async () => {
+    const btcBtc = fakeMarket({ id: 'm-btcbtc', symbol: 'ETH/BTC', baseAsset: 'ETH', quoteAsset: 'BTC' });
+    const app = await build(
+      deps({
+        markets: async () => [market, btcBtc],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?quote=' });
+    expect(res.statusCode).toBe(200);
+    expect(Object.keys(res.json() as Record<string, unknown>).sort()).toEqual(['BTC/USDT', 'ETH/BTC']);
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?quote= whitespace or oversized garbage → 400 before the map', async () => {
+    let listed = false;
+    let lookedUp = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+        marketBySymbol: async () => {
+          lookedUp = true;
+          return market;
+        },
+      }),
+    );
+    for (const quote of ['   ', 'U'.repeat(33)]) {
+      listed = false;
+      lookedUp = false;
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/tickers?quote=${encodeURIComponent(quote)}`,
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().code).toBe('BadRequest');
+      expect(res.json().intafacedCode).toBe('trade.invalid_market_quote');
+      expect(res.json().message).toBe('quote must be 1-32 characters');
+      expect(listed).toBe(false);
+      expect(lookedUp).toBe(false);
+    }
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?quote= unknown asset → honest empty map, not 404', async () => {
+    const app = await build(
+      deps({
+        markets: async () => [market],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?quote=NOPE' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol=&quote= is AND: mismatch → {}', async () => {
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('BTC/USDT')}&quote=BTC`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(listed).toBe(false);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers?symbol=&quote= is AND: matching quote keeps that symbol', async () => {
+    const eth = fakeMarket({ id: 'm-eth', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    let listed = false;
+    const app = await build(
+      deps({
+        markets: async () => {
+          listed = true;
+          return [market, eth];
+        },
+        marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : null),
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v1/tickers?symbol=${encodeURIComponent('ETH/USDT')}&quote=USDT`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(listed).toBe(false);
+    expect(Object.keys(res.json() as Record<string, unknown>)).toEqual(['ETH/USDT']);
+    await app.close();
+  });
+
   // ── OHLCV ────────────────────────────────────────────────────────────────
 
   const candle = {

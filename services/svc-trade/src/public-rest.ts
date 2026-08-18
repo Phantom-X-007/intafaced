@@ -17,7 +17,7 @@ import type { Candle, Market, MarketKind, MarketStatus, PublicTapePrint } from '
  *   GET /api/v1/markets?status=&kind=&quote=&base=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
- *   GET /api/v1/tickers?symbol=
+ *   GET /api/v1/tickers?symbol=&quote=
  *   GET /api/v1/trades/:symbol?limit=&since=&until=&side=
  *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&until=&limit=
  *   GET /api/v1/funding-rate/:symbol
@@ -659,21 +659,29 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
   /**
    * All-market tickers. Record keyed by unified symbol (CCXT `fetchTickers`).
    *
-   * Optional `symbol=` is an exact match via `marketBySymbol`. Unknown or
-   * unlistable → honest `{}` (not a 404 — that stays on `GET /ticker/:symbol`).
-   * Empty `symbol=` is omitted: the full venue map.
+   * Optional `symbol=` is an exact match via `marketBySymbol`. Optional `quote=`
+   * is an exact match on `quoteAsset` via the same `parseMarketQuote` as
+   * `GET /api/v1/markets`. Both together are AND. Unknown or unlistable →
+   * honest `{}` (not a 404 — that stays on `GET /ticker/:symbol`). Empty
+   * `symbol=` / `quote=` is omitted: the full venue map.
    *
    * Markets with no book (or a matching hop that is down for that market) still
    * appear — empty BBO + last from the tape if any. Never invent 24h stats or a mid.
    */
-  app.get<{ Querystring: { symbol?: string } }>('/api/v1/tickers', async (req, reply) => {
+  app.get<{ Querystring: { symbol?: string; quote?: string } }>('/api/v1/tickers', async (req, reply) => {
     const symbolParsed = parseTickerSymbol(req.query.symbol);
     if (!symbolParsed.ok) {
       return sendCcxt(reply, badRequest(symbolParsed.message, 'trade.invalid_ticker_symbol'));
     }
+    const quoteParsed = parseMarketQuote(req.query.quote);
+    if (!quoteParsed.ok) {
+      return sendCcxt(reply, badRequest(quoteParsed.message, 'trade.invalid_market_quote'));
+    }
 
     const ts = now();
     const out: Record<string, ReturnType<typeof presentTicker>> = {};
+
+    const matchesQuote = (market: Market) => quoteParsed.quote === undefined || market.quoteAsset === quoteParsed.quote;
 
     const tickerFor = async (market: Market) => {
       let depth: EngineDepth = EMPTY_DEPTH;
@@ -689,12 +697,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
 
     if (symbolParsed.symbol !== undefined) {
       const market = await deps.marketBySymbol(symbolParsed.symbol);
-      if (market) await tickerFor(market);
+      if (market && matchesQuote(market)) await tickerFor(market);
       return reply.code(200).send(out);
     }
 
-    const markets = await deps.markets();
-    await Promise.all(markets.map((market) => tickerFor(market)));
+    const markets = await deps.markets(undefined, undefined, quoteParsed.quote);
+    await Promise.all(markets.filter(matchesQuote).map((market) => tickerFor(market)));
     return reply.code(200).send(out);
   });
 
