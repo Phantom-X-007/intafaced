@@ -117,6 +117,9 @@ export function createIdentityRouter(
       accrualTierLaw,
       ledger,
     }),
+    // Flag registry request-path surfaces (must remain in this file):
+    // requireWaitlist().enroll
+    // requireWaitlist().position
     waitlist: createWaitlistRouter({ requireWaitlist }),
   });
 }
