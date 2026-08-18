@@ -195,8 +195,21 @@ export const SUITES = [
   {
     name: 'vaults',
     expect: 'compiles',
-    /** S-L1 crew vault + S-L2 legacy vault + S-L4 LP lock (trust). */
-    sources: ['vaults/CrewVault.sol', 'vaults/LegacyVault.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+    /** S-L1 crew vault + S-L2 legacy vault + S-L4 LP lock + S-L5 treasury yield. */
+    sources: [
+      'vaults/CrewVault.sol',
+      'vaults/LegacyVault.sol',
+      'vaults/TreasuryYieldVault.sol',
+      'trust/LaunchLpLock.sol',
+      'amm/IERC20Minimal.sol',
+      'test/MockERC20.sol',
+    ],
+  },
+  {
+    name: 'privacy',
+    expect: 'compiles',
+    /** S-L3 stealth announcement log — no identity fields. */
+    sources: ['privacy/StealthAnnouncer.sol'],
   },
 ];
 
