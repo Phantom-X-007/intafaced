@@ -1015,6 +1015,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         z
           .object({
             status: z.enum(['pending', 'active', 'margin_call', 'liquidating', 'repaid', 'liquidated']).optional(),
+            debtAssetId: z.string().min(1).max(16).optional(),
           })
           .optional(),
       )
@@ -1037,7 +1038,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .query(async ({ ctx, input }) =>
         guard(async () => {
-          const rows = await bank.loans.loansOf(ctx.principal.userId, input?.status);
+          const rows = await bank.loans.loansOf(ctx.principal.userId, input?.status, input?.debtAssetId);
           return Promise.all(
             rows.map(async (loan) => {
               const debt = await bank.loans.outstanding(loan.id);

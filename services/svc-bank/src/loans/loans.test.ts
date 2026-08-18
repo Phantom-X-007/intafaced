@@ -2057,6 +2057,77 @@ if (!available) {
       });
     });
 
+    describe('loansOf filters by debtAssetId without inventing outstanding', () => {
+      async function mixedDebtLoans() {
+        await fund(BORROWER, 'BTC', '3');
+        await fund(OTHER, 'BTC', '1');
+        const usdtProduct = await makeProduct();
+        const eurProduct = await makeProduct({
+          name: 'BTC-backed EUR',
+          debtAssetId: 'EUR',
+          quoteAssetId: 'EUR',
+        });
+        await fundReserve('USDT', '100000');
+        await fundReserve('EUR', '100000');
+        const { loan: usdtActive } = await loans.open({
+          productId: usdtProduct.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+        const { loan: eurToRepay } = await loans.open({
+          productId: eurProduct.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('1000'),
+          now,
+        });
+        await loans.repay({ loanId: eurToRepay.id, amount: amt('1000') });
+        await loans.open({
+          productId: usdtProduct.id,
+          userId: OTHER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        });
+        const eurRepaid = await loans.loan(eurToRepay.id);
+        return { usdtActive, eurRepaid };
+      }
+
+      it('returns mixed debt assets when debtAssetId is omitted', async () => {
+        const { usdtActive, eurRepaid } = await mixedDebtLoans();
+        const listed = await loans.loansOf(BORROWER);
+        expect(listed.map((loan) => loan.id).sort()).toEqual([usdtActive.id, eurRepaid.id].sort());
+        expect(new Set(listed.map((loan) => loan.debtAssetId))).toEqual(new Set(['USDT', 'EUR']));
+        expect(formatAmount((await loans.outstanding(usdtActive.id)).principal)).toBe('5000');
+        expect(formatAmount((await loans.outstanding(eurRepaid.id)).principal)).toBe('0');
+      });
+
+      it('exact-matches debtAssetId and keeps the list scoped to the caller', async () => {
+        const { usdtActive, eurRepaid } = await mixedDebtLoans();
+        const onlyUsdt = await loans.loansOf(BORROWER, undefined, 'USDT');
+        expect(onlyUsdt).toEqual([expect.objectContaining({ id: usdtActive.id, debtAssetId: 'USDT', userId: BORROWER })]);
+        expect(await loans.loansOf(BORROWER, undefined, 'EUR')).toEqual([
+          expect.objectContaining({ id: eurRepaid.id, debtAssetId: 'EUR', userId: BORROWER, status: 'repaid' }),
+        ]);
+        expect(await loans.loansOf(OTHER, undefined, 'USDT')).toEqual([expect.objectContaining({ debtAssetId: 'USDT', userId: OTHER })]);
+        expect(await loans.loansOf(OTHER, undefined, 'EUR')).toEqual([]);
+      });
+
+      it('ANDs debtAssetId with status and returns [] when none match', async () => {
+        const { usdtActive, eurRepaid } = await mixedDebtLoans();
+        expect(await loans.loansOf(BORROWER, 'active', 'USDT')).toEqual([
+          expect.objectContaining({ id: usdtActive.id, status: 'active', debtAssetId: 'USDT' }),
+        ]);
+        expect(await loans.loansOf(BORROWER, 'repaid', 'EUR')).toEqual([
+          expect.objectContaining({ id: eurRepaid.id, status: 'repaid', debtAssetId: 'EUR' }),
+        ]);
+        expect(await loans.loansOf(BORROWER, 'active', 'EUR')).toEqual([]);
+        expect(await loans.loansOf(BORROWER, undefined, 'BTC')).toEqual([]);
+      });
+    });
+
     it('marks a portfolio, reporting the aggregate AND each loan on its own', async () => {
       await fundReserve('USDT', '100000');
       await fund(BORROWER, 'BTC', '2');

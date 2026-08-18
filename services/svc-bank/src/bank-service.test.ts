@@ -2699,6 +2699,117 @@ if (!available) {
     });
   });
 
+  describe('loans.list filters by debtAssetId without inventing outstanding', () => {
+    const markNow = new Date('2026-06-01T12:00:00Z');
+
+    beforeEach(async () => {
+      await sql`
+        TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+                 bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+                 bank.loan_reserve_fundings
+        RESTART IDENTITY CASCADE
+      `;
+      bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        nativeAssetId: 'IFC',
+        loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => markNow) },
+      });
+      router = createBankRouter(bank);
+    });
+
+    async function fundReserve(assetId: string, value: string) {
+      const payer = '99999999-9999-4999-8999-999999999999';
+      await fund(payer, assetId, value);
+      await bank.loans.fundReserve({
+        debtAssetId: assetId,
+        fundingId: `f:${Math.random()}`,
+        amount: amt(value),
+        from: userAvailable(payer, assetId),
+      });
+    }
+
+    async function mixedDebtLoans() {
+      await fund(USER_A, 'BTC', '3');
+      await fund(USER_B, 'BTC', '1');
+      const usdtProduct = await bank.loans.createProduct({
+        name: 'BTC-backed USDT',
+        debtAssetId: 'USDT',
+        collateralAssetId: 'BTC',
+        quoteAssetId: 'USDT',
+        aprBps: 1_000,
+        maxLtvBps: 5_000,
+        policy: DEFAULT_LIQUIDATION_POLICY,
+      });
+      const eurProduct = await bank.loans.createProduct({
+        name: 'BTC-backed EUR',
+        debtAssetId: 'EUR',
+        collateralAssetId: 'BTC',
+        quoteAssetId: 'EUR',
+        aprBps: 1_000,
+        maxLtvBps: 5_000,
+        policy: DEFAULT_LIQUIDATION_POLICY,
+      });
+      await fundReserve('USDT', '100000');
+      await fundReserve('EUR', '100000');
+      const { loan: usdtActive } = await bank.loans.open({
+        productId: usdtProduct.id,
+        userId: USER_A,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now: markNow,
+      });
+      const { loan: eurToRepay } = await bank.loans.open({
+        productId: eurProduct.id,
+        userId: USER_A,
+        collateralAmount: amt('1'),
+        principal: amt('1000'),
+        now: markNow,
+      });
+      await bank.loans.repay({ loanId: eurToRepay.id, amount: amt('1000') });
+      await bank.loans.open({
+        productId: usdtProduct.id,
+        userId: USER_B,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now: markNow,
+      });
+      return { usdtActiveId: usdtActive.id, eurRepaidId: eurToRepay.id };
+    }
+
+    it('omitted debtAssetId still returns mixed debt assets', async () => {
+      const { usdtActiveId, eurRepaidId } = await mixedDebtLoans();
+      const listed = await (await caller(USER_A, ['bank:read'])).loans.list();
+      expect(listed.map((loan) => loan.id).sort()).toEqual([usdtActiveId, eurRepaidId].sort());
+      expect(new Set(listed.map((loan) => loan.debtAssetId))).toEqual(new Set(['USDT', 'EUR']));
+      expect(listed.find((loan) => loan.id === usdtActiveId)?.outstandingPrincipal).toBe('5000');
+      expect(listed.find((loan) => loan.id === eurRepaidId)?.outstandingPrincipal).toBe('0');
+    });
+
+    it('filters to the requested debt asset, ANDs status, and does not leak another user', async () => {
+      const { usdtActiveId, eurRepaidId } = await mixedDebtLoans();
+      const api = await caller(USER_A, ['bank:read']);
+      expect(await api.loans.list({ debtAssetId: 'USDT' })).toEqual([
+        expect.objectContaining({ id: usdtActiveId, debtAssetId: 'USDT', outstandingPrincipal: '5000' }),
+      ]);
+      expect(await api.loans.list({ debtAssetId: 'EUR', status: 'repaid' })).toEqual([
+        expect.objectContaining({ id: eurRepaidId, debtAssetId: 'EUR', status: 'repaid', outstandingPrincipal: '0' }),
+      ]);
+      expect(await api.loans.list({ debtAssetId: 'EUR', status: 'active' })).toEqual([]);
+      expect(await api.loans.list({ debtAssetId: 'BTC' })).toEqual([]);
+      expect(await (await caller(USER_B, ['bank:read'])).loans.list({ debtAssetId: 'USDT' })).toEqual([
+        expect.objectContaining({ debtAssetId: 'USDT', outstandingPrincipal: '5000' }),
+      ]);
+      expect(await (await caller(USER_B, ['bank:read'])).loans.list({ debtAssetId: 'EUR' })).toEqual([]);
+    });
+
+    it('rejects an empty or too-long debtAssetId at zod before the service', async () => {
+      const api = await caller(USER_A, ['bank:read']);
+      const empty = await api.loans.list({ debtAssetId: '' }).catch((e: unknown) => e);
+      expect(codeOf(empty)).toBe('BAD_REQUEST');
+      const tooLong = await api.loans.list({ debtAssetId: '12345678901234567' }).catch((e: unknown) => e);
+      expect(codeOf(tooLong)).toBe('BAD_REQUEST');
+    });
+  });
+
   describe('transfers.executions is not readable by another user', () => {
     it('refuses user B the firing history of user A’s standing order', async () => {
       const schedule = await firedStandingOrder(USER_A);
