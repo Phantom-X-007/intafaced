@@ -7,7 +7,7 @@ import type { CopyFollow } from './follows.js';
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
 const LEADER = '00000000-0000-4000-8000-000000000002';
 
-function follow(followId: string, leaderId = LEADER): CopyFollow {
+function follow(followId: string, leaderId = LEADER, region = 'SG'): CopyFollow {
   return {
     followId,
     followerId: FOLLOWER,
@@ -18,7 +18,7 @@ function follow(followId: string, leaderId = LEADER): CopyFollow {
       maxAggregateExposure: parseAmount('1000'),
       expiresAt: new Date('2026-12-01T00:00:00.000Z'),
     },
-    region: 'SG',
+    region,
     createdAt: new Date('2026-08-14T00:00:00.000Z'),
     feeShareKilled: false,
   };
@@ -77,5 +77,35 @@ describe('listFollowsByFollower', () => {
     expect(stranger).toHaveLength(1);
     expect(stranger[0]?.followerId).toBe(other);
     expect(stranger[0]?.leaderId).toBe(LEADER);
+  });
+
+  it('scopes by followerId first; optional region exact-matches and composes with leaderId', async () => {
+    const store = new MemoryCopyFollowStore();
+    const other = '00000000-0000-4000-8000-000000000099';
+    const leaderB = '00000000-0000-4000-8000-000000000003';
+    await store.saveFollow(follow('aaaa1111-1111-4111-8111-111111111111', LEADER, 'SG'));
+    await store.saveFollow(follow('bbbb2222-2222-4222-8222-222222222222', leaderB, 'AE'));
+    await store.saveFollow({ ...follow('cccc3333-3333-4333-8333-333333333333', LEADER, 'SG'), followerId: other });
+
+    const omitted = await store.listFollowsByFollower(FOLLOWER);
+    expect(omitted).toHaveLength(2);
+
+    const sg = await store.listFollowsByFollower(FOLLOWER, undefined, 'SG');
+    expect(sg).toHaveLength(1);
+    expect(sg[0]?.region).toBe('SG');
+    expect(sg[0]?.leaderId).toBe(LEADER);
+    expect(sg[0]?.followerId).toBe(FOLLOWER);
+
+    expect(await store.listFollowsByFollower(FOLLOWER, undefined, 'JP')).toEqual([]);
+
+    const both = await store.listFollowsByFollower(FOLLOWER, LEADER, 'SG');
+    expect(both).toHaveLength(1);
+    expect(both[0]?.leaderId).toBe(LEADER);
+    expect(both[0]?.region).toBe('SG');
+    expect(await store.listFollowsByFollower(FOLLOWER, LEADER, 'AE')).toEqual([]);
+
+    const stranger = await store.listFollowsByFollower(other, undefined, 'SG');
+    expect(stranger).toHaveLength(1);
+    expect(stranger[0]?.followerId).toBe(other);
   });
 });

@@ -376,6 +376,36 @@ describe('trade.copy product mount', () => {
     expect(await caller.copy.listMyFollows({ leaderId: 'no-such-leader' })).toEqual([]);
   });
 
+  it('listMyFollows optional region returns matching follows or []; composes with leaderId', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const jur: CopyJurisdictionLaw = { published: true, allowedRegions: ['SG', 'AE'] };
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur }));
+    const caller = router.createCaller(signed());
+    const a = await caller.copy.follow({
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await caller.copy.follow({
+      leaderId: LEADER_B,
+      region: 'AE',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    expect(await caller.copy.listMyFollows()).toHaveLength(2);
+    const sg = await caller.copy.listMyFollows({ region: 'SG' });
+    expect(sg).toHaveLength(1);
+    expect(sg[0]?.followId).toBe(a.followId);
+    expect(await caller.copy.listMyFollows({ region: 'JP' })).toEqual([]);
+    expect(await caller.copy.listMyFollows({ leaderId: LEADER, region: 'SG' })).toHaveLength(1);
+    expect(await caller.copy.listMyFollows({ leaderId: LEADER, region: 'AE' })).toEqual([]);
+  });
+
   it('planMirror plans within envelope and redelivers the same fillId', async () => {
     const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
     const caller = router.createCaller(signed());

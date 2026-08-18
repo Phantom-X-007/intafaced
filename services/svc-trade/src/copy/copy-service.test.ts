@@ -168,10 +168,10 @@ describe('CopyService', () => {
     const LEADER_B = '00000000-0000-4000-8000-000000000003';
     const OTHER = '00000000-0000-4000-8000-000000000099';
     class SpyStore extends MemoryCopyFollowStore {
-      lastArgs: [string, string | undefined] | null = null;
-      override async listFollowsByFollower(followerId: string, leaderId?: string) {
-        this.lastArgs = [followerId, leaderId];
-        return super.listFollowsByFollower(followerId, leaderId);
+      lastArgs: [string, string | undefined, string | undefined] | null = null;
+      override async listFollowsByFollower(followerId: string, leaderId?: string, region?: string) {
+        this.lastArgs = [followerId, leaderId, region];
+        return super.listFollowsByFollower(followerId, leaderId, region);
       }
     }
     const store = new SpyStore();
@@ -207,16 +207,92 @@ describe('CopyService', () => {
 
     const all = await svc.listMyFollows(principal);
     expect(all).toHaveLength(2);
-    expect(store.lastArgs).toEqual([FOLLOWER, undefined]);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined]);
 
     const one = await svc.listMyFollows(principal, { leaderId: LEADER });
     expect(one).toHaveLength(1);
     expect(one[0]?.followId).toBe(mineA.followId);
     expect(one[0]?.leaderId).toBe(LEADER);
-    expect(store.lastArgs).toEqual([FOLLOWER, LEADER]);
+    expect(store.lastArgs).toEqual([FOLLOWER, LEADER, undefined]);
 
     expect(await svc.listMyFollows(principal, { leaderId: 'no-such-leader' })).toEqual([]);
-    expect(store.lastArgs).toEqual([FOLLOWER, 'no-such-leader']);
+    expect(store.lastArgs).toEqual([FOLLOWER, 'no-such-leader', undefined]);
+  });
+
+  it('listMyFollows optional region exact-matches in the store; composes with leaderId; follow uniqueness omits region', async () => {
+    const LEADER_B = '00000000-0000-4000-8000-000000000003';
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    const twoRegions: CopyJurisdictionLaw = { published: true, allowedRegions: ['SG', 'AE'] };
+    class SpyStore extends MemoryCopyFollowStore {
+      lastArgs: [string, string | undefined, string | undefined] | null = null;
+      override async listFollowsByFollower(followerId: string, leaderId?: string, region?: string) {
+        this.lastArgs = [followerId, leaderId, region];
+        return super.listFollowsByFollower(followerId, leaderId, region);
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: twoRegions,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    const mineSg = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const mineAe = await svc.follow(principal, {
+      leaderId: LEADER_B,
+      region: 'AE',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+
+    expect(await svc.listMyFollows(principal)).toHaveLength(2);
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, undefined]);
+
+    const sg = await svc.listMyFollows(principal, { region: 'SG' });
+    expect(sg).toHaveLength(1);
+    expect(sg[0]?.followId).toBe(mineSg.followId);
+    expect(sg[0]?.region).toBe('SG');
+    expect(store.lastArgs).toEqual([FOLLOWER, undefined, 'SG']);
+
+    const ae = await svc.listMyFollows(principal, { region: 'AE' });
+    expect(ae).toHaveLength(1);
+    expect(ae[0]?.followId).toBe(mineAe.followId);
+
+    expect(await svc.listMyFollows(principal, { region: 'JP' })).toEqual([]);
+
+    const both = await svc.listMyFollows(principal, { leaderId: LEADER, region: 'SG' });
+    expect(both).toHaveLength(1);
+    expect(both[0]?.followId).toBe(mineSg.followId);
+    expect(await svc.listMyFollows(principal, { leaderId: LEADER, region: 'AE' })).toEqual([]);
+
+    store.lastArgs = null;
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'AE',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.lastArgs).toEqual([FOLLOWER, LEADER, undefined]);
   });
 
   it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {

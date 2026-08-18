@@ -238,12 +238,13 @@ export class CopyService {
 
   /**
    * List the caller's own follows (product desk). Store filters by followerId
-   * first — never loads another user's envelope. Optional leaderId is an exact
-   * match in the store (not a post-filter of a mixed page). Empty when none match.
+   * first — never loads another user's envelope. Optional leaderId / region are
+   * exact matches in the store (not a post-filter of a mixed page). Empty when none match.
    */
-  async listMyFollows(principal: Principal, input?: { leaderId?: string }) {
+  async listMyFollows(principal: Principal, input?: { leaderId?: string; region?: string }) {
     const leaderId = input?.leaderId?.trim();
-    const mine = await this.store.listFollowsByFollower(principal.userId, leaderId ? leaderId : undefined);
+    const region = input?.region?.trim();
+    const mine = await this.store.listFollowsByFollower(principal.userId, leaderId ? leaderId : undefined, region ? region : undefined);
     return mine.map(presentCopyFollow);
   }
 
