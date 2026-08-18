@@ -467,6 +467,93 @@ describe('svc-academy mount — a stake threshold is a decimal string on the wir
   });
 });
 
+const FREE_FOREX = '12121212-1212-4121-8121-121212121212';
+const STAKED_FOREX = '13131313-1313-4131-8131-131313131313';
+const STAKED_GENERAL = '14141414-1414-4141-8141-141414141414';
+const INVITE_OPTIONS = '15151515-1515-4151-8151-151515151515';
+
+function roomRecord(overrides: {
+  id: string;
+  slug: string;
+  name: string;
+  kind: 'general' | 'futures' | 'options' | 'meme_war_room' | 'forex' | 'defi_lab' | 'merchant_clinic';
+  access: 'free' | 'staked' | 'invite';
+}) {
+  return {
+    minStake: overrides.access === 'staked' ? 1_000_000_000_000_000_000n : 0n,
+    capacity: 25,
+    hostId: USER,
+    ...overrides,
+  };
+}
+
+const mixedRooms = [
+  roomRecord({ id: FREE_FOREX, slug: 'forex-free', name: 'Forex Free', kind: 'forex', access: 'free' }),
+  roomRecord({ id: STAKED_FOREX, slug: 'forex-staked', name: 'Forex Staked', kind: 'forex', access: 'staked' }),
+  roomRecord({ id: STAKED_GENERAL, slug: 'general-staked', name: 'General Staked', kind: 'general', access: 'staked' }),
+  roomRecord({ id: INVITE_OPTIONS, slug: 'options-invite', name: 'Options Invite', kind: 'options', access: 'invite' }),
+];
+
+describe('svc-academy mount — rooms may filter by access', () => {
+  it('omits access and returns mixed access kinds', async () => {
+    const listRooms = vi.fn(async () => mixedRooms);
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms();
+
+    expect(listRooms).toHaveBeenCalledWith({});
+    expect(out.map((r) => r.access).sort()).toEqual(['free', 'invite', 'staked', 'staked']);
+  });
+
+  it("forwards access: 'staked' and returns only staked rooms", async () => {
+    const listRooms = vi.fn(async (filter: { kind?: string; access?: string } = {}) =>
+      mixedRooms.filter((r) => (filter.access ? r.access === filter.access : true)),
+    );
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms({ access: 'staked' });
+
+    expect(listRooms).toHaveBeenCalledWith({ access: 'staked' });
+    expect(out.map((r) => r.id).sort()).toEqual([STAKED_FOREX, STAKED_GENERAL].sort());
+    expect(out.every((r) => r.access === 'staked')).toBe(true);
+  });
+
+  it('returns an empty list when no room matches the access', async () => {
+    const listRooms = vi.fn(async () => []);
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms({ access: 'invite' });
+
+    expect(listRooms).toHaveBeenCalledWith({ access: 'invite' });
+    expect(out).toEqual([]);
+  });
+
+  it('rejects an unknown access at the door before the service', async () => {
+    const listRooms = vi.fn(async () => mixedRooms);
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    await expect(
+      createAcademyRouter(academy)
+        .createCaller(signed())
+        .rooms({ access: 'vip' as never }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(listRooms).not.toHaveBeenCalled();
+  });
+
+  it('ANDs kind and access so a free forex room is not a staked forex hit', async () => {
+    const listRooms = vi.fn(async (filter: { kind?: string; access?: string } = {}) =>
+      mixedRooms.filter((r) => (filter.kind ? r.kind === filter.kind : true) && (filter.access ? r.access === filter.access : true)),
+    );
+    const academy = stubAcademy({ listRooms: listRooms as AcademyService['listRooms'] });
+
+    const out = await createAcademyRouter(academy).createCaller(signed()).rooms({ kind: 'forex', access: 'staked' });
+
+    expect(listRooms).toHaveBeenCalledWith({ kind: 'forex', access: 'staked' });
+    expect(out).toEqual([expect.objectContaining({ id: STAKED_FOREX, kind: 'forex', access: 'staked' })]);
+    expect(out).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: FREE_FOREX, access: 'free' })]));
+  });
+});
+
 const LIVE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SCHEDULED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const ENDED = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';

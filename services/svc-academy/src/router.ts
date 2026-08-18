@@ -1008,9 +1008,16 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
     // ── Lobbies ──────────────────────────────────────────────────────────────
 
     rooms: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ kind: roomKind.optional() }).optional())
+      .input(z.object({ kind: roomKind.optional(), access: roomAccess.optional() }).optional())
       .output(z.array(roomOut))
-      .query(async ({ input }) => (await academy.listRooms({ ...(input?.kind ? { kind: input.kind } : {}) })).map(serialiseRoom)),
+      .query(async ({ input }) =>
+        (
+          await academy.listRooms({
+            ...(input?.kind ? { kind: input.kind } : {}),
+            ...(input?.access ? { access: input.access } : {}),
+          })
+        ).map(serialiseRoom),
+      ),
 
     /** A room, its terms, and what is on in it. Optional status is an exact match only. */
     room: scopedProcedure('academy:read', { module: 'academy' })

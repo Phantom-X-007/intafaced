@@ -277,14 +277,20 @@ export class AcademyService {
     return toRoom(row);
   }
 
-  async listRooms(filter: { kind?: RoomKind } = {}): Promise<RoomRecord[]> {
+  async listRooms(filter: { kind?: RoomKind; access?: RoomAccessKind } = {}): Promise<RoomRecord[]> {
     const rows = filter.kind
       ? await this.sql<RoomRow[]>`
           SELECT id, slug, name, kind, access, min_stake, capacity, host_id
-            FROM academy.rooms WHERE kind = ${filter.kind} ORDER BY name ASC
+            FROM academy.rooms
+           WHERE kind = ${filter.kind}
+             AND ${filter.access == null ? this.sql`true` : this.sql`access = ${filter.access}`}
+           ORDER BY name ASC
         `
       : await this.sql<RoomRow[]>`
-          SELECT id, slug, name, kind, access, min_stake, capacity, host_id FROM academy.rooms ORDER BY kind ASC, name ASC
+          SELECT id, slug, name, kind, access, min_stake, capacity, host_id
+            FROM academy.rooms
+           WHERE ${filter.access == null ? this.sql`true` : this.sql`access = ${filter.access}`}
+           ORDER BY kind ASC, name ASC
         `;
     return rows.map(toRoom);
   }
