@@ -1463,11 +1463,11 @@ export function createIdentityRouter(
         }),
 
       /**
-       * Stage-2 admin read — attributed member roster (+ optional root filter).
+       * Stage-2 admin read — attributed member roster (+ optional root / frozen filters).
        * Structure + freeze overlay only; no rates / payouts.
        */
       members: scopedProcedure('admin:read')
-        .input(z.object({ rootId: z.string().uuid().optional() }).optional())
+        .input(z.object({ rootId: z.string().uuid().optional(), frozen: z.boolean().optional() }).optional())
         .output(
           z.object({
             members: z.array(
@@ -1488,9 +1488,9 @@ export function createIdentityRouter(
         )
         .query(async ({ input }) => {
           try {
-            const frozen = freeze ? await requireFreeze().frozenIds() : new Set<string>();
+            const frozenIds = freeze ? await requireFreeze().frozenIds() : new Set<string>();
             const rootId = input?.rootId ?? null;
-            const { members, board } = await requireReferral().listMembers(frozen, rootId);
+            const { members, board } = await requireReferral().listMembers(frozenIds, rootId, input?.frozen);
             return {
               members: members.map((m) => ({
                 userId: m.userId,

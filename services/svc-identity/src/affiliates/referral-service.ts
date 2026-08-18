@@ -88,22 +88,25 @@ export class ReferralService {
   }
 
   /**
-   * Stage-2 admin member roster — attributed edges (+ optional root filter).
+   * Stage-2 admin member roster — attributed edges (+ optional root / frozen filters).
+   * Overlay freeze first (not a referral_edges column), then exact-match `frozen`.
    * Structure + freeze only; no rates / payouts.
    */
   async listMembers(
     frozenIds?: ReadonlySet<string>,
     rootId?: string | null,
+    frozen?: boolean,
   ): Promise<{ readonly members: readonly AffiliateTreeMember[]; readonly board: AffiliateMemberListBoard }> {
     const parent = await this.loadParentMap();
     const attributedAt = await this.loadAttributedAtMap();
-    const members = listAffiliateTreeMembers({
+    const overlaid = listAffiliateTreeMembers({
       parent,
       attributedAt,
       frozenIds,
       rootId,
       maxDepth: this.maxDepth,
     });
+    const members = frozen === undefined ? overlaid : overlaid.filter((m) => m.frozen === frozen);
     return {
       members,
       board: buildAffiliateMemberListBoard(members, rootId ?? null),

@@ -799,7 +799,7 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
         frozen: frozenIds?.has(userId) ?? false,
         attributedAt: '2026-08-07T12:00:00.000Z',
       }),
-      listMembers: async (frozenIds?: ReadonlySet<string>, rootId?: string | null) => {
+      listMembers: async (frozenIds?: ReadonlySet<string>, rootId?: string | null, frozen?: boolean) => {
         const members = [
           {
             userId: NODE,
@@ -815,7 +815,9 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
             frozen: frozenIds?.has(CHILD) ?? false,
             attributedAt: null,
           },
-        ].filter((m) => !rootId || rootId === REF || (rootId === NODE && m.userId === CHILD));
+        ]
+          .filter((m) => !rootId || rootId === REF || (rootId === NODE && m.userId === CHILD))
+          .filter((m) => frozen === undefined || m.frozen === frozen);
         return {
           members,
           board: {
@@ -896,6 +898,39 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
     expect(under.total).toBe(1);
     expect(under.members[0]?.userId).toBe(CHILD);
     expect(under.rootId).toBe(NODE);
+  });
+
+  it('members filters by optional frozen overlay; board matches the page', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const mixed = await api.affiliates.members();
+    expect(mixed.members.map((m) => m.frozen).sort()).toEqual([false, true]);
+    expect(mixed.total).toBe(2);
+    expect(mixed.frozenInList).toBe(1);
+
+    const onlyFrozen = await api.affiliates.members({ frozen: true });
+    expect(onlyFrozen.members).toEqual([expect.objectContaining({ userId: NODE, frozen: true })]);
+    expect(onlyFrozen.total).toBe(1);
+    expect(onlyFrozen.frozenInList).toBe(1);
+    expect(onlyFrozen.maxDepthInList).toBe(1);
+
+    const onlyLive = await api.affiliates.members({ frozen: false });
+    expect(onlyLive.members).toEqual([expect.objectContaining({ userId: CHILD, frozen: false })]);
+    expect(onlyLive.total).toBe(1);
+    expect(onlyLive.frozenInList).toBe(0);
+    expect(onlyLive.maxDepthInList).toBe(2);
+
+    const miss = await api.affiliates.members({ rootId: NODE, frozen: true });
+    expect(miss.members).toEqual([]);
+    expect(miss.total).toBe(0);
+    expect(miss.frozenInList).toBe(0);
+    expect(miss.maxDepthInList).toBe(0);
+    expect(miss.rootId).toBe(NODE);
+  });
+
+  it('members rejects a non-boolean frozen as BAD_REQUEST', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const err = await api.affiliates.members({ frozen: 'yes' } as never).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
   });
 
   it('members requires admin:read', async () => {
