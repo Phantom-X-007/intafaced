@@ -6,7 +6,7 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { checkAccess } from '@intafaced/config';
 import type { Address } from 'viem';
 import { env } from './env.js';
-import { protocolGasPosture } from './chain/policy-surface.js';
+import { protocolGasPosture, venueVaultFromKek } from './chain/policy-surface.js';
 import * as schema from './db/schema.js';
 import { PostgresAccountStore } from './db/postgres-store.js';
 import { AccountRegistry } from './accounts/registry.js';
@@ -77,6 +77,9 @@ const chain = new ProtocolChain({
 /** S-A10/A11 — stated at boot; sponsorship refuses until Nitro funds a deposit. */
 const gasPosture = protocolGasPosture({ bundlerUrl: env.PROTOCOL_BUNDLER_URL });
 
+/** S-L6 — wrap missing until HSM/Nitro; withdrawal keys never enter the vault. */
+const venueVault = venueVaultFromKek(env.PROTOCOL_VENUE_VAULT_WRAP);
+
 const registry = new AccountRegistry(new PostgresAccountStore(db.drizzle), {
   chainId: env.PROTOCOL_CHAIN_ID,
   factory: env.PROTOCOL_FACTORY_ADDRESS as Address,
@@ -115,6 +118,7 @@ app.get('/health', async () => ({
   chainId: env.PROTOCOL_CHAIN_ID,
   custodial: false,
   relayEnabled,
+  venueVaultConfigured: venueVault !== null,
 }));
 
 /**

@@ -241,10 +241,18 @@ describe('committed AMM artefacts match the Solidity in this tree', () => {
 
 describe('committed vault artefacts match the Solidity in this tree', () => {
   const vaults = (SUITES as Suite[]).find((s) => s.name === 'vaults');
+  const vaultNames = [
+    'CrewVault',
+    'LegacyVault',
+    'LaunchLpLock',
+    'LaunchVesting',
+    'DeployerReputation',
+    'TreasuryYieldVault',
+  ] as const;
 
-  it('compiles CrewVault + LegacyVault + LaunchLpLock + LaunchVesting + DeployerReputation', () => {
+  it('compiles crew/legacy/trust/yield vaults', () => {
     expect(vaults?.expect).toBe('compiles');
-    for (const name of ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'LaunchVesting', 'DeployerReputation'] as const) {
+    for (const name of vaultNames) {
       const artefact = loadArtifact(name);
       expect(artefact.contractName).toBe(name);
       expect(artefact.suite).toBe('vaults');
@@ -255,11 +263,28 @@ describe('committed vault artefacts match the Solidity in this tree', () => {
 
   it('records a sourceHash that still matches the .sol files on disk', () => {
     const expected = computeSourceHash(suiteSources(vaults, collectSources()));
-    for (const name of ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'LaunchVesting', 'DeployerReputation'] as const) {
+    for (const name of vaultNames) {
       expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
         expected,
       );
     }
+  });
+});
+
+describe('committed privacy artefacts match the Solidity in this tree', () => {
+  const privacy = (SUITES as Suite[]).find((s) => s.name === 'privacy');
+
+  it('compiles StealthAnnouncer', () => {
+    expect(privacy?.expect).toBe('compiles');
+    const artefact = loadArtifact('StealthAnnouncer');
+    expect(artefact.contractName).toBe('StealthAnnouncer');
+    expect(artefact.suite).toBe('privacy');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(privacy, collectSources()));
+    expect(loadArtifact('StealthAnnouncer').sourceHash).toBe(expected);
   });
 });
 

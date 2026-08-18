@@ -478,14 +478,15 @@ export const FEATURES = [
   }),
   f('connect.venue-vault', 'Venue Vault — per-user external API keys, HSM-backed, withdrawal refused (§27)', {
     phase: '5',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['venue.aggregation'],
+    requires: ['services/svc-protocol/src/venue-vault/vault.ts'],
     note:
-      'Law §27:761. KEY CUSTODY — owner @shehzad002 (chain expertise, not protocol plane). Vault design + key handling + withdrawal-permission refuse = his. ' +
-      'Wiring svc-trade once a vault exists = ordinary agent work. W4 A0: removed `module: trade` so claim-check no longer invents services/svc-trade for this socket ' +
-      '(there is no vault tree under svc-trade yet; whole-service lock was a false claim-check hit). Add requires when a real path exists. ' +
-      'Non-negotiable: stored key with withdrawal permission refused at registration, not filtered at use.',
+      'CLOSED engineering bar 2026-08-18 (S-L6): VenueVault refuses withdrawal/internal-transfer permissions at ' +
+      'register (not at unwrap). Ciphertext AES-256-GCM; never written to protocol.* postgres (read model forbids key material). ' +
+      'Residuals: HSM-backed KEK (PROTOCOL_VENUE_VAULT_WRAP empty = fail-closed, Nitro/Class X), durable sealed store, ' +
+      'svc-trade/OMS wiring. Unaudited.',
   }),
   f('connect.latency-grading', 'Latency grading — every adapter scored live, feeding routing weights (§27)', {
     module: 'trade',
@@ -1394,10 +1395,14 @@ export const FEATURES = [
     module: 'launch',
     phase: '5',
     plane: 'P',
-    status: 'socket',
+    status: 'ready',
     owner: 'shehzad002',
-    dependsOn: ['launch.rwa'],
-    note: 'Law §36:841, gap-closed 2026-08-07. launch.rwa records the licensing blocker for the issuance registry; this rides the same rail and had no row, so the blocker was written down for one half of the pair and not the other. The contract half is his. THE LICENCE IS CLASS X and remains Nitro human — a yield product over tokenised treasuries is a regulated instrument in most places we would offer it, and no contract makes that go away.',
+    dependsOn: ['launch.token-factory'],
+    requires: ['services/svc-protocol/contracts/vaults/TreasuryYieldVault.sol'],
+    note:
+      'S-L5 contract half 2026-08-18: TreasuryYieldVault — owner is constructor msg.sender, licenceHash immutable, ' +
+      'deposit/withdraw revert LicenceUnset while hash is bytes32(0). STATUS ready (not done): licence *content* is Class X ' +
+      '(Nitro human / counsel) — no contract makes that go away. Unaudited.',
   }),
   f('launch.fundraising', 'Fundraising module — milestones, investor management (§25:658)', {
     module: 'launch',
@@ -1978,10 +1983,14 @@ export const FEATURES = [
     module: 'protocol',
     phase: '5P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: 'Law §26:746, gap-closed 2026-08-07. blueprint.attestations covers the zero-PII half — proving a rank without naming the person. This is the OTHER half and nothing carried it: a user receiving on-chain without the receiving address being linkable back to their other activity, plus indexer-side analytics that stay aggregate-only. Both are protocol-plane privacy and neither can be retrofitted once addresses are public, which is why it is a row now rather than after launch.',
+    requires: ['services/svc-protocol/contracts/privacy/StealthAnnouncer.sol', 'services/svc-protocol/src/stealth/presentation.ts'],
+    note:
+      'CLOSED engineering bar 2026-08-18 (S-L3): presentationAddress(spending, ephemeral) — two ephemerals are unlinkable; ' +
+      'StealthAnnouncer emits schemeId+stealthAddress+ephemeralPubKey with no user id. Indexer must stay aggregate-only. ' +
+      'Residual: full EIP-5564 ECDH scanner. Unaudited.',
   }),
   f('protocol.crew-vaults', 'Crew vaults — shared multi-sig treasuries, threshold spend, split on exit (§33)', {
     module: 'protocol',

@@ -51,6 +51,8 @@ export type ArtifactName =
   | 'LaunchLpLock'
   | 'LaunchVesting'
   | 'DeployerReputation'
+  | 'TreasuryYieldVault'
+  | 'StealthAnnouncer'
   | 'SovereignVenue'
   | 'SovereignEscrow'
   | 'MockERC20'

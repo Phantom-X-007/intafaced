@@ -58,6 +58,12 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
       .union([z.boolean(), z.string()])
       .default(true)
       .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+    /**
+     * 32-byte hex wrap for S-L6 venue API ciphertext. Empty = vault fail-closed
+     * (HSM-backed KEK is Nitro / Class X). Not a chain signing key.
+     */
+    PROTOCOL_VENUE_VAULT_WRAP: z.string().optional(),
   }),
 );
 
