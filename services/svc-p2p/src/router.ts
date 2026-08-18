@@ -682,12 +682,13 @@ export function createP2pRouter(
             .object({
               limit: z.number().int().min(1).max(200).optional(),
               status: z.enum(TRADE_STATUSES).optional(),
+              asset: z.string().min(1).max(16).optional(),
             })
             .optional(),
         )
         .output(z.array(tradeOutput))
         .query(async ({ ctx, input }) =>
-          guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit, input?.status)).map(toTradeOut)),
+          guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit, input?.status, input?.asset)).map(toTradeOut)),
         ),
 
       /**

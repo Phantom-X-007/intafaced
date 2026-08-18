@@ -195,14 +195,14 @@ if (!available) {
   }
 
   /** Put real value in a user's available balance so an escrow has something behind it. */
-  async function fund(userId: string, amount: string) {
+  async function fund(userId: string, amount: string, assetId = ASSET) {
     await ledger.post(
       recipes.deposit({
         userId,
-        assetId: ASSET,
+        assetId,
         amount: amt(amount),
         rail: 'test',
-        railRef: `${userId}:${amount}:${crypto.randomUUID()}`,
+        railRef: `${userId}:${assetId}:${amount}:${crypto.randomUUID()}`,
       }),
     );
   }
@@ -487,6 +487,50 @@ if (!available) {
 
       expect(await escrowOf(MAKER)).toBe(escrowBefore);
       await expectBooksClosed();
+    });
+
+    it('exact-matches asset in SQL and never shows a counterparty’s row', async () => {
+      const btc = 'BTC';
+      await fund(MAKER, '1000');
+      await fund(MAKER, '1000', btc);
+
+      const usdtOffer = await sellOffer({ totalAmt: amt('500') });
+      const btcOffer = await sellOffer({ asset: btc, totalAmt: amt('500') });
+
+      const oldestUsdt = await p2p.takeOffer({ offerId: usdtOffer.id, takerId: TAKER, amount: amt('10'), method: 'sepa' });
+      const middleUsdt = await p2p.takeOffer({ offerId: usdtOffer.id, takerId: TAKER, amount: amt('10'), method: 'sepa' });
+      const newestBtc = await p2p.takeOffer({ offerId: btcOffer.id, takerId: TAKER, amount: amt('10'), method: 'sepa' });
+
+      await p2p.markFiatSent(middleUsdt.id, TAKER);
+      await p2p.confirmFiatReceived(middleUsdt.id, MAKER);
+
+      const mixed = await p2p.listTrades(TAKER);
+      expect(mixed.map((t) => t.id)).toEqual([newestBtc.id, middleUsdt.id, oldestUsdt.id]);
+      expect(mixed.map((t) => t.asset)).toEqual([btc, ASSET, ASSET]);
+
+      // Mixed page of size 2 is BTC then released USDT. A post-filter of that
+      // page for USDT would miss the older escrowed USDT row; SQL AND must not.
+      const mixedPage = await p2p.listTrades(TAKER, 2);
+      expect(mixedPage.map((t) => t.id)).toEqual([newestBtc.id, middleUsdt.id]);
+
+      const usdtOnly = await p2p.listTrades(TAKER, 2, undefined, ASSET);
+      expect(usdtOnly.map((t) => t.id)).toEqual([middleUsdt.id, oldestUsdt.id]);
+      expect(usdtOnly.every((t) => t.asset === ASSET)).toBe(true);
+
+      const usdtEscrowed = await p2p.listTrades(TAKER, 2, 'escrowed', ASSET);
+      expect(usdtEscrowed.map((t) => t.id)).toEqual([oldestUsdt.id]);
+
+      expect(await p2p.listTrades(TAKER, 50, undefined, 'ETH')).toEqual([]);
+      expect(await p2p.listTrades(OTHER, 50, undefined, ASSET)).toEqual([]);
+      expect(await p2p.listTrades(OTHER)).toEqual([]);
+
+      await p2p.closeOffer(usdtOffer.id, MAKER);
+      expect((await p2p.listOffers()).map((o) => o.id)).not.toContain(usdtOffer.id);
+      expect((await p2p.listOffers()).map((o) => o.id)).toContain(btcOffer.id);
+      expect((await p2p.listTrades(TAKER, 50, undefined, ASSET)).map((t) => t.id)).toEqual([middleUsdt.id, oldestUsdt.id]);
+
+      await expectBooksClosed();
+      expect(ledger.totalsByAsset()[btc] ?? '0').toBe('0');
     });
   });
 

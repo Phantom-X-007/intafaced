@@ -162,8 +162,8 @@ describe('svc-p2p mount — authorisation', () => {
   it('forwards optional trades.list status to listTrades and rejects unknown statuses', async () => {
     const seen: unknown[] = [];
     const p2p = stubP2p({
-      listTrades: async (userId: string, limit?: number, status?: string) => {
-        seen.push([userId, limit, status]);
+      listTrades: async (userId: string, limit?: number, status?: string, asset?: string) => {
+        seen.push([userId, limit, status, asset]);
         return [];
       },
     });
@@ -176,8 +176,31 @@ describe('svc-p2p mount — authorisation', () => {
     });
 
     expect(seen).toEqual([
-      [USER, undefined, undefined],
-      [USER, undefined, 'escrowed'],
+      [USER, undefined, undefined, undefined],
+      [USER, undefined, 'escrowed', undefined],
+    ]);
+  });
+
+  it('forwards optional trades.list asset to listTrades and rejects empty or overlong values', async () => {
+    const seen: unknown[] = [];
+    const p2p = stubP2p({
+      listTrades: async (userId: string, limit?: number, status?: string, asset?: string) => {
+        seen.push([userId, limit, status, asset]);
+        return [];
+      },
+    });
+    const caller = routerFor(p2p).createCaller(signed());
+
+    await expect(caller.trades.list({})).resolves.toEqual([]);
+    await expect(caller.trades.list({ asset: 'USDT' })).resolves.toEqual([]);
+    await expect(caller.trades.list({ asset: 'USDT', status: 'escrowed' })).resolves.toEqual([]);
+    await expect(caller.trades.list({ asset: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.trades.list({ asset: 'X'.repeat(17) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    expect(seen).toEqual([
+      [USER, undefined, undefined, undefined],
+      [USER, undefined, undefined, 'USDT'],
+      [USER, undefined, 'escrowed', 'USDT'],
     ]);
   });
 
