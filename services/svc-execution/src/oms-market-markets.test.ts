@@ -135,6 +135,32 @@ describe('marketDataAdapterMarkets', () => {
     expect((await observe())[0]?.active).toBe(false);
   });
 
+  it('filters by expiry without inventing a row; null expiry stays null', async () => {
+    const expiry = new Date('2026-12-25T00:00:00.000Z');
+    const observe = marketDataAdapterMarkets(
+      adapter({
+        markets: async () => [
+          listed(),
+          listed({
+            type: 'future',
+            symbol: 'BTC/USDT:USDT-251225',
+            venueSymbol: 'BTCUSDT-251225',
+            settle: 'USDT',
+            expiry,
+          }),
+        ],
+      }),
+    );
+    expect(
+      (await observe(undefined, undefined, undefined, undefined, undefined, undefined, undefined, expiry)).map((row) => row.expiry),
+    ).toEqual([expiry]);
+    expect(
+      await observe(undefined, undefined, undefined, undefined, undefined, undefined, undefined, new Date('2027-01-01T00:00:00.000Z')),
+    ).toEqual([]);
+    expect(await observe()).toHaveLength(2);
+    expect((await observe())[0]?.expiry).toBeNull();
+  });
+
   it('propagates venue not_ready — does not invent a catalog', async () => {
     const observe = marketDataAdapterMarkets(
       adapter({
