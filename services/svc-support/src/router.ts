@@ -324,11 +324,18 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
 
     /** Stage-2 — prioritised operator queue (open/pending only). */
     listQueue: scopedProcedure('support:ops')
-      .input(z.object({ limit: z.number().int().positive().max(500).optional() }).optional())
+      .input(
+        z
+          .object({
+            limit: z.number().int().positive().max(500).optional(),
+            category: supportTicketCategorySchema.optional(),
+          })
+          .optional(),
+      )
       .output(queueResultSchema)
       .query(async ({ ctx, input }) => {
         requireSupportOps(ctx.principal!);
-        const q = await support.listOperatorQueue({ limit: input?.limit });
+        const q = await support.listOperatorQueue({ limit: input?.limit, category: input?.category });
         if (q.status === 'empty') return q;
         return { status: 'ok' as const, entries: [...q.entries] };
       }),

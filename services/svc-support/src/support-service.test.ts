@@ -252,6 +252,76 @@ describe('SupportService Stage-2 operator queue', () => {
     expect(q.entries[0]!).not.toHaveProperty('slaMinutes');
   });
 
+  it('listOperatorQueue exact-matches optional category in the store, not a post-filter', async () => {
+    const svc = new SupportService();
+    const account = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Account',
+      body: 'B',
+    });
+    const trading = await svc.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'Trading',
+      body: 'B',
+    });
+    const dep = await svc.createTicket({
+      userId: USER,
+      category: 'deposit_withdraw',
+      subject: 'Dep',
+      body: 'B',
+    });
+
+    const omitted = await svc.listOperatorQueue();
+    expect(omitted.status).toBe('ok');
+    if (omitted.status !== 'ok') return;
+    expect(new Set(omitted.entries.map((e) => e.ticketId))).toEqual(new Set([account.id, trading.id, dep.id]));
+    expect(omitted.entries[0]!.ticketId).toBe(dep.id);
+
+    const tradingOnly = await svc.listOperatorQueue({ category: 'trading' });
+    expect(tradingOnly.status).toBe('ok');
+    if (tradingOnly.status !== 'ok') return;
+    expect(tradingOnly.entries.map((e) => e.ticketId)).toEqual([trading.id]);
+
+    expect(await svc.listOperatorQueue({ category: 'other' })).toEqual({ status: 'empty' });
+  });
+
+  it('listOperatorQueue still excludes assigned and closed tickets when category is set', async () => {
+    const svc = new SupportService();
+    const closed = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Closed',
+      body: 'B',
+    });
+    await svc.setStatus({ operatorId: OP, ticketId: closed.id, status: 'closed' });
+    const assigned = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Assigned',
+      body: 'B',
+    });
+    await svc.claimForOperator({ operatorId: OP, ticketId: assigned.id });
+    const open = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Open',
+      body: 'B',
+    });
+    await svc.createTicket({
+      userId: USER,
+      category: 'trading',
+      subject: 'Other cat',
+      body: 'B',
+    });
+
+    const q = await svc.listOperatorQueue({ category: 'account' });
+    expect(q.status).toBe('ok');
+    if (q.status !== 'ok') return;
+    expect(q.entries.map((e) => e.ticketId)).toEqual([open.id]);
+  });
+
   it('peekNext and claimForOperator — exclusive claim, refuse steal', async () => {
     const svc = new SupportService();
     expect(await svc.peekNext()).toBeNull();

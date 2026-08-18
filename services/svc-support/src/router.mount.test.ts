@@ -459,6 +459,36 @@ describe('svc-support mount', () => {
     expect(support.claimForOperator).toHaveBeenCalledWith({ operatorId: OP, ticketId });
   });
 
+  it('forwards optional category on listQueue', async () => {
+    const support = stubSupport();
+    const op = principal({
+      userId: OP,
+      sub: OP,
+      scopes: ['support:read', 'support:write', 'support:ops'],
+    });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    await caller.listQueue();
+    expect(support.listOperatorQueue).toHaveBeenCalledWith({ limit: undefined, category: undefined });
+    await caller.listQueue({ category: 'trading' });
+    expect(support.listOperatorQueue).toHaveBeenCalledWith({ limit: undefined, category: 'trading' });
+    await caller.listQueue({ limit: 10, category: 'account' });
+    expect(support.listOperatorQueue).toHaveBeenCalledWith({ limit: 10, category: 'account' });
+  });
+
+  it('rejects invalid category on listQueue', async () => {
+    const support = stubSupport();
+    const op = principal({
+      userId: OP,
+      sub: OP,
+      scopes: ['support:read', 'support:write', 'support:ops'],
+    });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    await expect(caller.listQueue({ category: 'billing' as 'other' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(support.listOperatorQueue).not.toHaveBeenCalled();
+  });
+
   /* ----------------------------------------------------------------- *
    * Stage-4 — audit trail, grounding, case file
    *

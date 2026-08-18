@@ -401,9 +401,9 @@ export class SupportService implements SupportContract {
   }
 
   /** Stage-2 — prioritised open/pending queue for operators. No money. */
-  async listOperatorQueue(options: { limit?: number } = {}): Promise<QueueResult> {
+  async listOperatorQueue(options: { limit?: number; category?: SupportTicketCategory } = {}): Promise<QueueResult> {
     return withSupportSpan('support.listOperatorQueue', { op: 'listOperatorQueue' }, async () => {
-      const tickets = await this.store.listAll();
+      const tickets = await this.store.listAll({ category: options.category });
       return buildOperatorQueue(tickets, { limit: options.limit });
     });
   }
