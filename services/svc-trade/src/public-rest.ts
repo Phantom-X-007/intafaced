@@ -617,7 +617,13 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     if (!baseParsed.ok) {
       return sendCcxt(reply, badRequest(baseParsed.message, 'trade.invalid_market_base'));
     }
-    const markets = await deps.markets(statusParsed.status, kindParsed.kind, quoteParsed.quote, baseParsed.base);
+    // kind / quote / base are SQL in `markets()` and AND-filtered here so a
+    // mixed listing cannot leak the wrong kind. Omitted kind is the full board.
+    const listed = await deps.markets(statusParsed.status, kindParsed.kind, quoteParsed.quote, baseParsed.base);
+    const matchesKind = (m: Market) => kindParsed.kind === undefined || m.kind === kindParsed.kind;
+    const matchesQuote = (m: Market) => quoteParsed.quote === undefined || m.quoteAsset === quoteParsed.quote;
+    const matchesBase = (m: Market) => baseParsed.base === undefined || m.baseAsset === baseParsed.base;
+    const markets = listed.filter((m) => matchesKind(m) && matchesQuote(m) && matchesBase(m));
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
     return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));

@@ -14,6 +14,7 @@ import {
   presentTicker,
   parseUntil,
   parseTickerSymbol,
+  parseMarketKind,
   registerPublicRest,
   OPEN_POSITION_GATES_NOTE,
   type PublicRestDeps,
@@ -35,6 +36,22 @@ describe('bpsToRate / decimalPlaces', () => {
     expect(decimalPlaces('0.0001')).toBe(4);
     expect(decimalPlaces('1')).toBe(0);
     expect(decimalPlaces('0.0100')).toBe(2);
+  });
+});
+
+describe('parseMarketKind', () => {
+  it('treats absent or empty as omitted (full venue list)', () => {
+    expect(parseMarketKind(undefined)).toEqual({ ok: true, kind: undefined });
+    expect(parseMarketKind('')).toEqual({ ok: true, kind: undefined });
+    expect(parseMarketKind(null)).toEqual({ ok: true, kind: undefined });
+  });
+
+  it('accepts exact spot, futures, or options and rejects anything else', () => {
+    expect(parseMarketKind('spot')).toEqual({ ok: true, kind: 'spot' });
+    expect(parseMarketKind('futures')).toEqual({ ok: true, kind: 'futures' });
+    expect(parseMarketKind('options')).toEqual({ ok: true, kind: 'options' });
+    expect(parseMarketKind('perp')).toEqual({ ok: false, message: 'kind must be spot, futures, or options' });
+    expect(parseMarketKind('SPOT').ok).toBe(false);
   });
 });
 
@@ -398,19 +415,115 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  it('GET /api/v1/markets?kind=futures: passes kind into markets', async () => {
-    let seen: { kind?: string } = {};
+  it('GET /api/v1/markets omitted or empty kind lists mixed kinds', async () => {
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const opt = fakeMarket({ id: 'm-opt', symbol: 'BTC/USDT-OPT', kind: 'options' });
+    const paperSpot = fakeMarket({ id: 'm-paper', symbol: 'EUR/USD', baseAsset: 'EUR', quoteAsset: 'USD', paper: true });
+    let seenKind: string | undefined = 'sentinel';
     const app = await build(
       deps({
         markets: async (_status, kind) => {
-          seen = { kind };
-          return [market];
+          seenKind = kind;
+          return [market, perp, opt, paperSpot];
+        },
+      }),
+    );
+    const omitted = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    expect(omitted.statusCode).toBe(200);
+    expect(seenKind).toBeUndefined();
+    expect((omitted.json() as Array<{ symbol: string }>).map((row) => row.symbol)).toEqual([
+      'BTC/USDT',
+      'BTC/USDT-PERP',
+      'BTC/USDT-OPT',
+      'EUR/USD',
+    ]);
+
+    const empty = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=' });
+    expect(empty.statusCode).toBe(200);
+    expect(seenKind).toBeUndefined();
+    expect((empty.json() as Array<{ symbol: string }>).map((row) => row.symbol)).toEqual([
+      'BTC/USDT',
+      'BTC/USDT-PERP',
+      'BTC/USDT-OPT',
+      'EUR/USD',
+    ]);
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?kind=spot keeps only spot, including paper', async () => {
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const paperSpot = fakeMarket({
+      id: 'm-paper',
+      symbol: 'EUR/USD',
+      baseAsset: 'EUR',
+      quoteAsset: 'USD',
+      paper: true,
+    });
+    let seenKind: string | undefined;
+    const app = await build(
+      deps({
+        markets: async (_status, kind) => {
+          seenKind = kind;
+          return [market, perp, paperSpot];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=spot' });
+    expect(res.statusCode).toBe(200);
+    expect(seenKind).toBe('spot');
+    const body = res.json() as Array<{ symbol: string; type: string; paper: boolean }>;
+    expect(body.map((row) => row.symbol)).toEqual(['BTC/USDT', 'EUR/USD']);
+    expect(body.every((row) => row.type === 'spot')).toBe(true);
+    expect(body.find((row) => row.symbol === 'EUR/USD')?.paper).toBe(true);
+    expect(marketSchema.safeParse(body[0]).success).toBe(true);
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?kind=futures keeps only futures', async () => {
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const opt = fakeMarket({ id: 'm-opt', symbol: 'BTC/USDT-OPT', kind: 'options' });
+    let seenKind: string | undefined;
+    const app = await build(
+      deps({
+        markets: async (_status, kind) => {
+          seenKind = kind;
+          return [market, perp, opt];
         },
       }),
     );
     const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=futures' });
     expect(res.statusCode).toBe(200);
-    expect(seen.kind).toBe('futures');
+    expect(seenKind).toBe('futures');
+    const body = res.json() as Array<{ symbol: string; type: string }>;
+    expect(body.map((row) => row.symbol)).toEqual(['BTC/USDT-PERP']);
+    expect(body[0]?.type).toBe('swap');
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?kind=options with no matching rows → honest empty list', async () => {
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const app = await build(
+      deps({
+        markets: async () => [market, perp],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=options' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('GET /api/v1/markets?kind=&quote= is AND', async () => {
+    const ethBtc = fakeMarket({ id: 'm-ethbtc', symbol: 'ETH/BTC', baseAsset: 'ETH', quoteAsset: 'BTC' });
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const app = await build(
+      deps({
+        markets: async () => [market, ethBtc, perp],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=spot&quote=USDT' });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as Array<{ symbol: string }>).map((row) => row.symbol)).toEqual(['BTC/USDT']);
     await app.close();
   });
 
@@ -427,6 +540,8 @@ describe('public REST routes', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/markets?kind=perp' });
     expect(res.statusCode).toBe(400);
     expect(listed).toBe(false);
+    expect(res.json().code).toBe('BadRequest');
+    expect(res.json().intafacedCode).toBe('trade.invalid_market_kind');
     await app.close();
   });
 
