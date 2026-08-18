@@ -351,3 +351,37 @@ describe('committed NFT artefacts match the Solidity in this tree', () => {
     expect(artefact.optimizer).toEqual({ enabled: true, runs: 200 });
   });
 });
+
+describe('committed meme artefacts match the Solidity in this tree', () => {
+  const meme = (SUITES as Suite[]).find((s) => s.name === 'meme');
+
+  it('compiles MemeLaunch without retagging the vaults LaunchLpLock artefact', () => {
+    expect(meme?.expect).toBe('compiles');
+    const artefact = loadArtifact('MemeLaunch');
+    expect(artefact.contractName).toBe('MemeLaunch');
+    expect(artefact.suite).toBe('meme');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+    expect(loadArtifact('LaunchLpLock').suite).toBe('vaults');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(meme, collectSources()));
+    expect(
+      loadArtifact('MemeLaunch').sourceHash,
+      'MemeLaunch.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build',
+    ).toBe(expected);
+  });
+
+  it('exposes no owner, fee, or platform surface', () => {
+    const names = loadArtifact('MemeLaunch')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+    for (const forbidden of ['owner', 'setFee', 'feeTo', 'setOwner', 'withdraw', 'pause']) {
+      expect(names, `MemeLaunch must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    expect(names).toContain('launch');
+    expect(names).toContain('tokenFactory');
+    expect(names).toContain('poolFactory');
+  });
+});

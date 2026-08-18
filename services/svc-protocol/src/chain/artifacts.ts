@@ -62,7 +62,8 @@ export type ArtifactName =
   | 'P256'
   | 'EntryPointGetUserOpHash'
   | 'SovereignNft'
-  | 'RoyaltyMarket';
+  | 'RoyaltyMarket'
+  | 'MemeLaunch';
 
 export interface ContractArtifact {
   readonly contractName: string;

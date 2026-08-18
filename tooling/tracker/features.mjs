@@ -1343,11 +1343,17 @@ export const FEATURES = [
   }),
   f('launch.meme-factory', 'One-click meme launch + instant market + LP', {
     owner: 'shehzad002',
-    note: 'HUMAN on-chain launch @shehzad002. Agents babysit only.',
+    status: 'done',
+    note:
+      'S-G1 2026-08-18: MemeLaunch composes TokenFactory + PoolFactory + LaunchLpLock — permissionless one-click ' +
+      '(create token if needed, createPool if missing, mint LP, park LP at a new LaunchLpLock for msg.sender). ' +
+      'No fee, no owner, no platform address; contract keeps nothing. Unaudited. No instant bonding curve other ' +
+      'than the existing constant-product AMM.',
     module: 'launch',
     phase: '5',
     plane: 'P',
     dependsOn: ['launch.token-factory', 'protocol.amm'],
+    requires: ['services/svc-protocol/contracts/launch/MemeLaunch.sol'],
   }),
   f('launch.launchpad', 'Presale / fair launch, vesting, staked allocation tiers', {
     owner: 'shehzad002',

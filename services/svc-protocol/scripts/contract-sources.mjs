@@ -233,6 +233,19 @@ export const SUITES = [
     sources: ['entrypoint/EntryPointGetUserOpHash.sol'],
   },
   {
+    name: 'meme',
+    expect: 'compiles',
+    /**
+     * S-G1 / `launch.meme-factory` — compose TokenFactory + PoolFactory + LaunchLpLock.
+     *
+     * Factories are constructor addresses (inline interfaces) so this suite does
+     * not recompile TokenFactory/PoolFactory. `new LaunchLpLock` still needs
+     * LaunchLpLock.sol in the compile input; do not commit the overwritten
+     * `out/LaunchLpLock.json` — vaults remains the artefact owner.
+     */
+    sources: ['launch/MemeLaunch.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**
