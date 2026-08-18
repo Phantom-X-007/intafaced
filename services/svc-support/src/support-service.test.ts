@@ -24,6 +24,63 @@ describe('SupportService Stage-1', () => {
     expect(await svc.listMyTickets({ userId: OTHER })).toHaveLength(0);
   });
 
+  it('listMyTickets exact-matches optional status without leaking other users', async () => {
+    const svc = new SupportService();
+    const mineOpen = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine open',
+      body: 'B',
+    });
+    const mineResolved = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine resolved',
+      body: 'B',
+    });
+    await svc.setStatus({ operatorId: OP, ticketId: mineResolved.id, status: 'resolved' });
+    await svc.createTicket({
+      userId: OTHER,
+      category: 'account',
+      subject: 'Theirs open',
+      body: 'B',
+    });
+
+    const omitted = await svc.listMyTickets({ userId: USER });
+    expect(omitted.map((t) => t.id).sort()).toEqual([mineOpen.id, mineResolved.id].sort());
+
+    const openOnly = await svc.listMyTickets({ userId: USER, status: 'open' });
+    expect(openOnly).toHaveLength(1);
+    expect(openOnly[0]!.id).toBe(mineOpen.id);
+
+    const closedNone = await svc.listMyTickets({ userId: USER, status: 'closed' });
+    expect(closedNone).toEqual([]);
+  });
+
+  it('listAllTickets exact-matches optional status across users', async () => {
+    const svc = new SupportService();
+    const a = await svc.createTicket({
+      userId: USER,
+      category: 'other',
+      subject: 'A',
+      body: 'B',
+    });
+    const b = await svc.createTicket({
+      userId: OTHER,
+      category: 'other',
+      subject: 'B',
+      body: 'B',
+    });
+    await svc.setStatus({ operatorId: OP, ticketId: b.id, status: 'resolved' });
+
+    expect(await svc.listAllTickets()).toHaveLength(2);
+    const resolved = await svc.listAllTickets({ status: 'resolved' });
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]!.id).toBe(b.id);
+    expect(await svc.listAllTickets({ status: 'pending' })).toEqual([]);
+    expect(a.status).toBe('open');
+  });
+
   it('hides other users tickets from non-operators', async () => {
     const svc = new SupportService();
     const t = await svc.createTicket({

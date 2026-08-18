@@ -274,6 +274,22 @@ describe('svc-support mount', () => {
     expect(support.listAllTickets).toHaveBeenCalled();
   });
 
+  it('forwards optional status on listMine and listAll', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await caller.listMine();
+    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: undefined });
+    await caller.listMine({ status: 'open' });
+    expect(support.listMyTickets).toHaveBeenCalledWith({ userId: USER, status: 'open' });
+
+    const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
+    const ops = createSupportRouter(support).createCaller(signed(op));
+    await ops.listAll();
+    expect(support.listAllTickets).toHaveBeenCalledWith({ status: undefined });
+    await ops.listAll({ status: 'pending' });
+    expect(support.listAllTickets).toHaveBeenCalledWith({ status: 'pending' });
+  });
+
   it('refuses setStatus without support:ops', async () => {
     const support = stubSupport({
       setStatus: vi.fn(async () => {

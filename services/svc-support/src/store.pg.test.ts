@@ -69,6 +69,38 @@ describe.skipIf(!available)('PostgresSupportStore — durable desk', () => {
     expect(await s.listByUser('22222222-2222-4222-8222-222222222222')).toHaveLength(0);
   });
 
+  it('listByUser and listAll exact-match status in SQL', async () => {
+    const s = store();
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+    const mine = await s.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine',
+      body: 'Help',
+    });
+    const theirs = await s.createTicket({
+      userId: OTHER,
+      category: 'account',
+      subject: 'Theirs',
+      body: 'Help',
+    });
+    const moved = await s.setStatus({ ticketId: mine.id, status: 'resolved', operatorId: OP_A });
+    expect(moved.status).toBe('ok');
+
+    expect(await s.listByUser(USER)).toHaveLength(1);
+    expect(await s.listByUser(USER, { status: 'resolved' })).toHaveLength(1);
+    expect(await s.listByUser(USER, { status: 'open' })).toEqual([]);
+    expect(await s.listByUser(OTHER, { status: 'open' })).toHaveLength(1);
+    expect(await s.listByUser(USER, { status: 'closed' })).toEqual([]);
+
+    const allOpen = await s.listAll({ status: 'open' });
+    expect(allOpen.map((row) => row.id)).toEqual([theirs.id]);
+    const allResolved = await s.listAll({ status: 'resolved' });
+    expect(allResolved.map((row) => row.id)).toEqual([mine.id]);
+    expect(await s.listAll({ status: 'pending' })).toEqual([]);
+    expect(await s.listAll()).toHaveLength(2);
+  });
+
   it('two concurrent claims: exactly one operator wins', async () => {
     const s = store();
     const t = await s.createTicket({

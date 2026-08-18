@@ -99,10 +99,15 @@ export type SetStatusInput = {
   note?: string | null;
 };
 
+export type ListTicketsFilter = {
+  /** Exact status match in the store. Omitted = every visible ticket. */
+  status?: SupportTicketStatus;
+};
+
 export interface SupportStore {
   createTicket(input: CreateTicketRow): Promise<SupportTicket>;
-  listByUser(userId: string): Promise<SupportTicket[]>;
-  listAll(): Promise<SupportTicket[]>;
+  listByUser(userId: string, filter?: ListTicketsFilter): Promise<SupportTicket[]>;
+  listAll(filter?: ListTicketsFilter): Promise<SupportTicket[]>;
   findById(ticketId: string): Promise<SupportTicket | null>;
   addComment(input: AddCommentInput): Promise<AddCommentResult>;
   listComments(ticketId: string): Promise<SupportComment[]>;
@@ -431,12 +436,16 @@ export class MemorySupportStore implements SupportStore {
     return ticket;
   }
 
-  async listByUser(userId: string): Promise<SupportTicket[]> {
-    return [...this.tickets.values()].filter((t) => t.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  async listByUser(userId: string, filter?: ListTicketsFilter): Promise<SupportTicket[]> {
+    return [...this.tickets.values()]
+      .filter((t) => t.userId === userId && (filter?.status === undefined || t.status === filter.status))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  async listAll(): Promise<SupportTicket[]> {
-    return [...this.tickets.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  async listAll(filter?: ListTicketsFilter): Promise<SupportTicket[]> {
+    return [...this.tickets.values()]
+      .filter((t) => filter?.status === undefined || t.status === filter.status)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async findById(ticketId: string): Promise<SupportTicket | null> {
@@ -684,20 +693,24 @@ export class PostgresSupportStore implements SupportStore {
     });
   }
 
-  async listByUser(userId: string): Promise<SupportTicket[]> {
+  async listByUser(userId: string, filter?: ListTicketsFilter): Promise<SupportTicket[]> {
+    const status = filter?.status;
     const rows = await this.sql<PgTicket[]>`
       SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
       FROM support.tickets
       WHERE user_id = ${userId}
+      ${status !== undefined ? this.sql`AND status = ${status}` : this.sql``}
       ORDER BY created_at DESC
     `;
     return rows.map(ticketFromPg);
   }
 
-  async listAll(): Promise<SupportTicket[]> {
+  async listAll(filter?: ListTicketsFilter): Promise<SupportTicket[]> {
+    const status = filter?.status;
     const rows = await this.sql<PgTicket[]>`
       SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
       FROM support.tickets
+      ${status !== undefined ? this.sql`WHERE status = ${status}` : this.sql``}
       ORDER BY created_at DESC
     `;
     return rows.map(ticketFromPg);

@@ -86,17 +86,19 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
       }),
 
     listMine: scopedProcedure('support:read')
+      .input(z.object({ status: supportTicketStatusSchema.optional() }).optional())
       .output(z.array(supportTicketSchema))
-      .query(async ({ ctx }) => {
-        return support.listMyTickets({ userId: ctx.principal!.userId });
+      .query(async ({ ctx, input }) => {
+        return support.listMyTickets({ userId: ctx.principal!.userId, status: input?.status });
       }),
 
     /** Operator list — Stage-1 desk spine (no UI required). */
     listAll: scopedProcedure('support:ops')
+      .input(z.object({ status: supportTicketStatusSchema.optional() }).optional())
       .output(z.array(supportTicketSchema))
-      .query(async ({ ctx }) => {
+      .query(async ({ ctx, input }) => {
         requireSupportOps(ctx.principal!);
-        return support.listAllTickets();
+        return support.listAllTickets({ status: input?.status });
       }),
 
     get: scopedProcedure('support:read')

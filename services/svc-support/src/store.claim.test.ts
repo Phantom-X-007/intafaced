@@ -60,4 +60,31 @@ describe('MemorySupportStore claim exclusivity', () => {
     const r = await store.claimTicket({ ticketId: t.id, operatorId: OP_A });
     expect(r).toEqual({ status: 'refuse', reason: 'not_queueable' });
   });
+
+  it('listByUser and listAll exact-match status in memory', async () => {
+    const store = new MemorySupportStore();
+    const OTHER = '22222222-2222-4222-8222-222222222222';
+    const mine = await store.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Mine',
+      body: 'Body',
+    });
+    const theirs = await store.createTicket({
+      userId: OTHER,
+      category: 'account',
+      subject: 'Theirs',
+      body: 'Body',
+    });
+    const moved = await store.setStatus({ ticketId: mine.id, status: 'resolved', operatorId: OP_A });
+    expect(moved.status).toBe('ok');
+
+    expect(await store.listByUser(USER, { status: 'resolved' })).toHaveLength(1);
+    expect(await store.listByUser(USER, { status: 'open' })).toEqual([]);
+    const otherOpen = await store.listByUser(OTHER, { status: 'open' });
+    expect(otherOpen).toHaveLength(1);
+    expect(otherOpen[0]!.id).toBe(theirs.id);
+    expect((await store.listAll({ status: 'open' })).map((t) => t.id)).toEqual([theirs.id]);
+    expect(await store.listAll({ status: 'pending' })).toEqual([]);
+  });
 });

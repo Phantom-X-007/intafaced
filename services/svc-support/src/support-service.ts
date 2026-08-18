@@ -73,12 +73,14 @@ export class SupportService implements SupportContract {
     });
   }
 
-  async listMyTickets(input: { userId: string }): Promise<SupportTicket[]> {
-    return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () => this.store.listByUser(input.userId));
+  async listMyTickets(input: { userId: string; status?: SupportTicketStatus }): Promise<SupportTicket[]> {
+    return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () =>
+      this.store.listByUser(input.userId, { status: input.status }),
+    );
   }
 
-  async listAllTickets(): Promise<SupportTicket[]> {
-    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () => this.store.listAll());
+  async listAllTickets(input: { status?: SupportTicketStatus } = {}): Promise<SupportTicket[]> {
+    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () => this.store.listAll({ status: input.status }));
   }
 
   /**
