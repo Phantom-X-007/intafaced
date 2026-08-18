@@ -23,7 +23,7 @@ export interface TwapParentRecord {
 export interface TwapParentStore {
   save(record: TwapParentRecord): Promise<void>;
   load(id: string): Promise<TwapParentRecord | null>;
-  listForUser(userId: string, status?: AlgoStatus): Promise<TwapParent[]>;
+  listForUser(userId: string, status?: AlgoStatus, marketId?: string): Promise<TwapParent[]>;
   listActive(): Promise<TwapParentRecord[]>;
 }
 
@@ -183,11 +183,12 @@ export class SqlTwapParentStore implements TwapParentStore {
     return rowToRecord(rows[0]);
   }
 
-  async listForUser(userId: string, status?: AlgoStatus): Promise<TwapParent[]> {
+  async listForUser(userId: string, status?: AlgoStatus, marketId?: string): Promise<TwapParent[]> {
     const rows = await this.sql<Array<Record<string, unknown>>>`
       SELECT * FROM algo_parents
       WHERE user_id = ${userId}
       ${status ? this.sql`AND status = ${status}` : this.sql``}
+      ${marketId ? this.sql`AND market_id = ${marketId}` : this.sql``}
       ORDER BY created_at DESC
     `;
     return rows.map((r) => rowToRecord(r).parent);
@@ -259,9 +260,14 @@ export class MemoryTwapParentStore implements TwapParentStore {
     return this.byId.get(id) ?? null;
   }
 
-  async listForUser(userId: string, status?: AlgoStatus): Promise<TwapParent[]> {
+  async listForUser(userId: string, status?: AlgoStatus, marketId?: string): Promise<TwapParent[]> {
     return [...this.byId.values()]
-      .filter((r) => r.parent.userId === userId && (status === undefined || r.parent.status === status))
+      .filter(
+        (r) =>
+          r.parent.userId === userId &&
+          (status === undefined || r.parent.status === status) &&
+          (marketId === undefined || r.parent.marketId === marketId),
+      )
       .sort((a, b) => b.parent.createdAt.getTime() - a.parent.createdAt.getTime())
       .map((r) => r.parent);
   }

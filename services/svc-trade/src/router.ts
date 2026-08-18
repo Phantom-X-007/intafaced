@@ -610,6 +610,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           z
             .object({
               status: z.enum(['active', 'paused', 'cancelled', 'completed', 'halted']).optional(),
+              marketId: z.string().min(1).max(64).optional(),
             })
             .optional(),
         )

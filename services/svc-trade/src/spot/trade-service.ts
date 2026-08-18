@@ -2519,9 +2519,9 @@ export class TradeService {
     return hydrateAlgoIfMissing(this.algo, this.algoStore, principal.userId, parentId);
   }
 
-  async listAlgos(principal: Principal, input?: { status?: AlgoStatus }): Promise<TwapParent[]> {
+  async listAlgos(principal: Principal, input?: { status?: AlgoStatus; marketId?: string }): Promise<TwapParent[]> {
     requireScope(principal, 'trade:read');
-    return this.algoStore.listForUser(principal.userId, input?.status);
+    return this.algoStore.listForUser(principal.userId, input?.status, input?.marketId);
   }
 
   async algoProgress(principal: Principal, parentId: string): Promise<AlgoProgressView> {
