@@ -1586,6 +1586,38 @@ if (!available) {
       expect(JSON.stringify(viaRouter)).not.toContain(CANARY);
       expect(viaRouter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
     });
+
+    it('returns mixed currencies when fiatCurrency is omitted, and exact-matches after uppercasing when it is set', async () => {
+      const usd = await sellerInstrument({ fiatCurrency: 'USD' });
+      const gbp = await sellerInstrument({ fiatCurrency: 'GBP' });
+
+      const all = await instruments.listInstruments(SELLER);
+      expect(all.map((h) => h.fiatCurrency).sort()).toEqual(['GBP', 'USD']);
+      expect(all.map((h) => h.id).sort()).toEqual([gbp.id, usd.id].sort());
+
+      const viaRouter = await callerFor(SELLER).instruments.list({});
+      expect(viaRouter.map((h) => h.fiatCurrency).sort()).toEqual(['GBP', 'USD']);
+      expect(JSON.stringify(viaRouter)).not.toContain(CANARY);
+      expect(viaRouter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
+
+      const filtered = await instruments.listInstruments(SELLER, false, undefined, 'gbp');
+      expect(filtered.map((h) => h.id)).toEqual([gbp.id]);
+      expect(filtered[0]!.fiatCurrency).toBe('GBP');
+      expect(JSON.stringify(filtered)).not.toContain(CANARY);
+      expect(filtered.every((h) => !('details' in h))).toBe(true);
+
+      const viaFilter = await callerFor(SELLER).instruments.list({ fiatCurrency: 'gbp' });
+      expect(viaFilter.map((h) => h.id)).toEqual([gbp.id]);
+      expect(JSON.stringify(viaFilter)).not.toContain(CANARY);
+      expect(viaFilter.every((h) => !('details' in h) && !('fingerprint' in h))).toBe(true);
+
+      expect(await instruments.listInstruments(SELLER, false, undefined, 'EUR')).toEqual([]);
+      expect(await callerFor(SELLER).instruments.list({ fiatCurrency: 'EUR' })).toEqual([]);
+      await expect(callerFor(SELLER).instruments.list({ fiatCurrency: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+      const combined = await callerFor(SELLER).instruments.list({ methodId: METHOD, fiatCurrency: 'usd' });
+      expect(combined.map((h) => h.id)).toEqual([usd.id]);
+    });
   });
 
   // ── Ownership ─────────────────────────────────────────────────────────────

@@ -184,8 +184,8 @@ describe('svc-p2p mount — authorisation', () => {
   it('forwards optional instruments.list methodId and rejects an empty string', async () => {
     const seen: unknown[] = [];
     const instruments = stubInstruments({
-      listInstruments: async (ownerId: string, includeRemoved?: boolean, methodId?: string) => {
-        seen.push([ownerId, includeRemoved, methodId]);
+      listInstruments: async (ownerId: string, includeRemoved?: boolean, methodId?: string, fiatCurrency?: string) => {
+        seen.push([ownerId, includeRemoved, methodId, fiatCurrency]);
         return [];
       },
     });
@@ -196,8 +196,28 @@ describe('svc-p2p mount — authorisation', () => {
     await expect(caller.instruments.list({ methodId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     expect(seen).toEqual([
-      [USER, false, undefined],
-      [USER, false, 'Bank-Transfer_2'],
+      [USER, false, undefined, undefined],
+      [USER, false, 'Bank-Transfer_2', undefined],
+    ]);
+  });
+
+  it('forwards optional instruments.list fiatCurrency and rejects an empty string', async () => {
+    const seen: unknown[] = [];
+    const instruments = stubInstruments({
+      listInstruments: async (ownerId: string, includeRemoved?: boolean, methodId?: string, fiatCurrency?: string) => {
+        seen.push([ownerId, includeRemoved, methodId, fiatCurrency]);
+        return [];
+      },
+    });
+    const caller = routerFor(stubP2p(), instruments).createCaller(signed());
+
+    await expect(caller.instruments.list({ fiatCurrency: 'gbp' })).resolves.toEqual([]);
+    await expect(caller.instruments.list({ methodId: 'Bank-Transfer_2', fiatCurrency: 'USD' })).resolves.toEqual([]);
+    await expect(caller.instruments.list({ fiatCurrency: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    expect(seen).toEqual([
+      [USER, false, undefined, 'gbp'],
+      [USER, false, 'Bank-Transfer_2', 'USD'],
     ]);
   });
 
