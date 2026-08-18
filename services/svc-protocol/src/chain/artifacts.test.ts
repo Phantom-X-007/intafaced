@@ -243,9 +243,15 @@ describe('committed vault artefacts match the Solidity in this tree', () => {
   const vaults = (SUITES as Suite[]).find((s) => s.name === 'vaults');
   const vaultNames = ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'LaunchVesting', 'DeployerReputation', 'TreasuryYieldVault'] as const;
 
+<<<<<<< HEAD
   it('compiles crew/legacy/trust/yield vaults', () => {
     expect(vaults?.expect).toBe('compiles');
     for (const name of vaultNames) {
+=======
+  it('compiles CrewVault + LegacyVault + TreasuryYieldVault', () => {
+    expect(vaults?.expect).toBe('compiles');
+    for (const name of ['CrewVault', 'LegacyVault', 'TreasuryYieldVault'] as const) {
+>>>>>>> ca4b680f (feat(protocol): S-G1 meme launch token+pool+LP lock)
       const artefact = loadArtifact(name);
       expect(artefact.contractName).toBe(name);
       expect(artefact.suite).toBe('vaults');
@@ -256,7 +262,11 @@ describe('committed vault artefacts match the Solidity in this tree', () => {
 
   it('records a sourceHash that still matches the .sol files on disk', () => {
     const expected = computeSourceHash(suiteSources(vaults, collectSources()));
+<<<<<<< HEAD
     for (const name of vaultNames) {
+=======
+    for (const name of ['CrewVault', 'LegacyVault', 'TreasuryYieldVault'] as const) {
+>>>>>>> ca4b680f (feat(protocol): S-G1 meme launch token+pool+LP lock)
       expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
         expected,
       );
@@ -281,6 +291,7 @@ describe('committed privacy artefacts match the Solidity in this tree', () => {
   });
 });
 
+<<<<<<< HEAD
 describe('committed venue artefacts match the Solidity in this tree', () => {
   const venue = (SUITES as Suite[]).find((s) => s.name === 'venue');
 
@@ -349,5 +360,39 @@ describe('committed NFT artefacts match the Solidity in this tree', () => {
     expect(artefact.solcVersion).toBe('0.8.28');
     expect(artefact.evmVersion).toBe('paris');
     expect(artefact.optimizer).toEqual({ enabled: true, runs: 200 });
+  });
+});
+
+describe('committed meme artefacts match the Solidity in this tree', () => {
+  const meme = (SUITES as Suite[]).find((s) => s.name === 'meme');
+
+  it('compiles MemeLaunch without retagging the vaults LaunchLpLock artefact', () => {
+    expect(meme?.expect).toBe('compiles');
+    const artefact = loadArtifact('MemeLaunch');
+    expect(artefact.contractName).toBe('MemeLaunch');
+    expect(artefact.suite).toBe('meme');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+    expect(loadArtifact('LaunchLpLock').suite).toBe('vaults');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(meme, collectSources()));
+    expect(
+      loadArtifact('MemeLaunch').sourceHash,
+      'MemeLaunch.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build',
+    ).toBe(expected);
+  });
+
+  it('exposes no owner, fee, or platform surface', () => {
+    const names = loadArtifact('MemeLaunch')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+    for (const forbidden of ['owner', 'setFee', 'feeTo', 'setOwner', 'withdraw', 'pause']) {
+      expect(names, `MemeLaunch must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    expect(names).toContain('launch');
+    expect(names).toContain('tokenFactory');
+    expect(names).toContain('poolFactory');
   });
 });
