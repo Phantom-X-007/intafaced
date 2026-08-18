@@ -3,7 +3,7 @@ import { transaction } from '@intafaced/db';
 import type { EventBus } from '@intafaced/events';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from './errors.js';
-import { AuditLog, type ActionKind, type AuditedAction } from './fleet/audit.js';
+import { AuditLog, type ActionKind, type ActionStatus, type AuditedAction } from './fleet/audit.js';
 import {
   evaluateCompletion,
   evaluateToolCall,
@@ -637,8 +637,8 @@ export class AgentRuntime {
     return this.audit.forUser(userId, limit, tool, kind);
   }
 
-  async sessionLog(sessionId: string, kind?: ActionKind, tool?: string): Promise<AuditedAction[]> {
-    return this.audit.forSession(sessionId, kind, tool);
+  async sessionLog(sessionId: string, kind?: ActionKind, tool?: string, status?: ActionStatus): Promise<AuditedAction[]> {
+    return this.audit.forSession(sessionId, kind, tool, status);
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────

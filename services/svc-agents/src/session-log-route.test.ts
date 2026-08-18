@@ -44,7 +44,12 @@ function owned(overrides: Partial<SessionRecord> = {}): SessionRecord {
 
 function stubDeps(
   session: (sessionId: string) => Promise<SessionRecord | null>,
-  sessionLog: (sessionId: string, kind?: AuditedAction['kind'], tool?: string) => Promise<AuditedAction[]>,
+  sessionLog: (
+    sessionId: string,
+    kind?: AuditedAction['kind'],
+    tool?: string,
+    status?: AuditedAction['status'],
+  ) => Promise<AuditedAction[]>,
 ): AgentsRouterDeps {
   return {
     runtime: { session, sessionLog } as AgentsRouterDeps['runtime'],
@@ -264,6 +269,157 @@ describe('session.log tool filter', () => {
     ).createCaller(signed());
 
     await expect(caller.session.log({ sessionId: FOREIGN, tool: 'trade.quote' })).rejects.toBeDefined();
+    expect(logCalled).toBe(false);
+  });
+});
+
+describe('session.log status filter', () => {
+  it('omits status and still returns mixed outcomes in sequence for an owned session', async () => {
+    const calls: Array<{
+      sessionId: string;
+      kind?: AuditedAction['kind'];
+      tool?: string;
+      status?: AuditedAction['status'];
+    }> = [];
+    const mixed = [
+      action({ tool: null, kind: 'session_open', status: 'executed', sequence: 0 }),
+      action({
+        tool: 'trade.quote',
+        kind: 'tool_call',
+        status: 'refused',
+        sequence: 1,
+        id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      }),
+      action({
+        tool: 'trade.quote',
+        kind: 'tool_call',
+        status: 'failed',
+        sequence: 2,
+        id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      }),
+    ];
+    const caller = createAgentsRouter(
+      stubDeps(
+        async (sessionId) => owned({ id: sessionId }),
+        async (sessionId, kind, tool, status) => {
+          calls.push({ sessionId, kind, tool, status });
+          return mixed;
+        },
+      ),
+    ).createCaller(signed());
+
+    const result = await caller.session.log({ sessionId: SESSION });
+    expect(calls).toEqual([{ sessionId: SESSION, kind: undefined, tool: undefined, status: undefined }]);
+    expect(result.map((row) => row.status)).toEqual(['executed', 'refused', 'failed']);
+    expect(result.map((row) => row.sequence)).toEqual([0, 1, 2]);
+  });
+
+  it('passes exact executed, refused, and failed after ownedSession', async () => {
+    const calls: Array<{ status?: AuditedAction['status'] }> = [];
+    const caller = createAgentsRouter(
+      stubDeps(
+        async (sessionId) => owned({ id: sessionId }),
+        async (_sessionId, _kind, _tool, status) => {
+          calls.push({ status });
+          return [action({ status: status ?? 'executed' })];
+        },
+      ),
+    ).createCaller(signed());
+
+    expect((await caller.session.log({ sessionId: SESSION, status: 'executed' })).every((row) => row.status === 'executed')).toBe(true);
+    expect((await caller.session.log({ sessionId: SESSION, status: 'refused' })).every((row) => row.status === 'refused')).toBe(true);
+    expect((await caller.session.log({ sessionId: SESSION, status: 'failed' })).every((row) => row.status === 'failed')).toBe(true);
+    expect(calls).toEqual([{ status: 'executed' }, { status: 'refused' }, { status: 'failed' }]);
+  });
+
+  it('returns [] when the store has no matching status', async () => {
+    const caller = createAgentsRouter(
+      stubDeps(
+        async (sessionId) => owned({ id: sessionId }),
+        async () => [],
+      ),
+    ).createCaller(signed());
+    expect(await caller.session.log({ sessionId: SESSION, status: 'failed' })).toEqual([]);
+  });
+
+  it('ANDs kind with tool and status after ownedSession', async () => {
+    const calls: Array<{
+      sessionId: string;
+      kind?: AuditedAction['kind'];
+      tool?: string;
+      status?: AuditedAction['status'];
+    }> = [];
+    const caller = createAgentsRouter(
+      stubDeps(
+        async (sessionId) => owned({ id: sessionId }),
+        async (sessionId, kind, tool, status) => {
+          calls.push({ sessionId, kind, tool, status });
+          return [action({ tool: 'trade.quote', kind: 'tool_call', status: 'executed' })];
+        },
+      ),
+    ).createCaller(signed());
+
+    const result = await caller.session.log({
+      sessionId: SESSION,
+      kind: 'tool_call',
+      tool: 'trade.quote',
+      status: 'executed',
+    });
+    expect(calls).toEqual([{ sessionId: SESSION, kind: 'tool_call', tool: 'trade.quote', status: 'executed' }]);
+    expect(result.every((row) => row.kind === 'tool_call' && row.tool === 'trade.quote' && row.status === 'executed')).toBe(true);
+  });
+
+  it('still passes kind and tool when status is omitted', async () => {
+    const calls: Array<{
+      kind?: AuditedAction['kind'];
+      tool?: string;
+      status?: AuditedAction['status'];
+    }> = [];
+    const caller = createAgentsRouter(
+      stubDeps(
+        async (sessionId) => owned({ id: sessionId }),
+        async (_sessionId, kind, tool, status) => {
+          calls.push({ kind, tool, status });
+          return [action({ kind: 'tool_call', tool: 'trade.quote' })];
+        },
+      ),
+    ).createCaller(signed());
+
+    await caller.session.log({ sessionId: SESSION, kind: 'tool_call', tool: 'trade.quote' });
+    expect(calls).toEqual([{ kind: 'tool_call', tool: 'trade.quote', status: undefined }]);
+  });
+
+  it('rejects an invalid status with 400 before the store', async () => {
+    let called = false;
+    const caller = createAgentsRouter(
+      stubDeps(
+        async () => owned(),
+        async () => {
+          called = true;
+          return [];
+        },
+      ),
+    ).createCaller(signed());
+
+    await expect(caller.session.log({ sessionId: SESSION, status: 'ok' as 'executed' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(called).toBe(false);
+  });
+
+  it('refuses a foreign session without reading its log when a status is set', async () => {
+    let logCalled = false;
+    const caller = createAgentsRouter(
+      stubDeps(
+        async (sessionId) => owned({ id: sessionId, userId: OTHER }),
+        async () => {
+          logCalled = true;
+          return [action({ userId: OTHER, sessionId: FOREIGN })];
+        },
+      ),
+    ).createCaller(signed());
+
+    await expect(caller.session.log({ sessionId: FOREIGN, status: 'executed' })).rejects.toBeDefined();
     expect(logCalled).toBe(false);
   });
 });

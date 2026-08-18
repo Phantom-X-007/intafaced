@@ -178,15 +178,16 @@ export class AuditLog {
   }
 
   /**
-   * Everything one session did, in order. Optional exact `kind` / `tool` nest
-   * `AND` filters. Callers that verify the hash chain MUST omit both so every
-   * row is still in the list.
+   * Everything one session did, in order. Optional exact `kind` / `tool` /
+   * `status` nest `AND` filters. Callers that verify the hash chain MUST omit
+   * all three so every row is still in the list.
    */
-  async forSession(sessionId: string, kind?: ActionKind, tool?: string): Promise<AuditedAction[]> {
+  async forSession(sessionId: string, kind?: ActionKind, tool?: string, status?: ActionStatus): Promise<AuditedAction[]> {
     const kindFilter = kind === undefined ? this.sql`` : this.sql`AND kind = ${kind}`;
     const toolFilter = tool === undefined ? this.sql`` : this.sql`AND tool = ${tool}`;
+    const statusFilter = status === undefined ? this.sql`` : this.sql`AND status = ${status}`;
     const rows = await this.sql<ActionRow[]>`
-      SELECT * FROM agents.agent_actions WHERE session_id = ${sessionId} ${kindFilter} ${toolFilter} ORDER BY sequence ASC
+      SELECT * FROM agents.agent_actions WHERE session_id = ${sessionId} ${kindFilter} ${toolFilter} ${statusFilter} ORDER BY sequence ASC
     `;
     return rows.map(toAction);
   }

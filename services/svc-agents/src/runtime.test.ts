@@ -1006,6 +1006,97 @@ if (!available) {
       expect((await runtime.sessionLog(session.id, undefined, 'trade.quote')).map((entry) => entry.sequence)).toEqual([1]);
     });
 
+    it('omits a status filter so one session log still mixes outcomes in sequence', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+      await runtime
+        .act({
+          sessionId: session.id,
+          tool: 'trade.quote',
+          execute: async () => {
+            throw new Error('venue unreachable');
+          },
+        })
+        .catch(() => undefined);
+
+      const log = await runtime.sessionLog(session.id);
+      expect(log.map((entry) => entry.status)).toEqual(['executed', 'executed', 'refused', 'failed']);
+      expect(log.map((entry) => entry.sequence)).toEqual([0, 1, 2, 3]);
+      expect(log.every((entry) => entry.sessionId === session.id)).toBe(true);
+    });
+
+    it('filters one session log to exact executed, refused, and failed, still sequence ASC', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+      await runtime
+        .act({
+          sessionId: session.id,
+          tool: 'trade.quote',
+          execute: async () => {
+            throw new Error('venue unreachable');
+          },
+        })
+        .catch(() => undefined);
+
+      const executed = await runtime.sessionLog(session.id, undefined, undefined, 'executed');
+      expect(executed.length).toBe(2);
+      expect(executed.every((entry) => entry.status === 'executed' && entry.sessionId === session.id)).toBe(true);
+      expect(executed.map((entry) => entry.sequence)).toEqual([0, 1]);
+
+      const refused = await runtime.sessionLog(session.id, undefined, undefined, 'refused');
+      expect(refused.length).toBe(1);
+      expect(refused.every((entry) => entry.status === 'refused' && entry.sessionId === session.id)).toBe(true);
+      expect(refused.map((entry) => entry.sequence)).toEqual([2]);
+
+      const failed = await runtime.sessionLog(session.id, undefined, undefined, 'failed');
+      expect(failed.length).toBe(1);
+      expect(failed.every((entry) => entry.status === 'failed' && entry.sessionId === session.id)).toBe(true);
+      expect(failed.map((entry) => entry.sequence)).toEqual([3]);
+    });
+
+    it('returns an empty session log when no row matches the status', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      expect(await runtime.sessionLog(session.id, undefined, undefined, 'failed')).toEqual([]);
+    });
+
+    it('ANDs kind with tool and status on one session log', async () => {
+      const session = await open(USER_A);
+      await runtime.think({ sessionId: session.id, requestId: 'r-sess-status-and', task: 'plan', messages: MESSAGES });
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+
+      const log = await runtime.sessionLog(session.id, 'tool_call', 'trade.quote', 'executed');
+      expect(log.length).toBe(1);
+      expect(
+        log.every(
+          (entry) =>
+            entry.kind === 'tool_call' && entry.tool === 'trade.quote' && entry.status === 'executed' && entry.sessionId === session.id,
+        ),
+      ).toBe(true);
+      expect(await runtime.sessionLog(session.id, 'tool_call', 'trade.quote', 'refused')).toEqual([]);
+    });
+
+    it('still verifies the full mixed-status hash chain when the list is filtered', async () => {
+      const session = await open(USER_A);
+      await runtime.act({ sessionId: session.id, tool: 'trade.quote', execute: async () => 'ok' });
+      await runtime.act({ sessionId: session.id, tool: 'trade.order', execute: async () => 'placed' }).catch(() => undefined);
+      await runtime
+        .act({
+          sessionId: session.id,
+          tool: 'trade.quote',
+          execute: async () => {
+            throw new Error('venue unreachable');
+          },
+        })
+        .catch(() => undefined);
+
+      expect(await runtime.audit.verifyChain(session.id)).toEqual({ ok: true });
+      expect((await runtime.sessionLog(session.id, undefined, undefined, 'failed')).map((entry) => entry.sequence)).toEqual([3]);
+    });
+
     it('keys every log line for i18n rather than shipping prose', async () => {
       const session = await open();
       await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
