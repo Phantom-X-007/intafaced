@@ -18,6 +18,7 @@ const USER = '66666666-6666-4666-8666-666666666666';
 const OTHER = '77777777-7777-4777-8777-777777777777';
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const MANDATE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const MANDATE_OTHER_CUSTOMER = '11111111-1111-4111-8111-111111111111';
 const SUB = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const SUB_OTHER_CUSTOMER = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const CUSTOMER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -153,9 +154,20 @@ describe('subscription merchant surface', () => {
         ];
         return options.status === undefined ? rows : rows.filter((row) => row.status === options.status);
       },
-      listMandates: async () => {
-        calls.push('listMandates');
-        return [mandateRecord()];
+      listMandates: async (_merchantId: string, options: { status?: string; customerId?: string; limit?: number } = {}) => {
+        const parts = ['listMandates'];
+        if (options.status !== undefined) parts.push(`status:${options.status}`);
+        if (options.customerId !== undefined) parts.push(`customer:${options.customerId}`);
+        calls.push(parts.join(':'));
+        const rows = [
+          mandateRecord({ customerId: CUSTOMER_A, status: 'active' }),
+          mandateRecord({ id: MANDATE_OTHER_CUSTOMER, customerId: CUSTOMER_B, status: 'cancelled' }),
+        ];
+        return rows.filter((row) => {
+          if (options.status !== undefined && row.status !== options.status) return false;
+          if (options.customerId !== undefined && row.customerId !== options.customerId) return false;
+          return true;
+        });
       },
       listSubscriptions: async (_merchantId: string, options: { status?: string; customerId?: string; limit?: number } = {}) => {
         const parts = ['listSubscriptions'];
@@ -304,9 +316,10 @@ describe('subscription merchant surface', () => {
   it('owner can list mandates for a merchant', async () => {
     const api = await caller(['pay:read']);
     const rows = await api.mandate.list({ merchantId: MERCHANT });
-    expect(rows).toHaveLength(1);
+    expect(rows.map((row) => row.customerId)).toEqual([CUSTOMER_A, CUSTOMER_B]);
     expect(rows[0]!.id).toBe(MANDATE);
     expect(rows[0]!.amount).toBe('10');
+    expect(typeof rows[0]!.amount).toBe('string');
     expect(calls).toContain('listMandates');
   });
 
@@ -314,7 +327,52 @@ describe('subscription merchant surface', () => {
     owner = OTHER;
     const api = await caller(['pay:read'], USER);
     await expect(api.mandate.list({ merchantId: MERCHANT })).rejects.toThrow(/merchant_forbidden|FORBIDDEN/i);
-    expect(calls).not.toContain('listMandates');
+    expect(calls.filter((c) => c.startsWith('listMandates'))).toHaveLength(0);
+  });
+
+  it('omitted mandate customerId returns mixed customers', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.mandate.list({ merchantId: MERCHANT });
+    expect(rows.map((row) => row.customerId)).toEqual([CUSTOMER_A, CUSTOMER_B]);
+    expect(calls).toContain('listMandates');
+  });
+
+  it('filters mandates by exact customerId', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.mandate.list({ merchantId: MERCHANT, customerId: CUSTOMER_A });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.customerId).toBe(CUSTOMER_A);
+    expect(rows[0]!.id).toBe(MANDATE);
+    expect(rows[0]!.amount).toBe('10');
+    expect(calls).toContain(`listMandates:customer:${CUSTOMER_A}`);
+  });
+
+  it('ANDs mandate customerId with status', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.mandate.list({
+      merchantId: MERCHANT,
+      customerId: CUSTOMER_B,
+      status: 'cancelled',
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.customerId).toBe(CUSTOMER_B);
+    expect(rows[0]!.status).toBe('cancelled');
+    expect(calls).toContain(`listMandates:status:cancelled:customer:${CUSTOMER_B}`);
+  });
+
+  it('empty mandate customer filter is []', async () => {
+    const api = await caller(['pay:read']);
+    const rows = await api.mandate.list({ merchantId: MERCHANT, customerId: MISSING_CUSTOMER });
+    expect(rows).toEqual([]);
+    expect(calls).toContain(`listMandates:customer:${MISSING_CUSTOMER}`);
+  });
+
+  it('rejects a mandate customerId that is not a uuid', async () => {
+    const api = await caller(['pay:read']);
+    await expect(api.mandate.list({ merchantId: MERCHANT, customerId: 'not-a-uuid' as typeof CUSTOMER_A })).rejects.toThrow(
+      /BAD_REQUEST|invalid/i,
+    );
+    expect(calls.filter((c) => c.startsWith('listMandates'))).toHaveLength(0);
   });
 
   it('owner can list subscriptions for a merchant', async () => {
