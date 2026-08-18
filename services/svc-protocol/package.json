@@ -10,6 +10,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:forge": "node scripts/forge-test.mjs",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.ts",
     "contracts:build": "node scripts/compile-contracts.mjs",

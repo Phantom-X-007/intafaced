@@ -339,6 +339,13 @@ jobs:
       - name: Deploy the smart-account suite and cross-check CREATE2
         run: pnpm --filter @intafaced/svc-protocol chain:deploy
 
+      # S-A8 — forge fuzz + gas ceilings. Does not compile committed artefacts
+      # (solc-js still owns contracts/out/). Uses the same foundry image as anvil.
+      - name: Foundry fuzz (S-A8)
+        run: pnpm --filter @intafaced/svc-protocol test:forge
+        env:
+          CI: 'true'
+
       - run: pnpm test
 
       # The backstop. REQUIRE_POSTGRES / REQUIRE_EVM_CHAIN make the shared probes

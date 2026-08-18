@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-L3 ECDH scanner (this PR)
+> ### 2026-08-19 delta — S-A8 forge fuzz (this PR)
+>
+> **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Residual: session-key forge richness · external audit.
+>
+> ### 2026-08-19 delta — S-L3 ECDH scanner (#2463)
 >
 > **Stealth receive half:** `src/stealth/scan.ts` is ERC-5564 scheme-1 (secp256k1 + view tags). Recipients scan `StealthAnnouncer` logs with a viewing key the service never holds. Keccak `presentationAddress` stays a separate P0 helper — not an ECDH match. Unaudited.
 >
@@ -19,7 +23,7 @@
 > **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar · #2362 S-L2 LegacyVault · #2363 S-L6/L3/L5.
 > **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
 >
-> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · Foundry fuzz/gas (S-A8 residual).
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · S-A8 session-key forge richness.
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -97,12 +101,12 @@ Definitive build promise: **sovereignty by architecture** — non-custodial plan
 
 This board was written on 2026-08-03 against a picture that was already out of date, and the tracker rows it points at carried ownership stamps instead of state. The result: **four Tier A items read as greenfield and are substantially built.** Re-deriving any of this is our error, not yours.
 
-| Board item                       | Already merged                                                                                                                                                                                        | What is actually left                                                                                                       |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **S-A2 AMM**                     | Compile fix — private `_swap`, external ABI unchanged (**#228, yours**). PoolFactory on the dev chain (**#264**). **mint + swapExactIn proven on a real chain** (**#288**). Pure maths module tested. | **Invariants + LP suite shipped** (`src/amm/invariants.test.ts`) · oracle must NOT read AMM (S-A12) · `audited` stays false |
-| **S-A7 Launch / token factory**  | Fixed-supply ERC-20 + CREATE2 factory, own pinned suite, **proven end to end on the dev chain**, refuses a zero factory before any arithmetic, `audited:false` deliberate (**#217**)                  | The audit itself · launch fee (Fiat Plane) · meme/vesting/NFT surfaces (Tier G)                                             |
-| **S-A8 Toolchain pin**           | solc 0.8.28 pinned, artefacts committed with a re-derived source hash, contracts run against anvil in CI (`REQUIRE_EVM_CHAIN=1`), one `EXPECTED_SOLC` shared with the indexer                         | **Foundry/forge invariant + fuzz suites · gas snapshots** — the part that proves _safe_, not merely _correct_               |
-| **S-A1 Smart accounts (partly)** | SmartAccount / AccountFactory / SessionKeyLib compile and run; **31 contract tests incl. the CREATE2 cross-check** (**#210**); typed refusals on every chain path (**#193**); userop hashing built    | **The adversarial audit package** · S-A9 verifier · S-A11 differential check · gas ownership (S-A10/S-A11)                  |
+| Board item                       | Already merged                                                                                                                                                                                        | What is actually left                                                                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-A2 AMM**                     | Compile fix — private `_swap`, external ABI unchanged (**#228, yours**). PoolFactory on the dev chain (**#264**). **mint + swapExactIn proven on a real chain** (**#288**). Pure maths module tested. | **Invariants + LP suite shipped** (`src/amm/invariants.test.ts`) · oracle must NOT read AMM (S-A12) · `audited` stays false                  |
+| **S-A7 Launch / token factory**  | Fixed-supply ERC-20 + CREATE2 factory, own pinned suite, **proven end to end on the dev chain**, refuses a zero factory before any arithmetic, `audited:false` deliberate (**#217**)                  | The audit itself · launch fee (Fiat Plane) · meme/vesting/NFT surfaces (Tier G)                                                              |
+| **S-A8 Toolchain pin**           | solc 0.8.28 pinned, artefacts committed with a re-derived source hash, contracts run against anvil in CI (`REQUIRE_EVM_CHAIN=1`), one `EXPECTED_SOLC` shared with the indexer                         | **Forge fuzz + gas ceilings in CI** (`test/forge`). Residual: session-key forge richness · external audit. solc-js still compiles artefacts. |
+| **S-A1 Smart accounts (partly)** | SmartAccount / AccountFactory / SessionKeyLib compile and run; **31 contract tests incl. the CREATE2 cross-check** (**#210**); typed refusals on every chain path (**#193**); userop hashing built    | **The adversarial audit package** · S-A9 verifier · S-A11 differential check · gas ownership (S-A10/S-A11)                                   |
 
 **Your genuinely greenfield Tier A front is four items: S-A3 escrow · S-A4 lending · S-A5 router · S-A6 merchant contracts.**
 
