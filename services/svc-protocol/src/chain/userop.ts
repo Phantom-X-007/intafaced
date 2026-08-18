@@ -9,10 +9,11 @@ import type { Address, Hex } from 'viem';
  * recompute that hash independently — which is the whole basis on which the
  * relay can refuse to forward something the user did not authorise.
  *
- * §13 socket `socket.userop-differential-test`: these bytes are asserted
- * self-consistent and pinned against golden vectors here, but they are not yet
- * checked against a live EntryPoint's `getUserOpHash`. That check lands with the
- * contract toolchain.
+ * §13 socket `socket.userop-differential-test`: packing and golden vectors live
+ * in `userop.test.ts`. The hash is also checked against Solidity
+ * `EntryPointGetUserOpHash` (ERC-4337 v0.7 formula, same as canonical
+ * EntryPoint 0x0000000071727De22E5E9d8BAf0edAc6f37da032) in
+ * `userop.entrypoint.onchain.test.ts` when anvil is up.
  */
 
 export interface UserOperation {

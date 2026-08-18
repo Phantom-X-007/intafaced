@@ -2211,10 +2211,15 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['socket.contract-toolchain'],
-    note: 'Owner set 2026-08-07. Small job, serious failure mode: src/chain/userop.ts computes the hash a user signs and has only ever been checked against itself and golden vectors. If it disagrees with the deployed EntryPoint, users authorise one operation and the chain executes another.',
+    requires: ['services/svc-protocol/contracts/entrypoint/EntryPointGetUserOpHash.sol'],
+    note:
+      'CLOSED 2026-08-18 (S-A11). src/chain/userop.ts getUserOperationHash is checked against Solidity ' +
+      'EntryPointGetUserOpHash (ERC-4337 v0.7 formula, same as canonical EntryPoint 0x0000000071727De22E5E9d8BAf0edAc6f37da032) ' +
+      'in userop.entrypoint.onchain.test.ts on anvil (REQUIRE_EVM_CHAIN=1). Residual: not a fork of a public EntryPoint — Nitro RPC. ' +
+      'Not a full EntryPoint deploy / bundler.',
   }),
   f('socket.p256-verifier', 'Passkey (P-256) owner verifier contract', {
     module: 'protocol',
