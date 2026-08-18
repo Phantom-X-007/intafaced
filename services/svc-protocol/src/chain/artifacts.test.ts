@@ -243,15 +243,9 @@ describe('committed vault artefacts match the Solidity in this tree', () => {
   const vaults = (SUITES as Suite[]).find((s) => s.name === 'vaults');
   const vaultNames = ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'LaunchVesting', 'DeployerReputation', 'TreasuryYieldVault'] as const;
 
-<<<<<<< HEAD
   it('compiles crew/legacy/trust/yield vaults', () => {
     expect(vaults?.expect).toBe('compiles');
     for (const name of vaultNames) {
-=======
-  it('compiles CrewVault + LegacyVault + TreasuryYieldVault', () => {
-    expect(vaults?.expect).toBe('compiles');
-    for (const name of ['CrewVault', 'LegacyVault', 'TreasuryYieldVault'] as const) {
->>>>>>> ca4b680f (feat(protocol): S-G1 meme launch token+pool+LP lock)
       const artefact = loadArtifact(name);
       expect(artefact.contractName).toBe(name);
       expect(artefact.suite).toBe('vaults');
@@ -262,11 +256,7 @@ describe('committed vault artefacts match the Solidity in this tree', () => {
 
   it('records a sourceHash that still matches the .sol files on disk', () => {
     const expected = computeSourceHash(suiteSources(vaults, collectSources()));
-<<<<<<< HEAD
     for (const name of vaultNames) {
-=======
-    for (const name of ['CrewVault', 'LegacyVault', 'TreasuryYieldVault'] as const) {
->>>>>>> ca4b680f (feat(protocol): S-G1 meme launch token+pool+LP lock)
       expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
         expected,
       );
@@ -291,7 +281,6 @@ describe('committed privacy artefacts match the Solidity in this tree', () => {
   });
 });
 
-<<<<<<< HEAD
 describe('committed venue artefacts match the Solidity in this tree', () => {
   const venue = (SUITES as Suite[]).find((s) => s.name === 'venue');
 
