@@ -2028,10 +2028,11 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * instructions; the ledger answers "how much".
      */
     list: scopedProcedure('bank:read', { module: 'bank' })
+      .input(z.object({ status: z.enum(['active', 'paused', 'cancelled']).optional() }).optional())
       .output(z.array(autoInvestRuleOutput))
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const rows = await bank.autoInvest.listRules(ctx.principal.userId);
+          const rows = await bank.autoInvest.listRules(ctx.principal.userId, input?.status);
           return rows.map(mapRule);
         }),
       ),

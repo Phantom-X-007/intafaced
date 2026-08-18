@@ -435,12 +435,13 @@ export class AutoInvestService {
     );
   }
 
-  async listRules(userId: string): Promise<AutoInvestRule[]> {
+  async listRules(userId: string, status?: AutoInvestRuleStatus | null): Promise<AutoInvestRule[]> {
     const rows = await this.sql<RuleRow[]>`
       SELECT id, user_id, kind, asset_id, threshold, target_pool_id, buy_asset_id,
              amount, cadence, next_run_at, status, created_at
         FROM bank.auto_invest_rules
        WHERE user_id = ${userId}
+             ${status ? this.sql`AND status = ${status}` : this.sql``}
        ORDER BY created_at DESC
     `;
     return rows.map(toRule);

@@ -564,6 +564,164 @@ if (!available) {
     });
   });
 
+  describe('listRules filters by status without inventing a balance', () => {
+    async function mixedOwnedRules() {
+      const pool = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'List rules vault',
+        aprBps: 100,
+      });
+      const active = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('10'),
+        targetPoolId: pool.id,
+      });
+      const paused = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('20'),
+        targetPoolId: pool.id,
+      });
+      await bank.autoInvest.pauseRule(paused.id);
+      const cancelled = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('30'),
+        targetPoolId: pool.id,
+      });
+      await bank.autoInvest.cancelRule(cancelled.id);
+      return { active, paused, cancelled };
+    }
+
+    it('returns mixed active/paused/cancelled when status is omitted', async () => {
+      const { active, paused, cancelled } = await mixedOwnedRules();
+      const listed = await bank.autoInvest.listRules(USER_A);
+      expect(listed.map((r) => r.id).sort()).toEqual([active.id, paused.id, cancelled.id].sort());
+      expect(new Set(listed.map((r) => r.status))).toEqual(new Set(['active', 'paused', 'cancelled']));
+      const pausedRow = listed.find((r) => r.id === paused.id)!;
+      expect(pausedRow.threshold === null ? null : formatAmount(pausedRow.threshold)).toBe('20');
+    });
+
+    it('exact-matches status and returns [] when none of the caller’s rows match', async () => {
+      const { paused } = await mixedOwnedRules();
+      const onlyPaused = await bank.autoInvest.listRules(USER_A, 'paused');
+      expect(onlyPaused).toHaveLength(1);
+      expect(onlyPaused[0]!.id).toBe(paused.id);
+      expect(onlyPaused[0]!.status).toBe('paused');
+      expect(onlyPaused[0]!.threshold === null ? null : formatAmount(onlyPaused[0]!.threshold)).toBe('20');
+      expect(await bank.autoInvest.listRules(USER_A, 'cancelled')).toHaveLength(1);
+      expect(await bank.autoInvest.listRules(USER_A, 'cancelled')).toEqual([expect.objectContaining({ status: 'cancelled' })]);
+    });
+
+    it('returns an empty array when no rule has that status', async () => {
+      const pool = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Active only vault',
+        aprBps: 100,
+      });
+      await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('40'),
+        targetPoolId: pool.id,
+      });
+      expect(await bank.autoInvest.listRules(USER_A, 'paused')).toEqual([]);
+      expect(await bank.autoInvest.listRules(USER_A, 'cancelled')).toEqual([]);
+    });
+  });
+
+  describe('autoInvest.list rejects invalid status at the door', () => {
+    async function signedCaller() {
+      const { createEdgeContext, encodePrincipal, signPrincipalHeader } = await import('@intafaced/contracts');
+      const SECRET = 'a-bank-auto-invest-test-edge-secret-long';
+      const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
+      const raw = encodePrincipal({
+        sub: USER_A,
+        userId: USER_A,
+        sid: '22222222-2222-4222-8222-222222222222',
+        scopes: ['bank:read'],
+        tier: 'full',
+        mfa: true,
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+      const ctx = await edgeContext({
+        headers: {
+          'x-intafaced-principal': raw,
+          'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+          'x-intafaced-region': 'DE',
+        },
+        id: 'req-ai-list',
+      });
+      return createBankRouter(bank).createCaller(ctx);
+    }
+
+    it('omitted status still returns mixed active/paused/cancelled', async () => {
+      const pool = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Door list vault',
+        aprBps: 100,
+      });
+      const active = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('10'),
+        targetPoolId: pool.id,
+      });
+      const paused = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('20'),
+        targetPoolId: pool.id,
+      });
+      await bank.autoInvest.pauseRule(paused.id);
+      const cancelled = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('30'),
+        targetPoolId: pool.id,
+      });
+      await bank.autoInvest.cancelRule(cancelled.id);
+
+      const api = await signedCaller();
+      const listed = await api.autoInvest.list();
+      expect(listed.map((r) => r.id).sort()).toEqual([active.id, paused.id, cancelled.id].sort());
+      expect(new Set(listed.map((r) => r.status))).toEqual(new Set(['active', 'paused', 'cancelled']));
+      expect(listed.every((r) => r.threshold === null || typeof r.threshold === 'string')).toBe(true);
+    });
+
+    it('filters to the requested status and returns [] when none match', async () => {
+      const pool = await bank.earn.createPool({
+        assetId: 'USDT',
+        kind: 'flexible',
+        name: 'Door filter vault',
+        aprBps: 100,
+      });
+      const paused = await bank.autoInvest.createThresholdSweep({
+        userId: USER_A,
+        assetId: 'USDT',
+        threshold: amt('20'),
+        targetPoolId: pool.id,
+      });
+      await bank.autoInvest.pauseRule(paused.id);
+
+      const api = await signedCaller();
+      expect(await api.autoInvest.list({ status: 'paused' })).toEqual([
+        expect.objectContaining({ id: paused.id, status: 'paused', threshold: '20' }),
+      ]);
+      expect(await api.autoInvest.list({ status: 'cancelled' })).toEqual([]);
+    });
+
+    it('rejects an invalid status at zod before the service', async () => {
+      const api = await signedCaller();
+      const err = await api.autoInvest.list({ status: 'completed' } as never).catch((e: unknown) => e);
+      expect((err as { code?: string }).code).toBe('BAD_REQUEST');
+    });
+  });
+
   describe('doctrine — rules hold no balance', () => {
     it('auto_invest tables have no balance-shaped columns outside the allowlist shape', async () => {
       const cols = await sql<Array<{ table_name: string; column_name: string }>>`
