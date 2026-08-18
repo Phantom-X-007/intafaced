@@ -142,11 +142,14 @@ describeOnChain('MemeLaunch on chain (S-G1)', () => {
     let liquidity = 0n;
     for (const log of receipt.logs) {
       try {
-        const decoded = decodeEventLog({ abi: memeAbi, data: log.data, topics: log.topics });
-        if (decoded.eventName === 'Launched') {
-          pool = decoded.args.pool as Address;
-          lpLock = decoded.args.lpLock as Address;
-          liquidity = decoded.args.liquidity as bigint;
+        const decoded = decodeEventLog({ abi: memeAbi, data: log.data, topics: log.topics }) as {
+          eventName: string;
+          args?: { pool?: Address; lpLock?: Address; liquidity?: bigint };
+        };
+        if (decoded.eventName === 'Launched' && decoded.args) {
+          pool = decoded.args.pool ?? ZERO;
+          lpLock = decoded.args.lpLock ?? ZERO;
+          liquidity = decoded.args.liquidity ?? 0n;
         }
       } catch {
         // logs from the pool / lock / tokens
