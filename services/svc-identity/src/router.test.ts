@@ -134,6 +134,17 @@ function stubServices(): Stub {
       userVerification: 'preferred' as const,
     })),
     createApiKey: record('createApiKey', () => ({ id: 'key-1', key: 'ifc_secret', prefix: 'ifc_abc', mode: 'live' as const })),
+    listApiKeys: record('listApiKeys', () => [
+      {
+        id: 'key-1',
+        name: 'bot',
+        key_prefix: 'ifc_abc',
+        scopes: ['trade:read'],
+        last_used_at: null,
+        revoked: false,
+        mode: 'live',
+      },
+    ]),
     exchangeApiKey: record('exchangeApiKey', () => ({
       accessToken: 'api.key.jwt',
       expiresAt: new Date('2026-07-28T09:15:00.000Z'),
@@ -646,6 +657,32 @@ describe('apiKeys.create passes the GRANTING session as the ceiling', () => {
     const api = await caller(['identity:write']);
     const err = await api.apiKeys.create({ name: 'escalate', scopes: ['admin:compliance'] }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('BAD_REQUEST');
+  });
+});
+
+describe('apiKeys.list filters by optional mode', () => {
+  it('passes omitted input through as undefined (mixed live+sandbox)', async () => {
+    const api = await caller(['identity:read']);
+    const listed = await api.apiKeys.list();
+    expect(listed).toEqual([expect.objectContaining({ id: 'key-1', prefix: 'ifc_abc', mode: 'live' })]);
+    expect(listed[0]).not.toHaveProperty('key');
+    const [userId, opts] = stub.calls.find((c) => c.method === 'listApiKeys')!.args;
+    expect(userId).toBe(USER);
+    expect(opts).toBeUndefined();
+  });
+
+  it('forwards exact mode and parent revoked together', async () => {
+    const api = await caller(['identity:read']);
+    await api.apiKeys.list({ mode: 'sandbox', revoked: false });
+    const [, opts] = stub.calls.find((c) => c.method === 'listApiKeys')!.args as [string, { mode?: string; revoked?: boolean }];
+    expect(opts).toEqual({ mode: 'sandbox', revoked: false });
+  });
+
+  it('rejects an invalid mode as BAD_REQUEST without listing', async () => {
+    const api = await caller(['identity:read']);
+    const err = await api.apiKeys.list({ mode: 'prod' } as never).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(stub.calls.filter((c) => c.method === 'listApiKeys')).toHaveLength(0);
   });
 });
 

@@ -699,6 +699,66 @@ if (!available) {
       expect(await auth.revokeApiKey(attacker.userId, id)).toBe(false);
     });
 
+    it('filters listApiKeys by mode in SQL; omitted still returns live and sandbox', async () => {
+      const owner = await register();
+      const other = await register();
+      const live = await auth.createApiKey({
+        userId: owner.userId,
+        name: 'live-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        mode: 'live',
+      });
+      const sandbox = await auth.createApiKey({
+        userId: owner.userId,
+        name: 'sandbox-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        mode: 'sandbox',
+      });
+      const retiredSandbox = await auth.createApiKey({
+        userId: owner.userId,
+        name: 'retired-sandbox',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        mode: 'sandbox',
+      });
+      await auth.revokeApiKey(owner.userId, retiredSandbox.id);
+      const foreignSandbox = await auth.createApiKey({
+        userId: other.userId,
+        name: 'foreign-sandbox',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        mode: 'sandbox',
+      });
+
+      const omitted = await auth.listApiKeys(owner.userId);
+      expect(omitted.map((k) => k.id).sort()).toEqual([live.id, sandbox.id, retiredSandbox.id].sort());
+      expect(omitted.map((k) => k.mode).sort()).toEqual(['live', 'sandbox', 'sandbox'].sort());
+      expect(omitted.every((k) => typeof k.key_prefix === 'string' && k.key_prefix.length > 0)).toBe(true);
+      expect(omitted.some((k) => 'key' in k || 'key_hash' in k)).toBe(false);
+      expect(JSON.stringify(omitted)).not.toContain(live.key);
+      expect(JSON.stringify(omitted)).not.toContain(sandbox.key);
+
+      const onlySandbox = await auth.listApiKeys(owner.userId, { mode: 'sandbox' });
+      expect(onlySandbox.map((k) => k.id).sort()).toEqual([sandbox.id, retiredSandbox.id].sort());
+      expect(onlySandbox.every((k) => k.mode === 'sandbox')).toBe(true);
+      expect(onlySandbox.some((k) => k.id === foreignSandbox.id)).toBe(false);
+
+      const onlyLive = await auth.listApiKeys(owner.userId, { mode: 'live' });
+      expect(onlyLive).toEqual([expect.objectContaining({ id: live.id, mode: 'live' })]);
+
+      const miss = await auth.listApiKeys(other.userId, { mode: 'live' });
+      expect(miss).toEqual([]);
+
+      const andRevoked = await auth.listApiKeys(owner.userId, { mode: 'sandbox', revoked: false });
+      expect(andRevoked).toEqual([expect.objectContaining({ id: sandbox.id, mode: 'sandbox', revoked: false })]);
+
+      const stranger = await register();
+      expect(await auth.listApiKeys(stranger.userId, { mode: 'sandbox' })).toEqual([]);
+      expect(await auth.listApiKeys(stranger.userId, { mode: 'live' })).toEqual([]);
+    });
+
     it('filters listApiKeys by revoked in SQL; omitted still returns live and retired', async () => {
       const owner = await register();
       const other = await register();

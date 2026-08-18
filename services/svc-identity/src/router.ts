@@ -1028,7 +1028,7 @@ export function createIdentityRouter(
         }),
 
       list: scopedProcedure('identity:read')
-        .input(z.object({ revoked: z.boolean().optional() }).optional())
+        .input(z.object({ revoked: z.boolean().optional(), mode: z.enum(['live', 'sandbox']).optional() }).optional())
         .output(
           z.array(
             z.object({
