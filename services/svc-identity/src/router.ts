@@ -37,3 +37,11 @@ import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefRe
 import { FlagDisabledError } from '@intafaced/config';
 import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
 import { userCopy } from './user-copy.js';
+
+/**
+ * svc-identity's API (§4.1).
+ *
+ * The contract shape lives in `packages/contracts` — this implements it. A
+ * breaking change there is a compile error here, caught in the contracts PR
+ * before any consumer is touched (§15.2).
+ */
