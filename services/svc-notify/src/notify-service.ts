@@ -186,8 +186,10 @@ export class NotifyService {
     return this.deps?.channels.status() ?? [];
   }
 
-  listTargets(userId: string): Promise<ChannelTarget[]> {
-    return withNotifySpan('notify.listTargets', { op: 'listTargets' }, async () => (this.deps ? this.deps.targets.list(userId) : []));
+  listTargets(userId: string, channel?: OutOfAppChannel): Promise<ChannelTarget[]> {
+    return withNotifySpan('notify.listTargets', { op: 'listTargets' }, async () =>
+      this.deps ? this.deps.targets.list(userId, channel) : [],
+    );
   }
 
   /**

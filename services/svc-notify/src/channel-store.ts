@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
-import type { ChannelId, RefusalCode } from './channels/channel.js';
+import type { ChannelId, OutOfAppChannel, RefusalCode } from './channels/channel.js';
 
 /**
  * PERSISTENCE FOR CHANNELS — who we may contact, and what actually happened.
@@ -277,8 +277,13 @@ export interface UpsertTargetInput {
 export interface TargetStore {
   /** Register or replace an address. A changed address is ALWAYS unconfirmed again. */
   upsert(input: UpsertTargetInput): Promise<ChannelTarget>;
-  list(userId: string): Promise<ChannelTarget[]>;
-  /** The only list the dispatcher may use. */
+  /**
+   * Self-only. Omitted channel returns every owned target. Provided channel
+   * exact-matches in the store, never a mixed-page post-filter. Never invents
+   * a row for a channel the user never registered.
+   */
+  list(userId: string, channel?: OutOfAppChannel): Promise<ChannelTarget[]>;
+  /** The only list the dispatcher may use. Always unfiltered `list(userId)`. */
   verified(userId: string): Promise<ChannelTarget[]>;
   /**
    * Channels holding a registered but UNCONFIRMED address.
@@ -500,8 +505,8 @@ export class MemoryTargetStore implements TargetStore {
     return stripSecrets(row);
   }
 
-  async list(userId: string): Promise<ChannelTarget[]> {
-    return [...this.rows.values()].filter((r) => r.userId === userId).map(stripSecrets);
+  async list(userId: string, channel?: OutOfAppChannel): Promise<ChannelTarget[]> {
+    return [...this.rows.values()].filter((r) => r.userId === userId && (channel === undefined || r.channel === channel)).map(stripSecrets);
   }
 
   async verified(userId: string): Promise<ChannelTarget[]> {
@@ -796,10 +801,12 @@ export class PostgresTargetStore implements TargetStore {
     return fromTargetPg(rows[0]!);
   }
 
-  async list(userId: string): Promise<ChannelTarget[]> {
+  async list(userId: string, channel?: OutOfAppChannel): Promise<ChannelTarget[]> {
+    const channelMatch = channel !== undefined ? this.sql`AND channel = ${channel}` : this.sql``;
     const rows = await this.sql<TargetPgRow[]>`
       SELECT user_id, channel, address, locale, verified_at, created_at, updated_at FROM notify.channel_targets
        WHERE user_id = ${userId}
+       ${channelMatch}
        ORDER BY channel ASC
     `;
     return rows.map(fromTargetPg);

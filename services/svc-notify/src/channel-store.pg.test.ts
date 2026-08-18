@@ -382,4 +382,45 @@ describe.skipIf(!available)('PostgresTargetStore — verified and unverified are
     expect((await s.verified(USER)).map((t) => t.channel)).toEqual(['email']);
     expect(await s.unverifiedChannels(USER)).toEqual([]);
   });
+
+  it('list channel exact-matches in SQL and never leaks another user', async () => {
+    const s = store();
+    const OTHER = '44444444-4444-4444-8444-444444444444';
+    await sql!`DELETE FROM notify.channel_targets WHERE user_id = ${OTHER}`;
+    await s.upsert({
+      userId: USER,
+      channel: 'email',
+      address: 'me@example.com',
+      locale: 'en',
+      verifyTokenHash: 'a'.repeat(64),
+      verifyExpiresAt: new Date(Date.now() + 60_000),
+    });
+    await s.upsert({
+      userId: USER,
+      channel: 'sms',
+      address: '+447700900000',
+      locale: 'en',
+      verifyTokenHash: 'b'.repeat(64),
+      verifyExpiresAt: new Date(Date.now() + 60_000),
+    });
+    await s.upsert({
+      userId: OTHER,
+      channel: 'email',
+      address: 'them@example.com',
+      locale: 'en',
+      verifyTokenHash: 'c'.repeat(64),
+      verifyExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const mixed = await s.list(USER);
+    expect(mixed.map((t) => t.channel).sort()).toEqual(['email', 'sms']);
+    expect(mixed.every((t) => t.userId === USER)).toBe(true);
+
+    const email = await s.list(USER, 'email');
+    expect(email).toHaveLength(1);
+    expect(email[0]).toMatchObject({ userId: USER, channel: 'email', address: 'me@example.com' });
+
+    expect(await s.list(USER, 'push')).toEqual([]);
+    expect([...(await s.unverifiedChannels(USER))].sort()).toEqual(['email', 'sms']);
+  });
 });

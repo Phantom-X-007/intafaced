@@ -290,6 +290,41 @@ describe('svc-notify mount — authorisation', () => {
     await expect(caller.notify.alerts({ marketId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     await expect(caller.notify.alerts({ marketId: 'x'.repeat(65) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
+
+  it('targets omits channel and still asks for every target owned by the principal', async () => {
+    let listed: { userId: string; channel?: string } | null = null;
+    const notify = stubNotify({
+      listTargets: async (userId: string, channel?: string) => {
+        listed = { userId, ...(channel !== undefined ? { channel } : {}) };
+        return [];
+      },
+    });
+    await expect(createNotifyRouter(notify).createCaller(signed()).notify.targets()).resolves.toEqual([]);
+    expect(listed).toEqual({ userId: USER });
+    expect(listed).not.toHaveProperty('channel');
+  });
+
+  it('targets forwards channel exact-match to listTargets(userId, channel)', async () => {
+    let listed: { userId: string; channel?: string } | null = null;
+    const notify = stubNotify({
+      listTargets: async (userId: string, channel?: string) => {
+        listed = { userId, ...(channel !== undefined ? { channel } : {}) };
+        return [];
+      },
+    });
+    await createNotifyRouter(notify).createCaller(signed()).notify.targets({ channel: 'email' });
+    expect(listed).toEqual({ userId: USER, channel: 'email' });
+  });
+
+  it('targets refuses inapp and unknown channels', async () => {
+    const caller = createNotifyRouter(stubNotify()).createCaller(signed());
+    await expect(caller.notify.targets({ channel: 'inapp' as unknown as 'email' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    await expect(caller.notify.targets({ channel: 'fax' as unknown as 'sms' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
 });
 
 describe('svc-notify mount — public surface', () => {
