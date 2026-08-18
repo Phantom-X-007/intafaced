@@ -749,6 +749,185 @@ describe('the reconciliation routes', () => {
     await app.close();
   });
 
+  it('returns every resting order when price is omitted — mixed prices', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ marketId: 'BTC-USDT', orders: live });
+    expect(
+      res
+        .json()
+        .orders.map((o: { price: string }) => o.price)
+        .sort(),
+    ).toEqual(['100', '99']);
+    await app.close();
+  });
+
+  it('keeps only the matching Amount when price is set, including an honest empty list', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const at100 = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=100',
+      headers,
+    });
+    const at100canonical = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=100.00',
+      headers,
+    });
+    const at99 = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=99',
+      headers,
+    });
+    const miss = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=50',
+      headers,
+    });
+
+    expect(at100.statusCode).toBe(200);
+    expect(at100.json()).toEqual({ marketId: 'BTC-USDT', orders: [RESTING] });
+    expect(at100canonical.statusCode).toBe(200);
+    expect(at100canonical.json().orders).toEqual([RESTING]);
+    expect(at99.statusCode).toBe(200);
+    expect(at99.json().orders).toEqual([RESTING_SELL]);
+    expect(miss.statusCode).toBe(200);
+    expect(miss.json()).toEqual({ marketId: 'BTC-USDT', orders: [] });
+    await app.close();
+  });
+
+  it('does not invent a match when a row has no comparable price', async () => {
+    const unpriced = { ...RESTING, price: '' };
+    const app = await mount(fakeEngine({ restingOrders: () => [unpriced] }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=100',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ marketId: 'BTC-USDT', orders: [] });
+    await app.close();
+  });
+
+  it('refuses an invalid price with 400 and never asks restingOrders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const empty = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?price=', headers });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().code).toBe('InvalidPrice');
+    expect(asked).toBe(false);
+
+    const garbage = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=not-a-decimal',
+      headers,
+    });
+    expect(garbage.statusCode).toBe(400);
+    expect(garbage.json().code).toBe('InvalidPrice');
+    expect(asked).toBe(false);
+
+    const scientific = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?price=1e2',
+      headers,
+    });
+    expect(scientific.statusCode).toBe(400);
+    expect(scientific.json().code).toBe('InvalidPrice');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('still 404s an unknown market when price is set — the read does not allocate a book', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const unknown = await app.inject({
+      method: 'GET',
+      url: '/markets/NOT-A-MARKET/orders?price=100',
+      headers,
+    });
+
+    expect(unknown.statusCode).toBe(404);
+    expect(unknown.json().code).toBe('MarketNotFound');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('parses tif before price — a bad tif is 400 even when price is also bad', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?tif=DAY&price=',
+      headers,
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('InvalidTif');
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
+  it('keeps parent tif and side filters working, including composed with price', async () => {
+    const live = [RESTING, RESTING_SELL];
+    const app = await mount(fakeEngine({ restingOrders: () => live }));
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
+
+    const tifOnly = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?tif=GTC',
+      headers,
+    });
+    const sideOnly = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=sell',
+      headers,
+    });
+    const hit = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=book&accountId=acct-1&tif=GTC&price=100',
+      headers,
+    });
+    const missPrice = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=book&accountId=acct-1&tif=GTC&price=99',
+      headers,
+    });
+    const missTif = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders?side=buy&kind=book&accountId=acct-1&tif=PO&price=100',
+      headers,
+    });
+
+    expect(tifOnly.statusCode).toBe(200);
+    expect(tifOnly.json().orders).toEqual([RESTING]);
+    expect(sideOnly.statusCode).toBe(200);
+    expect(sideOnly.json().orders).toEqual([RESTING_SELL]);
+    expect(hit.statusCode).toBe(200);
+    expect(hit.json().orders).toEqual([RESTING]);
+    expect(missPrice.statusCode).toBe(200);
+    expect(missPrice.json().orders).toEqual([]);
+    expect(missTif.statusCode).toBe(200);
+    expect(missTif.json().orders).toEqual([]);
+    await app.close();
+  });
+
   // ── POST /reconcile ────────────────────────────────────────────────────────
 
   it('refuses an unauthenticated reconcile', async () => {

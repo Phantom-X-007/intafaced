@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import {
   DEFAULT_SERVICE_BODY_BIND_MODE,
@@ -73,6 +73,16 @@ const counterpartOrderSchema = z.object({
 const reconcileBodySchema = z.object({
   orders: z.array(counterpartOrderSchema).max(10_000),
 });
+
+/** Exact Amount match. Unparseable or missing prices are an honest miss, not invented. */
+function orderPriceEquals(price: unknown, expected: Amount): boolean {
+  if (typeof price !== 'string' || price.length === 0) return false;
+  try {
+    return parseAmount(price) === expected;
+  } catch {
+    return false;
+  }
+}
 
 function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
   return {
@@ -290,13 +300,14 @@ export function registerRoutes(
    * market with nothing resting" are different answers and a reconciler that
    * cannot tell them apart will report a whole book as missing.
    *
-   * Optional `?side=buy|sell`, `?kind=book|stop`, `?accountId=`, and `?tif=`
-   * filter after the engine answers. Side then kind then accountId then tif
-   * are parsed first. An unknown or invalid value is 400 before
-   * `restingOrders` is called — the engine is not asked to invent a book, and
-   * an empty match is still `[]`. The filters compose when more than one is
-   * present. IOC/FOK that never rested stay `[]` — this read does not invent
-   * them.
+   * Optional `?side=buy|sell`, `?kind=book|stop`, `?accountId=`, `?tif=`, and
+   * `?price=` (exact Amount match) filter after the engine answers. Side then
+   * kind then accountId then tif then price are parsed first. An unknown or
+   * invalid value is 400 before `restingOrders` is called — the engine is not
+   * asked to invent a book, and an empty match is still `[]`. The filters
+   * compose when more than one is present. IOC/FOK that never rested stay `[]`
+   * — this read does not invent them. A row with no comparable price does not
+   * match a provided price.
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
@@ -315,6 +326,7 @@ export function registerRoutes(
       kind?: string | string[];
       accountId?: string | string[];
       tif?: string | string[];
+      price?: string | string[] | number;
     };
 
     const sideRaw = query.side;
@@ -367,6 +379,26 @@ export function registerRoutes(
       tifFilter = parsed.data;
     }
 
+    const priceRaw = query.price;
+    const priceParam = Array.isArray(priceRaw) ? priceRaw[0] : priceRaw;
+    let priceFilter: Amount | undefined;
+    if (priceParam !== undefined) {
+      if (typeof priceParam !== 'string') {
+        return reply.code(400).send({
+          code: 'InvalidPrice',
+          message: 'price must be a positive decimal string',
+        });
+      }
+      const parsed = decimal.safeParse(priceParam);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          code: 'InvalidPrice',
+          message: 'price must be a positive decimal string',
+        });
+      }
+      priceFilter = parseAmount(parsed.data);
+    }
+
     const orders = engine.restingOrders(marketId);
     return reply.code(200).send({
       marketId,
@@ -375,7 +407,8 @@ export function registerRoutes(
           (sideFilter === undefined || order.side === sideFilter) &&
           (kindFilter === undefined || order.kind === kindFilter) &&
           (accountIdFilter === undefined || order.accountId === accountIdFilter) &&
-          (tifFilter === undefined || order.tif === tifFilter),
+          (tifFilter === undefined || order.tif === tifFilter) &&
+          (priceFilter === undefined || orderPriceEquals(order.price, priceFilter)),
       ),
     });
   });
