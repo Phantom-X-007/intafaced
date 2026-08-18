@@ -208,6 +208,79 @@ describe('SupportService Stage-1', () => {
     expect(resolved.status).toBe('resolved');
   });
 
+  it('omitting authorRole still returns the mixed thread, oldest first', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Cannot sign in',
+      body: 'Details',
+    });
+    await svc.comment({ userId: USER, ticketId: t.id, body: 'user note' });
+    await svc.comment({ userId: OP, ticketId: t.id, body: 'operator note', asOperator: true });
+
+    const thread = await svc.listComments({ userId: USER, ticketId: t.id });
+    expect(thread.map((c) => c.authorRole)).toEqual(['user', 'operator']);
+    expect(thread.map((c) => c.body)).toEqual(['user note', 'operator note']);
+  });
+
+  it('authorRole exact-matches operator comments in the store', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Cannot sign in',
+      body: 'Details',
+    });
+    await svc.comment({ userId: USER, ticketId: t.id, body: 'user note' });
+    await svc.comment({ userId: OP, ticketId: t.id, body: 'operator note', asOperator: true });
+
+    const ops = await svc.listComments({ userId: USER, ticketId: t.id, authorRole: 'operator' });
+    expect(ops.map((c) => c.authorRole)).toEqual(['operator']);
+    expect(ops.map((c) => c.body)).toEqual(['operator note']);
+  });
+
+  it('authorRole exact-matches user comments in the store', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Cannot sign in',
+      body: 'Details',
+    });
+    await svc.comment({ userId: USER, ticketId: t.id, body: 'user note' });
+    await svc.comment({ userId: OP, ticketId: t.id, body: 'operator note', asOperator: true });
+
+    const users = await svc.listComments({ userId: USER, ticketId: t.id, authorRole: 'user' });
+    expect(users.map((c) => c.authorRole)).toEqual(['user']);
+    expect(users.map((c) => c.body)).toEqual(['user note']);
+  });
+
+  it('authorRole with no matching rows returns empty, not a mixed leftover', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Cannot sign in',
+      body: 'Details',
+    });
+    await svc.comment({ userId: USER, ticketId: t.id, body: 'user note' });
+    expect(await svc.listComments({ userId: USER, ticketId: t.id, authorRole: 'operator' })).toEqual([]);
+  });
+
+  it('a stranger still cannot probe by authorRole — not_found, not empty', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'account',
+      subject: 'Cannot sign in',
+      body: 'Details',
+    });
+    await expect(svc.listComments({ userId: OTHER, ticketId: t.id, authorRole: 'user' })).rejects.toMatchObject({
+      code: 'support.not_found',
+    });
+  });
+
   it('lists Stage-2 platform KB spine (i18n keys only)', async () => {
     const svc = new SupportService();
     const kb = await svc.listKb();

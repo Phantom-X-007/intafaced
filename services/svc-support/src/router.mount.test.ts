@@ -387,6 +387,41 @@ describe('svc-support mount', () => {
     expect(support.listComments).not.toHaveBeenCalled();
   });
 
+  const TICKET_COMMENTS = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+  it('listComments omitted authorRole is the full thread', async () => {
+    const support = stubSupport();
+    await createSupportRouter(support).createCaller(signed()).listComments({ ticketId: TICKET_COMMENTS });
+    expect(support.listComments).toHaveBeenCalledWith({
+      userId: USER,
+      ticketId: TICKET_COMMENTS,
+      asOperator: false,
+      authorRole: undefined,
+    });
+  });
+
+  it('listComments passes authorRole through from the input', async () => {
+    const support = stubSupport();
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    await createSupportRouter(support).createCaller(signed(op)).listComments({ ticketId: TICKET_COMMENTS, authorRole: 'operator' });
+    expect(support.listComments).toHaveBeenCalledWith({
+      userId: OP,
+      ticketId: TICKET_COMMENTS,
+      asOperator: true,
+      authorRole: 'operator',
+    });
+  });
+
+  it('rejects invalid authorRole on listComments', async () => {
+    const support = stubSupport();
+    await expect(
+      createSupportRouter(support)
+        .createCaller(signed())
+        .listComments({ ticketId: TICKET_COMMENTS, authorRole: 'agent' as 'user' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(support.listComments).not.toHaveBeenCalled();
+  });
+
   it('refuses listQueue / next / claim without support:ops', async () => {
     const support = stubSupport();
     const caller = createSupportRouter(support).createCaller(signed());

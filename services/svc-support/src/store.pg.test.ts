@@ -203,6 +203,36 @@ describe.skipIf(!available)('audit trail and case file — enforced in Postgres'
     expect(await s.listEvents(t.id, 'escalated')).toEqual([]);
   });
 
+  it('listComments exact-matches optional authorRole in SQL, not a post-filter', async () => {
+    const s = store();
+    const t = await open();
+    expect(
+      (
+        await s.addComment({
+          ticketId: t.id,
+          authorId: USER,
+          authorRole: 'user',
+          body: 'user note',
+        })
+      ).status,
+    ).toBe('ok');
+    expect(
+      (
+        await s.addComment({
+          ticketId: t.id,
+          authorId: OP_A,
+          authorRole: 'operator',
+          body: 'operator note',
+        })
+      ).status,
+    ).toBe('ok');
+    const mixed = await s.listComments(t.id);
+    expect(mixed.map((c) => c.authorRole)).toEqual(['user', 'operator']);
+    expect((await s.listComments(t.id, 'operator')).map((c) => c.authorRole)).toEqual(['operator']);
+    expect((await s.listComments(t.id, 'user')).map((c) => c.body)).toEqual(['user note']);
+    expect(await s.listComments(t.id, 'operator')).toHaveLength(1);
+  });
+
   it('the trail cannot be UPDATEd', async () => {
     const t = await open();
     await expect(sql!`UPDATE support.ticket_events SET note = 'rewritten' WHERE ticket_id = ${t.id}`).rejects.toMatchObject({

@@ -113,7 +113,11 @@ export interface SupportStore {
   listAll(filter?: ListTicketsFilter): Promise<SupportTicket[]>;
   findById(ticketId: string): Promise<SupportTicket | null>;
   addComment(input: AddCommentInput): Promise<AddCommentResult>;
-  listComments(ticketId: string): Promise<SupportComment[]>;
+  /**
+   * Thread, oldest first. Optional `authorRole` is an exact match in the store —
+   * omitted = the full thread, never a post-filter of a mixed page.
+   */
+  listComments(ticketId: string, authorRole?: SupportComment['authorRole']): Promise<SupportComment[]>;
   /** Lifecycle move + its audit row, atomically. Refuses illegal transitions. */
   setStatus(input: SetStatusInput): Promise<SetStatusResult>;
   /**
@@ -510,8 +514,10 @@ export class MemorySupportStore implements SupportStore {
     return { status: 'ok', comment, ticket: updated, reopened };
   }
 
-  async listComments(ticketId: string): Promise<SupportComment[]> {
-    return [...(this.comments.get(ticketId) ?? [])];
+  async listComments(ticketId: string, authorRole?: SupportComment['authorRole']): Promise<SupportComment[]> {
+    const thread = this.comments.get(ticketId) ?? [];
+    const matched = authorRole === undefined ? thread : thread.filter((c) => c.authorRole === authorRole);
+    return [...matched];
   }
 
   async setStatus(input: SetStatusInput): Promise<SetStatusResult> {
@@ -810,11 +816,12 @@ export class PostgresSupportStore implements SupportStore {
     });
   }
 
-  async listComments(ticketId: string): Promise<SupportComment[]> {
+  async listComments(ticketId: string, authorRole?: SupportComment['authorRole']): Promise<SupportComment[]> {
     const rows = await this.sql<PgComment[]>`
       SELECT id, ticket_id, author_id, author_role, body, created_at
       FROM support.comments
       WHERE ticket_id = ${ticketId}
+      ${authorRole !== undefined ? this.sql`AND author_role = ${authorRole}` : this.sql``}
       ORDER BY created_at ASC
     `;
     return rows.map(commentFromPg);

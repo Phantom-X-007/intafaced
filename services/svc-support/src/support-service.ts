@@ -134,14 +134,19 @@ export class SupportService implements SupportContract {
     });
   }
 
-  async listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]> {
+  async listComments(input: {
+    userId: string;
+    ticketId: string;
+    asOperator?: boolean;
+    authorRole?: SupportComment['authorRole'];
+  }): Promise<SupportComment[]> {
     return withSupportSpan('support.listComments', { op: 'listComments', ticketId: input.ticketId }, async () => {
       await this.getTicket({
         userId: input.userId,
         ticketId: input.ticketId,
         asOperator: input.asOperator,
       });
-      return this.store.listComments(input.ticketId);
+      return this.store.listComments(input.ticketId, input.authorRole);
     });
   }
 

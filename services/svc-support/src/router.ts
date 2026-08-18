@@ -137,7 +137,13 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
       }),
 
     listComments: scopedProcedure('support:read')
-      .input(z.object({ ticketId: z.string().uuid() }))
+      .input(
+        z.object({
+          ticketId: z.string().uuid(),
+          /** Exact comment author role. Omitted = the full thread, oldest first. */
+          authorRole: supportCommentSchema.shape.authorRole.optional(),
+        }),
+      )
       .output(z.array(supportCommentSchema))
       .query(async ({ ctx, input }) => {
         try {
@@ -146,6 +152,7 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
             userId: ctx.principal!.userId,
             ticketId: input.ticketId,
             asOperator,
+            authorRole: input.authorRole,
           });
         } catch (err) {
           mapError(err);
