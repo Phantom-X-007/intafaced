@@ -215,10 +215,14 @@ describe('svc-notify mount — authorisation', () => {
   });
 
   it('alerts omits status and still asks for every watch owned by the principal', async () => {
-    let listed: { userId: string; status?: string } | null = null;
+    let listed: { userId: string; status?: string; marketId?: string } | null = null;
     const alerts = {
-      list: async (userId: string, status?: string) => {
-        listed = { userId, ...(status !== undefined ? { status } : {}) };
+      list: async (userId: string, status?: string, marketId?: string) => {
+        listed = {
+          userId,
+          ...(status !== undefined ? { status } : {}),
+          ...(marketId !== undefined ? { marketId } : {}),
+        };
         return [];
       },
       evaluationStatus: () => ({ markSource: 'dark' as const, canFire: false, code: 'alert.price_unavailable' as const }),
@@ -230,13 +234,18 @@ describe('svc-notify mount — authorisation', () => {
     expect(page.evaluation).toEqual({ markSource: 'dark', canFire: false, code: 'alert.price_unavailable' });
     expect(listed).toEqual({ userId: USER });
     expect(listed).not.toHaveProperty('status');
+    expect(listed).not.toHaveProperty('marketId');
   });
 
   it('alerts forwards status exact-match to list(userId, status)', async () => {
-    let listed: { userId: string; status?: string } | null = null;
+    let listed: { userId: string; status?: string; marketId?: string } | null = null;
     const alerts = {
-      list: async (userId: string, status?: string) => {
-        listed = { userId, ...(status !== undefined ? { status } : {}) };
+      list: async (userId: string, status?: string, marketId?: string) => {
+        listed = {
+          userId,
+          ...(status !== undefined ? { status } : {}),
+          ...(marketId !== undefined ? { marketId } : {}),
+        };
         return [];
       },
       evaluationStatus: () => ({ markSource: 'dark' as const, canFire: false, code: 'alert.price_unavailable' as const }),
@@ -247,6 +256,25 @@ describe('svc-notify mount — authorisation', () => {
     expect(listed).toEqual({ userId: USER, status: 'fired' });
   });
 
+  it('alerts forwards marketId exact-match to list(userId, status, marketId)', async () => {
+    let listed: { userId: string; status?: string; marketId?: string } | null = null;
+    const alerts = {
+      list: async (userId: string, status?: string, marketId?: string) => {
+        listed = {
+          userId,
+          ...(status !== undefined ? { status } : {}),
+          ...(marketId !== undefined ? { marketId } : {}),
+        };
+        return [];
+      },
+      evaluationStatus: () => ({ markSource: 'dark' as const, canFire: false, code: 'alert.price_unavailable' as const }),
+    };
+    await createNotifyRouter(stubNotify(), alerts as never)
+      .createCaller(signed())
+      .notify.alerts({ marketId: 'BTC-USD' });
+    expect(listed).toEqual({ userId: USER, marketId: 'BTC-USD' });
+  });
+
   it('alerts refuses a status outside active|fired|cancelled', async () => {
     await expect(
       createNotifyRouter(stubNotify())
@@ -255,6 +283,12 @@ describe('svc-notify mount — authorisation', () => {
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
     });
+  });
+
+  it('alerts refuses empty or too-long marketId', async () => {
+    const caller = createNotifyRouter(stubNotify()).createCaller(signed());
+    await expect(caller.notify.alerts({ marketId: '' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(caller.notify.alerts({ marketId: 'x'.repeat(65) })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
 

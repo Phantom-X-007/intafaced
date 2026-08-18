@@ -132,8 +132,8 @@ export class AlertService {
     return unpublishedKindOutcome(kind);
   }
 
-  list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]> {
-    return this.store.list(userId, status);
+  list(userId: string, status?: AlertStatus, marketId?: string): Promise<readonly PriceAlert[]> {
+    return this.store.list(userId, status, marketId);
   }
 
   cancel(userId: string, id: string): Promise<PriceAlert | null> {

@@ -60,6 +60,46 @@ describe('MemoryAlertStore.list — status exact-match, self-only', () => {
   });
 });
 
+describe('MemoryAlertStore.list — marketId exact-match, self-only', () => {
+  it('omitted marketId returns mixed markets owned by the caller', async () => {
+    const store = new MemoryAlertStore();
+    const btc = await store.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' });
+    const eth = await store.create({ userId: 'u1', marketId: 'ETH-USD', direction: 'below', targetPrice: '50' });
+    await store.create({ userId: 'u2', marketId: 'BTC-USD', direction: 'above', targetPrice: '90' });
+
+    const items = await store.list('u1');
+    expect(items.map((r) => r.id).sort()).toEqual([btc.id, eth.id].sort());
+  });
+
+  it('marketId exact-matches in the same predicate as userId', async () => {
+    const store = new MemoryAlertStore();
+    const btc = await store.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' });
+    await store.create({ userId: 'u1', marketId: 'ETH-USD', direction: 'below', targetPrice: '50' });
+    await store.create({ userId: 'u2', marketId: 'BTC-USD', direction: 'above', targetPrice: '90' });
+
+    const items = await store.list('u1', undefined, 'BTC-USD');
+    expect(items.map((r) => r.id)).toEqual([btc.id]);
+    expect(items.every((r) => r.userId === 'u1' && r.marketId === 'BTC-USD')).toBe(true);
+  });
+
+  it('unknown market with no watches returns empty, never an invented row', async () => {
+    const store = new MemoryAlertStore();
+    await store.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' });
+    expect(await store.list('u1', undefined, 'SOL-USD')).toEqual([]);
+  });
+
+  it('status and marketId AND together', async () => {
+    const store = new MemoryAlertStore();
+    const activeBtc = await store.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' });
+    const toCancel = await store.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'below', targetPrice: '90' });
+    await store.cancel('u1', toCancel.id);
+    await store.create({ userId: 'u1', marketId: 'ETH-USD', direction: 'above', targetPrice: '50' });
+
+    const items = await store.list('u1', 'active', 'BTC-USD');
+    expect(items.map((r) => r.id)).toEqual([activeBtc.id]);
+  });
+});
+
 describe('PostgresAlertStore.list — status is a SQL predicate', () => {
   it('filters with AND status in the query, not after mapping a mixed page', () => {
     const src = readFileSync(join(here, 'store.ts'), 'utf8');
@@ -67,6 +107,18 @@ describe('PostgresAlertStore.list — status is a SQL predicate', () => {
     const list = pg.slice(pg.indexOf('async list('), pg.indexOf('async get('));
     expect(list).toMatch(/AND status = \$\{status\}/);
     expect(list).toMatch(/statusMatch/);
+    expect(list).not.toMatch(/\.filter\(/);
+  });
+});
+
+describe('PostgresAlertStore.list — marketId is a SQL predicate', () => {
+  it('filters with AND market_id in the query, not after mapping a mixed page', () => {
+    const src = readFileSync(join(here, 'store.ts'), 'utf8');
+    const pg = src.slice(src.indexOf('export class PostgresAlertStore'), src.indexOf('function mapRow'));
+    const list = pg.slice(pg.indexOf('async list('), pg.indexOf('async get('));
+    expect(list).toMatch(/AND market_id = \$\{marketId\}/);
+    expect(list).toMatch(/marketMatch/);
+    expect(list).not.toMatch(/LIMIT/);
     expect(list).not.toMatch(/\.filter\(/);
   });
 });

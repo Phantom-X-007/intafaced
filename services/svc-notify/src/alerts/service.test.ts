@@ -73,6 +73,24 @@ describe('AlertService — rides notify fan-out, refuses dark marks', () => {
     expect(await alerts.list('u2', 'cancelled')).toEqual([]);
   });
 
+  it('list omits marketId and returns mixed markets; marketId exact-matches; miss is empty', async () => {
+    const { alerts } = harness({ kind: 'ok', price: '90', at: new Date() });
+    const btc = await alerts.create({ userId: 'u1', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' });
+    const eth = await alerts.create({ userId: 'u1', marketId: 'ETH-USD', direction: 'below', targetPrice: '50' });
+    await alerts.create({ userId: 'u2', marketId: 'BTC-USD', direction: 'above', targetPrice: '90' });
+
+    const mixed = await alerts.list('u1');
+    expect(mixed.map((r) => r.id).sort()).toEqual([btc.id, eth.id].sort());
+
+    const btcOnly = await alerts.list('u1', undefined, 'BTC-USD');
+    expect(btcOnly).toHaveLength(1);
+    expect(btcOnly[0]!.id).toBe(btc.id);
+    expect(btcOnly[0]!.marketId).toBe('BTC-USD');
+
+    expect(await alerts.list('u1', undefined, 'SOL-USD')).toEqual([]);
+    expect(await alerts.list('u2', undefined, 'ETH-USD')).toEqual([]);
+  });
+
   it('dark mark refuses every active alert and writes no notification', async () => {
     const { alerts, notifyStore } = harness({ kind: 'unavailable', reason: 'dark' });
     const row = await alerts.create({

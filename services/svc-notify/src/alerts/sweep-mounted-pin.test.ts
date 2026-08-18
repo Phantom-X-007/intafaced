@@ -58,7 +58,7 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     const createAlert = router.slice(router.indexOf('createAlert:'), router.indexOf('cancelAlert:'));
     expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
     expect(router).toMatch(/z\.enum\(\['active', 'fired', 'cancelled'\]\)\.optional\(\)/);
-    expect(router).toMatch(/alerts\.list\(ctx\.principal\.userId, input\?\.status\)/);
+    expect(router).toMatch(/alerts\.list\(ctx\.principal\.userId, input\?\.status, input\?\.marketId\)/);
     expect(router).toMatch(/evaluateAlert:/);
     expect(router).toMatch(/alerts\.evaluateAlert\(/);
     expect(router).toMatch(/alert\.kind_unpublished/);

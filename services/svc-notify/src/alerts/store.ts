@@ -20,8 +20,12 @@ export class AlertValidationError extends Error {
 
 export interface AlertStore {
   create(input: CreatePriceAlertInput): Promise<PriceAlert>;
-  /** Self-only. Omitted status returns every owned watch; provided status exact-matches in the store. */
-  list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]>;
+  /**
+   * Self-only. Omitted status/marketId returns every owned watch. Provided
+   * status and marketId exact-match in the store (AND), never a mixed-page
+   * post-filter.
+   */
+  list(userId: string, status?: AlertStatus, marketId?: string): Promise<readonly PriceAlert[]>;
   get(userId: string, id: string): Promise<PriceAlert | null>;
   /** Active alerts for a market — evaluation fan-in. */
   listActiveByMarket(marketId: string): Promise<readonly PriceAlert[]>;
@@ -68,9 +72,11 @@ export class MemoryAlertStore implements AlertStore {
     return row;
   }
 
-  async list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]> {
+  async list(userId: string, status?: AlertStatus, marketId?: string): Promise<readonly PriceAlert[]> {
     return [...this.byId.values()]
-      .filter((r) => r.userId === userId && (status === undefined || r.status === status))
+      .filter(
+        (r) => r.userId === userId && (status === undefined || r.status === status) && (marketId === undefined || r.marketId === marketId),
+      )
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
@@ -134,8 +140,9 @@ export class PostgresAlertStore implements AlertStore {
     return mapRow(rows[0]!);
   }
 
-  async list(userId: string, status?: AlertStatus): Promise<readonly PriceAlert[]> {
+  async list(userId: string, status?: AlertStatus, marketId?: string): Promise<readonly PriceAlert[]> {
     const statusMatch = status !== undefined ? this.sql`AND status = ${status}` : this.sql``;
+    const marketMatch = marketId !== undefined ? this.sql`AND market_id = ${marketId}` : this.sql``;
     const rows = await this.sql<
       {
         id: string;
@@ -152,6 +159,7 @@ export class PostgresAlertStore implements AlertStore {
       FROM notify.price_alerts
       WHERE user_id = ${userId}
         ${statusMatch}
+        ${marketMatch}
       ORDER BY created_at DESC
     `;
     return rows.map(mapRow);

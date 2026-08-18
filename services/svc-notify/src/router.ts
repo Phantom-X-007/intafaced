@@ -462,12 +462,19 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * receiving the fact that no watch on it can currently cross.
        */
       alerts: scopedProcedure('notify:read', { module: 'notify' })
-        .input(z.object({ status: z.enum(['active', 'fired', 'cancelled']).optional() }).optional())
+        .input(
+          z
+            .object({
+              status: z.enum(['active', 'fired', 'cancelled']).optional(),
+              marketId: z.string().min(1).max(64).optional(),
+            })
+            .optional(),
+        )
         .output(z.object({ items: z.array(priceAlertOutput), evaluation: alertEvaluationOutput }))
         .query(async ({ ctx, input }) => {
           if (!alerts) return { items: [], evaluation: NO_ALERT_SERVICE };
           return {
-            items: (await alerts.list(ctx.principal.userId, input?.status)).map(priceAlertToWire),
+            items: (await alerts.list(ctx.principal.userId, input?.status, input?.marketId)).map(priceAlertToWire),
             evaluation: alerts.evaluationStatus(),
           };
         }),
