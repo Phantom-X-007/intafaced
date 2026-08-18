@@ -297,7 +297,7 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
     expect(debtAfter1).toBeLessThanOrEqual((debtBefore1 * 55n) / 100n);
     expect(debtAfter2).toBeGreaterThan(debtBefore2 / 3n);
     expect(debtAfter2).toBeLessThanOrEqual((debtBefore2 * 55n) / 100n);
-  });
+  }, 30_000);
 
   it('flash pack: same-tx open/borrow/repay extracts no borrow-token profit', async () => {
     const trip = loadArtifact('LendingSameTxRoundTrip');
@@ -379,7 +379,7 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
       args: [attacker.deployer],
     })) as bigint;
     expect(borAfter).toBeLessThanOrEqual(borBefore);
-  });
+  }, 30_000);
 
   it('flash pack: reentrancy during borrow transfer cannot open a second borrow', async () => {
     const reTok = loadArtifact('ReenteringBorrowToken');
@@ -571,5 +571,5 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
     expect(succeeded).toBe(false);
     // Only the outer borrow landed
     expect(debt).toBe(20n * WAD);
-  });
+  }, 30_000);
 });

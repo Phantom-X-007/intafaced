@@ -241,10 +241,11 @@ describe('committed AMM artefacts match the Solidity in this tree', () => {
 
 describe('committed vault artefacts match the Solidity in this tree', () => {
   const vaults = (SUITES as Suite[]).find((s) => s.name === 'vaults');
+  const vaultNames = ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'LaunchVesting', 'DeployerReputation', 'TreasuryYieldVault'] as const;
 
-  it('compiles CrewVault + LegacyVault + LaunchLpLock + TreasuryYieldVault', () => {
+  it('compiles crew/legacy/trust/yield vaults', () => {
     expect(vaults?.expect).toBe('compiles');
-    for (const name of ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'TreasuryYieldVault'] as const) {
+    for (const name of vaultNames) {
       const artefact = loadArtifact(name);
       expect(artefact.contractName).toBe(name);
       expect(artefact.suite).toBe('vaults');
@@ -255,7 +256,7 @@ describe('committed vault artefacts match the Solidity in this tree', () => {
 
   it('records a sourceHash that still matches the .sol files on disk', () => {
     const expected = computeSourceHash(suiteSources(vaults, collectSources()));
-    for (const name of ['CrewVault', 'LegacyVault', 'LaunchLpLock', 'TreasuryYieldVault'] as const) {
+    for (const name of vaultNames) {
       expect(loadArtifact(name).sourceHash, `${name}.json is stale. Run: pnpm --filter @intafaced/svc-protocol contracts:build`).toBe(
         expected,
       );
@@ -277,5 +278,23 @@ describe('committed privacy artefacts match the Solidity in this tree', () => {
   it('records a sourceHash that still matches the .sol files on disk', () => {
     const expected = computeSourceHash(suiteSources(privacy, collectSources()));
     expect(loadArtifact('StealthAnnouncer').sourceHash).toBe(expected);
+  });
+});
+
+describe('committed venue artefacts match the Solidity in this tree', () => {
+  const venue = (SUITES as Suite[]).find((s) => s.name === 'venue');
+
+  it('compiles SovereignVenue (not a DevVenue fixture)', () => {
+    expect(venue?.expect).toBe('compiles');
+    const artefact = loadArtifact('SovereignVenue');
+    expect(artefact.contractName).toBe('SovereignVenue');
+    expect(artefact.suite).toBe('venue');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(venue, collectSources()));
+    expect(loadArtifact('SovereignVenue').sourceHash).toBe(expected);
   });
 });
