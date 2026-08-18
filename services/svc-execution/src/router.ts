@@ -358,6 +358,7 @@ export function createExecutionRouter(
             z.object({
               venueId: z.string().min(1).max(128),
               kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+              now: z.coerce.date().optional(),
             }),
           )
           .query(async ({ input }) => {
@@ -365,6 +366,7 @@ export function createExecutionRouter(
               return observeOmsLatency({
                 venueId: input.venueId,
                 kind: input.kind,
+                now: input.now,
                 latencyByVenue,
               });
             });
