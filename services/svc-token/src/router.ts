@@ -263,13 +263,20 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       ),
 
     listStakes: scopedProcedure('token:read', { module: 'token' })
-      .input(z.object({ status: z.enum(['active', 'closed', 'pending', 'all']).default('active') }).default({ status: 'active' }))
+      .input(
+        z
+          .object({
+            status: z.enum(['active', 'closed', 'pending', 'all']).default('active'),
+            tier: stakeTier.optional(),
+          })
+          .default({ status: 'active' }),
+      )
       .output(z.array(stakeOutput))
       .query(async ({ ctx, input }) =>
         guard(async () => {
           const userId = ctx.principal.userId;
           if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
-          const stakes = await token.listStakes(userId, input.status);
+          const stakes = await token.listStakes(userId, input.status, input.tier);
           return stakes.map(stakeToWire);
         }),
       ),

@@ -414,6 +414,12 @@ describe('svc-token mount — the public surface', () => {
     const list = await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'active' });
     expect(list).toHaveLength(1);
     expect(list[0]?.amount).toBe('1000');
-    expect(token.listStakes).toHaveBeenCalledWith(USER, 'active');
+    expect(token.listStakes).toHaveBeenCalledWith(USER, 'active', undefined);
+  });
+
+  it('passes optional listStakes tier through to the service', async () => {
+    const token = stubToken();
+    await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'all', tier: 'flex' });
+    expect(token.listStakes).toHaveBeenCalledWith(USER, 'all', 'flex');
   });
 });

@@ -558,8 +558,10 @@ export class TokenService {
   /**
    * Stakes owned by a user. Defaults to active only.
    * `all` includes pending so a crash mid-stake is visible for retry (M-02).
+   * Optional `tier` is an exact-match SQL filter on every status branch.
    */
-  async listStakes(userId: string, status: 'active' | 'closed' | 'pending' | 'all' = 'active'): Promise<StakeRecord[]> {
+  async listStakes(userId: string, status: 'active' | 'closed' | 'pending' | 'all' = 'active', tier?: StakeTier): Promise<StakeRecord[]> {
+    const tierFilter = tier ? this.sql`AND tier = ${tier}` : this.sql``;
     const rows =
       status === 'all'
         ? await this.sql<
@@ -576,6 +578,7 @@ export class TokenService {
             SELECT id, user_id, amount, tier, started_at, unlocks_at, status
               FROM token.stakes
              WHERE user_id = ${userId} AND status IN ('pending', 'active', 'unstaking', 'closed')
+             ${tierFilter}
              ORDER BY started_at DESC, id ASC
           `
         : await this.sql<
@@ -592,6 +595,7 @@ export class TokenService {
             SELECT id, user_id, amount, tier, started_at, unlocks_at, status
               FROM token.stakes
              WHERE user_id = ${userId} AND status = ${status}
+             ${tierFilter}
              ORDER BY started_at DESC, id ASC
           `;
 

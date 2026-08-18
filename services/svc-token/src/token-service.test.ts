@@ -330,6 +330,28 @@ if (!available) {
       expect(closed[0]?.id).toBe(a1.id);
     });
 
+    it('listStakes filters by optional tier in SQL; miss returns empty', async () => {
+      await fund(USER_A, '6000');
+      const flex = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const m3 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'm3' });
+
+      const omitted = await token.listStakes(USER_A);
+      expect(omitted.map((s) => s.id).sort()).toEqual([flex.id, m3.id].sort());
+
+      const flexOnly = await token.listStakes(USER_A, 'active', 'flex');
+      expect(flexOnly).toHaveLength(1);
+      expect(flexOnly[0]?.id).toBe(flex.id);
+      expect(flexOnly[0]?.tier).toBe('flex');
+      expect(formatAmount(flexOnly[0]!.amount)).toBe('1000');
+
+      const miss = await token.listStakes(USER_A, 'active', 'm12');
+      expect(miss).toEqual([]);
+
+      const allFlex = await token.listStakes(USER_A, 'all', 'flex');
+      expect(allFlex).toHaveLength(1);
+      expect(allFlex[0]?.id).toBe(flex.id);
+    });
+
     it('getStake returns null for unknown ids and returns active stakes', async () => {
       expect(await token.getStake('44444444-4444-4444-8444-444444444444')).toBeNull();
 
