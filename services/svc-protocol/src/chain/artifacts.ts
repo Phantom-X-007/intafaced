@@ -49,6 +49,8 @@ export type ArtifactName =
   | 'CrewVault'
   | 'LegacyVault'
   | 'LaunchLpLock'
+  | 'TreasuryYieldVault'
+  | 'StealthAnnouncer'
   | 'SovereignEscrow'
   | 'MockERC20'
   | 'LendingSameTxRoundTrip'

@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'vitest';
+import { MemoryVenueVaultStore, VenueVault, VenueVaultNotFoundError } from './vault.js';
+import { WithdrawalPermissionRefusedError } from './permissions.js';
+import { parseKek, VenueVaultKekUnconfiguredError } from './wrap.js';
+
+/** 32-byte test wrap only — never a production KEK. */
+const TEST_KEK = parseKek('11'.repeat(32));
+
+describe('S-L6 VenueVault', () => {
+  it('refuses withdrawal-capable keys before anything is stored', async () => {
+    const store = new MemoryVenueVaultStore();
+    const vault = new VenueVault(store, TEST_KEK);
+    await expect(
+      vault.register('user-a', {
+        venueId: 'binance-spot',
+        apiKey: 'ak-secret-material',
+        apiSecret: 'as-secret-material',
+        permissions: { scopes: ['spot', 'withdraw'] },
+      }),
+    ).rejects.toBeInstanceOf(WithdrawalPermissionRefusedError);
+    expect(store.rows.size).toBe(0);
+  });
+
+  it('stores ciphertext, never plaintext, and unwraps trade-only for the owner', async () => {
+    const store = new MemoryVenueVaultStore();
+    const vault = new VenueVault(store, TEST_KEK);
+    const { id } = await vault.register('user-a', {
+      venueId: 'bybit-spot',
+      apiKey: 'ak-secret-material',
+      apiSecret: 'as-secret-material',
+      permissions: { scopes: ['trade', 'read'] },
+    });
+    const dumped = JSON.stringify([...store.rows.values()]);
+    expect(dumped).not.toContain('ak-secret-material');
+    expect(dumped).not.toContain('as-secret-material');
+
+    const opened = await vault.unwrapForTrade('user-a', id);
+    expect(opened.apiKey).toBe('ak-secret-material');
+    expect(opened.venueId).toBe('bybit-spot');
+
+    await expect(vault.unwrapForTrade('user-b', id)).rejects.toBeInstanceOf(VenueVaultNotFoundError);
+  });
+
+  it('fail-closes when the wrap key is missing (HSM residual)', () => {
+    expect(() => parseKek('')).toThrow(VenueVaultKekUnconfiguredError);
+    expect(() => parseKek('aa')).toThrow(VenueVaultKekUnconfiguredError);
+  });
+});
