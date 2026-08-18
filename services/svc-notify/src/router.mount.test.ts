@@ -114,6 +114,45 @@ describe('svc-notify mount — authorisation', () => {
     expect(readFor).toBe(USER);
   });
 
+  it('list without kind still asks for the full principal page', async () => {
+    let query: { userId: string; unreadOnly: boolean; kind?: string } | null = null;
+    const notify = stubNotify({
+      list: async (q: { userId: string; unreadOnly: boolean; kind?: string }) => {
+        query = q;
+        return { items: [], nextCursor: null };
+      },
+    });
+
+    await expect(createNotifyRouter(notify).createCaller(signed()).notify.list()).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+    expect(query).toMatchObject({ userId: USER, unreadOnly: false });
+    expect(query).not.toHaveProperty('kind');
+  });
+
+  it('list forwards kind exact-match and composes with unreadOnly', async () => {
+    let query: { userId: string; unreadOnly: boolean; kind?: string } | null = null;
+    const notify = stubNotify({
+      list: async (q: { userId: string; unreadOnly: boolean; kind?: string }) => {
+        query = q;
+        return { items: [], nextCursor: null };
+      },
+    });
+
+    await expect(
+      createNotifyRouter(notify).createCaller(signed()).notify.list({ kind: 'p2p.escrow.locked', unreadOnly: true }),
+    ).resolves.toEqual({ items: [], nextCursor: null });
+    expect(query).toEqual(expect.objectContaining({ userId: USER, unreadOnly: true, kind: 'p2p.escrow.locked' }));
+  });
+
+  it('list refuses an empty kind', async () => {
+    const notify = stubNotify();
+    await expect(createNotifyRouter(notify).createCaller(signed()).notify.list({ kind: '' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+  });
+
   it('markRead uses principal.userId — never an input user', async () => {
     let markFor: string | null = null;
     const notify = stubNotify({

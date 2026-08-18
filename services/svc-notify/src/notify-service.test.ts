@@ -108,6 +108,43 @@ describe('NotifyService — dedupe + self-only mark', () => {
     const unread = await notify.list({ userId: USER, limit: 10, unreadOnly: true });
     expect(unread.items).toHaveLength(0);
   });
+
+  it('list omits kind and returns every notification for the caller', async () => {
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'a', kind: 'bank.margin_call' }));
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'b', kind: 'p2p.escrow.locked' }));
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: false });
+    expect(page.items).toHaveLength(2);
+  });
+
+  it('list exact-matches kind', async () => {
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'a', kind: 'bank.margin_call' }));
+    const locked = await notify.create(baseInsert({ sourceIdempotencyKey: 'b', kind: 'p2p.escrow.locked' }));
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: false, kind: 'p2p.escrow.locked' });
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]!.id).toBe(locked.notification!.id);
+  });
+
+  it('list kind miss returns empty items', async () => {
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'a', kind: 'bank.margin_call' }));
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: false, kind: 'does.not.exist' });
+    expect(page.items).toEqual([]);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('list unreadOnly and kind compose', async () => {
+    const first = await notify.create(baseInsert({ sourceIdempotencyKey: 'a', kind: 'bank.margin_call' }));
+    const second = await notify.create(baseInsert({ sourceIdempotencyKey: 'b', kind: 'bank.margin_call' }));
+    await notify.create(baseInsert({ sourceIdempotencyKey: 'c', kind: 'p2p.escrow.locked' }));
+    await notify.markRead(USER, [first.notification!.id]);
+
+    const page = await notify.list({ userId: USER, limit: 10, unreadOnly: true, kind: 'bank.margin_call' });
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]!.id).toBe(second.notification!.id);
+    expect(page.items[0]!.readAt).toBeNull();
+  });
 });
 
 describe('event fan-out', () => {

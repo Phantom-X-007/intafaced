@@ -42,6 +42,8 @@ export interface ListQuery {
   cursor?: string | null;
   limit: number;
   unreadOnly: boolean;
+  /** Exact match on `notification.kind`. Omitted means every kind for the caller. */
+  kind?: string;
 }
 
 export interface ListResult {
@@ -122,6 +124,7 @@ export class MemoryNotifyStore implements NotifyStore {
   async list(query: ListQuery): Promise<ListResult> {
     let rows = [...this.byId.values()].filter((r) => r.userId === query.userId);
     if (query.unreadOnly) rows = rows.filter((r) => r.readAt === null);
+    if (query.kind !== undefined) rows = rows.filter((r) => r.kind === query.kind);
     // Plain ordinal comparison on the tiebreak, matching `ORDER BY id DESC` on a
     // uuid column. `localeCompare` is locale-dependent, and the filter below has
     // always used `<` — two orderings deciding one page is how a row gets served
@@ -294,51 +297,34 @@ export class PostgresNotifyStore implements NotifyStore {
      * own (or no row at all) makes the subquery empty, the comparison NULL, and
      * the page empty — which is the same refusal the explicit lookup gave.
      */
+    const unread = query.unreadOnly ? this.sql`AND read_at IS NULL` : this.sql``;
+    const kind = query.kind !== undefined ? this.sql`AND kind = ${query.kind}` : this.sql``;
+
     const rows = query.cursor
-      ? query.unreadOnly
-        ? await this.sql<PgRow[]>`
-            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-                   read_at, source_subject, source_idempotency_key, created_at
-            FROM notify.notifications
-            WHERE user_id = ${query.userId}
-              AND read_at IS NULL
-              AND (created_at, id) < (
-                SELECT created_at, id FROM notify.notifications
-                 WHERE id = ${query.cursor} AND user_id = ${query.userId}
-              )
-            ORDER BY created_at DESC, id DESC
-            LIMIT ${limit + 1}
-          `
-        : await this.sql<PgRow[]>`
-            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-                   read_at, source_subject, source_idempotency_key, created_at
-            FROM notify.notifications
-            WHERE user_id = ${query.userId}
-              AND (created_at, id) < (
-                SELECT created_at, id FROM notify.notifications
-                 WHERE id = ${query.cursor} AND user_id = ${query.userId}
-              )
-            ORDER BY created_at DESC, id DESC
-            LIMIT ${limit + 1}
-          `
-      : query.unreadOnly
-        ? await this.sql<PgRow[]>`
-            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-                   read_at, source_subject, source_idempotency_key, created_at
-            FROM notify.notifications
-            WHERE user_id = ${query.userId}
-              AND read_at IS NULL
-            ORDER BY created_at DESC, id DESC
-            LIMIT ${limit + 1}
-          `
-        : await this.sql<PgRow[]>`
-            SELECT id, user_id, kind, title_key, body_key, params, href, severity,
-                   read_at, source_subject, source_idempotency_key, created_at
-            FROM notify.notifications
-            WHERE user_id = ${query.userId}
-            ORDER BY created_at DESC, id DESC
-            LIMIT ${limit + 1}
-          `;
+      ? await this.sql<PgRow[]>`
+          SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+                 read_at, source_subject, source_idempotency_key, created_at
+          FROM notify.notifications
+          WHERE user_id = ${query.userId}
+            ${unread}
+            ${kind}
+            AND (created_at, id) < (
+              SELECT created_at, id FROM notify.notifications
+               WHERE id = ${query.cursor} AND user_id = ${query.userId}
+            )
+          ORDER BY created_at DESC, id DESC
+          LIMIT ${limit + 1}
+        `
+      : await this.sql<PgRow[]>`
+          SELECT id, user_id, kind, title_key, body_key, params, href, severity,
+                 read_at, source_subject, source_idempotency_key, created_at
+          FROM notify.notifications
+          WHERE user_id = ${query.userId}
+            ${unread}
+            ${kind}
+          ORDER BY created_at DESC, id DESC
+          LIMIT ${limit + 1}
+        `;
 
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit).map(fromPg);
