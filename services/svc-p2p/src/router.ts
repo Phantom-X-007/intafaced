@@ -1194,7 +1194,14 @@ export function createP2pRouter(
      */
     ops: router({
       lateSettlements: scopedProcedure('admin:compliance', { module: 'p2p' })
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              limit: z.number().int().min(1).max(200).optional(),
+              status: z.enum(TRADE_STATUSES).optional(),
+            })
+            .optional(),
+        )
         .output(
           z.object({
             trades: z.array(
@@ -1213,7 +1220,7 @@ export function createP2pRouter(
         )
         .query(async ({ input }) =>
           guard(async () => {
-            const rows = await p2p.listLateSettlements(input?.limit ?? 100);
+            const rows = await p2p.listLateSettlements(input?.limit ?? 100, new Date(), input?.status);
             return {
               trades: rows.map((r) => ({
                 tradeId: r.tradeId,

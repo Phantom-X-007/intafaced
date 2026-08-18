@@ -490,6 +490,48 @@ if (!available) {
     });
   });
 
+  describe('listLateSettlements', () => {
+    function brokenLedger(): MemoryLedger {
+      return {
+        post: async () => {
+          throw new Error('ledger unavailable');
+        },
+        balance: (account: Parameters<typeof ledger.balance>[0]) => ledger.balance(account),
+        balances: (kind: string, id: string) => (ledger.balances as (k: string, i: string) => unknown)(kind, id),
+      } as unknown as MemoryLedger;
+    }
+
+    it('returns mixed late statuses when omitted, exact-matches in SQL, and excludes settled rows', async () => {
+      const breaking = new P2pService(sql, brokenLedger(), bus, options);
+
+      const releasedLate = await escrowedTrade('100');
+      await expect(breaking.confirmFiatReceived(releasedLate.id, MAKER)).rejects.toThrow('ledger unavailable');
+
+      const cancelledLate = await escrowedTrade('100');
+      await expect(breaking.cancelTrade(cancelledLate.id, TAKER)).rejects.toThrow('ledger unavailable');
+
+      const settled = await escrowedTrade('100');
+      await p2p.confirmFiatReceived(settled.id, MAKER);
+      expect((await p2p.getTrade(settled.id)).settledAt).not.toBeNull();
+
+      const mixed = await p2p.listLateSettlements();
+      expect(mixed.map((t) => t.tradeId).sort()).toEqual([releasedLate.id, cancelledLate.id].sort());
+      expect(new Set(mixed.map((t) => t.status))).toEqual(new Set(['released', 'cancelled']));
+      expect(mixed.every((t) => t.tradeId !== settled.id)).toBe(true);
+
+      const releasedOnly = await p2p.listLateSettlements(50, new Date(), 'released');
+      expect(releasedOnly.map((t) => t.tradeId)).toEqual([releasedLate.id]);
+      expect(releasedOnly[0]!.status).toBe('released');
+      expect(releasedOnly[0]!.ageSeconds).toBeGreaterThanOrEqual(0);
+
+      const cancelledOnly = await p2p.listLateSettlements(50, new Date(), 'cancelled');
+      expect(cancelledOnly.map((t) => t.tradeId)).toEqual([cancelledLate.id]);
+      expect(cancelledOnly[0]!.status).toBe('cancelled');
+
+      expect(await p2p.listLateSettlements(50, new Date(), 'disputed')).toEqual([]);
+    });
+  });
+
   // ── Happy path ────────────────────────────────────────────────────────────
 
   describe('HAPPY PATH — lock, then release', () => {

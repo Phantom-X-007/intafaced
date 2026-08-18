@@ -827,6 +827,28 @@ describe('svc-p2p mount — late settlements ops', () => {
     });
     expect(listed).toBe(0);
   });
+
+  it('forwards optional lateSettlements status and rejects unknown statuses', async () => {
+    const seen: unknown[] = [];
+    const p2p = stubP2p({
+      listLateSettlements: async (limit?: number, _now?: Date, status?: string) => {
+        seen.push([limit, status]);
+        return [];
+      },
+    });
+    const caller = createP2pRouter(p2p, stubInstruments()).createCaller(signed(principal({ scopes: ['admin:compliance'] })));
+
+    await expect(caller.ops.lateSettlements({})).resolves.toEqual({ trades: [] });
+    await expect(caller.ops.lateSettlements({ status: 'released' })).resolves.toEqual({ trades: [] });
+    await expect(caller.ops.lateSettlements({ status: 'bogus' as 'released' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+
+    expect(seen).toEqual([
+      [100, undefined],
+      [100, 'released'],
+    ]);
+  });
 });
 
 describe('svc-p2p mount — offer methods shape', () => {

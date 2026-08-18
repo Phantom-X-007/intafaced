@@ -2221,6 +2221,7 @@ export class P2pService {
   async listLateSettlements(
     limit = 100,
     now: Date = new Date(),
+    status?: TradeStatus,
   ): Promise<
     Array<{
       tradeId: string;
@@ -2235,24 +2236,33 @@ export class P2pService {
     }>
   > {
     const lim = Math.min(Math.max(limit, 1), 200);
-    const rows = await this.sql<
-      Array<{
-        id: string;
-        status: TradeStatus;
-        resolution: TradeResolution | null;
-        resolution_reason: string | null;
-        resolved_at: Date;
-        last_settle_error: string | null;
-        last_settle_error_at: Date | null;
-      }>
-    >`
-      SELECT id, status, resolution, resolution_reason, resolved_at,
-             last_settle_error, last_settle_error_at
-        FROM p2p.p2p_trades
-       WHERE resolved_at IS NOT NULL AND settled_at IS NULL
-       ORDER BY resolved_at ASC
-       LIMIT ${lim}
-    `;
+    type LateRow = {
+      id: string;
+      status: TradeStatus;
+      resolution: TradeResolution | null;
+      resolution_reason: string | null;
+      resolved_at: Date;
+      last_settle_error: string | null;
+      last_settle_error_at: Date | null;
+    };
+    const rows = status
+      ? await this.sql<LateRow[]>`
+          SELECT id, status, resolution, resolution_reason, resolved_at,
+                 last_settle_error, last_settle_error_at
+            FROM p2p.p2p_trades
+           WHERE resolved_at IS NOT NULL AND settled_at IS NULL
+             AND status = ${status}
+           ORDER BY resolved_at ASC
+           LIMIT ${lim}
+        `
+      : await this.sql<LateRow[]>`
+          SELECT id, status, resolution, resolution_reason, resolved_at,
+                 last_settle_error, last_settle_error_at
+            FROM p2p.p2p_trades
+           WHERE resolved_at IS NOT NULL AND settled_at IS NULL
+           ORDER BY resolved_at ASC
+           LIMIT ${lim}
+        `;
     const nowMs = now.getTime();
     return rows.map((r) => {
       const resolvedAt = r.resolved_at instanceof Date ? r.resolved_at : new Date(r.resolved_at);
