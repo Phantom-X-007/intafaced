@@ -717,15 +717,23 @@ export function createIdentityRouter(
 
       /** The caller's own records, and the tier they currently add up to. */
       status: scopedProcedure('identity:read')
-        .input(z.object({ status: z.enum(['pending', 'approved', 'rejected', 'expired']).optional() }).optional())
+        .input(
+          z
+            .object({
+              status: z.enum(['pending', 'approved', 'rejected', 'expired']).optional(),
+              tier: z.enum(['none', 'basic', 'full', 'institutional']).optional(),
+            })
+            .optional(),
+        )
         .output(z.object({ tier: z.enum(['none', 'basic', 'full', 'institutional']), records: z.array(kycRecordOutput) }))
         .query(async ({ ctx, input }) => ({
           // Read from the same function the token issuer uses, rather than
           // re-deriving "highest approved, unexpired" here. Two implementations
           // of that rule would eventually disagree, and the one the user is
           // shown is not the one that decides what they can do.
-          // Filtering `records` by status must not invent a different current
-          // tier — `kycTier` still reads every approved, unexpired row.
+          // Filtering `records` by status or record-tier must not invent a
+          // different current access tier — `kycTier` still reads every
+          // approved, unexpired row.
           tier: await auth.kycTier(ctx.principal.userId),
           records: (await auth.listKycRecords(ctx.principal.userId, input)).map(presentKyc),
         })),

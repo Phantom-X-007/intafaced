@@ -439,6 +439,36 @@ describe('kyc.status', () => {
     expect(tierCall.args).toEqual([USER]);
   });
 
+  it('filters records by tier without changing how the output tier is computed', async () => {
+    const api = await caller(['identity:read']);
+    const status = await api.kyc.status({ tier: 'basic' });
+
+    expect(status.tier).toBe('none');
+    const listCall = stub.calls.find((c) => c.method === 'listKycRecords')!;
+    expect(listCall.args[0]).toBe(USER);
+    expect(listCall.args[1]).toEqual({ tier: 'basic' });
+    const tierCall = stub.calls.find((c) => c.method === 'kycTier')!;
+    expect(tierCall.args).toEqual([USER]);
+  });
+
+  it('rejects an invalid tier with BAD_REQUEST', async () => {
+    const api = await caller(['identity:read']);
+    const err = await api.kyc.status({ tier: 'gold' as 'basic' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('BAD_REQUEST');
+    expect(stub.calls.some((c) => c.method === 'listKycRecords')).toBe(false);
+  });
+
+  it('ANDs status and tier filters without changing how the output tier is computed', async () => {
+    const api = await caller(['identity:read']);
+    const status = await api.kyc.status({ status: 'pending', tier: 'full' });
+
+    expect(status.tier).toBe('none');
+    const listCall = stub.calls.find((c) => c.method === 'listKycRecords')!;
+    expect(listCall.args[0]).toBe(USER);
+    expect(listCall.args[1]).toEqual({ status: 'pending', tier: 'full' });
+    expect(stub.calls.find((c) => c.method === 'kycTier')!.args).toEqual([USER]);
+  });
+
   it('rejects an invalid status with BAD_REQUEST', async () => {
     const api = await caller(['identity:read']);
     const err = await api.kyc.status({ status: 'nope' as 'pending' }).catch((e: unknown) => e);
