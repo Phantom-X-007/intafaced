@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-J1 audit pipeline (this PR)
+> ### 2026-08-19 delta — S-E3 CardIssuer on-chain interface (this PR)
+>
+> **No keys in this repo.** `ICardPull` is the Protocol Plane seam a live issuer may drive. `CardPull is ICardPull`. TypeScript `issuer-adapter` builds `pullExact`/`kill` calldata and refuses issuer secret env keys. Custodial `CardIssuerAdapter` in svc-bank is a different port. Live rail stays `socket.live-issuer`.
+>
+> ### 2026-08-19 delta — S-J1 audit pipeline (#2472)
 >
 > **Status + hash + signer, never a fake badge.** `src/audit/pipeline.ts` + public `auditStatus`. The committed smart-accounts package is `kind: internal`, `audited: false`. `audited:true` only exists as a pure-function path for a future external package whose pinned hash matches. `socket.contract-audit` stays a socket (Nitro budget).
 >
@@ -211,7 +215,7 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 | -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **S-E1** | **JIT funding contract**  | **Shipped #2470.** `CardPull` — exact `transferFrom` owner SA → user settlement; kill strands zero; session may call `pullExact`. Live issuer rail is still Nitro (`socket.live-issuer`). Unaudited. |
 | **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                                                                                                               |
-| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                                                                                                             |
+| **S-E3** | **Adapter boundary**      | **Shipped this PR.** `ICardPull` + `issuer-adapter.ts` calldata. No issuer key, mnemonic, or PAN. Live rail is still Nitro (`socket.live-issuer`). Unaudited.                                        |
 
 ### Tier F — Web4 / attestations (on-chain standing, zero PII)
 
@@ -248,11 +252,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier J — Security / audit factory (your senior edge)
 
-| ID       | Outcome                            | Done bar                                                                                                                                                                                   |
-| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **S-J1** | **Audit pipeline in svc-protocol** | **Shipped this PR.** `src/audit/pipeline.ts` + `auditStatus` — artefact hash, who signed. Internal package cannot set `audited:true`. External firm still Nitro (`socket.contract-audit`). |
-| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                                       |
-| **S-J3** | **Incident runbooks**              | **Shipped #2471.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook.                    |
+| ID       | Outcome                            | Done bar                                                                                                                                                                                 |
+| -------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-J1** | **Audit pipeline in svc-protocol** | **Shipped #2472.** `src/audit/pipeline.ts` + `auditStatus` — artefact hash, who signed. Internal package cannot set `audited:true`. External firm still Nitro (`socket.contract-audit`). |
+| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                                     |
+| **S-J3** | **Incident runbooks**              | **Shipped #2471.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook.                  |
 
 ### Tier K — Spec / ADR factory (plan completeness — you write freely)
 
