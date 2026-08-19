@@ -117,7 +117,7 @@ describe('index.ts production-wires bootKycVault (fails if the spread is omitted
 });
 
 describe('production boot shape — missing key refuses named, never invents a vault', () => {
-  it('storeDocument / listDocuments / bindDocument refuse PRECONDITION_FAILED when the key is unset', async () => {
+  it('store / list / bind / get refuse PRECONDITION_FAILED when the key is unset', async () => {
     const r = productionRouter(undefined);
     const op = r.createCaller(await ctx(['admin:compliance'], { mfa: true }));
     const store = await op.kyc
@@ -125,10 +125,13 @@ describe('production boot shape — missing key refuses named, never invents a v
       .catch((e: unknown) => e);
     const list = await op.kyc.listDocuments({ userId: USER }).catch((e: unknown) => e);
     const bind = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID }).catch((e: unknown) => e);
+    const get = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
     expect(codeOf(store)).toBe('PRECONDITION_FAILED');
     expect(String((store as Error).message)).toMatch(/kyc_doc\.unwired/);
     expect(codeOf(list)).toBe('PRECONDITION_FAILED');
     expect(codeOf(bind)).toBe('PRECONDITION_FAILED');
+    expect(codeOf(get)).toBe('PRECONDITION_FAILED');
+    expect(String((get as Error).message)).toMatch(/kyc_doc\.unwired/);
   });
 });
 
