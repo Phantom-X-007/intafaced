@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-J3 protocol incident runbook (this PR)
+> ### 2026-08-19 delta — S-J1 audit pipeline (this PR)
+>
+> **Status + hash + signer, never a fake badge.** `src/audit/pipeline.ts` + public `auditStatus`. The committed smart-accounts package is `kind: internal`, `audited: false`. `audited:true` only exists as a pure-function path for a future external package whose pinned hash matches. `socket.contract-audit` stays a socket (Nitro budget).
+>
+> ### 2026-08-19 delta — S-J3 protocol incident runbook (#2471)
 >
 > **No pause, no upgrade, no platform guardian.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — contain is edge kill of module `protocol` (or `PROTOCOL_RELAY_ENABLED=false`). That stops _our_ relay. Recovery is user-elected. Do not collide with Denon's money-path runbook.
 >
@@ -244,11 +248,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier J — Security / audit factory (your senior edge)
 
-| ID       | Outcome                            | Done bar                                                                                                                                                                  |
-| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S-J1** | **Audit pipeline in svc-protocol** | Status, artifact hash, who signed, never “audited:true” without package                                                                                                   |
-| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                      |
-| **S-J3** | **Incident runbooks**              | **Shipped this PR.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook. |
+| ID       | Outcome                            | Done bar                                                                                                                                                                                   |
+| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **S-J1** | **Audit pipeline in svc-protocol** | **Shipped this PR.** `src/audit/pipeline.ts` + `auditStatus` — artefact hash, who signed. Internal package cannot set `audited:true`. External firm still Nitro (`socket.contract-audit`). |
+| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                                       |
+| **S-J3** | **Incident runbooks**              | **Shipped #2471.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook.                    |
 
 ### Tier K — Spec / ADR factory (plan completeness — you write freely)
 
