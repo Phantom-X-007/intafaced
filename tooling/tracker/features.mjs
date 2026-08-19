@@ -2268,7 +2268,7 @@ export const FEATURES = [
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
     requires: ['services/svc-protocol/contracts/recovery/UserElectedRecovery.sol'],
-    note: 'CLOSED 2026-08-18 (S-A1 permitted shape). UserElectedRecovery.sol is an ERC-1271 owner a SmartAccount may set: the USER elects guardians and threshold (M-of-N), can revoke either, and can cancelRecovery during the delay; after delay + M guardian calls/signatures the owner rotates. Platform is never a guardian — no hardcoded platform address, no admin, no upgrade, no platform quorum. 2026-08-19: createAccount(recovery) proven on anvil — SmartAccount.owner is the recovery contract, ERC-1271 forwards to the sitting recovery-owner EOA, factory still takes the key it is given (not defaulted). Unaudited; no audited:true.',
+    note: 'CLOSED 2026-08-18 (S-A1 permitted shape). UserElectedRecovery.sol is an ERC-1271 owner a SmartAccount may set: the USER elects guardians and threshold (M-of-N), can revoke either, and can cancelRecovery during the delay; after delay + M guardian calls/signatures the owner rotates. Platform is never a guardian — no hardcoded platform address, no admin, no upgrade, no platform quorum. 2026-08-19: createAccount(recovery) proven in test/forge/RecoveryOwner.t.sol — SmartAccount.owner is the recovery contract, ERC-1271 forwards to the sitting recovery-owner EOA, factory still takes the key it is given (not defaulted). Unaudited; no audited:true.',
   }),
 
   // §13 socket CLOSED 2026-07-30 by indexer.readmodels. Kept as a `done` entry

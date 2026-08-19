@@ -5,20 +5,14 @@
  * Does not call evm_increaseTime — this suite shares one anvil with every other
  * on-chain file. Delay is proven by a long-delay instance that must still revert
  * executeRecovery without warping the node.
- *
- * Also proves a SmartAccount MAY take this contract as owner (ERC-1271). The
- * factory is not defaulted to it — createAccount still takes the key it is given.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { keccak256, toBytes, type Address, type Abi, type Hex } from 'viem';
-import { DEFAULT_USER_SALT } from '../accounts/address.js';
 import { loadArtifact } from '../chain/artifacts.js';
 
 const ERC1271_MAGIC = '0x1626ba7e';
 /** Far enough that sibling suites' short warps cannot skip it. We never warp. */
 const LONG_DELAY_SECONDS = 365 * 24 * 60 * 60;
-/** Public ERC-4337 v0.7 singleton — implementation only requires non-zero. */
-const ENTRYPOINT: Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 
 const devChainMod = await (async () => {
   try {
@@ -246,99 +240,5 @@ describeOnChain('UserElectedRecovery on chain (S-A1)', () => {
         chain: owner.walletClient.chain,
       }),
     ).rejects.toThrow();
-  }, 60_000);
-
-  it('SmartAccount can take UserElectedRecovery as owner; factory still takes the key it is given', async () => {
-    const recovery = await deployRecovery(owner.deployer, 0);
-    const suite = await devChainMod.deployAccountSuite(owner, ENTRYPOINT);
-    const factoryAbi = loadArtifact('AccountFactory').abi;
-    const accountAbi = loadArtifact('SmartAccount').abi;
-
-    const createRecoveryOwned = await owner.walletClient.writeContract({
-      address: suite.factory,
-      abi: factoryAbi,
-      functionName: 'createAccount',
-      args: [recovery, DEFAULT_USER_SALT],
-      account: owner.walletClient.account!,
-      chain: owner.walletClient.chain,
-    });
-    await owner.publicClient.waitForTransactionReceipt({ hash: createRecoveryOwned });
-
-    const recoveryOwned = (await owner.publicClient.readContract({
-      address: suite.factory,
-      abi: factoryAbi,
-      functionName: 'getAddress',
-      args: [recovery, DEFAULT_USER_SALT],
-    })) as Address;
-
-    const recoveryOwnedOwner = (await owner.publicClient.readContract({
-      address: recoveryOwned,
-      abi: accountAbi,
-      functionName: 'owner',
-    })) as Address;
-    expect(recoveryOwnedOwner.toLowerCase()).toBe(recovery.toLowerCase());
-
-    const digest = keccak256(toBytes('recovery-as-smart-account-owner'));
-    const ownerAccount = owner.walletClient.account;
-    const ownerSign = ownerAccount?.sign;
-    if (!ownerAccount || typeof ownerSign !== 'function') throw new Error('owner cannot sign');
-    const goodSig = await ownerSign({ hash: digest });
-    const magic = (await owner.publicClient.readContract({
-      address: recoveryOwned,
-      abi: accountAbi,
-      functionName: 'isValidSignature',
-      args: [digest, goodSig],
-    })) as Hex;
-    expect(magic.toLowerCase()).toBe(ERC1271_MAGIC);
-
-    const guardianAccount = guardianA.walletClient.account;
-    const guardianSign = guardianAccount?.sign;
-    if (!guardianAccount || typeof guardianSign !== 'function') throw new Error('guardian cannot sign');
-    const outsiderSig = await guardianSign({ hash: digest });
-    const refused = (await owner.publicClient.readContract({
-      address: recoveryOwned,
-      abi: accountAbi,
-      functionName: 'isValidSignature',
-      args: [digest, outsiderSig],
-    })) as Hex;
-    expect(refused.toLowerCase()).not.toBe(ERC1271_MAGIC);
-
-    // The sitting recovery-owner EOA is not the SmartAccount owner. Direct
-    // execute would mean the factory had defaulted to that EOA.
-    await expect(
-      owner.walletClient.writeContract({
-        address: recoveryOwned,
-        abi: accountAbi,
-        functionName: 'execute',
-        args: [owner.deployer, 0n, '0x'],
-        account: owner.walletClient.account!,
-        chain: owner.walletClient.chain,
-      }),
-    ).rejects.toThrow();
-
-    const eoaSalt = keccak256(toBytes('factory-still-takes-the-given-key'));
-    const createEoaOwned = await owner.walletClient.writeContract({
-      address: suite.factory,
-      abi: factoryAbi,
-      functionName: 'createAccount',
-      args: [owner.deployer, eoaSalt],
-      account: owner.walletClient.account!,
-      chain: owner.walletClient.chain,
-    });
-    await owner.publicClient.waitForTransactionReceipt({ hash: createEoaOwned });
-
-    const eoaOwned = (await owner.publicClient.readContract({
-      address: suite.factory,
-      abi: factoryAbi,
-      functionName: 'getAddress',
-      args: [owner.deployer, eoaSalt],
-    })) as Address;
-    const eoaOwnedOwner = (await owner.publicClient.readContract({
-      address: eoaOwned,
-      abi: accountAbi,
-      functionName: 'owner',
-    })) as Address;
-    expect(eoaOwnedOwner.toLowerCase()).toBe(owner.deployer.toLowerCase());
-    expect(eoaOwned.toLowerCase()).not.toBe(recoveryOwned.toLowerCase());
   }, 60_000);
 });

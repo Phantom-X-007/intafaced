@@ -7,7 +7,7 @@
 
 > ### 2026-08-19 delta — S-A1 recovery as possible SmartAccount owner (this PR)
 >
-> **Wiring proof, not a factory default:** `createAccount(recovery)` on anvil — `SmartAccount.owner` is `UserElectedRecovery`, ERC-1271 forwards to the sitting recovery-owner EOA, a non-owner signature is refused, the EOA cannot `execute` directly, and a second `createAccount(eoa)` still belongs to that EOA. Factory is unchanged. Unaudited.
+> **Wiring proof, not a factory default:** `test/forge/RecoveryOwner.t.sol` — `createAccount(recovery)` sets `SmartAccount.owner` to `UserElectedRecovery`, ERC-1271 forwards to the sitting recovery-owner EOA, a non-owner signature is refused, the EOA cannot `execute` directly, and a second `createAccount(eoa)` still belongs to that EOA. Factory is unchanged. Unaudited.
 >
 > ### 2026-08-19 delta — S-A8 session-key forge (#2466)
 >
