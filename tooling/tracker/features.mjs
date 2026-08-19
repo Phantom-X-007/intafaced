@@ -2239,7 +2239,9 @@ export const FEATURES = [
     note:
       'Owner set 2026-08-07. INTERNAL PACKAGE 2026-08-08: threat model + findings log + adversarial matrix ' +
       '(services/svc-protocol/src/accounts/adversarial-audit.test.ts) live under docs/audits/protocol-smart-accounts-2026-08-08.md. ' +
-      'STATUS stays socket: choosing and PAYING an audit firm is a Nitro decision (budget). Tests pass ≠ audited:true.',
+      'S-J1 PIPELINE 2026-08-19: src/audit/pipeline.ts + public auditStatus — artefact hash, who signed, audited:false ' +
+      'until kind=external with a pinned hash that matches. STATUS stays socket: choosing and PAYING an audit firm is a ' +
+      'Nitro decision (budget). Tests pass ≠ audited:true.',
   }),
   f('socket.userop-differential-test', 'getUserOperationHash checked against a live EntryPoint', {
     module: 'protocol',

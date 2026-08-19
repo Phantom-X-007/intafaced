@@ -139,6 +139,15 @@ describe('svc-protocol mount — authorisation', () => {
 });
 
 describe('svc-protocol mount — the public surface', () => {
+  it('serves auditStatus to an anonymous caller, hashed and not audited', async () => {
+    const status = await createProtocolRouter(stubDeps()).createCaller(anonymous()).auditStatus();
+    expect(status.kind).toBe('internal');
+    expect(status.audited).toBe(false);
+    expect(status.signedBy).toBe('shehzad002');
+    expect(status.artifactHash).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(status.packagePath).toBe('docs/audits/protocol-smart-accounts-2026-08-08.md');
+  });
+
   it('serves health to an anonymous caller, and still says it is non-custodial', async () => {
     await expect(createProtocolRouter(stubDeps()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,

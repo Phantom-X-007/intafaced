@@ -15,6 +15,7 @@ import { buildCreatePool, buildMintLiquidity, buildSwapExactIn, quoteExactIn } f
 import { computeTokenAddress, DEFAULT_TOKEN_SALT, templateArtifact, TokenAddressError } from './launch/address.js';
 import { buildCreateToken } from './launch/build.js';
 import { MAX_DECIMALS, MAX_NAME_BYTES, MAX_SYMBOL_BYTES, MAX_WHOLE_SUPPLY, parseTokenParams, TokenParamsError } from './launch/params.js';
+import { loadInternalSmartAccountsPackage } from './audit/pipeline.js';
 
 /**
  * svc-protocol's API.
@@ -263,6 +264,25 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         relayEnabled: deps.relayEnabled(),
         factoryConfigured: !isZeroAddress(chain.config.factory) && !isZeroAddress(chain.config.implementation),
       })),
+
+    /**
+     * S-J1 — audit pipeline as data, not a badge. The committed package is
+     * internal; `audited` is a literal false until a Nitro-paid external
+     * package hashes. Tests pass ≠ audited:true.
+     */
+    auditStatus: publicProcedure
+      .output(
+        z.object({
+          id: z.string(),
+          kind: z.literal('internal'),
+          packagePath: z.string(),
+          artifactHash: z.string().regex(/^0x[0-9a-f]{64}$/),
+          signedBy: z.string().nullable(),
+          signedAt: z.string().nullable(),
+          audited: z.literal(false),
+        }),
+      )
+      .query(() => loadInternalSmartAccountsPackage()),
 
     /**
      * IS ANY OF THIS REAL YET? — the question `health` cannot answer.
@@ -944,7 +964,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
               sourceHash: template.sourceHash,
               solcVersion: template.solcVersion,
               evmVersion: template.evmVersion,
-              audited: false as const,
+              audited: loadInternalSmartAccountsPackage().audited,
             },
             limits: {
               maxDecimals: MAX_DECIMALS,
