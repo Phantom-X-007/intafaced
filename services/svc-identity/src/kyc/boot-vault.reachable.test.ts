@@ -10,12 +10,12 @@
  *   1. Source-scans index.ts for `bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY)`
  *      and `...(vault ?? {})` (fails if the composition root omits the wire).
  *   2. Builds the router the same way index.ts does: `bootKycVault` then spread.
- *      Key set → storeDocument / listDocuments / bindDocument are not the
- *      unwired refuse. Key missing → named PRECONDITION_FAILED as today.
+ *      Key set → store / list / bind / get are not the unwired refuse.
+ *      Key missing → named PRECONDITION_FAILED as today.
  *   3. Asserts kyc.status never carries bytes or provider_ref.
  *
- * Does not invent a key. Does not mount a document-bytes read. Class X vendor
- * webhooks stay unwired.
+ * Does not invent a key. Bytes read is compliance+MFA kyc.getDocument only.
+ * Class X vendor webhooks stay unwired.
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -117,7 +117,7 @@ describe('index.ts production-wires bootKycVault (fails if the spread is omitted
 });
 
 describe('production boot shape — missing key refuses named, never invents a vault', () => {
-  it('storeDocument / listDocuments / bindDocument refuse PRECONDITION_FAILED when the key is unset', async () => {
+  it('store / list / bind / get refuse PRECONDITION_FAILED when the key is unset', async () => {
     const r = productionRouter(undefined);
     const op = r.createCaller(await ctx(['admin:compliance'], { mfa: true }));
     const store = await op.kyc
@@ -125,15 +125,18 @@ describe('production boot shape — missing key refuses named, never invents a v
       .catch((e: unknown) => e);
     const list = await op.kyc.listDocuments({ userId: USER }).catch((e: unknown) => e);
     const bind = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID }).catch((e: unknown) => e);
+    const get = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
     expect(codeOf(store)).toBe('PRECONDITION_FAILED');
     expect(String((store as Error).message)).toMatch(/kyc_doc\.unwired/);
     expect(codeOf(list)).toBe('PRECONDITION_FAILED');
     expect(codeOf(bind)).toBe('PRECONDITION_FAILED');
+    expect(codeOf(get)).toBe('PRECONDITION_FAILED');
+    expect(String((get as Error).message)).toMatch(/kyc_doc\.unwired/);
   });
 });
 
 describe('production boot shape — parsed key exposes operator vault procedures', () => {
-  it('storeDocument / listDocuments / bindDocument are not the unwired refuse', async () => {
+  it('store / list / bind / get are not the unwired refuse', async () => {
     const r = productionRouter(randomBytes(32).toString('base64'));
     const op = r.createCaller(await ctx(['admin:compliance'], { mfa: true }));
 
@@ -156,6 +159,10 @@ describe('production boot shape — parsed key exposes operator vault procedures
     const bindErr = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID }).catch((e: unknown) => e);
     expect(codeOf(bindErr)).not.toBe('PRECONDITION_FAILED');
     expect(String((bindErr as Error).message ?? bindErr)).not.toMatch(/kyc_doc\.unwired/);
+
+    const getErr = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
+    expect(codeOf(getErr)).not.toBe('PRECONDITION_FAILED');
+    expect(String((getErr as Error).message ?? getErr)).not.toMatch(/kyc_doc\.unwired/);
   });
 });
 
@@ -172,11 +179,12 @@ describe('kyc.status never returns document bytes or provider_ref', () => {
     expect(wire).not.toMatch(/"bytes"|"ciphertext"|"bytesBase64"/);
   });
 
-  it('router does not mount a document-bytes read on kyc', () => {
-    expect(routerSrc).not.toMatch(/getDocument|readDocument|downloadDocument/);
-    expect(routerSrc).not.toMatch(/vault\.getFor|kycDocs\.getFor/);
+  it('bytes read is compliance getDocument only — kyc.status stays meta', () => {
+    expect(routerSrc).toMatch(/getDocument:\s*scopedProcedure\('admin:compliance'\)/);
+    expect(routerSrc).toContain('vault.getFor');
     expect(routerSrc).toContain('storeDocument');
     expect(routerSrc).toContain('listDocuments');
     expect(routerSrc).toContain('bindDocument');
+    expect(routerSrc).not.toMatch(/readDocument|downloadDocument/);
   });
 });
