@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-A8 session-key forge (this PR)
+> ### 2026-08-19 delta — S-A1 recovery as possible SmartAccount owner (this PR)
+>
+> **Wiring proof, not a factory default:** `createAccount(recovery)` on anvil — `SmartAccount.owner` is `UserElectedRecovery`, ERC-1271 forwards to the sitting recovery-owner EOA, a non-owner signature is refused, the EOA cannot `execute` directly, and a second `createAccount(eoa)` still belongs to that EOA. Factory is unchanged. Unaudited.
+>
+> ### 2026-08-19 delta — S-A8 session-key forge (#2466)
 >
 > **Session-key richness:** `test/forge/SessionKey.t.sol` — self-target / outbound-selector refused at grant (fuzz), spend-limit counted before `_call` so re-entrancy cannot double-spend, `validateUserOp` refuses a session op whose selector is not `executeWithSession`. Clones via AccountFactory (implementation stays locked). No forge-std. Residual: external audit.
 >
@@ -15,7 +19,7 @@
 >
 > ### 2026-08-19 delta — S-A8 forge fuzz (#2464)
 >
-> **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Session-key richness is this PR. Residual: external audit.
+> **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Session-key richness is #2466. Residual: external audit.
 >
 > ### 2026-08-19 delta — S-L3 ECDH scanner (#2463)
 >
@@ -140,7 +144,7 @@ This board was written on 2026-08-03 against a picture that was already out of d
 | **S-A12** | **Price oracle for marks and liquidations** 🔴    | `socket.price-oracle` · **S-A4 lending cannot ship without it**; existed only as an ADR line                                                   | Source set · staleness bound · disagreement rule between sources · **fail closed (refuse to liquidate), never a fallback price**                                                                                      | TWAP vs feed, own-pool oracles, IFC marks                                                                                      |
 | **S-A13** | **Deployment registry + explorer verification**   | `socket.deployment-registry` · every address in `env.ts` defaults to zero; bytecode-vs-template proof already solved (immutable ranges masked) | A tracked artefact: these addresses, this chain, this source hash, verified on this explorer · reproducible by a third party                                                                                          | Multi-chain topology (S-K4), upgrade records                                                                                   |
 
-> **Doctrine note on recovery (resolved 2026-08-07).** This board previously invited a guardian / multi-sig recovery design, while `socket.social-recovery` in the tracker forbids one: _"a guardian is a second party who can take the account, and the platform must never be one."_ **The tracker wins.** What you may design: guardians the **user** elects and can revoke, where no platform-controlled key is ever eligible and no platform quorum can move funds. If that cannot be built without the platform becoming a party, the honest answer is that it stays a socket — say so rather than shipping it. **This PR ships that permitted shape:** `UserElectedRecovery` (user elect/revoke, delay, no platform key). Residual: not the default SmartAccount owner.
+> **Doctrine note on recovery (resolved 2026-08-07).** This board previously invited a guardian / multi-sig recovery design, while `socket.social-recovery` in the tracker forbids one: _"a guardian is a second party who can take the account, and the platform must never be one."_ **The tracker wins.** What you may design: guardians the **user** elects and can revoke, where no platform-controlled key is ever eligible and no platform quorum can move funds. If that cannot be built without the platform becoming a party, the honest answer is that it stays a socket — say so rather than shipping it. **Permitted shape shipped:** `UserElectedRecovery` (user elect/revoke, delay, no platform key). **This PR proves** a SmartAccount may take it as owner. Residual: still not the factory default.
 
 🔴 = named nowhere before 2026-08-07 and blocking something that is already on this board.
 
