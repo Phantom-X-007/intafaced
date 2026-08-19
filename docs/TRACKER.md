@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**88 of 157 shipped (56%)** · 12 in progress · 19 ready to claim · 38 blocked · 31 deliberate §13 sockets
+**88 of 158 shipped (56%)** · 12 in progress · 19 ready to claim · 39 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -221,7 +221,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (23/58)
+### Phase 5 — Surfaces (23/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -249,7 +249,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | One-click meme launch + instant market + LP <br/>_S-G1 2026-08-18: MemeLaunch composes TokenFactory + PoolFactory + LaunchLpLock — permissionless one-click (create token if needed, createPool if missing, mint LP, park LP at a new LaunchLpLock for msg.sender). No fee, no owner, no platform address; contract keeps nothing. Unaudited. No instant bonding curve other than the existing constant-product AMM._ | P |  | `launch.meme-factory` |
 | ✅ | Presale / fair launch, vesting, staked allocation tiers <br/>_CLOSED 2026-08-18 (S-G2): FairLaunch.sol — creator-set sale/quote, raise cap, window, per-wallet cap, minRaise, cliff+linear vest in-contract (no revoke, no admin unlock, no pause, no whitelist, no platform fee). contribute → finalize → claim; unmet minRaise refunds quote. On-chain: fair-launch.onchain.test.ts. Residual: staked allocation tiers not in this PR (needs stakeOf). Unaudited._ | P |  | `launch.launchpad` |
 | ✅ | NFT mint / list / auction, on-chain royalties <br/>_CLOSED engineering bar 2026-08-18 (S-G3): SovereignNft (minimal ERC-721 + ERC-2981, royalty cap 1000 bps) and RoyaltyMarket — list escrows NFT, buy pays quote ERC-20 with on-chain royalty split (not signalling-only); English auction endAuction pays highest bid the same way. No platform fee, no owner. On-chain: nft-royalty.onchain.test.ts. Unaudited. Residual: svc-launch product shell, indexer NFT events, Dutch/reserve auctions._ | P |  | `launch.nft` |
-| 🔌 | RWA issuance registry, licence-gated <br/>_HUMAN on-chain launch @shehzad002 (licence honesty). Agents babysit only. Plane corrected to P 2026-08-07 — the registry is on-chain; the LICENCE half is Class X and remains Nitro human._ | P |  | `launch.rwa` |
+| ⛔ | RWA issuance registry, licence-gated <br/>_S-G4 contract half 2026-08-19: RwaRegistry — licenceHash immutable, register/unlist revert LicenceUnset while hash is bytes32(0). Issuer is msg.sender; platform cannot unlist. STATUS ready (not done): licence *content* is Class X (Nitro human / counsel) — no contract makes that go away. Unaudited._ | P | `launch.token-factory` | `launch.rwa` |
 | ✅ | Launch trust — enforced LP locks, vesting proofs, deployer reputation (§35) <br/>_S-L4 2026-08-18: LaunchLpLock (immutable unlockTime, no admin exit) + LaunchVesting (cliff/linear, no revoke) + DeployerReputation (raw lock/vest counts only — empty history is zeros, no isSafe/score). A listing badge is still a UI concern; this contract will not issue one that would be false._ | P |  | `launch.trust-layer` |
 | ⛔ | Tokenized T-bill vaults — stable balances opt into RWA yield (§36) <br/>_S-L5 contract half 2026-08-18: TreasuryYieldVault — owner is constructor msg.sender, licenceHash immutable, deposit/withdraw revert LicenceUnset while hash is bytes32(0). STATUS ready (not done): licence *content* is Class X (Nitro human / counsel) — no contract makes that go away. Unaudited._ | P | `launch.token-factory` | `launch.treasury-yield` |
 | 🔌 | Fundraising module — milestones, investor management (§25:658) <br/>_Gap-closed 2026-08-07, and DELIBERATELY UNOWNED. The law names it with a service and a phase and no row carried it. It is a product surface — milestones, investor records, reporting — not chain work, so putting it on the chain owner would widen him into the fiat plane against his own sole-mountain law. The ON-CHAIN legs it would need (milestone escrow, vesting release) are his, under launch.trust-layer and S-G2. Agents may claim the product half._ | F |  | `launch.fundraising` |

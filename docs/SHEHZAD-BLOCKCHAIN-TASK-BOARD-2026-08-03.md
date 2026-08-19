@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-A10 paymaster contract (this PR)
+> ### 2026-08-19 delta — S-G4 RWA registry (this PR)
+>
+> **Licence-gated honesty:** `RwaRegistry` refuses `register`/`unlist` while `licenceHash` is `bytes32(0)`. Hash is immutable. Issuer is `msg.sender`; the platform cannot unlist. Licence _content_ stays Class X. Unaudited.
+>
+> ### 2026-08-19 delta — S-A10 paymaster contract (#2468)
 >
 > **Contract half:** `ScopedPaymaster` holds a native float, allowlist + selector + maxCost, refuses `validatePaymasterUserOp` when unfunded. Operator can only withdraw this contract's leftover ETH — never a user account. Nitro still funds the float. Unaudited.
 >
@@ -207,12 +211,12 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier G — Launchpad / NFT / RWA (crypto surfaces)
 
-| ID       | Outcome                                | Done bar                                                |
-| -------- | -------------------------------------- | ------------------------------------------------------- |
-| **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                     |
-| **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent |
-| **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                            |
-| **S-G4** | **RWA registry**                       | Licence-gated honesty · §13 if partner blocks           |
+| ID       | Outcome                                | Done bar                                                                                                                                    |
+| -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                                                                                                         |
+| **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent                                                                                     |
+| **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                                                                                                                |
+| **S-G4** | **RWA registry**                       | **Shipped this PR (contract half).** `RwaRegistry` refuse-closed on `bytes32(0)` licenceHash. Licence _content_ remains Class X. Unaudited. |
 
 ### Tier H — Mining / MatMul PoW interface (crypto)
 
