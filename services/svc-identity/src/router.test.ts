@@ -1420,9 +1420,7 @@ describe('kyc.getDocument is compliance-only bytes, never a public/user read', (
     const store = new MemoryKycDocumentStore(randomBytes(32).toString('base64'));
     const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, kycDocs: store });
     const user = r.createCaller(await ctx(['identity:read', 'identity:write'], { userId: USER }));
-    const err = await user.kyc
-      .getDocument({ documentId: '55555555-5555-4555-8555-555555555555' })
-      .catch((e: unknown) => e);
+    const err = await user.kyc.getDocument({ documentId: '55555555-5555-4555-8555-555555555555' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
   });
 });
