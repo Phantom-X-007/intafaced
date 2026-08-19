@@ -11,5 +11,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     fileParallelism: false,
+    // Vitest 3 can still schedule files on multiple workers when this is unset.
+    // One worker is what "one anvil, one file" actually means in CI.
+    maxWorkers: 1,
   },
 });
