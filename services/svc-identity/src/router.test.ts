@@ -1405,16 +1405,25 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
   });
 });
 
-describe('kyc surface never mounts a document-bytes read procedure', () => {
-  it('router source has no getDocument / readDocument / decryptDocument on the wire path', () => {
-    // router.test.ts lives next to router.ts
+describe('kyc.getDocument is compliance-only bytes, never a public/user read', () => {
+  it('getDocument is mounted behind admin:compliance', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
-    expect(src).not.toMatch(/getDocument|readDocument|downloadDocument/);
-    // getFor may exist only if someone mistakenly mounts it — forbid mounting decrypt on kyc procedures.
-    expect(src).not.toMatch(/vault\.getFor|kycDocs\.getFor|\.getFor\(/);
+    expect(src).toMatch(/getDocument:\s*scopedProcedure\('admin:compliance'\)/);
+    expect(src).toContain('vault.getFor');
+    expect(src).not.toMatch(/readDocument|downloadDocument/);
     expect(src).toContain('storeDocument');
     expect(src).toContain('listDocuments');
     expect(src).toContain('bindDocument');
+  });
+
+  it('a user session cannot open document bytes', async () => {
+    const store = new MemoryKycDocumentStore(randomBytes(32).toString('base64'));
+    const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, kycDocs: store });
+    const user = r.createCaller(await ctx(['identity:read', 'identity:write'], { userId: USER }));
+    const err = await user.kyc
+      .getDocument({ documentId: '55555555-5555-4555-8555-555555555555' })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
   });
 });
 

@@ -14,8 +14,8 @@
  *      unwired refuse. Key missing → named PRECONDITION_FAILED as today.
  *   3. Asserts kyc.status never carries bytes or provider_ref.
  *
- * Does not invent a key. Does not mount a document-bytes read. Class X vendor
- * webhooks stay unwired.
+ * Does not invent a key. Bytes read is compliance+MFA kyc.getDocument only.
+ * Class X vendor webhooks stay unwired.
  */
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -172,11 +172,12 @@ describe('kyc.status never returns document bytes or provider_ref', () => {
     expect(wire).not.toMatch(/"bytes"|"ciphertext"|"bytesBase64"/);
   });
 
-  it('router does not mount a document-bytes read on kyc', () => {
-    expect(routerSrc).not.toMatch(/getDocument|readDocument|downloadDocument/);
-    expect(routerSrc).not.toMatch(/vault\.getFor|kycDocs\.getFor/);
+  it('bytes read is compliance getDocument only — kyc.status stays meta', () => {
+    expect(routerSrc).toMatch(/getDocument:\s*scopedProcedure\('admin:compliance'\)/);
+    expect(routerSrc).toContain('vault.getFor');
     expect(routerSrc).toContain('storeDocument');
     expect(routerSrc).toContain('listDocuments');
     expect(routerSrc).toContain('bindDocument');
+    expect(routerSrc).not.toMatch(/readDocument|downloadDocument/);
   });
 });
