@@ -885,7 +885,7 @@ export const FEATURES = [
       '(socket.contract-audit; internal package #1176 shipped); (2) S-A9 PasskeyOwner ON-CHAIN exists but live passkey ' +
       'owner flow on configured Base Sepolia env is not proven (RPC/funding Nitro); (3) userOp hash vs live EntryPoint ' +
       'CLOSED #2366 (socket.userop-differential-test); (4) session-key forge richness in test/forge/SessionKey.t.sol (self-target + outbound-selector refusal, spend-limit re-entrancy, validateUserOp executeWithSession gate) — toolchain still socket until external audit; ' +
-      '(5) paymaster FUNDING Nitro — policy modules exist; (6) public deployment registry rows wait on Nitro RPC.',
+      '(5) paymaster CONTRACT shipped (ScopedPaymaster.sol) — FUNDING the float remains Nitro Class X; (6) public deployment registry rows wait on Nitro RPC.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
@@ -2323,10 +2323,15 @@ export const FEATURES = [
     status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    requires: ['services/svc-protocol/src/chain/paymaster-policy.ts', 'docs/adr/2026-08-08-paymaster-and-bundler-policy.md'],
+    requires: [
+      'services/svc-protocol/src/chain/paymaster-policy.ts',
+      'services/svc-protocol/contracts/paymaster/ScopedPaymaster.sol',
+      'docs/adr/2026-08-08-paymaster-and-bundler-policy.md',
+    ],
     note:
-      'S-A10 2026-08-08: sponsorship decision module — allowlist, selectors, gas cap; refuses when funding_unconfigured. ' +
-      'ADR states Nitro Class X owns the deposit account. Live paymaster contract + funded path still need that deposit.',
+      'S-A10 2026-08-08 policy + 2026-08-19 contract: ScopedPaymaster.sol holds a native float, allowlist/selectors/maxCost, ' +
+      'and refuses validatePaymasterUserOp when unfunded (same as funding_unconfigured). Operator can only spend this ' +
+      "contract's float, never a user account. ADR: Nitro Class X still owns depositing the float. No audited:true.",
   }),
   f('socket.bundler-policy', 'Bundler dependency — public relay or self-hosted', {
     module: 'protocol',

@@ -117,6 +117,8 @@ for (const suite of SUITES) {
       // Interfaces and internal-only libraries compile to empty bytecode.
       // Writing them would be an artefact nobody can deploy.
       if (bytecode === '0x') continue;
+      // MemeLaunch compiles LaunchLpLock to `new` it; vaults owns the artefact.
+      if (suite.name === 'meme' && contractName === 'LaunchLpLock') continue;
 
       writeFileSync(
         join(OUT_DIR, `${contractName}.json`),

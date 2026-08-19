@@ -275,6 +275,16 @@ export const SUITES = [
     sources: ['recovery/UserElectedRecovery.sol', 'interfaces/IAccount.sol'],
   },
   {
+    name: 'paymaster',
+    expect: 'compiles',
+    /**
+     * S-A10 / `socket.paymaster-policy` — contract half. Holds a native float;
+     * unfunded validation fails. Operator cannot touch user accounts.
+     * Own suite so an accounts edit does not stale this bytecode (and reverse).
+     */
+    sources: ['paymaster/ScopedPaymaster.sol', 'interfaces/IPaymaster.sol', 'interfaces/IAccount.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**

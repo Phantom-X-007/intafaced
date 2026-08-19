@@ -1,6 +1,6 @@
 # ADR — Paymaster sponsorship + bundler dependency (S-A10 / S-A11)
 
-**Status:** Accepted (policy); funding half open  
+**Status:** Accepted (policy + contract); funding half open  
 **Date:** 2026-08-08  
 **Board:** S-A10 · S-A11  
 **Tracker:** `socket.paymaster-policy` · `socket.bundler-policy`
@@ -10,6 +10,7 @@
 ### S-A10 — Who pays gas
 
 - Sponsorship is gated by an explicit **allowlist**, **permitted call selectors**, and a **per-UserOp gas cap** (`src/chain/paymaster-policy.ts`).
+- The on-chain half is `ScopedPaymaster.sol` (2026-08-19): native float, same refuse when unfunded. Operator can only withdraw this contract's leftover ETH.
 - If the paymaster deposit is **not funded**, every sponsorship decision is `funding_unconfigured` — refuse, do not pretend.
 - **Funding the deposit account is Nitro Class X.** The contract/policy path is Protocol Plane; the ETH/native behind it is not.
 

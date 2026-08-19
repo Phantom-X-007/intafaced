@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-A1 recovery as possible SmartAccount owner (this PR)
+> ### 2026-08-19 delta — S-A10 paymaster contract (this PR)
+>
+> **Contract half:** `ScopedPaymaster` holds a native float, allowlist + selector + maxCost, refuses `validatePaymasterUserOp` when unfunded. Operator can only withdraw this contract's leftover ETH — never a user account. Nitro still funds the float. Unaudited.
+>
+> ### 2026-08-19 delta — S-A1 recovery as possible SmartAccount owner (#2467)
 >
 > **Wiring proof, not a factory default:** `test/forge/RecoveryOwner.t.sol` — `createAccount(recovery)` sets `SmartAccount.owner` to `UserElectedRecovery`, ERC-1271 forwards to the sitting recovery-owner EOA, a non-owner signature is refused, the EOA cannot `execute` directly, and a second `createAccount(eoa)` still belongs to that EOA. Factory is unchanged. Unaudited.
 >
