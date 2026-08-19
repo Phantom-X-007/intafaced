@@ -100,5 +100,13 @@ export function loadInternalSmartAccountsPackage(root: string = repoRootFromThis
   if (record.kind !== 'internal' || record.audited !== false) {
     throw new Error('internal smart-accounts package must evaluate to kind=internal audited=false');
   }
-  return record;
+  return {
+    id: record.id,
+    kind: 'internal',
+    packagePath: record.packagePath,
+    artifactHash: record.artifactHash,
+    signedBy: record.signedBy,
+    signedAt: record.signedAt,
+    audited: false,
+  };
 }
