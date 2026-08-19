@@ -1,0 +1,24 @@
+name: kyc-get-prettier-once
+on:
+  push:
+    branches: [feat/svc-identity-kyc-get-refuse-blank-key]
+    paths:
+      - '.github/workflows/kyc-get-prettier-once.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/svc-identity-kyc-get-refuse-blank-key
+      - name: prettier-collapse getDocument caller and remove this workflow
+        run: |
+          python3 services/svc-identity/scripts/prettier-getdocument-caller.py
+          rm -f .github/workflows/kyc-get-prettier-once.yml services/svc-identity/scripts/prettier-getdocument-caller.py
+          git config user.name ZenYoda3
+          git config user.email intafaced@gmail.com
+          git add services/svc-identity/src/router.test.ts .github/workflows/kyc-get-prettier-once.yml services/svc-identity/scripts/prettier-getdocument-caller.py
+          git commit -m "test(svc-identity): prettier the compliance-only getDocument caller"
+          git push
