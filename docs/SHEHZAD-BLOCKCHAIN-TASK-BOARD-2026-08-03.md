@@ -220,7 +220,7 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 | **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                                                                                                         |
 | **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent                                                                                     |
 | **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                                                                                                                |
-| **S-G4** | **RWA registry**                       | **Shipped this PR (contract half).** `RwaRegistry` refuse-closed on `bytes32(0)` licenceHash. Licence _content_ remains Class X. Unaudited. |
+| **S-G4** | **RWA registry**                       | **Shipped #2469 (contract half).** `RwaRegistry` refuse-closed on `bytes32(0)` licenceHash. Licence _content_ remains Class X. Unaudited. |
 
 ### Tier H — Mining / MatMul PoW interface (crypto)
 
