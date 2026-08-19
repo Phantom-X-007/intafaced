@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-A8 forge fuzz (this PR)
+> ### 2026-08-19 delta — S-C2 venue reorg (this PR)
+>
+> **Solidity tip replace:** `sovereign-venue-reorg.onchain.test.ts` snapshots, places (BookLevel), mines 5 blocks, reverts — orphaned block hash is gone. Indexer projection unwind stays on 8546. No `evm_increaseTime`.
+>
+> ### 2026-08-19 delta — S-A8 forge fuzz (#2464)
 >
 > **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Residual: session-key forge richness · external audit.
 >
@@ -148,11 +152,11 @@ This board was written on 2026-08-03 against a picture that was already out of d
 
 ### Tier C — Indexer / venue contracts (chain → read models)
 
-| ID       | Outcome                                 | Done bar                                                                                                                                              | Collision                                         |
-| -------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **S-C1** | **Real venue contracts (not DevVenue)** | **Shipped this PR.** `SovereignVenue` — matching CLOB, same BookLevel/Fill/Position as the indexer. Residual: external audit + public deploy address. | Indexer adapter exists; DevVenue stays a fixture  |
-| **S-C2** | **Reorg-safe event surface**            | Property tests: reorg deeper than history · tip replace                                                                                               | Pair with indexer owners; you own Solidity venue  |
-| **S-C3** | **Permissionless position/fill events** | Event matrix is the three events on `SovereignVenue` (same as indexer ABI). Don’t invent futures mids.                                                | WS transport is `socket.indexer-stream` (unowned) |
+| ID       | Outcome                                 | Done bar                                                                                                                                                                               | Collision                                               |
+| -------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **S-C1** | **Real venue contracts (not DevVenue)** | **Shipped this PR.** `SovereignVenue` — matching CLOB, same BookLevel/Fill/Position as the indexer. Residual: external audit + public deploy address.                                  | Indexer adapter exists; DevVenue stays a fixture        |
+| **S-C2** | **Reorg-safe event surface**            | **Shipped this PR.** Tip replace + 5-block history discard on SovereignVenue BookLevel (`sovereign-venue-reorg.onchain.test.ts`). Indexer unwind remains `reorg.live.test.ts` on 8546. | Pair with indexer; do not share 8545 with indexer reorg |
+| **S-C3** | **Permissionless position/fill events** | Event matrix is the three events on `SovereignVenue` (same as indexer ABI). Don’t invent futures mids.                                                                                 | WS transport is `socket.indexer-stream` (unowned)       |
 
 ### Tier D — INTACHAIN L1 epic (honest sequencing · §17 — YOU OWN THIS)
 
