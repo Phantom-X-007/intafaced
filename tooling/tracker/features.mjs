@@ -1130,7 +1130,8 @@ export const FEATURES = [
     note:
       '**Custodial half DONE #1174** (2026-08-09) · **D26-P1-B3 refuse-invent seal** (mounted-router product suite): ' +
       'settlement asset ≠ funding asset; rate frozen at auth; refuses invented marks (bank.mark_*); no second book; ' +
-      'no invent FX. On-chain JIT / smart-account funding half remains Shehzad protocol board.',
+      'no invent FX. On-chain JIT / CardPull shipped 2026-08-19 (S-E1): pullExact transferFrom owner SA to ' +
+      'user-chosen settlement; kill strands zero (tokens stay in the SA). Live issuer rail remains socket.live-issuer.',
   }),
   f('bank.ramps', 'Fiat on/off ramp reusing svc-pay adapters', {
     module: 'bank',

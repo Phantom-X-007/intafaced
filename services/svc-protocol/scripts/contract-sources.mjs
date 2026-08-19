@@ -295,6 +295,16 @@ export const SUITES = [
     sources: ['rwa/RwaRegistry.sol'],
   },
   {
+    name: 'card',
+    expect: 'compiles',
+    /**
+     * S-E1 / sovereign-card on-chain half — exact pull from the user's
+     * SmartAccount to a user-chosen settlement. This contract never holds
+     * tokens. nft stays last. Do not compile MockERC20 here.
+     */
+    sources: ['card/CardPull.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**

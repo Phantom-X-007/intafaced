@@ -68,7 +68,8 @@ export type ArtifactName =
   | 'FairLaunch'
   | 'UserElectedRecovery'
   | 'ScopedPaymaster'
-  | 'RwaRegistry';
+  | 'RwaRegistry'
+  | 'CardPull';
 
 export interface ContractArtifact {
   readonly contractName: string;
