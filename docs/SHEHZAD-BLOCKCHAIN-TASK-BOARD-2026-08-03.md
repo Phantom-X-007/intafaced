@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-E1 JIT CardPull (this PR)
+> ### 2026-08-19 delta — S-J3 protocol incident runbook (this PR)
+>
+> **No pause, no upgrade, no platform guardian.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — contain is edge kill of module `protocol` (or `PROTOCOL_RELAY_ENABLED=false`). That stops _our_ relay. Recovery is user-elected. Do not collide with Denon's money-path runbook.
+>
+> ### 2026-08-19 delta — S-E1 JIT CardPull (#2470)
 >
 > **On-chain half:** `CardPull` — owner is the user's SmartAccount. `pullExact` is `transferFrom(owner, settlement, amount)` so this contract never holds tokens. `kill` is owner-only and strands zero. Session keys may be granted `pullExact` (not an outbound ERC-20 transfer). No issuer key. Unaudited.
 >
@@ -240,11 +244,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier J — Security / audit factory (your senior edge)
 
-| ID       | Outcome                            | Done bar                                                                                    |
-| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| **S-J1** | **Audit pipeline in svc-protocol** | Status, artifact hash, who signed, never “audited:true” without package                     |
-| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                        |
-| **S-J3** | **Incident runbooks**              | Pause, upgrade, recovery paths (**no platform-guardian path** — see the S-A1 doctrine note) |
+| ID       | Outcome                            | Done bar                                                                                                                                                                  |
+| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-J1** | **Audit pipeline in svc-protocol** | Status, artifact hash, who signed, never “audited:true” without package                                                                                                   |
+| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                      |
+| **S-J3** | **Incident runbooks**              | **Shipped this PR.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook. |
 
 ### Tier K — Spec / ADR factory (plan completeness — you write freely)
 
