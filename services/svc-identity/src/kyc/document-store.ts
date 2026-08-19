@@ -165,8 +165,9 @@ export class KycDocumentStore implements KycDocumentVault {
   }
 
   async getFor(id: string, reader: DocReader): Promise<{ meta: StoredDocumentMeta; bytes: Buffer }> {
-    assertReader(reader);
+    // Refuse before reader or row — no invented key, no plaintext.
     const key = this.requireKey();
+    assertReader(reader);
     const rows = await this.sql<
       Array<{
         id: string;
@@ -340,8 +341,9 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
   }
 
   async getFor(id: string, reader: DocReader): Promise<{ meta: StoredDocumentMeta; bytes: Buffer }> {
-    assertReader(reader);
+    // Refuse before reader or row — no invented key, no plaintext.
     const key = this.requireKey();
+    assertReader(reader);
     const row = this.rows.get(id);
     if (!row) throw new KycDocumentError('Document not found', 'kyc_doc.not_found');
     assertDocAccess(row.userId, reader);
