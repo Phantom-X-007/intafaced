@@ -1,0 +1,24 @@
+name: kyc-get-once
+on:
+  push:
+    branches: [feat/svc-identity-kyc-get-refuse-blank-key]
+    paths:
+      - '.github/workflows/kyc-get-once.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/svc-identity-kyc-get-refuse-blank-key
+      - name: mount kyc.getDocument on existing router and remove this workflow
+        run: |
+          python3 services/svc-identity/scripts/mount-kyc-get-document.py
+          rm -f .github/workflows/kyc-get-once.yml services/svc-identity/scripts/mount-kyc-get-document.py
+          git config user.name ZenYoda3
+          git config user.email intafaced@gmail.com
+          git add services/svc-identity/src/router.ts .github/workflows/kyc-get-once.yml services/svc-identity/scripts/mount-kyc-get-document.py
+          git commit -m "feat(svc-identity): mount kyc.getDocument (refuse blank IDENTITY_KYC_DOC_KEY)"
+          git push
