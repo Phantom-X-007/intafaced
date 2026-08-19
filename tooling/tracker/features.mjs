@@ -884,7 +884,7 @@ export const FEATURES = [
       'STATUS stays ready (not done) — honesty residuals 2026-08-19: (1) EXTERNAL audit / Nitro budget ' +
       '(socket.contract-audit; internal package #1176 shipped); (2) S-A9 PasskeyOwner ON-CHAIN exists but live passkey ' +
       'owner flow on configured Base Sepolia env is not proven (RPC/funding Nitro); (3) userOp hash vs live EntryPoint ' +
-      'CLOSED #2366 (socket.userop-differential-test); (4) fuzz/invariant + gas snapshots (socket.contract-toolchain); ' +
+      'CLOSED #2366 (socket.userop-differential-test); (4) session-key forge richness in test/forge/SessionKey.t.sol (self-target + outbound-selector refusal, spend-limit re-entrancy, validateUserOp executeWithSession gate) — toolchain still socket until external audit; ' +
       '(5) paymaster FUNDING Nitro — policy modules exist; (6) public deployment registry rows wait on Nitro RPC.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
@@ -2219,9 +2219,10 @@ export const FEATURES = [
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
     note:
-      '2026-08-19 FORGE FUZZ IN CI (S-A8): test/forge runs via the foundry:v1.5.1 image (`pnpm test:forge`); ' +
-      'solc-js still owns contracts/out/ (no forge last-write). StealthAnnouncer + CrewVault share-sum fuzz and gas ceilings. ' +
-      'STATUS stays socket: no session-key escalation forge suite, no external audit — this still does not prove safe for mainnet.',
+      '2026-08-19 SESSION-KEY FORGE (S-A8): test/forge/SessionKey.t.sol fuzzes self-target + outbound-selector refusal at grant, ' +
+      'spend-limit re-entrancy (counted before _call), and validateUserOp refusing session ops that are not executeWithSession. ' +
+      'Prior: test/forge via foundry:v1.5.1 (`pnpm test:forge`); solc-js still owns contracts/out/ (no forge last-write). ' +
+      'STATUS stays socket: no external audit — this still does not prove safe for mainnet.',
   }),
   f('socket.contract-audit', 'External audit of the account + factory suite', {
     module: 'protocol',

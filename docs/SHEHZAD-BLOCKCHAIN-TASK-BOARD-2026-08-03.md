@@ -5,13 +5,17 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-C2 venue reorg (this PR)
+> ### 2026-08-19 delta — S-A8 session-key forge (this PR)
+>
+> **Session-key richness:** `test/forge/SessionKey.t.sol` — self-target / outbound-selector refused at grant (fuzz), spend-limit counted before `_call` so re-entrancy cannot double-spend, `validateUserOp` refuses a session op whose selector is not `executeWithSession`. Clones via AccountFactory (implementation stays locked). No forge-std. Residual: external audit.
+>
+> ### 2026-08-19 delta — S-C2 venue reorg (#2465)
 >
 > **Solidity tip replace:** `sovereign-venue-reorg.onchain.test.ts` snapshots, places (BookLevel), mines 5 blocks, reverts — orphaned block hash is gone. Indexer projection unwind stays on 8546. No `evm_increaseTime`.
 >
 > ### 2026-08-19 delta — S-A8 forge fuzz (#2464)
 >
-> **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Residual: session-key forge richness · external audit.
+> **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Session-key richness is this PR. Residual: external audit.
 >
 > ### 2026-08-19 delta — S-L3 ECDH scanner (#2463)
 >
@@ -27,7 +31,7 @@
 > **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar · #2362 S-L2 LegacyVault · #2363 S-L6/L3/L5.
 > **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
 >
-> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X) · S-A8 session-key forge richness.
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X).
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -109,7 +113,7 @@ This board was written on 2026-08-03 against a picture that was already out of d
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | **S-A2 AMM**                     | Compile fix — private `_swap`, external ABI unchanged (**#228, yours**). PoolFactory on the dev chain (**#264**). **mint + swapExactIn proven on a real chain** (**#288**). Pure maths module tested. | **Invariants + LP suite shipped** (`src/amm/invariants.test.ts`) · oracle must NOT read AMM (S-A12) · `audited` stays false                  |
 | **S-A7 Launch / token factory**  | Fixed-supply ERC-20 + CREATE2 factory, own pinned suite, **proven end to end on the dev chain**, refuses a zero factory before any arithmetic, `audited:false` deliberate (**#217**)                  | The audit itself · launch fee (Fiat Plane) · meme/vesting/NFT surfaces (Tier G)                                                              |
-| **S-A8 Toolchain pin**           | solc 0.8.28 pinned, artefacts committed with a re-derived source hash, contracts run against anvil in CI (`REQUIRE_EVM_CHAIN=1`), one `EXPECTED_SOLC` shared with the indexer                         | **Forge fuzz + gas ceilings in CI** (`test/forge`). Residual: session-key forge richness · external audit. solc-js still compiles artefacts. |
+| **S-A8 Toolchain pin**           | solc 0.8.28 pinned, artefacts committed with a re-derived source hash, contracts run against anvil in CI (`REQUIRE_EVM_CHAIN=1`), one `EXPECTED_SOLC` shared with the indexer                         | **Forge fuzz + gas ceilings in CI** (`test/forge`), including session-key escalation / re-entrancy / validateUserOp. Residual: external audit. solc-js still compiles artefacts. |
 | **S-A1 Smart accounts (partly)** | SmartAccount / AccountFactory / SessionKeyLib compile and run; **31 contract tests incl. the CREATE2 cross-check** (**#210**); typed refusals on every chain path (**#193**); userop hashing built    | **The adversarial audit package** · S-A9 verifier · S-A11 differential check · gas ownership (S-A10/S-A11)                                   |
 
 **Your genuinely greenfield Tier A front is four items: S-A3 escrow · S-A4 lending · S-A5 router · S-A6 merchant contracts.**
