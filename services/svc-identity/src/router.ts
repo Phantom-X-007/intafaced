@@ -843,6 +843,29 @@ export function createIdentityRouter(
         }),
 
       /**
+       * §10 — operator opens a KYC document from the encrypted vault.
+       *
+       * MFA required: same privilege class as store/approve (document = PII).
+       * Refuses a blank IDENTITY_KYC_DOC_KEY before reader — no invented AES key, no plaintext.
+       */
+      getDocument: scopedProcedure('admin:compliance')
+        .input(z.object({ documentId: z.string().uuid() }))
+        .output(kycDocMetaOutput.extend({ bytesBase64: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            const vault = requireKycDocs();
+            const opened = await vault.getFor(input.documentId, {
+              kind: 'compliance',
+              operatorId: ctx.principal.userId,
+            });
+            return { ...presentDocMeta(opened.meta), bytesBase64: opened.bytes.toString('base64') };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
        * Meta-only list for one subject. No document bytes on the wire.
        * Compliance scope only — not a free userId lookup for ordinary sessions.
        */
