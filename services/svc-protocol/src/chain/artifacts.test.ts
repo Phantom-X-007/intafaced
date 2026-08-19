@@ -316,6 +316,39 @@ describe('committed entrypoint artefacts match the Solidity in this tree', () =>
   });
 });
 
+describe('committed paymaster artefacts match the Solidity in this tree', () => {
+  const paymaster = (SUITES as Suite[]).find((s) => s.name === 'paymaster');
+
+  it('compiles ScopedPaymaster before nft (nft stays last)', () => {
+    const names = (SUITES as Suite[]).map((s) => s.name);
+    expect(names.indexOf('paymaster')).toBeGreaterThan(-1);
+    expect(names.indexOf('paymaster')).toBeLessThan(names.lastIndexOf('nft'));
+    expect(paymaster?.expect).toBe('compiles');
+    const artefact = loadArtifact('ScopedPaymaster');
+    expect(artefact.contractName).toBe('ScopedPaymaster');
+    expect(artefact.suite).toBe('paymaster');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(paymaster, collectSources()));
+    expect(loadArtifact('ScopedPaymaster').sourceHash).toBe(expected);
+  });
+
+  it('exposes operator policy + float withdraw, not a user-fund pause', () => {
+    const names = loadArtifact('ScopedPaymaster')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+    for (const forbidden of ['pause', 'upgradeTo', 'upgradeToAndCall', 'execute']) {
+      expect(names, `ScopedPaymaster must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    for (const required of ['validatePaymasterUserOp', 'setAllowlisted', 'withdrawFloat']) {
+      expect(names).toContain(required);
+    }
+  });
+});
+
 describe('committed NFT artefacts match the Solidity in this tree', () => {
   const nft = (SUITES as Suite[]).find((s) => s.name === 'nft');
 
