@@ -203,11 +203,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier E — Sovereign card / JIT (contract half)
 
-| ID       | Outcome                   | Done bar                                                                                                                                                                                               |
-| -------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **S-E1** | **JIT funding contract**  | **Shipped this PR.** `CardPull` — exact `transferFrom` owner SA → user settlement; kill strands zero; session may call `pullExact`. Live issuer rail is still Nitro (`socket.live-issuer`). Unaudited. |
-| **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                                                                                                                 |
-| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                                                                                                               |
+| ID       | Outcome                   | Done bar                                                                                                                                                                                             |
+| -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-E1** | **JIT funding contract**  | **Shipped #2470.** `CardPull` — exact `transferFrom` owner SA → user settlement; kill strands zero; session may call `pullExact`. Live issuer rail is still Nitro (`socket.live-issuer`). Unaudited. |
+| **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                                                                                                               |
+| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                                                                                                             |
 
 ### Tier F — Web4 / attestations (on-chain standing, zero PII)
 
