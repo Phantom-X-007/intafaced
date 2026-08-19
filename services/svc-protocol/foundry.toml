@@ -1,0 +1,18 @@
+# S-A8 — Foundry is the fuzzer, not the compiler.
+#
+# Artefacts still come from solc-js (`scripts/compile-contracts.mjs` → contracts/out/).
+# `src` is this test folder so forge does not compile the whole contracts/ tree
+# (committed artefacts are suite-isolated; a unified compile last-writes bytecode).
+[profile.default]
+src = "test/forge"
+test = "test/forge"
+out = "forge-out"
+libs = []
+solc_version = "0.8.28"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 200
+ffi = false
+auto_detect_solc = false
+fuzz = { runs = 64 }
+fs_permissions = [{ access = "read", path = "./contracts" }]

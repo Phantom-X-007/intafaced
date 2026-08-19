@@ -2218,7 +2218,10 @@ export const FEATURES = [
     status: 'socket',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    note: '2026-07-30 PARTIALLY CLOSED. Solidity is compiled and executed now: solc 0.8.28 pinned in package.json, `contracts:build` emits committed artefacts, and the account suite runs against anvil in CI (REQUIRE_EVM_CHAIN=1) — 31 contract tests including the CREATE2 cross-check. FIRST COMPILE FOUND A BUG NOBODY COULD HAVE SEEN: ConstantProductPool.swapExactIn called `swap`, which is `external`, so the AMM pool produced no bytecode and was undeployable. THAT IS FIXED — #228 introduced a private `_swap` shared by both entrypoints and the suite is now pinned `expect: compiles` in scripts/contract-sources.mjs (corrected here 2026-08-07; this note claimed a broken suite eight days after it was repaired, which is how the AMM ends up on a task board as if it were greenfield). Remaining: no Foundry/forge invariant or fuzz suite, no gas snapshots, and no audit — this proves the contracts compile and behave, not that they are safe. Blocks any mainnet deploy.',
+    note:
+      '2026-08-19 FORGE FUZZ IN CI (S-A8): test/forge runs via the foundry:v1.5.1 image (`pnpm test:forge`); ' +
+      'solc-js still owns contracts/out/ (no forge last-write). StealthAnnouncer + CrewVault share-sum fuzz and gas ceilings. ' +
+      'STATUS stays socket: no session-key escalation forge suite, no external audit — this still does not prove safe for mainnet.',
   }),
   f('socket.contract-audit', 'External audit of the account + factory suite', {
     module: 'protocol',

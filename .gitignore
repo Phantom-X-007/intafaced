@@ -18,6 +18,10 @@ coverage/
 !services/svc-protocol/contracts/out/
 !services/svc-protocol/contracts/out/**
 
+# Foundry scratch for S-A8 fuzz (not the solc-js artefacts under contracts/out/).
+services/svc-protocol/forge-out/
+services/svc-protocol/cache/
+
 # Same reasoning, second caller. #218 added svc-indexer's own pinned suite
 # (contracts/dev/DevVenue.sol) but not the matching negation, so `out/` above
 # swallowed DevVenue.json exactly as it would have swallowed svc-protocol's.
