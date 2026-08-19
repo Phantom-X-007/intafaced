@@ -349,6 +349,39 @@ describe('committed paymaster artefacts match the Solidity in this tree', () => 
   });
 });
 
+describe('committed RWA artefacts match the Solidity in this tree', () => {
+  const rwa = (SUITES as Suite[]).find((s) => s.name === 'rwa');
+
+  it('compiles RwaRegistry before nft (nft stays last)', () => {
+    const names = (SUITES as Suite[]).map((s) => s.name);
+    expect(names.indexOf('rwa')).toBeGreaterThan(-1);
+    expect(names.indexOf('rwa')).toBeLessThan(names.lastIndexOf('nft'));
+    expect(rwa?.expect).toBe('compiles');
+    const artefact = loadArtifact('RwaRegistry');
+    expect(artefact.contractName).toBe('RwaRegistry');
+    expect(artefact.suite).toBe('rwa');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(rwa, collectSources()));
+    expect(loadArtifact('RwaRegistry').sourceHash).toBe(expected);
+  });
+
+  it('exposes register/unlist, not an admin licence switch', () => {
+    const names = loadArtifact('RwaRegistry')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+    for (const forbidden of ['pause', 'upgradeTo', 'upgradeToAndCall', 'setLicence', 'setAdmin']) {
+      expect(names, `RwaRegistry must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    for (const required of ['register', 'unlist']) {
+      expect(names).toContain(required);
+    }
+  });
+});
+
 describe('committed NFT artefacts match the Solidity in this tree', () => {
   const nft = (SUITES as Suite[]).find((s) => s.name === 'nft');
 

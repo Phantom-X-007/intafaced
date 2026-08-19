@@ -285,6 +285,16 @@ export const SUITES = [
     sources: ['paymaster/ScopedPaymaster.sol', 'interfaces/IPaymaster.sol', 'interfaces/IAccount.sol'],
   },
   {
+    name: 'rwa',
+    expect: 'compiles',
+    /**
+     * S-G4 / `launch.rwa` — licence-gated issuance registry. Zero hash refuses.
+     * Licence *content* is Class X. Own suite so a vaults edit does not stale
+     * this bytecode (and reverse). nft stays last.
+     */
+    sources: ['rwa/RwaRegistry.sol'],
+  },
+  {
     name: 'nft',
     expect: 'compiles',
     /**

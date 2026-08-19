@@ -501,7 +501,7 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
         address: col2,
         abi: mock.abi,
         functionName: 'mint',
-        args: [victim.deployer, 50n * WAD],
+        args: [victim.deployer, 80n * WAD],
         account: a.walletClient.account!,
         chain: a.walletClient.chain,
       }),
@@ -511,7 +511,7 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
         address: col2,
         abi: mock.abi,
         functionName: 'approve',
-        args: [market2, 50n * WAD],
+        args: [market2, 80n * WAD],
         account: victim.walletClient.account!,
         chain: victim.walletClient.chain,
       }),
@@ -521,11 +521,39 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
         address: market2,
         abi: mk.abi,
         functionName: 'depositCollateral',
-        args: [50n * WAD],
+        args: [80n * WAD],
         account: victim.walletClient.account!,
         chain: victim.walletClient.chain,
       }),
     );
+
+    // Re-assert marks: sibling files warp the shared anvil; a stale/disagreed
+    // oracle turns this borrow into Unhealthy even though 20/80 is inside 50% LTV.
+    for (const [asset, price] of [
+      [col2, 100n * WAD],
+      [bor2, 100n * WAD],
+    ] as const) {
+      await write(a.publicClient, () =>
+        a.walletClient.writeContract({
+          address: oracle2,
+          abi: oc.abi,
+          functionName: 'report',
+          args: [asset, price],
+          account: a.walletClient.account!,
+          chain: a.walletClient.chain,
+        }),
+      );
+      await write(reporterB.publicClient, () =>
+        reporterB.walletClient.writeContract({
+          address: oracle2,
+          abi: oc.abi,
+          functionName: 'report',
+          args: [asset, price],
+          account: reporterB.walletClient.account!,
+          chain: reporterB.walletClient.chain,
+        }),
+      );
+    }
 
     // Arm: during the outbound borrow transfer, try to borrow another 20
     await write(a.publicClient, () =>

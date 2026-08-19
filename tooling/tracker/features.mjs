@@ -1388,12 +1388,16 @@ export const FEATURES = [
   }),
   f('launch.rwa', 'RWA issuance registry, licence-gated', {
     owner: 'shehzad002',
-    note: 'HUMAN on-chain launch @shehzad002 (licence honesty). Agents babysit only. Plane corrected to P 2026-08-07 — the registry is on-chain; the LICENCE half is Class X and remains Nitro human.',
     module: 'launch',
     phase: '5',
     plane: 'P',
-    status: 'socket',
+    status: 'ready',
     dependsOn: ['launch.token-factory'],
+    requires: ['services/svc-protocol/contracts/rwa/RwaRegistry.sol'],
+    note:
+      'S-G4 contract half 2026-08-19: RwaRegistry — licenceHash immutable, register/unlist revert LicenceUnset ' +
+      'while hash is bytes32(0). Issuer is msg.sender; platform cannot unlist. STATUS ready (not done): licence ' +
+      '*content* is Class X (Nitro human / counsel) — no contract makes that go away. Unaudited.',
   }),
   f('launch.trust-layer', 'Launch trust — enforced LP locks, vesting proofs, deployer reputation (§35)', {
     module: 'launch',
