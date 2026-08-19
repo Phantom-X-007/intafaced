@@ -10,8 +10,8 @@
  *   1. Source-scans index.ts for `bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY)`
  *      and `...(vault ?? {})` (fails if the composition root omits the wire).
  *   2. Builds the router the same way index.ts does: `bootKycVault` then spread.
- *      Key set → storeDocument / listDocuments / bindDocument are not the
- *      unwired refuse. Key missing → named PRECONDITION_FAILED as today.
+ *      Key set → store / list / bind / get are not the unwired refuse.
+ *      Key missing → named PRECONDITION_FAILED as today.
  *   3. Asserts kyc.status never carries bytes or provider_ref.
  *
  * Does not invent a key. Bytes read is compliance+MFA kyc.getDocument only.
@@ -136,7 +136,7 @@ describe('production boot shape — missing key refuses named, never invents a v
 });
 
 describe('production boot shape — parsed key exposes operator vault procedures', () => {
-  it('storeDocument / listDocuments / bindDocument are not the unwired refuse', async () => {
+  it('store / list / bind / get are not the unwired refuse', async () => {
     const r = productionRouter(randomBytes(32).toString('base64'));
     const op = r.createCaller(await ctx(['admin:compliance'], { mfa: true }));
 
@@ -159,6 +159,10 @@ describe('production boot shape — parsed key exposes operator vault procedures
     const bindErr = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID }).catch((e: unknown) => e);
     expect(codeOf(bindErr)).not.toBe('PRECONDITION_FAILED');
     expect(String((bindErr as Error).message ?? bindErr)).not.toMatch(/kyc_doc\.unwired/);
+
+    const getErr = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
+    expect(codeOf(getErr)).not.toBe('PRECONDITION_FAILED');
+    expect(String((getErr as Error).message ?? getErr)).not.toMatch(/kyc_doc\.unwired/);
   });
 });
 
