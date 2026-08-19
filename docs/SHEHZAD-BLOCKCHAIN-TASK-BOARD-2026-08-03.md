@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-19 delta — S-G4 RWA registry (this PR)
+> ### 2026-08-19 delta — S-E1 JIT CardPull (this PR)
+>
+> **On-chain half:** `CardPull` — owner is the user's SmartAccount. `pullExact` is `transferFrom(owner, settlement, amount)` so this contract never holds tokens. `kill` is owner-only and strands zero. Session keys may be granted `pullExact` (not an outbound ERC-20 transfer). No issuer key. Unaudited.
+>
+> ### 2026-08-19 delta — S-G4 RWA registry (#2469)
 >
 > **Licence-gated honesty:** `RwaRegistry` refuses `register`/`unlist` while `licenceHash` is `bytes32(0)`. Hash is immutable. Issuer is `msg.sender`; the platform cannot unlist. Licence _content_ stays Class X. Unaudited.
 >
@@ -195,11 +199,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier E — Sovereign card / JIT (contract half)
 
-| ID       | Outcome                   | Done bar                                                                                                         |
-| -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **S-E1** | **JIT funding contract**  | Smart-account pull exact amount at auth · issuer never holds user balance · program kill strands zero user funds |
-| **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                           |
-| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                         |
+| ID       | Outcome                   | Done bar                                                                                                                                                                                               |
+| -------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **S-E1** | **JIT funding contract**  | **Shipped this PR.** `CardPull` — exact `transferFrom` owner SA → user settlement; kill strands zero; session may call `pullExact`. Live issuer rail is still Nitro (`socket.live-issuer`). Unaudited. |
+| **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                                                                                                                 |
+| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                                                                                                               |
 
 ### Tier F — Web4 / attestations (on-chain standing, zero PII)
 
@@ -211,12 +215,12 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier G — Launchpad / NFT / RWA (crypto surfaces)
 
-| ID       | Outcome                                | Done bar                                                                                                                                    |
-| -------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                                                                                                         |
-| **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent                                                                                     |
-| **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                                                                                                                |
-| **S-G4** | **RWA registry**                       | **Shipped this PR (contract half).** `RwaRegistry` refuse-closed on `bytes32(0)` licenceHash. Licence _content_ remains Class X. Unaudited. |
+| ID       | Outcome                                | Done bar                                                                                                                                  |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                                                                                                       |
+| **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent                                                                                   |
+| **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                                                                                                              |
+| **S-G4** | **RWA registry**                       | **Shipped #2469 (contract half).** `RwaRegistry` refuse-closed on `bytes32(0)` licenceHash. Licence _content_ remains Class X. Unaudited. |
 
 ### Tier H — Mining / MatMul PoW interface (crypto)
 

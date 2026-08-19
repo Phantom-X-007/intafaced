@@ -382,6 +382,39 @@ describe('committed RWA artefacts match the Solidity in this tree', () => {
   });
 });
 
+describe('committed card-pull artefacts match the Solidity in this tree', () => {
+  const card = (SUITES as Suite[]).find((s) => s.name === 'card');
+
+  it('compiles CardPull before nft (nft stays last)', () => {
+    const names = (SUITES as Suite[]).map((s) => s.name);
+    expect(names.indexOf('card')).toBeGreaterThan(-1);
+    expect(names.indexOf('card')).toBeLessThan(names.lastIndexOf('nft'));
+    expect(card?.expect).toBe('compiles');
+    const artefact = loadArtifact('CardPull');
+    expect(artefact.contractName).toBe('CardPull');
+    expect(artefact.suite).toBe('card');
+    expect(artefact.bytecode.length).toBeGreaterThan(2);
+    expect(artefact.bytecode).not.toContain('__$');
+  });
+
+  it('records a sourceHash that still matches the .sol files on disk', () => {
+    const expected = computeSourceHash(suiteSources(card, collectSources()));
+    expect(loadArtifact('CardPull').sourceHash).toBe(expected);
+  });
+
+  it('exposes pullExact/kill, not a pause or issuer mint', () => {
+    const names = loadArtifact('CardPull')
+      .abi.filter((entry) => entry.type === 'function')
+      .map((entry) => ('name' in entry ? entry.name : ''));
+    for (const forbidden of ['pause', 'upgradeTo', 'upgradeToAndCall', 'mint']) {
+      expect(names, `CardPull must not expose ${forbidden}()`).not.toContain(forbidden);
+    }
+    for (const required of ['pullExact', 'kill', 'setSettlement']) {
+      expect(names).toContain(required);
+    }
+  });
+});
+
 describe('committed NFT artefacts match the Solidity in this tree', () => {
   const nft = (SUITES as Suite[]).find((s) => s.name === 'nft');
 
