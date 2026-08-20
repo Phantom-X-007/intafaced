@@ -1,5 +1,7 @@
 # Swarm all-out orient — cold agents (GitHub tip)
 
+> **Historical orientation (2026-08-03), not a live queue.** Keep the anti-stamp and ownership principles, but re-derive the tip, open PRs, tracker ownership, claims, and ledger before acting. Dated statuses and example queues never override live state.
+
 **Status:** BINDING for multi-chat / multi-model / insane parallel when Nitro says go all-out / AFK / swarms  
 **Audience:** every agent (any coding agent CLI) — Nitro does not run git  
 **Re-derive tip every fire.** Chat memory is never high water.

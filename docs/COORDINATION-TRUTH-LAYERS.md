@@ -1,11 +1,13 @@
 # Coordination truth layers (binding)
 
-**Status:** BINDING · **program FINISHED** · **auto-load enforced** (no Nitro paste)  
+**Status:** BINDING coordination law · **historical Board Clear program sealed** · **auto-load enforced** (no Nitro paste)
 **Home for this fact:** this file. Pointers only elsewhere.  
 **Finish audit:** [`COORDINATION-FINISH-AUDIT-2026-08-02.md`](COORDINATION-FINISH-AUDIT-2026-08-02.md) (F1–F10).  
 **User-claim stress test:** [`COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md`](COORDINATION-STRESS-TEST-USER-CLAIMS-2026-08-02.md).  
 **Intent:** Denon multi-dev context + zero agent conflict **without** slowing parallel autonomous ship.  
 **Not:** a new project board, every-PR registry tax, or a human Approve gate.
+
+**Authority order for current work:** doctrine and `AGENTS.md` → live GitHub (`origin/main` and open PRs) → `tooling/tracker/features.mjs` (product state and ownership) → `docs/LIVE-LANES.md` and current claim files (session collision paths) → dated campaign boards (sequence/history only). A dated board never overrides live code, ownership, claims, or CI.
 
 ### How this is enforced without you messaging a chat
 

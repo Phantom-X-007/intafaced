@@ -1,5 +1,7 @@
 # LIVE LANES Ã¢â€Å“ÃƒÂ³ÃŽâ€œÃƒÂ©Ã‚Â¼ÃŽâ€œÃƒâ€¡Ã‚Â¥ multi-agent claims
 
+> **Session snapshot, not product truth.** Rows describe collision and ownership hints for a point in time. Re-derive every fire from live GitHub PR file lists, `tooling/tracker/features.mjs`, claim checks, and the current tip; explicit current ownership and claims win over stale rows.
+
 **Rule:** No code edits until your lane is on this board (or `docs/ops/claims/<id>.md`). First claimer wins.  
 **Law:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) Ã¢â€Å“ÃƒÂ©Ã¢â€Â¬Ã¢â€¢â€“ [`NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md`](NITRO-OWNERSHIP-AND-DENON-DIRECTION-2026-07-31.md)  
 **Truth layers:** [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)  
