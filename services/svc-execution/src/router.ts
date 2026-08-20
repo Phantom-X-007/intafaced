@@ -38,7 +38,7 @@ const latencyGradeInput = z.object({
   errorRateBps: z.number().nullable(),
   staleMs: z.number().nullable(),
   provisional: z.boolean(),
-  reasons: z.array(z.string()),
+  reasons: z.array(z.string()).readonly(),
 });
 
 const omsVenueInput = z.object({
