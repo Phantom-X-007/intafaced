@@ -612,6 +612,7 @@ registerPrivateRest(app, {
       symbol: input.symbol,
       leverage: parseAmount(input.leverage),
       positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
     }),
   addIsolatedMargin: (principal, input) =>
     positions.addIsolatedMargin({
@@ -619,6 +620,7 @@ registerPrivateRest(app, {
       symbol: input.symbol,
       amount: parseAmount(input.amount),
       positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
     }),
   reduceIsolatedMargin: (principal, input) =>
     positions.reduceIsolatedMargin({
@@ -626,6 +628,7 @@ registerPrivateRest(app, {
       symbol: input.symbol,
       amount: parseAmount(input.amount),
       positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
     }),
   getOpenMarginCall: async (principal, positionId) => {
     const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);

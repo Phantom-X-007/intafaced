@@ -142,17 +142,26 @@ export interface PrivateRestDeps {
    * recipes; missing position 404; >10× / would-be liquidation / insufficient
    * margin refuse without writing.
    */
-  setLeverage(principal: Principal, input: { symbol: string; leverage: string; positionId?: string }): Promise<Position>;
+  setLeverage(
+    principal: Principal,
+    input: { symbol: string; leverage: string; positionId?: string; clientAdjustmentId: string },
+  ): Promise<Position>;
   /**
    * Isolated extra collateral via futuresMarginAdd. Does not change leverage or
    * margin mode. Amount is a decimal string; JSON numbers refused.
    */
-  addIsolatedMargin(principal: Principal, input: { symbol: string; amount: string; positionId?: string }): Promise<Position>;
+  addIsolatedMargin(
+    principal: Principal,
+    input: { symbol: string; amount: string; positionId?: string; clientAdjustmentId: string },
+  ): Promise<Position>;
   /**
    * Isolated excess collateral out via futuresMarginRelease. Cannot pull below
    * IM. Would-be liquidation at the current mark refuses without writing.
    */
-  reduceIsolatedMargin(principal: Principal, input: { symbol: string; amount: string; positionId?: string }): Promise<Position>;
+  reduceIsolatedMargin(
+    principal: Principal,
+    input: { symbol: string; amount: string; positionId?: string; clientAdjustmentId: string },
+  ): Promise<Position>;
   /**
    * Open delivered margin call for a position owned by the principal.
    * Null → 404 (no call, or not theirs). Never invents a call.
@@ -1059,8 +1068,19 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
       const positionId = positionIdRaw.trim() || undefined;
+      if (!positionId) {
+        return reply.code(400).send({
+          ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
+        });
+      }
+      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!clientAdjustmentId) {
+        return reply.code(400).send({
+          ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
+        });
+      }
 
-      const pos = await deps.setLeverage(principal, { symbol, leverage: leverageRaw, positionId });
+      const pos = await deps.setLeverage(principal, { symbol, leverage: leverageRaw, positionId, clientAdjustmentId });
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {
@@ -1107,8 +1127,19 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
       const positionId = positionIdRaw.trim() || undefined;
+      if (!positionId) {
+        return reply.code(400).send({
+          ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
+        });
+      }
+      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!clientAdjustmentId) {
+        return reply.code(400).send({
+          ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
+        });
+      }
 
-      const pos = await deps.addIsolatedMargin(principal, { symbol, amount: body.amount, positionId });
+      const pos = await deps.addIsolatedMargin(principal, { symbol, amount: body.amount, positionId, clientAdjustmentId });
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {
@@ -1155,8 +1186,19 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
       const positionId = positionIdRaw.trim() || undefined;
+      if (!positionId) {
+        return reply.code(400).send({
+          ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
+        });
+      }
+      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!clientAdjustmentId) {
+        return reply.code(400).send({
+          ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
+        });
+      }
 
-      const pos = await deps.reduceIsolatedMargin(principal, { symbol, amount: body.amount, positionId });
+      const pos = await deps.reduceIsolatedMargin(principal, { symbol, amount: body.amount, positionId, clientAdjustmentId });
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {

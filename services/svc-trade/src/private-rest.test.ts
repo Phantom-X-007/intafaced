@@ -2039,11 +2039,33 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/leverage',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', leverage: '5' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', leverage: '5', clientAdjustmentId: 'lev-1' },
     });
     expect(res.statusCode).toBe(200);
-    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', leverage: '5', positionId: undefined });
+    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', leverage: '5', positionId: 'pos-1', clientAdjustmentId: 'lev-1' });
     expect(res.json().leverage).toBe('5');
+    await app.close();
+  });
+
+  it('POST /positions/leverage: refuses a missing durable caller key before the money dependency', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        setLeverage: async () => {
+          called = true;
+          return fakeLeveredPosition;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', leverage: '5' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().intafacedCode).toBe('trade.idempotency_key_required');
+    expect(called).toBe(false);
     await app.close();
   });
 
@@ -2061,10 +2083,10 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/margin',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', amount: '2500' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'add-1' },
     });
     expect(res.statusCode).toBe(200);
-    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', amount: '2500', positionId: undefined });
+    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', amount: '2500', positionId: 'pos-1', clientAdjustmentId: 'add-1' });
     expect(res.json().collateral).toBe('12500');
     await app.close();
   });
@@ -2102,7 +2124,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/margin',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', amount: '2500' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'add-insufficient' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.insufficient_margin');
@@ -2123,10 +2145,10 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/margin/reduce',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', amount: '2500' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'reduce-1' },
     });
     expect(res.statusCode).toBe(200);
-    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', amount: '2500', positionId: undefined });
+    expect(called).toEqual({ symbol: 'BTC/USDT-PERP', amount: '2500', positionId: 'pos-1', clientAdjustmentId: 'reduce-1' });
     expect(res.json().collateral).toBe('5000');
     await app.close();
   });
@@ -2143,7 +2165,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/margin/reduce',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', amount: '2500' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'reduce-below' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.margin_below_initial');
@@ -2162,7 +2184,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/leverage',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', leverage: '5' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-missing', leverage: '5', clientAdjustmentId: 'lev-missing' },
     });
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe('trade.position_not_found');
@@ -2181,7 +2203,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/leverage',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', leverage: '11' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', leverage: '11', clientAdjustmentId: 'lev-high' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.leverage_too_high');
@@ -2200,7 +2222,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/leverage',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', leverage: '10' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', leverage: '10', clientAdjustmentId: 'lev-liquidate' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.statusCode).not.toBe(200);
@@ -2220,7 +2242,7 @@ describe('private REST — mount boundary + order write path', () => {
       method: 'POST',
       url: '/api/v1/positions/leverage',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT-PERP', leverage: '1' },
+      payload: { symbol: 'BTC/USDT-PERP', positionId: 'pos-1', leverage: '1', clientAdjustmentId: 'lev-insufficient' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.statusCode).not.toBe(200);

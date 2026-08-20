@@ -1,4 +1,5 @@
-import { bigint, boolean, index, integer, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -401,6 +402,28 @@ export const positions = trade.table(
   (t) => [index('positions_user_status_idx').on(t.userId, t.status), index('positions_market_idx').on(t.marketId)],
 );
 
+export const positionMarginAdjustments = trade.table(
+  'position_margin_adjustments',
+  {
+    positionId: uuid('position_id')
+      .notNull()
+      .references(() => positions.id, { onDelete: 'cascade' }),
+    clientAdjustmentId: text('client_adjustment_id').notNull(),
+    requestFingerprint: text('request_fingerprint').notNull(),
+    sequence: integer('sequence').notNull(),
+    status: text('status').notNull().default('pending'),
+    result: jsonb('result'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    completedAt: tstz('completed_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.positionId, t.clientAdjustmentId] }),
+    uniqueIndex('position_margin_adjustments_one_pending_idx')
+      .on(t.positionId)
+      .where(sql`${t.status} = 'pending'`),
+  ],
+);
+
 /**
  * Which funding periods have already moved a position's margin (0014).
  *
@@ -427,4 +450,4 @@ export const positionFundingApplied = trade.table(
   (t) => [primaryKey({ columns: [t.positionId, t.periodId] }), index('position_funding_applied_period_idx').on(t.periodId)],
 );
 
-export const schema = { markets, orders, fills, positions, positionFundingApplied };
+export const schema = { markets, orders, fills, positions, positionMarginAdjustments, positionFundingApplied };

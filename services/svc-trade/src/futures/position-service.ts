@@ -29,7 +29,7 @@
  * price is REFUSED at the REST edge rather than silently re-priced, so a caller
  * learns instead of getting different behaviour than they asked for.
  */
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, userAvailable, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
@@ -128,6 +128,8 @@ export interface SetLeverageInput {
   leverage: Amount;
   /** When omitted, the unique open position on `symbol` is used. */
   positionId?: string;
+  /** Durable caller idempotency key. Mandatory at the REST boundary. */
+  clientAdjustmentId?: string;
 }
 
 export interface AddIsolatedMarginInput {
@@ -138,6 +140,8 @@ export interface AddIsolatedMarginInput {
   amount: Amount;
   /** When omitted, the unique open position on `symbol` is used. */
   positionId?: string;
+  /** Durable caller idempotency key. Mandatory at the REST boundary. */
+  clientAdjustmentId?: string;
 }
 
 export type ReduceIsolatedMarginInput = AddIsolatedMarginInput;
@@ -262,8 +266,12 @@ export class PositionService {
    * Commit the semantic request before touching the external ledger. A retry of
    * the exact request resumes; a different request cannot inherit its sequence.
    */
-  private async claimMarginAdjustment(input: { userId: string; symbol: string; positionId?: string }, request: string): Promise<void> {
-    await this.sql.begin(async (tx) => {
+  private async claimMarginAdjustment(
+    input: { userId: string; symbol: string; positionId?: string },
+    adjustmentId: string,
+    request: string,
+  ): Promise<Position | null> {
+    return this.sql.begin(async (tx) => {
       await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
       const rows = input.positionId
         ? await tx<PositionRow[]>`
@@ -284,27 +292,67 @@ export class PositionService {
       const row = rows[0]!;
       if (row.symbol !== input.symbol)
         throw new FuturesError(`position is on ${row.symbol}, not ${input.symbol}`, 'trade.symbol_mismatch', 400);
+      const [existing] = await tx<
+        { request_fingerprint: string; status: 'pending' | 'completed'; result: Position | null }[]
+      >`SELECT request_fingerprint, status, result FROM trade.position_margin_adjustments
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId}`;
+      if (existing) {
+        if (existing.request_fingerprint !== request) {
+          throw new FuturesError('clientAdjustmentId was already used for a different request', 'trade.idempotency_conflict', 409);
+        }
+        return existing.status === 'completed' ? existing.result : null;
+      }
       if (row.status !== 'open') throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
       if (row.margin_mode !== 'isolated')
         throw new FuturesError('live margin adjustment is isolated-only', 'trade.cross_margin_unsupported', 400);
-      if (row.margin_adjust_request !== null && row.margin_adjust_request !== request) {
+      if (row.margin_adjust_request !== null) {
         throw new FuturesError('a previous margin adjustment must finish before a different request', MARGIN_ADJUSTMENT_IN_PROGRESS, 409);
       }
-      if (row.margin_adjust_request === null) {
-        await tx`UPDATE trade.positions SET margin_adjust_request = ${request}, updated_at = now() WHERE id = ${row.id}`;
+      const sequence = Number(row.margin_adjust_seq) + 1;
+      await tx`INSERT INTO trade.position_margin_adjustments
+        (position_id, client_adjustment_id, request_fingerprint, sequence)
+        VALUES (${row.id}, ${adjustmentId}, ${request}, ${sequence})`;
+      await tx`UPDATE trade.positions SET margin_adjust_request = ${adjustmentId}, updated_at = now() WHERE id = ${row.id}`;
+      return null;
+    });
+  }
+
+  private async abandonMarginAdjustment(
+    input: { userId: string; symbol: string; positionId?: string },
+    adjustmentId: string,
+  ): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      if (input.positionId) {
+        await tx`DELETE FROM trade.position_margin_adjustments
+          WHERE position_id = ${input.positionId} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
+        await tx`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
+          WHERE id = ${input.positionId} AND user_id = ${input.userId} AND margin_adjust_request = ${adjustmentId}`;
+      } else {
+        await tx`DELETE FROM trade.position_margin_adjustments a USING trade.positions p, trade.markets m
+          WHERE a.position_id = p.id AND m.id = p.market_id AND p.user_id = ${input.userId}
+            AND m.symbol = ${input.symbol} AND a.client_adjustment_id = ${adjustmentId} AND a.status = 'pending'`;
+        await tx`UPDATE trade.positions p SET margin_adjust_request = NULL, updated_at = now()
+          FROM trade.markets m WHERE m.id = p.market_id AND p.user_id = ${input.userId}
+            AND m.symbol = ${input.symbol} AND p.status = 'open' AND p.margin_adjust_request = ${adjustmentId}`;
       }
     });
   }
 
-  private async abandonMarginAdjustment(input: { userId: string; symbol: string; positionId?: string }, request: string): Promise<void> {
-    if (input.positionId) {
-      await this.sql`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
-        WHERE id = ${input.positionId} AND user_id = ${input.userId} AND margin_adjust_request = ${request}`;
-    } else {
-      await this.sql`UPDATE trade.positions p SET margin_adjust_request = NULL, updated_at = now()
-        FROM trade.markets m WHERE m.id = p.market_id AND p.user_id = ${input.userId}
-          AND m.symbol = ${input.symbol} AND p.status = 'open' AND p.margin_adjust_request = ${request}`;
+  private async completedMarginAdjustment(
+    tx: TransactionSql,
+    positionId: string,
+    adjustmentId: string,
+    request: string,
+  ): Promise<Position | null> {
+    const [record] = await tx<{ request_fingerprint: string; status: 'pending' | 'completed'; result: Position | null }[]>`
+      SELECT request_fingerprint, status, result FROM trade.position_margin_adjustments
+      WHERE position_id = ${positionId} AND client_adjustment_id = ${adjustmentId}
+      FOR UPDATE
+    `;
+    if (!record || record.request_fingerprint !== request) {
+      throw new FuturesError('margin adjustment intent is missing or changed', 'trade.idempotency_conflict', 409);
     }
+    return record.status === 'completed' ? record.result : null;
   }
 
   /**
@@ -771,8 +819,10 @@ export class PositionService {
     }
 
     const request = `leverage:${formatAmount(input.leverage)}`;
+    const adjustmentId = input.clientAdjustmentId?.trim() || request;
     const claimed = { ...input, symbol };
-    await this.claimMarginAdjustment(claimed, request);
+    const completed = await this.claimMarginAdjustment(claimed, adjustmentId, request);
+    if (completed) return completed;
     let ledgerAttempted = false;
     try {
       const row = await this.sql.begin(async (tx) => {
@@ -815,11 +865,17 @@ export class PositionService {
         if (row.margin_mode !== 'isolated') {
           throw new FuturesError('live re-leverage is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
         }
+        const replay = await this.completedMarginAdjustment(tx, row.id, adjustmentId, request);
+        if (replay) return replay;
 
         const currentLeverage = parseAmount(row.leverage);
         if (currentLeverage === input.leverage) {
           await tx`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
-            WHERE id = ${row.id} AND margin_adjust_request = ${request}`;
+            WHERE id = ${row.id} AND margin_adjust_request = ${adjustmentId}`;
+          const result = presentPosition(row);
+          await tx`UPDATE trade.position_margin_adjustments
+            SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+            WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
           return row;
         }
 
@@ -906,13 +962,18 @@ export class PositionService {
         if (!updated) {
           throw new FuturesError('position changed underneath this leverage update', 'trade.position_not_open', 409);
         }
+        const result = presentPosition(updated);
+        await tx`UPDATE trade.position_margin_adjustments
+          SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
         return updated;
       });
 
+      if (!('user_id' in row)) return row;
       await this.publishPositionUpdated(row);
       return presentPosition(row);
     } catch (err) {
-      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, request);
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, adjustmentId);
       if (isLockTimeout(err)) {
         throw new FuturesError(
           'another mutation of this position is already in flight — retry in a moment',
@@ -939,8 +1000,10 @@ export class PositionService {
     }
 
     const request = `add:${formatAmount(input.amount)}`;
+    const adjustmentId = input.clientAdjustmentId?.trim() || request;
     const claimed = { ...input, symbol };
-    await this.claimMarginAdjustment(claimed, request);
+    const completed = await this.claimMarginAdjustment(claimed, adjustmentId, request);
+    if (completed) return completed;
     let ledgerAttempted = false;
     try {
       const row = await this.sql.begin(async (tx) => {
@@ -983,6 +1046,8 @@ export class PositionService {
         if (row.margin_mode !== 'isolated') {
           throw new FuturesError('live margin add is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
         }
+        const replay = await this.completedMarginAdjustment(tx, row.id, adjustmentId, request);
+        if (replay) return replay;
 
         const currentMargin = parseAmount(row.margin_current ?? row.margin_initial);
         const nextMargin = currentMargin + input.amount;
@@ -1026,13 +1091,18 @@ export class PositionService {
         if (!updated) {
           throw new FuturesError('position changed underneath this margin add', 'trade.position_not_open', 409);
         }
+        const result = presentPosition(updated);
+        await tx`UPDATE trade.position_margin_adjustments
+          SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
         return updated;
       });
 
+      if (!('user_id' in row)) return row;
       await this.publishPositionUpdated(row);
       return presentPosition(row);
     } catch (err) {
-      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, request);
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, adjustmentId);
       if (isLockTimeout(err)) {
         throw new FuturesError(
           'another mutation of this position is already in flight — retry in a moment',
@@ -1061,8 +1131,10 @@ export class PositionService {
     }
 
     const request = `release:${formatAmount(input.amount)}`;
+    const adjustmentId = input.clientAdjustmentId?.trim() || request;
     const claimed = { ...input, symbol };
-    await this.claimMarginAdjustment(claimed, request);
+    const completed = await this.claimMarginAdjustment(claimed, adjustmentId, request);
+    if (completed) return completed;
     let ledgerAttempted = false;
     try {
       const row = await this.sql.begin(async (tx) => {
@@ -1105,6 +1177,8 @@ export class PositionService {
         if (row.margin_mode !== 'isolated') {
           throw new FuturesError('live margin reduce is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
         }
+        const replay = await this.completedMarginAdjustment(tx, row.id, adjustmentId, request);
+        if (replay) return replay;
 
         const currentMargin = parseAmount(row.margin_current ?? row.margin_initial);
         const initial = parseAmount(row.margin_initial);
@@ -1173,13 +1247,18 @@ export class PositionService {
         if (!updated) {
           throw new FuturesError('position changed underneath this margin reduce', 'trade.position_not_open', 409);
         }
+        const result = presentPosition(updated);
+        await tx`UPDATE trade.position_margin_adjustments
+          SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
         return updated;
       });
 
+      if (!('user_id' in row)) return row;
       await this.publishPositionUpdated(row);
       return presentPosition(row);
     } catch (err) {
-      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, request);
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, adjustmentId);
       if (isLockTimeout(err)) {
         throw new FuturesError(
           'another mutation of this position is already in flight — retry in a moment',

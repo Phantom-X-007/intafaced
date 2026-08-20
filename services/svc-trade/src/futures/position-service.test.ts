@@ -1379,6 +1379,69 @@ if (!available) {
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
   });
 
+  it('a lost successful response replays the stored result without advancing sequence or moving margin twice', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-response-loss',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const input = {
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      leverage: amt('5'),
+      clientAdjustmentId: 'response-loss-1',
+    };
+    const first = await positions.setLeverage(input);
+    const replay = await positions.setLeverage(input);
+    expect(replay).toEqual(first);
+    await expect(positions.setLeverage({ ...input, leverage: amt('4') })).rejects.toMatchObject({
+      code: 'trade.idempotency_conflict',
+      status: 409,
+    });
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
+    const [stored] = await sql<{ margin_adjust_seq: number; completed: number }[]>`
+      SELECT p.margin_adjust_seq,
+        (SELECT count(*)::int FROM trade.position_margin_adjustments a
+          WHERE a.position_id = p.id AND a.status = 'completed') AS completed
+      FROM trade.positions p WHERE p.id = ${pos.id!}
+    `;
+    expect(stored).toEqual({ margin_adjust_seq: 2, completed: 1 });
+  });
+
+  it('concurrent identical caller keys serialize to one ledger movement and one stored completion', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-concurrent-key',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const input = {
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      leverage: amt('5'),
+      clientAdjustmentId: 'concurrent-same-1',
+    };
+    const [a, b] = await Promise.all([positions.setLeverage(input), positions.setLeverage(input)]);
+    expect(a).toEqual(b);
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
+    const [stored] = await sql<{ margin_adjust_seq: number; completed: number }[]>`
+      SELECT p.margin_adjust_seq,
+        (SELECT count(*)::int FROM trade.position_margin_adjustments a
+          WHERE a.position_id = p.id AND a.status = 'completed') AS completed
+      FROM trade.positions p WHERE p.id = ${pos.id!}
+    `;
+    expect(stored).toEqual({ margin_adjust_seq: 2, completed: 1 });
+  });
+
   it('ledger success plus DB-finalize failure resumes the same intent exactly once and blocks a different target', async () => {
     feed('50000');
     const pos = await positions.open({
