@@ -1139,6 +1139,7 @@ module.exports = {
         dateTimeSeconds: "S",
         moredetail: "View More",
         terminal: {
+            spot: "Spot",
             favoriteAdd: "Add to favourites",
             favoriteRemove: "Remove from favourites",
             moreDetail: "More detail",
@@ -1249,6 +1250,23 @@ module.exports = {
             statusFilled: "Filled",
             statusCancelled: "Cancelled",
             statusOpen: "Open"
+        },
+        convert: {
+            title: "Convert",
+            quantity: "Quantity",
+            quote: "Quote",
+            quoting: "Quoting…",
+            execute: "Execute convert",
+            executing: "Executing…",
+            requestedQty: "Requested",
+            filledQty: "Filled",
+            avgPrice: "Average price",
+            spread: "Spread",
+            expires: "Expires",
+            orderId: "Order",
+            signIn: "Sign in on Platform to use Convert",
+            invalidQuantity: "Enter a decimal quantity greater than zero.",
+            refused: "Convert was refused — no conversion was executed."
         },
         residual: {
             skipToTicket: "Skip to order ticket",
