@@ -7,7 +7,8 @@
 -- at 2+. Never a JS number; integer sequence only.
 
 ALTER TABLE "trade"."positions"
-  ADD COLUMN IF NOT EXISTS "margin_adjust_seq" integer NOT NULL DEFAULT 1;
+  ADD COLUMN IF NOT EXISTS "margin_adjust_seq" integer NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS "margin_adjust_request" text;
 
 ALTER TABLE "trade"."positions"
   DROP CONSTRAINT IF EXISTS "positions_margin_adjust_seq_ck";

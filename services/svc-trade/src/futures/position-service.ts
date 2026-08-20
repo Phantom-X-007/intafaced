@@ -150,6 +150,8 @@ export const LEVERAGE_INSUFFICIENT_MARGIN = 'trade.insufficient_margin';
 export const MARGIN_BELOW_INITIAL = 'trade.margin_below_initial';
 /** Isolated reduce would leave equity ≤ 0 at the current mark. */
 export const MARGIN_WOULD_LIQUIDATE = 'trade.margin_would_liquidate';
+/** A previous ledger-backed adjustment must finish before a different one starts. */
+export const MARGIN_ADJUSTMENT_IN_PROGRESS = 'trade.margin_adjustment_in_progress';
 
 export interface PositionServiceDeps {
   /**
@@ -192,6 +194,8 @@ export interface PositionServiceDeps {
    * tests that are not proving the public door; public-door + index always wire it.
    */
   assertAdlDisclosureAcked?: (userId: string) => Promise<void>;
+  /** Test-only crash seam after the external ledger accepts, before DB finalize. */
+  afterMarginLedgerPost?: (request: string) => Promise<void>;
 }
 
 /** Why a position is frozen waiting for a mark — futures-namespaced refuse codes. */
@@ -232,12 +236,14 @@ export interface PositionRow {
   closing_reason: string | null;
   /** Last posted futuresMarginAdd/Release sequence; close residual uses 1. */
   margin_adjust_seq: number;
+  margin_adjust_request: string | null;
 }
 
 export class PositionService {
   private readonly bus: EventBus | null;
   private readonly markPolicy: MarkPolicy;
   private readonly maxLeverage: Amount;
+  private readonly afterMarginLedgerPost: ((request: string) => Promise<void>) | null;
   private readonly now: () => Date;
 
   constructor(
@@ -248,7 +254,57 @@ export class PositionService {
     this.bus = deps.bus ?? null;
     this.markPolicy = deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY;
     this.maxLeverage = resolveMaxLeverage(deps.maxLeverage ?? null);
+    this.afterMarginLedgerPost = deps.afterMarginLedgerPost ?? null;
     this.now = deps.now ?? (() => new Date());
+  }
+
+  /**
+   * Commit the semantic request before touching the external ledger. A retry of
+   * the exact request resumes; a different request cannot inherit its sequence.
+   */
+  private async claimMarginAdjustment(input: { userId: string; symbol: string; positionId?: string }, request: string): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
+      const rows = input.positionId
+        ? await tx<PositionRow[]>`
+            SELECT p.*, m.symbol FROM trade.positions p
+            JOIN trade.markets m ON m.id = p.market_id
+            WHERE p.id = ${input.positionId} AND p.user_id = ${input.userId}
+            LIMIT 1 FOR UPDATE OF p
+          `
+        : await tx<PositionRow[]>`
+            SELECT p.*, m.symbol FROM trade.positions p
+            JOIN trade.markets m ON m.id = p.market_id
+            WHERE p.user_id = ${input.userId} AND m.symbol = ${input.symbol} AND p.status = 'open'
+            FOR UPDATE OF p
+          `;
+      if (rows.length === 0) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+      if (rows.length > 1)
+        throw new FuturesError(`more than one open position on ${input.symbol} — pass position id`, 'trade.position_ambiguous', 400);
+      const row = rows[0]!;
+      if (row.symbol !== input.symbol)
+        throw new FuturesError(`position is on ${row.symbol}, not ${input.symbol}`, 'trade.symbol_mismatch', 400);
+      if (row.status !== 'open') throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+      if (row.margin_mode !== 'isolated')
+        throw new FuturesError('live margin adjustment is isolated-only', 'trade.cross_margin_unsupported', 400);
+      if (row.margin_adjust_request !== null && row.margin_adjust_request !== request) {
+        throw new FuturesError('a previous margin adjustment must finish before a different request', MARGIN_ADJUSTMENT_IN_PROGRESS, 409);
+      }
+      if (row.margin_adjust_request === null) {
+        await tx`UPDATE trade.positions SET margin_adjust_request = ${request}, updated_at = now() WHERE id = ${row.id}`;
+      }
+    });
+  }
+
+  private async abandonMarginAdjustment(input: { userId: string; symbol: string; positionId?: string }, request: string): Promise<void> {
+    if (input.positionId) {
+      await this.sql`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
+        WHERE id = ${input.positionId} AND user_id = ${input.userId} AND margin_adjust_request = ${request}`;
+    } else {
+      await this.sql`UPDATE trade.positions p SET margin_adjust_request = NULL, updated_at = now()
+        FROM trade.markets m WHERE m.id = p.market_id AND p.user_id = ${input.userId}
+          AND m.symbol = ${input.symbol} AND p.status = 'open' AND p.margin_adjust_request = ${request}`;
+    }
   }
 
   /**
@@ -714,6 +770,10 @@ export class PositionService {
       throw new FuturesError('symbol is required', 'trade.bad_request', 400);
     }
 
+    const request = `leverage:${formatAmount(input.leverage)}`;
+    const claimed = { ...input, symbol };
+    await this.claimMarginAdjustment(claimed, request);
+    let ledgerAttempted = false;
     try {
       const row = await this.sql.begin(async (tx) => {
         await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
@@ -758,6 +818,8 @@ export class PositionService {
 
         const currentLeverage = parseAmount(row.leverage);
         if (currentLeverage === input.leverage) {
+          await tx`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
+            WHERE id = ${row.id} AND margin_adjust_request = ${request}`;
           return row;
         }
 
@@ -802,6 +864,7 @@ export class PositionService {
               400,
             );
           }
+          ledgerAttempted = true;
           await this.ledger.post(
             recipes.futuresMarginAdd({
               positionId: row.id,
@@ -812,6 +875,7 @@ export class PositionService {
             }),
           );
         } else if (delta < 0n) {
+          ledgerAttempted = true;
           await this.ledger.post(
             recipes.futuresMarginRelease({
               positionId: row.id,
@@ -822,6 +886,7 @@ export class PositionService {
             }),
           );
         }
+        if (ledgerAttempted) await this.afterMarginLedgerPost?.(request);
 
         const [updated] = await tx<PositionRow[]>`
           UPDATE trade.positions p
@@ -829,6 +894,7 @@ export class PositionService {
               margin_initial = ${formatAmount(target)},
               margin_current = ${formatAmount(target)},
               margin_adjust_seq = ${seq},
+              margin_adjust_request = NULL,
               updated_at = now()
           FROM trade.markets m
           WHERE p.id = ${row.id}
@@ -846,6 +912,7 @@ export class PositionService {
       await this.publishPositionUpdated(row);
       return presentPosition(row);
     } catch (err) {
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, request);
       if (isLockTimeout(err)) {
         throw new FuturesError(
           'another mutation of this position is already in flight — retry in a moment',
@@ -871,6 +938,10 @@ export class PositionService {
       throw new FuturesError('symbol is required', 'trade.bad_request', 400);
     }
 
+    const request = `add:${formatAmount(input.amount)}`;
+    const claimed = { ...input, symbol };
+    await this.claimMarginAdjustment(claimed, request);
+    let ledgerAttempted = false;
     try {
       const row = await this.sql.begin(async (tx) => {
         await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
@@ -927,6 +998,7 @@ export class PositionService {
           );
         }
 
+        ledgerAttempted = true;
         await this.ledger.post(
           recipes.futuresMarginAdd({
             positionId: row.id,
@@ -936,11 +1008,13 @@ export class PositionService {
             sequence: seq,
           }),
         );
+        await this.afterMarginLedgerPost?.(request);
 
         const [updated] = await tx<PositionRow[]>`
           UPDATE trade.positions p
           SET margin_current = ${formatAmount(nextMargin)},
               margin_adjust_seq = ${seq},
+              margin_adjust_request = NULL,
               updated_at = now()
           FROM trade.markets m
           WHERE p.id = ${row.id}
@@ -958,6 +1032,7 @@ export class PositionService {
       await this.publishPositionUpdated(row);
       return presentPosition(row);
     } catch (err) {
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, request);
       if (isLockTimeout(err)) {
         throw new FuturesError(
           'another mutation of this position is already in flight — retry in a moment',
@@ -985,6 +1060,10 @@ export class PositionService {
       throw new FuturesError('symbol is required', 'trade.bad_request', 400);
     }
 
+    const request = `release:${formatAmount(input.amount)}`;
+    const claimed = { ...input, symbol };
+    await this.claimMarginAdjustment(claimed, request);
+    let ledgerAttempted = false;
     try {
       const row = await this.sql.begin(async (tx) => {
         await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
@@ -1066,6 +1145,7 @@ export class PositionService {
         const prevSeq = Number(row.margin_adjust_seq);
         const seq = (Number.isFinite(prevSeq) && prevSeq >= 1 ? prevSeq : 1) + 1;
 
+        ledgerAttempted = true;
         await this.ledger.post(
           recipes.futuresMarginRelease({
             positionId: row.id,
@@ -1075,11 +1155,13 @@ export class PositionService {
             sequence: seq,
           }),
         );
+        await this.afterMarginLedgerPost?.(request);
 
         const [updated] = await tx<PositionRow[]>`
           UPDATE trade.positions p
           SET margin_current = ${formatAmount(nextMargin)},
               margin_adjust_seq = ${seq},
+              margin_adjust_request = NULL,
               updated_at = now()
           FROM trade.markets m
           WHERE p.id = ${row.id}
@@ -1097,6 +1179,7 @@ export class PositionService {
       await this.publishPositionUpdated(row);
       return presentPosition(row);
     } catch (err) {
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, request);
       if (isLockTimeout(err)) {
         throw new FuturesError(
           'another mutation of this position is already in flight — retry in a moment',

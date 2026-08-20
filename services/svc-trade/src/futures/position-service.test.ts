@@ -1379,6 +1379,57 @@ if (!available) {
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
   });
 
+  it('ledger success plus DB-finalize failure resumes the same intent exactly once and blocks a different target', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-set-leverage-durable-intent',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    let crashOnce = true;
+    const crashing = new PositionService(sql, ledger, {
+      marks: marks.source(),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
+      bus,
+      now: () => NOW,
+      afterMarginLedgerPost: async () => {
+        if (crashOnce) {
+          crashOnce = false;
+          throw new Error('simulated DB finalize failure after ledger acceptance');
+        }
+      },
+    });
+
+    await expect(crashing.setLeverage({ userId: ALICE, symbol: 'BTC/USDT-PERP', positionId: pos.id!, leverage: amt('5') })).rejects.toThrow(
+      'simulated DB finalize failure',
+    );
+    expect((await positions.get(ALICE, pos.id!)).leverage).toBe('10');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
+
+    await expect(
+      crashing.setLeverage({ userId: ALICE, symbol: 'BTC/USDT-PERP', positionId: pos.id!, leverage: amt('4') }),
+    ).rejects.toMatchObject({ code: 'trade.margin_adjustment_in_progress', status: 409 });
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
+
+    const resumed = await crashing.setLeverage({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      leverage: amt('5'),
+    });
+    expect(resumed.leverage).toBe('5');
+    expect(resumed.collateral).toBe('10000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
+    const [stored] = await sql<{ margin_adjust_request: string | null }[]>`
+      SELECT margin_adjust_request FROM trade.positions WHERE id = ${pos.id!}
+    `;
+    expect(stored!.margin_adjust_request).toBeNull();
+  });
+
   it('re-leverage above the sealed 10× cap is 400 and does not write', async () => {
     feed('50000');
     const pos = await positions.open({

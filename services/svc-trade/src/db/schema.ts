@@ -388,6 +388,8 @@ export const positions = trade.table(
     fundingPaid: amount('funding_paid').notNull().default('0'),
     /** Last posted futuresMarginAdd/Release sequence; close residual uses 1. */
     marginAdjustSeq: integer('margin_adjust_seq').notNull().default(1),
+    /** Durable saga intent. Non-null from prepare commit through ledger post/finalize. */
+    marginAdjustRequest: text('margin_adjust_request'),
     liqPrice: amount('liq_price'),
     openedAt: tstz('opened_at').notNull().defaultNow(),
     closedAt: tstz('closed_at'),
