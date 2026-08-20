@@ -30,6 +30,7 @@
 | **Quality**           | False `done` still fails `pnpm tracker:check` · doctrine gates unchanged         |
 | **Autonomy**          | Agents claim, ship, merge under Class matrix — **no new Denon/Nitro Approve**    |
 | **Zero Nitro manual** | Agents own claim + registry + LIVE-LANES + PR loop                               |
+| **No wait-on-Nitro**  | Approve and `audited:true` are not session gates. Partners keep shipping.        |
 | **No every-PR tax**   | Craft under an already-`wip` mountain does **not** require a `features.mjs` edit |
 
 If a future change breaks a row above, **reject the change**.
