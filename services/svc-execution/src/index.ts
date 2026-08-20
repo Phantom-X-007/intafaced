@@ -16,11 +16,19 @@ registerProcessHooks(
 );
 
 /**
- * svc-execution — house tenancy (D26-P0-01) + OMS plan door (D26-P1-X3).
+ * svc-execution — house tenancy (D26-P0-01) + OMS plan/execute (D26-P1-X3).
  *
- * Health + tRPC `execution.tenant.*` (describe / kill) and `execution.oms.plan`
- * (existing SOR `planRoute` + execution report). Plan does not submit. No EMS.
- * Internal venues refused. No matching-path privilege. In-memory sealed registry.
+ * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
+ * (SOR `planRoute`, does not submit), `execution.oms.execute` (same plan,
+ * then injected submit), `execution.oms.cancel` (client order id),
+ * `execution.oms.fetch` (client order id), `execution.oms.openOrders`,
+ * `execution.oms.balances`, `execution.oms.positions`,
+ * `execution.oms.rails` (not a transfer), `execution.oms.funding`
+ * (not a settlement), `execution.oms.borrow` (not a loan),
+ * `execution.oms.latency` (venue observation — not a routing weight),
+ * `execution.oms.markets` (instrument catalog — not a route), and
+ * `execution.oms.snapshot` (seed book — not a mark).
+ * No live CEX keys. Internal venues refused. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
 const appRouter = createExecutionRouter(registry);
@@ -34,7 +42,7 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'oms-plan',
+  stage: 'oms-snapshot',
   store: 'memory',
   internalVenue: 'blocked',
 }));
