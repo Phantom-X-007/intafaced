@@ -262,6 +262,21 @@ module.exports = {
                 blurb: "Withdrawable balance and withdrawal history, read from the ledger rather than summed anywhere else.",
                 note: "Health lists configured rails publicly. Withdrawal surfaces answer a normal session. Merchant rails and live checkout still need real pay infrastructure — sandbox must not take a stranger's money."
             },
+            market: {
+                title: "Market",
+                blurb: "A public catalogue of listed programmes, with prices read from svc-market.",
+                note: "The catalogue is empty when no listing is available. Commission configuration is reported as supplied; this screen never invents a rate."
+            },
+            support: {
+                title: "Support",
+                blurb: "Search the platform knowledge base and keep your support requests in one place.",
+                note: "Knowledge articles and ticket status come from svc-support."
+            },
+            portfolio: {
+                title: "Portfolio",
+                blurb: "A read-only view of your custodial ledger holdings.",
+                note: "The ledger is the book. Indexer holdings are named absent until read models exist."
+            },
             p2p: {
                 title: "OTC / P2P",
                 blurb: "Peer-to-peer offers across 100+ fiat currencies, escrowed on the ledger.",
@@ -971,6 +986,58 @@ module.exports = {
             access: "Access",
             capacity: "Capacity",
             minStake: "Min stake"
+        },
+        market: {
+            nav: { aria: "Market sections", catalogue: "Catalogue", mine: "My market" },
+            programme: "Programme",
+            commissionBps: "Commission (basis points)",
+            commissionUnset: "Commission is not configured; purchasing is unavailable.",
+            listings: "Listings",
+            listingTitle: "Title",
+            assetId: "Asset",
+            price: "Price",
+            offerType: "Offer type",
+            buy: "Buy",
+            signInToBuy: "Sign in to buy",
+            empty: "No listings are available.",
+            mine: "My vendor application",
+            apply: "Apply as vendor",
+            displayName: "Display name",
+            description: "Description",
+            myListings: "My listings",
+            myPurchases: "My purchases",
+            applied: "Application submitted",
+            noApplication: "No vendor application yet.",
+            noMine: "Nothing here yet."
+        },
+        support: {
+            title: "Support",
+            lead: "Search published help articles, then send a ticket when you need a person to look at the account.",
+            search: "Search knowledge base",
+            searchHint: "Search terms",
+            searchButton: "Search",
+            results: "Knowledge base",
+            noResults: "No published articles match.",
+            ticket: "File a ticket",
+            category: "Category",
+            subject: "Subject",
+            body: "Details",
+            submit: "Send ticket",
+            created: "Ticket created",
+            mine: "My tickets",
+            noTickets: "No tickets yet.",
+            status: "Status",
+            categories: { account: "Account", trading: "Trading", deposit_withdraw: "Deposit or withdrawal", other: "Other" }
+        },
+        portfolio: {
+            title: "Portfolio",
+            lead: "Custodial holdings read from ledger.balances. This page does not post or calculate balances.",
+            holdings: "Custodial holdings",
+            asset: "Asset",
+            amount: "Amount",
+            empty: "Your custodial ledger book is empty.",
+            indexer: "Chain view",
+            indexerAbsent: "Indexer holdings are absent: read models are not built."
         },
         launch: {
             statusTitle: "Token factory status",

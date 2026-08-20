@@ -1,0 +1,9 @@
+<template>
+  <div class="ix-page"><div class="ix-page-head"><h1>{{ $t('intafaced.portfolio.title') }}</h1><p>{{ $t('intafaced.portfolio.lead') }}</p><div class="ix-source">svc-ledger · /api/ledger/trpc/portfolio</div></div><div class="ix-card"><div class="ix-card-head"><h2>{{ $t('intafaced.portfolio.holdings') }}</h2><span class="ix-sub">ledger.balances</span></div><IxState :loading="portfolio.loading" :reason="portfolio.reason" :message="portfolio.message" endpoint="/api/ledger/trpc/portfolio"><div v-if="portfolio.data && portfolio.data.custodial.length" class="ix-scroll"><table class="ix-table"><thead><tr><th>{{ $t('intafaced.portfolio.asset') }}</th><th>{{ $t('intafaced.portfolio.amount') }}</th></tr></thead><tbody><tr v-for="holding in portfolio.data.custodial" :key="holding.accountId"><td>{{ holding.assetId }}</td><td>{{ holding.amount }}</td></tr></tbody></table></div><div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.portfolio.empty') }}</div><div v-if="portfolio.data && portfolio.data.indexer && portfolio.data.indexer.status === 'absent'" class="ix-note ix-note-quiet" style="margin-top:16px;">{{ $t('intafaced.portfolio.indexerAbsent') }}</div></IxState></div></div>
+</template>
+<script>
+import IxState from '../../components/intafaced/IxState.vue';
+import { query, subjectOf } from '../../config/intafaced.js';
+import ixModule from '../../components/intafaced/module-mixin.js';
+export default { name: 'IxPortfolio', components: { IxState }, mixins: [ixModule], data() { return { portfolio: this.emptySection() }; }, created() { this.$store.commit('navigate', 'nav-platform'); var ownerId = subjectOf(this.ixToken); if (ownerId) this.load('portfolio', query('ledger', 'portfolio', { ownerType: 'user', ownerId: ownerId }, this.ixToken)); else this.load('portfolio', Promise.resolve({ ok: false, reason: 'unauthorized', message: 'No platform session', data: null })); } };
+</script>

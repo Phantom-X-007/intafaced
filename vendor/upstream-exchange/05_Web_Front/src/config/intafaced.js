@@ -464,6 +464,9 @@ export function scopesOf(token) {
 export const MODULES = [
     { key: 'bank', route: '/bank', edge: 'bank', service: 'svc-bank', state: 'partial' },
     { key: 'pay', route: '/pay', edge: 'pay', service: 'svc-pay', state: 'live' },
+    { key: 'market', route: '/market', edge: 'market', service: 'svc-market', state: 'live' },
+    { key: 'support', route: '/support', edge: 'support', service: 'svc-support', state: 'partial' },
+    { key: 'portfolio', route: '/portfolio', edge: 'ledger', service: 'svc-ledger', state: 'partial' },
     { key: 'p2p', route: '/p2p', edge: 'p2p', service: 'svc-p2p', state: 'partial' },
     { key: 'token', route: '/token', edge: 'token', service: 'svc-token', state: 'live' },
     { key: 'agents', route: '/agents', edge: 'agents', service: 'svc-agents', state: 'live' },
