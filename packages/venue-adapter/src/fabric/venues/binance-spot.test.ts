@@ -484,6 +484,70 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
     expect(() => mapBinanceSpotOrder({ ...base, type: 'UNKNOWN' }, 'BTC/USDT', new Date())).toThrow(/order type UNKNOWN/);
   });
 
+  it('refuses missing identifiers instead of returning an uncorrelatable order', () => {
+    const base = {
+      orderId: 42,
+      clientOrderId: 'abc',
+      price: '100',
+      origQty: '1',
+      executedQty: '0',
+      cummulativeQuoteQty: '0',
+      status: 'NEW',
+      type: 'LIMIT',
+      side: 'BUY',
+    };
+
+    expect(() => mapBinanceSpotOrder({ ...base, orderId: null }, 'BTC/USDT', new Date())).toThrow(/orderId is missing/);
+    expect(() => mapBinanceSpotOrder({ ...base, clientOrderId: ' ' }, 'BTC/USDT', new Date())).toThrow(/clientOrderId is missing/);
+  });
+
+  it('refuses impossible signed quantities, quote totals, and limit prices', () => {
+    const base = {
+      orderId: 42,
+      clientOrderId: 'abc',
+      price: '100',
+      origQty: '1',
+      executedQty: '0',
+      cummulativeQuoteQty: '0',
+      status: 'NEW',
+      type: 'LIMIT',
+      side: 'BUY',
+    };
+
+    expect(() => mapBinanceSpotOrder({ ...base, origQty: '0' }, 'BTC/USDT', new Date())).toThrow(/origQty must be positive/);
+    expect(() => mapBinanceSpotOrder({ ...base, executedQty: '-0.1' }, 'BTC/USDT', new Date())).toThrow(/unsigned decimal/);
+    expect(() => mapBinanceSpotOrder({ ...base, cummulativeQuoteQty: '-1' }, 'BTC/USDT', new Date())).toThrow(/unsigned decimal/);
+    expect(() => mapBinanceSpotOrder({ ...base, price: '0' }, 'BTC/USDT', new Date())).toThrow(/price must be positive/);
+  });
+
+  it('refuses contradictory execution and cumulative quote totals', () => {
+    const base = {
+      orderId: 42,
+      clientOrderId: 'abc',
+      price: '100',
+      origQty: '1',
+      executedQty: '0',
+      cummulativeQuoteQty: '0',
+      status: 'NEW',
+      type: 'LIMIT',
+      side: 'BUY',
+    };
+
+    expect(() => mapBinanceSpotOrder({ ...base, executedQty: '0.5' }, 'BTC/USDT', new Date())).toThrow(/both be zero or both be positive/);
+    expect(() => mapBinanceSpotOrder({ ...base, cummulativeQuoteQty: '10' }, 'BTC/USDT', new Date())).toThrow(
+      /both be zero or both be positive/,
+    );
+  });
+
+  it('refuses unscoped openOrders rather than leaking native venue symbols', async () => {
+    const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
+    const http = new FakeHttp();
+    const trade = new BinanceSpotTrade(keys, { http, restBase: 'https://rest.test', clock: () => 1 });
+
+    await expect(trade.openOrders()).rejects.toMatchObject({ reason: 'not_ready' });
+    expect(http.requests).toEqual([]);
+  });
+
   it('throws the venue error body instead of returning a fake rejected order', async () => {
     const http = new FakeHttp().queue({ code: -2010, msg: 'insufficient balance' }, 400);
     const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };

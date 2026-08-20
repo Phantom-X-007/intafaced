@@ -63,14 +63,30 @@ export function mapBinanceSpotOrder(body: Record<string, unknown>, unified: stri
   }
   const orig = readDecimal(body.origQty, VENUE.id, 'origQty');
   const executed = readDecimal(body.executedQty, VENUE.id, 'executedQty');
+  if (orig <= 0n) {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', 'origQty must be positive');
+  }
+  if (executed < 0n) {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', 'executedQty must not be negative');
+  }
   const remaining = orig - executed;
   if (remaining < 0n) {
     throw new VenueUnavailableError(VENUE.id, 'malformed', 'executedQty exceeds origQty');
   }
   const quote = body.cummulativeQuoteQty;
   let averagePrice: VenueOrder['averagePrice'] = null;
-  if (executed > 0n && quote !== undefined && quote !== null && String(quote) !== '0') {
-    const quoteAmt = readDecimal(quote, VENUE.id, 'cummulativeQuoteQty');
+  const quoteAmt = quote === undefined || quote === null ? 0n : readDecimal(quote, VENUE.id, 'cummulativeQuoteQty');
+  if (quoteAmt < 0n) {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', 'cummulativeQuoteQty must not be negative');
+  }
+  if ((executed === 0n) !== (quoteAmt === 0n)) {
+    throw new VenueUnavailableError(
+      VENUE.id,
+      'malformed',
+      'executedQty and cummulativeQuoteQty must either both be zero or both be positive',
+    );
+  }
+  if (executed > 0n) {
     averagePrice = div(quoteAmt, executed);
   }
   const typeRaw = String(body.type ?? '').toUpperCase();
@@ -82,16 +98,27 @@ export function mapBinanceSpotOrder(body: Record<string, unknown>, unified: stri
     type === 'market' || body.price === undefined || body.price === null || String(body.price) === '0.00000000'
       ? null
       : readDecimal(body.price, VENUE.id, 'price');
+  if (type === 'limit' && (price === null || price <= 0n)) {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', 'limit order price must be positive');
+  }
   const transact = body.transactTime ?? body.updateTime ?? body.time;
   const createdAt = transact === undefined || transact === null ? now : new Date(readInteger(transact, VENUE.id, 'transactTime'));
   const sideRaw = String(body.side ?? '').toUpperCase();
   if (sideRaw !== 'BUY' && sideRaw !== 'SELL') {
     throw new VenueUnavailableError(VENUE.id, 'malformed', `order side ${sideRaw || '(empty)'} is not a known Binance side`);
   }
+  const venueOrderId = body.orderId === undefined || body.orderId === null ? '' : String(body.orderId).trim();
+  const clientOrderId = String(body.clientOrderId ?? body.origClientOrderId ?? '').trim();
+  if (!venueOrderId || venueOrderId === '0') {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', 'orderId is missing or invalid');
+  }
+  if (!clientOrderId) {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', 'clientOrderId is missing');
+  }
   return {
     venueId: VENUE.id,
-    venueOrderId: body.orderId === undefined || body.orderId === null ? null : String(body.orderId),
-    clientOrderId: String(body.clientOrderId ?? body.origClientOrderId ?? ''),
+    venueOrderId,
+    clientOrderId,
     symbol: unified,
     side: sideRaw === 'SELL' ? 'sell' : 'buy',
     type,
@@ -196,11 +223,18 @@ export class BinanceSpotTrade implements TradeAdapter {
 
   async openOrders(symbol?: string): Promise<VenueOrder[]> {
     const keys = requireCredentials(VENUE.id, 'openOrders', this.#credentials);
+    if (!symbol) {
+      throw new VenueUnavailableError(
+        VENUE.id,
+        'not_ready',
+        'openOrders requires a unified symbol; native Binance symbols are not returned as unified symbols',
+      );
+    }
     const params: Record<string, string> = {
       timestamp: String(this.#clock()),
       recvWindow: '5000',
     };
-    if (symbol) params.symbol = venueSymbolOf(symbol);
+    params.symbol = venueSymbolOf(symbol);
     const body = await this.#signed('GET', '/api/v3/openOrders', params, keys, 'openOrders');
     if (!Array.isArray(body)) {
       throw new VenueUnavailableError(VENUE.id, 'malformed', 'openOrders did not return an array');
@@ -210,7 +244,7 @@ export class BinanceSpotTrade implements TradeAdapter {
       if (!row || typeof row !== 'object') {
         throw new VenueUnavailableError(VENUE.id, 'malformed', 'openOrders row is not an object');
       }
-      return mapBinanceSpotOrder(row as Record<string, unknown>, symbol ?? String((row as { symbol?: unknown }).symbol ?? ''), now);
+      return mapBinanceSpotOrder(row as Record<string, unknown>, symbol, now);
     });
   }
 
