@@ -1,4 +1,5 @@
-import { bigint, boolean, index, integer, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, pgSchema, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
 
 /**
@@ -386,6 +387,10 @@ export const positions = trade.table(
     marginCurrent: amount('margin_current').notNull(),
     marginAsset: text('margin_asset').notNull(),
     fundingPaid: amount('funding_paid').notNull().default('0'),
+    /** Last posted futuresMarginAdd/Release sequence; close residual uses 1. */
+    marginAdjustSeq: integer('margin_adjust_seq').notNull().default(1),
+    /** Durable saga intent. Non-null from prepare commit through ledger post/finalize. */
+    marginAdjustRequest: text('margin_adjust_request'),
     liqPrice: amount('liq_price'),
     openedAt: tstz('opened_at').notNull().defaultNow(),
     closedAt: tstz('closed_at'),
@@ -395,6 +400,28 @@ export const positions = trade.table(
     updatedAt: updatedAt(),
   },
   (t) => [index('positions_user_status_idx').on(t.userId, t.status), index('positions_market_idx').on(t.marketId)],
+);
+
+export const positionMarginAdjustments = trade.table(
+  'position_margin_adjustments',
+  {
+    positionId: uuid('position_id')
+      .notNull()
+      .references(() => positions.id, { onDelete: 'cascade' }),
+    clientAdjustmentId: text('client_adjustment_id').notNull(),
+    requestFingerprint: text('request_fingerprint').notNull(),
+    sequence: integer('sequence').notNull(),
+    status: text('status').notNull().default('pending'),
+    result: jsonb('result'),
+    createdAt: tstz('created_at').notNull().defaultNow(),
+    completedAt: tstz('completed_at'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.positionId, t.clientAdjustmentId] }),
+    uniqueIndex('position_margin_adjustments_one_pending_idx')
+      .on(t.positionId)
+      .where(sql`${t.status} = 'pending'`),
+  ],
 );
 
 /**
@@ -423,4 +450,4 @@ export const positionFundingApplied = trade.table(
   (t) => [primaryKey({ columns: [t.positionId, t.periodId] }), index('position_funding_applied_period_idx').on(t.periodId)],
 );
 
-export const schema = { markets, orders, fills, positions, positionFundingApplied };
+export const schema = { markets, orders, fills, positions, positionMarginAdjustments, positionFundingApplied };

@@ -74,10 +74,23 @@ function privateDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps 
     markets: async () => [],
     userBalances: async () => [],
     listPositions: async () => [],
+    listClosedPositions: async () => [],
+    getPosition: async () => {
+      throw new Error('unused');
+    },
     openPosition: async () => {
       throw new Error('unused');
     },
     closePosition: async () => {
+      throw new Error('unused');
+    },
+    setLeverage: async () => {
+      throw new Error('unused');
+    },
+    addIsolatedMargin: async () => {
+      throw new Error('unused');
+    },
+    reduceIsolatedMargin: async () => {
       throw new Error('unused');
     },
     getOpenMarginCall: async () => null,

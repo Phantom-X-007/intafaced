@@ -593,6 +593,8 @@ registerPrivateRest(app, {
   // Self-only: route always passes principal.userId — never client ownerId.
   userBalances: (userId) => ledger.balances('user', userId),
   listPositions: (principal, symbol) => positions.listOpen(principal.userId, symbol),
+  listClosedPositions: (principal, input) => positions.listClosed(principal.userId, input),
+  getPosition: (principal, positionId) => positions.get(principal.userId, positionId),
   openPosition: (principal, input) =>
     positions.open({
       userId: principal.userId,
@@ -604,6 +606,30 @@ registerPrivateRest(app, {
       clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
+  setLeverage: (principal, input) =>
+    positions.setLeverage({
+      userId: principal.userId,
+      symbol: input.symbol,
+      leverage: parseAmount(input.leverage),
+      positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
+    }),
+  addIsolatedMargin: (principal, input) =>
+    positions.addIsolatedMargin({
+      userId: principal.userId,
+      symbol: input.symbol,
+      amount: parseAmount(input.amount),
+      positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
+    }),
+  reduceIsolatedMargin: (principal, input) =>
+    positions.reduceIsolatedMargin({
+      userId: principal.userId,
+      symbol: input.symbol,
+      amount: parseAmount(input.amount),
+      positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
+    }),
   getOpenMarginCall: async (principal, positionId) => {
     const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);
     if (!row || row.userId !== principal.userId) return null;
@@ -670,6 +696,8 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'GET /api/v1/positions/closed',
+      'GET /api/v1/positions/:id',
       'GET /api/v1/positions/:id/margin-call',
       'GET /api/v1/futures/adl-disclosure',
       'POST /api/v1/futures/adl-disclosure/ack',
@@ -677,6 +705,8 @@ app.log.info(
       'POST /api/v1/positions',
       'DELETE /api/v1/positions/:id',
       'POST /api/v1/positions/leverage',
+      'POST /api/v1/positions/margin',
+      'POST /api/v1/positions/margin/reduce',
       'POST /api/v1/positions/margin-mode',
     ],
   },

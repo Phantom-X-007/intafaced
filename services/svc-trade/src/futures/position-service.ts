@@ -29,13 +29,14 @@
  * price is REFUSED at the REST edge rather than silently re-priced, so a caller
  * learns instead of getting different behaviour than they asked for.
  */
-import type { Sql } from 'postgres';
+import type { Sql, TransactionSql } from 'postgres';
 import { positionIdFor } from './ids.js';
-import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, recipes, userAvailable, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
 import { checkLeverage, initialMargin, resolveMaxLeverage } from './initial-margin.js';
 import { planClose } from './close-planner.js';
+import { planLiquidation } from './liquidation-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
 import {
   DEFAULT_FUTURES_MARK_POLICY,
@@ -120,6 +121,42 @@ export interface OpenPositionInput {
   clientOpenId: string;
 }
 
+export interface SetLeverageInput {
+  userId: string;
+  /** Market symbol — must match the open isolated position. */
+  symbol: string;
+  leverage: Amount;
+  /** When omitted, the unique open position on `symbol` is used. */
+  positionId?: string;
+  /** Durable caller idempotency key. Mandatory at the REST boundary. */
+  clientAdjustmentId?: string;
+}
+
+export interface AddIsolatedMarginInput {
+  userId: string;
+  /** Market symbol — must match the open isolated position. */
+  symbol: string;
+  /** Extra isolated collateral. Decimal string on the wire; scaled bigint here. */
+  amount: Amount;
+  /** When omitted, the unique open position on `symbol` is used. */
+  positionId?: string;
+  /** Durable caller idempotency key. Mandatory at the REST boundary. */
+  clientAdjustmentId?: string;
+}
+
+export type ReduceIsolatedMarginInput = AddIsolatedMarginInput;
+
+/** New isolated IM would leave equity ≤ 0 at the current mark. */
+export const LEVERAGE_WOULD_LIQUIDATE = 'trade.leverage_would_liquidate';
+/** Decreasing leverage needs a lock the available balance cannot fund. */
+export const LEVERAGE_INSUFFICIENT_MARGIN = 'trade.insufficient_margin';
+/** Isolated reduce would pull collateral below initial margin. */
+export const MARGIN_BELOW_INITIAL = 'trade.margin_below_initial';
+/** Isolated reduce would leave equity ≤ 0 at the current mark. */
+export const MARGIN_WOULD_LIQUIDATE = 'trade.margin_would_liquidate';
+/** A previous ledger-backed adjustment must finish before a different one starts. */
+export const MARGIN_ADJUSTMENT_IN_PROGRESS = 'trade.margin_adjustment_in_progress';
+
 export interface PositionServiceDeps {
   /**
    * Where prices come from. Required, and required to be a port the caller
@@ -161,6 +198,8 @@ export interface PositionServiceDeps {
    * tests that are not proving the public door; public-door + index always wire it.
    */
   assertAdlDisclosureAcked?: (userId: string) => Promise<void>;
+  /** Test-only crash seam after the external ledger accepts, before DB finalize. */
+  afterMarginLedgerPost?: (request: string) => Promise<void>;
 }
 
 /** Why a position is frozen waiting for a mark — futures-namespaced refuse codes. */
@@ -199,12 +238,16 @@ export interface PositionRow {
   accepted_mark_at: Date | null;
   /** Non-null only while status=closing. */
   closing_reason: string | null;
+  /** Last posted futuresMarginAdd/Release sequence; close residual uses 1. */
+  margin_adjust_seq: number;
+  margin_adjust_request: string | null;
 }
 
 export class PositionService {
   private readonly bus: EventBus | null;
   private readonly markPolicy: MarkPolicy;
   private readonly maxLeverage: Amount;
+  private readonly afterMarginLedgerPost: ((request: string) => Promise<void>) | null;
   private readonly now: () => Date;
 
   constructor(
@@ -215,7 +258,101 @@ export class PositionService {
     this.bus = deps.bus ?? null;
     this.markPolicy = deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY;
     this.maxLeverage = resolveMaxLeverage(deps.maxLeverage ?? null);
+    this.afterMarginLedgerPost = deps.afterMarginLedgerPost ?? null;
     this.now = deps.now ?? (() => new Date());
+  }
+
+  /**
+   * Commit the semantic request before touching the external ledger. A retry of
+   * the exact request resumes; a different request cannot inherit its sequence.
+   */
+  private async claimMarginAdjustment(
+    input: { userId: string; symbol: string; positionId?: string },
+    adjustmentId: string,
+    request: string,
+  ): Promise<Position | null> {
+    return this.sql.begin(async (tx) => {
+      await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
+      const rows = input.positionId
+        ? await tx<PositionRow[]>`
+            SELECT p.*, m.symbol FROM trade.positions p
+            JOIN trade.markets m ON m.id = p.market_id
+            WHERE p.id = ${input.positionId} AND p.user_id = ${input.userId}
+            LIMIT 1 FOR UPDATE OF p
+          `
+        : await tx<PositionRow[]>`
+            SELECT p.*, m.symbol FROM trade.positions p
+            JOIN trade.markets m ON m.id = p.market_id
+            WHERE p.user_id = ${input.userId} AND m.symbol = ${input.symbol} AND p.status = 'open'
+            FOR UPDATE OF p
+          `;
+      if (rows.length === 0) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+      if (rows.length > 1)
+        throw new FuturesError(`more than one open position on ${input.symbol} — pass position id`, 'trade.position_ambiguous', 400);
+      const row = rows[0]!;
+      if (row.symbol !== input.symbol)
+        throw new FuturesError(`position is on ${row.symbol}, not ${input.symbol}`, 'trade.symbol_mismatch', 400);
+      const [existing] = await tx<
+        { request_fingerprint: string; status: 'pending' | 'completed'; result: Position | null }[]
+      >`SELECT request_fingerprint, status, result FROM trade.position_margin_adjustments
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId}`;
+      if (existing) {
+        if (existing.request_fingerprint !== request) {
+          throw new FuturesError('clientAdjustmentId was already used for a different request', 'trade.idempotency_conflict', 409);
+        }
+        return existing.status === 'completed' ? existing.result : null;
+      }
+      if (row.status !== 'open') throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+      if (row.margin_mode !== 'isolated')
+        throw new FuturesError('live margin adjustment is isolated-only', 'trade.cross_margin_unsupported', 400);
+      if (row.margin_adjust_request !== null) {
+        throw new FuturesError('a previous margin adjustment must finish before a different request', MARGIN_ADJUSTMENT_IN_PROGRESS, 409);
+      }
+      const sequence = Number(row.margin_adjust_seq) + 1;
+      await tx`INSERT INTO trade.position_margin_adjustments
+        (position_id, client_adjustment_id, request_fingerprint, sequence)
+        VALUES (${row.id}, ${adjustmentId}, ${request}, ${sequence})`;
+      await tx`UPDATE trade.positions SET margin_adjust_request = ${adjustmentId}, updated_at = now() WHERE id = ${row.id}`;
+      return null;
+    });
+  }
+
+  private async abandonMarginAdjustment(
+    input: { userId: string; symbol: string; positionId?: string },
+    adjustmentId: string,
+  ): Promise<void> {
+    await this.sql.begin(async (tx) => {
+      if (input.positionId) {
+        await tx`DELETE FROM trade.position_margin_adjustments
+          WHERE position_id = ${input.positionId} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
+        await tx`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
+          WHERE id = ${input.positionId} AND user_id = ${input.userId} AND margin_adjust_request = ${adjustmentId}`;
+      } else {
+        await tx`DELETE FROM trade.position_margin_adjustments a USING trade.positions p, trade.markets m
+          WHERE a.position_id = p.id AND m.id = p.market_id AND p.user_id = ${input.userId}
+            AND m.symbol = ${input.symbol} AND a.client_adjustment_id = ${adjustmentId} AND a.status = 'pending'`;
+        await tx`UPDATE trade.positions p SET margin_adjust_request = NULL, updated_at = now()
+          FROM trade.markets m WHERE m.id = p.market_id AND p.user_id = ${input.userId}
+            AND m.symbol = ${input.symbol} AND p.status = 'open' AND p.margin_adjust_request = ${adjustmentId}`;
+      }
+    });
+  }
+
+  private async completedMarginAdjustment(
+    tx: TransactionSql,
+    positionId: string,
+    adjustmentId: string,
+    request: string,
+  ): Promise<Position | null> {
+    const [record] = await tx<{ request_fingerprint: string; status: 'pending' | 'completed'; result: Position | null }[]>`
+      SELECT request_fingerprint, status, result FROM trade.position_margin_adjustments
+      WHERE position_id = ${positionId} AND client_adjustment_id = ${adjustmentId}
+      FOR UPDATE
+    `;
+    if (!record || record.request_fingerprint !== request) {
+      throw new FuturesError('margin adjustment intent is missing or changed', 'trade.idempotency_conflict', 409);
+    }
+    return record.status === 'completed' ? record.result : null;
   }
 
   /**
@@ -366,6 +503,82 @@ export class PositionService {
         `;
     // List is not a valuation: no mark source, no invented 0. Close attaches extras.
     return rows.map((row) => presentPosition(row));
+  }
+
+  /**
+   * Settled history: `closed` and `liquidated`. Empty [] when none — never
+   * invents a mark. Open/closing rows stay on listOpen. Optional since is SQL
+   * on COALESCE(closed_at, opened_at); limit is capped like orderHistory.
+   */
+  async listClosed(userId: string, input: { symbol?: string; limit?: number; sinceMs?: number } = {}): Promise<Position[]> {
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+    const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
+    const symbol = input.symbol?.trim() || undefined;
+    const rows =
+      symbol && sinceDate
+        ? await this.sql<PositionRow[]>`
+            SELECT p.*, m.symbol
+            FROM trade.positions p
+            JOIN trade.markets m ON m.id = p.market_id
+            WHERE p.user_id = ${userId}
+              AND p.status IN ('closed', 'liquidated')
+              AND m.symbol = ${symbol}
+              AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
+            ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+            LIMIT ${limit}
+          `
+        : symbol
+          ? await this.sql<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.user_id = ${userId}
+                AND p.status IN ('closed', 'liquidated')
+                AND m.symbol = ${symbol}
+              ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+              LIMIT ${limit}
+            `
+          : sinceDate
+            ? await this.sql<PositionRow[]>`
+                SELECT p.*, m.symbol
+                FROM trade.positions p
+                JOIN trade.markets m ON m.id = p.market_id
+                WHERE p.user_id = ${userId}
+                  AND p.status IN ('closed', 'liquidated')
+                  AND COALESCE(p.closed_at, p.opened_at) >= ${sinceDate}
+                ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+                LIMIT ${limit}
+              `
+            : await this.sql<PositionRow[]>`
+                SELECT p.*, m.symbol
+                FROM trade.positions p
+                JOIN trade.markets m ON m.id = p.market_id
+                WHERE p.user_id = ${userId}
+                  AND p.status IN ('closed', 'liquidated')
+                ORDER BY COALESCE(p.closed_at, p.opened_at) DESC
+                LIMIT ${limit}
+              `;
+    return rows.map((row) => presentPosition(row));
+  }
+
+  /**
+   * One position owned by this user. Closed rows are returned as closed — not
+   * hidden, and not revalued. Missing / not theirs is 404 (same answer).
+   */
+  async get(userId: string, positionId: string): Promise<Position> {
+    const id = positionId.trim();
+    if (!id) {
+      throw new FuturesError('position id is required', 'trade.bad_request', 400);
+    }
+    const [row] = await this.sql<PositionRow[]>`
+      SELECT p.*, m.symbol
+      FROM trade.positions p
+      JOIN trade.markets m ON m.id = p.market_id
+      WHERE p.id = ${id} AND p.user_id = ${userId}
+      LIMIT 1
+    `;
+    if (!row) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+    return presentPosition(row);
   }
 
   async open(input: OpenPositionInput): Promise<Position> {
@@ -581,6 +794,480 @@ export class PositionService {
     `;
     await this.publishPositionUpdated(row!);
     return presentPosition(row!);
+  }
+
+  /**
+   * Live isolated re-leverage within the sealed 10× cap.
+   *
+   * Extra IM is `futuresMarginAdd`; excess is `futuresMarginRelease`. Open lock
+   * keys once per position, so a second `futuresMarginLock` would no-op.
+   * Close residual release already uses sequence 1 — adjusts start at 2.
+   *
+   * Refuses without posting when the new IM would leave equity ≤ 0 at the
+   * current mark (D3 maintenance unset — equity only) or when the extra lock
+   * cannot be funded. Does not invent funding, a liq-price, or a profit source.
+   */
+  async setLeverage(input: SetLeverageInput): Promise<Position> {
+    const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
+    if (!leverageCheck.ok) {
+      throw new FuturesError(leverageCheck.reason ?? 'leverage refused', leverageCheck.code ?? 'trade.leverage_invalid', 400);
+    }
+
+    const symbol = input.symbol.trim();
+    if (!symbol) {
+      throw new FuturesError('symbol is required', 'trade.bad_request', 400);
+    }
+
+    const request = `leverage:${formatAmount(input.leverage)}`;
+    const adjustmentId = input.clientAdjustmentId?.trim() || request;
+    const claimed = { ...input, symbol };
+    const completed = await this.claimMarginAdjustment(claimed, adjustmentId, request);
+    if (completed) return completed;
+    let ledgerAttempted = false;
+    try {
+      const row = await this.sql.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
+
+        const locked = input.positionId
+          ? await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.id = ${input.positionId} AND p.user_id = ${input.userId}
+              LIMIT 1
+              FOR UPDATE OF p
+            `
+          : await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.user_id = ${input.userId}
+                AND m.symbol = ${symbol}
+                AND p.status = 'open'
+              FOR UPDATE OF p
+            `;
+
+        if (input.positionId) {
+          if (!locked[0]) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        } else if (locked.length === 0) {
+          throw new FuturesError(`no open position on ${symbol}`, 'trade.position_not_found', 404);
+        } else if (locked.length > 1) {
+          throw new FuturesError(`more than one open position on ${symbol} — pass position id`, 'trade.position_ambiguous', 400);
+        }
+
+        const row = locked[0]!;
+        if (row.symbol !== symbol) {
+          throw new FuturesError(`position is on ${row.symbol}, not ${symbol}`, 'trade.symbol_mismatch', 400);
+        }
+        if (row.status !== 'open') {
+          throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+        }
+        if (row.margin_mode !== 'isolated') {
+          throw new FuturesError('live re-leverage is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
+        }
+        const replay = await this.completedMarginAdjustment(tx, row.id, adjustmentId, request);
+        if (replay) return replay;
+
+        const currentLeverage = parseAmount(row.leverage);
+        if (currentLeverage === input.leverage) {
+          await tx`UPDATE trade.positions SET margin_adjust_request = NULL, updated_at = now()
+            WHERE id = ${row.id} AND margin_adjust_request = ${adjustmentId}`;
+          const result = presentPosition(row);
+          await tx`UPDATE trade.position_margin_adjustments
+            SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
+            WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
+          return row;
+        }
+
+        const size = parseAmount(row.size);
+        const entryPrice = parseAmount(row.entry_price);
+        const currentMargin = parseAmount(row.margin_current ?? row.margin_initial);
+        const target = initialMargin({ size, entryPrice, leverage: input.leverage });
+
+        const at = this.now();
+        const mark = await this.markFor(row.market_id, row.symbol, at, size);
+        const wouldLiq = planLiquidation({
+          liquidationId: `re-leverage-gate:${row.id}`,
+          position: {
+            positionId: row.id,
+            userId: input.userId,
+            side: row.side,
+            size,
+            entryPrice,
+            margin: target,
+            marginAsset: row.margin_asset,
+          },
+          markPrice: formatAmount(mark.price),
+        });
+        if (wouldLiq.liquidate) {
+          throw new FuturesError(
+            `refusing leverage ${formatAmount(input.leverage)}x — new isolated margin would already be in liquidation at the current mark`,
+            LEVERAGE_WOULD_LIQUIDATE,
+            400,
+          );
+        }
+
+        const delta = target - currentMargin;
+        const prevSeq = Number(row.margin_adjust_seq);
+        const seq = (Number.isFinite(prevSeq) && prevSeq >= 1 ? prevSeq : 1) + 1;
+
+        if (delta > 0n) {
+          const available = await this.ledger.balance(userAvailable(input.userId, row.margin_asset));
+          if (available.amount < delta) {
+            throw new FuturesError(
+              `need ${formatAmount(delta)} ${row.margin_asset} extra isolated margin, have ${formatAmount(available.amount)}`,
+              LEVERAGE_INSUFFICIENT_MARGIN,
+              400,
+            );
+          }
+          ledgerAttempted = true;
+          await this.ledger.post(
+            recipes.futuresMarginAdd({
+              positionId: row.id,
+              userId: input.userId,
+              assetId: row.margin_asset,
+              amount: delta,
+              sequence: seq,
+            }),
+          );
+        } else if (delta < 0n) {
+          ledgerAttempted = true;
+          await this.ledger.post(
+            recipes.futuresMarginRelease({
+              positionId: row.id,
+              userId: input.userId,
+              assetId: row.margin_asset,
+              amount: -delta,
+              sequence: seq,
+            }),
+          );
+        }
+        if (ledgerAttempted) await this.afterMarginLedgerPost?.(request);
+
+        const [updated] = await tx<PositionRow[]>`
+          UPDATE trade.positions p
+          SET leverage = ${formatAmount(input.leverage)},
+              margin_initial = ${formatAmount(target)},
+              margin_current = ${formatAmount(target)},
+              margin_adjust_seq = ${seq},
+              margin_adjust_request = NULL,
+              updated_at = now()
+          FROM trade.markets m
+          WHERE p.id = ${row.id}
+            AND p.user_id = ${input.userId}
+            AND p.status = 'open'
+            AND m.id = p.market_id
+          RETURNING p.*, m.symbol
+        `;
+        if (!updated) {
+          throw new FuturesError('position changed underneath this leverage update', 'trade.position_not_open', 409);
+        }
+        const result = presentPosition(updated);
+        await tx`UPDATE trade.position_margin_adjustments
+          SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
+        return updated;
+      });
+
+      if (!('user_id' in row)) return row;
+      await this.publishPositionUpdated(row);
+      return presentPosition(row);
+    } catch (err) {
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, adjustmentId);
+      if (isLockTimeout(err)) {
+        throw new FuturesError(
+          'another mutation of this position is already in flight — retry in a moment',
+          'trade.close_in_progress',
+          409,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Isolated extra collateral — `futuresMarginAdd` only. Does not change
+   * leverage or IM, and does not flip margin mode. Add-only: amount must be > 0.
+   */
+  async addIsolatedMargin(input: AddIsolatedMarginInput): Promise<Position> {
+    if (input.amount <= 0n) {
+      throw new FuturesError('isolated margin add must be a positive decimal amount', 'trade.bad_request', 400);
+    }
+
+    const symbol = input.symbol.trim();
+    if (!symbol) {
+      throw new FuturesError('symbol is required', 'trade.bad_request', 400);
+    }
+
+    const request = `add:${formatAmount(input.amount)}`;
+    const adjustmentId = input.clientAdjustmentId?.trim() || request;
+    const claimed = { ...input, symbol };
+    const completed = await this.claimMarginAdjustment(claimed, adjustmentId, request);
+    if (completed) return completed;
+    let ledgerAttempted = false;
+    try {
+      const row = await this.sql.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
+
+        const locked = input.positionId
+          ? await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.id = ${input.positionId} AND p.user_id = ${input.userId}
+              LIMIT 1
+              FOR UPDATE OF p
+            `
+          : await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.user_id = ${input.userId}
+                AND m.symbol = ${symbol}
+                AND p.status = 'open'
+              FOR UPDATE OF p
+            `;
+
+        if (input.positionId) {
+          if (!locked[0]) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        } else if (locked.length === 0) {
+          throw new FuturesError(`no open position on ${symbol}`, 'trade.position_not_found', 404);
+        } else if (locked.length > 1) {
+          throw new FuturesError(`more than one open position on ${symbol} — pass position id`, 'trade.position_ambiguous', 400);
+        }
+
+        const row = locked[0]!;
+        if (row.symbol !== symbol) {
+          throw new FuturesError(`position is on ${row.symbol}, not ${symbol}`, 'trade.symbol_mismatch', 400);
+        }
+        if (row.status !== 'open') {
+          throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+        }
+        if (row.margin_mode !== 'isolated') {
+          throw new FuturesError('live margin add is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
+        }
+        const replay = await this.completedMarginAdjustment(tx, row.id, adjustmentId, request);
+        if (replay) return replay;
+
+        const currentMargin = parseAmount(row.margin_current ?? row.margin_initial);
+        const nextMargin = currentMargin + input.amount;
+        const prevSeq = Number(row.margin_adjust_seq);
+        const seq = (Number.isFinite(prevSeq) && prevSeq >= 1 ? prevSeq : 1) + 1;
+
+        const available = await this.ledger.balance(userAvailable(input.userId, row.margin_asset));
+        if (available.amount < input.amount) {
+          throw new FuturesError(
+            `need ${formatAmount(input.amount)} ${row.margin_asset} extra isolated margin, have ${formatAmount(available.amount)}`,
+            LEVERAGE_INSUFFICIENT_MARGIN,
+            400,
+          );
+        }
+
+        ledgerAttempted = true;
+        await this.ledger.post(
+          recipes.futuresMarginAdd({
+            positionId: row.id,
+            userId: input.userId,
+            assetId: row.margin_asset,
+            amount: input.amount,
+            sequence: seq,
+          }),
+        );
+        await this.afterMarginLedgerPost?.(request);
+
+        const [updated] = await tx<PositionRow[]>`
+          UPDATE trade.positions p
+          SET margin_current = ${formatAmount(nextMargin)},
+              margin_adjust_seq = ${seq},
+              margin_adjust_request = NULL,
+              updated_at = now()
+          FROM trade.markets m
+          WHERE p.id = ${row.id}
+            AND p.user_id = ${input.userId}
+            AND p.status = 'open'
+            AND m.id = p.market_id
+          RETURNING p.*, m.symbol
+        `;
+        if (!updated) {
+          throw new FuturesError('position changed underneath this margin add', 'trade.position_not_open', 409);
+        }
+        const result = presentPosition(updated);
+        await tx`UPDATE trade.position_margin_adjustments
+          SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
+        return updated;
+      });
+
+      if (!('user_id' in row)) return row;
+      await this.publishPositionUpdated(row);
+      return presentPosition(row);
+    } catch (err) {
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, adjustmentId);
+      if (isLockTimeout(err)) {
+        throw new FuturesError(
+          'another mutation of this position is already in flight — retry in a moment',
+          'trade.close_in_progress',
+          409,
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Isolated excess collateral out — `futuresMarginRelease` only. Does not
+   * change leverage or IM. Cannot pull below `margin_initial`. Refuses without
+   * posting when the remaining isolated margin would already be in liquidation
+   * at the current mark.
+   */
+  async reduceIsolatedMargin(input: ReduceIsolatedMarginInput): Promise<Position> {
+    if (input.amount <= 0n) {
+      throw new FuturesError('isolated margin reduce must be a positive decimal amount', 'trade.bad_request', 400);
+    }
+
+    const symbol = input.symbol.trim();
+    if (!symbol) {
+      throw new FuturesError('symbol is required', 'trade.bad_request', 400);
+    }
+
+    const request = `release:${formatAmount(input.amount)}`;
+    const adjustmentId = input.clientAdjustmentId?.trim() || request;
+    const claimed = { ...input, symbol };
+    const completed = await this.claimMarginAdjustment(claimed, adjustmentId, request);
+    if (completed) return completed;
+    let ledgerAttempted = false;
+    try {
+      const row = await this.sql.begin(async (tx) => {
+        await tx.unsafe(`SET LOCAL lock_timeout = ${CLOSE_LOCK_TIMEOUT_MS}`);
+
+        const locked = input.positionId
+          ? await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.id = ${input.positionId} AND p.user_id = ${input.userId}
+              LIMIT 1
+              FOR UPDATE OF p
+            `
+          : await tx<PositionRow[]>`
+              SELECT p.*, m.symbol
+              FROM trade.positions p
+              JOIN trade.markets m ON m.id = p.market_id
+              WHERE p.user_id = ${input.userId}
+                AND m.symbol = ${symbol}
+                AND p.status = 'open'
+              FOR UPDATE OF p
+            `;
+
+        if (input.positionId) {
+          if (!locked[0]) throw new FuturesError('position not found', 'trade.position_not_found', 404);
+        } else if (locked.length === 0) {
+          throw new FuturesError(`no open position on ${symbol}`, 'trade.position_not_found', 404);
+        } else if (locked.length > 1) {
+          throw new FuturesError(`more than one open position on ${symbol} — pass position id`, 'trade.position_ambiguous', 400);
+        }
+
+        const row = locked[0]!;
+        if (row.symbol !== symbol) {
+          throw new FuturesError(`position is on ${row.symbol}, not ${symbol}`, 'trade.symbol_mismatch', 400);
+        }
+        if (row.status !== 'open') {
+          throw new FuturesError(`position is ${row.status}`, 'trade.position_not_open', 400);
+        }
+        if (row.margin_mode !== 'isolated') {
+          throw new FuturesError('live margin reduce is isolated-only — margin mode is set at open', 'trade.cross_margin_unsupported', 400);
+        }
+        const replay = await this.completedMarginAdjustment(tx, row.id, adjustmentId, request);
+        if (replay) return replay;
+
+        const currentMargin = parseAmount(row.margin_current ?? row.margin_initial);
+        const initial = parseAmount(row.margin_initial);
+        const nextMargin = currentMargin - input.amount;
+        if (nextMargin < initial) {
+          throw new FuturesError(
+            `refusing to pull isolated margin below initial ${formatAmount(initial)} ${row.margin_asset}`,
+            MARGIN_BELOW_INITIAL,
+            400,
+          );
+        }
+
+        const size = parseAmount(row.size);
+        const entryPrice = parseAmount(row.entry_price);
+        const at = this.now();
+        const mark = await this.markFor(row.market_id, row.symbol, at, size);
+        const wouldLiq = planLiquidation({
+          liquidationId: `margin-reduce-gate:${row.id}`,
+          position: {
+            positionId: row.id,
+            userId: input.userId,
+            side: row.side,
+            size,
+            entryPrice,
+            margin: nextMargin,
+            marginAsset: row.margin_asset,
+          },
+          markPrice: formatAmount(mark.price),
+        });
+        if (wouldLiq.liquidate) {
+          throw new FuturesError(
+            `refusing isolated margin reduce — remaining collateral would already be in liquidation at the current mark`,
+            MARGIN_WOULD_LIQUIDATE,
+            400,
+          );
+        }
+
+        const prevSeq = Number(row.margin_adjust_seq);
+        const seq = (Number.isFinite(prevSeq) && prevSeq >= 1 ? prevSeq : 1) + 1;
+
+        ledgerAttempted = true;
+        await this.ledger.post(
+          recipes.futuresMarginRelease({
+            positionId: row.id,
+            userId: input.userId,
+            assetId: row.margin_asset,
+            amount: input.amount,
+            sequence: seq,
+          }),
+        );
+        await this.afterMarginLedgerPost?.(request);
+
+        const [updated] = await tx<PositionRow[]>`
+          UPDATE trade.positions p
+          SET margin_current = ${formatAmount(nextMargin)},
+              margin_adjust_seq = ${seq},
+              margin_adjust_request = NULL,
+              updated_at = now()
+          FROM trade.markets m
+          WHERE p.id = ${row.id}
+            AND p.user_id = ${input.userId}
+            AND p.status = 'open'
+            AND m.id = p.market_id
+          RETURNING p.*, m.symbol
+        `;
+        if (!updated) {
+          throw new FuturesError('position changed underneath this margin reduce', 'trade.position_not_open', 409);
+        }
+        const result = presentPosition(updated);
+        await tx`UPDATE trade.position_margin_adjustments
+          SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
+          WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
+        return updated;
+      });
+
+      if (!('user_id' in row)) return row;
+      await this.publishPositionUpdated(row);
+      return presentPosition(row);
+    } catch (err) {
+      if (!ledgerAttempted) await this.abandonMarginAdjustment(claimed, adjustmentId);
+      if (isLockTimeout(err)) {
+        throw new FuturesError(
+          'another mutation of this position is already in flight — retry in a moment',
+          'trade.close_in_progress',
+          409,
+        );
+      }
+      throw err;
+    }
   }
 
   /**

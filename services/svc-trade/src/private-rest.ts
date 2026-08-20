@@ -3,7 +3,17 @@ import { requireScope, type Principal } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext, type Context, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema, type CreateOrderRequest } from '@intafaced/exchange-contract';
-import { ZERO, add, formatAmount, mul, parseAmount, type AccountKind, type Amount, type Balance } from '@intafaced/ledger-client';
+import {
+  ZERO,
+  add,
+  formatAmount,
+  mul,
+  parseAmount,
+  MoneyError,
+  type AccountKind,
+  type Amount,
+  type Balance,
+} from '@intafaced/ledger-client';
 import {
   UNAUTHENTICATED,
   badRequest,
@@ -39,6 +49,8 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
  *   GET    /api/v1/positions       scope: trade:read  (open futures rows; [] when none)
+ *   GET    /api/v1/positions/closed scope: trade:read (closed/liquidated; [] when none; ?symbol=&limit=&since= ms)
+ *   GET    /api/v1/positions/:id   scope: trade:read  (one owned row; 404 if missing)
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
  *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
  *   POST   /api/v1/futures/adl-disclosure/ack scope: trade:write (ack before open)
@@ -98,6 +110,10 @@ export interface PrivateRestDeps {
   userBalances(userId: string): Promise<readonly Balance[]>;
   /** Open futures positions for the principal (empty [] when none). */
   listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
+  /** Closed/liquidated rows for the principal (empty [] when none). */
+  listClosedPositions(principal: Principal, input: { symbol?: string; limit?: number; sinceMs?: number }): Promise<Position[]>;
+  /** One owned futures row. Missing / not theirs → 404, never another user's row. */
+  getPosition(principal: Principal, positionId: string): Promise<Position>;
   /**
    * Open a futures position. NO PRICE PARAMETER, on purpose — the entry price is
    * read from the mark port inside the service. See `PRICE_FIELDS` below.
@@ -121,6 +137,31 @@ export interface PrivateRestDeps {
   ): Promise<Position>;
   /** Close at the current mark. No price parameter, for the same reason. */
   closePosition(principal: Principal, positionId: string): Promise<Position>;
+  /**
+   * Isolated live re-leverage within the sealed 10× cap. Extra IM via ledger
+   * recipes; missing position 404; >10× / would-be liquidation / insufficient
+   * margin refuse without writing.
+   */
+  setLeverage(
+    principal: Principal,
+    input: { symbol: string; leverage: string; positionId?: string; clientAdjustmentId: string },
+  ): Promise<Position>;
+  /**
+   * Isolated extra collateral via futuresMarginAdd. Does not change leverage or
+   * margin mode. Amount is a decimal string; JSON numbers refused.
+   */
+  addIsolatedMargin(
+    principal: Principal,
+    input: { symbol: string; amount: string; positionId?: string; clientAdjustmentId: string },
+  ): Promise<Position>;
+  /**
+   * Isolated excess collateral out via futuresMarginRelease. Cannot pull below
+   * IM. Would-be liquidation at the current mark refuses without writing.
+   */
+  reduceIsolatedMargin(
+    principal: Principal,
+    input: { symbol: string; amount: string; positionId?: string; clientAdjustmentId: string },
+  ): Promise<Position>;
   /**
    * Open delivered margin call for a position owned by the principal.
    * Null → 404 (no call, or not theirs). Never invents a call.
@@ -731,6 +772,35 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
+   * Settled futures history. Mounted as `/closed` (not `:id`) so it cannot be
+   * swallowed by GET /positions/:id. Empty [] when none — no invented mark.
+   */
+  app.get<{ Querystring: { symbol?: string; limit?: string; since?: string } }>('/api/v1/positions/closed', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+    const sinceParsed = parseSince(req.query.since);
+    if (!sinceParsed.ok) {
+      return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
+    }
+
+    try {
+      requireScope(principal, 'trade:read');
+      const rows = await deps.listClosedPositions(principal, {
+        symbol: req.query.symbol,
+        limit,
+        sinceMs: sinceParsed.sinceMs,
+      });
+      return reply.code(200).send(rows);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
    * Open a funded futures position (margin via ledger recipes).
    *
    * The entry price is NOT a parameter. It is read from the mark source, and a
@@ -892,6 +962,29 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
+   * One owned futures position. Closed is still a row — 404 only when missing
+   * or not theirs (same answer, no leak). Not a valuation: no invented mark.
+   * Registered after `/positions/:id/margin-call` so that door stays specific.
+   */
+  app.get<{ Params: { id: string } }>('/api/v1/positions/:id', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+
+    try {
+      requireScope(principal, 'trade:read');
+      const pos = await deps.getPosition(principal, req.params.id);
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
    * Close a position at the CURRENT MARK.
    *
    * `?exitPrice=` used to be required here and was the whole realised PnL — the
@@ -923,8 +1016,8 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
-   * POST leverage / margin-mode still 501: open path sets mode at open time;
-   * in-place leverage change is not built (would re-margin live risk).
+   * POST leverage: isolated live re-leverage within the 10× cap (ledger delta).
+   * POST margin-mode stays 501: isolated-at-open only — never a live mode flip.
    */
   const derivativesNotSupported = (what: string, intafacedCode: string) =>
     async function handler(req: FastifyRequest, reply: FastifyReply) {
@@ -939,22 +1032,183 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         throw err;
       }
 
-      return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open; live re-leverage not built`, intafacedCode));
+      return sendCcxt(reply, notSupported(`${what} is not available: set margin mode at open`, intafacedCode));
     };
 
-  const setLeverageArm = refuseArmById('setLeverage');
   const setMarginModeArm = refuseArmById('setMarginMode');
-  if (
-    !setLeverageArm ||
-    !setMarginModeArm ||
-    setLeverageArm.httpStatus !== 501 ||
-    setMarginModeArm.httpStatus !== 501 ||
-    setLeverageArm.ccxtCode !== 'NotSupported' ||
-    setMarginModeArm.ccxtCode !== 'NotSupported'
-  ) {
-    throw new Error('ccxt matrix setLeverage/setMarginMode must stay 501 NotSupported — never invent leverage');
+  if (!setMarginModeArm || setMarginModeArm.httpStatus !== 501 || setMarginModeArm.ccxtCode !== 'NotSupported') {
+    throw new Error('ccxt matrix setMarginMode must stay 501 NotSupported — isolated-at-open only');
   }
-  app.post('/api/v1/positions/leverage', derivativesNotSupported('setLeverage', setLeverageArm.intafacedCode));
+
+  app.post('/api/v1/positions/leverage', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const supplied = suppliedPriceFields(body);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
+      }
+
+      const symbol = typeof body.symbol === 'string' ? body.symbol : '';
+      const leverageRaw = typeof body.leverage === 'string' ? body.leverage.trim() : '';
+      if (!leverageRaw) {
+        return reply.code(400).send({
+          ...badRequest('leverage is required — isolated re-leverage does not default', 'trade.leverage_required').body,
+        });
+      }
+      if (!symbol) {
+        return reply.code(400).send({
+          ...badRequest('symbol is required', 'trade.bad_request').body,
+        });
+      }
+      const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
+      const positionId = positionIdRaw.trim() || undefined;
+      if (!positionId) {
+        return reply.code(400).send({
+          ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
+        });
+      }
+      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!clientAdjustmentId) {
+        return reply.code(400).send({
+          ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
+        });
+      }
+
+      const pos = await deps.setLeverage(principal, { symbol, leverage: leverageRaw, positionId, clientAdjustmentId });
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.post('/api/v1/positions/margin', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const supplied = suppliedPriceFields(body);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
+      }
+
+      const symbol = typeof body.symbol === 'string' ? body.symbol : '';
+      if (!symbol) {
+        return reply.code(400).send({
+          ...badRequest('symbol is required', 'trade.bad_request').body,
+        });
+      }
+      if (typeof body.amount !== 'string') {
+        return reply.code(400).send({
+          ...badRequest('amount is required as a decimal string — JSON numbers are not money', 'trade.bad_request').body,
+        });
+      }
+      try {
+        parseAmount(body.amount);
+      } catch (err) {
+        const message = err instanceof MoneyError ? err.message : 'malformed amount';
+        return reply.code(400).send({
+          ...badRequest(message, 'trade.bad_request').body,
+        });
+      }
+      const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
+      const positionId = positionIdRaw.trim() || undefined;
+      if (!positionId) {
+        return reply.code(400).send({
+          ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
+        });
+      }
+      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!clientAdjustmentId) {
+        return reply.code(400).send({
+          ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
+        });
+      }
+
+      const pos = await deps.addIsolatedMargin(principal, { symbol, amount: body.amount, positionId, clientAdjustmentId });
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.post('/api/v1/positions/margin/reduce', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const supplied = suppliedPriceFields(body);
+      if (supplied.length > 0) {
+        return reply.code(400).send(priceNotAcceptedBody(supplied));
+      }
+
+      const symbol = typeof body.symbol === 'string' ? body.symbol : '';
+      if (!symbol) {
+        return reply.code(400).send({
+          ...badRequest('symbol is required', 'trade.bad_request').body,
+        });
+      }
+      if (typeof body.amount !== 'string') {
+        return reply.code(400).send({
+          ...badRequest('amount is required as a decimal string — JSON numbers are not money', 'trade.bad_request').body,
+        });
+      }
+      try {
+        parseAmount(body.amount);
+      } catch (err) {
+        const message = err instanceof MoneyError ? err.message : 'malformed amount';
+        return reply.code(400).send({
+          ...badRequest(message, 'trade.bad_request').body,
+        });
+      }
+      const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
+      const positionId = positionIdRaw.trim() || undefined;
+      if (!positionId) {
+        return reply.code(400).send({
+          ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
+        });
+      }
+      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!clientAdjustmentId) {
+        return reply.code(400).send({
+          ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
+        });
+      }
+
+      const pos = await deps.reduceIsolatedMargin(principal, { symbol, amount: body.amount, positionId, clientAdjustmentId });
+      return reply.code(200).send(pos);
+    } catch (err) {
+      if (err instanceof FuturesError) {
+        return reply.code(err.status).send(presentFuturesErrorWire(err));
+      }
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
   app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', setMarginModeArm.intafacedCode));
 
   // ── Create (money path) ───────────────────────────────────────────────────
