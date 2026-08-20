@@ -302,7 +302,7 @@ export const SUITES = [
      * SmartAccount to a user-chosen settlement. This contract never holds
      * tokens. nft stays last. Do not compile MockERC20 here.
      */
-    sources: ['card/CardPull.sol', 'amm/IERC20Minimal.sol'],
+    sources: ['card/CardPull.sol', 'interfaces/ICardPull.sol', 'amm/IERC20Minimal.sol'],
   },
   {
     name: 'nft',
