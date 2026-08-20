@@ -14,7 +14,7 @@ Read once, properly. It takes five minutes and saves a week.
 
 1. One service per PR. Worktree. Squash-merge your own green PR.
 2. **Denon / Shehzad** merge when CI is green + self-audit. **Nitro agents** merge Class N/P/M when gates pass. Nobody waits for Nitro to Approve.
-3. CI red → the **job name** is the failure (`Doctrine gates`, `Tests`, `Tests (protocol)` once shards land, …). Fix that job. Re-push. Do not ask Nitro.
+3. CI red → the **job name** is the failure (`Doctrine gates`, `Tests (protocol)`, `Tests (full)`, …). Fix that job. Re-push. Do not ask Nitro.
 4. `audited:true` stays false until a paid external audit. Leave it. Keep shipping.
 5. Money still through `packages/ledger-client`. No balances in a service. No money in a `number`. No fake books, mids, or vendor names in the UI.
 6. Coordination-only PRs (status, keepalive, board unchanged) are forbidden. Near-duplicate unwired series: warn, then block on the fourth; escape is `Serial-Work: <why>`.
@@ -182,13 +182,16 @@ Do **not** file an issue for everything. A tracker nobody reads is worse than no
 
 Every PR runs, and all of it must be green to merge. The **job name** is the diagnosis — open that log, not Telegram.
 
-| Check                           | What it protects                                                                                                                                                                                                                                                               |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Doctrine gates`                | brand-scan (§0.7), custody-scan (§16.10), migration reversibility (§14), money honesty                                                                                                                                                                                         |
-| `Typecheck & build`             | the whole monorepo compiles (format is inside this job until shards land)                                                                                                                                                                                                      |
-| `Tests`                         | every package's suite, against real Postgres/Redis/NATS. A later `chore/ci-named-shards` PR splits this into `Tests (protocol)` / `Tests (money)` / `Tests (trade)` / `Tests (pay-bank)` / `Tests (rest)` with a `CI merge seal` aggregator. `push:main` keeps the full suite. |
-| `Definition of Done`            | the §14 gate per service                                                                                                                                                                                                                                                       |
-| `Gitleaks` / `Dependency audit` | secrets and known CVEs                                                                                                                                                                                                                                                         |
+| Check                                                                       | What it protects                                                                       |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Doctrine gates`                                                            | brand-scan (§0.7), custody-scan (§16.10), migration reversibility (§14), money honesty |
+| `Format`                                                                    | prettier — fails in seconds, not behind typecheck                                      |
+| `Typecheck & build`                                                         | the whole monorepo compiles                                                            |
+| `Tests (protocol)` / `Tests (money)` / `Tests (trade)` / `Tests (pay-bank)` | affected shards only                                                                   |
+| `Tests (full)`                                                              | entire suite: tooling, lockfile, contracts/events, `push:main`, or 3+ shards           |
+| `CI merge seal`                                                             | aggregator so skipped shards cannot pend a required check                              |
+| `Definition of Done`                                                        | the §14 gate per service                                                               |
+| `Gitleaks` / `Dependency audit`                                             | secrets and known CVEs                                                                 |
 
 Run the same thing locally before pushing. It is **required** — not to save anything, but because local is seconds and a CI round trip is minutes:
 
