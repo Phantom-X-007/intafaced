@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { formatAmount } from '@intafaced/ledger-client/money';
+import { div, formatAmount } from '@intafaced/ledger-client/money';
 import {
   readDecimal,
   readInteger,
@@ -71,9 +71,12 @@ export function mapBinanceSpotOrder(body: Record<string, unknown>, unified: stri
   let averagePrice: VenueOrder['averagePrice'] = null;
   if (executed > 0n && quote !== undefined && quote !== null && String(quote) !== '0') {
     const quoteAmt = readDecimal(quote, VENUE.id, 'cummulativeQuoteQty');
-    averagePrice = quoteAmt / executed;
+    averagePrice = div(quoteAmt, executed);
   }
   const typeRaw = String(body.type ?? '').toUpperCase();
+  if (!['LIMIT', 'LIMIT_MAKER', 'MARKET'].includes(typeRaw)) {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', `order type ${typeRaw || '(empty)'} is not a known Binance spot type`);
+  }
   const type: VenueOrder['type'] = typeRaw === 'MARKET' ? 'market' : 'limit';
   const price =
     type === 'market' || body.price === undefined || body.price === null || String(body.price) === '0.00000000'
@@ -81,12 +84,16 @@ export function mapBinanceSpotOrder(body: Record<string, unknown>, unified: stri
       : readDecimal(body.price, VENUE.id, 'price');
   const transact = body.transactTime ?? body.updateTime ?? body.time;
   const createdAt = transact === undefined || transact === null ? now : new Date(readInteger(transact, VENUE.id, 'transactTime'));
+  const sideRaw = String(body.side ?? '').toUpperCase();
+  if (sideRaw !== 'BUY' && sideRaw !== 'SELL') {
+    throw new VenueUnavailableError(VENUE.id, 'malformed', `order side ${sideRaw || '(empty)'} is not a known Binance side`);
+  }
   return {
     venueId: VENUE.id,
     venueOrderId: body.orderId === undefined || body.orderId === null ? null : String(body.orderId),
     clientOrderId: String(body.clientOrderId ?? body.origClientOrderId ?? ''),
     symbol: unified,
-    side: String(body.side).toLowerCase() === 'sell' ? 'sell' : 'buy',
+    side: sideRaw === 'SELL' ? 'sell' : 'buy',
     type,
     price,
     amount: orig,

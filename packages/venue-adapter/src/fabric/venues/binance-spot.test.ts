@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
 import { VenueCredentialScopeError, VenueCredentialsMissingError, VenueUnavailableError } from '@intafaced/venue-contracts';
-import { BinanceSpotAccount, BinanceSpotMarketData, BinanceSpotTrade, retryAfterFrom, venueSymbolOf } from './binance-spot.js';
+import {
+  BinanceSpotAccount,
+  BinanceSpotMarketData,
+  BinanceSpotTrade,
+  mapBinanceSpotOrder,
+  retryAfterFrom,
+  venueSymbolOf,
+} from './binance-spot.js';
 import { AsyncFrameQueue, type HttpPort, type HttpResponse, type StreamHandle, type StreamPort } from '../transport.js';
 import { MaintainedBook } from '../book-feed.js';
 import { RateLimitGovernor } from '../rate-limit.js';
@@ -437,6 +444,44 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
     expect(http.requests[0]).toMatch(/^POST https:\/\/rest\.test\/api\/v3\/order\?/);
     expect(http.requests[0]).toContain('signature=');
     expect(http.requests[0]).toContain('newClientOrderId=abc');
+  });
+
+  it('keeps average fill price in the shared 18-decimal scale', () => {
+    const mapped = mapBinanceSpotOrder(
+      {
+        orderId: 42,
+        clientOrderId: 'abc',
+        transactTime: 1_500_000_000_000,
+        price: '100',
+        origQty: '2',
+        executedQty: '1.5',
+        cummulativeQuoteQty: '150',
+        status: 'PARTIALLY_FILLED',
+        type: 'LIMIT',
+        side: 'BUY',
+      },
+      'BTC/USDT',
+      new Date(1_700_000_000_000),
+    );
+
+    expect(formatAmount(mapped.averagePrice!)).toBe('100');
+  });
+
+  it('refuses unknown venue side and type instead of silently mapping them to buy/limit', () => {
+    const base = {
+      orderId: 42,
+      clientOrderId: 'abc',
+      price: '100',
+      origQty: '1',
+      executedQty: '0',
+      cummulativeQuoteQty: '0',
+      status: 'NEW',
+      type: 'LIMIT',
+      side: 'BUY',
+    };
+
+    expect(() => mapBinanceSpotOrder({ ...base, side: 'UNKNOWN' }, 'BTC/USDT', new Date())).toThrow(/order side UNKNOWN/);
+    expect(() => mapBinanceSpotOrder({ ...base, type: 'UNKNOWN' }, 'BTC/USDT', new Date())).toThrow(/order type UNKNOWN/);
   });
 
   it('throws the venue error body instead of returning a fake rejected order', async () => {
