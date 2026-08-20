@@ -300,7 +300,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       method: 'POST',
       url: '/api/v1/positions/leverage',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', leverage: '5' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', leverage: '5', clientAdjustmentId: 'ccxt-set-leverage-1' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().leverage).toBe('5');
@@ -320,7 +320,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       method: 'POST',
       url: '/api/v1/positions/margin',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', amount: '2500' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'ccxt-add-margin-1' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().collateral).toBe('7500');
@@ -373,7 +373,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       method: 'POST',
       url: '/api/v1/positions/margin/reduce',
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', amount: '2500' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'ccxt-reduce-margin-1' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().collateral).toBe('5000');
@@ -397,7 +397,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       method: 'POST',
       url: arm.path,
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', leverage: '11' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', leverage: '11', clientAdjustmentId: 'ccxt-set-too-high-1' },
     });
     expect(res.statusCode).toBe(arm.httpStatus);
     expect(res.json().error).toBe(arm.intafacedCode);

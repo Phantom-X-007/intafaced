@@ -1404,13 +1404,18 @@ if (!available) {
       status: 409,
     });
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10000');
-    const [stored] = await sql<{ margin_adjust_seq: number; completed: number }[]>`
+    const [stored] = await sql<{ margin_adjust_seq: number; completed: number; result_type: string; collateral: string }[]>`
       SELECT p.margin_adjust_seq,
         (SELECT count(*)::int FROM trade.position_margin_adjustments a
-          WHERE a.position_id = p.id AND a.status = 'completed') AS completed
-      FROM trade.positions p WHERE p.id = ${pos.id!}
+          WHERE a.position_id = p.id AND a.status = 'completed') AS completed,
+        jsonb_typeof(a.result) AS result_type,
+        a.result->>'collateral' AS collateral
+      FROM trade.positions p
+      JOIN trade.position_margin_adjustments a ON a.position_id = p.id
+        AND a.client_adjustment_id = ${input.clientAdjustmentId}
+      WHERE p.id = ${pos.id!}
     `;
-    expect(stored).toEqual({ margin_adjust_seq: 2, completed: 1 });
+    expect(stored).toEqual({ margin_adjust_seq: 2, completed: 1, result_type: 'object', collateral: '10000' });
   });
 
   it('concurrent identical caller keys serialize to one ledger movement and one stored completion', async () => {
@@ -1687,6 +1692,12 @@ if (!available) {
     });
     expect((await positions.get(ALICE, pos.id!)).collateral).toBe('6500');
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('6500');
+    const [stored] = await sql<{ result_type: string; collateral: string }[]>`
+      SELECT jsonb_typeof(result) AS result_type, result->>'collateral' AS collateral
+      FROM trade.position_margin_adjustments
+      WHERE position_id = ${pos.id!} AND client_adjustment_id = ${oldInput.clientAdjustmentId}
+    `;
+    expect(stored).toEqual({ result_type: 'object', collateral: '6000' });
   });
 
   it('isolated margin add of a missing position is 404', async () => {
@@ -1869,6 +1880,12 @@ if (!available) {
     });
     expect((await positions.get(ALICE, pos.id!)).collateral).toBe('6500');
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('6500');
+    const [stored] = await sql<{ result_type: string; collateral: string }[]>`
+      SELECT jsonb_typeof(result) AS result_type, result->>'collateral' AS collateral
+      FROM trade.position_margin_adjustments
+      WHERE position_id = ${pos.id!} AND client_adjustment_id = ${oldInput.clientAdjustmentId}
+    `;
+    expect(stored).toEqual({ result_type: 'object', collateral: '7000' });
   });
 
   it('binds each caller key to one operation and payload across set, add, and reduce', async () => {

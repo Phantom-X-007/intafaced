@@ -874,7 +874,7 @@ export class PositionService {
             WHERE id = ${row.id} AND margin_adjust_request = ${adjustmentId}`;
           const result = presentPosition(row);
           await tx`UPDATE trade.position_margin_adjustments
-            SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+            SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
             WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
           return row;
         }
@@ -964,7 +964,7 @@ export class PositionService {
         }
         const result = presentPosition(updated);
         await tx`UPDATE trade.position_margin_adjustments
-          SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+          SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
           WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
         return updated;
       });
@@ -1093,7 +1093,7 @@ export class PositionService {
         }
         const result = presentPosition(updated);
         await tx`UPDATE trade.position_margin_adjustments
-          SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+          SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
           WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
         return updated;
       });
@@ -1249,7 +1249,7 @@ export class PositionService {
         }
         const result = presentPosition(updated);
         await tx`UPDATE trade.position_margin_adjustments
-          SET status = 'completed', result = ${JSON.stringify(result)}::jsonb, completed_at = now()
+          SET status = 'completed', result = ${tx.json(result)}, completed_at = now()
           WHERE position_id = ${row.id} AND client_adjustment_id = ${adjustmentId} AND status = 'pending'`;
         return updated;
       });
