@@ -701,6 +701,52 @@
           aria-label="Resize order ticket column"
           @mousedown.prevent="startPanelResize('order', $event)"
         ></div>
+        <div class="ix-side-toggle" role="group" aria-label="Trading mode">
+          <button
+            type="button"
+            :class="{ 'is-active': deskMode === 'spot' }"
+            :aria-pressed="deskMode === 'spot' ? 'true' : 'false'"
+            @click="deskMode = 'spot'"
+          >{{ $t('exchange.terminal.spot') }}</button>
+          <button
+            type="button"
+            :class="{ 'is-active': deskMode === 'convert' }"
+            :aria-pressed="deskMode === 'convert' ? 'true' : 'false'"
+            @click="deskMode = 'convert'"
+          >{{ $t('exchange.convert.title') }}</button>
+        </div>
+
+        <div v-if="deskMode === 'convert'" class="ix-order-body">
+          <div class="ix-side-toggle" role="group" aria-label="Convert side">
+            <button type="button" :class="{ 'is-active': convertSide === 'buy' }" @click="convertSide = 'buy'">{{ $t('exchange.terminal.buy') }}</button>
+            <button type="button" :class="{ 'is-active': convertSide === 'sell' }" @click="convertSide = 'sell'">{{ $t('exchange.terminal.sell') }}</button>
+          </div>
+          <div class="ix-field">
+            <label for="ix-convert-qty">{{ $t('exchange.convert.quantity') }}</label>
+            <div class="ix-input">
+              <input id="ix-convert-qty" type="text" inputmode="decimal" spellcheck="false" v-model="convertQty" @input="convertError = ''" />
+              <span class="ix-unit">{{ currentCoin.coin }}</span>
+            </div>
+          </div>
+          <button type="button" class="ix-submit is-buy" :disabled="!isLogin || !currentCoin.symbol || !convertQty || convertLoading" @click="quoteConvert">
+            {{ convertLoading ? $t('exchange.convert.quoting') : $t('exchange.convert.quote') }}
+          </button>
+          <p v-if="convertError" class="ix-order-note ix-order-error">{{ convertError }}</p>
+          <div v-if="convertQuote" class="ix-meta">
+            <div><dt>{{ $t('exchange.convert.requestedQty') }}</dt><dd>{{ convertQuote.requestedQty }}</dd></div>
+            <div><dt>{{ $t('exchange.convert.filledQty') }}</dt><dd>{{ convertQuote.filledQty }}</dd></div>
+            <div><dt>{{ $t('exchange.convert.avgPrice') }}</dt><dd>{{ convertQuote.avgPrice }}</dd></div>
+            <div><dt>{{ $t('exchange.convert.spread') }}</dt><dd>{{ convertQuote.convertSpreadBps }} bps</dd></div>
+            <div><dt>{{ $t('exchange.convert.expires') }}</dt><dd>{{ convertQuote.expiresAt }}</dd></div>
+          </div>
+          <button type="button" class="ix-submit is-buy" :disabled="!convertCanExecute || convertExecuting" @click="executeConvert">
+            {{ convertExecuting ? $t('exchange.convert.executing') : $t('exchange.convert.execute') }}
+          </button>
+          <p v-if="convertResult" class="ix-order-note">{{ convertResult.status }} · {{ $t('exchange.convert.orderId') }}: {{ convertResult.orderId }}</p>
+          <p v-else-if="!isLogin" class="ix-order-note"><router-link to="/platform">{{ $t('exchange.convert.signIn') }}</router-link></p>
+        </div>
+
+        <template v-else>
         <div class="ix-side-toggle" role="group" aria-label="Order side">
           <button
             type="button"
@@ -905,6 +951,7 @@
           </p>
           <p class="ix-order-note" v-else-if="orderBlockReason">{{ orderBlockReason }}</p>
         </div>
+        </template>
       </aside>
     </div>
   </div>
@@ -956,7 +1003,7 @@ import { KlineChart } from '@js/market-chart/kline.js';
 import DepthGraph from '@components/exchange/DepthGraph.vue';
 import SubAccountSelector from '@components/intafaced/SubAccountSelector.vue';
 
-import { rest, symbolPath, REST_BASE } from '@/config/intafaced.js';
+import { rest, query, mutate, symbolPath, REST_BASE } from '@/config/intafaced.js';
 
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
@@ -1002,6 +1049,14 @@ export default {
       searchKey: '',
 
       mainTab: 'chart',
+      deskMode: 'spot',
+      convertSide: 'buy',
+      convertQty: '',
+      convertQuote: null,
+      convertResult: null,
+      convertError: '',
+      convertLoading: false,
+      convertExecuting: false,
       mainTabs: [
         { id: 'chart', label: 'Chart' },
         { id: 'depth', label: 'Depth' },
@@ -1119,6 +1174,11 @@ export default {
     /** The platform session's access token, or null. In memory only. */
     ixToken() {
       return this.$store.getters.ixToken;
+    },
+    convertCanExecute() {
+      if (!this.convertQuote || !this.convertQuote.expiresAt || !this.convertQty) return false;
+      return Date.parse(this.convertQuote.expiresAt) > Date.now() &&
+        String(this.convertQuote.requestedQty) === String(this.convertQty).trim();
     },
     /**
      * "SIGNED IN" ON THIS SCREEN MEANS THE PLATFORM SESSION, NOT THE SHELL ONE.
@@ -2306,6 +2366,63 @@ export default {
     },
 
     /* ── interactions ──────────────────────────────────────────────────── */
+
+    quoteConvert() {
+      var qty = String(this.convertQty == null ? '' : this.convertQty).trim();
+      if (!this.ixToken) {
+        this.convertError = this.$t('exchange.convert.signIn');
+        return;
+      }
+      if (!this.currentCoin.symbol || !ixMoney.isPositive(qty)) {
+        this.convertError = this.$t('exchange.convert.invalidQuantity');
+        return;
+      }
+      this.convertLoading = true;
+      this.convertError = '';
+      this.convertQuote = null;
+      this.convertResult = null;
+      query('trade', 'convert.quote', {
+        symbol: this.currentCoin.symbol,
+        side: this.convertSide,
+        qty: qty
+      }, this.ixToken).then(res => {
+        this.convertLoading = false;
+        if (!res || !res.ok) {
+          this.convertError = res && res.message ? res.message : this.$t('exchange.convert.refused');
+          return;
+        }
+        this.convertQuote = res.data;
+      });
+    },
+
+    executeConvert() {
+      if (!this.convertCanExecute || this.convertExecuting) return;
+      var qty = String(this.convertQty).trim();
+      this.convertExecuting = true;
+      this.convertError = '';
+      mutate('trade', 'convert.execute', {
+        symbol: this.currentCoin.symbol,
+        side: this.convertSide,
+        qty: qty,
+        clientConvertId: this.convertClientId()
+      }, this.ixToken).then(res => {
+        this.convertExecuting = false;
+        if (!res || !res.ok) {
+          this.convertError = res && res.message ? res.message : this.$t('exchange.convert.refused');
+          return;
+        }
+        this.convertResult = {
+          status: String(res.data && res.data.status || ''),
+          orderId: String(res.data && res.data.id || '')
+        };
+        this.convertQuote = null;
+      });
+    },
+
+    convertClientId() {
+      var suffix = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      return 'convert:' + suffix.slice(0, 40);
+    },
 
     openPair(row) {
       if (!row || row.symbol === this.currentCoin.symbol) {
@@ -4324,4 +4441,3 @@ body.ix-resizing-cols {
   outline-offset: 2px;
 }
 </style>
-
