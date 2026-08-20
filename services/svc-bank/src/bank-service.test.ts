@@ -1468,6 +1468,24 @@ if (!available) {
       expect(await availableOf(USER_A, 'USDT')).toBe('900');
     });
 
+    it('refuses a deposit id reused by the same caller for a different pool', async () => {
+      const firstPool = await openPool();
+      const otherPool = await openPool({ apr: 1200 });
+      await fund(USER_A, 'USDT', '1000');
+
+      const positionId = '7f000000-0000-4000-8000-00000000bbbd';
+      await bank.earn.deposit({ poolId: firstPool.id, userId: USER_A, amount: amt('100'), positionId });
+
+      await expect(bank.earn.deposit({ poolId: otherPool.id, userId: USER_A, amount: amt('100'), positionId })).rejects.toMatchObject({
+        code: 'bank.position_conflict',
+      });
+
+      expect(await stakedOf(USER_A, 'USDT')).toBe('100');
+      expect(await availableOf(USER_A, 'USDT')).toBe('900');
+      expect(formatAmount(await bank.earn.poolSize(firstPool.id))).toBe('100');
+      expect(formatAmount(await bank.earn.poolSize(otherPool.id))).toBe('0');
+    });
+
     it('still treats a genuine retry of the same deposit as one deposit', async () => {
       const pool = await openPool();
       await fund(USER_A, 'USDT', '1000');

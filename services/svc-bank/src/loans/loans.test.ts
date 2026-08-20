@@ -1169,6 +1169,38 @@ if (!available) {
       });
     });
 
+    it('refuses a loan id reused by the same borrower for a different product', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '1');
+      const firstProduct = await makeProduct({ name: 'First BTC-backed USDT' });
+      const otherProduct = await makeProduct({ name: 'Other BTC-backed USDT' });
+      const loanId = '6f000000-0000-4000-8000-00000000eeef';
+
+      const opened = await loans.open({
+        loanId,
+        productId: firstProduct.id,
+        userId: BORROWER,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now,
+      });
+
+      await expect(
+        loans.open({
+          loanId,
+          productId: otherProduct.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.loan_borrower_mismatch' });
+
+      expect(opened.loan.productId).toBe(firstProduct.id);
+      expect(formatAmount(await loans.collateralOf(opened.loan))).toBe('1');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
+    });
+
     /**
      * ═══════════════════════════════════════════════════════════════════════════
      * IF THE PROCESS DIES BETWEEN THE LOCK AND THE DRAW, WHOSE FUNDS ARE STRANDED?
