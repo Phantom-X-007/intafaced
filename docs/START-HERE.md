@@ -2,6 +2,8 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
+**Ship rules (Denon / Shehzad / Nitro agents):** [`CONTRIBUTING.md`](../CONTRIBUTING.md) §0 — merge your own green PR; do not wait on Nitro; `audited:true` is not a coding gate.
+
 **Re-derive every session (do not trust frozen SHAs in chat):**  
 `git fetch origin main && git rev-parse --short origin/main` · `gh pr list --state open`  
 **Anti-drift pack (2026-08-03):** product + recovery + owners live in  

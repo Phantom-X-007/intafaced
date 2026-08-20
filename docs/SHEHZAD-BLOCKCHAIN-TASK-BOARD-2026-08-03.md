@@ -1,13 +1,17 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-08  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-20  
 **Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
+> ### 2026-08-20 delta — sitting items are not coding gates
+>
+> §0.5 does not pause the board. Do not ping Nitro to flip `audited:true`. Keep shipping with an honest `audited: false`.
+>
 > ### 2026-08-19 delta — S-J1 audit pipeline (this PR)
 >
-> **Status + hash + signer, never a fake badge.** `src/audit/pipeline.ts` + public `auditStatus`. The committed smart-accounts package is `kind: internal`, `audited: false`. `audited:true` only exists as a pure-function path for a future external package whose pinned hash matches. `socket.contract-audit` stays a socket (Nitro budget).
+> **Status + hash + signer, never a fake badge.** `src/audit/pipeline.ts` + public `auditStatus`. The committed smart-accounts package is `kind: internal`, `audited: false`. `audited:true` only exists as a pure-function path for a future external package whose pinned hash matches. `socket.contract-audit` stays a socket (Nitro budget). **Do not ping Nitro to flip it — keep shipping.**
 >
 > ### 2026-08-19 delta — S-J3 protocol incident runbook (#2471)
 >
@@ -102,18 +106,24 @@
 
 ---
 
-## 0.5 · Waiting on Nitro — not yours to solve, do not stall on them
+## 0.5 · Sitting with Nitro — not coding gates
 
-Added 2026-08-07. Each of these gates something on this board and **no PR closes any of them**. If one blocks you, say so and move to the next item — an owner-gated wall is never your delay.
+These rows cost money, keys, or a live vendor. **They do not pause your board.**
+Do not message Nitro to start the next `S-*`. Do not ping Nitro to flip `audited:true`.
 
-| Blocked on                                     | Whose call         | What it gates                                                                       | Status                                                              |
+`audited:true` is a sale/UI flag. It stays false until Nitro pays an external firm
+and the package hash+signer match (`src/audit/pipeline.ts`). Internal packages and
+green CI are not an audit. Your Done-bar is an honest `audited: false` plus the
+pipeline that refuses a fake badge (S-J1 shipped).
+
+| Sitting with                                   | Whose call         | What it gates                                                                       | Status                                                              |
 | ---------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Which venue this platform quotes**           | **Nitro**          | `socket.dex-venue-set` — svc-dex and the indexer both stay honestly dead until then | Open. Not tracked as pending in any ADR until now                   |
-| **Money for an external contract audit**       | **Nitro**          | S-J1 / `socket.contract-audit` — `audited:true` is unreachable without it           | Open                                                                |
-| **Testnet / mainnet funding, RPC access**      | **Nitro**          | Anything past a local dev chain, incl. S-A13 deployment registry                    | Open                                                                |
+| **Which venue this platform quotes**           | **Nitro**          | `socket.dex-venue-set` — svc-dex and the indexer both stay honestly dead until then | Sitting — keep shipping                                             |
+| **Money for an external contract audit**       | **Nitro**          | S-J1 / `socket.contract-audit` — `audited:true` is unreachable without it           | Sitting — keep shipping. Do not ping Nitro                          |
+| **Testnet / mainnet funding, RPC access**      | **Nitro**          | Anything past a local dev chain, incl. S-A13 deployment registry                    | Sitting — keep shipping                                             |
 | **Which EVM chain P0 deploys to**              | Nitro, on your ADR | S-D1, and every deployed-address item                                               | **Ruled 2026-08-08: Base Sepolia → Base; HyperEVM later; anvil=CI** |
 | **Class X — mainnet keys, go-live, sanctions** | **Nitro human**    | Any live-money posture                                                              | Standing law, unchanged                                             |
-| **Gas sponsorship funding** (if we sponsor)    | **Nitro**          | S-A10 paymaster — the contract is yours, the funded account is not                  | Open                                                                |
+| **Gas sponsorship funding** (if we sponsor)    | **Nitro**          | S-A10 paymaster — the contract is yours, the funded account is not                  | Sitting — keep shipping                                             |
 
 ---
 
@@ -248,11 +258,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier J — Security / audit factory (your senior edge)
 
-| ID       | Outcome                            | Done bar                                                                                                                                                                                   |
-| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **S-J1** | **Audit pipeline in svc-protocol** | **Shipped this PR.** `src/audit/pipeline.ts` + `auditStatus` — artefact hash, who signed. Internal package cannot set `audited:true`. External firm still Nitro (`socket.contract-audit`). |
-| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                                       |
-| **S-J3** | **Incident runbooks**              | **Shipped #2471.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook.                    |
+| ID       | Outcome                            | Done bar                                                                                                                                                                                                                   |
+| -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-J1** | **Audit pipeline in svc-protocol** | **Shipped this PR.** `src/audit/pipeline.ts` + `auditStatus` — artefact hash, who signed. Internal package cannot set `audited:true`. External firm still Nitro (`socket.contract-audit`). **Not a reason to ping Nitro.** |
+| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                                                                       |
+| **S-J3** | **Incident runbooks**              | **Shipped #2471.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook.                                                    |
 
 ### Tier K — Spec / ADR factory (plan completeness — you write freely)
 
