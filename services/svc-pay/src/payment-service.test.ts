@@ -147,6 +147,45 @@ if (!available) {
     return pay.createMerchant({ userId, pricing: { feeBps } });
   }
 
+  async function beginMerchantCutoff(merchantId: string, cutoff: 'rejected' | 'suspended') {
+    let announceLocked!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => (announceLocked = resolve));
+    const mayCommit = new Promise<void>((resolve) => (release = resolve));
+    const done = sql.begin(async (tx) => {
+      await tx`SELECT id FROM pay.merchants WHERE id = ${merchantId} FOR UPDATE`;
+      if (cutoff === 'rejected') {
+        await tx`UPDATE pay.merchants SET kyb_status = 'rejected' WHERE id = ${merchantId}`;
+      } else {
+        await tx`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${merchantId}`;
+      }
+      announceLocked();
+      await mayCommit;
+    });
+    await locked;
+    return {
+      async commit() {
+        release();
+        await done;
+      },
+    };
+  }
+
+  async function expectEligibilityReadWaiting(): Promise<void> {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [row] = await sql<{ waiting: number }[]>`
+        SELECT count(*)::int AS waiting
+          FROM pg_stat_activity
+         WHERE datname = current_database()
+           AND wait_event_type = 'Lock'
+           AND query ILIKE '%FROM pay.merchants%FOR SHARE%'
+      `;
+      if ((row?.waiting ?? 0) > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error('money door never waited on the concurrent merchant cutoff lock');
+  }
+
   /** A card payment, authorized and ready to capture. */
   async function cardPayment(merchantId: string, amount = '100', assetId = 'USDT'): Promise<PaymentView> {
     const payment = await pay.createPayment({
@@ -832,6 +871,46 @@ if (!available) {
   // ── Settlement ────────────────────────────────────────────────────────────
 
   describe('settlement', () => {
+    it('uses merchant → payment lock order when capture races a settlement freeze', async () => {
+      const m = await merchant(0);
+      const included = await cardPayment(m.id, '40');
+      await pay.capture(included.id);
+      const toCapture = await cardPayment(m.id, '15');
+
+      let announceMerchantLock!: () => void;
+      let releaseSettlement!: () => void;
+      const merchantLocked = new Promise<void>((resolve) => (announceMerchantLock = resolve));
+      const mayContinue = new Promise<void>((resolve) => (releaseSettlement = resolve));
+      const racing = new PayService(sql, ledger, rails, {
+        checkoutRiskBand: 'low',
+        payoutDestinations: dests,
+        afterSettlementMerchantLock: async () => {
+          announceMerchantLock();
+          await mayContinue;
+        },
+      });
+
+      const settling = racing.settleWindow({
+        merchantId: m.id,
+        window: 'w-capture-race',
+        assetId: 'USDT',
+        from: new Date(Date.now() - 24 * 3600_000),
+        to: new Date(Date.now() + 24 * 3600_000),
+      });
+      await merchantLocked;
+      const capturing = racing.capture(toCapture.id);
+      await expectEligibilityReadWaiting();
+      releaseSettlement();
+
+      const [settled, captured] = await Promise.all([settling, capturing]);
+      expect(settled.status).toBe('posted');
+      expect(formatAmount(settled.gross)).toBe('40');
+      expect(captured.status).toBe('captured');
+      expect(await availableOf(MERCHANT_USER)).toBe('40');
+      expect(await clearingOf(m.id)).toBe('15');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('sweeps every captured payment in the window into one posting', async () => {
       const m = await merchant(200); // 2%
       for (const value of ['10', '20', '30']) {
@@ -1856,6 +1935,74 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('serializes a concurrent KYB rejection ahead of payment creation', async () => {
+      const m = await merchant();
+      const cutoff = await beginMerchantCutoff(m.id, 'rejected');
+      const creating = pay.createPayment({
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(creating).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.payments WHERE merchant_id = ${m.id}`).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('serializes a concurrent KYB rejection ahead of authorization', async () => {
+      const m = await merchant();
+      const payment = await pay.createPayment({
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+      const cutoff = await beginMerchantCutoff(m.id, 'rejected');
+      const authorizing = pay.authorize(payment.id);
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(authorizing).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect((await pay.getPayment(payment.id)).status).toBe('created');
+      expect((await pay.history(payment.id)).map((event) => event.event)).toEqual(['created']);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('serializes suspension ahead of capture, while a completed capture retry stays idempotent', async () => {
+      const m = await merchant();
+      const authorized = await cardPayment(m.id, '25');
+      const cutoff = await beginMerchantCutoff(m.id, 'suspended');
+      const capturing = pay.capture(authorized.id);
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(capturing).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect((await pay.getPayment(authorized.id)).status).toBe('authorized');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+
+      await sql`UPDATE pay.merchants SET status = 'active' WHERE id = ${m.id}`;
+      const captured = await pay.capture(authorized.id);
+      await sql`UPDATE pay.merchants SET status = 'suspended', kyb_status = 'rejected' WHERE id = ${m.id}`;
+      const replay = await pay.capture(authorized.id);
+      expect(replay).toEqual(captured);
+      // Capture credits the merchant clearing account; settlement is the
+      // separate transition that moves net value into the user's available
+      // balance. A completed retry must not perform either move again.
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(await clearingOf(m.id)).toBe('25');
+      expect((await pay.history(authorized.id)).filter((event) => event.event === 'captured')).toHaveLength(1);
+      expect(ledger.journal().filter((entry) => entry.reason === 'payment.captured')).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+      expect(ledger.verifyChain()).toEqual({ ok: true });
+    });
+
     it('refuses a new payment link for a suspended merchant', async () => {
       const m = await merchant();
       await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
@@ -2287,6 +2434,19 @@ if (!available) {
       });
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
       expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('serializes a concurrent KYB rejection ahead of public checkout open', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
+      const cutoff = await beginMerchantCutoff(m.id, 'rejected');
+      const opening = pay.openCheckoutSession({ linkToken: link.token, ...geo });
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(opening).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.checkout_sessions WHERE link_id = ${link.id}`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments WHERE merchant_id = ${m.id}`).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
     it('live-only createPaymentLink refuses when KYB is not approved', async () => {
