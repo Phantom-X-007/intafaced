@@ -1657,6 +1657,38 @@ if (!available) {
     expect(stored).toEqual({ margin_adjust_seq: 2, completed: 1 });
   });
 
+  it('margin add replays its stored old response after a later add while preserving the newer ledger state', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-add-margin-historical-result',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const common = { userId: ALICE, symbol: 'BTC/USDT-PERP', positionId: pos.id! };
+    const oldInput = { ...common, amount: amt('1000'), clientAdjustmentId: 'add-historical-old' };
+    const oldResult = await positions.addIsolatedMargin(oldInput);
+    expect(oldResult.collateral).toBe('6000');
+
+    const newer = await positions.addIsolatedMargin({
+      ...common,
+      amount: amt('500'),
+      clientAdjustmentId: 'add-historical-new',
+    });
+    expect(newer.collateral).toBe('6500');
+
+    const replay = await positions.addIsolatedMargin(oldInput);
+    expect(replay).toEqual(oldResult);
+    await expect(positions.addIsolatedMargin({ ...oldInput, amount: amt('999') })).rejects.toMatchObject({
+      code: 'trade.idempotency_conflict',
+      status: 409,
+    });
+    expect((await positions.get(ALICE, pos.id!)).collateral).toBe('6500');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('6500');
+  });
+
   it('isolated margin add of a missing position is 404', async () => {
     await expect(
       positions.addIsolatedMargin({
@@ -1804,6 +1836,39 @@ if (!available) {
       FROM trade.positions p WHERE p.id = ${pos.id!}
     `;
     expect(stored).toEqual({ margin_adjust_seq: 3, completed: 2 });
+  });
+
+  it('margin reduce replays its stored old response after a later reduce while preserving the newer ledger state', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-reduce-margin-historical-result',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const common = { userId: ALICE, symbol: 'BTC/USDT-PERP', positionId: pos.id! };
+    await positions.addIsolatedMargin({ ...common, amount: amt('3000'), clientAdjustmentId: 'reduce-history-setup' });
+    const oldInput = { ...common, amount: amt('1000'), clientAdjustmentId: 'reduce-historical-old' };
+    const oldResult = await positions.reduceIsolatedMargin(oldInput);
+    expect(oldResult.collateral).toBe('7000');
+
+    const newer = await positions.reduceIsolatedMargin({
+      ...common,
+      amount: amt('500'),
+      clientAdjustmentId: 'reduce-historical-new',
+    });
+    expect(newer.collateral).toBe('6500');
+
+    const replay = await positions.reduceIsolatedMargin(oldInput);
+    expect(replay).toEqual(oldResult);
+    await expect(positions.reduceIsolatedMargin({ ...oldInput, amount: amt('999') })).rejects.toMatchObject({
+      code: 'trade.idempotency_conflict',
+      status: 409,
+    });
+    expect((await positions.get(ALICE, pos.id!)).collateral).toBe('6500');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('6500');
   });
 
   it('binds each caller key to one operation and payload across set, add, and reduce', async () => {
