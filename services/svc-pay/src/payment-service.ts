@@ -749,6 +749,17 @@ export class PayService {
     return toMerchant(row);
   }
 
+  /** Serialize eligibility reads with KYB/status writers in the money-door transaction. */
+  private async lockMerchantEligibility(sql: Sql, merchantId: string): Promise<MerchantRecord> {
+    const rows = await sql<MerchantRow[]>`
+      SELECT id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
+        FROM pay.merchants WHERE id = ${merchantId} FOR SHARE
+    `;
+    const row = rows[0];
+    if (!row) throw new PayError(`Merchant ${merchantId} not found`, 'pay.merchant_not_found');
+    return toMerchant(row);
+  }
+
   async getMerchantByUserId(userId: string): Promise<MerchantRecord | null> {
     const rows = await this.sql<MerchantRow[]>`
       SELECT id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
@@ -806,18 +817,28 @@ export class PayService {
   }
 
   private async writeKybDecision(merchantId: string, decision: 'approved' | 'rejected'): Promise<MerchantRecord> {
-    const merchant = await this.getMerchant(merchantId);
-    if (merchant.kybStatus !== 'pending') {
-      throw new PayError(`Merchant KYB must be pending to decide (is ${merchant.kybStatus})`, 'pay.kyb_invalid', {
-        kybStatus: merchant.kybStatus,
-      });
-    }
-    await this.sql`
-      UPDATE pay.merchants
-         SET kyb_status = ${decision}, updated_at = now()
-       WHERE id = ${merchantId}
-    `;
-    return this.getMerchant(merchantId);
+    return transaction(this.sql, async (tx) => {
+      const rows = await tx<MerchantRow[]>`
+        SELECT id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
+          FROM pay.merchants WHERE id = ${merchantId} FOR UPDATE
+      `;
+      const row = rows[0];
+      if (!row) throw new PayError(`Merchant ${merchantId} not found`, 'pay.merchant_not_found');
+      const merchant = toMerchant(row);
+      if (merchant.kybStatus !== 'pending') {
+        throw new PayError(`Merchant KYB must be pending to decide (is ${merchant.kybStatus})`, 'pay.kyb_invalid', {
+          kybStatus: merchant.kybStatus,
+        });
+      }
+      const [updated] = await tx<MerchantRow[]>`
+        UPDATE pay.merchants
+           SET kyb_status = ${decision}, updated_at = now()
+         WHERE id = ${merchantId}
+         RETURNING id, user_id, mode, tier, kyb_status, kyb_ref, status, pricing, settlement_prefs
+      `;
+      if (!updated) throw new PayError(`Merchant ${merchantId} vanished during KYB decision`, 'pay.merchant_not_found');
+      return toMerchant(updated);
+    });
   }
 
   /**
@@ -1214,7 +1235,7 @@ export class PayService {
       async (tx) => {
         const link = await this.readLink(tx, input.linkToken, { forUpdate: true });
 
-        const merchant = await this.getMerchant(link.merchantId);
+        const merchant = await this.lockMerchantEligibility(tx, link.merchantId);
         // Same code the merchant integration path uses, and deliberately the
         // same refusal: a suspended merchant does not take money from the
         // public either.
@@ -1426,9 +1447,6 @@ export class PayService {
   }): Promise<PaymentView> {
     if (input.amount <= 0n) throw new PayError('Payment amount must be positive', 'pay.invalid_amount');
 
-    const merchant = await this.getMerchant(input.merchantId);
-    this.assertMerchantActive(merchant);
-
     // Resolved now so an unknown or incapable rail fails before a payment row
     // exists, rather than at authorize time with a buyer watching.
     this.rails.require(input.railAdapter, 'authorize');
@@ -1436,6 +1454,7 @@ export class PayService {
     return transaction(
       this.sql,
       async (tx) => {
+        this.assertMerchantActive(await this.lockMerchantEligibility(tx, input.merchantId));
         const row = await insertPayment(tx, input);
         return { ...toPayment(row), capturedAmount: 0n, refundedAmount: 0n };
       },
@@ -1467,7 +1486,7 @@ export class PayService {
           // Suspension mid-flight: new progress stops. Already-terminal reads above
           // stay idempotent. Refund is deliberately NOT gated here — returning
           // money to a payer after cut-off is customer-protective.
-          this.assertMerchantActive(await this.getMerchant(row.merchant_id));
+          this.assertMerchantActive(await this.lockMerchantEligibility(tx, row.merchant_id));
 
           const adapter = this.rails.require(row.rail_adapter, 'authorize');
 
@@ -1574,7 +1593,7 @@ export class PayService {
 
           // Same mid-flight suspend rule as authorize: no new money into clearing
           // after cut-off. Idempotent re-read of already-captured stays above.
-          this.assertMerchantActive(await this.getMerchant(row.merchant_id));
+          this.assertMerchantActive(await this.lockMerchantEligibility(tx, row.merchant_id));
 
           const authorized = parseAmount(row.amount);
 
