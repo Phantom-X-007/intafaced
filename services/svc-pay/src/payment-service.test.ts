@@ -871,6 +871,46 @@ if (!available) {
   // ── Settlement ────────────────────────────────────────────────────────────
 
   describe('settlement', () => {
+    it('uses merchant → payment lock order when capture races a settlement freeze', async () => {
+      const m = await merchant(0);
+      const included = await cardPayment(m.id, '40');
+      await pay.capture(included.id);
+      const toCapture = await cardPayment(m.id, '15');
+
+      let announceMerchantLock!: () => void;
+      let releaseSettlement!: () => void;
+      const merchantLocked = new Promise<void>((resolve) => (announceMerchantLock = resolve));
+      const mayContinue = new Promise<void>((resolve) => (releaseSettlement = resolve));
+      const racing = new PayService(sql, ledger, rails, {
+        checkoutRiskBand: 'low',
+        payoutDestinations: dests,
+        afterSettlementMerchantLock: async () => {
+          announceMerchantLock();
+          await mayContinue;
+        },
+      });
+
+      const settling = racing.settleWindow({
+        merchantId: m.id,
+        window: 'w-capture-race',
+        assetId: 'USDT',
+        from: new Date(Date.now() - 24 * 3600_000),
+        to: new Date(Date.now() + 24 * 3600_000),
+      });
+      await merchantLocked;
+      const capturing = racing.capture(toCapture.id);
+      await expectEligibilityReadWaiting();
+      releaseSettlement();
+
+      const [settled, captured] = await Promise.all([settling, capturing]);
+      expect(settled.status).toBe('posted');
+      expect(formatAmount(settled.gross)).toBe('40');
+      expect(captured.status).toBe('captured');
+      expect(await availableOf(MERCHANT_USER)).toBe('40');
+      expect(await clearingOf(m.id)).toBe('15');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('sweeps every captured payment in the window into one posting', async () => {
       const m = await merchant(200); // 2%
       for (const value of ['10', '20', '30']) {
@@ -1931,7 +1971,7 @@ if (!available) {
       await cutoff.commit();
       await expect(authorizing).rejects.toMatchObject({ code: 'pay.kyb_required' });
       expect((await pay.getPayment(payment.id)).status).toBe('created');
-      expect((await pay.history(payment.id)).map((event) => event.type)).toEqual(['created']);
+      expect((await pay.history(payment.id)).map((event) => event.event)).toEqual(['created']);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 

@@ -432,6 +432,9 @@ export interface PayServiceOptions {
   /** Injectable clock. Expiry is half of this feature, so it has to be drivable. */
   readonly now?: () => Date;
 
+  /** Test failpoint after settlement owns the merchant lock; never wired at boot. */
+  readonly afterSettlementMerchantLock?: () => void | Promise<void>;
+
   /**
    * Outbound merchant webhook notifier (pay.public-api step 3 / ADR §2.4).
    *
@@ -613,6 +616,7 @@ export class PayService {
         payment: PaymentView;
       }) => void | Promise<void>)
     | undefined;
+  private readonly afterSettlementMerchantLock: (() => void | Promise<void>) | undefined;
   private readonly affiliateAccrue: AffiliateAccruePort;
   private readonly affiliatePayout: AffiliatePayoutPort;
   private readonly payoutDestinations: MerchantPayoutDestinations;
@@ -635,6 +639,7 @@ export class PayService {
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
     this.now = options.now ?? (() => new Date());
     this.afterPaymentEvent = options.afterPaymentEvent;
+    this.afterSettlementMerchantLock = options.afterSettlementMerchantLock;
     this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
     this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
     this.payoutDestinations = options.payoutDestinations ?? assertOnlyPayoutDestinations();
@@ -1475,18 +1480,22 @@ export class PayService {
       const outcome = await transaction(
         this.sql,
         async (tx) => {
-          const row = await lockPayment(tx, paymentId);
+          const observed = await readPayment(tx, paymentId);
 
           // Idempotent: an authorization that already happened is not an error.
+          if (observed.status === 'authorized' || observed.status === 'captured' || observed.status === 'settled') {
+            return { declined: false as const, view: await this.view(tx, observed) };
+          }
+
+          // Global money lock order: merchant eligibility, then payment. Settlement
+          // freezes use the same order. Re-check the payment after both locks: it
+          // may have completed while this operation waited on a cutoff/settlement.
+          this.assertMerchantActive(await this.lockMerchantEligibility(tx, observed.merchant_id));
+          const row = await lockPayment(tx, paymentId);
           if (row.status === 'authorized' || row.status === 'captured' || row.status === 'settled') {
             return { declined: false as const, view: await this.view(tx, row) };
           }
           assertTransition(row, 'authorized');
-
-          // Suspension mid-flight: new progress stops. Already-terminal reads above
-          // stay idempotent. Refund is deliberately NOT gated here — returning
-          // money to a payer after cut-off is customer-protective.
-          this.assertMerchantActive(await this.lockMerchantEligibility(tx, row.merchant_id));
 
           const adapter = this.rails.require(row.rail_adapter, 'authorize');
 
@@ -1586,14 +1595,18 @@ export class PayService {
       transaction(
         this.sql,
         async (tx) => {
-          const row = await lockPayment(tx, paymentId);
+          const observed = await readPayment(tx, paymentId);
 
+          if (observed.status === 'captured' || observed.status === 'settled') return this.view(tx, observed);
+
+          // Merchant → payment is the single svc-pay money lock order. The shared
+          // merchant lock intentionally spans the rail + ledger calls below: if
+          // released earlier, a cutoff could commit after this check but before
+          // the irreversible capture, recreating the stale-eligibility race.
+          this.assertMerchantActive(await this.lockMerchantEligibility(tx, observed.merchant_id));
+          const row = await lockPayment(tx, paymentId);
           if (row.status === 'captured' || row.status === 'settled') return this.view(tx, row);
           assertTransition(row, 'captured');
-
-          // Same mid-flight suspend rule as authorize: no new money into clearing
-          // after cut-off. Idempotent re-read of already-captured stays above.
-          this.assertMerchantActive(await this.lockMerchantEligibility(tx, row.merchant_id));
 
           const authorized = parseAmount(row.amount);
 
@@ -2402,6 +2415,7 @@ export class PayService {
         if (!lockedRow) {
           throw new PayError(`Merchant ${input.merchantId} not found`, 'pay.merchant_not_found');
         }
+        await this.afterSettlementMerchantLock?.();
 
         const existing = await tx<SettlementRow[]>`
           SELECT id, merchant_id, "window", asset_id, gross, fees, net, payout_method, payout_ref, payout_attempts, status
@@ -3005,6 +3019,16 @@ function toCheckoutSessionView(row: CheckoutSessionRow, label: string, method: s
     expiresAt: row.expires_at.toISOString(),
     instruction: reference ? { reference, amount: formatAmount(parseAmount(row.amount)), currency: row.currency } : null,
   };
+}
+
+async function readPayment(tx: Sql, paymentId: string): Promise<PaymentRow> {
+  const rows = await tx<PaymentRow[]>`
+    SELECT id, merchant_id, profile_id, amount, currency, method, rail_adapter, rail_ref, status, created_at
+      FROM pay.payments WHERE id = ${paymentId}
+  `;
+  const row = rows[0];
+  if (!row) throw new PayError(`Payment ${paymentId} not found`, 'pay.payment_not_found');
+  return row;
 }
 
 async function lockPayment(tx: Sql, paymentId: string): Promise<PaymentRow> {
