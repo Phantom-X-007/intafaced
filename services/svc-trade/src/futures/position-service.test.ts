@@ -1608,6 +1608,55 @@ if (!available) {
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('7500');
   });
 
+  it('margin add survives finalize failure, concurrent identical retry, and successful-response replay exactly once', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-add-margin-delta-retries',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    let crashOnce = true;
+    const crashing = new PositionService(sql, ledger, {
+      marks: marks.source(),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
+      bus,
+      now: () => NOW,
+      afterMarginLedgerPost: async () => {
+        if (crashOnce) {
+          crashOnce = false;
+          throw new Error('simulated add finalize failure');
+        }
+      },
+    });
+    const input = {
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('2500'),
+      clientAdjustmentId: 'add-delta-retry-1',
+    };
+
+    await expect(crashing.addIsolatedMargin(input)).rejects.toThrow('simulated add finalize failure');
+    expect((await positions.get(ALICE, pos.id!)).collateral).toBe('5000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('7500');
+
+    const [a, b] = await Promise.all([crashing.addIsolatedMargin(input), crashing.addIsolatedMargin(input)]);
+    expect(a).toEqual(b);
+    expect((await crashing.addIsolatedMargin(input)).collateral).toBe('7500');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('7500');
+    const [stored] = await sql<{ margin_adjust_seq: number; completed: number }[]>`
+      SELECT p.margin_adjust_seq,
+        (SELECT count(*)::int FROM trade.position_margin_adjustments a
+          WHERE a.position_id = p.id AND a.status = 'completed') AS completed
+      FROM trade.positions p WHERE p.id = ${pos.id!}
+    `;
+    expect(stored).toEqual({ margin_adjust_seq: 2, completed: 1 });
+  });
+
   it('isolated margin add of a missing position is 404', async () => {
     await expect(
       positions.addIsolatedMargin({
@@ -1699,6 +1748,96 @@ if (!available) {
     expect(next.collateral).toBe('5000');
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('95000');
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+  });
+
+  it('margin reduce survives finalize failure, concurrent identical retry, and successful-response replay exactly once', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-reduce-margin-delta-retries',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    await positions.addIsolatedMargin({
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('2500'),
+      clientAdjustmentId: 'reduce-setup-add',
+    });
+    let crashOnce = true;
+    const crashing = new PositionService(sql, ledger, {
+      marks: marks.source(),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
+      bus,
+      now: () => NOW,
+      afterMarginLedgerPost: async () => {
+        if (crashOnce) {
+          crashOnce = false;
+          throw new Error('simulated reduce finalize failure');
+        }
+      },
+    });
+    const input = {
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      positionId: pos.id!,
+      amount: amt('2500'),
+      clientAdjustmentId: 'reduce-delta-retry-1',
+    };
+
+    await expect(crashing.reduceIsolatedMargin(input)).rejects.toThrow('simulated reduce finalize failure');
+    expect((await positions.get(ALICE, pos.id!)).collateral).toBe('7500');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+
+    const [a, b] = await Promise.all([crashing.reduceIsolatedMargin(input), crashing.reduceIsolatedMargin(input)]);
+    expect(a).toEqual(b);
+    expect((await crashing.reduceIsolatedMargin(input)).collateral).toBe('5000');
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
+    const [stored] = await sql<{ margin_adjust_seq: number; completed: number }[]>`
+      SELECT p.margin_adjust_seq,
+        (SELECT count(*)::int FROM trade.position_margin_adjustments a
+          WHERE a.position_id = p.id AND a.status = 'completed') AS completed
+      FROM trade.positions p WHERE p.id = ${pos.id!}
+    `;
+    expect(stored).toEqual({ margin_adjust_seq: 3, completed: 2 });
+  });
+
+  it('binds each caller key to one operation and payload across set, add, and reduce', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-margin-cross-operation-keys',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const common = { userId: ALICE, symbol: 'BTC/USDT-PERP', positionId: pos.id! };
+
+    await positions.setLeverage({ ...common, leverage: amt('5'), clientAdjustmentId: 'shared-set-key' });
+    await expect(positions.addIsolatedMargin({ ...common, amount: amt('1'), clientAdjustmentId: 'shared-set-key' })).rejects.toMatchObject({
+      code: 'trade.idempotency_conflict',
+      status: 409,
+    });
+    await expect(
+      positions.reduceIsolatedMargin({ ...common, amount: amt('1'), clientAdjustmentId: 'shared-set-key' }),
+    ).rejects.toMatchObject({ code: 'trade.idempotency_conflict', status: 409 });
+
+    await positions.addIsolatedMargin({ ...common, amount: amt('1'), clientAdjustmentId: 'shared-add-key' });
+    await expect(
+      positions.reduceIsolatedMargin({ ...common, amount: amt('1'), clientAdjustmentId: 'shared-add-key' }),
+    ).rejects.toMatchObject({ code: 'trade.idempotency_conflict', status: 409 });
+    await expect(positions.setLeverage({ ...common, leverage: amt('4'), clientAdjustmentId: 'shared-add-key' })).rejects.toMatchObject({
+      code: 'trade.idempotency_conflict',
+      status: 409,
+    });
+
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('10001');
+    expect((await positions.get(ALICE, pos.id!)).collateral).toBe('10001');
   });
 
   it('isolated margin reduce below initial is 400 and does not write', async () => {
