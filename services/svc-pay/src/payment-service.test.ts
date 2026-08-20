@@ -1992,8 +1992,15 @@ if (!available) {
       await sql`UPDATE pay.merchants SET status = 'suspended', kyb_status = 'rejected' WHERE id = ${m.id}`;
       const replay = await pay.capture(authorized.id);
       expect(replay).toEqual(captured);
-      expect(await availableOf(MERCHANT_USER)).toBe('25');
+      // Capture credits the merchant clearing account; settlement is the
+      // separate transition that moves net value into the user's available
+      // balance. A completed retry must not perform either move again.
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(await clearingOf(m.id)).toBe('25');
+      expect((await pay.history(authorized.id)).filter((event) => event.event === 'captured')).toHaveLength(1);
+      expect(ledger.journal().filter((entry) => entry.reason === 'payment.captured')).toHaveLength(1);
       expect(ledger.reconcile()).toEqual({ ok: true });
+      expect(ledger.verifyChain()).toEqual({ ok: true });
     });
 
     it('refuses a new payment link for a suspended merchant', async () => {
