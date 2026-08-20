@@ -8,13 +8,10 @@ import {
   type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
-  type PlaceOrderRequest,
-  type TradeAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
   type VenueDescriptor,
   type VenueMarket,
-  type VenueOrder,
   type VenueTrade,
 } from '@intafaced/venue-contracts';
 import { requireCredentials, type VenueCredentials } from '@intafaced/venue-contracts';
@@ -23,6 +20,7 @@ import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
 import { VenueLatencyGrader } from '../latency.js';
 import { assertPayoutGradeBook } from '../payout-grade.js';
 import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+export { BinanceSpotTrade, mapBinanceSpotOrder, signBinanceQuery } from './binance-spot-trade.js';
 
 /**
  * BINANCE SPOT — the first venue in the fabric, done properly.
@@ -370,57 +368,9 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
   }
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// TRADING AND ACCOUNT — credentialed, and honest about not being built
-// ════════════════════════════════════════════════════════════════════════════
-
-/**
- * What is missing, in one string, so the message cannot drift between methods.
- *
- * Written as a refusal rather than a TODO because a TODO does not stop anything.
- * The signed REST path (HMAC over the query string, `recvWindow`, the listen-key
- * user-data stream for fill callbacks, and the reconciliation that turns a
- * `pending` order into a known one after a reconnect) is real work that has not
- * been done, and an adapter that returned `{ status: 'rejected' }` in the
- * meantime would let a router report a fill that never happened.
- */
-const NOT_BUILT =
-  'the signed REST path for this venue is NOT BUILT. Public market data is live; ' +
-  'order placement, cancellation and account state are not. This call is refused rather than ' +
-  'simulated — a fabricated order status is worse than an outage (§27).';
-
-export class BinanceSpotTrade implements TradeAdapter {
-  readonly venue = VENUE;
-  readonly #credentials: VenueCredentials | null;
-
-  /** Credentials are validated at CONSTRUCTION — a withdrawal-capable key is refused before it is stored. */
-  constructor(credentials: VenueCredentials | null = null) {
-    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
-    this.#credentials = credentials;
-  }
-
-  async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `placeOrder(${request.clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async cancelOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'cancelOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `cancelOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async fetchOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'fetchOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `fetchOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async openOrders(): Promise<VenueOrder[]> {
-    requireCredentials(VENUE.id, 'openOrders', this.#credentials);
-    // Deliberately NOT `[]`. An empty array is indistinguishable from "no open
-    // orders", and a risk check that read it that way would conclude we are flat.
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `openOrders: ${NOT_BUILT}`);
-  }
-}
+const ACCOUNT_NOT_BUILT =
+  'account / listen-key user-data stream for this venue is NOT BUILT. ' +
+  'Order place/cancel/fetch/openOrders use signed REST. This call is refused rather than simulated (§27).';
 
 export class BinanceSpotAccount implements AccountAdapter {
   readonly venue = VENUE;
@@ -433,17 +383,17 @@ export class BinanceSpotAccount implements AccountAdapter {
 
   async balances(): Promise<never> {
     requireCredentials(VENUE.id, 'balances', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${NOT_BUILT}`);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${ACCOUNT_NOT_BUILT}`);
   }
 
   async positions(): Promise<never> {
     requireCredentials(VENUE.id, 'positions', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${NOT_BUILT}`);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${ACCOUNT_NOT_BUILT}`);
   }
 
   async transferRails(): Promise<never> {
     requireCredentials(VENUE.id, 'transferRails', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${NOT_BUILT}`);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${ACCOUNT_NOT_BUILT}`);
   }
 }
 
