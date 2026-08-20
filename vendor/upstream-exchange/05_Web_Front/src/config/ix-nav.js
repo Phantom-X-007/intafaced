@@ -53,4 +53,9 @@ export const PAY_NAV = [
     { to: '/pay/checkout', labelKey: 'intafaced.pay.nav.checkout', procedures: 'resolveLink · checkout.*' }
 ];
 
-export default { BANK_NAV: BANK_NAV, PAY_NAV: PAY_NAV };
+export const MARKET_NAV = [
+    { to: '/market', labelKey: 'intafaced.market.nav.catalogue', procedures: 'commerceProgramme · listings · purchase' },
+    { to: '/market/mine', labelKey: 'intafaced.market.nav.mine', procedures: 'mine · myListings · myPurchases · applyAsVendor' }
+];
+
+export default { BANK_NAV: BANK_NAV, PAY_NAV: PAY_NAV, MARKET_NAV: MARKET_NAV };
