@@ -45,7 +45,7 @@ A tracker row is **IMPLEMENTABLE** when **all** hold:
 2. Spec at `docs/ops/trk/<id>.md`, **≥100 lines**, code-grounded
 3. If `id` matches `/^(trade|pay|bank|venue|p2p|market)\./`, it is on the **OPEN_MONEY allowlist** in `tooling/scripts/swarm.mjs` (not every money id)
 
-Implementable rows enter **freeProduct** under normal Class N: path-disjoint, width **3–6**, worktrees, claim files.
+Implementable rows enter **freeProduct** under normal Class N: path-disjoint, isolated worktrees, and claim files. Any width shown below is a capacity heuristic, never a cap or readiness gate.
 
 **`residual-own` on a TRK claim** means “spec done, awaiting implement.” It **MUST NOT** hide implementable rows from the free board. Only **`claimed` | `pr-open` | `done`/`merged`/`retired` | money-gated | dep-blocked** hide them.
 
@@ -120,7 +120,7 @@ When the primary board finish is met but the session continues (AFK / “never s
 - Any ship must still be P1–P5 with a real **Board-Delta** (or code). Metric: value-gate (L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`).
 - **Report format every cycle:** `P1 N clear / M landed this cycle · P2 <changes> · P3 <thin count> · tip <sha>`
 
-**Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not stamp clones.
+**Spawn width (heuristic):** use available capacity for path-disjoint, high-leverage writers when `freeProduct>0`; the historical 6–8 figure is a planning target, never a cap or reason to delay work. When `freeProduct=0`, continue **P1–P3** only when they are substantive and path-clear; the 3–6 figure is also a planning heuristic, not a mandate.
 
 ### AFK PR law (mandatory)
 

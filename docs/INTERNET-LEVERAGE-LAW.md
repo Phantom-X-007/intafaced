@@ -29,6 +29,10 @@ Agents must **wire and extend those**, not invent a second shell, second money b
 
 **Not “platform complete”** — residual craft remains. **Sufficient leverage for residual craft without rebuild** = yes.
 
+### 1.1 · Narrow greenfield exception
+
+Phase A is the default, not a prohibition on justified new work. A greenfield or design exception is lawful only when the agent proves in the focused audit and PR body that the existing Phase A asset cannot satisfy the required behavior, names the smallest new boundary, preserves money/custody/product-law doctrine, and obtains any required LAW, Class X, or owner decision before implementation. “I prefer a new stack” is not evidence.
+
 ---
 
 ## 2 · Mandatory pre-code ritual (every agent · every code task)

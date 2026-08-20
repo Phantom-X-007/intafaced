@@ -66,6 +66,8 @@ Status for humans: [`docs/START-HERE.md`](docs/START-HERE.md). Tip is never in t
 
 **Auto-load.** Home: [`docs/COORDINATION-TRUTH-LAYERS.md`](docs/COORDINATION-TRUTH-LAYERS.md). Product map = tracker. Next = `pnpm swarm:next` only when the Done-bar is a mountain close, not leftover land. No PR cap. No extra Approves.
 
+Dated campaign boards are sequence/history aids, not live product queues; their completion or babysit labels never override the current tracker, GitHub tip/open PRs, claims, or ledger.
+
 ## Check where you are
 
 ```bash
