@@ -3,6 +3,8 @@ import { formatAmount } from '@intafaced/ledger-client/money';
 import { VenueCredentialScopeError, VenueCredentialsMissingError } from '@intafaced/venue-contracts';
 import { createVenueAccountAdapter } from './factory-account.js';
 import { BinanceSpotAccount } from './binance-spot-account.js';
+import { BybitSpotAccount } from './bybit-spot-account.js';
+import { OkxSpotAccount } from './okx-spot-account.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
 class FakeHttp implements HttpPort {
@@ -17,13 +19,13 @@ class FakeHttp implements HttpPort {
 const KEYS = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
 
 describe('createVenueAccountAdapter', () => {
-  it('builds binance-spot from its id and refuses everything else', () => {
+  it('builds all three spot account adapters from their ids', () => {
     expect(createVenueAccountAdapter('binance-spot', KEYS)).toBeInstanceOf(BinanceSpotAccount);
+    expect(createVenueAccountAdapter('bybit-spot', KEYS)).toBeInstanceOf(BybitSpotAccount);
+    expect(createVenueAccountAdapter('okx-spot', { ...KEYS, venueId: 'okx-spot', passphrase: 'p' })).toBeInstanceOf(OkxSpotAccount);
     expect(createVenueAccountAdapter('  BINANCE-SPOT  ', KEYS)!.venue.id).toBe('binance-spot');
     expect(createVenueAccountAdapter('')).toBeNull();
     expect(createVenueAccountAdapter('off')).toBeNull();
-    expect(createVenueAccountAdapter('bybit-spot', KEYS)).toBeNull();
-    expect(createVenueAccountAdapter('okx-spot', KEYS)).toBeNull();
     expect(createVenueAccountAdapter('not-a-venue', KEYS)).toBeNull();
   });
 
