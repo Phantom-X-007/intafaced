@@ -10,13 +10,13 @@
 
 <!-- tracker:start -->
 
-`████████████████░░░░` **80%** — 127 of 158 features shipped
+`████████████████░░░░` **81%** — 128 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 39/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 40/59 · **5P** 4/7
 
 **In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
 
-**🟢 19 ready to claim** — nothing blocks these:
+**🟢 18 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `web.mobile-apps` — Native mobile apps — iOS and Android, own name, zero attribution (§25:727)
@@ -26,7 +26,7 @@ Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 14/15 �
 - `launch.rwa` — RWA issuance registry, licence-gated
 - `launch.treasury-yield` — Tokenized T-bill vaults — stable balances opt into RWA yield (§36)
 - `mining.pool` — Stratum share protocol, PPLNS payouts
-- …and 11 more
+- …and 10 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

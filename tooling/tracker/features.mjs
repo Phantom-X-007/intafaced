@@ -1828,8 +1828,18 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.portfolio'],
-    note: 'Law §8.2:388 ("v2: Portfolio (auto-rebalance in guardrails)") and §25:732, gap-closed 2026-08-08. §8.2 names TEN agents; the board carried five plus the gateway (audit §A1.a #12), and this is one of the five with no row. Blocked on ops.portfolio: rebalancing means comparing a held position against a target allocation, and the portfolio view that would supply "held" does not exist yet. agents.gateway is `done`, so the fleet runtime, guardrail schema and `agent_actions` audit log this rides are real rather than assumed. CLASS M THE MOMENT IT MOVES: an agent that rebalances is placing orders with user money, so §8.2\'s Agentic Law is not decoration — every action to `agent_actions` plus a user-visible log, execution strictly inside user guardrails, and a kill-switch the user can see. NOT DECIDED: whether rebalancing may cross the plane boundary. Selling a custodial holding to fund a sovereign one is a bridge movement, not a trade, and it follows `docs/adr/2026-08-04-cross-plane-bridge-accounting.md` — not this row\'s assumption.',
+    requires: [
+      'services/svc-agents/src/portfolio-agent/mount-vs-tracker.ts',
+      'services/svc-agents/src/portfolio-agent/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/portfolio-agent/plan.test.ts',
+    ],
+    note:
+      '**D26-P1-PF1 Done 2026-08-21:** plan-only rebalance mounted (`mount-vs-tracker.ts`); dark port refuses. ' +
+      'Never places orders in this slice. Kill-switch + audit on plan path. ' +
+      'Class X residual: execution slice; cross-plane bridge owner ruling.',
   }),
   f('agents.launch', 'Launch Agent — pre-listing risk pattern flags (§8.2)', {
     module: 'agents',
