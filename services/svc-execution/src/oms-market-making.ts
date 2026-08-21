@@ -77,10 +77,10 @@ function parseKill(kill: OmsMmKillInput): MmKillConfig {
   };
 }
 
-function wireQuoteResult(result: QuoteExternalMmResult): QuoteExternalMmResult | Record<string, unknown> {
+function wireQuoteResult(result: QuoteExternalMmResult) {
   if (!result.ok) return result;
   return {
-    ok: true,
+    ok: true as const,
     symbol: result.symbol,
     venueId: result.venueId,
     kind: result.kind,
@@ -103,10 +103,10 @@ function wireQuoteResult(result: QuoteExternalMmResult): QuoteExternalMmResult |
   };
 }
 
-function wireHedgeResult(result: PlanExternalMmHedgeResult): PlanExternalMmHedgeResult | Record<string, unknown> {
+function wireHedgeResult(result: PlanExternalMmHedgeResult) {
   if (!result.ok) return result;
   return {
-    ok: true,
+    ok: true as const,
     symbol: result.symbol,
     quoteVenueId: result.quoteVenueId,
     hedgeVenueId: result.hedgeVenueId,
