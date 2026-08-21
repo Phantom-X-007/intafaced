@@ -17,6 +17,7 @@ import {
   type PostRequest,
 } from '@intafaced/ledger-client';
 import { PayService, PayError, type PaymentView } from './payment-service.js';
+import { REFERENCE_RAIL_ROUTING_PROFILES, type RailRoutingProfile } from './routing/decide.js';
 import { memoryPayoutDestinations } from './merchant-payout-destination.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter, SANDBOX_DECLINE_TOKEN } from './rails/card-sandbox.js';
@@ -24,6 +25,16 @@ import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { BankPayoutAbsentAdapter } from './rails/bank-payout.js';
 import { MemoryChain } from './rails/chain-port.js';
 import { signPayload } from './rails/webhook-signature.js';
+
+/** Test-only operator-declared fractions — never baked into REFERENCE profiles. */
+function withDeclaredRates(profiles: readonly RailRoutingProfile[]): RailRoutingProfile[] {
+  return profiles.map((p) => ({
+    ...p,
+    successRate: p.railId === 'card-sandbox' ? '0.88' : '0.91',
+  }));
+}
+
+const TEST_ROUTING_PROFILES = withDeclaredRates(REFERENCE_RAIL_ROUTING_PROFILES);
 
 /**
  * svc-pay money paths.
@@ -134,7 +145,11 @@ if (!available) {
     crypto = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
     rails = new RailRegistry([card, crypto, new BankPayoutAbsentAdapter()]);
     dests = memoryPayoutDestinations();
-    pay = new PayService(sql, ledger, rails, { checkoutRiskBand: 'low', payoutDestinations: dests });
+    pay = new PayService(sql, ledger, rails, {
+      checkoutRiskBand: 'low',
+      payoutDestinations: dests,
+      routingProfiles: TEST_ROUTING_PROFILES,
+    });
   });
 
   afterAll(async () => {
@@ -2327,7 +2342,11 @@ if (!available) {
 
     it('puts a floor under an anonymous caller opening sessions off one URL', async () => {
       const { link } = await linked({ amount: '1', currency: 'USDT' });
-      const bounded = new PayService(sql, ledger, rails, { maxOpenSessionsPerLink: 2, checkoutRiskBand: 'low' });
+      const bounded = new PayService(sql, ledger, rails, {
+        maxOpenSessionsPerLink: 2,
+        checkoutRiskBand: 'low',
+        routingProfiles: TEST_ROUTING_PROFILES,
+      });
 
       await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
       await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
@@ -2512,6 +2531,7 @@ if (!available) {
         publicCheckoutMovement: 'allow-sandbox',
         checkoutRails: [{ railId: 'crypto-native', method: 'crypto' }],
         checkoutRiskBand: 'low',
+        routingProfiles: TEST_ROUTING_PROFILES,
       });
       const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
       const createArgs = {
