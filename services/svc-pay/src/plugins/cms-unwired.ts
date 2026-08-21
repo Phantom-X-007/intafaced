@@ -53,3 +53,40 @@ export function refuseAllCmsPlugins(): readonly CmsPluginRefuse[] {
 export function cmsPluginsShipped(): boolean {
   return true;
 }
+
+export type CmsPluginShipped = {
+  readonly status: 'shipped';
+  readonly family: typeof SHIPPED_CMS_PLUGIN_FAMILY;
+  readonly shipped: true;
+  readonly phpTree: true;
+};
+
+export type CmsPluginStatus = {
+  readonly socket: typeof CMS_PLUGIN_SOCKET;
+  readonly code: typeof PAY_PLUGIN_CMS_UNWIRED;
+  readonly shippedFamily: typeof SHIPPED_CMS_PLUGIN_FAMILY;
+  readonly cmsPluginsShipped: boolean;
+  readonly families: readonly CmsPluginFamily[];
+  readonly unwiredFamilies: readonly UnwiredCmsPluginFamily[];
+  readonly shipped: CmsPluginShipped;
+  readonly refuse: readonly CmsPluginRefuse[];
+};
+
+/** Public door for pay.plugins.cmsStatus — Woo shipped, Magento/OpenCart refused. */
+export function getCmsPluginStatus(): CmsPluginStatus {
+  return {
+    socket: CMS_PLUGIN_SOCKET,
+    code: PAY_PLUGIN_CMS_UNWIRED,
+    shippedFamily: SHIPPED_CMS_PLUGIN_FAMILY,
+    cmsPluginsShipped: cmsPluginsShipped(),
+    families: CMS_PLUGIN_FAMILIES,
+    unwiredFamilies: UNWIRED_CMS_PLUGIN_FAMILIES,
+    shipped: {
+      status: 'shipped',
+      family: SHIPPED_CMS_PLUGIN_FAMILY,
+      shipped: true,
+      phpTree: true,
+    },
+    refuse: refuseAllCmsPlugins(),
+  };
+}

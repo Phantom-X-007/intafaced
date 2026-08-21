@@ -25,6 +25,15 @@ import {
 import { evaluateFraud } from './fraud/evaluate.js';
 import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
 import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
+import { describeCmsPluginStatus } from './plugins/cms-status.js';
+import {
+  CMS_PLUGIN_FAMILIES,
+  CMS_PLUGIN_SOCKET,
+  getCmsPluginStatus,
+  PAY_PLUGIN_CMS_UNWIRED,
+  SHIPPED_CMS_PLUGIN_FAMILY,
+  UNWIRED_CMS_PLUGIN_FAMILIES,
+} from './plugins/cms-unwired.js';
 import { PAY_PUBLIC_API_BASE } from './plugins/reference-client.js';
 
 /**
@@ -1197,6 +1206,39 @@ export function createPayRouter(
       publicBase: publicProcedure.output(z.object({ base: z.string() })).query(() => ({
         base: PAY_PUBLIC_API_BASE,
       })),
+
+      cmsStatus: publicProcedure
+        .output(
+          z.object({
+            socket: z.string(),
+            shipped: z.boolean(),
+            shippedFamily: z.literal('woocommerce'),
+            unwiredFamilies: z.array(z.enum(['magento', 'opencart'])),
+            families: z.array(
+              z.union([
+                z.object({
+                  family: z.literal('woocommerce'),
+                  shipped: z.literal(true),
+                  refuse: z.null(),
+                }),
+                z.object({
+                  family: z.enum(['magento', 'opencart']),
+                  shipped: z.literal(false),
+                  refuse: z.object({
+                    status: z.literal('refuse'),
+                    code: z.literal('pay.plugin_cms_unwired'),
+                    socket: z.string(),
+                    family: z.enum(['magento', 'opencart']),
+                    shipped: z.literal(false),
+                    phpTree: z.literal(false),
+                    message: z.string(),
+                  }),
+                }),
+              ]),
+            ),
+          }),
+        )
+        .query(() => describeCmsPluginStatus()),
     }),
 
     /**
