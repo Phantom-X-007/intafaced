@@ -13,6 +13,8 @@
  *     waits, because getting banned mid-execution is an outage we caused.
  *   · `latency.ts` — continuous grading on round-trip, rejects and staleness,
  *     wired into routing through `VenueHealth` and nothing else.
+ *   · `latency-policy.ts` — connect.latency-grading honesty door (D-S-18).
+ *     Measurement not estimate; thresholds owner-unruled.
  *   · `cross-check.ts` — a median across venues, so a venue that is fresh,
  *     sequenced and simply WRONG is caught by the only thing that can catch it.
  *   · `payout-grade.ts` — absolute notional floor for a two-sided book. Dust
