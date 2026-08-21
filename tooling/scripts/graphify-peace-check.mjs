@@ -95,7 +95,7 @@ if (!existsSync(GRAPH)) {
       }).stdout.trim();
       const nBehind = Number(behind);
       if (Number.isFinite(nBehind) && nBehind > 50) {
-        warn(`graph is ${nBehind} commits behind origin/main — run graphify update .`);
+        fail(`graph is ${nBehind} commits behind origin/main — run graphify update .`);
       } else {
         ok(`graph commit ${String(built).slice(0, 8)} vs tip (${nBehind || 0} behind)`);
       }

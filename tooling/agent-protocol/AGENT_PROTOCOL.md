@@ -11,6 +11,7 @@
 3. Read this file.
 4. Multi-dev: read `docs/COORDINATION-TRUTH-LAYERS.md` (or the coordination section in `AGENTS.md`). Auto-load on cold start — **full access**, no human permission gate.
 5. Internet leverage: read `docs/INTERNET-LEVERAGE-LAW.md` before product code. Prefer Phase A in-repo assets (shell, ledger, `svc-*`).
+6. If `graphify-out/graph.json` exists: first code-location move is `graphify query "<mountain>" --budget 1500`, then open the one file you will edit. Do not grep `services/` to find a symbol.
 
 **Full access:** any agent may start any product path when deps are met. **Merge when done — never wait for CI green or verify.** Path-intersect open PRs is optional courtesy, not permission.
 
