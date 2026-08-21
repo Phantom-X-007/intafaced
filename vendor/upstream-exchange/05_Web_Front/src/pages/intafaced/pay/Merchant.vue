@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.merchantPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.merchantPage.lead') }}</p>
-      <div class="ix-source">svc-pay · merchant.me · merchant.create · merchant.submitKyb · merchant.decideKybStub · merchant.profile · merchant.balances</div>
+      <div class="ix-source">svc-pay · merchant.me · merchant.create · merchant.submitKyb · merchant.decideKybStub · merchant.profile · merchant.balances · merchant.setPayoutDestination</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -189,6 +189,54 @@
           <IxState v-else :loading="profile.busy" :reason="profile.reason" :message="profile.message" endpoint="/api/pay/trpc/merchant.profile"></IxState>
         </div>
       </div>
+
+      <!-- ── where later payouts should land (shape checked by svc-pay) ──── -->
+      <div class="ix-card">
+        <div class="ix-card-head">
+          <h2>{{ $t('intafaced.pay.merchant.payoutDestTitle') }}</h2>
+          <span class="ix-sub">merchant.setPayoutDestination</span>
+        </div>
+        <p class="ix-lead">{{ $t('intafaced.pay.merchant.payoutDestLead') }}</p>
+        <div class="ix-field-grid">
+          <div class="ix-field">
+            <label for="ix-pd-rail">{{ $t('intafaced.pay.merchant.payoutDestRail') }}</label>
+            <Input element-id="ix-pd-rail" v-model="destForm.railId" :placeholder="$t('intafaced.pay.merchant.payoutDestRailHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label for="ix-pd-kind">{{ $t('intafaced.pay.merchant.payoutDestKind') }}</label>
+            <Input element-id="ix-pd-kind" v-model="destForm.kind" :placeholder="$t('intafaced.pay.merchant.payoutDestKindHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label for="ix-pd-ref">{{ $t('intafaced.pay.merchant.payoutDestRef') }}</label>
+            <Input element-id="ix-pd-ref" v-model="destForm.ref" :placeholder="$t('intafaced.pay.merchant.payoutDestRefHint')"></Input>
+          </div>
+        </div>
+        <div class="ix-actions">
+          <Button type="primary" :loading="dest.busy" :disabled="!canSaveDest" @click="submitPayoutDest">
+            {{ $t('intafaced.pay.merchant.payoutDestSave') }}
+          </Button>
+        </div>
+        <div v-if="dest.ran" style="margin-top:14px;">
+          <div v-if="dest.reason === 'ok'" class="ix-done">
+            <strong>{{ $t('intafaced.pay.merchant.payoutDestSaved') }}</strong>
+            <div class="ix-kv" style="margin-top:6px;">
+              <div class="ix-kv-item">
+                <span class="k">{{ $t('intafaced.pay.merchant.payoutDestRail') }}</span>
+                <span class="v">{{ dest.data.railId }}</span>
+              </div>
+              <div class="ix-kv-item">
+                <span class="k">{{ $t('intafaced.pay.merchant.payoutDestKind') }}</span>
+                <span class="v">{{ dest.data.kind }}</span>
+              </div>
+              <div class="ix-kv-item">
+                <span class="k">{{ $t('intafaced.pay.merchant.payoutDestRef') }}</span>
+                <span class="v" style="font-size:13px;">{{ dest.data.ref }}</span>
+              </div>
+            </div>
+          </div>
+          <IxState v-else :loading="dest.busy" :reason="dest.reason" :message="dest.message" endpoint="/api/pay/trpc/merchant.setPayoutDestination"></IxState>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -223,6 +271,11 @@
  * as a JSON number — so it is the one field here that is parsed. No amount on
  * this screen is: `clearing` and `available` are decimal strings from the
  * ledger and are printed as they arrived.
+ *
+ * ── PAYOUT DESTINATION DOES NOT MOVE VALUE ────────────────────────────────
+ * `merchant.setPayoutDestination` stores kind+ref for a later settlement
+ * payout. svc-pay asserts IBAN / IFSC / EVM. This form does not ship sample
+ * refs, and does not post a hold.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -241,12 +294,14 @@ export default {
       kybRef: '',
       balanceAsset: 'USDT',
       domains: '',
+      destForm: { railId: '', kind: '', ref: '' },
       merchant: this.emptySection(),
       balances: this.emptySection(),
       created: this.emptyAction(),
       kyb: this.emptyAction(),
       decided: this.emptyAction(),
-      profile: this.emptyAction()
+      profile: this.emptyAction(),
+      dest: this.emptyAction()
     };
   },
   computed: {
@@ -261,6 +316,14 @@ export default {
         .split(',')
         .map(function(d) { return d.trim(); })
         .filter(function(d) { return d.length > 0; });
+    },
+    canSaveDest() {
+      return Boolean(
+        this.merchantId &&
+        this.destForm.railId.trim() &&
+        this.destForm.kind.trim() &&
+        this.destForm.ref.trim()
+      );
     }
   },
   created() {
@@ -324,6 +387,18 @@ export default {
     submitProfile() {
       if (!this.merchantId || !this.domainList.length) return;
       this.act('profile', mutate('pay', 'merchant.profile', { merchantId: this.merchantId, domains: this.domainList }, this.ixToken));
+    },
+    submitPayoutDest() {
+      if (!this.canSaveDest) return;
+      this.act(
+        'dest',
+        mutate('pay', 'merchant.setPayoutDestination', {
+          merchantId: this.merchantId,
+          railId: this.destForm.railId.trim(),
+          kind: this.destForm.kind.trim(),
+          ref: this.destForm.ref.trim()
+        }, this.ixToken)
+      );
     }
   }
 };

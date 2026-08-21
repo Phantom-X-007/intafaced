@@ -813,6 +813,19 @@ module.exports = {
                 profileLead: "The domains your hosted checkout may be embedded on. Checkout configuration and fee routing are free-form on the wire and are not collected here — a raw JSON box on a fee-routing field is a way to post a typo into money movement."
             },
 
+            merchant: {
+                payoutDestTitle: "Payout destination",
+                payoutDestLead: "Where later settlement payouts should land. svc-pay checks the reference shape; this screen does not move value and does not invent an example.",
+                payoutDestRail: "Rail",
+                payoutDestRailHint: "The rail id svc-pay will pay out over",
+                payoutDestKind: "Kind",
+                payoutDestKindHint: "bank or crypto — typed, then checked by the service",
+                payoutDestRef: "Reference",
+                payoutDestRefHint: "The destination the rail can actually pay",
+                payoutDestSave: "Save destination",
+                payoutDestSaved: "Destination saved"
+            },
+
             /* The payfac surface: the sub-merchant tree, and the permission
                journal over it. Two screens because svc-pay puts them behind two
                routers with two authorization questions — "can you reach this
