@@ -84,7 +84,7 @@ export type ScannerSignalInputsGateRefuseReason =
 export type ScannerSignalInputsGateRefuse = {
   readonly status: 'refuse';
   readonly reason: ScannerSignalInputsGateRefuseReason;
-  readonly userMessageKey: 'agents.scanner.tier_closed';
+  readonly userMessageKey: 'agents.scanner.signal_inputs_closed';
   readonly residual: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
   readonly boardId: typeof P0_11_BOARD_ID;
 };
@@ -101,7 +101,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
     return {
       status: 'refuse',
       reason: 'signal_inputs_law_blank',
-      userMessageKey: 'agents.scanner.tier_closed',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
       boardId: P0_11_BOARD_ID,
     };
@@ -111,7 +111,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
     return {
       status: 'refuse',
       reason: 'inputs_empty',
-      userMessageKey: 'agents.scanner.tier_closed',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
       boardId: P0_11_BOARD_ID,
     };
@@ -121,7 +121,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
     return {
       status: 'refuse',
       reason: 'ranking_recipe_unknown',
-      userMessageKey: 'agents.scanner.tier_closed',
+      userMessageKey: 'agents.scanner.signal_inputs_closed',
       residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
       boardId: P0_11_BOARD_ID,
     };
@@ -133,7 +133,7 @@ export function scannerSignalInputsGate(law: ScannerSignalInputsLaw | null | und
       return {
         status: 'refuse',
         reason: 'required_inputs_missing',
-        userMessageKey: 'agents.scanner.tier_closed',
+        userMessageKey: 'agents.scanner.signal_inputs_closed',
         residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
         boardId: P0_11_BOARD_ID,
       };
