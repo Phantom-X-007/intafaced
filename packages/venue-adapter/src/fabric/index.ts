@@ -39,6 +39,7 @@ export * from './sequenced-book.js';
 export * from './book-feed.js';
 export * from './rate-limit.js';
 export * from './latency.js';
+export * from './latency-policy.js';
 export * from './cross-check.js';
 export * from './payout-grade.js';
 export * from './capture-lake.js';
