@@ -364,21 +364,20 @@ export const FEATURES = [
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'token.staking'],
-    requires: ['services/svc-trade/src/otc'],
+    requires: [
+      'services/svc-trade/src/otc/mount-vs-tracker.ts',
+      'services/svc-trade/src/otc/mount-vs-tracker.test.ts',
+      'services/svc-trade/src/otc/otc-rfq-settle-donebar.test.ts',
+      'services/svc-trade/src/otc/otc-mount.reachable.test.ts',
+      'services/svc-trade/src/otc/otc-policy.ts',
+    ],
     note:
-      'WIP residual (not umbrella-done) — D26-P4-09 2026-08-15: T2 RFQ/stake/settle LANDED #1686; durable quotes #1814; mid-feed #1812. ' +
-      'RFQ→stake→fail-closed quote (mid asOf + owner maxMidAgeSeconds)→ledger settle. ' +
-      'Stage #1000 + #1097: RFQ refuse-closed blank §8; accept binds quoted price (no last look); caller mid removed; settle via marketMakerMakerFill. ' +
-      'requires narrowed to src/otc (W4) so a future claim cannot whole-lock svc-trade via this row alone. ' +
-      '2026-08-12 maker-routing seal: deskStatus.makerRouting + planOtcSettle refuse name socket.otc-maker-routing (platform principal settle remains real). ' +
-      '2026-08-14: socket.otc-mid-feed closed — venue observation source (TRADE_OTC_MID_FROM_VENUE, default OFF) refreshes asOf; boot TRADE_OTC_MIDS is not a live feed and is not mixed in when venue is on. ' +
-      '2026-08-14: TRADE_VENUE_MARK_STREAM ON → same MaintainedBook port as marks/MM; desynced withholds; snapshot poll when stream off. ' +
-      '2026-08-14: durable quotes table — otc_desk_quotes + OtcQuoteStore; accept/settle survive process restart; numbers are the quoted ones, never a new mid. ' +
-      'Residual OWNER: §8 spreads/stake/maxMidAgeSeconds numbers, maker-routing recipe close. ' +
-      'copy/algo released 2026-08-08 (not Nitro-owned). connect.venue-vault remains @shehzad002 key custody (socket; no module→svc-trade invent after W4 A0).',
+      '**D26-P1-T2 Done 2026-08-21:** RFQ→stake→fail-closed quote→ledger settle (`mount-vs-tracker.ts`); durable quotes + venue mid feed. ' +
+      'Accept binds quoted price; caller mid refused; platform-principal settle via ledger-client only. ' +
+      'Class X residual: owner §8 desk-law numbers; socket.otc-maker-routing; connect.venue-vault custody.',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
     module: 'trade',
