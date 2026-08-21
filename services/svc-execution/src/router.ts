@@ -40,6 +40,7 @@ function isRefusal(value: TenantDescribe | TenantRefusal): value is TenantRefusa
 }
 
 const decimalString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive decimal strings');
+const signedDecimalString = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'amounts are signed decimal strings');
 
 const latencyGradeInput = z.object({
   venueId: z.string().min(1),
@@ -107,13 +108,15 @@ const omsArbScanInput = z.object({
   maxQuoteAgeMs: z.number().int().nonnegative().nullable(),
 });
 
+const omsMmInventoryInput = z.object({
+  position: signedDecimalString,
+  minPosition: signedDecimalString,
+  maxPosition: signedDecimalString,
+});
+
 const omsMmKillInput = z.object({
   adminKill: z.boolean(),
-  inventory: z.object({
-    position: decimalString,
-    minPosition: decimalString,
-    maxPosition: decimalString,
-  }),
+  inventory: omsMmInventoryInput,
   volatility: z.object({
     realizedVolBps: z.number().int().nullable(),
     maxVolBps: z.number().int(),
@@ -142,7 +145,7 @@ const omsMmQuoteInput = z.object({
 const omsMmHedgeInput = z.object({
   symbol: z.string().min(1).max(64),
   quoteVenueId: z.string().min(1).max(128),
-  inventory: omsMmKillInput.shape.inventory,
+  inventory: omsMmInventoryInput,
   kill: omsMmKillInput,
   hedge: z.object({
     venueId: z.string().min(1).max(128),
