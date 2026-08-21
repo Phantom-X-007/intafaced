@@ -1044,12 +1044,10 @@ export class TokenService {
    *   *out* of the rewards engine (fee-funded value already ours); `mintEmission`
    *   would print supply; `sweepFeesToRewards` drains module fees already used
    *   by yield. `toRewards` is the remainder of the split, not a second credit.
-   * - Settling without those legs would write `tokensBought` / `toRewards` as
-   *   DB-only figures while the engine dropped by `toBurn` (or, with a zero
-   *   burn split, moved nothing). A settled row must mean the ledger moved
-   *   `tokensBought` (buy into engine + burn `toBurn`). Until a buyback recipe
-   *   exists, a new or pending run is refused `token.buyback_tokens_unmoved`
-   *   and the claim is released so the window is not held hostage.
+   * - A settled row must mean this run posted recipes whose engineΔ + burnΔ
+   *   equals `tokensBought`. No such recipe exists in `packages/ledger-client`,
+   *   so a new or pending run is refused `token.buyback_tokens_unmoved`.
+   *   Coincidental global balance movement is not a settle (paper-settle).
    * - There is no caller: no cron, no bus subscriber, no admin form. An
    *   operator with admin:treasury + MFA invokes the mutation or it never runs.
    * - `buybackBudget()` (economics/buyback.ts) is what would size the spend from
@@ -1135,53 +1133,36 @@ export class TokenService {
       return { runId: claimed.id, burned: claimed.burned, toRewards: claimed.toRewards };
     }
 
-    // ── BOOK OR REFUSE ───────────────────────────────────────────────────────
-    // A settled buyback must move `tokensBought` on the ledger: buy that many
-    // into the rewards engine, then burn `toBurn` from it, so
-    // engineΔ + burnΔ === tokensBought. Today no existing recipe books the
-    // buy-in (`burn` only moves `toBurn` out of fee-funded engine balance;
-    // `mintEmission` would print supply; `sweepFeesToRewards` drains yield's
-    // fees). Do not post a fee-funded burn. Measure, then refuse unless the
-    // book actually moved the operator figure. A future buyback recipe posts
-    // between the two snapshots; this check is what lets that run settle.
-    const engineBefore = (await this.ledger.balance(rewardsEngine(this.assetId))).amount;
-    const burnBefore = (await this.ledger.balance(burnAccount(this.assetId))).amount;
-
-    const engineDelta = (await this.ledger.balance(rewardsEngine(this.assetId))).amount - engineBefore;
-    const burnDelta = (await this.ledger.balance(burnAccount(this.assetId))).amount - burnBefore;
-    if (engineDelta + burnDelta !== input.tokensBought) {
-      return this.refuseUnbookedBuyback(claimed.id, input.runId, input.tokensBought);
-    }
-
-    await this.sql`
-      UPDATE token.buyback_runs
-         SET status = 'settled', executed_at = now()
-       WHERE id = ${claimed.id} AND status = 'pending'
-    `;
-
-    await this.bus.publish(
-      'buybackExecuted',
-      {
-        runId: input.runId,
-        tokensBought: formatAmount(input.tokensBought),
-        tokensBurned: formatAmount(toBurn),
-        tokensToRewards: formatAmount(toRewards),
-        revenueWindow: { from: iso(input.revenueWindow.from), to: iso(input.revenueWindow.to) },
-      },
-      { idempotencyKey: `token.buyback:${input.runId}` },
-    );
-
-    return { runId: input.runId, burned: toBurn, toRewards };
+    // ── REFUSE ───────────────────────────────────────────────────────────────
+    // No existing recipe books tokensBought onto the ledger. Do not post
+    // `burn(toBurn)` from the fee-funded engine (that is not a buy). Do not
+    // settle because two consecutive `balance` reads happened to sum to the
+    // operator figure (paper-settle — a concurrent yield/mint/burn can mint a
+    // `buybackExecuted` this run never posted). A future buyback recipe posts
+    // here, then settles only against *this run's* posted keys.
+    return this.refuseUnbookedBuyback(claimed.id, input.runId, input.tokensBought, { fresh: claimed.fresh });
   }
 
   /**
-   * Pending claim, no market-buy on the book. Release the window unless an
-   * irreversible burn for this runId already landed (crash between the old
-   * fee-funded post and settle) — deleting that claim would hide the burn.
+   * Pending claim, no market-buy on the book.
+   *
+   * A fresh insert from this call posted nothing — release so the window is
+   * not held hostage. A retry of an older pending row may sit on top of a
+   * landed `token.burn:` from the pre-refuse path; deleting that claim would
+   * hide the burn. Live HTTP `getTxByKey` throws (S2S has no such door) — that
+   * must stay `token.buyback_tokens_unmoved`, never a 500, and unknown ≠ absent.
    */
-  private async refuseUnbookedBuyback(claimedId: string, runId: string, tokensBought: Amount): Promise<never> {
-    const burnTx = await this.ledger.getTxByKey(`token.burn:${this.assetId}:${runId}`);
-    if (!burnTx) {
+  private async refuseUnbookedBuyback(claimedId: string, runId: string, tokensBought: Amount, opts: { fresh: boolean }): Promise<never> {
+    let burnKnownAbsent = opts.fresh;
+    if (!burnKnownAbsent) {
+      try {
+        const burnTx = await this.ledger.getTxByKey(`token.burn:${this.assetId}:${runId}`);
+        burnKnownAbsent = burnTx === null;
+      } catch {
+        burnKnownAbsent = false;
+      }
+    }
+    if (burnKnownAbsent) {
       await this.sql`
         DELETE FROM token.buyback_runs WHERE id = ${claimedId} AND status = 'pending'
       `;
@@ -1213,7 +1194,7 @@ export class TokenService {
     tokensBought: Amount;
     toBurn: Amount;
     toRewards: Amount;
-  }): Promise<{ id: string; status: BuybackRunStatus; burned: Amount; toRewards: Amount }> {
+  }): Promise<{ id: string; status: BuybackRunStatus; burned: Amount; toRewards: Amount; fresh: boolean }> {
     type Row = {
       id: string;
       revenue_window_from: Date;
@@ -1225,11 +1206,12 @@ export class TokenService {
     };
     type Held = { id: string; revenue_window_from: Date; revenue_window_to: Date; status: BuybackRunStatus };
 
-    const mapRow = (row: Row) => ({
+    const mapRow = (row: Row, fresh: boolean) => ({
       id: row.id,
       status: row.status,
       burned: parseAmount(row.tokens_burned),
       toRewards: parseAmount(row.tokens_to_rewards),
+      fresh,
     });
 
     try {
@@ -1269,7 +1251,7 @@ export class TokenService {
           `;
 
           const row = inserted[0];
-          if (row) return mapRow(row);
+          if (row) return mapRow(row, true);
 
           const rows = await tx<Row[]>`
             SELECT id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
@@ -1294,7 +1276,7 @@ export class TokenService {
             );
           }
 
-          return mapRow(existing);
+          return mapRow(existing, false);
         },
         { isolation: 'read committed' },
       );

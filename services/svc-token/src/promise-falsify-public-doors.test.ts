@@ -35,7 +35,16 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
-import { MemoryLedger, formatAmount, houseFees, parseAmount as amt, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
+import {
+  MemoryLedger,
+  formatAmount,
+  houseFees,
+  parseAmount as amt,
+  recipes,
+  rewardsEngine,
+  userAvailable,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { registerInternalEmissions } from './internal-emissions.js';
@@ -777,6 +786,55 @@ if (!available) {
       );
       expect(again.statusCode).toBe(400);
       expect(await token.burnedSupply()).toBe(0n);
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback live getTxByKey throw is 400 unmoved, never 500', async () => {
+      const inner = ledger;
+      const s2s: LedgerClient = {
+        post: inner.post.bind(inner),
+        balance: inner.balance.bind(inner),
+        balances: inner.balances.bind(inner),
+        getTx: async () => {
+          throw new Error('getTx is not exposed over the internal ledger API — query svc-ledger directly');
+        },
+        getTxByKey: async () => {
+          throw new Error('getTxByKey is not exposed over the internal ledger API — query svc-ledger directly');
+        },
+      };
+      token = new TokenService(sql, s2s, bus, options);
+      const app = await mountDoors();
+      const window = uniqueWindow('mounted-gettx-live');
+
+      const fresh = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(fresh.statusCode).toBe(400);
+      expect(fresh.body.error?.data?.code).toBe('BAD_REQUEST');
+      expect(fresh.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+
+      const runId = randomUUID();
+      await seedBuybackRun({
+        runId,
+        window: { from: new Date(window.from), to: new Date(window.to) },
+        status: 'pending',
+      });
+      const retry = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(retry.statusCode).toBe(400);
+      expect(retry.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+      expect(retry.body.error?.message ?? '').not.toMatch(/getTxByKey/);
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.buyback_runs WHERE id = ${runId}`;
+      expect(rows[0]?.status).toBe('pending');
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
       await app.close();
     });
 

@@ -15,6 +15,7 @@ import {
   houseFees,
   rewardsEngine,
   userAvailable,
+  type LedgerClient,
 } from '@intafaced/ledger-client';
 import { TokenService, TokenError, foldTally } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
@@ -1241,6 +1242,24 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    /**
+     * Live svc-token HTTP client throws on getTxByKey — S2S has no such door.
+     * Production recordBuyback must still be TokenError, never that throw.
+     */
+    function s2sShapedLedger(inner: MemoryLedger): LedgerClient {
+      return {
+        post: inner.post.bind(inner),
+        balance: inner.balance.bind(inner),
+        balances: inner.balances.bind(inner),
+        getTx: async () => {
+          throw new Error('getTx is not exposed over the internal ledger API — query svc-ledger directly');
+        },
+        getTxByKey: async () => {
+          throw new Error('getTxByKey is not exposed over the internal ledger API — query svc-ledger directly');
+        },
+      };
+    }
+
     it('keeps a pending claim if the old fee-funded burn already landed — does not hide it, does not settle', async () => {
       await fundRewards('2000', 'w-claim-orphan-burn');
       const runId = crypto.randomUUID();
@@ -1262,6 +1281,83 @@ if (!available) {
       const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.buyback_runs WHERE id = ${runId}`;
       expect(rows[0]?.status).toBe('pending');
       expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('live getTxByKey throw on a FRESH run is token.buyback_tokens_unmoved, not a 500 — claim released', async () => {
+      const live = new TokenService(sql, s2sShapedLedger(ledger), bus, options);
+      const runId = crypto.randomUUID();
+      const err = await live
+        .recordBuyback({
+          runId,
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+
+      expect(err).toBeInstanceOf(TokenError);
+      expect((err as TokenError).code).toBe('token.buyback_tokens_unmoved');
+      expect((err as Error).message).not.toMatch(/getTxByKey/);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
+    });
+
+    it('live getTxByKey throw on a pending retry stays TokenError — unknown lookup does not hide or settle', async () => {
+      const live = new TokenService(sql, s2sShapedLedger(ledger), bus, options);
+      const runId = crypto.randomUUID();
+      await seedBuybackRun({ runId, window: JULY, status: 'pending' });
+
+      const err = await live
+        .recordBuyback({
+          runId,
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        })
+        .then(
+          () => null,
+          (e: unknown) => e,
+        );
+
+      expect(err).toBeInstanceOf(TokenError);
+      expect((err as TokenError).code).toBe('token.buyback_tokens_unmoved');
+      expect((err as Error).message).not.toMatch(/getTxByKey/);
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.buyback_runs WHERE id = ${runId}`;
+      expect(rows[0]?.status).toBe('pending');
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
+    });
+
+    it('does not settle from coincidental engine+burn deltas — this run posted no recipe', async () => {
+      const inner = ledger;
+      const reads = new Map<string, number>();
+      const lying: LedgerClient = {
+        post: inner.post.bind(inner),
+        balances: inner.balances.bind(inner),
+        getTx: inner.getTx.bind(inner),
+        getTxByKey: inner.getTxByKey.bind(inner),
+        async balance(ref) {
+          const real = await inner.balance(ref);
+          const n = (reads.get(ref.ownerId) ?? 0) + 1;
+          reads.set(ref.ownerId, n);
+          // Second engine snapshot looks like +tokensBought arrived. Must not settle.
+          if (ref.ownerId === 'rewards-engine' && n >= 2) return { ...real, amount: real.amount + amt('1000') };
+          return real;
+        },
+      };
+      const paper = new TokenService(sql, lying, bus, options);
+      await expect(
+        paper.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ name: 'TokenError', code: 'token.buyback_tokens_unmoved' });
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
     });
 
     it('refuses to post one run id against another run id’s window, and burns nothing', async () => {
