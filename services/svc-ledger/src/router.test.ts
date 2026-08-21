@@ -240,7 +240,7 @@ describe('balances — authorisation', () => {
     await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
       ownerId: USER,
       custodial: [{ amount: '100', assetId: 'USDT' }],
-      indexer: { status: 'absent', reason: 'indexer.readmodels_unbuilt' },
+      indexer: { status: 'absent', reason: 'indexer.portfolio_positions_unwired' },
     });
   });
 
@@ -254,7 +254,7 @@ describe('balances — authorisation', () => {
     await expect(caller.portfolio({ ownerType: 'user', ownerId: OTHER })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
       custodial: [],
-      indexer: { status: 'absent', reason: 'indexer.readmodels_unbuilt' },
+      indexer: { status: 'absent', reason: 'indexer.portfolio_positions_unwired' },
     });
   });
 

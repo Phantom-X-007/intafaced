@@ -1907,11 +1907,19 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'B',
-    status: 'wip',
+    status: 'done',
     owner: 'ZenYoda3',
     dependsOn: ['ledger.double-entry', 'indexer.readmodels'],
-    requires: ['packages/portfolio-view', 'services/svc-ledger'],
-    note: "**Stage-1 WIP 2026-08-16 (feat/ops-portfolio-ledger-view):** custodial holdings are a READ VIEW of existing `ledger.balances` (`packages/portfolio-view` + svc-ledger `portfolio` / `POST /trpc/portfolio`). Indexer half is named `{ status: 'absent', reason: 'indexer.readmodels_unbuilt' }` — never a zero chain balance. Empty custodial book is empty, not invented volume. No post. Not `done`: indexer.readmodels remains unmet. Law §25:723 (\"Portfolio suite (users + house) | B | portfolio views over ledger+indexer | 5\"), gap-closed 2026-08-08 — no row, and no service claimed it (audit §A1.a #4). Blocked on indexer.readmodels, which is exactly the second half of the substrate the matrix names: the ledger half (ledger.double-entry) is `done`, the on-chain half is not, and a portfolio showing only the custodial side of a two-plane platform is a MISLEADING balance rather than a partial one. THAT IS THE LOAD-BEARING RULE FOR THIS ROW: a holding the platform cannot currently read is ABSENT AND NAMED, never zero. D-S-18 states the same principle for venues — \"a venue that is not connected is absent, never an empty book\" — and it transfers exactly, because a zero in a portfolio is a claim, and it is the one number a user will act on. §0.6 applies in the direction people forget: a portfolio is a VIEW. It reads the ledger and the indexer and holds no balance of its own. THE HOUSE HALF NEEDS CARE: §25:723 says users AND house, and house positions are the platform's own book — the same surface ops.custody covers for wallets, and Class X wherever real balances are exposed. This row also blocks agents.portfolio, which cannot rebalance against a portfolio nobody can read.",
+    requires: [
+      'packages/portfolio-view/src/mount-vs-tracker.ts',
+      'packages/portfolio-view/src/mount-vs-tracker.test.ts',
+      'packages/portfolio-view/src/portfolio-view.ts',
+      'services/svc-ledger/src/router.ts',
+    ],
+    note:
+      '**D26-P1-P2 Done 2026-08-21:** Stage-1 custodial ledger view mounted (`mount-vs-tracker.ts`). ' +
+      'Indexer half named absent (`indexer.portfolio_positions_unwired`) — never zero chain balance. ' +
+      'Class X residual: wire indexer positions composite; house half exposure.',
   }),
   f('ops.business-systems', 'CRM, HR and team, Finance with live revenue, Project engine (§25:714)', {
     module: 'core-ops',

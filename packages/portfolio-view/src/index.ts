@@ -1,11 +1,11 @@
 /**
  * @intafaced/portfolio-view — §25:723 Stage-1 custodial holdings view.
  *
- * Reads ledger balances. Does not post. Does not invent indexer/readmodels.
+ * Reads ledger balances. Does not post. Does not invent chain positions.
  */
 export {
   INDEXER_ABSENT,
-  INDEXER_READMODELS_UNBUILT,
+  PORTFOLIO_INDEXER_UNWIRED,
   custodialHoldingSchema,
   indexerAbsentSchema,
   portfolioViewFromLedgerBalances,
