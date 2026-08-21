@@ -16,6 +16,7 @@ import { describeCopyPolicy } from './copy/copy-policy.js';
 import type { CopyService } from './copy/copy-service.js';
 import { describeFuturesPolicy } from './futures/futures-policy.js';
 import { describeOptionsPolicy } from './spot/options-policy.js';
+import { describeOtcPolicy } from './otc/otc-policy.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -473,6 +474,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      * Default desk law unpublished → refuse-closed (DIRECTION §8). Never invents spread/stake.
      */
     otc: router({
+      policy: publicProcedure.query(() => describeOtcPolicy()),
+
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!otc) {
           const deskLaw = 'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
