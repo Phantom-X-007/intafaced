@@ -70,6 +70,32 @@
       </div>
     </div>
 
+    <!-- ── register ────────────────────────────────────────────────────── -->
+    <div v-if="!session" class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.hub.registerTitle') }}</h2>
+        <span class="ix-sub">POST /api/identity/trpc/auth.register</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.hub.registerLead') }}
+      </p>
+      <div class="ix-form-row">
+        <Input v-model="registerHandle" :placeholder="$t('intafaced.hub.registerHandle')" @on-enter="register"></Input>
+        <Input v-model="registerEmail" :placeholder="$t('intafaced.hub.registerEmail')" @on-enter="register"></Input>
+        <Input v-model="registerPassword" type="password" :placeholder="$t('intafaced.hub.registerPassword')" @on-enter="register"></Input>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="registering" @click="register">{{ $t('intafaced.hub.register') }}</Button>
+        </div>
+      </div>
+      <IxState
+        v-if="registerRan"
+        :loading="registering"
+        :reason="registerReason"
+        :message="registerMessage"
+        endpoint="/api/identity/trpc/auth.register"
+      ></IxState>
+    </div>
+
     <!-- ── the modules ─────────────────────────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -126,9 +152,17 @@
  *    this page says without anybody editing this page.
  */
 import { MODULES, query, mutate, subjectOf, scopesOf } from '../../config/intafaced.js';
+import IxState from '../../components/intafaced/IxState.vue';
+
+/** Mirrors svc-identity auth.register handle rule. */
+var HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
+/** Permissive; the service's email check is the real one. */
+var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+var PASSWORD_MIN = 12;
 
 export default {
   name: 'IxPlatform',
+  components: { IxState },
   data() {
     return {
       modules: MODULES,
@@ -136,6 +170,13 @@ export default {
       password: '',
       signingIn: false,
       signInError: '',
+      registerHandle: '',
+      registerEmail: '',
+      registerPassword: '',
+      registering: false,
+      registerRan: false,
+      registerReason: null,
+      registerMessage: '',
       probing: false,
       // key -> { reason, status }
       probes: {}
@@ -191,9 +232,62 @@ export default {
           }
         });
     },
+    register() {
+      var self = this;
+      var handle = (this.registerHandle || '').trim();
+      var email = (this.registerEmail || '').trim();
+      var password = this.registerPassword || '';
+      if (!handle || !email || !password) return;
+
+      this.registerRan = true;
+      this.registering = false;
+      this.registerReason = null;
+      this.registerMessage = '';
+
+      if (!HANDLE_RE.test(handle)) {
+        this.registerReason = 'error';
+        this.registerMessage = this.$t('intafaced.hub.registerHandleInvalid');
+        return;
+      }
+      if (!EMAIL_RE.test(email)) {
+        this.registerReason = 'error';
+        this.registerMessage = this.$t('intafaced.hub.registerEmailInvalid');
+        return;
+      }
+      if (password.length < PASSWORD_MIN) {
+        this.registerReason = 'error';
+        this.registerMessage = this.$t('intafaced.hub.registerPasswordShort');
+        return;
+      }
+
+      this.registering = true;
+      mutate('identity', 'auth.register', { handle: handle, email: email, password: password })
+        .then(function(res) {
+          self.registering = false;
+          if (res.ok) {
+            self.$store.commit('setIxSession', res.data);
+            self.$store.commit('setMember', {
+              id: res.data.userId || subjectOf(res.data.accessToken),
+              username: handle
+            });
+            self.registerPassword = '';
+            self.registerReason = 'ok';
+            self.registerMessage = '';
+            self.probe();
+          } else {
+            self.registerReason = res.reason;
+            self.registerMessage = res.message;
+          }
+        });
+    },
     signOut() {
+      var session = this.session;
+      var refreshToken = session && session.refreshToken;
       this.$store.commit('clearIxSession');
       this.probe();
+      if (refreshToken) {
+        mutate('identity', 'auth.logout', { refreshToken: refreshToken });
+      }
     },
     probe() {
       var self = this;
