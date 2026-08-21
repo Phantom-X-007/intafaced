@@ -79,9 +79,14 @@
         </div>
       </div>
 
-      <div v-if="!railIds.length" class="ix-note ix-note-quiet" style="margin-bottom:14px;">
-        {{ $t('intafaced.pay.moneyPage.noRailToUse') }}
-      </div>
+      <!-- Empty rails is only a fact after health answered ok. Loading and
+           refuse are painted as themselves (IxState: quiet loading, orange
+           no_surface, named refusal) — never as "no rail registered". -->
+      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+        <div v-if="health.reason === 'ok' && !railIds.length" class="ix-note ix-note-quiet" style="margin-bottom:14px;">
+          {{ $t('intafaced.pay.moneyPage.noRailToUse') }}
+        </div>
+      </IxState>
 
       <div class="ix-actions">
         <Button type="primary" :loading="sent.busy" :disabled="!canSend" @click="submitWithdrawal">
