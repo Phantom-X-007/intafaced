@@ -21,6 +21,7 @@ import { createAcademyCurriculumSource } from './coach/academy-curriculum-source
 import { createHttpSupportDeskPort } from './support-agent/desk-port.js';
 import { createHttpSpotTickersPort } from './scanner/trade-tickers-http-port.js';
 import { createHttpPayMetricsPort } from './merchant/pay-metrics-http-port.js';
+import { createHttpCopyLeaderFixturesPort } from './copy-intel/copy-leader-fixtures-http-port.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -141,6 +142,10 @@ const payMetricsPort = env.PAY_URL
   ? createHttpPayMetricsPort({ payUrl: env.PAY_URL, internalSecret: env.INTERNAL_SERVICE_SECRET })
   : undefined;
 
+const copyLeaderFixturesPort = env.TRADE_URL
+  ? createHttpCopyLeaderFixturesPort({ tradeUrl: env.TRADE_URL, internalSecret: env.INTERNAL_SERVICE_SECRET })
+  : undefined;
+
 const appRouter = createAgentsRouter({
   runtime,
   gateway,
@@ -150,6 +155,7 @@ const appRouter = createAgentsRouter({
   ...(supportDesk ? { supportDesk, edgePrincipalSecret: env.EDGE_PRINCIPAL_SECRET } : {}),
   ...(spotTickersPort ? { spotTickersPort } : {}),
   ...(payMetricsPort ? { payMetricsPort } : {}),
+  ...(copyLeaderFixturesPort ? { copyLeaderFixturesPort } : {}),
 });
 
 // Built before the listener opens: a service that cannot authenticate the edge

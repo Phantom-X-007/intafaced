@@ -29,6 +29,7 @@ import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import { isLiveLeaderPlaneAllowlisted, refuseLiveLeaderPlane } from './live-leader-plane-refuse.js';
+import { readLiveLeaderFixtures, type CopyLeaderFixturesPort } from './live-leader-fixtures-port.js';
 import { isForbiddenReturnsRankKey, refuseReturnsRankedMarketingBoard } from './returns-board-refuse.js';
 import { buildLeaderStats, type AuditWrite, type CopyPlaneState, type LeaderPerformanceFixture, type LeaderStat } from './stats.js';
 
@@ -127,7 +128,13 @@ export type CopyIntelRunInput = {
   readonly userId: string;
   readonly feeAssetId: string;
   readonly plane: CopyPlaneState;
+  /**
+   * Fixture/dark body rows. Ignored when `plane === 'live'` — live truth is
+   * `copyLeaderFixturesPort` only.
+   */
   readonly fixtures: readonly LeaderPerformanceFixture[];
+  /** Required for live. Unset in production until Class X leader stats exist. */
+  readonly copyLeaderFixturesPort?: CopyLeaderFixturesPort;
   readonly leaderAllowlist?: ReadonlySet<string> | readonly string[];
   readonly now?: Date;
   /**
@@ -166,20 +173,31 @@ export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promis
     };
   }
 
-  if (input.fixtures.length === 0) {
+  let fixtures = input.fixtures;
+
+  if (input.plane === 'live') {
+    const live = await readLiveLeaderFixtures(input.copyLeaderFixturesPort);
+    if (!live.ok) {
+      return {
+        ...refuseLiveLeaderPlane(),
+        fixturesRefusedByGuardrail: 0,
+        writesRefusedByGuardrail: 0,
+        metering: unmetered(input.feeAssetId),
+      };
+    }
+    fixtures = live.fixtures;
+    if (!isLiveLeaderPlaneAllowlisted(input.leaderAllowlist)) {
+      return {
+        ...refuseLiveLeaderPlane(),
+        fixturesRefusedByGuardrail: 0,
+        writesRefusedByGuardrail: 0,
+        metering: unmetered(input.feeAssetId),
+      };
+    }
+  } else if (fixtures.length === 0) {
     return {
       status: 'empty',
       userMessageKey: 'agents.copy_intel.empty',
-      metering: unmetered(input.feeAssetId),
-    };
-  }
-
-  // Live trade.copy leader plane is Class X. Caller allowlists do not invent it.
-  if (input.plane === 'live' && !isLiveLeaderPlaneAllowlisted(input.leaderAllowlist)) {
-    return {
-      ...refuseLiveLeaderPlane(),
-      fixturesRefusedByGuardrail: 0,
-      writesRefusedByGuardrail: 0,
       metering: unmetered(input.feeAssetId),
     };
   }
@@ -191,7 +209,7 @@ export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promis
     const accepted: LeaderPerformanceFixture[] = [];
     let fixturesRefusedByGuardrail = 0;
 
-    for (const fixture of input.fixtures) {
+    for (const fixture of fixtures) {
       try {
         const act = await input.runtime.act({
           sessionId: session.id,

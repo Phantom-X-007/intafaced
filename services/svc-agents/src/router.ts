@@ -43,6 +43,7 @@ import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
 import type { PayMetricsPort } from './merchant/pay-metrics-port.js';
 import type { SpotTickersPort } from './scanner/spot-tickers-port.js';
+import type { CopyLeaderFixturesPort } from './copy-intel/live-leader-fixtures-port.js';
 import { serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
@@ -300,11 +301,26 @@ export interface AgentsRouterDeps {
    * scanner.runSession then refuses `no_live_tickers` rather than invent quotes.
    */
   readonly spotTickersPort?: SpotTickersPort;
+  /**
+   * Live trade.copy leader fixtures. Unset in production (Class X) — live
+   * copyIntel.runSession then refuses `no_live_leaders` rather than invent PnL.
+   */
+  readonly copyLeaderFixturesPort?: CopyLeaderFixturesPort;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret, payMetricsPort, spotTickersPort } =
-    deps;
+  const {
+    runtime,
+    gateway,
+    meter,
+    feeAssetId,
+    loadCoachGrounding,
+    supportDesk,
+    edgePrincipalSecret,
+    payMetricsPort,
+    spotTickersPort,
+    copyLeaderFixturesPort,
+  } = deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -2849,6 +2865,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               fixtures: input.fixtures,
+              ...(copyLeaderFixturesPort === undefined ? {} : { copyLeaderFixturesPort }),
               ...(input.leaderAllowlist === undefined ? {} : { leaderAllowlist: input.leaderAllowlist }),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });

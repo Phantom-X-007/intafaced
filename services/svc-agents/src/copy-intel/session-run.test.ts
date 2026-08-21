@@ -232,10 +232,10 @@ describe('copy_intel.stats metered session run', () => {
     expect(fake.openCalls).toBe(0);
   });
 
-  it('is empty — not a session — when nothing was asked for', async () => {
+  it('refuses live plane when port is unset and no fixtures are supplied', async () => {
     const fake = new FakeRuntime();
     const result = await runCopyIntelStatsSession({ ...baseInput(fake), fixtures: [] });
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.copy_intel.empty' });
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_leaders' });
     expect(fake.openCalls).toBe(0);
   });
 
