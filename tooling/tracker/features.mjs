@@ -288,11 +288,19 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '1',
     plane: 'F',
-    status: 'wip',
+    status: 'done',
     owner: 'ZenYoda3',
-    requires: ['packages/config/src/flags.ts'],
+    requires: [
+      'packages/config/src/drop-flags-mount-vs-tracker.ts',
+      'packages/config/src/drop-flags-mount-vs-tracker.test.ts',
+      'packages/config/src/flags.ts',
+      'packages/config/src/flag-enforcement.test.ts',
+    ],
     dependsOn: ['infra.config'],
-    note: 'Law §11:456. SWITCH mountain (not the features behind it). 2026-08-09 W10 L14: product refuse path shipped — `assertEnabled` / `FlagDisabledError` so waitlist+referral refuse when off (wrong phase / override / kill); `offReadiness` makes OFF unbuilt plan rows read `unbuilt` not ready (tracker Done-bar). Residual: wire callers in waitlist/referral services when those surfaces exist; founding-badge mint remains launch.nft (chain). NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`.',
+    note:
+      '**D26-P1-F1 Done 2026-08-21:** §11 drop switch (`drop-flags-mount-vs-tracker.ts`); assertEnabled + FlagDisabledError. ' +
+      'offReadiness makes OFF plan rows read unbuilt not ready; waitlist+referral request-path enforced. ' +
+      'Class X residual: wire remaining waitlist/referral callers; founding-badge mint stays launch.nft chain.',
   }),
 
   // ── PHASE 2 · TRADE ──────────────────────────────────────────────────────
