@@ -48,9 +48,27 @@ const jsonRecord = (label: string) =>
       }
     });
 
-const bool = z
-  .union([z.boolean(), z.string()])
-  .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
+const METERING_TRUE = new Set(['1', 'true', 'yes', 'on']);
+const METERING_FALSE = new Set(['0', 'false', 'no', 'off']);
+
+/**
+ * Kill-switch tokens. Unset / blank / false-tokens → false (must NOT bill).
+ * Garbage and untrimmed-unknown refuse boot — the denylist
+ * `!['0','false','off','no']` treated `false ` and `garbage` as true.
+ */
+const meteringFlag = z.union([
+  z.boolean(),
+  z.string().transform((raw, ctx) => {
+    const token = raw.trim().toLowerCase();
+    if (METERING_TRUE.has(token)) return true;
+    if (METERING_FALSE.has(token)) return false;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'must be true/false/1/0/on/off/yes/no (garbage must not bill)',
+    });
+    return z.NEVER;
+  }),
+]);
 
 /** Compose interpolates unset optional URLs to "". Blank is absent, not an invalid URL. */
 const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
@@ -143,12 +161,17 @@ const schema = serviceEnvSchema
        * bill). Dual-write of usage_records while off is forbidden.
        *
        * Unset / blank → false (must NOT bill). Explicit true is owner-on.
+       * Trimmed false tokens stay off. Garbage strings refuse boot.
        * Never default true — that was fail-open feeCharge.
        */
-      AGENTS_METERING_ENABLED: z.preprocess(
-        (v) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '') ? false : v),
-        bool,
-      ),
+      AGENTS_METERING_ENABLED: z.preprocess((v) => {
+        if (v === undefined || v === null) return false;
+        if (typeof v === 'string') {
+          const trimmed = v.trim();
+          return trimmed === '' ? false : trimmed;
+        }
+        return v;
+      }, meteringFlag),
 
       /**
        * Which registered provider serves the logical id `primary` in the routing

@@ -1,41 +1,65 @@
 /**
  * Unit card — svc-agents money env refuse-closed (S11-1 / S11-3 / S11-4)
  *
- * 1. Promise: unset AGENTS_METERING_ENABLED must NOT bill; unset LEDGER_URL
- *    must refuse (no silent localhost); unset AGENTS_FEE_ASSET_ID must refuse
- *    (no invent IFC).
+ * 1. Promise: unset AGENTS_METERING_ENABLED must NOT bill; garbage / untrimmed
+ *    non-boolean metering strings must NOT bill; unset LEDGER_URL must refuse
+ *    (no silent localhost); unset AGENTS_FEE_ASSET_ID must refuse (no invent IFC).
  * 2. Break: bool.default(true) / LEDGER_URL localhost / fee asset default IFC
  *    still feeCharge or invent an owner asset when the operator never set them.
- * 3. Done bar: this slice parses unset metering → false; unset ledger / fee
- *    asset fail; env.ts source matches (no fail-open defaults).
+ *    A forked Zod slice stays green while production loadEnv fail-opens.
+ *    Denylist `!['0','false','off','no']` treats `false ` and `garbage` as true.
+ * 3. Done bar: production env.ts loadEnv (not a forked slice) parses unset
+ *    metering → false; garbage metering refuses; unset ledger / fee asset fail;
+ *    env.ts source matches (no fail-open defaults).
  * 4. Class M
- * 5. Paths: env.ts (slice below is the same shapes env.ts pins)
- * 6. RED: fail-open defaults return, or unset metering parses as true
+ * 5. Paths: env.ts via loadEnv at import (same as boot)
+ * 6. RED: fail-open defaults return, unset metering parses as true, or garbage
+ *    / untrimmed `false ` still bills
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const SECRET = 's'.repeat(32);
 
-const bool = z
-  .union([z.boolean(), z.string()])
-  .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
+/** Minimum boot env so assertions are about the money-path keys. */
+const BASE_ENV = {
+  DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  EDGE_PRINCIPAL_SECRET: SECRET,
+  INTERNAL_SERVICE_SECRET: SECRET,
+  LEDGER_URL: 'http://svc-ledger:4001',
+  AGENTS_FEE_ASSET_ID: 'X',
+};
 
-/** Same money-path shapes env.ts must keep (source-pin below). */
-const moneySlice = z.object({
-  LEDGER_URL: z.string().url(),
-  AGENTS_FEE_ASSET_ID: z.string().min(1),
-  AGENTS_METERING_ENABLED: z.preprocess(
-    (v) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '') ? false : v),
-    bool,
-  ),
+/**
+ * Load production env.ts the way the process does.
+ *
+ * `vi.resetModules` + explicit clears are load-bearing: env.ts calls
+ * `loadEnv(process.env)` at import. A forked Zod slice would stay green if
+ * production preprocess flipped back to `v ?? true`.
+ */
+async function loadWith(overrides: Record<string, string | undefined> = {}) {
+  vi.resetModules();
+  vi.unstubAllEnvs();
+  vi.stubEnv('NODE_ENV', 'test');
+  vi.stubEnv('AGENTS_METERING_ENABLED', undefined);
+  vi.stubEnv('LEDGER_URL', undefined);
+  vi.stubEnv('AGENTS_FEE_ASSET_ID', undefined);
+  for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
+    vi.stubEnv(key, value);
+  }
+  const module = await import('./env.js');
+  return module.env;
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('svc-agents money env refuse-closed', () => {
-  it('env.ts keeps the refuse-closed shapes this slice parses', () => {
+  it('env.ts keeps the refuse-closed shapes production loadEnv parses', () => {
     const envTs = readFileSync(join(HERE, 'env.ts'), 'utf8');
     expect(envTs).not.toMatch(/LEDGER_URL:\s*z\.string\(\)\.url\(\)\.default\('http:\/\/localhost:4001'\)/);
     expect(envTs).toMatch(/LEDGER_URL:\s*z\.string\(\)\.url\(\)/);
@@ -43,49 +67,56 @@ describe('svc-agents money env refuse-closed', () => {
     expect(envTs).toMatch(/AGENTS_FEE_ASSET_ID:\s*z\.string\(\)\.min\(1\)/);
     expect(envTs).not.toMatch(/AGENTS_METERING_ENABLED:\s*bool\.default\(true\)/);
     expect(envTs).toMatch(/AGENTS_METERING_ENABLED:\s*z\.preprocess\(/);
+    expect(envTs).not.toMatch(/!\['0', 'false', 'off', 'no'\]\.includes/);
   });
 
-  it('unset LEDGER_URL refuses (no silent localhost book)', () => {
-    const parsed = moneySlice.safeParse({ AGENTS_FEE_ASSET_ID: 'X' });
-    expect(parsed.success).toBe(false);
+  it('unset LEDGER_URL refuses (no silent localhost book)', async () => {
+    await expect(loadWith({ LEDGER_URL: undefined })).rejects.toThrow(/LEDGER_URL/);
   });
 
-  it('unset AGENTS_FEE_ASSET_ID refuses (no invent IFC)', () => {
-    const parsed = moneySlice.safeParse({ LEDGER_URL: 'http://svc-ledger:4001' });
-    expect(parsed.success).toBe(false);
+  it('unset AGENTS_FEE_ASSET_ID refuses (no invent IFC)', async () => {
+    await expect(loadWith({ AGENTS_FEE_ASSET_ID: undefined })).rejects.toThrow(/AGENTS_FEE_ASSET_ID/);
   });
 
-  it('blank AGENTS_FEE_ASSET_ID refuses', () => {
-    const parsed = moneySlice.safeParse({
-      LEDGER_URL: 'http://svc-ledger:4001',
-      AGENTS_FEE_ASSET_ID: '',
-    });
-    expect(parsed.success).toBe(false);
+  it('blank AGENTS_FEE_ASSET_ID refuses', async () => {
+    await expect(loadWith({ AGENTS_FEE_ASSET_ID: '' })).rejects.toThrow(/AGENTS_FEE_ASSET_ID/);
   });
 
-  it('unset AGENTS_METERING_ENABLED must not bill', () => {
-    const parsed = moneySlice.parse({
-      LEDGER_URL: 'http://svc-ledger:4001',
-      AGENTS_FEE_ASSET_ID: 'X',
-    });
+  it('unset AGENTS_METERING_ENABLED must not bill', async () => {
+    const parsed = await loadWith({});
     expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
   });
 
-  it('blank AGENTS_METERING_ENABLED must not bill', () => {
-    const parsed = moneySlice.parse({
-      LEDGER_URL: 'http://svc-ledger:4001',
-      AGENTS_FEE_ASSET_ID: 'X',
-      AGENTS_METERING_ENABLED: '',
-    });
+  it('blank AGENTS_METERING_ENABLED must not bill', async () => {
+    const parsed = await loadWith({ AGENTS_METERING_ENABLED: '' });
     expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
   });
 
-  it('explicit true is owner-on (not invented)', () => {
-    const parsed = moneySlice.parse({
-      LEDGER_URL: 'http://svc-ledger:4001',
-      AGENTS_FEE_ASSET_ID: 'X',
-      AGENTS_METERING_ENABLED: 'true',
-    });
+  it('whitespace AGENTS_METERING_ENABLED must not bill', async () => {
+    const parsed = await loadWith({ AGENTS_METERING_ENABLED: '   ' });
+    expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
+  });
+
+  it('trimmed false tokens must not bill', async () => {
+    for (const token of ['false', 'FALSE', '0', 'off', 'no'] as const) {
+      const parsed = await loadWith({ AGENTS_METERING_ENABLED: token });
+      expect(parsed.AGENTS_METERING_ENABLED, token).toBe(false);
+    }
+  });
+
+  it('untrimmed false must not bill', async () => {
+    const parsed = await loadWith({ AGENTS_METERING_ENABLED: 'false ' });
+    expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
+  });
+
+  it('garbage metering strings refuse (must not bill)', async () => {
+    await expect(loadWith({ AGENTS_METERING_ENABLED: 'garbage' })).rejects.toThrow(/AGENTS_METERING_ENABLED/);
+    await expect(loadWith({ AGENTS_METERING_ENABLED: 'maybe' })).rejects.toThrow(/AGENTS_METERING_ENABLED/);
+    await expect(loadWith({ AGENTS_METERING_ENABLED: 'enabled' })).rejects.toThrow(/AGENTS_METERING_ENABLED/);
+  });
+
+  it('explicit true is owner-on (not invented)', async () => {
+    const parsed = await loadWith({ AGENTS_METERING_ENABLED: 'true' });
     expect(parsed.AGENTS_METERING_ENABLED).toBe(true);
     expect(parsed.AGENTS_FEE_ASSET_ID).toBe('X');
     expect(parsed.LEDGER_URL).toBe('http://svc-ledger:4001');
