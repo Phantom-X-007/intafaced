@@ -10,23 +10,23 @@
 
 <!-- tracker:start -->
 
-`██████████████░░░░░░` **69%** — 109 of 158 features shipped
+`██████████████░░░░░░` **70%** — 110 of 158 features shipped
 
-Phases: **0** 11/12 · **1** 12/13 · **2** 17/26 · **3** 16/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** 12/13 · **2** 18/26 · **3** 16/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
 
-**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · House desk sealed private tenant — the Throne Law (§28) (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Woo / Magento / OpenCart plugins (nitro-agents) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
+**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · House desk sealed private tenant — the Throne Law (§28) (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Woo / Magento / OpenCart plugins (nitro-agents) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
 
-**🟢 17 ready to claim** — nothing blocks these:
+**🟢 18 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
+- `trade.options` — European options, cash-settled, full collateral in v1
 - `trade.forex` — Fiat pairs on the same engine
 - `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
 - `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
 - `protocol.smart-accounts` — Passkey smart accounts, session keys (§17.4)
 - `academy.spatial` — 2D navigable room canvas, VR-ready scene state
 - `academy.certs` — Certifications → XP → real perks
-- `launch.token-factory` — ERC-20 deploy from audited templates
-- …and 9 more
+- …and 10 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

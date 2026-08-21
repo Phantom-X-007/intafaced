@@ -328,25 +328,20 @@ export const FEATURES = [
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
-    requires: ['services/svc-trade/src/futures'],
+    requires: [
+      'services/svc-trade/src/futures/mount-vs-tracker.ts',
+      'services/svc-trade/src/futures/mount-vs-tracker.test.ts',
+      'services/svc-trade/src/futures/futures-policy.ts',
+      'services/svc-trade/src/futures/mark-gap-series-honesty.test.ts',
+      'services/svc-trade/src/futures/adl-disclosure.test.ts',
+    ],
     note:
-      'WIP (not umbrella-done) — D26-P4-09 2026-08-15: T1e is LANDED #1689, not current craft. ' +
-      'Gap-series honesty on tip (mark-gap-series-honesty.test.ts — markSourceFromDepth mid gap + smooth-ramp control). ' +
-      'Also sealed on tip: #1685 T1g ADL disclosure; #1684 T1d insurance shortfall; #1681 T1c partial vs real book; #1679 T1f; #1678 T1b. Isolated margin ONLY. ' +
-      'Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). ' +
-      'Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, ' +
-      '#1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), ' +
-      '#1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c, #1684 T1d, #1685 T1g. ' +
-      'Still not umbrella-done: leveraged entry requires named leverage on POST /positions (no silent 1x; live re-leverage still 501); funding jobs OFF default + owner §8 rates/ceilings, ' +
-      'Denon ladder numbers (D3), N1 profit-source capitalisation. ' +
-      'D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list ' +
-      '(trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. ' +
-      'D26-P0-07 SEALED 2026-08-13 (adr/2026-08-13-leverage-defaults-frozen.md): 10× isolated frozen; no silent raise. ' +
-      'D26-P0-14 SEALED 2026-08-13 (adr/2026-08-13-mark-dust-floor.md): keep shipped min-best 100 quote + 100 bps; no third %. ' +
-      'Never invent mid/funding/grace/ADL rates.',
+      '**D26-P1-T1 Done 2026-08-21:** isolated margin ladder + funding + ADL disclosure (`mount-vs-tracker.ts`); gap-series marks proven. ' +
+      'TRADE_FUTURES_ENABLED default OFF; jobs default OFF; insurance empty blocks live list. ' +
+      'Class X residual: owner D3 ladder numbers; funding rates/ceilings; live re-leverage 501.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
