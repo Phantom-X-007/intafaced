@@ -99,6 +99,13 @@ const schema = serviceEnvSchema
        */
       TRADE_URL: blankAsAbsent(z.string().url().optional()),
 
+      /**
+       * svc-pay base for merchant approval-rate watch
+       * (`GET /internal/agents/merchant-watch-metrics`). Unset / blank → merchant
+       * watch refuses `no_live_metrics`. No localhost default.
+       */
+      PAY_URL: blankAsAbsent(z.string().url().optional()),
+
       /** Asset premium agent tiers are billed in (§8.2). */
       AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
 

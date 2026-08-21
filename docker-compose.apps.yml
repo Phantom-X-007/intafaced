@@ -948,6 +948,9 @@ services:
       # Scanner live spot tickers (`GET /api/v1/tickers`). Unset locally stays
       # dark (`no_live_tickers`). Compose pins trade on the fleet network.
       TRADE_URL: http://svc-trade:4004
+      # Merchant approval-rate watch (`GET /internal/agents/merchant-watch-metrics`).
+      # Unset locally stays dark (`no_live_metrics`). Compose pins pay on fleet.
+      PAY_URL: http://svc-pay:4006
       # `mock` by default so bringing the fleet up cannot spend money. The
       # upstream's identity is deployment configuration — set the
       # AGENTS_UPSTREAM_* block in .env to point it somewhere real.
