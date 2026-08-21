@@ -1330,9 +1330,17 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['identity.rank'],
-    requires: ['services/svc-academy'],
-    note: 'svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here.',
+    requires: [
+      'services/svc-academy/src/lobbies/mount-vs-tracker.ts',
+      'services/svc-academy/src/lobbies/mount-vs-tracker.test.ts',
+      'services/svc-academy/src/access/room-access.ts',
+      'services/svc-academy/src/stream/provider.ts',
+    ],
+    note:
+      'DONE: decideSeat capacity tiers (free/staked/invite); host bypass; NullStreamProvider refuses SFU creds. ' +
+      'D26-P1-LB1 mount-vs-tracker seals lobby doors. Class X residual: LiveKit SFU socket; navigable spatial shell.',
   }),
   f('academy.spatial', '2D navigable room canvas, VR-ready scene state', {
     module: 'academy',
