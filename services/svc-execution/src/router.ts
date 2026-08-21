@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { router, scopedProcedure } from '@intafaced/contracts';
+import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
@@ -16,6 +16,7 @@ import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
 import { describeExecutionSpine } from './oms-spine.js';
+import { describeExecutionPolicy } from './execution-policy.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
@@ -511,6 +512,8 @@ export function createExecutionRouter(
       }),
 
       spine: scopedProcedure('admin:read', { module: 'execution' }).query(() => describeExecutionSpine()),
+
+      policy: publicProcedure.query(() => describeExecutionPolicy()),
 
       arb: router({
         scan: scopedProcedure('admin:write', { module: 'execution' })
