@@ -295,6 +295,16 @@ describe('PrivateOrderHub', () => {
     expect(alice.sent).toHaveLength(0);
   });
 
+  it('re-announces ready only on the subscribed channel when attach is filtered', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const ordersOnly = sink();
+    hub.attach('user-a', ordersOnly, 'orders');
+    hub.announceBus(true);
+    expect(ordersOnly.sent).toHaveLength(1);
+    expect(JSON.parse(ordersOnly.sent[0]!).channel).toBe('orders');
+    expect(JSON.parse(ordersOnly.sent[0]!).bus).toBe(true);
+  });
+
   it('holds live frames until releaseSnapshot so snapshot stays first', () => {
     const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
     const alice = sink();

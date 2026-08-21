@@ -164,12 +164,14 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     });
   }
 
-  async function connectOwner(): Promise<Client> {
+  async function connectOwner(query = ''): Promise<Client> {
     const { token } = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'] }, tokens);
-    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
-    await client.frameCount(3);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}${query}`);
+    const readyCount = query.includes('channel=orders') || query.includes('channel=fills') || query.includes('channel=positions') ? 1 : 3;
+    await client.frameCount(readyCount);
     for (;;) {
       if (client.parsed().some((f) => f.channel === 'orders' && f.type === 'snapshot')) break;
+      if (client.closed) throw new Error('closed before orders snapshot');
       await client.frameCount(client.frames.length + 1);
     }
     return client;
@@ -270,6 +272,27 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     expect(live).toHaveLength(0);
     expect(client.parsed().some((f) => f.channel === 'orders' && f.type === 'snapshot')).toBe(true);
 
+    client.socket.close();
+  });
+
+  it('channel=orders fans bus orderUpdated only — honest empty snapshot, no fills/positions invent', async () => {
+    await boot();
+    const client = await connectOwner('&channel=orders');
+
+    const hello = client.parsed().filter((f) => f.type === 'ready' || f.type === 'snapshot');
+    expect(hello.filter((f) => f.type === 'ready').map((f) => f.channel)).toEqual(['orders']);
+    expect(hello.find((f) => f.channel === 'orders' && f.type === 'snapshot')).toMatchObject({ orders: [] });
+    expect(hello.some((f) => f.channel === 'fills' || f.channel === 'positions')).toBe(false);
+
+    const before = client.frames.length;
+    await bus.publish('orderUpdated', FIXTURE_ORDER);
+    await bus.publish('fillSettled', FIXTURE_FILL);
+    await bus.publish('positionUpdated', FIXTURE_POSITION);
+    await client.frameCount(before + 1);
+
+    const live = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(live).toHaveLength(1);
+    expect(live[0]).toMatchObject({ channel: 'orders', orderId: ORDER_ID, qty: '2.5' });
     client.socket.close();
   });
 

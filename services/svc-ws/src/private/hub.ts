@@ -310,7 +310,8 @@ export class PrivateOrderHub {
   announceBus(bus: boolean): void {
     for (const sub of this.#subscriptions) {
       if (sub.closed) continue;
-      for (const channel of READY_CHANNELS) {
+      const channels = sub.channel === null ? READY_CHANNELS : [sub.channel];
+      for (const channel of channels) {
         this.#write(sub, JSON.stringify({ channel, type: 'ready', userId: sub.userId, bus }));
       }
     }
