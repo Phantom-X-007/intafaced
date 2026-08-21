@@ -17,6 +17,7 @@ import type { CopyService } from './copy/copy-service.js';
 import { describeFuturesPolicy } from './futures/futures-policy.js';
 import { describeOptionsPolicy } from './spot/options-policy.js';
 import { describeOtcPolicy } from './otc/otc-policy.js';
+import { describeAlgoPolicy } from './algo/algo-policy.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -572,6 +573,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      * Parent holds no value; progress is sum of child fills only.
      */
     algo: router({
+      policy: publicProcedure.query(() => describeAlgoPolicy()),
+
       createTwap: scopedProcedure('trade:write', { module: 'trade' })
         .input(
           z.object({
