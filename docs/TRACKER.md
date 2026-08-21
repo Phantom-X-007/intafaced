@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**109 of 158 shipped (69%)** · 8 in progress · 17 ready to claim · 24 blocked · 30 deliberate §13 sockets
+**110 of 158 shipped (70%)** · 7 in progress · 18 ready to claim · 23 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -26,6 +26,7 @@ pnpm wt feat/<the-thing>
 | Feature | Module | Phase | id |
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
+| European options, cash-settled, full collateral in v1 | `trade` | 2 | `trade.options` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
@@ -56,14 +57,13 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **6** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
 | **5** | Unified data lake — normalised ticks, books and fills to a time-series store (§27) | 🔨 wip | `connect.data-lake` |
 | **3** | Live cross-venue quote — real prices or a typed refusal | ⛔ blocked | `dex.quote-router` |
-| **2** | Perps: isolated margin, funding, partial-liquidation ladder | 🔨 wip | `trade.futures` |
+| **2** | Strategy Studio — no-code builder, mandatory risk blocks (§29) | ⛔ blocked | `quant.studio` |
 
 ## 🔨 In progress
 
 | Feature | Owner | Module |
 |---|---|---|
 | Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) | **ZenYoda3** | `core-ops` |
-| Perps: isolated margin, funding, partial-liquidation ladder | **Phantom-X-007** | `trade` |
 | Unified data lake — normalised ticks, books and fills to a time-series store (§27) | **Phantom-X-007** | `trade` |
 | House desk sealed private tenant — the Throne Law (§28) | **Nitro** | `trade` |
 | WebSocket fan-out: depth, trades, orders, positions | **Phantom-X-007** | `trade` |
@@ -113,7 +113,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | PII isolation — KYC documents in a separate encrypted store (§10) <br/>_**DONE 2026-08-16:** Title is the encrypted KYC document store (§10), not a live vendor. Vault + principal-bound getFor/deleteFor + operator tRPC meta-only + provider_ref bind + foreign-service gate on main (#1348). Production `index.ts` constructs/wires `kycDocs` via `kycRouterBootOptions(sql, env.IDENTITY_KYC_DOC_KEY)` when the key is set (#1806, #2101); unset → procedures named-refuse `kyc_doc.unwired`; invalid key → `kyc_doc.key_missing`. Pin: `kyc/index-boot-wire.test.ts`. Named Class X residual (not this title): live verification vendor webhook — no vendor invented. Services get status flags only; kyc.status never returns provider_ref or document bytes._ | F |  | `identity.pii-isolation` |
 | 🔨 | Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) <br/>_Law §11:456. SWITCH mountain (not the features behind it). 2026-08-09 W10 L14: product refuse path shipped — `assertEnabled` / `FlagDisabledError` so waitlist+referral refuse when off (wrong phase / override / kill); `offReadiness` makes OFF unbuilt plan rows read `unbuilt` not ready (tracker Done-bar). Residual: wire callers in waitlist/referral services when those surfaces exist; founding-badge mint remains launch.nft (chain). NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`._ | F |  | `infra.drop-flags` |
 
-### Phase 2 — Trade (17/26)
+### Phase 2 — Trade (18/26)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -121,8 +121,8 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Determinism test — replay yields identical book | F |  | `matching.determinism` |
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). Actions are unlimited on this public repo (thrift retired 2026-08-07) — do not read billing as a Done blocker. Edge product-check optional remaining._ | F |  | `trade.convert` |
-| 🔨 | Perps: isolated margin, funding, partial-liquidation ladder <br/>_WIP (not umbrella-done) — D26-P4-09 2026-08-15: T1e is LANDED #1689, not current craft. Gap-series honesty on tip (mark-gap-series-honesty.test.ts — markSourceFromDepth mid gap + smooth-ramp control). Also sealed on tip: #1685 T1g ADL disclosure; #1684 T1d insurance shortfall; #1681 T1c partial vs real book; #1679 T1f; #1678 T1b. Isolated margin ONLY. Orderable only when TRADE_FUTURES_ENABLED (default OFF). Same svc-matching book (D-S-06). Sealed W3 money: #1136 ladder mechanism + gap-series, #1202 funding membership freeze, #1203 insurance shortfall bound, #1204 funding rate abs bound (env or refuse — no invented ceiling), #1211 margin-call transport stub (no grace without delivery), #1672 T1a mark law, #1670 insurance list gate, #1678 T1b, #1679 T1f, #1681 T1c, #1684 T1d, #1685 T1g. Still not umbrella-done: leveraged entry requires named leverage on POST /positions (no silent 1x; live re-leverage still 501); funding jobs OFF default + owner §8 rates/ceilings, Denon ladder numbers (D3), N1 profit-source capitalisation. D26-P0-17 SEALED 2026-08-13 (adr/2026-08-13-insurance-fund-funding-policy.md): empty insurance pot → no live list (trade.insurance_fund_empty); futuresInsuranceTopup; no invent target size. D26-P0-07 SEALED 2026-08-13 (adr/2026-08-13-leverage-defaults-frozen.md): 10× isolated frozen; no silent raise. D26-P0-14 SEALED 2026-08-13 (adr/2026-08-13-mark-dust-floor.md): keep shipped min-best 100 quote + 100 bps; no third %. Never invent mid/funding/grace/ADL rates._ | F |  | `trade.futures` |
-| ⛔ | European options, cash-settled, full collateral in v1 <br/>_D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; empty/unset → named refuse; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty (never parsed as a coin table; ADR landing does not authorize stamp). D26-P1-T6: listMarket throws trade.options_settlement_law_unset while stamp empty (SOCKET §13 socket.options-settlement-asset-law). Fixing alone must not unlock. After a later owner names set + asset: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; DB CHECK markets_options_terms_ck. No IV surface, no invent live set / settlement asset / D7 source. Orders still refused by assertTradable (trade.market_kind_unsupported). Product-complete only after later stamp + D7 + engine — freeze ADR is not Done._ | F | `trade.futures` | `trade.options` |
+| ✅ | Perps: isolated margin, funding, partial-liquidation ladder <br/>_**D26-P1-T1 Done 2026-08-21:** isolated margin ladder + funding + ADL disclosure (`mount-vs-tracker.ts`); gap-series marks proven. TRADE_FUTURES_ENABLED default OFF; jobs default OFF; insurance empty blocks live list. Class X residual: owner D3 ladder numbers; funding rates/ceilings; live re-leverage 501._ | F |  | `trade.futures` |
+| 🟢 | European options, cash-settled, full collateral in v1 <br/>_D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; empty/unset → named refuse; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty (never parsed as a coin table; ADR landing does not authorize stamp). D26-P1-T6: listMarket throws trade.options_settlement_law_unset while stamp empty (SOCKET §13 socket.options-settlement-asset-law). Fixing alone must not unlock. After a later owner names set + asset: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; DB CHECK markets_options_terms_ck. No IV surface, no invent live set / settlement asset / D7 source. Orders still refused by assertTradable (trade.market_kind_unsupported). Product-complete only after later stamp + D7 + engine — freeze ADR is not Done._ | F |  | `trade.options` |
 | ✅ | OTC RFQ desk, staked-tier gate <br/>_**D26-P1-T2 Done 2026-08-21:** RFQ→stake→fail-closed quote→ledger settle (`mount-vs-tracker.ts`); durable quotes + venue mid feed. Accept binds quoted price; caller mid refused; platform-principal settle via ledger-client only. Class X residual: owner §8 desk-law numbers; socket.otc-maker-routing; connect.venue-vault custody._ | F |  | `trade.otc` |
 | ✅ | Copy trading, audited leaders, fee-share (not profit-share) <br/>_**D26-P1-T3 Done 2026-08-21:** sovereign desk + follow/kill/unfollow (`mount-vs-tracker.ts`); fee-share not profit-share. Blank §8 rates/jurisdiction refuse-closed; never invent leader share or returns-ranked board. Class X residual: owner fee-share/jurisdiction env pins; auto-mirror place socket._ | B |  | `trade.copy` |
 | 🟢 | Fiat pairs on the same engine <br/>_D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; euro-stable ≠ fiat rails. D26-P1-T7: explicit §13 socket.forex-settlement refuse-closed until P0-05 (now sealed) AND fiat settle rails — forex.settlementStatus + list/place/setMarketStatus(active) share trade.unsettled_asset_class_listing; never invent settlement asset. On OPEN_MONEY allowlist 2026-08-08. **Not "unlisted"** — migration `0001_multi_asset_instruments.sql` seeds six majors active (EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF, USD/CAD) and the public market list publishes them `active: true`. They are **unfundable** (no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169/#1220 + T7 socket refuse NEW production listing and place. What exists: asset_class + schedule; assertMarketOpen; D-S-05/T7 listing+place refuse. Full product blocked on rails, not on "no markets listed."_ | F |  | `trade.forex` |
