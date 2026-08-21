@@ -21,18 +21,13 @@ export function rethrowCopyFollowUnique(err: unknown): never {
 }
 
 /**
- * Pre-post refuses never posted ledger recipes. Unclaim so a later valid
- * follow can still settle. Any other throw from `run` may have swept or
- * paid — keep unique fill_id (second leader unique-violates).
+ * Typed product refuses fire before ledger recipes. Unclaim every CopyError
+ * after INSERT (fill-not-found / wrong owner / killed / not-mirrored /
+ * pre-follow / blank / expired) so the once-key is not burned. A ledger or
+ * crash throw may have swept or paid — keep unique fill_id.
  */
 export function isCopyFeeSharePrePostUnclaim(err: unknown): boolean {
-  if (!(err instanceof CopyError)) return false;
-  if (err.code === 'trade.copy_key_expired') return true;
-  if (err.code !== 'trade.copy_settle_refused') return false;
-  return (
-    err.message === 'Fill predates this follow — refuse fee-share' ||
-    err.message === 'Fill is not a copy-mirrored fill for this follow — refuse fee-share'
-  );
+  return err instanceof CopyError;
 }
 
 /**
@@ -54,11 +49,13 @@ export function isCopyFeeSharePrePostUnclaim(err: unknown): boolean {
  * INSERT commits **before** ledger recipes (`copy-fee:${fillId}` sweep,
  * `copy-leader-share:${fillId}:${leaderId}` payout). Crash after post cannot
  * pay a second leader: the row is already there, unique-violation refuses.
- * Same-follow redelivery returns the prior row and never re-runs `run`.
- * Unclaim only pre-post refuses (pre-follow / not-mirrored / expired) so a
- * later valid follow is not poisoned. Any other throw from `run` may have
- * posted — keep the unique fill_id. Ledger keys alone are not enough: payout
- * keys include leaderId, so two leaders would both post from one house pot.
+ * Same-follow **pending** (`settled=false`, no skip) retries `run` — crash
+ * after INSERT or a post-throw must not poison follow A. Terminal rows
+ * (settled or cap/zero skip) never re-run. Other follow unique-refuses.
+ * Unclaim every pre-post CopyError so a later valid follow is not poisoned.
+ * Any other throw from `run` may have posted — keep the unique fill_id.
+ * Ledger keys alone are not enough: payout keys include leaderId, so two
+ * leaders would both post from one house pot.
  */
 
 export interface CopyPeriodStats {
@@ -124,6 +121,29 @@ export interface StoredSettledFeeShare {
 export type RunFeeShareSettleOnceResult =
   | { readonly status: 'duplicate'; readonly record: StoredSettledFeeShare }
   | { readonly status: 'claimed'; readonly record: StoredSettledFeeShare };
+
+/**
+ * Crash leftover / post-throw keep-claim: zeros, `settled=false`, no skip.
+ * Cap/zero skips also use `settled=false` but they already finished `run`.
+ */
+export function isPendingFeeShareClaim(record: StoredSettledFeeShare): boolean {
+  return record.settled === false && record.skippedReason === null;
+}
+
+export type ExistingFeeShareClaimResolution =
+  { readonly action: 'duplicate'; readonly record: StoredSettledFeeShare } | { readonly action: 'retry' };
+
+/**
+ * Other follow on this fill_id unique-refuses (no second pay). Same-follow
+ * pending retries `run`. Terminal same-follow is a duplicate.
+ */
+export function resolveExistingFeeShareClaim(followId: string, existing: StoredSettledFeeShare): ExistingFeeShareClaimResolution {
+  if (existing.followId !== followId) {
+    throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+  }
+  if (isPendingFeeShareClaim(existing)) return { action: 'retry' };
+  return { action: 'duplicate', record: existing };
+}
 
 /** Prior follower place under a claimed (follow, leader fill). */
 export interface StoredPlacedMirror {
@@ -204,10 +224,11 @@ export interface CopyFollowStore {
   /**
    * Run fee-share settle body at most once per fillId (all follows).
    * Claims the unique fill_id row **before** `run` (ledger sweep + rewardPay).
-   * Same follow redelivery returns the prior record without re-running `run`.
-   * A different follow on the same fill throws `trade.copy_settle_refused`.
-   * `run` throws: unclaim only pre-post refuses; keep the row if a post may
-   * have committed (second leader unique-violates).
+   * Same-follow pending retries `run`. Terminal same-follow redelivery
+   * returns the prior record without re-running. A different follow on the
+   * same fill throws `trade.copy_settle_refused` (even while pending).
+   * `run` throws: unclaim every pre-post CopyError; keep the row if a post
+   * may have committed (second leader unique-violates).
    */
   runFeeShareSettleOnce(followId: string, fillId: string, run: () => Promise<StoredSettledFeeShare>): Promise<RunFeeShareSettleOnceResult>;
   /**
@@ -446,15 +467,16 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     return this.exclusive(`settle-fill:${fillId}`, async () => {
       const existing = this.settledByFill.get(fillId);
       if (existing) {
-        if (existing.followId !== followId) {
-          throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+        const resolved = resolveExistingFeeShareClaim(followId, existing);
+        if (resolved.action === 'duplicate') {
+          return { status: 'duplicate' as const, record: resolved.record };
         }
-        return { status: 'duplicate' as const, record: existing };
+      } else {
+        const follow = this.follows.get(followId);
+        const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
+        this.settled.set(settleKey(followId, fillId), claim);
+        this.settledByFill.set(fillId, claim);
       }
-      const follow = this.follows.get(followId);
-      const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
-      this.settled.set(settleKey(followId, fillId), claim);
-      this.settledByFill.set(fillId, claim);
       try {
         const record = await run();
         this.settled.set(settleKey(followId, fillId), record);
@@ -918,49 +940,49 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     const settleOnce = async () => {
       const existing = await this.getSettledFeeShareByFillId(fillId);
       if (existing) {
-        if (existing.followId !== followId) {
-          throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+        const resolved = resolveExistingFeeShareClaim(followId, existing);
+        if (resolved.action === 'duplicate') {
+          return { status: 'duplicate' as const, record: resolved.record };
         }
-        return { status: 'duplicate' as const, record: existing };
-      }
-
-      // Claim unique fill_id BEFORE ledger recipes. Payout keys include
-      // leaderId (`copy-leader-share:${fillId}:${leaderId}`); a crash after
-      // post used to leave no row, so a second follow paid a second leader.
-      const follow = await this.getFollow(followId);
-      const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
-      try {
-        await this.sql`
-          INSERT INTO copy_settled_fee_shares (
-            follow_id, fill_id, leader_id, follower_id, asset_id,
-            protocol_fee, applied_share_bps, gross_leader_share, capped_leader_share,
-            skipped_reason, settled, created_at
-          ) VALUES (
-            ${claim.followId},
-            ${claim.fillId},
-            ${claim.leaderId},
-            ${claim.followerId},
-            ${claim.assetId},
-            ${formatAmount(claim.protocolFee)},
-            ${claim.appliedShareBps},
-            ${formatAmount(claim.grossLeaderShare)},
-            ${formatAmount(claim.cappedLeaderShare)},
-            ${claim.skippedReason},
-            ${claim.settled},
-            now()
-          )
-        `;
-      } catch (err) {
-        if (isPgUniqueViolation(err)) {
-          const saved = await this.getSettledFeeShareByFillId(fillId);
-          if (saved && saved.followId !== followId) {
-            throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
-          }
-          if (saved) {
-            return { status: 'duplicate' as const, record: saved };
+      } else {
+        // Claim unique fill_id BEFORE ledger recipes. Payout keys include
+        // leaderId (`copy-leader-share:${fillId}:${leaderId}`); a crash after
+        // post used to leave no row, so a second follow paid a second leader.
+        const follow = await this.getFollow(followId);
+        const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
+        try {
+          await this.sql`
+            INSERT INTO copy_settled_fee_shares (
+              follow_id, fill_id, leader_id, follower_id, asset_id,
+              protocol_fee, applied_share_bps, gross_leader_share, capped_leader_share,
+              skipped_reason, settled, created_at
+            ) VALUES (
+              ${claim.followId},
+              ${claim.fillId},
+              ${claim.leaderId},
+              ${claim.followerId},
+              ${claim.assetId},
+              ${formatAmount(claim.protocolFee)},
+              ${claim.appliedShareBps},
+              ${formatAmount(claim.grossLeaderShare)},
+              ${formatAmount(claim.cappedLeaderShare)},
+              ${claim.skippedReason},
+              ${claim.settled},
+              now()
+            )
+          `;
+        } catch (err) {
+          if (isPgUniqueViolation(err)) {
+            const saved = await this.getSettledFeeShareByFillId(fillId);
+            if (!saved) throw err;
+            const resolved = resolveExistingFeeShareClaim(followId, saved);
+            if (resolved.action === 'duplicate') {
+              return { status: 'duplicate' as const, record: resolved.record };
+            }
+          } else {
+            throw err;
           }
         }
-        throw err;
       }
 
       let record: StoredSettledFeeShare;

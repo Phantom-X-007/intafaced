@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, formatAmount, userAvailable } from '@intafaced/ledger-client';
-import { CopyService, type LookupFollowerFillFeePort } from './copy-service.js';
+import { CopyService, type FollowerFillFee, type LookupFollowerFillFeePort } from './copy-service.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 import { UNPUBLISHED_COPY_FEE_SHARE_LAW, type CopyFeeShareLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
 import { CopyError } from './errors.js';
@@ -1635,6 +1635,164 @@ describe('CopyService', () => {
     expect(ledger.payoutCalls).toBe(1);
     expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
     expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare pending same-follow retries after post-throw — keys are idempotent', async () => {
+    class SweepOkPayoutThrowOnceLedger extends MemoryLedger {
+      payoutCalls = 0;
+      override async post(request: Parameters<MemoryLedger['post']>[0]) {
+        if (request.reason === 'trade.copy.fee_share') {
+          this.payoutCalls += 1;
+          if (this.payoutCalls === 1) throw new Error('payout threw after sweep');
+        }
+        return super.post(request);
+      }
+    }
+    const ledger = new SweepOkPayoutThrowOnceLedger();
+    await seedHouseFees(ledger, 'copy-pending-retry', '100');
+    await ledger.post(
+      recipes.sweepFeesToRewards({
+        windowId: 'pending-retry-seed',
+        sourceModule: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('20'),
+      }),
+    );
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    await planOneMirror(svc, followA.followId, 'fill-pending-retry');
+    await planOneMirror(svc, followB.followId, 'fill-pending-retry');
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followA.followId,
+        fillId: 'fill-pending-retry',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toThrow(/payout threw after sweep/);
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followB.followId,
+        fillId: 'fill-pending-retry',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(ledger.payoutCalls).toBe(1);
+
+    const retried = await svc.settleFeeShare(principal, {
+      followId: followA.followId,
+      fillId: 'fill-pending-retry',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    });
+    expect(retried.settled).toBe(true);
+    expect(retried.cappedLeaderShare).toBe('0.5');
+    expect(ledger.payoutCalls).toBe(2);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare fill-not-found unclaims — a later valid follow can still pay', async () => {
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-fill-missing', '100');
+    const store = new MemoryCopyFollowStore();
+    const fills = new Map<string, FollowerFillFee>();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: async (fillId) => fills.get(fillId) ?? null,
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    await planOneMirror(svc, followA.followId, 'fill-late-row');
+    await planOneMirror(svc, followB.followId, 'fill-late-row');
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followA.followId,
+        fillId: 'fill-late-row',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(await store.getSettledFeeShare(followA.followId, 'fill-late-row')).toBeNull();
+
+    fills.set('fill-late-row', {
+      fillId: 'fill-late-row',
+      userId: FOLLOWER,
+      feeAsset: 'USDT',
+      feeAmount: parseAmount('1'),
+      createdAt: new Date(Date.now() + 60_000),
+    });
+    const later = await svc.settleFeeShare(principal, {
+      followId: followB.followId,
+      fillId: 'fill-late-row',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    });
+    expect(later.settled).toBe(true);
+    expect(later.leaderId).toBe(LEADER_B);
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare killed unclaims — a later valid follow can still pay', async () => {
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-killed-unclaim', '100');
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    await planOneMirror(svc, followA.followId, 'fill-killed-unclaim');
+    await planOneMirror(svc, followB.followId, 'fill-killed-unclaim');
+    await svc.killFeeShare(principal, { followId: followA.followId });
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followA.followId,
+        fillId: 'fill-killed-unclaim',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_fee_share_killed' });
+    expect(await store.getSettledFeeShare(followA.followId, 'fill-killed-unclaim')).toBeNull();
+
+    const later = await svc.settleFeeShare(principal, {
+      followId: followB.followId,
+      fillId: 'fill-killed-unclaim',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    });
+    expect(later.settled).toBe(true);
+    expect(later.leaderId).toBe(LEADER_B);
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 });
