@@ -13,6 +13,7 @@ import type { OtcDeskService } from './otc/otc-service.js';
 import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
+import { describeFuturesPolicy } from './futures/futures-policy.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -666,6 +667,14 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             return { ok: true as const, refused: false as const };
           }),
         ),
+    }),
+
+    /**
+     * Futures product policy (trade.futures / D26-P1-T1g).
+     * Jobs capability + insurance listing + ADL disclosure constants — no invented D3/D5 numbers.
+     */
+    futures: router({
+      policy: publicProcedure.query(() => describeFuturesPolicy({})),
     }),
 
     /**

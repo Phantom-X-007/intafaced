@@ -83,13 +83,4 @@ export async function checkInsuranceFundedForListing(input: InsuranceListingGate
   return { ok: true, account, available };
 }
 
-/**
- * Ops/bot-facing listing policy. Does not read the pot (no invented funded).
- * Size/schedule stay owner-unset.
- */
-export function presentInsuranceListingPolicy(): {
-  readonly emptyPotBlocksLiveList: true;
-  readonly targetSize: 'owner_unset';
-} {
-  return { emptyPotBlocksLiveList: true, targetSize: 'owner_unset' };
-}
+export { presentInsuranceListingPolicy } from './futures-policy.js';

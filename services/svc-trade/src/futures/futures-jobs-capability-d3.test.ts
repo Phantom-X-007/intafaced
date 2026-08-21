@@ -4,7 +4,7 @@
  * 2. Break: presentFuturesJobsCapabilityNote adds maintenanceBps from DEFAULT policy
  * 3. Done bar: source has ladderNumbers: 'd3_unset' and no maintenanceBps
  * 4. Class N
- * 5. Paths: svc-trade/src/futures/futures-jobs-capability.ts
+ * 5. Paths: svc-trade/src/futures/futures-policy.ts
  * 6. RED: maintenanceBps: in the presenter
  * 7. Collision: none — new file only
  */
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(here, 'futures-jobs-capability.ts'), 'utf8');
+const src = readFileSync(join(here, 'futures-policy.ts'), 'utf8');
 
 describe('capabilities futures note does not invent D3 bps', () => {
   it('ladderNumbers stays d3_unset and maintenanceBps is absent', () => {
