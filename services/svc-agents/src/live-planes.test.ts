@@ -9,6 +9,8 @@ describe('describeAgentsLivePlanes', () => {
       supportUrlConfigured: false,
       identityUrlConfigured: false,
       academyUrlConfigured: false,
+      copyLeaderPlaneOpenConfigured: false,
+      copyLeaderAllowlistCount: 0,
       storesMayStillRefuse: true,
     });
   });
@@ -28,6 +30,21 @@ describe('describeAgentsLivePlanes', () => {
       supportUrlConfigured: true,
       identityUrlConfigured: true,
       academyUrlConfigured: true,
+      copyLeaderPlaneOpenConfigured: false,
+      copyLeaderAllowlistCount: 0,
+      storesMayStillRefuse: true,
+    });
+  });
+
+  it('reports copy leader env pins without inventing allowlist content', () => {
+    expect(
+      describeAgentsLivePlanes({
+        LIVE_TRADE_COPY_LEADER_PLANE_OPEN: 'true',
+        LIVE_TRADE_COPY_LEADER_IDS: 'leader-a, leader-b',
+      }),
+    ).toMatchObject({
+      copyLeaderPlaneOpenConfigured: true,
+      copyLeaderAllowlistCount: 2,
       storesMayStillRefuse: true,
     });
   });

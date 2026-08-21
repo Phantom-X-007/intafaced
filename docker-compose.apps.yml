@@ -987,6 +987,9 @@ services:
       AGENTS_UPSTREAM_COMPLETIONS_PATH:
       AGENTS_UPSTREAM_EMBEDDINGS_PATH:
       AGENTS_ROUTING_TABLE:
+      # Copy-intel live plane (Class X). Pass-through only — unset stays refuse-closed.
+      LIVE_TRADE_COPY_LEADER_PLANE_OPEN:
+      LIVE_TRADE_COPY_LEADER_IDS:
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4008']
     healthcheck: *healthcheck

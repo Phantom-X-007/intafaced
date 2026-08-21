@@ -5,12 +5,16 @@
  * (`no_live_metrics`, `no_live_leaders`, …) — never reported as live data here.
  */
 
+import { liveTradeCopyLeaderIds, liveTradeCopyLeaderPlaneOpen } from './copy-intel/live-leader-plane-refuse.js';
+
 export type AgentsLivePlanesSummary = {
   readonly tradeUrlConfigured: boolean;
   readonly payUrlConfigured: boolean;
   readonly supportUrlConfigured: boolean;
   readonly identityUrlConfigured: boolean;
   readonly academyUrlConfigured: boolean;
+  readonly copyLeaderPlaneOpenConfigured: boolean;
+  readonly copyLeaderAllowlistCount: number;
   /** Fleet URL pin ≠ upstream store wired. Always true in Stage-1. */
   readonly storesMayStillRefuse: true;
 };
@@ -22,6 +26,8 @@ export function describeAgentsLivePlanes(env: NodeJS.ProcessEnv = process.env): 
     supportUrlConfigured: (env.SUPPORT_URL?.trim() ?? '').length > 0,
     identityUrlConfigured: (env.IDENTITY_URL?.trim() ?? '').length > 0,
     academyUrlConfigured: (env.ACADEMY_URL?.trim() ?? '').length > 0,
+    copyLeaderPlaneOpenConfigured: liveTradeCopyLeaderPlaneOpen(env),
+    copyLeaderAllowlistCount: liveTradeCopyLeaderIds(env).length,
     storesMayStillRefuse: true,
   };
 }

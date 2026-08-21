@@ -106,6 +106,18 @@ const schema = serviceEnvSchema
        */
       PAY_URL: blankAsAbsent(z.string().url().optional()),
 
+      /**
+       * Copy-intel live trade.copy leader plane (Class X). Only the literal `true`
+       * opens the sealed plane; blank / unset stays refuse-closed.
+       */
+      LIVE_TRADE_COPY_LEADER_PLANE_OPEN: blankAsAbsent(z.literal('true').optional()),
+
+      /**
+       * Comma-separated owner allowlist of leader ids. Blank / unset → empty list
+       * (refuse). Never seeded with invented leader ids in compose.
+       */
+      LIVE_TRADE_COPY_LEADER_IDS: blankAsAbsent(z.string().optional()),
+
       /** Asset premium agent tiers are billed in (§8.2). */
       AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
 
