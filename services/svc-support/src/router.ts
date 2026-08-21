@@ -16,6 +16,7 @@ import {
   supportTicketStatusSchema,
 } from '@intafaced/contracts';
 import { describeSupportDeskPolicy } from './desk-policy.js';
+import { describeKbPolicy } from './kb-policy.js';
 import { SupportError, SupportService, requireSupportOps } from './support-service.js';
 import type { TicketKbLoopObserver } from './ticket-kb-loop-observation.js';
 import { userCopy } from './user-copy.js';
@@ -74,6 +75,8 @@ function mapError(err: unknown): never {
 export function createSupportRouter(support: SupportService, loop?: TicketKbLoopObserver, internalServiceSecret?: string | null) {
   return router({
     deskPolicy: publicProcedure.query(() => describeSupportDeskPolicy(internalServiceSecret ?? null)),
+
+    kbPolicy: publicProcedure.query(() => describeKbPolicy()),
 
     create: scopedProcedure('support:write')
       .input(createTicketInputSchema)
