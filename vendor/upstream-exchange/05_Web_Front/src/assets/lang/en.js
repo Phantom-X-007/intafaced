@@ -2151,6 +2151,11 @@ module.exports = {
             mobileNeed1: 'A phone identifier on svc-identity, with the uniqueness and recovery rules that implies.',
             mobileNeed2: 'An SMS sender behind the edge, and a decision about which jurisdictions it may send to.'
         },
+        reg: {
+            referrer: 'Referrer UUID (optional)',
+            referrerTip: "Optional. Paste the referrer's account UUID, or leave blank. A failed referral still creates the account.",
+            referrerErr: 'Use a UUID, or leave blank.'
+        },
         app: {
             socketTitle: 'Mobile app',
             socketLead: 'The Android download page that shipped with the shell.',
