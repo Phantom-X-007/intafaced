@@ -1,19 +1,22 @@
 /**
  * Unit card — addCollateral retry is one lock (client eventId)
  *
- * 1. Promise: a timed-out loans.addCollateral retry with the same eventId and
- *    amount posts recipes.loanCollateralLock once. Sequence is MAX+1 only for a
- *    new event; the client id is the retry key (same shape as loans.open loanId).
- * 2. Break: timeout after the lock posts, retry the same amount with no client
- *    id (or a fresh MAX+1) double-locks the borrower.
- * 3. Done bar: timeout after lock posts, retry addCollateral same amount +
- *    eventId → one extra loan.collateral.locked and one extra collateral event.
- *    Two extra events is RED; one lock is GREEN. Amount mismatch on the same
- *    eventId refuses bank.loan_collateral_mismatch and posts nothing more.
+ * 1. Promise: a timed-out or overlapping loans.addCollateral retry with the same
+ *    eventId and amount posts recipes.loanCollateralLock once. Sequence is MAX+1
+ *    only for a new event; the client id is the retry key. The overlap loser posts
+ *    the claimed row's sequence (ledger key is loanId:sequence).
+ * 2. Break: overlapping retries allocate different MAX+1 sequences; ON CONFLICT
+ *    (id) still posts the caller's sequence and double-locks. Requiring eventId
+ *    400s leftover Loans.vue `{loanId, amount}`. Minting UUID when omitted makes
+ *    a retry without a stable client id a second lock.
+ * 3. Done bar: two overlapping addCollateral same eventId + amount → one extra
+ *    lock. Timeout-after-post serial retry is still one lock. HTTP without
+ *    eventId is 200 (Loans.vue). Amount mismatch refuses
+ *    bank.loan_collateral_mismatch.
  * 4. Class M
  * 5. Paths: services/svc-bank/src/loans/loan-service.ts, router.ts (addCollateral)
- * 6. RED: first addCollateral times out after the lock posts; retry same amount
- *    allocates MAX+1 and posts a second lock
+ * 6. RED: overlapping same eventId posts two loan.collateral.locked; HTTP
+ *    `{loanId, amount}` is 400
  * 7. Collision: night #2681 Bank.vue; closed #2698 amountFromSql mill — this
  *    file does not touch either
  */
@@ -54,13 +57,14 @@ type WireBody = {
 };
 
 describe('addCollateral pins eventId before MAX+1 sequence allocation', () => {
-  it('addCollateral resolves the client event id before nextCollateralSequence', () => {
+  it('addCollateral resolves the client event id before nextCollateralSequence and does not mint', () => {
     const src = readFileSync(join(here, 'loan-service.ts'), 'utf8');
     const addAt = src.indexOf('async addCollateral(input:');
     const relAt = src.indexOf('async releaseExcess(input:', addAt);
     const body = src.slice(addAt, relAt);
     expect(addAt).toBeGreaterThan(-1);
     expect(body).toMatch(/eventId/);
+    expect(body).not.toMatch(/randomUUID/);
     const lookupAt = body.indexOf('collateralEventById');
     const nextAt = body.indexOf('nextCollateralSequence');
     expect(lookupAt).toBeGreaterThan(-1);
@@ -68,13 +72,25 @@ describe('addCollateral pins eventId before MAX+1 sequence allocation', () => {
     expect(src).toMatch(/FROM bank\.loan_collateral_events WHERE id =/);
   });
 
-  it('public door requires eventId the way open requires loanId', () => {
+  it('lockCollateral posts the claimed row sequence after ON CONFLICT (id)', () => {
+    const src = readFileSync(join(here, 'loan-service.ts'), 'utf8');
+    const lockAt = src.indexOf('private async lockCollateral(');
+    const relAt = src.indexOf('private async releaseCollateral(', lockAt);
+    const body = src.slice(lockAt, relAt);
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(body).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+    expect(body).toMatch(/let postSequence = sequence/);
+    expect(body).toMatch(/postSequence = Number\(row\.sequence\)/);
+    expect(body).toMatch(/sequence: postSequence/);
+  });
+
+  it('public door accepts optional eventId so Loans.vue {loanId, amount} is not 400', () => {
     const src = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     const doorAt = src.indexOf("addCollateral: scopedProcedure('bank:write'");
     const relAt = src.indexOf("releaseExcess: scopedProcedure('bank:write'", doorAt);
     const body = src.slice(doorAt, relAt);
     expect(doorAt).toBeGreaterThan(-1);
-    expect(body).toMatch(/eventId:\s*z\.string\(\)\.uuid\(\)/);
+    expect(body).toMatch(/eventId:\s*z\.string\(\)\.uuid\(\)\.optional\(\)/);
     expect(body).toMatch(/eventId:\s*input\.eventId/);
   });
 });
@@ -246,6 +262,71 @@ describe('LoanService.addCollateral — timed-out retry is one lock', () => {
     expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
   });
 
+  it('two overlapping addCollateral with the same eventId lock once', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW) },
+    });
+    const opened = await seedOpenLoan(bank, ledger);
+    const locksAtOpen = lockCount(ledger);
+    const eventId = randomUUID();
+
+    type Sequencer = { nextCollateralSequence: (loanId: string) => Promise<number> };
+    const loans = bank.loans as unknown as Sequencer;
+    if (typeof loans.nextCollateralSequence !== 'function') {
+      throw new Error('nextCollateralSequence missing — overlap harness cannot force distinct sequences');
+    }
+    const origNext = loans.nextCollateralSequence.bind(bank.loans);
+    let nextHits = 0;
+    let bothAtNext!: () => void;
+    const bothReachedNext = new Promise<void>((resolve) => {
+      bothAtNext = resolve;
+    });
+    let loserMayAllocate!: () => void;
+    const loserAllowed = new Promise<void>((resolve) => {
+      loserMayAllocate = resolve;
+    });
+    loans.nextCollateralSequence = async (loanId: string) => {
+      const place = ++nextHits;
+      if (place === 2) bothAtNext();
+      await bothReachedNext;
+      if (place === 1) return origNext(loanId);
+      await loserAllowed;
+      return origNext(loanId);
+    };
+
+    const innerPost = ledger.post.bind(ledger);
+    let firstTopUpSeen = false;
+    let releaseFirstPost!: () => void;
+    const firstPostHeld = new Promise<void>((resolve) => {
+      releaseFirstPost = resolve;
+    });
+    ledger.post = async (request) => {
+      if (!firstTopUpSeen && isTopUpLock(request)) {
+        firstTopUpSeen = true;
+        loserMayAllocate();
+        await firstPostHeld;
+      }
+      return innerPost(request);
+    };
+
+    const first = bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('1'), now: NOW });
+    const second = bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('1'), now: NOW });
+    const secondResult = await second;
+    releaseFirstPost();
+    const firstResult = await first;
+
+    expect(firstResult.sequence).toBe(secondResult.sequence);
+    expect(firstResult.ledgerTxId).toBe(secondResult.ledgerTxId);
+    expect(lockCount(ledger)).toBe(locksAtOpen + 1);
+    const events = await sql<Array<{ id: string; sequence: number }>>`
+      SELECT id, sequence FROM bank.loan_collateral_events
+       WHERE loan_id = ${opened.loan.id} AND sequence > 0
+    `;
+    expect(events).toHaveLength(1);
+    expect(events[0]!.id).toBe(eventId);
+    expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
+  }, 20_000);
+
   it('same eventId with a different amount refuses and does not post a second lock', async () => {
     const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
       loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW) },
@@ -306,5 +387,23 @@ describe('HTTP /trpc/loans.addCollateral — retry with the same eventId is one 
     `;
     expect(events).toHaveLength(1);
     expect(events[0]!.id).toBe(eventId);
+  });
+
+  it('HTTP without eventId is 200 — leftover Loans.vue {loanId, amount}', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }) },
+    });
+    const opened = await seedOpenLoan(bank, ledger, new Date());
+    const locksAtOpen = lockCount(ledger);
+    const app = await mountDoors(bank);
+
+    const added = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, amount: '1' });
+    expect(added.statusCode).toBe(200);
+    const data = procedureData(added.body) as { ledgerTxId: string; sequence: number };
+    expect(data.ledgerTxId.length).toBeGreaterThan(0);
+    expect(data.sequence).toBeGreaterThan(0);
+    await app.close();
+
+    expect(lockCount(ledger)).toBe(locksAtOpen + 1);
   });
 });

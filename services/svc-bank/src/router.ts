@@ -1092,12 +1092,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     /**
-     * `eventId` is supplied by the client so a timed-out retry is the same lock,
-     * not a second one (§5). Sequence is allocated server-side; without a client
-     * id, MAX+1 after the first lock posted would pledge collateral twice.
+     * `eventId` is the client retry key when the caller has one (§5). Optional:
+     * leftover Loans.vue posts `{loanId, amount}` and must not 400. Night owns
+     * Bank.vue. Same eventId + amount is one lock, including overlapping retries.
      */
     addCollateral: scopedProcedure('bank:write', { module: 'bank' })
-      .input(z.object({ loanId: z.string().uuid(), eventId: z.string().uuid(), amount: amountString }))
+      .input(z.object({ loanId: z.string().uuid(), eventId: z.string().uuid().optional(), amount: amountString }))
       .output(z.object({ ledgerTxId: z.string(), sequence: z.number().int() }))
       .mutation(async ({ ctx, input }) =>
         guard(async () => {

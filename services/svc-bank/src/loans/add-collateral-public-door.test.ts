@@ -203,7 +203,7 @@ describe('LoanService.addCollateral refuses missing loan or mark before any post
       loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW) },
     });
 
-    await expect(bank.loans.addCollateral({ loanId: MISSING, eventId: randomUUID(), amount: amt('1'), now: NOW })).rejects.toMatchObject({
+    await expect(bank.loans.addCollateral({ loanId: MISSING, amount: amt('1'), now: NOW })).rejects.toMatchObject({
       code: 'bank.loan_not_found',
     });
 
@@ -220,9 +220,7 @@ describe('LoanService.addCollateral refuses missing loan or mark before any post
       loans: { priceSource: fixedPriceSource({}, () => NOW) },
     });
 
-    await expect(
-      bank.loans.addCollateral({ loanId: opened.loan.id, eventId: randomUUID(), amount: amt('1'), now: NOW }),
-    ).rejects.toMatchObject({
+    await expect(bank.loans.addCollateral({ loanId: opened.loan.id, amount: amt('1'), now: NOW })).rejects.toMatchObject({
       code: 'bank.mark_missing',
     });
 
@@ -249,12 +247,12 @@ describe('HTTP /trpc/loans.addCollateral — top-up through ledger-client', () =
     });
     const app = await mountDoors(bank);
 
-    await expect(caller(bank).loans.addCollateral({ loanId: MISSING, eventId: randomUUID(), amount: '1' })).rejects.toMatchObject({
+    await expect(caller(bank).loans.addCollateral({ loanId: MISSING, amount: '1' })).rejects.toMatchObject({
       code: 'NOT_FOUND',
       cause: { code: 'bank.loan_not_found' },
     });
 
-    const added = await post(app, 'loans.addCollateral', { loanId: MISSING, eventId: randomUUID(), amount: '1' });
+    const added = await post(app, 'loans.addCollateral', { loanId: MISSING, amount: '1' });
     expect(added.statusCode).toBe(404);
     expect(added.body.error?.data?.code).toBe('NOT_FOUND');
     await app.close();
@@ -273,12 +271,12 @@ describe('HTTP /trpc/loans.addCollateral — top-up through ledger-client', () =
     });
     const app = await mountDoors(bank);
 
-    await expect(caller(bank).loans.addCollateral({ loanId: opened.loan.id, eventId: randomUUID(), amount: '1' })).rejects.toMatchObject({
+    await expect(caller(bank).loans.addCollateral({ loanId: opened.loan.id, amount: '1' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'bank.mark_missing' },
     });
 
-    const added = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, eventId: randomUUID(), amount: '1' });
+    const added = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, amount: '1' });
     expect(added.statusCode).toBe(412);
     expect(added.body.error?.data?.code).toBe('PRECONDITION_FAILED');
     expect(JSON.stringify(added.body.error)).toMatch(/bank\.mark_missing/);
@@ -295,7 +293,7 @@ describe('HTTP /trpc/loans.addCollateral — top-up through ledger-client', () =
     const locksBefore = ledger.journal().filter((tx) => tx.reason === 'loan.collateral.locked').length;
     const app = await mountDoors(bank);
 
-    const added = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, eventId: randomUUID(), amount: '1' });
+    const added = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, amount: '1' });
     expect(added.statusCode).toBe(200);
     const data = procedureData(added.body) as { ledgerTxId: string; sequence: number };
     expect(data.ledgerTxId.length).toBeGreaterThan(0);
