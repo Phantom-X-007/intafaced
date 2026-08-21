@@ -129,6 +129,7 @@
     </div>
 
     <IxAcademyCurriculum />
+    <IxAcademyCerts />
   </div>
 </template>
 
@@ -142,12 +143,13 @@
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import IxAcademyCurriculum from './academy/Curriculum.vue';
+import IxAcademyCerts from './academy/Certs.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxAcademy',
-  components: { IxState, IxAcademyCurriculum },
+  components: { IxState, IxAcademyCurriculum, IxAcademyCerts },
   mixins: [ixModule],
   data() {
     return {
