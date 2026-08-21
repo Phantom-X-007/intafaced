@@ -81,7 +81,7 @@ export function describeSupportPolicy(): SupportPolicySummary {
       reason: dark.reason,
       userMessageKey: dark.userMessageKey,
     },
-    liveAllowedTasks: live.allowedTasks,
+    liveAllowedTasks: [...live.allowedTasks] as ['support.classify', 'support.reply'],
     tierLawRefuse: {
       reason: tierBlank.reason,
       userMessageKey: tierBlank.userMessageKey,

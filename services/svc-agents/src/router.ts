@@ -32,7 +32,6 @@ import { navigatorTierGate } from './navigator/tier-gate.js';
 import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
 import { supportAgentGuardrail } from './support-agent/guardrail.js';
-import { describeSupportAgentPolicy } from './support-agent/policy.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
 import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
