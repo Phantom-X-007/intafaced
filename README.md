@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`███████████████░░░░░` **76%** — 120 of 158 features shipped
+`███████████████░░░░░` **77%** — 121 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 13/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 13/15 · **4** ✅ · **4P** 0/3 · **5** 34/59 · **5P** 4/7
 
-**In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · Auto-invest — DCA schedules, card round-ups, threshold sweeps (§31) (nitro-bank-roundup) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03) · Portfolio suite — users and house, views over ledger and indexer (§25:723) (ZenYoda3)
+**In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03) · Portfolio suite — users and house, views over ledger and indexer (§25:723) (ZenYoda3)
 
 **🟢 18 ready to claim** — nothing blocks these:
 
