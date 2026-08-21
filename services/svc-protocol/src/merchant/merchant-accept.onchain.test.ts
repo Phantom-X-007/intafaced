@@ -61,7 +61,7 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
     });
     accept = (await deployer.publicClient.waitForTransactionReceipt({ hash: mTx })).contractAddress!;
 
-    await deployer.walletClient.writeContract({
+    const mintHash = await deployer.walletClient.writeContract({
       address: token,
       abi: tokenAbi,
       functionName: 'mint',
@@ -69,11 +69,12 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
       account: deployer.walletClient.account!,
       chain: deployer.walletClient.chain,
     });
+    await deployer.publicClient.waitForTransactionReceipt({ hash: mintHash });
   }, 120_000);
 
   it('splits payment to merchant + merchant-chosen fee recipient', async () => {
     const amount = 10n * WAD;
-    await payer.walletClient.writeContract({
+    const approveHash = await payer.walletClient.writeContract({
       address: token,
       abi: tokenAbi,
       functionName: 'approve',
@@ -81,7 +82,8 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
       account: payer.walletClient.account!,
       chain: payer.walletClient.chain,
     });
-    await payer.walletClient.writeContract({
+    await payer.publicClient.waitForTransactionReceipt({ hash: approveHash });
+    const payHash = await payer.walletClient.writeContract({
       address: accept,
       abi: acceptAbi,
       functionName: 'pay',
@@ -89,6 +91,7 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
       account: payer.walletClient.account!,
       chain: payer.walletClient.chain,
     });
+    await payer.publicClient.waitForTransactionReceipt({ hash: payHash });
     const mBal = (await deployer.publicClient.readContract({
       address: token,
       abi: tokenAbi,
