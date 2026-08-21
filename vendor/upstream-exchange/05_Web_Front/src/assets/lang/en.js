@@ -1025,6 +1025,7 @@ module.exports = {
             completed: "Completed",
             itemSlug: "Item slug",
             itemSlugHint: "known slug, or one that is not",
+            lookupSlug: "Look up slug",
             signInToComplete: "Sign in to complete",
             emptyCurriculum: "No playbooks on this path."
         },
