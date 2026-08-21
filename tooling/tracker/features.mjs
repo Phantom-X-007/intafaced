@@ -1347,8 +1347,17 @@ export const FEATURES = [
   f('academy.spatial', '2D navigable room canvas, VR-ready scene state', {
     module: 'academy',
     phase: '5',
+    owner: 'Phantom-X-007',
     dependsOn: ['academy.lobbies'],
-    note: 'Stage-1 2026-08-04: versioned Scene v1 schema + size gate (`spatial/scene.ts`); updateScene rejects invalid/oversized. Canvas product residual. Not tracker done until navigable shell uses server scene.',
+    requires: [
+      'services/svc-academy/src/spatial/mount-vs-tracker.ts',
+      'services/svc-academy/src/spatial/mount-vs-tracker.test.ts',
+      'services/svc-academy/src/spatial/scene.ts',
+      'services/svc-academy/src/spatial/edit-policy.ts',
+    ],
+    note:
+      'Stage-1 D26-P1-SP1M: Scene v1 schema + size gate + host write policy mount-vs-tracker. ' +
+      'NOT done — navigable shell product residual (sceneIsNavigableProductShell stays false). Class X: canvas UI craft.',
   }),
   f('academy.curriculum', 'DERIV//DESK library import — 20 playbooks + 3 workbooks', {
     module: 'academy',
