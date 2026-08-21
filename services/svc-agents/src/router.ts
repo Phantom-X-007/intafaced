@@ -30,6 +30,7 @@ import { navigatorAgentGuardrail } from './navigator/guardrail.js';
 import { invokeNavigatorDataTool } from './navigator/data-tools.js';
 import { effectiveNavigatorTradePlane } from './navigator/trade-plane-env.js';
 import type { NavigatorTradeDataPort } from './navigator/trade-data-port.js';
+import type { NavigatorIdentitySessionPort } from './navigator/identity-session-port.js';
 import { navigatorTierGate } from './navigator/tier-gate.js';
 import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
@@ -318,6 +319,11 @@ export interface AgentsRouterDeps {
    * caller fixtures or refuse missing_fixture / empty_markets.
    */
   readonly navigatorTradeDataPort?: NavigatorTradeDataPort;
+  /**
+   * Live identity session projection for navigator identity.session.read. Unset
+   * → live runs need caller session fixtures or refuse incomplete_session.
+   */
+  readonly navigatorIdentitySessionPort?: NavigatorIdentitySessionPort;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
@@ -334,6 +340,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     copyLeaderFixturesPort,
     navigatorTradeUrl,
     navigatorTradeDataPort,
+    navigatorIdentitySessionPort,
   } = deps;
 
   const resolveNavigatorPlane = (requested: 'live' | 'dark') => effectiveNavigatorTradePlane(requested, navigatorTradeUrl);
@@ -1626,6 +1633,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }
           }
 
+          let session = input.session ?? null;
+          if (plane === 'live' && navigatorIdentitySessionPort && input.tool === 'identity.session.read' && session?.sessionId?.trim()) {
+            const liveSession = await navigatorIdentitySessionPort.read(session.sessionId).catch(() => null);
+            if (liveSession) session = liveSession;
+          }
+
           const result = invokeNavigatorDataTool({
             tool: input.tool,
             plane,
@@ -1635,7 +1648,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             quote,
             markets,
-            session: input.session ?? null,
+            session,
           });
           const occurredAt = input.occurredAt ?? new Date().toISOString();
           const log = auditNavigatorDataTool(emptyNavigatorAuditLog(), result, occurredAt);
@@ -1786,6 +1799,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 session: ask.session ?? null,
               })),
               ...(navigatorTradeDataPort ? { tradeDataPort: navigatorTradeDataPort } : {}),
+              ...(navigatorIdentitySessionPort ? { identitySessionPort: navigatorIdentitySessionPort } : {}),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });
 

@@ -72,6 +72,7 @@ import type { TradeDataPlane } from './grounded.js';
 import { navigatorDeclaredTools } from './guardrail.js';
 import { navigatorTierGate, type NavigatorTierLaw } from './tier-gate.js';
 import { readLiveNavigatorMarkets, readLiveNavigatorQuote, type NavigatorTradeDataPort } from './trade-data-port.js';
+import { readLiveNavigatorSession, type NavigatorIdentitySessionPort } from './identity-session-port.js';
 
 /** The agent id the navigator guardrail is registered under. */
 export const NAVIGATOR_AGENT_ID = 'navigator';
@@ -207,6 +208,7 @@ export type NavigatorRunInput = {
   readonly asks: readonly NavigatorAsk[];
   /** Live trade REST samples when plane is live and caller fixtures are absent. */
   readonly tradeDataPort?: NavigatorTradeDataPort;
+  readonly identitySessionPort?: NavigatorIdentitySessionPort;
   readonly now?: Date;
 };
 
@@ -300,6 +302,7 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
       const tool = ask.tool.trim();
       let quote = ask.quote ?? null;
       let markets = ask.markets ?? null;
+      let session = ask.session ?? null;
 
       if (input.plane === 'live' && input.tradeDataPort) {
         if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
@@ -313,6 +316,11 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
             if (liveQuote.ok) quote = liveQuote.quote;
           }
         }
+      }
+
+      if (input.plane === 'live' && input.identitySessionPort && tool === 'identity.session.read' && session?.sessionId?.trim()) {
+        const liveSession = await readLiveNavigatorSession(input.identitySessionPort, session.sessionId, input.userId);
+        if (liveSession.ok) session = liveSession.session;
       }
 
       let toolResult: DataToolResult;
@@ -333,7 +341,7 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
               now,
               quote,
               markets,
-              session: ask.session ?? null,
+              session,
             }),
         });
         toolResult = act.result as DataToolResult;
