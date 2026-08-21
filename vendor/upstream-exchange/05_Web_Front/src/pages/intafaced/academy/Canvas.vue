@@ -59,7 +59,7 @@
 /**
  * Spatial scene v1 on /academy. Host writes the whole scene; attendees read.
  *
- * No schema v2. No localStorage. expectedFingerprint is the last server hash.
+ * No schema v2. Scene lives on the service only. expectedFingerprint is the last server hash.
  * Attendee writes refuse by name (`academy.not_host`).
  */
 import IxState from '../../../components/intafaced/IxState.vue';
