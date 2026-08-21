@@ -347,6 +347,8 @@ describe('trade.copy product mount', () => {
     const listed = await caller.copy.listMyFollows();
     expect(listed).toHaveLength(1);
     expect(listed[0]?.followId).toBe(follow.followId);
+    expect(listed[0]?.currentExposure).toBe('0');
+    expect(listed[0]?.remainingExposure).toBe('1000');
   });
 
   it('planMirror plans within envelope and redelivers the same fillId', async () => {
@@ -382,5 +384,10 @@ describe('trade.copy product mount', () => {
     });
     expect(again.fillId).toBe(plan.fillId);
     expect(again.nextExposure).toBe(plan.nextExposure);
+
+    const desk = await caller.copy.listMyFollows();
+    expect(desk).toHaveLength(1);
+    expect(desk[0]?.currentExposure).toBe('100');
+    expect(desk[0]?.remainingExposure).toBe('9900');
   });
 });

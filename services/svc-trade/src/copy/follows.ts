@@ -39,6 +39,10 @@ export interface PresentCopyFollow {
   readonly permittedMarkets: readonly string[];
   readonly maxNotionalPerOrder: string;
   readonly maxAggregateExposure: string;
+  /** Cumulative session budget spent — mirrors durable store exposure, not net position. */
+  readonly currentExposure: string;
+  /** Headroom under maxAggregateExposure; zero when exhausted. */
+  readonly remainingExposure: string;
   readonly expiresAt: string;
   readonly region: string;
   readonly createdAt: string;
@@ -93,7 +97,8 @@ export function assertCopyRegionAllowed(law: CopyJurisdictionLaw, region: string
   return code;
 }
 
-export function presentCopyFollow(follow: CopyFollow): PresentCopyFollow {
+export function presentCopyFollow(follow: CopyFollow, currentExposure: Amount = 0n): PresentCopyFollow {
+  const remaining = follow.envelope.maxAggregateExposure > currentExposure ? follow.envelope.maxAggregateExposure - currentExposure : 0n;
   return {
     followId: follow.followId,
     followerId: follow.followerId,
@@ -101,6 +106,8 @@ export function presentCopyFollow(follow: CopyFollow): PresentCopyFollow {
     permittedMarkets: follow.envelope.permittedMarkets,
     maxNotionalPerOrder: formatAmount(follow.envelope.maxNotionalPerOrder),
     maxAggregateExposure: formatAmount(follow.envelope.maxAggregateExposure),
+    currentExposure: formatAmount(currentExposure),
+    remainingExposure: formatAmount(remaining),
     expiresAt: follow.envelope.expiresAt.toISOString(),
     region: follow.region,
     createdAt: follow.createdAt.toISOString(),
