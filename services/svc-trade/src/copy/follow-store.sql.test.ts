@@ -235,5 +235,45 @@ if (!available) {
       ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
       expect(ran).toBe(false);
     });
+
+    it('leftover pending + CopyError on retry keeps the row — other follow ran===false', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      await store.saveFollow(follow(FOLLOW_B, LEADER_B));
+      await db.sql`
+        INSERT INTO copy_settled_fee_shares (
+          follow_id, fill_id, leader_id, follower_id, asset_id,
+          protocol_fee, applied_share_bps, gross_leader_share, capped_leader_share,
+          skipped_reason, settled, created_at
+        ) VALUES (
+          ${FOLLOW_A}, ${FILL}, ${LEADER}, ${FOLLOWER}, '',
+          0, 0, 0, 0, NULL, false, now()
+        )
+      `;
+
+      let seenInserted: boolean | undefined;
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+          seenInserted = ctx.insertedThisCall;
+          throw new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
+        }),
+      ).rejects.toMatchObject({ code: 'trade.copy_fee_share_killed' });
+      expect(seenInserted).toBe(false);
+
+      const leftover = await db.sql<Array<{ follow_id: string }>>`
+        SELECT follow_id FROM copy_settled_fee_shares WHERE fill_id = ${FILL}
+      `;
+      expect(leftover).toHaveLength(1);
+      expect(leftover[0]?.follow_id).toBe(FOLLOW_A);
+
+      let ranB = false;
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+          ranB = true;
+          return share(FOLLOW_B, FILL, LEADER_B);
+        }),
+      ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+      expect(ranB).toBe(false);
+    });
   });
 }

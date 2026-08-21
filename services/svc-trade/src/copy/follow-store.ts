@@ -21,14 +21,24 @@ export function rethrowCopyFollowUnique(err: unknown): never {
 }
 
 /**
- * Typed product refuses fire before ledger recipes. Unclaim every CopyError
- * after INSERT (fill-not-found / wrong owner / killed / not-mirrored /
- * pre-follow / blank / expired) so the once-key is not burned. A ledger or
- * crash throw may have swept or paid — keep unique fill_id.
+ * Typed product refuses fire before ledger recipes. Unclaim a CopyError
+ * only when **this call INSERTed** the pending row (pre-post). Fill-not-found /
+ * wrong owner / killed / not-mirrored / pre-follow / blank / expired must not
+ * burn the once-key on first insert. Retry of leftover pending that then
+ * CopyErrors must **keep** unique fill_id — DELETE would let follow B pay.
+ * A ledger or crash throw may have swept or paid — keep unique fill_id.
  */
 export function isCopyFeeSharePrePostUnclaim(err: unknown): boolean {
   return err instanceof CopyError;
 }
+
+/** DELETE unique fill_id only on CopyError from this call's INSERT. */
+export function shouldUnclaimCopyFeeShareClaim(insertedThisCall: boolean, err: unknown): boolean {
+  return insertedThisCall && isCopyFeeSharePrePostUnclaim(err);
+}
+
+/** `runFeeShareSettleOnce` body — skip reserve / unclaim when this is a leftover retry. */
+export type FeeShareSettleOnceContext = { readonly insertedThisCall: boolean };
 
 /**
  * Durable copy-follow store (trade.copy residual — same pattern as #1010 TWAP).
@@ -52,10 +62,12 @@ export function isCopyFeeSharePrePostUnclaim(err: unknown): boolean {
  * Same-follow **pending** (`settled=false`, no skip) retries `run` — crash
  * after INSERT or a post-throw must not poison follow A. Terminal rows
  * (settled or cap/zero skip) never re-run. Other follow unique-refuses.
- * Unclaim every pre-post CopyError so a later valid follow is not poisoned.
- * Any other throw from `run` may have posted — keep the unique fill_id.
+ * Unclaim CopyError only when this call INSERTed (`insertedThisCall`).
+ * Leftover pending retry that then CopyErrors keeps the row. Any other
+ * throw from `run` may have posted — keep the unique fill_id.
  * Ledger keys alone are not enough: payout keys include leaderId, so two
- * leaders would both post from one house pot.
+ * leaders would both post from one house pot. Pending retry must not
+ * re-reserve (`copy-fee:${fillId}` / `copy-leader-share:${fillId}:${leaderId}`).
  */
 
 export interface CopyPeriodStats {
@@ -227,10 +239,14 @@ export interface CopyFollowStore {
    * Same-follow pending retries `run`. Terminal same-follow redelivery
    * returns the prior record without re-running. A different follow on the
    * same fill throws `trade.copy_settle_refused` (even while pending).
-   * `run` throws: unclaim every pre-post CopyError; keep the row if a post
-   * may have committed (second leader unique-violates).
+   * `run` throws: unclaim CopyError only when this call INSERTed; leftover
+   * pending retry keeps the row (second leader unique-violates).
    */
-  runFeeShareSettleOnce(followId: string, fillId: string, run: () => Promise<StoredSettledFeeShare>): Promise<RunFeeShareSettleOnceResult>;
+  runFeeShareSettleOnce(
+    followId: string,
+    fillId: string,
+    run: (ctx: FeeShareSettleOnceContext) => Promise<StoredSettledFeeShare>,
+  ): Promise<RunFeeShareSettleOnceResult>;
   /**
    * Run follower place at most once per (followId, fillId).
    * Redelivery returns the prior order and does not call placeOrder again.
@@ -458,13 +474,14 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   async runFeeShareSettleOnce(
     followId: string,
     fillId: string,
-    run: () => Promise<StoredSettledFeeShare>,
+    run: (ctx: FeeShareSettleOnceContext) => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
     // Exclusive on fillId so two follows cannot both pass a null lookup
     // and both reserve / pay two leaders from one house fee. Claim the
     // fill *before* `run` so a second follow sees the once-key even while
     // ledger recipes are in flight (SQL unique fill_id is the durable form).
     return this.exclusive(`settle-fill:${fillId}`, async () => {
+      let insertedThisCall = false;
       const existing = this.settledByFill.get(fillId);
       if (existing) {
         const resolved = resolveExistingFeeShareClaim(followId, existing);
@@ -476,14 +493,15 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
         this.settled.set(settleKey(followId, fillId), claim);
         this.settledByFill.set(fillId, claim);
+        insertedThisCall = true;
       }
       try {
-        const record = await run();
+        const record = await run({ insertedThisCall });
         this.settled.set(settleKey(followId, fillId), record);
         this.settledByFill.set(fillId, record);
         return { status: 'claimed' as const, record };
       } catch (err) {
-        if (isCopyFeeSharePrePostUnclaim(err)) {
+        if (shouldUnclaimCopyFeeShareClaim(insertedThisCall, err)) {
           this.settled.delete(settleKey(followId, fillId));
           const cur = this.settledByFill.get(fillId);
           if (cur?.followId === followId) this.settledByFill.delete(fillId);
@@ -935,9 +953,10 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   async runFeeShareSettleOnce(
     followId: string,
     fillId: string,
-    run: () => Promise<StoredSettledFeeShare>,
+    run: (ctx: FeeShareSettleOnceContext) => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
     const settleOnce = async () => {
+      let insertedThisCall = false;
       const existing = await this.getSettledFeeShareByFillId(fillId);
       if (existing) {
         const resolved = resolveExistingFeeShareClaim(followId, existing);
@@ -971,6 +990,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
               now()
             )
           `;
+          insertedThisCall = true;
         } catch (err) {
           if (isPgUniqueViolation(err)) {
             const saved = await this.getSettledFeeShareByFillId(fillId);
@@ -987,9 +1007,9 @@ export class SqlCopyFollowStore implements CopyFollowStore {
 
       let record: StoredSettledFeeShare;
       try {
-        record = await run();
+        record = await run({ insertedThisCall });
       } catch (err) {
-        if (isCopyFeeSharePrePostUnclaim(err)) {
+        if (shouldUnclaimCopyFeeShareClaim(insertedThisCall, err)) {
           try {
             await this.sql`
               DELETE FROM copy_settled_fee_shares

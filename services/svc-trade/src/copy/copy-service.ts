@@ -503,10 +503,10 @@ export class CopyService {
    * cannot pay a second leader (`copy-leader-share:${fillId}:${leaderId}`).
    * A throw after sweep/payout keeps that claim (do not DELETE). Same-follow
    * pending retries `run` (keys `copy-fee:${fillId}` /
-   * `copy-leader-share:${fillId}:${leaderId}` are idempotent). Unclaim every
-   * pre-post CopyError after INSERT so fill-not-found / wrong owner / killed
-   * do not burn the once-key.
-   * reserveEarnings must not fire twice for one fillId (period poison).
+   * `copy-leader-share:${fillId}:${leaderId}` are idempotent). Unclaim CopyError
+   * only when this call INSERTed — leftover pending retry keeps the row.
+   * Pending retry must not re-reserve (crash after post / before UPDATE would
+   * persist cap_reached over a paid fill and burn cap twice).
    */
   async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {
     return this.store.runFollowExclusive(input.followId, (store) => this.settleFeeShareExclusive(store, principal, input));
@@ -526,7 +526,7 @@ export class CopyService {
 
     const fillId = canonicalizeCopyFillId(input.fillId);
     const assetId = input.assetId.trim();
-    const once = await store.runFeeShareSettleOnce(follow.followId, fillId, async () => {
+    const once = await store.runFeeShareSettleOnce(follow.followId, fillId, async (ctx) => {
       const key = `${follow.leaderId}:${follow.followerId}`;
       const period = await store.getPeriodStats(key);
       requirePublishedCopyFeeShareLaw(this.feeShareLaw);
@@ -562,11 +562,23 @@ export class CopyService {
       const cap = parseAmount(law.earningsCapPerFollower);
 
       // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
-      // reserveEarnings always +1 round-trip so decay still advances on skips.
+      // First INSERT reserves. Leftover pending retry must not — the period
+      // may already hold this fill's reserve (crash after post / before UPDATE).
+      // Ledger keys copy-fee:${fillId} / copy-leader-share:${fillId}:${leaderId}
+      // are idempotent. Ignore live cap_reached on retry so we do not stamp
+      // skip over a fill the ledger already paid.
       const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
-      const reserved = await store.reserveEarnings(key, intend, cap);
+      let reservedAmount: Amount;
+      if (ctx.insertedThisCall) {
+        const reserved = await store.reserveEarnings(key, intend, cap);
+        reservedAmount = reserved.reserved;
+      } else if (attribution.skippedReason === 'zero_share') {
+        reservedAmount = 0n;
+      } else {
+        reservedAmount = intend > 0n ? intend : attribution.grossLeaderShare;
+      }
 
-      if (reserved.reserved <= 0n) {
+      if (reservedAmount <= 0n) {
         const skipped =
           attribution.skippedReason !== null
             ? attribution
@@ -592,14 +604,16 @@ export class CopyService {
 
       const finalAttribution = {
         ...attribution,
-        cappedLeaderShare: reserved.reserved,
+        cappedLeaderShare: reservedAmount,
         skippedReason: null as null,
       };
       const plan = planCopyFeeShareSettle(finalAttribution);
       try {
         await postCopyFeeShareSettle(this.ledger, plan);
       } catch (err) {
-        await store.releaseEarnings(key, reserved.reserved);
+        if (ctx.insertedThisCall) {
+          await store.releaseEarnings(key, reservedAmount);
+        }
         throw err;
       }
       return {

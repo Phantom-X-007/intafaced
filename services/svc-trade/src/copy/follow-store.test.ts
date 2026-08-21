@@ -9,6 +9,7 @@ import {
   isPendingFeeShareClaim,
   rethrowCopyFollowUnique,
   resolveExistingFeeShareClaim,
+  shouldUnclaimCopyFeeShareClaim,
   type StoredSettledFeeShare,
 } from './follow-store.js';
 import type { CopyFollow } from './follows.js';
@@ -96,6 +97,11 @@ describe('CopyFollowStore unique (follower, leader)', () => {
       ),
     ).toBe(true);
     expect(isCopyFeeSharePrePostUnclaim(new Error('payout threw after sweep'))).toBe(false);
+    const killed = new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
+    expect(shouldUnclaimCopyFeeShareClaim(true, killed)).toBe(true);
+    expect(shouldUnclaimCopyFeeShareClaim(false, killed)).toBe(false);
+    expect(shouldUnclaimCopyFeeShareClaim(true, new Error('payout threw after sweep'))).toBe(false);
+    expect(shouldUnclaimCopyFeeShareClaim(false, new Error('crash after INSERT'))).toBe(false);
   });
 
   it('pending zeros retry; cap-skip settled=false does not', () => {
@@ -282,6 +288,53 @@ describe('runFeeShareSettleOnce claim-before-post', () => {
     expect(retry.status).toBe('claimed');
     expect(retry.record.settled).toBe(true);
     expect(retry.record.cappedLeaderShare).toBe(parseAmount('0.5'));
+  });
+
+  it('memory leftover pending + CopyError on retry keeps the claim — other follow ran===false', async () => {
+    const store = new MemoryCopyFollowStore();
+    await store.saveFollow(follow(FOLLOW_A, LEADER));
+    await store.saveFollow(follow(FOLLOW_B, LEADER_B));
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new Error('crash after INSERT before run completed');
+      }),
+    ).rejects.toThrow(/crash after INSERT/);
+    expect(isPendingFeeShareClaim((await store.getSettledFeeShare(FOLLOW_A, FILL))!)).toBe(true);
+
+    let seenInserted: boolean | undefined;
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+        seenInserted = ctx.insertedThisCall;
+        throw new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_fee_share_killed' });
+    expect(seenInserted).toBe(false);
+    expect(await store.getSettledFeeShare(FOLLOW_A, FILL)).not.toBeNull();
+
+    let ranB = false;
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ranB = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ranB).toBe(false);
+  });
+
+  it('memory insert sees insertedThisCall true; leftover retry sees false', async () => {
+    const store = new MemoryCopyFollowStore();
+    const flags: boolean[] = [];
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+        flags.push(ctx.insertedThisCall);
+        throw new Error('crash after INSERT');
+      }),
+    ).rejects.toThrow(/crash after INSERT/);
+    await store.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+      flags.push(ctx.insertedThisCall);
+      return share(FOLLOW_A, FILL, LEADER);
+    });
+    expect(flags).toEqual([true, false]);
   });
 
   it('memory cap-skip settled=false does not re-run', async () => {
@@ -553,6 +606,46 @@ describe('SqlCopyFollowStore runFeeShareSettleOnce (order, no Postgres)', () => 
     expect(mock.events).not.toContain('insert');
     expect(mock.events).toContain('update');
     expect(mock.byFill.get(FILL)?.settled).toBe(true);
+  });
+
+  it('leftover pending + CopyError on retry does not DELETE — other follow ran===false', async () => {
+    const mock = mockSettleSql();
+    mock.byFill.set(FILL, {
+      follow_id: FOLLOW_A,
+      fill_id: FILL,
+      leader_id: LEADER,
+      follower_id: FOLLOWER,
+      asset_id: '',
+      protocol_fee: '0',
+      applied_share_bps: 0,
+      gross_leader_share: '0',
+      capped_leader_share: '0',
+      skipped_reason: null,
+      settled: false,
+    });
+
+    const storeA = new SqlCopyFollowStore(mock.sql, FOLLOW_A);
+    let seenInserted: boolean | undefined;
+    await expect(
+      storeA.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+        seenInserted = ctx.insertedThisCall;
+        throw new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_fee_share_killed' });
+    expect(seenInserted).toBe(false);
+    expect(mock.events).not.toContain('insert');
+    expect(mock.events).not.toContain('delete');
+    expect(mock.byFill.get(FILL)?.follow_id).toBe(FOLLOW_A);
+
+    const storeB = new SqlCopyFollowStore(mock.sql, FOLLOW_B);
+    let ranB = false;
+    await expect(
+      storeB.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ranB = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ranB).toBe(false);
   });
 
   it('fill-not-found refuse DELETEs the claim so a later follow is not poisoned', async () => {
