@@ -12,6 +12,7 @@ import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
 import type { OtcDeskService } from './otc/otc-service.js';
 import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
+import { describeCopyPolicy } from './copy/copy-policy.js';
 import type { CopyService } from './copy/copy-service.js';
 import { describeFuturesPolicy } from './futures/futures-policy.js';
 import { describeOptionsPolicy } from './spot/options-policy.js';
@@ -694,6 +695,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      * Fee-share settle posts only via ledger-client when owner law is published.
      */
     copy: router({
+      policy: publicProcedure.query(() => describeCopyPolicy()),
+
       deskStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => {
         if (!copy) {
           return {
