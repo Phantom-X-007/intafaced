@@ -75,7 +75,7 @@ describe('copyIntel.runSession route', () => {
   it('is empty when no fixtures were supplied', async () => {
     const result = await createAgentsRouter(stubDeps()).createCaller(signed()).copyIntel.runSession({ plane: 'live', fixtures: [] });
 
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.copy_intel.empty' });
+    expect(result).toMatchObject({ status: 'refuse', userMessageKey: 'agents.copy_intel.unavailable' });
     expect(result.metering.billedAmount).toBe('0');
   });
 
