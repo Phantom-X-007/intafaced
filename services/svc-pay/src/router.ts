@@ -29,6 +29,7 @@ import { describeRoutingPolicy } from './routing/routing-policy.js';
 import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
 import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
 import { describeCmsPluginStatus } from './plugins/cms-status.js';
+import { describePluginsPolicy } from './plugins/plugins-policy.js';
 import {
   CMS_PLUGIN_FAMILIES,
   CMS_PLUGIN_SOCKET,
@@ -1210,6 +1211,8 @@ export function createPayRouter(
      * Exposes the public base path so integrators and contract tests share one symbol.
      */
     plugins: router({
+      policy: publicProcedure.query(() => describePluginsPolicy()),
+
       publicBase: publicProcedure.output(z.object({ base: z.string() })).query(() => ({
         base: PAY_PUBLIC_API_BASE,
       })),
