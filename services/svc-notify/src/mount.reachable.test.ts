@@ -367,6 +367,24 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(data(listed.body)).toMatchObject({ items: [] });
   });
 
+  it('evaluateAlert with kind=portfolio refuses unpublished and never fires', async () => {
+    const { base, notifyStore } = await mount();
+    const evaluated = await call(base, 'notify.evaluateAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { kind: 'portfolio' },
+    });
+    expect(evaluated.status).toBe(200);
+    const body = data(evaluated.body) as {
+      alert: unknown;
+      outcome: { kind: string; code?: string };
+    };
+    expect(body.alert).toBeNull();
+    expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.portfolio_view_unpublished' });
+    expect(body.outcome.kind).not.toBe('fire');
+    expect(await notifyStore.unreadCount(USER)).toBe(0);
+  });
+
   it('evaluateAlert over HTTP refuses a dark port that quotes a fake last — never fired as live', async () => {
     const lyingDark: MarkSource = {
       kind: 'dark',

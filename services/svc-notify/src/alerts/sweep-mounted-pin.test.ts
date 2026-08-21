@@ -31,13 +31,22 @@ const here = dirname(fileURLToPath(import.meta.url));
 const src = (rel: string) => readFileSync(join(here, '..', rel), 'utf8');
 
 describe('the alert evaluation driver is reachable from the entrypoint', () => {
-  it('index.ts drives evaluateDueAlerts on an interval', () => {
+  it('index.ts drives the mounted sweep driver on an interval', () => {
     const index = src('index.ts');
-    expect(index).toMatch(/evaluateDueAlerts\(/);
+    expect(index).toMatch(/runAlertSweepPass\(/);
     // An interval, not a single pass at boot: a watch created after boot must be
     // evaluated too.
-    expect(index).toMatch(/setInterval\([\s\S]*evaluateDueAlerts/);
+    expect(index).toMatch(/setInterval\([\s\S]*runAlertSweepPass/);
     expect(index).toMatch(/ALERT_SWEEP_INTERVAL_MS/);
+    expect(src('alerts/sweep-driver.ts')).toMatch(/evaluateDueAlerts\(/);
+  });
+
+  it('index.ts runs a boot sweep pass before waiting on the interval', () => {
+    const index = src('index.ts');
+    const bootIdx = index.indexOf('void runAlertSweepPass');
+    const intervalIdx = index.indexOf('setInterval', bootIdx);
+    expect(bootIdx).toBeGreaterThan(-1);
+    expect(intervalIdx).toBeGreaterThan(bootIdx);
   });
 
   it('index.ts clears the sweep on shutdown, so a restart does not stack drivers', () => {
@@ -59,6 +68,7 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
     expect(router).toMatch(/evaluateAlert:/);
     expect(router).toMatch(/alerts\.evaluateAlert\(/);
+    expect(router).toMatch(/evaluatePortfolio\(\)/);
     expect(router).toMatch(/alert\.kind_unpublished/);
     expect(router).toMatch(/createUnpublishedKind/);
     expect(router).toMatch(/evaluateUnpublishedKind/);

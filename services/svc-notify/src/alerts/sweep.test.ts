@@ -13,7 +13,7 @@
  * 7. Collision: none
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
 import { AlertService } from './service.js';
@@ -122,6 +122,42 @@ describe('the alert sweep — evaluation that actually runs', () => {
     await alerts.cancel('u1', row.id);
 
     await expect(alerts.evaluateDueAlerts()).resolves.toMatchObject({ markets: 0, fired: 0 });
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it('required out-of-app that cannot deliver refuses on the sweep path and does not fire', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const create = vi.fn();
+    const notify = {
+      channelStatus: () => [
+        { channel: 'inapp', available: true, reason: null, requires: [], required: false, socket: null },
+        {
+          channel: 'email',
+          available: false,
+          reason: 'channel.not_configured',
+          requires: ['NOTIFY_EMAIL_GATEWAY_URL', 'NOTIFY_EMAIL_GATEWAY_TOKEN'],
+          required: true,
+          socket: 'socket.notify-email',
+        },
+      ],
+      create,
+    } as unknown as NotifyService;
+    const alerts = new AlertService(
+      new MemoryAlertStore(),
+      marks('live', { 'BTC-USD': { kind: 'ok', price: '100.5', at: new Date() } }),
+      notify,
+    );
+    await alerts.create(watch('u1', 'BTC-USD', '100'));
+
+    const report = await alerts.evaluateDueAlerts();
+    expect(report).toMatchObject({
+      markets: 1,
+      fired: 0,
+      refused: 1,
+      refusals: { 'channel.not_configured': 1 },
+    });
+    expect(create).not.toHaveBeenCalled();
+    expect((await alerts.list('u1'))[0]!.status).toBe('active');
     expect(await notifyStore.unreadCount('u1')).toBe(0);
   });
 });
