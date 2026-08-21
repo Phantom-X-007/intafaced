@@ -60,9 +60,52 @@ describe('canonical price keys', () => {
   });
 });
 
+describe('snapshot is a full replace — prior book is discarded', () => {
+  it('a later snapshot that omits a prior price does not keep that rest', () => {
+    const prior = book(
+      1,
+      [
+        ['100', '1'],
+        ['99', '2'],
+      ],
+      [],
+    );
+    expect(prior.bids.has('100')).toBe(true);
+
+    const next = bookFromSnapshot(snapshot(2, [['99', '2']], []));
+    expect(next.bids.has('100')).toBe(false);
+    expect(formatAmount(next.bids.get('99')!)).toBe('2');
+  });
+
+  it('a later snapshot that lists a prior price at qty 0 does not keep that rest', () => {
+    const prior = book(1, [['100', '1']], []);
+    expect(prior.bids.has('100')).toBe(true);
+
+    const next = bookFromSnapshot(snapshot(2, [['100', '0']], []));
+    expect(next.bids.has('100')).toBe(false);
+    expect(next.bids.size).toBe(0);
+  });
+});
+
+describe('snapshot last-write at the same canonical price', () => {
+  it('qty 0 retracts the earlier rest at "100" / "100.0"', () => {
+    const b = book(
+      1,
+      [
+        ['100', '1'],
+        ['100.0', '0'],
+      ],
+      [],
+    );
+    expect(b.bids.has('100')).toBe(false);
+    expect(b.bids.has('100.0')).toBe(false);
+    expect(b.bids.size).toBe(0);
+  });
+});
+
 describe('negative quantity must not rest', () => {
-  it('does not plant a delta qty "-1" at "100"', () => {
-    const start = book(1, [], []);
+  it('refuses a delta qty "-1" and does not advance sequence', () => {
+    const start = book(1, [['100', '1']], []);
     const result = applyDelta(start, {
       type: 'delta',
       marketId: MARKET,
@@ -71,31 +114,49 @@ describe('negative quantity must not rest', () => {
       bids: [['100', '-1']],
       asks: [],
     });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.book.bids.size).toBe(0);
-    expect(result.book.bids.get('100')).toBeUndefined();
-    for (const qty of result.book.bids.values()) {
-      expect(qty > 0n).toBe(true);
-    }
+
+    expect(result).toEqual({ ok: false, reason: 'invalid-qty' });
+    expect(result).not.toHaveProperty('book');
+    expect(start.sequence).toBe(1);
+    expect(sideOf(start, 'bids')).toEqual({ '100': '1' });
   });
 
-  it('does not replace an existing rest with a negative quantity', () => {
+  it('refuses the whole delta when one level is negative, even if others are valid', () => {
     const start = book(1, [['100', '5']], []);
     const result = applyDelta(start, {
       type: 'delta',
       marketId: MARKET,
       fromSequence: 1,
       sequence: 2,
-      bids: [['100', '-1']],
+      bids: [
+        ['100', '9'],
+        ['99', '-1'],
+      ],
+      asks: [],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('invalid-qty');
+    expect(result).not.toHaveProperty('book');
+    expect(start.sequence).toBe(1);
+    expect(sideOf(start, 'bids')).toEqual({ '100': '5' });
+  });
+
+  it('still deletes on qty 0 — zero is removal, not garbage', () => {
+    const start = book(1, [['100', '5']], []);
+    const result = applyDelta(start, {
+      type: 'delta',
+      marketId: MARKET,
+      fromSequence: 1,
+      sequence: 2,
+      bids: [['100', '0']],
       asks: [],
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    for (const qty of result.book.bids.values()) {
-      expect(qty > 0n).toBe(true);
-    }
-    expect(formatAmount(result.book.bids.get('100')!)).toBe('5');
+    expect(result.book.sequence).toBe(2);
+    expect(result.book.bids.has('100')).toBe(false);
   });
 });
 
