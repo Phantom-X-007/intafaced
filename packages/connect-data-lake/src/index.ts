@@ -44,7 +44,12 @@ export {
   type PersistenceSinkRefuse,
   type PersistenceSinkResult,
 } from './persistence-sink.js';
-export { ingestCaptureLakeBatch, type IngestCaptureLakeBatchResult } from './ingest-capture-lake-batch.js';
+export {
+  describeIngestCaptureLakeBatch,
+  ingestCaptureLakeBatch,
+  type IngestCaptureLakeBatchResult,
+  type IngestCaptureLakeBatchSummary,
+} from './ingest-capture-lake-batch.js';
 export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
