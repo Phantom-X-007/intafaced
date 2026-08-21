@@ -83,6 +83,54 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.p2p.trades.title') }}</h2>
+        <span class="ix-sub">trades.list</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.p2p.trades.lead') }}</p>
+      <IxState :loading="trades.loading" :reason="trades.reason" :message="trades.message" endpoint="/api/p2p/trpc/trades.list">
+        <div v-if="trades.data && trades.data.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('intafaced.p2p.take.tradeId') }}</th>
+                <th>{{ $t('intafaced.p2p.take.status') }}</th>
+                <th>{{ $t('intafaced.p2p.take.amount') }}</th>
+                <th>{{ $t('intafaced.p2p.take.fiatAmount') }}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="t in trades.data" :key="t.id">
+                <td>{{ t.id }}</td>
+                <td>{{ t.status }}</td>
+                <td>{{ t.amount }} {{ t.asset }}</td>
+                <td>{{ t.fiatAmount }} {{ t.fiatCurrency }}</td>
+                <td>
+                  <div class="ix-actions">
+                    <Button v-if="canMarkSent(t)" size="small" :loading="lifecycle.busy && lifeId === t.id" @click="markFiatSent(t)">{{ $t('intafaced.p2p.trades.markSent') }}</Button>
+                    <Button v-if="canConfirm(t)" size="small" :loading="lifecycle.busy && lifeId === t.id" @click="confirmReceived(t)">{{ $t('intafaced.p2p.trades.confirm') }}</Button>
+                    <Button v-if="canCancel(t)" size="small" :loading="lifecycle.busy && lifeId === t.id" @click="cancelTrade(t)">{{ $t('intafaced.p2p.trades.cancel') }}</Button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.p2p.trades.empty') }}</div>
+      </IxState>
+      <IxState v-if="lifecycle.ran" :loading="lifecycle.busy" :reason="lifecycle.reason" :message="lifecycle.message" :endpoint="lifeEndpoint">
+        <div v-if="lifecycle.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.trades.updated') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ lifecycle.data.id }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.status') }}</span><span class="v">{{ lifecycle.data.status }}</span></div>
+          </div>
+        </div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.fiat') }}</h2>
         <span class="ix-sub">fiat.list</span>
       </div>
@@ -134,7 +182,7 @@
  * decimal string. This screen never posts a lock and never invents a rail.
  */
 import IxState from '../../components/intafaced/IxState.vue';
-import { query, mutate } from '../../config/intafaced.js';
+import { query, mutate, subjectOf } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
@@ -147,9 +195,13 @@ export default {
       fiat: this.emptySection(),
       methods: this.emptySection(),
       take: this.emptyAction(),
+      trades: this.emptySection(),
+      lifecycle: this.emptyAction(),
       takeAmount: '',
       takeMethod: '',
-      takingId: ''
+      takingId: '',
+      lifeId: '',
+      lifeEndpoint: '/api/p2p/trpc/trades.list'
     };
   },
   computed: {
@@ -158,6 +210,9 @@ export default {
     },
     canTake() {
       return !!(this.takeAmount && this.takeMethod && !this.take.busy);
+    },
+    myId() {
+      return subjectOf(this.ixToken);
     }
   },
   created() {
@@ -165,6 +220,7 @@ export default {
     this.load('offers', query('p2p', 'offers.list', undefined, this.ixToken));
     this.load('fiat', query('p2p', 'fiat.list', undefined, this.ixToken));
     this.load('methods', query('p2p', 'instruments.methods.list', undefined, this.ixToken));
+    this.loadTrades();
   },
   methods: {
     methodIds(offer) {
@@ -187,7 +243,41 @@ export default {
         mutate('p2p', 'trades.take', { offerId: offer.id, amount: this.takeAmount, method: this.takeMethod }, this.ixToken)
       ).then(function () {
         self.takingId = '';
+        self.loadTrades();
       });
+    },
+    loadTrades() {
+      this.load('trades', query('p2p', 'trades.list', { limit: 50 }, this.ixToken));
+    },
+    canMarkSent(trade) {
+      return !!(trade && this.myId && trade.status === 'escrowed' && trade.buyerId === this.myId);
+    },
+    canConfirm(trade) {
+      return !!(trade && this.myId && trade.status === 'fiat_sent' && trade.sellerId === this.myId);
+    },
+    canCancel(trade) {
+      if (!trade || !this.myId) return false;
+      if (trade.status === 'escrowed' && (trade.buyerId === this.myId || trade.sellerId === this.myId)) return true;
+      return trade.status === 'fiat_sent' && trade.sellerId === this.myId;
+    },
+    runLifecycle(procedure, trade) {
+      var self = this;
+      if (this.lifecycle.busy || !trade) return;
+      this.lifeId = trade.id;
+      this.lifeEndpoint = '/api/p2p/trpc/' + procedure;
+      this.act('lifecycle', mutate('p2p', procedure, { tradeId: trade.id }, this.ixToken)).then(function () {
+        self.lifeId = '';
+        self.loadTrades();
+      });
+    },
+    markFiatSent(trade) {
+      this.runLifecycle('trades.markFiatSent', trade);
+    },
+    confirmReceived(trade) {
+      this.runLifecycle('trades.confirmReceived', trade);
+    },
+    cancelTrade(trade) {
+      this.runLifecycle('trades.cancel', trade);
     }
   }
 };
