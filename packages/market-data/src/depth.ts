@@ -43,7 +43,11 @@ import { CaptureLog, bookLevelsFromCapture, type CaptureRecord, type VenueConnec
  * and an order book is nothing but sums.
  */
 
-/** One side of a book: price → total quantity resting at that price. */
+/**
+ * One side of a book: canonical price → total quantity resting at that price.
+ * Keys are `formatAmount(parseAmount(wire))`, never the raw wire spelling —
+ * `'100'` and `'100.0'` are one level.
+ */
 export type DepthSide = ReadonlyMap<string, Amount>;
 
 export interface DepthBook {
@@ -85,13 +89,19 @@ export function emptyBook(marketId: string): DepthBook {
   return { marketId, sequence: -1, bids: new Map(), asks: new Map() };
 }
 
+/** Map key for a wire price: the canonical Amount string, not the raw spelling. */
+function priceKey(wirePrice: string): string {
+  return formatAmount(parseAmount(wirePrice));
+}
+
 function sideFromWire(levels: readonly WireLevel[]): Map<string, Amount> {
   const side = new Map<string, Amount>();
   for (const [price, qty] of levels) {
     const amount = parseAmount(qty);
     // A snapshot carrying a zero level is a server bug, but dropping it here
     // costs nothing and keeps "present in the map" equivalent to "has depth".
-    if (amount > 0n) side.set(price, amount);
+    // Last write wins when the same canonical price appears twice.
+    if (amount > 0n) side.set(priceKey(price), amount);
   }
   return side;
 }
@@ -120,10 +130,12 @@ function applySide(current: DepthSide, levels: readonly WireLevel[]): Map<string
   const next = new Map(current);
   for (const [price, qty] of levels) {
     const amount = parseAmount(qty);
+    const key = priceKey(price);
     // Zero is removal. An ABSENT price is unchanged — the two are different
     // statements and treating them alike leaves phantom liquidity behind.
-    if (amount === 0n) next.delete(price);
-    else next.set(price, amount);
+    // Negative quantity is garbage: it must not rest, and it is not a delete.
+    if (amount === 0n) next.delete(key);
+    else if (amount > 0n) next.set(key, amount);
   }
   return next;
 }

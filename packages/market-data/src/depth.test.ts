@@ -28,6 +28,77 @@ function book(sequence: number, bids: WireLevel[], asks: WireLevel[]): DepthBook
 
 const sideOf = (b: DepthBook, side: 'bids' | 'asks') => Object.fromEntries([...b[side].entries()].map(([p, q]) => [p, formatAmount(q)]));
 
+describe('canonical price keys', () => {
+  it('collapses a snapshot of [["100","1"],["100.0","1"]] to one level', () => {
+    const b = book(
+      1,
+      [
+        ['100', '1'],
+        ['100.0', '1'],
+      ],
+      [],
+    );
+    expect(b.bids.size).toBe(1);
+    expect(formatAmount(b.bids.get('100')!)).toBe('1');
+    expect(b.bids.has('100.0')).toBe(false);
+  });
+
+  it('applies a delta at "100.0" onto the "100" rest', () => {
+    const start = book(1, [['100', '1']], []);
+    const result = applyDelta(start, {
+      type: 'delta',
+      marketId: MARKET,
+      fromSequence: 1,
+      sequence: 2,
+      bids: [['100.0', '3']],
+      asks: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.book.bids.size).toBe(1);
+    expect(formatAmount(result.book.bids.get('100')!)).toBe('3');
+  });
+});
+
+describe('negative quantity must not rest', () => {
+  it('does not plant a delta qty "-1" at "100"', () => {
+    const start = book(1, [], []);
+    const result = applyDelta(start, {
+      type: 'delta',
+      marketId: MARKET,
+      fromSequence: 1,
+      sequence: 2,
+      bids: [['100', '-1']],
+      asks: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.book.bids.size).toBe(0);
+    expect(result.book.bids.get('100')).toBeUndefined();
+    for (const qty of result.book.bids.values()) {
+      expect(qty > 0n).toBe(true);
+    }
+  });
+
+  it('does not replace an existing rest with a negative quantity', () => {
+    const start = book(1, [['100', '5']], []);
+    const result = applyDelta(start, {
+      type: 'delta',
+      marketId: MARKET,
+      fromSequence: 1,
+      sequence: 2,
+      bids: [['100', '-1']],
+      asks: [],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const qty of result.book.bids.values()) {
+      expect(qty > 0n).toBe(true);
+    }
+    expect(formatAmount(result.book.bids.get('100')!)).toBe('5');
+  });
+});
+
 describe('applying a delta', () => {
   it('updates, adds and removes levels in one message', () => {
     const start = book(10, [['100', '5']], [['101', '3']]);
