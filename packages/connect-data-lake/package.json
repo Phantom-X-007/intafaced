@@ -18,6 +18,9 @@
     "test:watch": "vitest",
     "clean": "rimraf dist .turbo"
   },
+  "dependencies": {
+    "@intafaced/ledger-client": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "rimraf": "^6.0.1",

@@ -23,3 +23,19 @@ export {
   type VenueConnection,
   type WireLevel,
 } from './capture.js';
+export {
+  absentReasonFromCaptureLakeHole,
+  bookLevelsFromLakeRecord,
+  bookObservationFromLakeRecord,
+  captureRecordFromLakeRecord,
+  ingestCaptureLakeRecord,
+  ingestCaptureLakeRecords,
+  isCaptureLakeBook,
+  isCaptureLakeHole,
+  type CaptureLakeBookRecord,
+  type CaptureLakeBookSnapshot,
+  type CaptureLakeHoleReason,
+  type CaptureLakeHoleRecord,
+  type CaptureLakeRecord,
+  type IngestCaptureLakeOptions,
+} from './capture-lake-consumer.js';
