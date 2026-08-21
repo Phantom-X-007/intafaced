@@ -64,6 +64,7 @@ import {
   type CertPerkInventKind,
 } from './certs/perk-plane.js';
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
+import { seasonWindowAt } from './tournaments/season-calendar.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -367,6 +368,16 @@ const standingOut = z.object({
   score: z.number().int(),
   updatedAt: z.date(),
   rank: z.number().int(),
+});
+
+const seasonCalendarOut = z.object({
+  seasonId: z.string().uuid(),
+  status: seasonStatus,
+  startsAt: z.date(),
+  endsAt: z.date().nullable(),
+  openAt: z.date(),
+  inWindow: z.boolean(),
+  scoreWindowOpen: z.boolean(),
 });
 
 const residencyStatus = z.enum(['applied', 'accepted', 'rejected', 'withdrawn']);
@@ -1384,6 +1395,16 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
       .input(z.object({ seasonId: z.string().uuid() }))
       .output(seasonOut)
       .query(({ input }) => guard(() => academy.season(input.seasonId))),
+
+    seasonCalendar: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ seasonId: z.string().uuid(), at: z.coerce.date().optional() }))
+      .output(seasonCalendarOut)
+      .query(async ({ input }) =>
+        guard(async () => {
+          const season = await academy.season(input.seasonId);
+          return seasonWindowAt(season, input.at ?? new Date());
+        }),
+      ),
 
     standings: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid() }))
