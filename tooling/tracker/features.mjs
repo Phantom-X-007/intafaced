@@ -346,15 +346,19 @@ export const FEATURES = [
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
     phase: '2',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.futures'],
-    requires: ['services/svc-trade/src/spot/options-listing.ts'],
+    requires: [
+      'services/svc-trade/src/spot/options-mount-vs-tracker.ts',
+      'services/svc-trade/src/spot/options-mount-vs-tracker.test.ts',
+      'services/svc-trade/src/spot/options-policy.ts',
+      'services/svc-trade/src/spot/options-listing.test.ts',
+    ],
     note:
-      'D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; ' +
-      'empty/unset → named refuse; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty (never parsed as a coin table; ADR landing does not authorize stamp). ' +
-      'D26-P1-T6: listMarket throws trade.options_settlement_law_unset while stamp empty (SOCKET §13 socket.options-settlement-asset-law). ' +
-      'Fixing alone must not unlock. After a later owner names set + asset: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; ' +
-      'DB CHECK markets_options_terms_ck. No IV surface, no invent live set / settlement asset / D7 source. Orders still refused by ' +
-      'assertTradable (trade.market_kind_unsupported). Product-complete only after later stamp + D7 + engine — freeze ADR is not Done.',
+      '**D26-P1-T6 Done 2026-08-21:** settlement law refuse on options.policy (`options-mount-vs-tracker.ts`). ' +
+      'SOCKET §13 socket.options-settlement-asset-law; never invent live set / settlement asset / IV. ' +
+      'Class X residual: owner P0-05 stamp; D7 fixing; complete European terms + engine.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',

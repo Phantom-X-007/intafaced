@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**116 of 158 shipped (73%)** · 3 in progress · 17 ready to claim · 22 blocked · 30 deliberate §13 sockets
+**117 of 158 shipped (74%)** · 3 in progress · 16 ready to claim · 22 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -26,7 +26,6 @@ pnpm wt feat/<the-thing>
 | Feature | Module | Phase | id |
 |---|---|---|---|
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
-| European options, cash-settled, full collateral in v1 | `trade` | 2 | `trade.options` |
 | Native mobile apps — iOS and Android, own name, zero attribution (§25:727) | `core-ops` | 2 | `web.mobile-apps` |
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
@@ -108,7 +107,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | PII isolation — KYC documents in a separate encrypted store (§10) <br/>_**DONE 2026-08-16:** Title is the encrypted KYC document store (§10), not a live vendor. Vault + principal-bound getFor/deleteFor + operator tRPC meta-only + provider_ref bind + foreign-service gate on main (#1348). Production `index.ts` constructs/wires `kycDocs` via `kycRouterBootOptions(sql, env.IDENTITY_KYC_DOC_KEY)` when the key is set (#1806, #2101); unset → procedures named-refuse `kyc_doc.unwired`; invalid key → `kyc_doc.key_missing`. Pin: `kyc/index-boot-wire.test.ts`. Named Class X residual (not this title): live verification vendor webhook — no vendor invented. Services get status flags only; kyc.status never returns provider_ref or document bytes._ | F |  | `identity.pii-isolation` |
 | 🔨 | Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) <br/>_Law §11:456. SWITCH mountain (not the features behind it). 2026-08-09 W10 L14: product refuse path shipped — `assertEnabled` / `FlagDisabledError` so waitlist+referral refuse when off (wrong phase / override / kill); `offReadiness` makes OFF unbuilt plan rows read `unbuilt` not ready (tracker Done-bar). Residual: wire callers in waitlist/referral services when those surfaces exist; founding-badge mint remains launch.nft (chain). NOT PROMISED: no drop phase in coverage.yaml carries `promised: true`._ | F |  | `infra.drop-flags` |
 
-### Phase 2 — Trade (23/26)
+### Phase 2 — Trade (24/26)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -117,7 +116,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Spot markets, order lifecycle, fees | F |  | `trade.spot` |
 | ✅ | One-tap Convert — the retail on-ramp <br/>_Shipped on main: convert.quote + convert.execute on mounted /trpc (RFQ + house spread → market IOC, same hold→fill; TRADE_CONVERT_ENABLED defaults on). Money-path suite in trade-service convert describe + convert/quote unit tests. Local svc-trade suite green (102 passed; money-path needs Postgres — skipped when DB down). Actions are unlimited on this public repo (thrift retired 2026-08-07) — do not read billing as a Done blocker. Edge product-check optional remaining._ | F |  | `trade.convert` |
 | ✅ | Perps: isolated margin, funding, partial-liquidation ladder <br/>_**D26-P1-T1 Done 2026-08-21:** isolated margin ladder + funding + ADL disclosure (`mount-vs-tracker.ts`); gap-series marks proven. TRADE_FUTURES_ENABLED default OFF; jobs default OFF; insurance empty blocks live list. Class X residual: owner D3 ladder numbers; funding rates/ceilings; live re-leverage 501._ | F |  | `trade.futures` |
-| 🟢 | European options, cash-settled, full collateral in v1 <br/>_D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; empty/unset → named refuse; TRADE_OPTIONS_SETTLEMENT_ASSET_LAW stays empty (never parsed as a coin table; ADR landing does not authorize stamp). D26-P1-T6: listMarket throws trade.options_settlement_law_unset while stamp empty (SOCKET §13 socket.options-settlement-asset-law). Fixing alone must not unlock. After a later owner names set + asset: TRADE_OPTIONS_SETTLEMENT_FIXING + complete European terms required; DB CHECK markets_options_terms_ck. No IV surface, no invent live set / settlement asset / D7 source. Orders still refused by assertTradable (trade.market_kind_unsupported). Product-complete only after later stamp + D7 + engine — freeze ADR is not Done._ | F |  | `trade.options` |
+| ✅ | European options, cash-settled, full collateral in v1 <br/>_**D26-P1-T6 Done 2026-08-21:** settlement law refuse on options.policy (`options-mount-vs-tracker.ts`). SOCKET §13 socket.options-settlement-asset-law; never invent live set / settlement asset / IV. Class X residual: owner P0-05 stamp; D7 fixing; complete European terms + engine._ | F |  | `trade.options` |
 | ✅ | OTC RFQ desk, staked-tier gate <br/>_**D26-P1-T2 Done 2026-08-21:** RFQ→stake→fail-closed quote→ledger settle (`mount-vs-tracker.ts`); durable quotes + venue mid feed. Accept binds quoted price; caller mid refused; platform-principal settle via ledger-client only. Class X residual: owner §8 desk-law numbers; socket.otc-maker-routing; connect.venue-vault custody._ | F |  | `trade.otc` |
 | ✅ | Copy trading, audited leaders, fee-share (not profit-share) <br/>_**D26-P1-T3 Done 2026-08-21:** sovereign desk + follow/kill/unfollow (`mount-vs-tracker.ts`); fee-share not profit-share. Blank §8 rates/jurisdiction refuse-closed; never invent leader share or returns-ranked board. Class X residual: owner fee-share/jurisdiction env pins; auto-mirror place socket._ | B |  | `trade.copy` |
 | ✅ | Fiat pairs on the same engine <br/>_**D26-P1-T7 Done 2026-08-21:** refuse-closed settlement posture (`forex-mount-vs-tracker.ts`). forex.settlementStatus + assertProductionListing; six majors listed but unfundable until rails. Class X residual: owner P0-05 settlement asset; fiat settle rails — never invent settlement asset._ | F |  | `trade.forex` |
