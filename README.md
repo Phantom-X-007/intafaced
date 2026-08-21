@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`███████████░░░░░░░░░` **56%** — 88 of 158 features shipped
+`████████████░░░░░░░░` **58%** — 91 of 158 features shipped
 
-Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 23/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 26/59 · **5P** 4/7
 
-**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Navigator — tool-calling inside user guardrails (Phantom-X-007) · Market Scanner — ranked signals by tier (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Support desk, tickets, KB (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007)
+**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Support desk, tickets, KB (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007)
 
 **🟢 19 ready to claim** — nothing blocks these:
 
