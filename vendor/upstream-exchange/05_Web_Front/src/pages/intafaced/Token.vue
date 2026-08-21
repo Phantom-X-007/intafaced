@@ -183,7 +183,7 @@ export default {
       return !!(this.access.data && this.access.data.tier === '[object Object]');
     },
     canStake() {
-      return Boolean(this.amount && this.tier);
+      return typeof this.amount === 'string' && this.amount.length > 0 && Boolean(this.tier);
     }
   },
   created() {
@@ -199,6 +199,7 @@ export default {
     submitStake() {
       var self = this;
       if (!this.canStake) return;
+      if (typeof this.amount !== 'string') return;
       var stakeId = this.draftId('tokenStake');
       var input = { amount: this.amount, tier: this.tier };
       if (stakeId) input.stakeId = stakeId;
