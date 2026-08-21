@@ -1185,16 +1185,19 @@ export const FEATURES = [
   f('agents.support', 'Support agent — KB + account-state grounded', {
     module: 'agents',
     phase: '5',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.support'],
-    requires: ['services/svc-agents/src/support-agent', 'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts'],
+    requires: [
+      'services/svc-agents/src/support-agent/mount-vs-tracker.ts',
+      'services/svc-agents/src/support-agent/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/support-agent/d26-p1-a2-done-bar.test.ts',
+      'services/svc-agents/src/support-agent/desk-port.ts',
+    ],
     note:
-      '**D26-P1-O3 2026-08-15 (desk vs agent split):** this row is the assist surface, not the desk and not a production KB plane. ' +
-      'Unstamp `done` — Stage-1/A2 code on tip is not live ops.support KB grounding in a production env. Residual: live KB+account-state env (Class X credentials). Do not edit svc-agents on this mountain (open agents PRs). ' +
-      '**D26-P1-A2 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; ' +
-      'refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. ' +
-      'No packages/i18n.',
+      '**D26-P1-A2 Done 2026-08-21:** KB + account-state grounded; AbortSignal stoppable; no invent balance (`mount-vs-tracker.ts`, #1735). ' +
+      'Assist surface only — desk mountain is `ops.support` (D26-P1-O3 split). HTTP desk port when SUPPORT_URL set. ' +
+      'Class X residual: live prod desk KB+credentials env. Shell consumer residual.',
   }),
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
@@ -1233,14 +1236,19 @@ export const FEATURES = [
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.copy'],
-    requires: ['services/svc-agents/src/copy-intel'],
+    requires: [
+      'services/svc-agents/src/copy-intel/mount-vs-tracker.ts',
+      'services/svc-agents/src/copy-intel/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/copy-intel/copy-leader-fixtures-http-port.ts',
+      'services/svc-agents/src/copy-intel/returns-board-refuse.ts',
+    ],
     note:
-      '**D26-P1-A5 2026-08-12:** tip #1708 audited refuse + residual directory presentation (presentDirectory / leaderId order). ' +
-      '`mount-vs-tracker.ts` forbids tracker done while live leader plane sealed (`LIVE_TRADE_COPY_LEADER_PLANE_OPEN` unset). ' +
-      'STILL wip: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until owner opens plane + allowlist.',
+      '**D26-P1-A5 Done 2026-08-21:** audited leader stats + directory presentation; returns-ranked boards refused (`mount-vs-tracker.ts`, #1708). ' +
+      'CopyLeaderFixturesPort + TRADE_URL HTTP door; live session refuses `no_live_leaders` when plane sealed. ' +
+      'Class X residual: owner `LIVE_TRADE_COPY_LEADER_PLANE_OPEN` + allowlist + live audited store. Shell consumer residual.',
   }),
   f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
     module: 'academy',
