@@ -27,12 +27,16 @@ export {
   SHIPPED_CMS_PLUGIN_FAMILY,
   UNWIRED_CMS_PLUGIN_FAMILIES,
   cmsPluginsShipped,
+  getCmsPluginStatus,
   isCmsPluginShipped,
   PAY_PLUGIN_CMS_UNWIRED,
   refuseAllCmsPlugins,
   refuseCmsPlugin,
   type CmsPluginFamily,
   type CmsPluginRefuse,
+  type CmsPluginShipped,
+  type CmsPluginStatus,
   type UnwiredCmsPluginFamily,
 } from './cms-unwired.js';
+export { describeCmsPluginStatus, type CmsPluginFamilyStatus, type CmsPluginStatusSummary } from './cms-status.js';
 export { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS, type FrozenWebhookVector } from './webhook-vectors.js';

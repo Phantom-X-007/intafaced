@@ -14,6 +14,7 @@ import {
   SHIPPED_CMS_PLUGIN_FAMILY,
   UNWIRED_CMS_PLUGIN_FAMILIES,
   cmsPluginsShipped,
+  getCmsPluginStatus,
   isCmsPluginShipped,
   PAY_PLUGIN_CMS_UNWIRED,
   refuseAllCmsPlugins,
@@ -35,6 +36,30 @@ function walkFiles(dir: string): string[] {
 }
 
 describe('D26-P1-P8 pay.plugin_cms_unwired', () => {
+  it('getCmsPluginStatus exposes shipped WooCommerce and refused Magento/OpenCart', () => {
+    const status = getCmsPluginStatus();
+    expect(status.socket).toBe(CMS_PLUGIN_SOCKET);
+    expect(status.code).toBe(PAY_PLUGIN_CMS_UNWIRED);
+    expect(status.shippedFamily).toBe(SHIPPED_CMS_PLUGIN_FAMILY);
+    expect(status.cmsPluginsShipped).toBe(true);
+    expect([...status.families]).toEqual(['woocommerce', 'magento', 'opencart']);
+    expect([...status.unwiredFamilies]).toEqual(['magento', 'opencart']);
+    expect(status.shipped).toEqual({
+      status: 'shipped',
+      family: 'woocommerce',
+      shipped: true,
+      phpTree: true,
+    });
+    expect(status.refuse).toHaveLength(2);
+    expect(status.refuse.map((r) => r.family)).toEqual(['magento', 'opencart']);
+    for (const r of status.refuse) {
+      expect(r.status).toBe('refuse');
+      expect(r.code).toBe(PAY_PLUGIN_CMS_UNWIRED);
+      expect(r.shipped).toBe(false);
+      expect(r.phpTree).toBe(false);
+    }
+  });
+
   it('ships WooCommerce and refuses Magento/OpenCart', () => {
     expect(PAY_PLUGIN_CMS_UNWIRED).toBe('pay.plugin_cms_unwired');
     expect(CMS_PLUGIN_SOCKET).toBe('socket.pay-plugin-cms-php');
