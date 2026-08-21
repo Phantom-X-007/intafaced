@@ -15,6 +15,7 @@ import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.j
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import { areaForSurface, type PayfacSurface } from './payfac-permissions.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
+import { describeRoutingPolicy } from './routing-policy.js';
 import {
   REFERENCE_RAIL_ROUTING_PROFILES,
   selectSmartCheckoutRail,
@@ -24,6 +25,7 @@ import {
 } from './routing/decide.js';
 import { evaluateFraud } from './fraud/evaluate.js';
 import { describeFraudPolicy } from './fraud/fraud-policy.js';
+import { describeRoutingPolicy } from './routing/routing-policy.js';
 import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
 import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
 import { describeCmsPluginStatus } from './plugins/cms-status.js';
@@ -784,6 +786,8 @@ export function createPayRouter(
      * Moves no value — returns a decision record only.
      */
     routing: router({
+      policy: publicProcedure.query(() => describeRoutingPolicy()),
+
       assertInputs: publicProcedure
         .input(
           z.object({
