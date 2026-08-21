@@ -1,3 +1,4 @@
+import { parseAmount } from '@intafaced/ledger-client';
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
@@ -85,7 +86,7 @@ describe('trade book snapshot mount', () => {
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.snapshot.venueId).toBe(TRADE_BOOK_SNAPSHOT_VENUE_ID);
-    expect(out.snapshot.bids).toEqual([['42000', '1']]);
+    expect(out.snapshot.bids).toEqual([[parseAmount('42000'), parseAmount('1')]]);
     expect(out.snapshot.sequence).toBe(7);
   });
 });
