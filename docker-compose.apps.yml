@@ -1072,6 +1072,8 @@ services:
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
+      # Class X: owner sets true only after observing ticket create + KB loop in live compose.
+      TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE:
     expose: ['4017']
     healthcheck: *healthcheck
     depends_on:

@@ -1,15 +1,15 @@
 /**
  * Ticket create + searchKb/getKb are proven in svc-support unit tests and
- * migrations. That is not the same as observing the loop serving in a live
- * compose process. Compose health is `/health` liveness. Do not treat a
- * healthy container as a served ticket+KB loop. Do not invent SLA times.
- *
- * Live-env Class X: this flag stays false until a human observes the loop
- * in a real compose/prod process. Process-local timestamps below are
- * observability for the mounted Fastify app — zeros until that process
- * itself succeeds create + searchKb + getKb.
+ * process inject suites. Live compose observation is Class X: owner sets
+ * TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE=true only after observing the loop
+ * in a real compose/prod process. Default unset → false (never invent SLA).
  */
-export const TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE = false as const;
+export function ticketKbLoopObservedInLiveCompose(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE?.trim() === 'true';
+}
+
+/** Default refuse-closed at module load (tests pin this stays false). */
+export const TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE = ticketKbLoopObservedInLiveCompose();
 
 export type TicketKbLoopSnapshot = {
   /** Unix ms of last successful ticket create on this process. 0 until first. */

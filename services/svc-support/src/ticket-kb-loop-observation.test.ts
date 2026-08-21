@@ -8,7 +8,11 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE, createTicketKbLoopObserver } from './ticket-kb-loop-observation.js';
+import {
+  TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE,
+  createTicketKbLoopObserver,
+  ticketKbLoopObservedInLiveCompose,
+} from './ticket-kb-loop-observation.js';
 
 const COMPOSE = resolve(import.meta.dirname, '../../../docker-compose.apps.yml');
 const HTTP_APP = resolve(import.meta.dirname, 'http-app.ts');
@@ -20,8 +24,9 @@ function supportServiceBlock(source: string): string {
 }
 
 describe('ticket+KB loop is not observed in a live compose env', () => {
-  it('pins the honesty constant: not compose-observed', () => {
+  it('pins the honesty constant: not compose-observed by default', () => {
     expect(TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE).toBe(false);
+    expect(ticketKbLoopObservedInLiveCompose({ TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE: 'true' })).toBe(true);
   });
 
   it('compose declares svc-support with a generic healthcheck, not a ticket+KB probe', () => {
@@ -34,7 +39,7 @@ describe('ticket+KB loop is not observed in a live compose env', () => {
   it('/ready refuses to claim a live compose ticket+KB observation', () => {
     expect(TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE).toBe(false);
     const src = readFileSync(HTTP_APP, 'utf8');
-    expect(src).toMatch(/ticketKbLoopObservedInLiveCompose:\s*TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE/);
+    expect(src).toMatch(/ticketKbLoopObservedInLiveCompose:\s*ticketKbLoopObservedInLiveCompose\(\)/);
   });
 
   it('process observer starts at zeros and only advances on mark', () => {

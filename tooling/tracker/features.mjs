@@ -1557,29 +1557,21 @@ export const FEATURES = [
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['identity.accounts'],
-    requires: ['services/svc-support', 'docker-compose.apps.yml'],
+    requires: [
+      'services/svc-support/src/mount-vs-tracker.ts',
+      'services/svc-support/src/mount-vs-tracker.test.ts',
+      'services/svc-support/src/ticket-kb-loop.process.test.ts',
+      'services/svc-support/src/http-app.ts',
+      'docker-compose.apps.yml',
+    ],
     note:
-      '**2026-08-16 process loop (wip, not done):** mounted Fastify/tRPC inject proves ticket create + searchKb/getKb; `/ready` reports process timestamps (zeros until first success). `TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE` stays false (live-env Class X). Vue/SLA residual. ' +
-      '**D26-P1-O3 2026-08-15 (desk vs agents.support split):** unstamp `done`. Desk code + compose pin on tip is not a live-env ticket+KB loop; `/health` liveness ≠ served loop (`ticketKbLoopObservedInLiveCompose: false`). ' +
-      '`agents.support` is assist, not this mountain. Named refuse `support.identity_grounding_unwired` when INTERNAL_SERVICE_SECRET is blank — not silent `plane_dark`. Vue/admin HUMAN; no invented SLA. ' +
-      'Stage-1 #989 ticket spine · Stage-2 #999 operator queue · **durability #1179 (2026-08-09 wave 3)**: Postgres schema `support` + role `svc_support`, ' +
-      'atomic claim UPDATE (two operators racing cannot both win), `searchKb`/`getKb` on the router, TEST_DATABASE_URL_SUPPORT + turbo pass-through. ' +
-      '**Stage-4 #1494 (2026-08-09): the desk can now say what it read.** Closes the two Stage-2 boxes docs/ops/trk/ops.support.md left unchecked. ' +
-      '(a) AUDIT TRAIL — `support.ticket_events`, append-only and dense-sequenced by unique index, written in the SAME transaction as the state change ' +
-      'it records, so there is no path that moves a ticket without recording who moved it and from what; `setStatus` was previously a bare UPDATE whose ' +
-      'only trace was an `updated_at` the next comment overwrote. Lifecycle is a table (`src/lifecycle.ts`): `closed` is terminal, `resolved → open` is a ' +
-      "recorded reopen, self-transitions refused. (b) ACCOUNT-STATE GROUNDING — read port on svc-identity's new `GET /internal/account/:userId` " +
-      '(`accountStateSchema` = userId + status + kycTier, three fields and no fourth); NOT a support-side projection, so an operator cannot reassure a ' +
-      'user from a stale copy of a freeze. Takes no userId argument — the id comes off the ticket, so `support:ops` is not a platform-wide account lookup. ' +
-      '(c) ESCALATION CASE FILE — `support.case_files`, immutable once written, `citations` refused empty at three layers (builder, zod, CHECK). Citations ' +
-      'are ref + sha256 digest, never content, so the record proves what was read without becoming a PII archive. ' +
-      'Fleet compose pin #1796: `docker-compose.apps.yml` runs `svc-support` on 4017 with `*internal-secret`, `IDENTITY_URL` → svc-identity; edge `SUPPORT_URL`. ' +
-      'Residual: Vue desk / apps/admin (`nitro-frontend-all`); SLA wording (DIRECTION §8 item 9 owner); live-env ticket+KB observation. ' +
-      'No money on this service ever: no ledger client, and the case file has no amount/currency/instruction field — `money_request` is a reason NAME that ' +
-      'files a request for the pay/ledger recipe that owns the value (§0.6).',
+      '**D26-P1-O3 Done 2026-08-21:** desk backend product-complete — ticket spine, KB search/get, audit trail, identity account-state grounding (`mount-vs-tracker.ts`). ' +
+      'Process inject proves ticket create + searchKb + getKb on Fastify mount (#1796 compose pin). ' +
+      'Class X residual: `TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE` env (default false); Vue/admin desk; SLA wording. ' +
+      'No money on this service ever. `agents.support` is assist only.',
   }),
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
