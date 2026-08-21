@@ -1,39 +1,78 @@
+/**
+ * Fail-first: /invite attributes a referrer via identity.affiliates.attribute.
+ * Run: node src/assets/js/invite-attribute.golden.js  (from 05_Web_Front cwd)
+ */
 'use strict';
 
-/**
- * Invite page writes a referrer via identity affiliates.attribute.
- * Run from 05_Web_Front: node src/assets/js/invite-attribute.golden.js
- */
 var fs = require('fs');
 var path = require('path');
 
-var vue = fs.readFileSync(path.join(__dirname, '../../pages/invite/Invite.vue'), 'utf8');
-var lang = require('../lang/en.js');
+var page = fs.readFileSync(path.join(__dirname, '../../pages/invite/Invite.vue'), 'utf8');
+var lang = fs.readFileSync(path.join(__dirname, '../../assets/lang/en.js'), 'utf8');
 
-function assert(cond, msg) {
-  if (!cond) throw new Error(msg);
+function mustHave(hay, needle, where) {
+  if (hay.indexOf(needle) === -1) {
+    throw new Error(where + ' must contain ' + needle);
+  }
 }
 
-var needle = "mutate('identity', 'affiliates.attribute'";
-assert(vue.indexOf(needle) !== -1, 'Invite.vue missing ' + needle);
-assert(/\{referrerId[:\s]/.test(vue) || vue.indexOf('{referrerId}') !== -1, 'Invite.vue missing {referrerId}');
+function mustNot(hay, needle, where) {
+  if (hay.indexOf(needle) !== -1) {
+    throw new Error(where + ' must not contain ' + needle);
+  }
+}
 
-['7200', 'leader_share', 'fee-share'].forEach(function(bad) {
-  assert(vue.indexOf(bad) === -1, 'Invite.vue contains banned ' + bad);
+mustHave(page, "mutate('identity', 'affiliates.attribute'", 'Invite.vue');
+mustHave(page, "query('identity', 'affiliates.myReferrer'", 'Invite.vue');
+mustHave(page, "query('identity', 'affiliates.policy'", 'Invite.vue');
+mustHave(page, 'invite.referrer.empty', 'Invite.vue');
+mustHave(page, 'IxState', 'Invite.vue');
+
+mustNot(page, 'IxNoSurface', 'Invite.vue');
+mustNot(page, '7200', 'Invite.vue');
+mustNot(page, 'leader_share', 'Invite.vue');
+mustNot(page, 'fee-share', 'Invite.vue');
+mustNot(page, '135000', 'Invite.vue');
+mustNot(page, 'dataFanyong', 'Invite.vue');
+if (page.indexOf('%') !== -1) {
+  throw new Error('Invite.vue must not contain % fee-share');
+}
+
+mustHave(lang, 'invite: {', 'en.js');
+mustHave(lang, 'attribute: {', 'en.js');
+mustHave(lang, 'referrer: {', 'en.js');
+
+var copy = require('../lang/en.js').invite;
+if (!copy || typeof copy.attribute !== 'object' || typeof copy.referrer !== 'object') {
+  throw new Error('en.js invite.attribute and invite.referrer must be objects');
+}
+if (!copy.referrer.empty) {
+  throw new Error('en.js missing invite.referrer.empty');
+}
+if (!copy.attribute.btn) {
+  throw new Error('en.js missing invite.attribute.btn');
+}
+Object.keys(copy).forEach(function (key) {
+  if (!/^(attribute|referrer|accruals)/.test(key)) {
+    throw new Error('en.js invite.' + key + ' is outside exclusive prefixes');
+  }
 });
-
-var invite = lang.invite;
-assert(invite && typeof invite === 'object', 'en.js missing invite block');
-
-Object.keys(invite).forEach(function(key) {
-  assert(/^(attribute|referrer)/.test(key), 'en.js invite.' + key + ' is not invite.attribute* or invite.referrer*');
-  var value = String(invite[key]);
-  ['%', '7200', 'leader_share', 'fee-share'].forEach(function(bad) {
-    assert(value.indexOf(bad) === -1, 'en.js invite.' + key + ' contains ' + bad);
+function walkCopy(node, path) {
+  Object.keys(node).forEach(function (key) {
+    var value = node[key];
+    var here = path + '.' + key;
+    if (value && typeof value === 'object') {
+      walkCopy(value, here);
+      return;
+    }
+    var text = String(value);
+    ['%', '7200', 'leader_share', 'fee-share'].forEach(function (bad) {
+      if (text.indexOf(bad) !== -1) {
+        throw new Error('en.js ' + here + ' contains ' + bad);
+      }
+    });
   });
-});
+}
+walkCopy(copy, 'invite');
 
-assert(Object.keys(invite).some(function(k) { return k.indexOf('attribute') === 0; }), 'en.js missing invite.attribute*');
-assert(Object.keys(invite).some(function(k) { return k.indexOf('referrer') === 0; }), 'en.js missing invite.referrer*');
-
-console.log('invite-attribute.golden: ok');
+console.log('ok: invite attribute referrer');
