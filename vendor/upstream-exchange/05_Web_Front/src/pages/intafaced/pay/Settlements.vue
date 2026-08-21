@@ -124,9 +124,14 @@
           <div class="ix-field-grid">
             <div class="ix-field">
               <label>{{ $t('intafaced.pay.rail') }}</label>
-              <Select v-model="payoutForm.railId" :placeholder="$t('intafaced.pay.chooseRail')">
-                <Option v-for="rail in railIds" :key="rail" :value="rail" :label="rail"></Option>
-              </Select>
+              <!-- Rails are only a list after health answered ok. Loading and
+                   refuse are painted as themselves (IxState) — never as an
+                   empty picker that reads as "zero rails". -->
+              <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+                <Select v-model="payoutForm.railId" :placeholder="$t('intafaced.pay.chooseRail')">
+                  <Option v-for="rail in railIds" :key="rail" :value="rail" :label="rail"></Option>
+                </Select>
+              </IxState>
             </div>
             <div class="ix-field">
               <label for="ix-po-kind">{{ $t('intafaced.pay.destinationKind') }}</label>
@@ -181,6 +186,11 @@
  * Nothing here checks that gross − fees = net. It would have to parse three
  * amounts to do it, and a browser that disagreed with the ledger about a
  * merchant's revenue would be the number the merchant believed.
+ *
+ * ── THE RAIL PICKER DOES NOT TREAT A REFUSED HEALTH AS ZERO RAILS ─────────
+ * `health` is loaded so `settlement.payout` can name a rail the service
+ * actually has. `railIds` is unused unless `health.reason === 'ok'`; loading
+ * and refuse go through IxState. An empty Select would be the lie.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -211,13 +221,20 @@ export default {
       return (this.merchant.data && this.merchant.data.id) || '';
     },
     railIds() {
+      if (this.health.reason !== 'ok') return [];
       return (this.health.data && this.health.data.rails) || [];
     },
     canRun() {
       return Boolean(this.merchantId && this.runForm.window && this.runForm.assetId);
     },
     canPayout() {
-      return Boolean(this.current && this.payoutForm.railId && this.payoutForm.kind && this.payoutForm.ref);
+      return Boolean(
+        this.health.reason === 'ok' &&
+          this.current &&
+          this.payoutForm.railId &&
+          this.payoutForm.kind &&
+          this.payoutForm.ref
+      );
     }
   },
   created() {
