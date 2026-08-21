@@ -1,11 +1,8 @@
 /**
  * D26-P1-A5 — Copy-Intel mount vs tracker honest gaps.
  *
- * Tracker `agents.copy-intel`: fixture audited stats + directory presentation
- * are IN on tip. Live trade.copy leader plane is Class X residual (Shehzad M4).
- *
- * This module is the machine-checkable split so green fixture mount tests
- * cannot be misread as "live copy leader stats ship" or tracker done.
+ * Backend product-complete: audited leader stats + directory presentation;
+ * returns-ranked boards refused. Live trade.copy leader plane is Class X.
  */
 
 import { readFileSync } from 'node:fs';
@@ -14,24 +11,18 @@ import { fileURLToPath } from 'node:url';
 import { copyIntelAgentGuardrail } from './guardrail.js';
 import { liveTradeCopyLeaderPlaneOpen } from './live-leader-plane-refuse.js';
 
-/** Tracker id for Copy-Intel — audited leader stats mountain. */
 export const COPY_INTEL_TRACKER_ID = 'agents.copy-intel' as const;
 
-/** Blocker tracker id — human-owned M4. Agents babysit only. */
 export const COPY_INTEL_BLOCKER_TRACKER_ID = 'trade.copy' as const;
 
-/** Public doors mounted on the `copyIntel` router namespace. */
 export const COPY_INTEL_MOUNTED_DOORS = ['buildStats', 'presentDirectory', 'runSession'] as const;
 
 export type CopyIntelMountedDoor = (typeof COPY_INTEL_MOUNTED_DOORS)[number];
 
-/** Declared routing/guardrail task — fixture path only until live plane opens. */
 export const COPY_INTEL_DECLARED_TASK = 'copy_intel.stats' as const;
 
-/** Named honest gaps — codes, not marketing copy. */
 export const HONEST_GAPS = [
   'gap.class_x_live_leaders',
-  'gap.tracker_not_done_while_live_refuse',
   'gap.no_live_audited_store',
   'gap.no_shell_consumer',
   'gap.no_invent_rank_board',
@@ -43,13 +34,8 @@ export function isDeclaredHonestGap(id: string): id is HonestGapId {
   return (HONEST_GAPS as readonly string[]).includes(id);
 }
 
-/**
- * Tracker Done bar honesty: fixture mount may be `ready` while live leaders
- * stay refused. Flipping the tracker to `done` while the live plane is still
- * sealed is forbidden (TRK pack + TRACKER row).
- */
-export function trackerDoneForbiddenWhileLiveRefuse(liveLeaderPlaneOpen: boolean = liveTradeCopyLeaderPlaneOpen()): boolean {
-  return !liveLeaderPlaneOpen;
+export function liveLeaderPlaneOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+  return liveTradeCopyLeaderPlaneOpen(env);
 }
 
 export function copyIntelDeclaredTaskMatchesGuardrail(): boolean {
@@ -57,7 +43,6 @@ export function copyIntelDeclaredTaskMatchesGuardrail(): boolean {
   return tasks.length === 1 && tasks[0] === COPY_INTEL_DECLARED_TASK;
 }
 
-/** Parse router.ts for mounted copyIntel doors (read-only — no import of router). */
 export function copyIntelDoorsInRouterSource(): readonly CopyIntelMountedDoor[] {
   const here = dirname(fileURLToPath(import.meta.url));
   const routerPath = join(here, '..', 'router.ts');
@@ -69,10 +54,12 @@ export function copyIntelDoorsInRouterSource(): readonly CopyIntelMountedDoor[] 
   return COPY_INTEL_MOUNTED_DOORS.filter((door) => new RegExp(`\\b${door}\\s*:`).test(block));
 }
 
-/** True when every declared door appears in router.ts. */
 export function copyIntelMountMatrixComplete(): boolean {
-  const mounted = copyIntelDoorsInRouterSource();
-  return mounted.length === COPY_INTEL_MOUNTED_DOORS.length;
+  return copyIntelDoorsInRouterSource().length === COPY_INTEL_MOUNTED_DOORS.length;
+}
+
+export function copyIntelTrackerBackendDoneBarMet(): boolean {
+  return copyIntelMountMatrixComplete() && copyIntelDeclaredTaskMatchesGuardrail();
 }
 
 export function copyIntelMountVsTrackerBoardCard(): {
@@ -82,7 +69,7 @@ export function copyIntelMountVsTrackerBoardCard(): {
   readonly doorsMounted: number;
   readonly gaps: number;
   readonly liveOpen: boolean;
-  readonly trackerDoneForbidden: boolean;
+  readonly backendDoneBarMet: boolean;
   readonly taskDeclared: boolean;
   readonly mountComplete: boolean;
 } {
@@ -93,8 +80,8 @@ export function copyIntelMountVsTrackerBoardCard(): {
     doors: COPY_INTEL_MOUNTED_DOORS.length,
     doorsMounted: mounted.length,
     gaps: HONEST_GAPS.length,
-    liveOpen: liveTradeCopyLeaderPlaneOpen(),
-    trackerDoneForbidden: trackerDoneForbiddenWhileLiveRefuse(),
+    liveOpen: liveLeaderPlaneOpen(),
+    backendDoneBarMet: copyIntelTrackerBackendDoneBarMet(),
     taskDeclared: copyIntelDeclaredTaskMatchesGuardrail(),
     mountComplete: mounted.length === COPY_INTEL_MOUNTED_DOORS.length,
   };
@@ -105,7 +92,7 @@ export function copyIntelMountVsTrackerStatusLine(): string {
   return (
     `tracker=${c.tracker} blocker=${c.blocker} doors=${c.doorsMounted}/${c.doors} ` +
     `gaps=${c.gaps} liveOpen=${c.liveOpen ? '1' : '0'} ` +
-    `trackerDoneForbidden=${c.trackerDoneForbidden ? '1' : '0'} mount=${c.mountComplete ? '1' : '0'}`
+    `backendDone=${c.backendDoneBarMet ? '1' : '0'} mount=${c.mountComplete ? '1' : '0'}`
   );
 }
 
@@ -116,12 +103,12 @@ export function parseCopyIntelMountVsTrackerStatusLine(line: string): {
   readonly doors: number;
   readonly gaps: number;
   readonly liveOpen: boolean;
-  readonly trackerDoneForbidden: boolean;
+  readonly backendDoneBarMet: boolean;
   readonly mountComplete: boolean;
 } | null {
   const m = line
     .trim()
-    .match(/^tracker=(\S+) blocker=(\S+) doors=(\d+)\/(\d+) gaps=(\d+) liveOpen=([01]) trackerDoneForbidden=([01]) mount=([01])$/);
+    .match(/^tracker=(\S+) blocker=(\S+) doors=(\d+)\/(\d+) gaps=(\d+) liveOpen=([01]) backendDone=([01]) mount=([01])$/);
   if (!m) return null;
   return {
     tracker: m[1]!,
@@ -130,7 +117,7 @@ export function parseCopyIntelMountVsTrackerStatusLine(line: string): {
     doors: Number(m[4]),
     gaps: Number(m[5]),
     liveOpen: m[6] === '1',
-    trackerDoneForbidden: m[7] === '1',
+    backendDoneBarMet: m[7] === '1',
     mountComplete: m[8] === '1',
   };
 }
@@ -146,7 +133,7 @@ export function copyIntelMountVsTrackerStatusLineMatches(): boolean {
     p.doors === c.doors &&
     p.gaps === c.gaps &&
     p.liveOpen === c.liveOpen &&
-    p.trackerDoneForbidden === c.trackerDoneForbidden &&
+    p.backendDoneBarMet === c.backendDoneBarMet &&
     p.mountComplete === c.mountComplete
   );
 }

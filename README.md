@@ -10,13 +10,13 @@
 
 <!-- tracker:start -->
 
-`████████████░░░░░░░░` **58%** — 92 of 158 features shipped
+`████████████░░░░░░░░` **59%** — 94 of 158 features shipped
 
-Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 27/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 29/59 · **5P** 4/7
 
 **In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · OTC RFQ desk, staked-tier gate (Phantom-X-007) · Copy trading, audited leaders, fee-share (not profit-share) (Phantom-X-007) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Multi-tier affiliate / IB trees, payout automation (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · Knowledge base and workflow automation (§25:720) (nitro-agent)
 
-**🟢 21 ready to claim** — nothing blocks these:
+**🟢 20 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.forex` — Fiat pairs on the same engine
@@ -26,7 +26,7 @@ Phases: **0** 11/12 · **1** 12/13 · **2** 10/26 · **3** 12/18 · **3P** 11/15
 - `pay.payfac` — PayFac mode — sub-merchant trees, 14 permission areas
 - `p2p.payment-instruments` — Payment instruments — where the buyer actually pays
 - `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
-- …and 13 more
+- …and 12 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

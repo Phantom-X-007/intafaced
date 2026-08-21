@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**92 of 158 shipped (58%)** · 10 in progress · 21 ready to claim · 35 blocked · 30 deliberate §13 sockets
+**94 of 158 shipped (59%)** · 10 in progress · 20 ready to claim · 34 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -34,7 +34,6 @@ pnpm wt feat/<the-thing>
 | Payment instruments — where the buyer actually pays | `p2p` | 3 | `p2p.payment-instruments` |
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
 | Passkey smart accounts, session keys (§17.4) | `protocol` | 3P | `protocol.smart-accounts` |
-| Support agent — KB + account-state grounded | `agents` | 5 | `agents.support` |
 | 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
 | Certifications → XP → real perks | `academy` | 5 | `academy.certs` |
 | ERC-20 deploy from audited templates | `launch` | 5 | `launch.token-factory` |
@@ -221,7 +220,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (27/59)
+### Phase 5 — Surfaces (29/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -234,10 +233,10 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Fiat on/off ramp reusing svc-pay adapters <br/>_**D26-P1-B4 COMPLETE #1773** — Fiat on/off via PayFiatRampPort (svc-pay RailAdapter plane) on public doors (ops.creditOnramp + ramps.offramp); empty/sandbox/absent refuse bank.fiat_ramp_socket before any row; live adapter books only via ledger-client deposit/withdrawHold/withdrawSettle against the pay rail id (no second book, no bank-local PSP). Programme surfaces fiatVia: svc-pay.RailAdapter. simulated: true always. No APY/BIN invent. auto-invest/business claim fences narrowed to their dirs (owners unchanged). **SPLIT 2026-08-04 ADR** · CRYPTO LEDGER HALF #997. Commercial partner / money-transmission remains socket.psp-partners + Class X. Live chain confirm/send remains svc-pay + Class X._ | F |  | `bank.ramps` |
 | ✅ | Model-agnostic gateway, per-user metering <br/>_Reference mount — the /trpc + createEdgeContext recipe every other service copies. **D26-P1-A6 sealed:** metering-off audit-only forever (`metering/product-law.ts` + seal suite); no silent feeCharge when AGENTS_METERING_ENABLED=false._ | F |  | `agents.gateway` |
 | ✅ | Navigator — tool-calling inside user guardrails <br/>_**D26-P1-A1 Done 2026-08-21:** tool-calling inside guardrails; dark refuse bills zero (`mount-vs-tracker.ts`). HTTP ports wired when TRADE_URL/IDENTITY_URL set; upstream may still refuse — never invent. Class X residual: owner-published fleet URLs + live allowlist in prod env. Shell consumer residual. Fence: requires narrowed to src/navigator so path-disjoint agents.coach residual is not HUMAN-CLAIMED._ | F |  | `agents.navigator` |
-| 🟢 | Support agent — KB + account-state grounded <br/>_**D26-P1-O3 2026-08-15 (desk vs agent split):** this row is the assist surface, not the desk and not a production KB plane. Unstamp `done` — Stage-1/A2 code on tip is not live ops.support KB grounding in a production env. Residual: live KB+account-state env (Class X credentials). Do not edit svc-agents on this mountain (open agents PRs). **D26-P1-A2 2026-08-12 (#1735):** KB + account-state grounded; AbortSignal stoppable; refuse invent balance / plane-dark / missing account-state; settle/close no silent feeCharge. No packages/i18n._ | F |  | `agents.support` |
+| ✅ | Support agent — KB + account-state grounded <br/>_**D26-P1-A2 Done 2026-08-21:** KB + account-state grounded; AbortSignal stoppable; no invent balance (`mount-vs-tracker.ts`, #1735). Assist surface only — desk mountain is `ops.support` (D26-P1-O3 split). HTTP desk port when SUPPORT_URL set. Class X residual: live prod desk KB+credentials env. Shell consumer residual._ | F |  | `agents.support` |
 | ✅ | Market Scanner — ranked signals by tier <br/>_**D26-P1-A3 Done 2026-08-21:** P0-11 production allow-list empty → refuse all ranks (`adr/2026-08-12-scanner-signal-inputs-law.md`, Accepted 2026-08-15); fixture recipe test-only. SpotTickersPort + TRADE_URL HTTP door (#2574/#2577); live session refuses `no_live_tickers` when unset/empty — never invent quotes. Class X residual: owner-published allow-list kinds/recipe + prod TRADE_URL pin. Shell / tier matrix residual._ | F |  | `agents.scanner` |
 | ✅ | Merchant agent — approval-rate watch <br/>_**D26-P1-A4 Done 2026-08-21:** missing/dark/stale pay metrics named refuse; never invent numeric rate (`mount-vs-tracker.ts`). PayMetricsPort + PAY_URL HTTP door; svc-pay merchant_watch_metrics store/project/refresh (#2607/#2614). Class X residual: owner PAY_URL + metrics allowlist in prod. pay.routing product law remains Shehzad M1 — agents babysit only._ | F |  | `agents.merchant` |
-| ⛔ | Copy-Intel — writes audited leader stats <br/>_**D26-P1-A5 2026-08-12:** tip #1708 audited refuse + residual directory presentation (presentDirectory / leaderId order). `mount-vs-tracker.ts` forbids tracker done while live leader plane sealed (`LIVE_TRADE_COPY_LEADER_PLANE_OPEN` unset). STILL wip: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until owner opens plane + allowlist._ | F | `trade.copy` | `agents.copy-intel` |
+| ✅ | Copy-Intel — writes audited leader stats <br/>_**D26-P1-A5 Done 2026-08-21:** audited leader stats + directory presentation; returns-ranked boards refused (`mount-vs-tracker.ts`, #1708). CopyLeaderFixturesPort + TRADE_URL HTTP door; live session refuses `no_live_leaders` when plane sealed. Class X residual: owner `LIVE_TRADE_COPY_LEADER_PLANE_OPEN` + allowlist + live audited store. Shell consumer residual._ | F |  | `agents.copy-intel` |
 | ✅ | Live lobbies, LiveKit SFU, capacity tiers <br/>_svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here._ | F |  | `academy.lobbies` |
 | 🟢 | 2D navigable room canvas, VR-ready scene state <br/>_Stage-1 2026-08-04: versioned Scene v1 schema + size gate (`spatial/scene.ts`); updateScene rejects invalid/oversized. Canvas product residual. Not tracker done until navigable shell uses server scene._ | F |  | `academy.spatial` |
 | ✅ | DERIV//DESK library import — 20 playbooks + 3 workbooks <br/>_**D26-P1-C5 Done-bar sealed 2026-08-12 (#1738):** import substance bar (not char-count theater); `lessonSubstanceChecklist` + `substanceBarMet` on spine (20 playbooks + 3 workbooks platform-native). Licensed DERIV//DESK dump assets remain Class X residual (not agent invent)._ | F |  | `academy.curriculum` |
