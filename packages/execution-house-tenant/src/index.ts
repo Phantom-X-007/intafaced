@@ -28,3 +28,14 @@ export {
   type TenantRefusal,
   type TenantVenueTarget,
 } from './house-tenant.js';
+export {
+  HOUSE_TENANT_BLOCKED_TARGETS,
+  HOUSE_TENANT_POLICY_RULING,
+  describeHouseTenantPolicy,
+  evaluateHouseTenantPolicyGate,
+  policyAllowsExternalOnly,
+  policyBlocksInternalHalf,
+  policyKillSwitchFirst,
+  type HouseTenantPolicyGate,
+  type HouseTenantPolicySummary,
+} from './house-tenant-policy.js';
