@@ -15,7 +15,6 @@ import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.j
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
 import { areaForSurface, type PayfacSurface } from './payfac-permissions.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
-import { describeRoutingPolicy } from './routing-policy.js';
 import {
   REFERENCE_RAIL_ROUTING_PROFILES,
   selectSmartCheckoutRail,
