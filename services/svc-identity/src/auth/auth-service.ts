@@ -28,6 +28,11 @@ import type {
   StoredWebAuthnCredential,
   WebAuthnConfig,
 } from './webauthn.js';
+import {
+  syncNavigatorSessionClosed,
+  syncNavigatorSessionOpen,
+  syncNavigatorSessionsClosedForUser,
+} from '../agents/navigator-session-projection-sync.js';
 import type { RankService } from '../rank/rank-service.js';
 
 /**
@@ -368,6 +373,7 @@ export class AuthService {
       RETURNING id
     `;
     const sessionId = inserted[0]!.id;
+    void syncNavigatorSessionOpen(this.sql, sessionId, userId);
 
     const tier = await this.kycTier(userId);
 
@@ -394,8 +400,8 @@ export class AuthService {
     type RefreshOutcome =
       | { kind: 'reuse'; userId: string; sessionId: string }
       | { kind: 'frozen'; userId: string; sessionId: string; status: string }
-      | { kind: 'expired' }
-      | { kind: 'rotated'; tokens: SessionTokens };
+      | { kind: 'expired'; sessionId: string }
+      | { kind: 'rotated'; previousSessionId: string; tokens: SessionTokens };
 
     const result = await transaction<RefreshOutcome>(this.sql, async (tx) => {
       // Join users so status is locked with the session row (ID-P1-2).
@@ -418,7 +424,7 @@ export class AuthService {
 
       if (session.expires_at.getTime() < Date.now()) {
         await tx`UPDATE sessions SET revoked = true WHERE id = ${session.id}`;
-        return { kind: 'expired' };
+        return { kind: 'expired', sessionId: session.id };
       }
 
       // Mirror login / ifc_ exchange: frozen or closed accounts must not mint new
@@ -452,6 +458,7 @@ export class AuthService {
 
       return {
         kind: 'rotated',
+        previousSessionId: session.id,
         tokens: {
           accessToken,
           refreshToken: nextToken,
@@ -473,26 +480,40 @@ export class AuthService {
          WHERE user_id = ${result.userId} AND revoked = false
       `;
       await this.sql`UPDATE sessions SET reuse_detected_at = now() WHERE id = ${result.sessionId}`;
+      await syncNavigatorSessionsClosedForUser(this.sql, result.userId);
       throw new AuthError('Refresh token reuse detected — all sessions revoked', 'auth.session_reused');
     }
 
     if (result.kind === 'frozen') {
       // Committed: presented session is dead so a thaw cannot reuse this refresh.
       await this.sql`UPDATE sessions SET revoked = true WHERE id = ${result.sessionId}`;
+      await syncNavigatorSessionClosed(this.sql, result.sessionId);
       throw new AuthError(`Account is ${result.status}`, 'auth.account_frozen');
     }
 
-    if (result.kind === 'expired') throw new AuthError('Session expired', 'auth.session_invalid');
+    if (result.kind === 'expired') {
+      await syncNavigatorSessionClosed(this.sql, result.sessionId);
+      throw new AuthError('Session expired', 'auth.session_invalid');
+    }
 
+    await syncNavigatorSessionClosed(this.sql, result.previousSessionId);
+    void syncNavigatorSessionOpen(this.sql, result.tokens.sessionId, result.tokens.userId);
     return result.tokens;
   }
 
   async logout(refreshToken: string): Promise<void> {
-    await this.sql`UPDATE sessions SET revoked = true WHERE refresh_hash = ${hashToken(refreshToken)}`;
+    const hash = hashToken(refreshToken);
+    const rows = await this.sql<Array<{ id: string }>>`
+      SELECT id FROM sessions WHERE refresh_hash = ${hash} LIMIT 1
+    `;
+    await this.sql`UPDATE sessions SET revoked = true WHERE refresh_hash = ${hash}`;
+    const sessionId = rows[0]?.id;
+    if (sessionId) await syncNavigatorSessionClosed(this.sql, sessionId);
   }
 
   async logoutAll(userId: string): Promise<number> {
     const result = await this.sql`UPDATE sessions SET revoked = true WHERE user_id = ${userId} AND revoked = false`;
+    if (result.count > 0) await syncNavigatorSessionsClosedForUser(this.sql, userId);
     return result.count;
   }
 
