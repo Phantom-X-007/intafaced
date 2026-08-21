@@ -14,6 +14,7 @@ import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
 import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
+import { scanOmsExternalArb } from './oms-arbitrage.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -73,6 +74,36 @@ const omsPlanInput = z.object({
   amount: decimalString,
   venues: z.array(omsVenueInput).min(1).max(16),
   tenantId: z.string().min(1).max(128).optional(),
+});
+
+const sorCostTermsInput = z.object({
+  feeBps: z.number().nullable(),
+  expectedImpactBps: z.number().nullable(),
+  transferCostBps: z.number().nullable(),
+  latencyGrade: latencyGradeInput.nullable(),
+});
+
+const omsArbScanInput = z.object({
+  symbol: z.string().min(1).max(64),
+  amount: decimalString,
+  quotes: z
+    .array(
+      z.object({
+        venueId: z.string().min(1).max(128),
+        kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']),
+        price: decimalString.nullable(),
+        amount: decimalString,
+        asOfMs: z.number().int().nullable(),
+      }),
+    )
+    .min(1)
+    .max(32),
+  costTermsByVenue: z.record(z.string().min(1).max(128), sorCostTermsInput),
+  inventory: z.object({
+    prePositionedByVenue: z.record(z.string().min(1).max(128), z.boolean()),
+  }),
+  nowMs: z.number().int(),
+  maxQuoteAgeMs: z.number().int().nonnegative().nullable(),
 });
 
 export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
@@ -424,6 +455,14 @@ export function createExecutionRouter(
                 snapshotByVenue,
               });
             });
+          }),
+      }),
+
+      arb: router({
+        scan: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsArbScanInput)
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.arb.scan', input.symbol, async () => scanOmsExternalArb(input));
           }),
       }),
     }),
