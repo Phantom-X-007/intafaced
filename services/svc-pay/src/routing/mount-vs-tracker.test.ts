@@ -13,8 +13,8 @@ import {
 describe('pay.routing mount vs tracker honest gaps (D26-P1-P3)', () => {
   it('backend done bar met on tip', () => {
     expect(PAY_ROUTING_TRACKER_ID).toBe('pay.routing');
-    expect([routingDoorsInRouterSource()].sort()).toEqual([...ROUTING_MOUNTED_DOORS].sort());
-    expect([routingSymbolsInProductSource()].sort()).toEqual([...ROUTING_PRODUCT_SYMBOLS].sort());
+    expect(Array.from(routingDoorsInRouterSource()).sort()).toEqual(Array.from(ROUTING_MOUNTED_DOORS).sort());
+    expect(Array.from(routingSymbolsInProductSource()).sort()).toEqual(Array.from(ROUTING_PRODUCT_SYMBOLS).sort());
     expect(routingDoneBarTestsPresent()).toBe(true);
     expect(payRoutingTrackerBackendDoneBarMet()).toBe(true);
     expect(payRoutingMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);

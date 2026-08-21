@@ -11,7 +11,7 @@ import {
 describe('execution.market-making mount vs tracker honest gaps (D26-P1-X5)', () => {
   it('backend done bar met on tip', () => {
     expect(EXECUTION_MM_TRACKER_ID).toBe('execution.market-making');
-    expect([mmExportsInIndexSource()].sort()).toEqual([...MM_PRODUCT_EXPORTS].sort());
+    expect(Array.from(mmExportsInIndexSource()).sort()).toEqual(Array.from(MM_PRODUCT_EXPORTS).sort());
     expect(mmDoneBarTestPresent()).toBe(true);
     expect(executionMmTrackerBackendDoneBarMet()).toBe(true);
     expect(executionMmMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);

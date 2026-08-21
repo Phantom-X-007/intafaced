@@ -12,7 +12,7 @@ import {
 describe('ops.affiliates mount vs tracker honest gaps (D26-P1-O2)', () => {
   it('backend done bar met on tip', () => {
     expect(AFFILIATES_TRACKER_ID).toBe('ops.affiliates');
-    expect([affiliatesDoorsInRouterSource()].sort()).toEqual([...AFFILIATES_MOUNTED_DOORS].sort());
+    expect(Array.from(affiliatesDoorsInRouterSource()).sort()).toEqual(Array.from(AFFILIATES_MOUNTED_DOORS).sort());
     expect(affiliatesMountMatrixComplete()).toBe(true);
     expect(affiliatesProducerDoorsInIndexSource()).toBe(true);
     expect(affiliatesTrackerBackendDoneBarMet()).toBe(true);

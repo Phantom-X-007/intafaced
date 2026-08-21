@@ -13,7 +13,7 @@ describe('trade.copy mount vs tracker honest gaps (D26-P1-T3)', () => {
   it('backend done bar met on tip', () => {
     expect(COPY_TRACKER_ID).toBe('trade.copy');
     expect(copyPolicyHonest()).toBe(true);
-    expect([copyDoorsInRouterSource()].sort()).toEqual([...COPY_MOUNTED_DOORS].sort());
+    expect(Array.from(copyDoorsInRouterSource()).sort()).toEqual(Array.from(COPY_MOUNTED_DOORS).sort());
     expect(copyMountMatrixComplete()).toBe(true);
     expect(copyTrackerBackendDoneBarMet()).toBe(true);
     expect(copyMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
