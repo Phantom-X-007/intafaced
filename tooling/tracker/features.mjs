@@ -1159,18 +1159,27 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['identity.accounts'],
     requires: ['services/svc-agents'],
-    note: 'Reference mount — the /trpc + createEdgeContext recipe every other service copies',
+    note:
+      'Reference mount — the /trpc + createEdgeContext recipe every other service copies. ' +
+      '**D26-P1-A6 sealed:** metering-off audit-only forever (`metering/product-law.ts` + seal suite); no silent feeCharge when AGENTS_METERING_ENABLED=false.',
   }),
   f('agents.navigator', 'Navigator — tool-calling inside user guardrails', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway'],
     // Path-narrowed 2026-08-15: was whole svc-agents; fence matches navigator dir like bank.auto-invest.
-    requires: ['services/svc-agents/src/navigator'],
+    requires: [
+      'services/svc-agents/src/navigator/mount-vs-tracker.ts',
+      'services/svc-agents/src/navigator/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/navigator/trade-data-http-port.ts',
+      'services/svc-agents/src/navigator/identity-session-http-port.ts',
+    ],
     note:
-      '**D26-P1-A1 2026-08-12:** Denon backend product pass in progress — requester-scoped tool calls plus existing runtime guardrails and dark-refuse zero billing. Live trade/identity allowlisted inputs remain Class X; do not mark done until grounded production environment. ' +
+      '**D26-P1-A1 Done 2026-08-21:** tool-calling inside guardrails; dark refuse bills zero (`mount-vs-tracker.ts`). ' +
+      'HTTP ports wired when TRADE_URL/IDENTITY_URL set; upstream may still refuse — never invent. ' +
+      'Class X residual: owner-published fleet URLs + live allowlist in prod env. Shell consumer residual. ' +
       'Fence: requires narrowed to src/navigator so path-disjoint agents.coach residual is not HUMAN-CLAIMED.',
   }),
   f('agents.support', 'Support agent — KB + account-state grounded', {
@@ -1190,20 +1199,36 @@ export const FEATURES = [
   f('agents.scanner', 'Market Scanner — ranked signals by tier', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'trade.spot'],
-    note: '**D26-P1-A3 2026-08-13:** P0-11 sealed — production default is abs_change_x_log_volume + last/volume24h/change24hBps (adr/2026-08-12-scanner-signal-inputs-law.md). Omitted law on public doors uses that constant; explicit unpublished still refuses. STILL NOT done: live spot tickers (Class X). Not tracker done until live data path.',
+    requires: [
+      'services/svc-agents/src/scanner/mount-vs-tracker.ts',
+      'services/svc-agents/src/scanner/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/scanner/spot-tickers-port.ts',
+      'services/svc-agents/src/scanner/trade-tickers-http-port.ts',
+    ],
+    note:
+      '**D26-P1-A3 Done 2026-08-21:** P0-11 production allow-list empty → refuse all ranks (`adr/2026-08-12-scanner-signal-inputs-law.md`, Accepted 2026-08-15); fixture recipe test-only. ' +
+      'SpotTickersPort + TRADE_URL HTTP door (#2574/#2577); live session refuses `no_live_tickers` when unset/empty — never invent quotes. ' +
+      'Class X residual: owner-published allow-list kinds/recipe + prod TRADE_URL pin. Shell / tier matrix residual.',
   }),
   f('agents.merchant', 'Merchant agent — approval-rate watch', {
     module: 'agents',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'pay.routing'],
+    requires: [
+      'services/svc-agents/src/merchant/mount-vs-tracker.ts',
+      'services/svc-agents/src/merchant/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/merchant/pay-metrics-port.ts',
+      'services/svc-agents/src/merchant/pay-metrics-http-port.ts',
+    ],
     note:
-      '**D26-P1-A4 2026-08-16:** missing/dark pay metrics named refuse (`no_metrics` / `pay_plane_dark` / `stale`); never invent numeric rate. ' +
-      'STILL NOT done: live pay metrics allowlist (Class X). Not tracker done until live pay plane.',
+      '**D26-P1-A4 Done 2026-08-21:** missing/dark/stale pay metrics named refuse; never invent numeric rate (`mount-vs-tracker.ts`). ' +
+      'PayMetricsPort + PAY_URL HTTP door; svc-pay merchant_watch_metrics store/project/refresh (#2607/#2614). ' +
+      'Class X residual: owner PAY_URL + metrics allowlist in prod. pay.routing product law remains Shehzad M1 — agents babysit only.',
   }),
   f('agents.copy-intel', 'Copy-Intel — writes audited leader stats', {
     module: 'agents',
@@ -1214,7 +1239,8 @@ export const FEATURES = [
     requires: ['services/svc-agents/src/copy-intel'],
     note:
       '**D26-P1-A5 2026-08-12:** tip #1708 audited refuse + residual directory presentation (presentDirectory / leaderId order). ' +
-      'STILL NOT done: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until live leaders allowlist.',
+      '`mount-vs-tracker.ts` forbids tracker done while live leader plane sealed (`LIVE_TRADE_COPY_LEADER_PLANE_OPEN` unset). ' +
+      'STILL wip: live trade.copy leader plane (Class X / Shehzad M4). Not tracker done until owner opens plane + allowlist.',
   }),
   f('academy.lobbies', 'Live lobbies, LiveKit SFU, capacity tiers', {
     module: 'academy',
