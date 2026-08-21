@@ -5,6 +5,7 @@ import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
+import { buildExecutionVenueAccountMaps } from './venue-account-adapters.js';
 import { buildExecutionVenueTradeMaps, parseExecutionVenueIds } from './venue-adapters.js';
 
 registerProcessHooks(
@@ -23,13 +24,18 @@ registerProcessHooks(
  * Internal venues refused. No matching-path privilege. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
-const venueTradeMaps = buildExecutionVenueTradeMaps(parseExecutionVenueIds(env.EXECUTION_VENUE_IDS));
+const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
+const venueTradeMaps = buildExecutionVenueTradeMaps(executionVenueIds);
+const venueAccountMaps = buildExecutionVenueAccountMaps(executionVenueIds);
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
   venueTradeMaps.cancelByVenue,
   venueTradeMaps.fetchByVenue,
   venueTradeMaps.openOrdersByVenue,
+  venueAccountMaps.balancesByVenue,
+  venueAccountMaps.positionsByVenue,
+  venueAccountMaps.railsByVenue,
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
@@ -45,6 +51,7 @@ app.get('/ready', async () => ({
   store: 'memory',
   internalVenue: 'blocked',
   externalVenueTrade: venueTradeMaps.wiredVenueIds,
+  externalVenueAccount: venueAccountMaps.wiredVenueIds,
 }));
 
 await app.register(fastifyTRPCPlugin, {
