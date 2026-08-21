@@ -17,25 +17,13 @@
  * invents no numbers.
  */
 import type { Sql } from 'postgres';
+import {
+  ADL_DISCLOSURE_COPY,
+  ADL_DISCLOSURE_REQUIRED,
+  ADL_DISCLOSURE_VERSION,
+} from './futures-policy.js';
 
-/** Stable product copy version — bump only when the disclosed meaning changes. */
-export const ADL_DISCLOSURE_VERSION = 'DIRECTION-2026-07-31:34' as const;
-
-/** Honest refuse when open is attempted without a matching ack. */
-export const ADL_DISCLOSURE_REQUIRED = 'trade.adl_disclosure_required' as const;
-
-/**
- * In-product disclosure text. Describes mechanism existence only — no invented
- * threshold, ranking formula, or reduce size.
- */
-export const ADL_DISCLOSURE_COPY =
-  'Auto-deleveraging (ADL) is a last-resort risk control. If a liquidated ' +
-  'position’s shortfall cannot be covered by its margin and the insurance fund, ' +
-  'the platform may reduce profitable opposite-side positions. ADL does not run ' +
-  'silently: a disclosure event is recorded before any reduce, and thresholds or ' +
-  'ranking are owner-configured (unset → ADL refuses rather than inventing ' +
-  'parameters). By acknowledging, you confirm you have read this before opening ' +
-  'a futures position.';
+export { ADL_DISCLOSURE_COPY, ADL_DISCLOSURE_REQUIRED, ADL_DISCLOSURE_VERSION } from './futures-policy.js';
 
 export interface AdlDisclosureAck {
   readonly userId: string;
