@@ -20,6 +20,9 @@ describe('svc-agents live ports mount', () => {
     expect(src).toContain('createHttpPayMetricsPort');
     expect(src).toContain('env.IDENTITY_URL');
     expect(src).toContain('createHttpNavigatorIdentitySessionPort');
+    expect(src).toContain('env.ACADEMY_URL');
+    expect(src).toContain('createAcademyCurriculumSource');
+    expect(src).toContain('describeAgentsLivePlanes');
   });
 
   it('passes live ports into createAgentsRouter', () => {

@@ -8,6 +8,7 @@ describe('describeAgentsLivePlanes', () => {
       payUrlConfigured: false,
       supportUrlConfigured: false,
       identityUrlConfigured: false,
+      academyUrlConfigured: false,
       storesMayStillRefuse: true,
     });
   });
@@ -19,12 +20,14 @@ describe('describeAgentsLivePlanes', () => {
         PAY_URL: 'http://svc-pay:4006',
         SUPPORT_URL: 'http://svc-support:4017',
         IDENTITY_URL: 'http://svc-identity:4002',
+        ACADEMY_URL: 'http://svc-academy:4016',
       }),
     ).toEqual({
       tradeUrlConfigured: true,
       payUrlConfigured: true,
       supportUrlConfigured: true,
       identityUrlConfigured: true,
+      academyUrlConfigured: true,
       storesMayStillRefuse: true,
     });
   });
