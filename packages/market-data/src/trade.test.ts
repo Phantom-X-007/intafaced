@@ -79,4 +79,37 @@ describe('ingestVenueFill / ingestVenueTick — capture holes', () => {
     });
     expect(record).toMatchObject({ status: 'absent', reason: 'adapter_no_connection', kind: 'tick' });
   });
+
+  it('refuses JSON number price/quantity on a connected tick — not a measured print', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:03.000Z') });
+    expect(() =>
+      ingestVenueTick(lake, {
+        venueId: 'binance-spot',
+        marketId: 'BTC-USDT',
+        connection: 'connected',
+        tick: {
+          price: 0.1 as unknown as string,
+          quantity: 1 as unknown as string,
+          ts: '2026-08-16T13:10:03.000Z',
+        },
+      }),
+    ).toThrow(/decimal string/);
+    expect(lake.records()).toEqual([]);
+  });
+
+  it('writes a measured tick when connected with decimal-string price and quantity', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:04.000Z') });
+    const record = ingestVenueTick(lake, {
+      venueId: 'binance-spot',
+      marketId: 'BTC-USDT',
+      connection: 'connected',
+      tick: { price: '0.1', quantity: '1', ts: '2026-08-16T13:10:04.000Z' },
+    });
+    expect(record).toMatchObject({
+      status: 'measured',
+      kind: 'tick',
+      price: '0.1',
+      quantity: '1',
+    });
+  });
 });
