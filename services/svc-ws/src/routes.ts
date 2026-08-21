@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { toSnapshot, type DepthHub } from './depth/hub.js';
-import { DepthSourceError, type DepthSource } from './depth/source.js';
+import { DEPTH_ENGINE_UNAVAILABLE, snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
+import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
@@ -70,6 +70,19 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     privateConnections: privateHub.connections,
     tradesBus: tradesBus(),
     privateBus: privateBus(),
+    /**
+     * Per-hub ceilings. Summing them is NOT a process-wide cap — each hub
+     * refuses at its own max (1013). Occupancy never 503s this probe.
+     */
+    capacity: {
+      depth: { connections: hub.connections, maxConnections: hub.maxConnections },
+      trades: { connections: tradeHub.connections, maxConnections: tradeHub.maxConnections },
+      private: {
+        connections: privateHub.connections,
+        maxConnections: privateHub.maxConnections,
+        maxConnectionsPerUser: privateHub.maxConnectionsPerUser,
+      },
+    },
   }));
 
   /**
@@ -108,8 +121,8 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     try {
       // Checked against the LISTING before any depth call — not against the
       // engine's book list, which omits every market that has not traded yet
-      // (`depth/registry.ts`). A listed market with no book is not a 404 here;
-      // it is an empty book, which is what `source.snapshot` returns for it.
+      // (`depth/registry.ts`). Unlisted → 404 MarketNotFound. Listed with no
+      // resting depth → 404 NoBook, never a 200 with bids/asks [].
       if (!(await hub.ensureKnownMarket(marketId))) {
         return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
       }
@@ -118,15 +131,117 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       // socket is diffed against, so a client that fetches here and then applies
       // deltas cannot land between two versions of the truth.
       const book = hub.bookFor(marketId);
-      if (book) return reply.code(200).send(toSnapshot(book));
+      if (book) {
+        const snap = toSnapshot(book);
+        if (!snapshotHasRestingDepth(snap)) {
+          return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
+        }
+        return reply.code(200).send(snap);
+      }
+
+      if (hub.isEngineUnavailable(marketId)) {
+        return reply.code(502).send({
+          code: DEPTH_ENGINE_UNAVAILABLE,
+          message: `"${marketId}": matching engine unavailable`,
+        });
+      }
 
       const snapshot = await withWsSpan('ws.depth.snapshot', { marketId }, () => source.snapshot(marketId, depthLimit));
+      if (!snapshotHasRestingDepth(snapshot)) {
+        return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
+      }
       return reply.code(200).send(snapshot);
     } catch (err) {
+      if (err instanceof DepthNoBookError) {
+        return reply.code(404).send({ code: 'NoBook', message: err.message });
+      }
       // 502, not 500: this service is fine, svc-matching is not, and a caller
       // needs to tell those apart before deciding whether to retry.
       const message = err instanceof DepthSourceError ? err.message : 'depth unavailable';
       req.log.error({ err, marketId }, 'ws: snapshot failed');
+      return reply.code(502).send({ code: DEPTH_ENGINE_UNAVAILABLE, message });
+    }
+  });
+
+  /**
+   * Recent public prints for a listed market. Empty ≠ zero: a listed market
+   * with no tape is `404 NoTape`, never `200 { trades: [] }`.
+   */
+  app.get('/markets/:marketId/trades', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+
+    try {
+      if (!(await hub.ensureKnownMarket(marketId))) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+
+      const trades = tradeHub.recentFor(marketId);
+      if (trades.length === 0) {
+        return reply.code(404).send({ code: 'NoTape', message: `"${marketId}": matching holds no prints` });
+      }
+      return reply.code(200).send({ marketId, trades });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'trades unavailable';
+      req.log.error({ err, marketId }, 'ws: trades snapshot failed');
+      return reply.code(502).send({ code: 'UpstreamUnavailable', message });
+    }
+  });
+
+  /**
+   * Public door has no orders blotter. Empty ≠ zero: never `200 { orders: [] }`.
+   * Unknown market is `404 MarketNotFound`. Listed is `404 NoBlotter`.
+   */
+  app.get('/markets/:marketId/orders', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+
+    try {
+      if (!(await hub.ensureKnownMarket(marketId))) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+      return reply.code(404).send({ code: 'NoBlotter', message: `"${marketId}": no public orders blotter` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'orders unavailable';
+      req.log.error({ err, marketId }, 'ws: orders snapshot failed');
+      return reply.code(502).send({ code: 'UpstreamUnavailable', message });
+    }
+  });
+
+  /**
+   * Public door has no positions blotter. Empty ≠ zero: never `200 { positions: [] }`.
+   * Unknown market is `404 MarketNotFound`. Listed is `404 NoPositions`.
+   */
+  app.get('/markets/:marketId/positions', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+
+    try {
+      if (!(await hub.ensureKnownMarket(marketId))) {
+        return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+      return reply.code(404).send({ code: 'NoPositions', message: `"${marketId}": no public positions blotter` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'positions unavailable';
+      req.log.error({ err, marketId }, 'ws: positions snapshot failed');
       return reply.code(502).send({ code: 'UpstreamUnavailable', message });
     }
   });

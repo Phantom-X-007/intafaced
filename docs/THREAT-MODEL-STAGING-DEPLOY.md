@@ -1,7 +1,7 @@
 # Threat model — the staging deploy workflow
 
 **Subject:** `.github/workflows/staging-deploy.yml`, and nothing else.
-**Board:** D26-P3-01 (the workflow) · D26-P3-02 (this document, in part — see the scope note).
+**Board:** D26-P3-01 (the workflow). Fiat / wallet_rpc / vendor Java live under **D26-P3-02** → [`THREAT-MODEL-CURRENT.md`](THREAT-MODEL-CURRENT.md).
 **Law it sits under:** [`adr/2026-08-08-staging-deploy-path.md`](adr/2026-08-08-staging-deploy-path.md) (Accepted 2026-08-08).
 **Doctrine it is consistent with, and does not restate:** [`OWNER-ACTIONS-WALLET-RPC-SECRETS.md`](OWNER-ACTIONS-WALLET-RPC-SECRETS.md) · the header of `tooling/ci/secret-scan.mjs` · [`SECURITY-WHEN-PLAIN.md`](SECURITY-WHEN-PLAIN.md).
 
@@ -11,7 +11,7 @@
 
 This is the threat model of **one workflow file**. It is written because that file will one day hold credentials that can reach a running copy of a money platform, and the day it does is a bad day to start thinking about it.
 
-**It is not the whole of D26-P3-02.** The board asks there for a living threat model of the _fiat plane, `wallet_rpc`, and the vendored Java surface_. That is a much larger piece of work on three surfaces this workflow does not touch, and claiming it here would be exactly the "route exists ≠ done" move the board exists to prevent. What is delivered is the deploy-path slice. The other three remain open.
+**It is not D26-P3-02.** The board asked there for a living threat model of the _fiat plane, `wallet_rpc`, and the vendored Java surface_. That work now lives in [`THREAT-MODEL-CURRENT.md`](THREAT-MODEL-CURRENT.md). This file stays the deploy-path slice only. Claiming P3-02 done from this workflow would be the "route exists ≠ done" move the board exists to prevent.
 
 **Nothing here has been tested against a host.** There is no staging host; buying one is Class X money. Every mitigation below is reasoned and, where it was mechanically checkable, checked — the trigger self-check and the container-state classifier were executed against fixtures, `actionlint` passes, every embedded script passes `bash -n`. None of that is the same as a deploy having happened. **No deploy has happened.**
 

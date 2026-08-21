@@ -23,7 +23,7 @@ import {
   type CardConversionPolicy,
   type ConversionQuote,
 } from './conversion.js';
-import { cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
+import { cardProgrammeOutput, cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
 
 /**
  * CARDS (§8.1) — the LEDGER half: authorise, hold, capture, reverse, cash back.
@@ -236,6 +236,8 @@ export interface CaptureResult {
    * converted at. NULL on a same-asset card, where the two are one number.
    */
   settlement: { readonly assetId: string; readonly amount: Amount; readonly rate: Amount } | null;
+  /** Spare-change sweep. Capture never rolls back on this. */
+  roundUp: RoundUpOutcome;
 }
 
 /**
@@ -250,6 +252,24 @@ export type CashbackOutcome =
   | { readonly status: 'none'; readonly amount: Amount }
   | { readonly status: 'paid'; readonly amount: Amount; readonly ledgerTxId: string }
   | { readonly status: 'refused'; readonly amount: Amount; readonly reason: string };
+
+/**
+ * Spare-change sweep after capture. Same reporting rule as cashback: the
+ * capture stands even when this refuses. `none` means no rule; `skipped` is
+ * a named no-op (kill switch, exact multiple).
+ */
+export type RoundUpOutcome =
+  | { readonly status: 'none'; readonly amount: Amount }
+  | { readonly status: 'skipped'; readonly amount: Amount; readonly reason: string }
+  | { readonly status: 'settled'; readonly amount: Amount; readonly positionId: string }
+  | { readonly status: 'refused'; readonly amount: Amount; readonly reason: string };
+
+export type CaptureSettledHook = (event: {
+  userId: string;
+  assetId: string;
+  authorizationId: string;
+  captured: Amount;
+}) => Promise<RoundUpOutcome>;
 
 export interface CardServiceOptions {
   /**
@@ -276,6 +296,12 @@ export interface CardServiceOptions {
    * When false, issue and authorise refuse `bank.cards_disabled`.
    */
   readonly moduleEnabled?: boolean;
+  /**
+   * After a capture settles (and cashback is attempted), sweep spare change.
+   * Absent = no round-up. Must not throw in a way that undoes the capture —
+   * CardService catches and reports `refused`.
+   */
+  readonly onCaptureSettled?: CaptureSettledHook;
 }
 
 export class CardService {
@@ -284,6 +310,7 @@ export class CardService {
   private readonly conversionPolicy: CardConversionPolicy;
   private readonly clock: () => Date;
   private readonly moduleEnabled: boolean;
+  private readonly onCaptureSettled: CaptureSettledHook | null;
 
   constructor(
     private readonly sql: Sql,
@@ -295,6 +322,7 @@ export class CardService {
     this.conversionPolicy = options.conversionPolicy ?? DEFAULT_CARD_CONVERSION_POLICY;
     this.clock = options.clock ?? (() => new Date());
     this.moduleEnabled = options.moduleEnabled !== false;
+    this.onCaptureSettled = options.onCaptureSettled ?? null;
   }
 
   private assertModuleEnabled(): void {
@@ -303,9 +331,20 @@ export class CardService {
     }
   }
 
+  /**
+   * Live `card-sim` must refuse BEFORE a row or a hold. `tellIssuer` swallows
+   * adapter errors after the ledger has already moved, so throwing from
+   * `respondToAuthorization` is not enough.
+   */
+  private assertIssuerMayMutate(): void {
+    const code = this.issuer.mutationRefuse;
+    if (!code) return;
+    throw new BankError('card-sim is not a live issuer — this deployment will not issue or authorise as if a BIN exists', code);
+  }
+
   /** What this deployment's card programme is, and whether it is real. */
   programme(): CardIssuerAdapter['programme'] {
-    return this.issuer.programme;
+    return cardProgrammeOutput(this.issuer.programme);
   }
 
   // ── Cards ──────────────────────────────────────────────────────────────────
@@ -336,6 +375,7 @@ export class CardService {
     perAuthorizationLimit: Amount;
   }): Promise<CardRecord> {
     this.assertModuleEnabled();
+    this.assertIssuerMayMutate();
     if (input.perAuthorizationLimit <= 0n) {
       throw new BankError('A card needs a positive per-authorisation limit', 'bank.card_limit_exceeded');
     }
@@ -416,6 +456,7 @@ export class CardService {
     merchantCategory?: string;
   }): Promise<AuthorizationRecord> {
     this.assertModuleEnabled();
+    this.assertIssuerMayMutate();
     const card = await this.card(input.cardId);
 
     // Idempotency, before anything else. An issuer redelivering an
@@ -695,6 +736,7 @@ export class CardService {
         // settlement number instead would pay a reward denominated in a currency
         // this platform holds no pot for.
         const cashback = await this.payCashback(card, authorization, capturedFunding);
+        const roundUp = await this.applyRoundUp(card, authorization, capturedFunding);
 
         return {
           authorizationId: authorization.id,
@@ -703,6 +745,7 @@ export class CardService {
           captureLedgerTxId: captureTxId,
           reversalLedgerTxId: reversalTxId,
           cashback,
+          roundUp,
           settlement: conversion ? { assetId: conversion.settlementAssetId, amount: input.amount, rate: conversion.rate } : null,
         };
       },
@@ -846,6 +889,30 @@ export class CardService {
       resumed,
       held: await this.heldFor(authorization.id, card.userId, card.assetId),
     };
+  }
+
+  /**
+   * Spare-change sweep after the capture (and cashback) have settled.
+   *
+   * Never throws out to `capture()`: a failed round-up must not look like a
+   * failed purchase. Same posture as `payCashback`.
+   */
+  private async applyRoundUp(card: CardRecord, authorization: AuthorizationRecord, captured: Amount): Promise<RoundUpOutcome> {
+    if (!this.onCaptureSettled) return { status: 'none', amount: 0n };
+    try {
+      return await this.onCaptureSettled({
+        userId: card.userId,
+        assetId: card.assetId,
+        authorizationId: authorization.id,
+        captured,
+      });
+    } catch (err) {
+      return {
+        status: 'refused',
+        amount: 0n,
+        reason: err instanceof BankError ? err.code : 'bank.auto_invest_run_failed',
+      };
+    }
   }
 
   // ── Cashback ───────────────────────────────────────────────────────────────
@@ -1202,6 +1269,9 @@ interface AuthorizationRow {
 }
 
 function toCard(row: CardRow): CardRecord {
+  if (typeof row.simulated !== 'boolean') {
+    throw new TypeError('Card row must declare whether it is simulated');
+  }
   return {
     id: row.id,
     userId: row.user_id,

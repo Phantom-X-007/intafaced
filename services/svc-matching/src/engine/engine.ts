@@ -150,12 +150,14 @@ export class MatchingEngine {
   }
 
   /**
-   * Drop a book that never accepted an order (sequence still 0).
-   * Used after a rejected submit so invent-on-write does not stick.
+   * Drop a book that never printed and holds nothing.
+   * Used after submit so invent-on-write does not stick: FOK/PO/structural
+   * reject (sequence 0) and IOC/market remainder on a virgin book (sequence
+   * advanced, still no print and no rest) must not appear on GET /markets.
    */
   private dropIfNeverTraded(marketId: MarketId): void {
     const book = this.books.get(marketId);
-    if (book && book.currentSequence === 0) this.books.delete(marketId);
+    if (book?.isNeverPrintedEmpty) this.books.delete(marketId);
   }
 
   hasMarket(marketId: MarketId): boolean {
@@ -278,13 +280,14 @@ export class MatchingEngine {
 
         const result = this.book(marketId).submit(order);
         /**
-         * REJECT MUST NOT LEAVE A NEVER-TRADED MARKET. `book()` allocates and
-         * stores an empty OrderBook so the first *accepted* order can open a
-         * market. A FOK/PO/structural reject never advances sequence and never
-         * rests — keeping that empty book would list a market that never traded
-         * (and turn depth null → empty forever). Same honesty bar as cancel.
+         * SUBMIT MUST NOT LEAVE A NEVER-TRADED MARKET. `book()` allocates and
+         * stores an empty OrderBook so the first *accepted* rest or print can
+         * open a market. A FOK/PO/structural reject never advances sequence;
+         * an IOC/market remainder on a virgin book advances sequence then
+         * cancels in full. Keeping either empty book would list a market that
+         * never traded (and turn depth null → empty forever).
          */
-        if (!result.accepted) this.dropIfNeverTraded(marketId);
+        this.dropIfNeverTraded(marketId);
         await this.emit(this.eventsForSubmit(marketId, order.orderId, result, at));
         await this.maybeSnapshot();
 

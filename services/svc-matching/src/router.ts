@@ -12,6 +12,7 @@ import {
 import type { MatchingEngine } from './engine/engine.js';
 import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 import { reconcile } from './reconcile.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * HTTP surface.
@@ -158,10 +159,21 @@ function presentSubmit(result: SubmitResult) {
  * price is not a secret. Writes are not.
  */
 export class MatchingAuthError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly rejected: string;
+  constructor(rejected: string) {
+    super(userCopy('matching.unauthenticated'));
     this.name = 'MatchingAuthError';
+    this.rejected = rejected;
   }
+}
+
+function unauthenticatedBody(err: unknown): { code: 'Unauthenticated'; message: string; rejected?: string } {
+  const rejected = err instanceof MatchingAuthError ? err.rejected : undefined;
+  return {
+    code: 'Unauthenticated',
+    message: userCopy('matching.unauthenticated'),
+    ...(rejected ? { rejected } : {}),
+  };
 }
 
 export interface MatchingRouteOptions {
@@ -195,7 +207,7 @@ export function registerRoutes(
     const { service, rejected, scheme } = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
 
     if (!service) {
-      throw new MatchingAuthError(`Order writes are callable only by another INTAFACED service with valid credentials (§2): ${rejected}`);
+      throw new MatchingAuthError(rejected ?? 'unauthenticated');
     }
 
     // THE MIGRATION SIGNAL (L2-6). A v1 accept is an authenticated caller whose
@@ -215,7 +227,7 @@ export function registerRoutes(
     try {
       requireService(req);
     } catch (err) {
-      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+      return reply.code(401).send(unauthenticatedBody(err));
     }
 
     const { marketId } = req.params as { marketId: string };
@@ -234,12 +246,12 @@ export function registerRoutes(
     try {
       requireService(req);
     } catch (err) {
-      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+      return reply.code(401).send(unauthenticatedBody(err));
     }
 
     const { marketId, orderId } = req.params as { marketId: string; orderId: string };
     const result = await engine.cancel(marketId, orderId);
-    if (!result.cancelled) return reply.code(404).send({ code: 'OrderNotFound', message: `${orderId} is not live in ${marketId}` });
+    if (!result.cancelled) return reply.code(404).send({ code: 'OrderNotFound', message: userCopy('matching.order_not_found') });
     return reply.code(200).send({
       cancelled: true,
       orderId: result.orderId,
@@ -258,7 +270,7 @@ export function registerRoutes(
     // the engine's memory without bound — and every one of those phantom books
     // then appeared to exist. Reading must not create.
     if (depth === null) {
-      return reply.code(404).send({ code: 'MarketNotFound', message: `${marketId} is not a market on this engine` });
+      return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
     return reply.code(200).send({ marketId, ...depth });
   });
@@ -279,12 +291,12 @@ export function registerRoutes(
     try {
       requireService(req);
     } catch (err) {
-      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+      return reply.code(401).send(unauthenticatedBody(err));
     }
 
     const { marketId } = req.params as { marketId: string };
     if (!engine.hasMarket(marketId)) {
-      return reply.code(404).send({ code: 'MarketNotFound', message: `${marketId} is not a market on this engine` });
+      return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
 
     return reply.code(200).send({ marketId, orders: engine.restingOrders(marketId) });
@@ -310,7 +322,7 @@ export function registerRoutes(
     try {
       requireService(req);
     } catch (err) {
-      return reply.code(401).send({ code: 'Unauthenticated', message: (err as Error).message });
+      return reply.code(401).send(unauthenticatedBody(err));
     }
 
     const parsed = reconcileBodySchema.safeParse(req.body);

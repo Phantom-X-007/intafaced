@@ -57,14 +57,17 @@ smallest blast radius in the fleet. A second public origin on a process that hol
 HTTP + JSON, plus one websocket. Amounts in and out are **decimal strings**, never JSON numbers. The only JSON
 numbers anywhere in this service's output are integer sequences.
 
-| Route                                              | Input | Output                                                                                                                                                       |
-| -------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                                                                                                                    |
-| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                 |
-| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` unlisted · `502` upstream down                                                                                                       |
-| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                |
-| `GET /health`                                      | —     | `{ ok, service, enabled, connections, privateConnections, tradesBus, privateBus, … }`                                                                        |
-| `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works) |
+| Route                                              | Input | Output                                                                                                                                                            |
+| -------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /stream?market=<id>` (upgrade)                | —     | `DepthSnapshot`, then `DepthDelta` frames                                                                                                                         |
+| `GET /stream?market=<id>&channel=trades` (upgrade) | —     | recent `TradePrint` frames, then live prints                                                                                                                      |
+| `GET /markets/:marketId/depth`                     | —     | `DepthSnapshot` · `404` `MarketNotFound` (unlisted) · `404` `NoBook` (listed, no resting depth) · `502` upstream down                                             |
+| `GET /markets/:marketId/trades`                    | —     | recent `TradePrint[]` · `404` `MarketNotFound` (unlisted) · `404` `NoTape` (listed, no prints — never `200 { trades: [] }`) · `502` listing down                  |
+| `GET /markets/:marketId/orders`                    | —     | no public blotter · `404` `MarketNotFound` (unlisted) · `404` `NoBlotter` (listed — never `200 { orders: [] }`)                                                   |
+| `GET /markets/:marketId/positions`                 | —     | no public blotter · `404` `MarketNotFound` (unlisted) · `404` `NoPositions` (listed — never `200 { positions: [] }`)                                              |
+| `GET /markets`                                     | —     | `{ markets: string[] }` — the listing, not the engine's books                                                                                                     |
+| `GET /health`                                      | —     | `{ ok, service, enabled, connections, capacity.{depth,trades,private}, tradesBus, privateBus, … }` — occupancy never 503s; ceilings are per-hub, not process-wide |
+| `GET /ready`                                       | —     | depth + trade counters + `tradesBus` / `privateBus` / `privateConnections` · `503` only when kill-switch off · bus down does **not** 503 (depth still works)      |
 
 ### The wire format is not ours
 
@@ -119,14 +122,26 @@ That distinction was, for a long time, the whole reason live depth did not work.
 intersection** — sixteen listed ids, ten journal ids, nothing in common — so every id a browser could legitimately
 discover was refused by the socket with `unknown market`, while both services reported healthy and correct.
 
-A listed market with no book is **not** an error. Six of the sixteen have never traded, and svc-matching answers 404
-for them; `HttpDepthSource` turns that into an empty book at sequence 0, which is what the terminal renders as
-"No asks / No bids". Refusing to stream a market because nobody has quoted in it yet is a lie about the market.
-An id **nobody** lists is still refused, with `unknown market` — that is the one case that earns it.
+A listed market with no book is **not** "a live empty ladder". Six of the sixteen have never traded, and
+svc-matching answers 404 for them; `HttpDepthSource` throws `DepthNoBookError` rather than fabricating
+`{ bids: [], asks: [], sequence: 0 }`. Empty ≠ zero: the socket stays open with **no snapshot** until matching
+has resting depth; the first real quote is a snapshot, not a delta off a fake sequence 0. An id **nobody** lists
+is still refused, with `unknown market` — that is the one case that earns a typed close for the market id.
+
+The public **trades** tape follows the same rule. An unseeded ring, a matching 404, or a seed failure is
+absence — the socket stays open with **no frames**, and `GET /markets/:id/trades` is `404 NoTape`. Fabricating
+`{ trades: [] }` would let a client treat that as a live zero-print market. The first real fill is a `TradePrint`;
+prints and mids are never invented.
+
+Private **orders** and **positions** follow the same rule. An unseeded seat, a matching 404, or a seed failure is
+absence — no `{ orders: [] }` / `{ positions: [] }` on the wire, and the public GETs are `404 NoBlotter` /
+`404 NoPositions`. Fabricating an empty snapshot would let a client treat that as a priced live book of nothing.
+The first real lifecycle event is a private update; fills are never invented. Ready frames (`type: "ready"`) name
+the bus, they are not a blotter.
 
 The union survives a failure of either source: the listing being down leaves every traded market streaming, the
-engine being down leaves every listed market opening on an empty book, and only a failure of both keeps the last
-known list. `depth/registry.ts` carries the reasoning next to the code.
+engine being down leaves every listed market subscribed without a fabricated book, and only a failure of both
+keeps the last known list. `depth/registry.ts` carries the reasoning next to the code.
 
 ### The thing that would have been a vulnerability
 
@@ -137,7 +152,7 @@ depth route), so the market check is no longer the only thing standing between a
 heap. It is still the difference between "nobody is quoting" and "that is not a market", which is why it stays.
 
 There are tests asserting the depth endpoint is never called for an unlisted market, on both the socket and the HTTP
-path, and that a listed market with no book opens on an empty ladder rather than a close frame.
+path, and that a listed market with no book stays open without emitting a priced empty snapshot.
 
 There is deliberately **no Origin check**. An origin allow-list is an authorisation control and there is nothing here
 to authorise; it would inconvenience a bot without protecting anything, since the same bytes are a `curl` away.
@@ -249,19 +264,16 @@ off before close). **Not** via the svc-edge admin console — edge never routes 
 origin, not behind the edge), so edge module halt cannot stop depth/tape here.
 
 **Effect when off:** upgrades are refused with `503`, every open socket is closed with a reason, and `/ready`
-returns `503` so the load balancer takes the instance out of rotation. `/health` keeps answering, so an operator can
-still see the process is alive. The terminal renders the book as unavailable with the reason on screen — never as
-stale numbers.
+returns `503` so the load balancer takes the instance out of rotation. `/health` keeps answering (including per-hub
+`capacity` vs the same ceilings attach already enforces), so an operator can still see occupancy without paging.
+Occupancy never 503s `/health`.
 
 **Bus honesty:** if NATS subscribe fails **before the first successful attach** (boot), the process **retries with
 exponential backoff** (depth keeps serving). `/ready` stays `200` while the bus is down, but `tradesBus` /
 `privateBus` are `false` so ops can see an empty tape is not "live and quiet" — it is unsubscribed until the next
 successful connect.
 
-After a consumer is attached, **nats.js owns TCP reconnect** for that connection. The flags stay `true` for the
-process session while the consumer is held; they are not a continuous probe of remote NATS liveness. A mid-session
-supervisor that drops the flags and re-attaches when the connection is gone for good is **not built** (ops residual
-if nats.js reconnect proves insufficient).
+After a consumer is attached, **nats.js owns TCP reconnect** for that connection. If the connection is gone for good (`closed()`), `/ready` flips `tradesBus` / `privateBus` false and the lifecycle **re-attaches** without a process restart. Depth keeps serving. Flags are not a continuous probe of remote NATS while TCP reconnect is in progress.
 
 ---
 

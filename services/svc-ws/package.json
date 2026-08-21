@@ -17,6 +17,7 @@
     "@intafaced/auth": "workspace:*",
     "@intafaced/config": "workspace:*",
     "@intafaced/events": "workspace:*",
+    "@intafaced/i18n": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
     "@intafaced/market-data": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
@@ -29,7 +30,7 @@
     "@types/node": "^22.10.2",
     "@types/ws": "^8.18.1",
     "rimraf": "^6.0.1",
-    "tsx": "^4.23.7",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }

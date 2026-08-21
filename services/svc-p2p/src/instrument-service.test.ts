@@ -40,6 +40,7 @@ const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_
 const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_instrument_field_guard.sql'), 'utf8');
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
+const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
 
 const SELLER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';
@@ -104,6 +105,7 @@ if (!available) {
     await tx.unsafe(fieldGuardMigration);
     await tx.unsafe(disputeRulingMigration);
     await tx.unsafe(lateSettleErrorMigration);
+    await tx.unsafe(disputeOpenOriginMigration);
   });
 
   const instruments = new InstrumentService(sql);
@@ -231,12 +233,165 @@ if (!available) {
   describe('the method registry', () => {
     it('ships empty, so an unregistered market refuses rather than guesses', async () => {
       await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
-      expect(await instruments.listMethodSchemas()).toEqual([]);
+      expect(await instruments.enabledMethodKeys()).toEqual(new Set());
 
-      // The honest failure. The alternative is a seeded guess at what this
-      // market needs, which produces an instrument that looks complete and
-      // cannot be paid — discovered by a buyer, after escrow is locked.
-      await expect(sellerInstrument()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+      // PIN: an empty catalogue must refuse, not return []. [] is how a
+      // seller/register/pay door still looks like a live rail with zero methods.
+      await expect(instruments.listMethodSchemas()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+      await expect(callerFor(SELLER).instruments.methods.list({})).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(sellerInstrument()).rejects.toMatchObject({
+        code: 'p2p.instrument_method_unknown',
+        message: 'p2p.instrument_method_unknown',
+      });
+      await expect(
+        callerFor(SELLER).instruments.create({
+          methodId: METHOD,
+          country: 'DE',
+          fiatCurrency: 'USD',
+          details: { account_reference: CANARY, holder_name: 'A Seller' },
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    });
+
+    it('PIN: empty registry refuses list/register/pay with a stable code, not a fake account', async () => {
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      const unknown = { code: 'p2p.instrument_method_unknown' as const };
+
+      await expect(instruments.listMethodSchemas()).rejects.toMatchObject(unknown);
+      await expect(sellerInstrument()).rejects.toMatchObject(unknown);
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject(unknown);
+      await expect(
+        p2p.createOffer({
+          makerId: BUYER,
+          side: 'buy',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject(unknown);
+
+      // Pay disclosure with no trade is NOT_FOUND (oracle-closed), never a
+      // destination. Operator register is the one door that must still work —
+      // that is how the empty registry becomes a real rail.
+      await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: crypto.randomUUID() })).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      });
+      await expect(
+        instruments.registerMethodSchema({
+          methodId: METHOD,
+          country: ANY_COUNTRY,
+          label: 'Test transfer',
+          fields: [{ key: 'account_reference', label: 'Account reference', required: true }],
+        }),
+      ).resolves.toMatchObject({ methodId: METHOD });
+    });
+
+    it('RED: an empty registry is not a live payable rail', async () => {
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      // `offer_method_no_destination` would mean "this rail exists; add a
+      // destination." That sentence is how an empty registry looks payable.
+      await expect(
+        p2p.createOffer({
+          makerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          priceType: 'fixed',
+          price: amt('1'),
+          minAmt: amt('10'),
+          maxAmt: amt('500'),
+          methods: [METHOD],
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+
+      // Buy offers used to skip every method check, so the board could advertise
+      // whatever string the maker typed as if it were a rail.
+      const buy = p2p.createOffer({
+        makerId: BUYER,
+        side: 'buy',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      await expect(buy).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
+
+      expect(await p2p.listOffers({})).toEqual([]);
+    });
+
+    it('a leftover destination is not payable once the operator registry is empty', async () => {
+      const created = await sellerInstrument();
+      await fund(SELLER, '1000');
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      expect(await instruments.liveMethodKeys(SELLER, 'USD')).toEqual(new Set());
+      expect(await instruments.enabledMethodKeys()).toEqual(new Set());
+      expect(created.status).toBe('active');
+
+      // #1858 closed create/board. Take still used `loadOfferRaw` + attach on
+      // any active dest, so a leftover row after the operator emptied the
+      // registry still locked escrow. The dest is still there; it is not a rail.
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.take_refused',
+      });
+
+      const log = await instruments.accessLogFor(SELLER);
+      expect(log.some((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toBe(true);
+    });
+
+    it('a leftover destination is not payable after the operator disables the schema', async () => {
+      await sellerInstrument();
+      await fund(SELLER, '1000');
+      const offer = await p2p.createOffer({
+        makerId: SELLER,
+        side: 'sell',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+
+      await instruments.setMethodSchemaEnabled(METHOD, ANY_COUNTRY, false);
+
+      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+        code: 'p2p.take_refused',
+      });
     });
 
     it('rejects a field the operator never declared instead of dropping it', async () => {
@@ -605,7 +760,7 @@ if (!available) {
       expect(a).toEqual(b);
       // And the message names nothing the caller was not entitled to see: not
       // the method they asked for, not the currency, not the seller.
-      expect(a.message).toBe('This offer cannot be taken with the selected payment method');
+      expect(a.message).toBe('p2p.take_refused');
       expect(a.message).not.toContain('other-rail');
       expect(a.message).not.toContain(METHOD);
       expect(a.message).not.toContain('USD');
@@ -844,6 +999,10 @@ if (!available) {
         'disputes.list': {},
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
+        // Moderator backlog counts only (open/overdue/escalated/neverSeen) —
+        // no instrument id, no account details, no dispute row join. Stranger
+        // without allowlist/moderation env refuses; probe asserts no canary.
+        'disputes.backlog': {},
         // Operator-only late settlement queue — no instrument fields; stranger refuses.
         'ops.lateSettlements': {},
         'reputation.get': { userId: SELLER },
@@ -1016,6 +1175,8 @@ if (!available) {
 
     it('does not force buy offers to hold destinations at create', async () => {
       // Maker is the buyer; seller is the eventual taker — unknown at post time.
+      // The method still has to be an operator-registered rail, or the board
+      // would advertise an invented string as payable.
       await expect(
         p2p.createOffer({
           makerId: BUYER,
@@ -1029,6 +1190,26 @@ if (!available) {
           methods: [METHOD],
         }),
       ).resolves.toMatchObject({ side: 'buy', methods: [METHOD] });
+    });
+
+    it('drops a buy offer from the board when the operator registry is emptied', async () => {
+      const offer = await p2p.createOffer({
+        makerId: BUYER,
+        side: 'buy',
+        asset: ASSET,
+        fiatCurrency: 'USD',
+        priceType: 'fixed',
+        price: amt('1'),
+        minAmt: amt('10'),
+        maxAmt: amt('500'),
+        methods: [METHOD],
+      });
+      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+
+      await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
+
+      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
     it('filters a multi-method sell offer down to live rails only', async () => {

@@ -7,6 +7,8 @@ import { env } from './env.js';
 import { TradeService } from './spot/trade-service.js';
 import { createMatchingClient } from './spot/matching-client.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
+import { createAffiliateAccrueClient } from './spot/affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './spot/affiliate-payout.js';
 import { createSubAccountOwnershipClient } from './spot/sub-account-ownership.js';
 import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
@@ -23,12 +25,18 @@ import {
 } from './futures/adl-disclosure.js';
 import { presentAdlActionDisclosureWire, sqlAdlDisclosureEventStore } from './futures/adl-last-resort.js';
 import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
+import { parseConfiguredMaxLeverage, resolveMaxLeverage } from './futures/initial-margin.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
+import { presentVenueLatencyHealth } from './futures/venue-latency-health.js';
+import { presentInsuranceListingPolicy } from './futures/insurance-listing-gate.js';
+import { presentFuturesJobsHealth } from './futures/futures-jobs-health.js';
+import { MaintainedBook } from '@intafaced/venue-adapter';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
+import { presentMmSeedHealth } from './mm/seed-health.js';
 import { createMmMidSourceFromConfig } from './mm/mid-source.js';
 import { HOUSE_MM_USER_UUID } from './spot/ids.js';
 import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
@@ -39,8 +47,9 @@ import { checkEngineSequences, describeRegressions } from './spot/sequence-guard
 import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { parseOtcDeskLawJson } from './otc/desk-law.js';
-import { createConfigOtcMidSource } from './otc/mid-source.js';
+import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
+import { SqlOtcQuoteStore } from './otc/quote-store.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
 import { CopyService } from './copy/copy-service.js';
@@ -86,6 +95,8 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const matching = createMatchingClient(env.MATCHING_URL, env.INTERNAL_SERVICE_SECRET);
 const perks = createRankPerksClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const affiliateAccrue = createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const affiliatePayout = createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
@@ -107,17 +118,55 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   // SD-4: same kill as TRADE_MM_SEED_ENABLED — seeded placeOrder path stays OFF by default.
   seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
   subAccounts,
+  affiliateAccrue,
+  affiliatePayout,
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 
+// Venue fabric public mid (A-TRADE-VENUE-1). Empty venue = off. Shared with MM + OTC.
+// Unknown venue id → null (refuse invent). Created before OTC so the desk can chain it.
+const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
+
+// Stream books start after Fastify (needs app.log). The map is filled then;
+// lookups before run() returns null (unservable), never an invented mid.
+const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
+const otcVenueSymbols = parseVenueMarkSymbols(env.TRADE_OTC_VENUE_SYMBOLS);
+const venueStreamSymbols = new Set([...venueMarkSymbols.values(), ...otcVenueSymbols.values()]);
+const venueMaintainedBooks = new Map<string, MaintainedBook>();
+const venueBookPort =
+  env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter && venueStreamSymbols.size > 0
+    ? (symbol: string) => {
+        const book = venueMaintainedBooks.get(symbol);
+        if (!book) return null;
+        return {
+          get servable() {
+            return book.servable;
+          },
+          top: () => book.top(),
+          observedAt: () => book.tracker.observedAt,
+        };
+      }
+    : undefined;
+
 // trade.otc — D-S-02 / D26-P1-T2. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
-// Empty TRADE_OTC_MIDS → the desk can source no price and refuses every quote.
-// Boot-stamped mids carry asOf; published maxMidAgeSeconds makes them go dark.
+// Empty TRADE_OTC_MIDS / unmapped venue pair → the desk can source no price and refuses.
+// Boot-stamped mids carry asOf; venue observation refreshes asOf when opted in.
 const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
 const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
-const otcMids = createConfigOtcMidSource(env.TRADE_OTC_MIDS);
-const otc = new OtcDeskService(ledger, otcStakes, { law: otcDeskLaw, midSource: otcMids });
+const otcMidBuilt = createOtcMidSourceFromConfig({
+  midsEnv: env.TRADE_OTC_MIDS,
+  midFromVenue: env.TRADE_OTC_MID_FROM_VENUE,
+  venueAdapter: venuePublicAdapter,
+  venueSymbols: env.TRADE_OTC_VENUE_SYMBOLS,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
+});
+const otc = new OtcDeskService(ledger, otcStakes, {
+  law: otcDeskLaw,
+  midSource: otcMidBuilt.source,
+  liveObservationFeed: otcMidBuilt.liveObservationFeed,
+  store: new SqlOtcQuoteStore(sql),
+});
 
 // trade.copy — D-S-03 Stage product mount. Empty TRADE_COPY_* laws → refuse-closed
 // (never invent leader_share_bps or jurisdiction allowlist). Sql store needs
@@ -128,6 +177,23 @@ const copy = new CopyService(ledger, {
   feeShareLaw: copyFeeShareLaw,
   jurisdictionLaw: copyJurisdictionLaw,
   store: new SqlCopyFollowStore(sql),
+  placeFollowerOrder: async (principal, input) => {
+    const order = await trade.placeOrder(principal, {
+      symbol: input.symbol,
+      marketId: input.marketId,
+      side: input.side,
+      type: 'limit',
+      qty: input.qty,
+      price: input.price,
+      tif: 'GTC',
+      clientOrderId: input.clientOrderId,
+    });
+    return { orderId: order.id };
+  },
+  inspectMarket: async (symbol) => {
+    const market = await trade.marketBySymbol(symbol);
+    return market ? { paper: market.paper } : null;
+  },
 });
 
 export const appRouter = createTradeRouter(trade, otc, copy);
@@ -137,19 +203,26 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-// Venue fabric public mid → mark path (A-TRADE-VENUE-1). Empty venue = off.
-// Unknown venue id → null (refuse invent). Symbol map required per market.
-// Shared adapter also feeds MM mid port when TRADE_MM_SEED_MID_FROM_VENUE (A-TRADE-MM-3).
-const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
+// Venue fabric public mid → mark path (A-TRADE-VENUE-1). Adapter created above (OTC/MM share).
+if (venueBookPort && venuePublicAdapter) {
+  for (const symbol of venueStreamSymbols) {
+    const book = new MaintainedBook(venuePublicAdapter, symbol);
+    venueMaintainedBooks.set(symbol, book);
+    void book.run().then((status) => {
+      app.log.warn({ symbol, status }, 'venue maintained book ended');
+    });
+  }
+}
 const venueMarkConfigured = createConfiguredVenueMarkSource({
   venueId: env.TRADE_VENUE_MARK_VENUE,
-  symbols: env.TRADE_VENUE_MARK_SYMBOLS,
+  symbols: venueMarkSymbols,
   adapter: venuePublicAdapter,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
   // Typo / unsupported venue — say so once; do not invent a mid adapter.
   console.warn(
-    `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot, bybit-spot`,
+    `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot, bybit-spot, okx-spot`,
   );
 }
 
@@ -212,6 +285,7 @@ const futuresJobs = startFuturesJobs({
  * exchange stays up while the owner decides.
  */
 const profitSource = optionalProfitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
+const maxLeverage = resolveMaxLeverage(parseConfiguredMaxLeverage(env.TRADE_FUTURES_MAX_LEVERAGE));
 if (profitSource) {
   app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
 } else {
@@ -236,6 +310,7 @@ const positions = new PositionService(sql, ledger, {
   marks: futuresJobs.marks,
   profitSource,
   bus,
+  maxLeverage,
   assertAdlDisclosureAcked: async (userId) => {
     try {
       await assertAdlDisclosureAcked(adlDisclosureAcks, userId);
@@ -270,13 +345,14 @@ const candleJobs = startCandleJobs({
 
 // MM seed job — default OFF. Empty markets or missing mids → no invent.
 // Mid port (A-TRADE-MM-3): env map first; optional venue public mid when enabled.
-const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
 const mmMidSource = createMmMidSourceFromConfig({
   midsEnv: env.TRADE_MM_SEED_MIDS,
   midFromVenue: env.TRADE_MM_SEED_MID_FROM_VENUE,
   venueAdapter: venuePublicAdapter,
   resolveVenueSymbol: (marketId) => venueMarkSymbols.get(marketId) ?? null,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
+const mmSeedTargets = parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS);
 const mmSeedJobs = startMmSeedJobs({
   ledger,
   matching,
@@ -285,7 +361,7 @@ const mmSeedJobs = startMmSeedJobs({
   marketFor: async (marketId) => {
     const m = await trade.marketById(marketId);
     if (!m) return null;
-    return { symbol: m.symbol, kind: m.kind, status: m.status };
+    return { symbol: m.symbol, kind: m.kind, status: m.status, assetClass: m.assetClass };
   },
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   config: {
@@ -295,7 +371,7 @@ const mmSeedJobs = startMmSeedJobs({
     stepBps: env.TRADE_MM_SEED_STEP_BPS,
     levels: env.TRADE_MM_SEED_LEVELS,
     qtyPerLevel: env.TRADE_MM_SEED_QTY,
-    targets: parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS),
+    targets: mmSeedTargets,
   },
   statePath: env.TRADE_MM_SEED_STATE_PATH,
   // SD-2: flag resting MM seed orders so public tape excludes them before fill.
@@ -386,7 +462,25 @@ const reconcileJobs = startEngineLedgerReconcileJobs({
   },
 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
+app.get('/health', async () => ({
+  ok: true,
+  service: env.SERVICE_NAME,
+  venueLatency: presentVenueLatencyHealth(venuePublicAdapter, new Date(), {
+    streamEnabled: env.TRADE_VENUE_MARK_STREAM,
+  }),
+  mmSeed: presentMmSeedHealth({
+    enabled: env.TRADE_MM_SEED_ENABLED,
+    targetCount: mmSeedTargets.length,
+  }),
+  futuresJobs: presentFuturesJobsHealth({
+    enabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    fundingMarketCount: fundingMarketIds.length,
+    fundingMaxAbsRateConfigured: fundingMaxAbsRate !== null,
+    fundingIntervalConfigured: env.TRADE_FUTURES_FUNDING_INTERVAL_MS != null,
+    venueMarkConfigured: venueMarkConfigured != null,
+  }),
+  insuranceListing: presentInsuranceListingPolicy(),
+}));
 
 app.get('/ready', async (_req, reply) => {
   if (!env.TRADE_SPOT_ENABLED) return reply.code(503).send({ ready: false, reason: 'trade.spot flag is off' });
@@ -457,6 +551,19 @@ registerPublicRest(app, {
       indexPrice: null,
     };
   },
+  algo: {
+    createEnabled: env.TRADE_ALGO_ENABLED,
+    jobsEnabled: env.TRADE_ALGO_JOBS_ENABLED,
+  },
+  futures: {
+    jobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    orderableEnabled: env.TRADE_FUTURES_ENABLED,
+    profitSourceConfigured: profitSource != null,
+    fundingMaxAbsRateConfigured: env.TRADE_FUTURES_FUNDING_MAX_ABS_RATE.trim() !== '',
+    fundingMarketCount: fundingMarketIds.length,
+    venueMarkConfigured: venueMarkConfigured != null,
+    fundingIntervalConfigured: env.TRADE_FUTURES_FUNDING_INTERVAL_MS != null,
+  },
 });
 
 // S2S: oracle/ops publish funding rates (public GET only reflects published).
@@ -486,6 +593,8 @@ registerPrivateRest(app, {
   // Self-only: route always passes principal.userId — never client ownerId.
   userBalances: (userId) => ledger.balances('user', userId),
   listPositions: (principal, symbol) => positions.listOpen(principal.userId, symbol),
+  listClosedPositions: (principal, input) => positions.listClosed(principal.userId, input),
+  getPosition: (principal, positionId) => positions.get(principal.userId, positionId),
   openPosition: (principal, input) =>
     positions.open({
       userId: principal.userId,
@@ -497,6 +606,30 @@ registerPrivateRest(app, {
       clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
+  setLeverage: (principal, input) =>
+    positions.setLeverage({
+      userId: principal.userId,
+      symbol: input.symbol,
+      leverage: parseAmount(input.leverage),
+      positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
+    }),
+  addIsolatedMargin: (principal, input) =>
+    positions.addIsolatedMargin({
+      userId: principal.userId,
+      symbol: input.symbol,
+      amount: parseAmount(input.amount),
+      positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
+    }),
+  reduceIsolatedMargin: (principal, input) =>
+    positions.reduceIsolatedMargin({
+      userId: principal.userId,
+      symbol: input.symbol,
+      amount: parseAmount(input.amount),
+      positionId: input.positionId,
+      clientAdjustmentId: input.clientAdjustmentId,
+    }),
   getOpenMarginCall: async (principal, positionId) => {
     const row = await futuresJobs.marginCalls.getOpenForPosition(positionId);
     if (!row || row.userId !== principal.userId) return null;
@@ -532,7 +665,7 @@ app.log.info(
     futuresEnabled: env.TRADE_FUTURES_ENABLED,
     futuresJobsEnabled: env.TRADE_FUTURES_JOBS_ENABLED,
     futuresJobs: futuresJobs.host.list(),
-    venueMark: venueMarkConfigured ? { venueId: venueMarkConfigured.venueId, symbols: venueMarkConfigured.symbolCount } : null,
+    venueMark: venueMarkConfigured ? { configured: true, symbolCount: venueMarkConfigured.symbolCount } : null,
     candleJobsEnabled: env.TRADE_CANDLE_JOBS_ENABLED,
     candleJobs: candleJobs.host.list(),
     mmSeedEnabled: env.TRADE_MM_SEED_ENABLED,
@@ -563,6 +696,8 @@ app.log.info(
       'GET /api/v1/account/fees',
       'GET /api/v1/account/balance',
       'GET /api/v1/positions',
+      'GET /api/v1/positions/closed',
+      'GET /api/v1/positions/:id',
       'GET /api/v1/positions/:id/margin-call',
       'GET /api/v1/futures/adl-disclosure',
       'POST /api/v1/futures/adl-disclosure/ack',
@@ -570,6 +705,8 @@ app.log.info(
       'POST /api/v1/positions',
       'DELETE /api/v1/positions/:id',
       'POST /api/v1/positions/leverage',
+      'POST /api/v1/positions/margin',
+      'POST /api/v1/positions/margin/reduce',
       'POST /api/v1/positions/margin-mode',
     ],
   },
@@ -584,6 +721,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       mmSeedJobs.stop();
       algoJobs.stop();
       reconcileJobs.stop();
+      await Promise.all([...venueMaintainedBooks.values()].map((b) => b.close()));
       await app.close();
       for (const subscription of subscriptions) await subscription.unsubscribe();
       await bus.close();

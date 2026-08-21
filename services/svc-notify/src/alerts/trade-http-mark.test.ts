@@ -3,10 +3,10 @@
  * 1. Promise: README § Price alerts — "until a real mark feed is wired";
  *    tracker residual "owner mark source before any watch can fire"; bank
  *    already reads the same public ticker (services/svc-bank loans/prices.ts)
- * 2. Break on tip: production always injects dark — canFire false forever even
- *    when TRADE_URL points at a live trade public surface
+ * 2. Break on tip: a ticker timestamp from 2023 still returned `{ kind: 'ok' }`
+ *    and evaluateMarket fired the one-shot on a memory
  * 3. Done bar: live source fires on mid/last decimal strings; missing URL stays
- *    dark; bad/empty ticker refuses by name — never invents a price
+ *    dark; bad/empty/stale ticker refuses by name — never invents a price
  * 4. Class P (no ledger; decimal strings only)
  * 5. Paths: services/svc-notify only
  * 6. RED: empty ticker returns ok with "0" or invents mid from nothing
@@ -62,28 +62,58 @@ describe('createTradeHttpMarkSource', () => {
   });
 
   it('resolves marketId → symbol → mid and never invents on HTTP failure', async () => {
+    const now = new Date('2026-08-14T00:00:00Z');
     const fetchImpl = vi.fn(async (url: string) => {
       const u = String(url);
       if (u.endsWith('/api/v1/markets')) {
         return new Response(JSON.stringify([{ id: MARKET_ID, symbol: SYMBOL }]), { status: 200 });
       }
       if (u.includes('/api/v1/ticker/')) {
-        return new Response(JSON.stringify({ bid: '100', ask: '102', last: '101', timestamp: 1_700_000_000_000 }), { status: 200 });
+        return new Response(JSON.stringify({ bid: '100', ask: '102', last: '101', timestamp: now.getTime() }), { status: 200 });
       }
       return new Response('nope', { status: 404 });
     }) as unknown as typeof fetch;
 
     const marks = createTradeHttpMarkSource({ baseUrl: 'http://trade.test/', fetchImpl });
-    const ok = await marks.quote(MARKET_ID);
+    const ok = await marks.quote(MARKET_ID, now);
     expect(ok).toEqual({
       kind: 'ok',
       price: '101',
-      at: new Date(1_700_000_000_000),
+      at: now,
     });
 
     // Unknown market id → refuse, no second invent path
-    const miss = await marks.quote('22222222-2222-2222-2222-222222222222');
+    const miss = await marks.quote('22222222-2222-2222-2222-222222222222', now);
     expect(miss.kind).toBe('unavailable');
+  });
+
+  it('refuses a ticker whose timestamp is older than the bank marking window', async () => {
+    const now = new Date('2026-08-14T00:10:00Z');
+    const fetchImpl = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.endsWith('/api/v1/markets')) {
+        return new Response(JSON.stringify([{ id: MARKET_ID, symbol: SYMBOL }]), { status: 200 });
+      }
+      return new Response(JSON.stringify({ bid: '200', ask: '200', last: '200', timestamp: now.getTime() - 301_000 }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const marks = createTradeHttpMarkSource({ baseUrl: 'http://trade.test', fetchImpl });
+    const q = await marks.quote(MARKET_ID, now);
+    expect(q).toMatchObject({ kind: 'unavailable', reason: 'stale' });
+
+    const notifyStore = new MemoryNotifyStore();
+    const alerts = new AlertService(new MemoryAlertStore(), marks, new NotifyService(notifyStore, { fanoutEnabled: true }));
+    await alerts.create({
+      userId: 'u1',
+      marketId: MARKET_ID,
+      direction: 'above',
+      targetPrice: '150',
+    });
+    const report = await alerts.evaluateDueAlerts(now);
+    expect(report.fired).toBe(0);
+    expect(report.refused).toBe(1);
+    expect(report.refusals).toEqual({ 'alert.price_unavailable': 1 });
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
   });
 
   it('fires a one-shot watch when trade mid crosses the target', async () => {

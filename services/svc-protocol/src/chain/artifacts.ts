@@ -47,11 +47,29 @@ export type ArtifactName =
   | 'MerchantAccept'
   | 'SovereignRouter'
   | 'CrewVault'
+  | 'LegacyVault'
   | 'LaunchLpLock'
+  | 'LaunchVesting'
+  | 'DeployerReputation'
+  | 'TreasuryYieldVault'
+  | 'StealthAnnouncer'
+  | 'SovereignVenue'
   | 'SovereignEscrow'
   | 'MockERC20'
+  | 'LendingSameTxRoundTrip'
+  | 'ReenteringBorrowToken'
   | 'PasskeyOwner'
-  | 'P256';
+  | 'P256'
+  | 'EntryPointGetUserOpHash'
+  | 'SovereignNft'
+  | 'RoyaltyMarket'
+  | 'MemeLaunch'
+  | 'RankAttestation'
+  | 'FairLaunch'
+  | 'UserElectedRecovery'
+  | 'ScopedPaymaster'
+  | 'RwaRegistry'
+  | 'CardPull';
 
 export interface ContractArtifact {
   readonly contractName: string;

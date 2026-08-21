@@ -110,7 +110,7 @@ When the primary board finish is met but the session continues (AFK / “never s
 - Any ship must still be P1–P5 with a real **Board-Delta** (or code). Metric: value-gate (L0 in `docs/BOARD-CLEAR-PROCESS-LOOPS.md`).
 - **Report format every cycle:** `P1 N clear / M landed this cycle · P2 <changes> · P3 <thin count> · tip <sha>`
 
-**Spawn width:** target **6–8 concurrent** path-disjoint free product writers when freeProduct>0. When freeProduct=0, spawn **P1–P3** workers (width 3–6), not stamp clones.
+**Spawn width (heuristic):** use available capacity for path-disjoint, high-leverage writers when `freeProduct>0`; the historical 6–8 figure is a planning target, never a cap or reason to delay work. When `freeProduct=0`, continue **P1–P3** only when they are substantive and path-clear; the 3–6 figure is also a planning heuristic, not a mandate.
 
 ### AFK PR law (mandatory)
 

@@ -46,6 +46,14 @@ describe('parseOtcDeskLawJson', () => {
       parseOtcDeskLawJson(JSON.stringify({ published: true, spreadBps: 25, minStake: '1', counterparty: 'platform', quoteTtlMs: 15_000 })),
     ).toThrow(OtcError);
   });
+
+  it('refuses invent — missing minStake', () => {
+    expect(() =>
+      parseOtcDeskLawJson(
+        JSON.stringify({ published: true, spreadBps: 25, counterparty: 'platform', quoteTtlMs: 15_000, maxMidAgeSeconds: 60 }),
+      ),
+    ).toThrow(OtcError);
+  });
 });
 
 describe('requirePublishedOtcDeskLaw', () => {

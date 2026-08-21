@@ -59,17 +59,21 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 
 COPY apps/admin/package.json                 apps/admin/
 
+COPY packages/academy-ambassadors-pay/package.json packages/academy-ambassadors-pay/
 COPY packages/auth/package.json              packages/auth/
 COPY packages/config/package.json            packages/config/
+COPY packages/connect-data-lake/package.json packages/connect-data-lake/
 COPY packages/contracts/package.json         packages/contracts/
 COPY packages/db/package.json                packages/db/
 COPY packages/events/package.json            packages/events/
 COPY packages/execution-arb/package.json     packages/execution-arb/
+COPY packages/execution-house-tenant/package.json packages/execution-house-tenant/
 COPY packages/execution-mm/package.json      packages/execution-mm/
 COPY packages/exchange-contract/package.json packages/exchange-contract/
 COPY packages/i18n/package.json              packages/i18n/
 COPY packages/ledger-client/package.json     packages/ledger-client/
 COPY packages/market-data/package.json       packages/market-data/
+COPY packages/portfolio-view/package.json    packages/portfolio-view/
 COPY packages/quant-honesty/package.json     packages/quant-honesty/
 COPY packages/safe-regex/package.json        packages/safe-regex/
 COPY packages/telemetry/package.json         packages/telemetry/
@@ -94,6 +98,7 @@ COPY services/svc-token/package.json         services/svc-token/
 COPY services/svc-trade/package.json         services/svc-trade/
 COPY services/svc-dex/package.json           services/svc-dex/
 COPY services/svc-edge/package.json          services/svc-edge/
+COPY services/svc-execution/package.json     services/svc-execution/
 COPY services/svc-indexer/package.json       services/svc-indexer/
 COPY services/svc-ws/package.json            services/svc-ws/
 

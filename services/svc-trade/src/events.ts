@@ -33,8 +33,8 @@ export async function subscribeMatchingEvents(
     idempotent(
       async (payload) => {
         // Account ids from matching STP (optional on older producers). When
-        // absent, settleFillEvent falls back to trade.orders for user makers;
-        // house MM seed makers require makerAccountId === house:market-maker.
+        // absent, settleFillEvent recovers user makers from trade.orders and
+        // house MM from a recorded seed row (HOUSE_MM_USER_UUID → house:market-maker).
         await trade.settleFillEvent({
           marketId: payload.marketId,
           makerOrderId: payload.makerOrderId,

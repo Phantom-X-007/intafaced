@@ -40,6 +40,7 @@ import { markSourceFromDepth } from './mark-from-depth.js';
 import { markSourceFromVenuePublicBook, markSourcePrefer } from './mark-from-venue.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
+import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 
 /**
  * A PER-RUN DATABASE, created and dropped by this suite — the same posture as
@@ -139,6 +140,7 @@ if (!available) {
         resolveSymbol: () => 'BTC/USDT',
       }),
       profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
       bus,
       now: () => NOW,
     });
@@ -324,6 +326,7 @@ if (!available) {
           markSourceFromDepth(async () => depth),
         ),
         profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+        maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
         bus,
         now: () => NOW,
       });

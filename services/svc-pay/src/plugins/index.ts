@@ -1,9 +1,15 @@
 export {
   absoluteUrl,
   assertDecimalAmount,
+  assertHttpsWebhookUrl,
+  buildAuthorizePaymentRequest,
+  buildCapturePaymentRequest,
   buildCreatePaymentRequest,
   buildGetPaymentRequest,
+  buildListWebhookDeliveriesRequest,
+  buildListWebhookEndpointsRequest,
   buildRefundRequest,
+  buildRegisterWebhookEndpointRequest,
   PAY_PUBLIC_API_BASE,
   sendPluginRequest,
   signMerchantWebhook,
@@ -13,5 +19,20 @@ export {
   type PayPluginKeyMode,
   type PayPluginScope,
   type PluginRequest,
+  type RegisterWebhookEndpointBody,
 } from './reference-client.js';
+export {
+  CMS_PLUGIN_FAMILIES,
+  CMS_PLUGIN_SOCKET,
+  SHIPPED_CMS_PLUGIN_FAMILY,
+  UNWIRED_CMS_PLUGIN_FAMILIES,
+  cmsPluginsShipped,
+  isCmsPluginShipped,
+  PAY_PLUGIN_CMS_UNWIRED,
+  refuseAllCmsPlugins,
+  refuseCmsPlugin,
+  type CmsPluginFamily,
+  type CmsPluginRefuse,
+  type UnwiredCmsPluginFamily,
+} from './cms-unwired.js';
 export { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS, type FrozenWebhookVector } from './webhook-vectors.js';

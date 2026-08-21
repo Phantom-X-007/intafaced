@@ -12,6 +12,7 @@
 
 import { certIdempotencyKey, type CertGrantRecord } from './progress.js';
 import { listCertCatalog } from './catalog.js';
+import { assertCertGrantPathHonest } from './grant-ledger.js';
 
 export type CertXpPolicy = {
   readonly certId: string;
@@ -61,6 +62,7 @@ export type XpEarnedIntent = {
  * cannot double-award even if publish is retried.
  */
 export function xpIntentFromGrant(grant: CertGrantRecord): XpEarnedIntent | null {
+  assertCertGrantPathHonest(grant);
   const policy = xpPolicyFor(grant.certId);
   if (!policy) return null;
   if (!/^\d+$/.test(policy.xpDelta) || policy.xpDelta === '0') return null;

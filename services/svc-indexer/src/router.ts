@@ -4,6 +4,14 @@ import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from 
 import { ChainDataError } from './chain/source.js';
 import type { FillRecord, PositionRecord, ProjectionStore } from './projection/store.js';
 import type { Indexer } from './indexer.js';
+import {
+  chainSourceRefusesServing,
+  haltServingReason,
+  lastErrorRefusesServing,
+  lastErrorServingReason,
+  nullChainServingReason,
+} from './serving.js';
+import { userCopy } from './user-copy.js';
 import { withReadSpan } from './tracing.js';
 
 /**
@@ -90,9 +98,9 @@ function toWirePosition(position: PositionRecord): z.infer<typeof positionSchema
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
   if (err instanceof ChainDataError) {
-    return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
-  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Indexer request failed', cause: err });
+  return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('indexer.request_failed'), cause: err });
 }
 
 /**
@@ -148,17 +156,34 @@ export interface IndexerRouterDeps {
 
 /**
  * A halted projection knows its book is wrong and cannot repair it.
- * `status` and `health` still answer so an operator can see why; every data
- * procedure refuses so a client that never checks `status.halted` cannot
- * render a price that belongs to a dead branch.
+ * A projection whose last sync hit a typed serving-refuse lastError (chain
+ * door or startHeight — see `SERVING_REFUSE_CODES`) likewise must not serve
+ * prices as current. A `chainSource: 'null'` boot never sets lastError
+ * (`NullChainSource` cannot fail) — without this door an empty book / null
+ * position would look like a quiet market or a flat holding.
+ * `status` and `health` still answer so an operator can see why.
  */
-function assertServing(indexer: Indexer): void {
+function assertServing(indexer: Indexer, chainSource: string): void {
   const halt = indexer.halted;
-  if (!halt) return;
-  throw new TRPCError({
-    code: 'SERVICE_UNAVAILABLE',
-    message: `Indexer halted — projection is known wrong and will not serve data until re-indexed. ${halt.reason}`,
-  });
+  if (halt) {
+    throw new TRPCError({
+      code: 'SERVICE_UNAVAILABLE',
+      message: haltServingReason(halt),
+    });
+  }
+  const failure = indexer.lastError;
+  if (lastErrorRefusesServing(failure)) {
+    throw new TRPCError({
+      code: 'SERVICE_UNAVAILABLE',
+      message: lastErrorServingReason(failure),
+    });
+  }
+  if (chainSourceRefusesServing(chainSource)) {
+    throw new TRPCError({
+      code: 'SERVICE_UNAVAILABLE',
+      message: nullChainServingReason(),
+    });
+  }
 }
 
 export function createIndexerRouter(deps: IndexerRouterDeps) {
@@ -250,7 +275,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
     markets: publicJurisdictionProcedure('indexer', 'protocol')
       .output(z.array(z.string()))
       .query(async () => {
-        assertServing(indexer);
+        assertServing(indexer, deps.chainSource);
         return [...(await store.markets())];
       }),
 
@@ -262,7 +287,8 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
      * A client holding two books can tell whether they describe the same chain;
      * one holding two bare price ladders cannot.
      *
-     * Refuses when halted — a wrong price costs a trade; unreachability does not.
+     * Refuses when halted or when the chain door last failed with a typed code
+     * (D26-P1-I3) — a wrong/stale-as-live price costs a trade.
      */
     book: publicJurisdictionProcedure('indexer', 'protocol')
       .input(z.object({ market: marketSchema, depth: z.number().int().min(1).max(200).default(50) }))
@@ -278,7 +304,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       )
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const view = await withReadSpan('indexer.book', input.market, () => store.book(input.market, input.depth));
           return {
             market: view.market,
@@ -298,7 +324,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.fills', input.market, () => store.recentFills(input.market, input.limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -312,7 +338,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.accountFills', null, () => store.fillsForAccount(input.account, input.limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -325,7 +351,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(positionSchema.nullable())
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const row = await withReadSpan('indexer.position', input.market, () => store.position(input.market, input.account));
           return row ? toWirePosition(row) : null;
         } catch (err) {
@@ -338,7 +364,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(positionSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer);
+          assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account));
           return rows.map(toWirePosition);
         } catch (err) {

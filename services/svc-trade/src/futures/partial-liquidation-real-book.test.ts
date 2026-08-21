@@ -43,7 +43,8 @@ const AT = new Date('2026-08-12T14:00:00.000Z');
 
 /**
  * Widened band so an uncapped partial is reachable — see maintenance-ladder.test.ts.
- * Production still uses DEFAULT_FUTURES_LADDER_POLICY (placeholders pending D3).
+ * Test harness only. Live jobs omit ladderPolicy (skipped_d3_unset). These bps
+ * are not product law and must not be copied into index.ts / startFuturesJobs.
  */
 const WIDE_POLICY: FuturesLadderPolicy = {
   tiers: [
@@ -241,10 +242,23 @@ function baseDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     markets: async () => [],
     userBalances: async () => [],
     listPositions: async () => [],
+    listClosedPositions: async () => [],
+    getPosition: async () => {
+      throw new Error('unused');
+    },
     openPosition: async () => {
       throw new Error('unused');
     },
     closePosition: async () => {
+      throw new Error('unused');
+    },
+    setLeverage: async () => {
+      throw new Error('unused');
+    },
+    addIsolatedMargin: async () => {
+      throw new Error('unused');
+    },
+    reduceIsolatedMargin: async () => {
       throw new Error('unused');
     },
     getOpenMarginCall: async () => null,

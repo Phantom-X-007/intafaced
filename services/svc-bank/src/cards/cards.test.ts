@@ -18,7 +18,16 @@ import { BankError } from '../errors.js';
 import type { MarkQuality, PriceSource, QuotedMark } from '../loans/prices.js';
 import { CardService } from './card-service.js';
 import { DEFAULT_CARD_CONVERSION_POLICY, fundingFor, noConversionRates, quoteConversion } from './conversion.js';
-import { cardSim, cashbackOn, noCardIssuer, type CardIssuerAdapter } from './issuer.js';
+import {
+  cardIssuerFor,
+  cardProgrammeOutput,
+  cardSim,
+  cardSimIsLivePosture,
+  cardSimNotLive,
+  cashbackOn,
+  noCardIssuer,
+  type CardIssuerAdapter,
+} from './issuer.js';
 
 /**
  * CARDS (§8.1) — the LEDGER half.
@@ -97,6 +106,14 @@ describe('the simulator says what it is on every surface it has', () => {
     expect(programme.simulated).toBe(true);
     expect(programme.id).toBe('card-sim');
     expect(programme.displayName.toLowerCase()).toContain('simulated');
+    expect(Object.hasOwn(programme, 'simulated')).toBe(true);
+    expect(JSON.parse(JSON.stringify(programme)).simulated).toBe(true);
+  });
+
+  it('cannot omit simulated:true — a missing flag would look like a live card', () => {
+    const wire = JSON.stringify(cardProgrammeOutput(cardSim().programme));
+    expect(wire).toContain('"simulated":true');
+    expect(() => cardProgrammeOutput({ id: 'card-sim', displayName: 'Simulated card (no card programme)' } as never)).toThrow(TypeError);
   });
 
   it('derives a stable four-digit tail from the card id, and it is not a card number', async () => {
@@ -122,6 +139,14 @@ describe('no issuer configured means no card programme, and it refuses by name',
    * against a counterparty that does not exist. Choosing `cardSim()` has to be an
    * act somebody performed.
    */
+  it('is the CardService default, not the simulator', () => {
+    const unconfigured = new CardService(null as never, null as never);
+    expect(unconfigured.programme()).toEqual(noCardIssuer.programme);
+    expect(unconfigured.programme().id).toBe('none');
+    expect(unconfigured.programme().id).not.toBe('card-sim');
+    expect(JSON.stringify(unconfigured.programme())).toContain('"simulated":true');
+  });
+
   it('refuses to issue, respond or set status', async () => {
     await expect(noCardIssuer.issue({ cardId: randomUUID(), userId: HOLDER, assetId: 'USDT' })).rejects.toMatchObject({
       code: 'bank.no_card_issuer',
@@ -135,6 +160,51 @@ describe('no issuer configured means no card programme, and it refuses by name',
       }),
     ).rejects.toMatchObject({ code: 'bank.no_card_issuer' });
     await expect(noCardIssuer.setStatus({ cardId: randomUUID(), issuerRef: 'x', status: 'frozen' })).rejects.toMatchObject({
+      code: 'bank.no_card_issuer',
+    });
+  });
+});
+
+describe('card-sim under live posture is not a BIN', () => {
+  it('treats NODE_ENV=production and APP_ENV staging/prod as live, not test/dev', () => {
+    expect(cardSimIsLivePosture({ live: true })).toBe(true);
+    expect(cardSimIsLivePosture({ live: false, NODE_ENV: 'production' })).toBe(false);
+    expect(cardSimIsLivePosture({ NODE_ENV: 'production' })).toBe(true);
+    expect(cardSimIsLivePosture({ NODE_ENV: 'test', APP_ENV: 'prod' })).toBe(true);
+    expect(cardSimIsLivePosture({ NODE_ENV: 'test', APP_ENV: 'staging' })).toBe(true);
+    expect(cardSimIsLivePosture({ NODE_ENV: 'test', APP_ENV: 'dev' })).toBe(false);
+  });
+
+  it('named-refuses issue, respond and setStatus as bank.card_sim_not_live', async () => {
+    const issuer = cardSimNotLive();
+    expect(issuer.programme).toMatchObject({ id: 'card-sim', simulated: true });
+    await expect(issuer.issue({ cardId: randomUUID(), userId: HOLDER, assetId: 'USDT' })).rejects.toMatchObject({
+      code: 'bank.card_sim_not_live',
+    });
+    await expect(
+      issuer.respondToAuthorization({
+        cardId: randomUUID(),
+        issuerRef: 'x',
+        authorizationRef: 'y',
+        outcome: { decision: 'declined', reason: 'nope' },
+      }),
+    ).rejects.toMatchObject({ code: 'bank.card_sim_not_live' });
+    await expect(issuer.setStatus({ cardId: randomUUID(), issuerRef: 'x', status: 'frozen' })).rejects.toMatchObject({
+      code: 'bank.card_sim_not_live',
+    });
+  });
+
+  it('cardIssuerFor(card-sim) selects the refusing adapter on live flags', () => {
+    expect(cardIssuerFor('card-sim', { live: true }).mutationRefuse).toBe('bank.card_sim_not_live');
+    expect(cardIssuerFor('card-sim', { NODE_ENV: 'production' }).mutationRefuse).toBe('bank.card_sim_not_live');
+    expect(cardIssuerFor('card-sim', { APP_ENV: 'prod' }).mutationRefuse).toBe('bank.card_sim_not_live');
+    expect(cardIssuerFor('card-sim').mutationRefuse).toBeUndefined();
+  });
+
+  it('CARD_ISSUER=none under live posture stays bank.no_card_issuer', async () => {
+    const issuer = cardIssuerFor('none', { live: true, NODE_ENV: 'production', APP_ENV: 'prod' });
+    expect(issuer).toBe(noCardIssuer);
+    await expect(issuer.issue({ cardId: randomUUID(), userId: HOLDER, assetId: 'USDT' })).rejects.toMatchObject({
       code: 'bank.no_card_issuer',
     });
   });
@@ -349,6 +419,8 @@ if (!available) {
       const card = await issueCard();
 
       expect(card.simulated).toBe(true);
+      expect(Object.hasOwn(card, 'simulated')).toBe(true);
+      expect(JSON.parse(JSON.stringify({ simulated: card.simulated })).simulated).toBe(true);
       expect(card.issuer).toBe('card-sim');
       expect(card.panTail).toMatch(/^\d{4}$/);
 
@@ -383,6 +455,24 @@ if (!available) {
       // And nothing was written on the way to refusing.
       const rows = await sql`SELECT id FROM bank.cards`;
       expect(rows).toHaveLength(0);
+    });
+
+    it('refuses issue and authorise when card-sim is under production posture — never holds as if a BIN exists', async () => {
+      const live = new CardService(sql, ledger, { issuer: cardIssuerFor('card-sim', { NODE_ENV: 'production' }) });
+      await expect(
+        live.issue({ cardId: randomUUID(), userId: HOLDER, assetId: 'USDT', perAuthorizationLimit: amt('100') }),
+      ).rejects.toMatchObject({ code: 'bank.card_sim_not_live' });
+      expect(await sql`SELECT id FROM bank.cards`).toHaveLength(0);
+
+      await fund(HOLDER, 'USDT', '500');
+      const card = await issueCard();
+      const liveAuth = new CardService(sql, ledger, { issuer: cardIssuerFor('card-sim', { APP_ENV: 'prod' }) });
+      await expect(liveAuth.authorize({ cardId: card.id, authorizationRef: 'auth-live', amount: amt('50') })).rejects.toMatchObject({
+        code: 'bank.card_sim_not_live',
+      });
+      expect(await availableOf(HOLDER, 'USDT')).toBe('500');
+      const auths = await sql`SELECT id FROM bank.card_authorizations`;
+      expect(auths).toHaveLength(0);
     });
 
     // ── Authorise ────────────────────────────────────────────────────────────

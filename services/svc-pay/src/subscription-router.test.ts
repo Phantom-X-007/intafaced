@@ -129,6 +129,8 @@ describe('subscription merchant surface', () => {
             attemptedAt: new Date('2026-08-01T00:00:00.000Z'),
             settledAt: new Date('2026-08-01T01:00:00.000Z'),
             createdAt: new Date('2026-08-01T00:00:00.000Z'),
+            notifyStatus: 'skipped_unwired' as const,
+            notifyCode: 'pay.subscription_notify_unwired',
           },
         ];
       },

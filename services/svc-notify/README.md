@@ -225,18 +225,21 @@ _None._
 
 **Consumes**
 
-| Subject                              | Consumer (durable)           | Effect                                                     |
-| ------------------------------------ | ---------------------------- | ---------------------------------------------------------- |
-| `intafaced.trade.fill.settled`       | `notify-fill-settled`        | Inbox row for the fill owner                               |
-| `intafaced.trade.position.updated`   | `notify-position-updated`    | **Critical** inbox row + fan-out on liquidation only       |
-| `intafaced.p2p.escrow.locked`        | `notify-p2p-escrow-locked`   | Inbox rows for seller and buyer                            |
-| `intafaced.p2p.escrow.released`      | `notify-p2p-escrow-released` | Inbox rows when escrow releases to buyer                   |
-| `intafaced.p2p.escrow.refunded`      | `notify-p2p-escrow-refunded` | Inbox rows when escrow returns to seller                   |
-| `intafaced.p2p.trade.disputed`       | `notify-p2p-trade-disputed`  | Inbox row for the opener only (no counterparty on payload) |
-| `intafaced.identity.kyc.approved`    | `notify-kyc-approved`        | Inbox row when verification tier is granted                |
-| `intafaced.identity.rank.updated`    | `notify-rank-updated`        | Inbox row when rank changes                                |
-| `intafaced.token.stake.created`      | `notify-stake-created`       | Inbox row when a stake is locked                           |
-| `intafaced.bank.margin_call.created` | `notify-bank-margin-called`  | **Critical** inbox row + fan-out when a loan is called     |
+| Subject                              | Consumer (durable)              | Effect                                                     |
+| ------------------------------------ | ------------------------------- | ---------------------------------------------------------- |
+| `intafaced.trade.fill.settled`       | `notify-fill-settled`           | Inbox row for the fill owner                               |
+| `intafaced.trade.order.updated`      | `notify-order-updated`          | Inbox row on cancelled / rejected / expired only           |
+| `intafaced.trade.position.updated`   | `notify-position-updated`       | **Critical** inbox row + fan-out on liquidation only       |
+| `intafaced.p2p.escrow.locked`        | `notify-p2p-escrow-locked`      | Inbox rows for seller and buyer                            |
+| `intafaced.p2p.escrow.released`      | `notify-p2p-escrow-released`    | Inbox rows when escrow releases to buyer                   |
+| `intafaced.p2p.escrow.refunded`      | `notify-p2p-escrow-refunded`    | Inbox rows when escrow returns to seller                   |
+| `intafaced.p2p.trade.disputed`       | `notify-p2p-trade-disputed`     | Inbox row for the opener only (no counterparty on payload) |
+| `intafaced.identity.kyc.approved`    | `notify-kyc-approved`           | Inbox row when verification tier is granted                |
+| `intafaced.identity.rank.updated`    | `notify-rank-updated`           | Inbox row when rank changes                                |
+| `intafaced.token.stake.created`      | `notify-stake-created`          | Inbox row when a stake is locked                           |
+| `intafaced.bank.margin_call.created` | `notify-bank-margin-called`     | **Critical** inbox row + fan-out when a loan is called     |
+| `intafaced.agents.action.rejected`   | `notify-agent-action-rejected`  | Inbox row when a guardrail refuses an agent action         |
+| `intafaced.agents.action.completed`  | `notify-agent-action-completed` | Inbox row on completion / session_close only               |
 
 ### Idempotency and backpressure
 
@@ -308,6 +311,18 @@ The table is the tip wire vocabulary — a pin test fails if it drifts from
 `<loanId>` — a loan can be called, cured and called again, and the second call is
 a different fact.
 
+### `trade.order.updated` — terminal statuses only
+
+That subject is published on every order row change (pending / open / filled /
+cancelled / rejected / expired). Fills already have `fill.settled`. Pending and
+open are things the trader just did, and the private WS already fans the live
+row. The inbox consumer writes only on **cancelled**, **rejected**, and
+**expired** — the cases that can complete while the app is closed.
+
+Which other statuses deserve a message is product law. It lives in
+`DEFAULT_ORDER_TERMINAL_NOTIFY_POLICY` (`src/events.ts`). Severity is `info`
+(mute may apply). The key is `<orderId>:<status>`; `ts` is not part of it.
+
 ### `trade.position.updated` — one transition of four
 
 That subject is published on **every** futures position transition, and again
@@ -372,9 +387,19 @@ every `ALERT_SWEEP_INTERVAL_MS`, clearing it on shutdown. The last pass is on
 `/ready`; a null `lastAt` means the driver never ran.
 
 **Dark mark refuse.** Evaluation is pure (`evaluatePriceAlert`) against an
-injected mark port. When the port returns unavailable (dark / stale / refused),
+injected mark port. `acceptAlertMark` is the accepted-mark gate: a `kind: 'dark'`
+source cannot fire even if `quote()` invents `{ kind: 'ok' }`, and an absent
+quote is refused rather than treated as zero. A live `{ kind: 'ok' }` whose
+`at` is older than 300s (same ticker window bank uses for loan marks) or dated
+more than 30s in the future is `stale` / `refused` — a one-shot must not fire
+on a memory. When the accepted mark is unavailable (dark / stale / refused),
 the outcome is `alert.price_unavailable` and **nothing is written to the inbox**.
-A missing mark is never treated as zero and never invented.
+
+**Out-of-app required.** If this deployment listed a channel in
+`NOTIFY_REQUIRED_CHANNELS` and that channel cannot deliver, a crossing watch
+refuses `channel.not_configured` / `channel.disabled` by name — it does not
+silently drop the device leg and mark the watch fired. Inbox-only (nothing
+required) remains the honest fallback; sockets stay open (tracker `ready`).
 
 **Live mark when `TRADE_URL` is set.** Production injects
 `createTradeHttpMarkSource` against svc-trade's public REST — the same

@@ -315,4 +315,27 @@ export const subAccounts = identity.table(
   (t) => [index('sub_accounts_parent_idx').on(t.parentUserId), index('sub_accounts_parent_revoked_idx').on(t.parentUserId, t.revoked)],
 );
 
-export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts };
+/**
+ * Drop 0 tease waitlist — email capture + FIFO referral queue.
+ * Not the affiliate tree (`referral_edges`). No rewards column on purpose.
+ */
+export const waitlistEntries = identity.table(
+  'waitlist_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    email: citext('email').notNull(),
+    referralCode: text('referral_code').notNull(),
+    referredBy: text('referred_by'),
+    position: bigserial('position', { mode: 'number' }).notNull(),
+    referredCount: integer('referred_count').notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('waitlist_entries_email_idx').on(t.email),
+    uniqueIndex('waitlist_entries_code_idx').on(t.referralCode),
+    uniqueIndex('waitlist_entries_position_idx').on(t.position),
+    index('waitlist_entries_referred_by_idx').on(t.referredBy),
+  ],
+);
+
+export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts, waitlistEntries };

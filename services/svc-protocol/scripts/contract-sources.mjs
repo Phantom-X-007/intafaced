@@ -168,7 +168,13 @@ export const SUITES = [
     name: 'lending',
     expect: 'compiles',
     /** S-A4 — isolated over-collateral market; needs oracle interface + ERC-20. */
-    sources: ['lending/IsolatedLendingMarket.sol', 'oracle/IPriceOracle.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+    sources: [
+      'lending/IsolatedLendingMarket.sol',
+      'lending/test/LendingAdversary.sol',
+      'oracle/IPriceOracle.sol',
+      'amm/IERC20Minimal.sol',
+      'test/MockERC20.sol',
+    ],
   },
   {
     name: 'merchant',
@@ -189,8 +195,123 @@ export const SUITES = [
   {
     name: 'vaults',
     expect: 'compiles',
-    /** S-L1 crew vault + S-L4 LP lock (trust). */
-    sources: ['vaults/CrewVault.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol', 'test/MockERC20.sol'],
+    /** S-L1 crew + S-L2 legacy + S-L4 lock/vest/reputation + S-L5 treasury yield. */
+    sources: [
+      'vaults/CrewVault.sol',
+      'vaults/LegacyVault.sol',
+      'vaults/TreasuryYieldVault.sol',
+      'trust/LaunchLpLock.sol',
+      'trust/LaunchVesting.sol',
+      'trust/DeployerReputation.sol',
+      'amm/IERC20Minimal.sol',
+      'test/MockERC20.sol',
+    ],
+  },
+  {
+    name: 'privacy',
+    expect: 'compiles',
+    /** S-L3 stealth announcement log — no identity fields. */
+    sources: ['privacy/StealthAnnouncer.sol'],
+  },
+  {
+    name: 'venue',
+    expect: 'compiles',
+    /**
+     * S-C1 — real CLOB (not DevVenue). Own suite so a book edit does not stale
+     * vault bytecode. MockERC20 is test-only; artefact name collides with
+     * lending/vaults so those suites still own MockERC20.json.
+     */
+    sources: ['venue/SovereignVenue.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
+    name: 'entrypoint',
+    expect: 'compiles',
+    /**
+     * S-A11 / `socket.userop-differential-test` — ERC-4337 v0.7 getUserOpHash
+     * so TypeScript can be checked against the Solidity the live EntryPoint runs.
+     */
+    sources: ['entrypoint/EntryPointGetUserOpHash.sol'],
+  },
+  {
+    name: 'meme',
+    expect: 'compiles',
+    /**
+     * S-G1 / `launch.meme-factory` — compose TokenFactory + PoolFactory + LaunchLpLock.
+     *
+     * Factories are constructor addresses (inline interfaces) so this suite does
+     * not recompile TokenFactory/PoolFactory. `new LaunchLpLock` still needs
+     * LaunchLpLock.sol in the compile input; do not commit the overwritten
+     * `out/LaunchLpLock.json` — vaults remains the artefact owner.
+     */
+    sources: ['launch/MemeLaunch.sol', 'trust/LaunchLpLock.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
+    name: 'attestations',
+    expect: 'compiles',
+    /**
+     * S-F1 / `blueprint.attestations` — on-chain rank standing, zero PII.
+     * Subject is a commitment, never an address / name / email / user id / KYC.
+     * Permissionless issuers; consumers choose whom to trust off-chain.
+     */
+    sources: ['attestations/RankAttestation.sol'],
+  },
+  {
+    name: 'launchpad',
+    expect: 'compiles',
+    /**
+     * S-G2 / `launch.launchpad` — fair launch + in-contract cliff/linear vest.
+     * Own suite so editing this file cannot stale TokenFactory.json (launch suite).
+     */
+    sources: ['launch/FairLaunch.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
+    name: 'recovery',
+    expect: 'compiles',
+    /**
+     * S-A1 / `socket.social-recovery` — user-elected M-of-N ERC-1271 owner.
+     * Platform is never a guardian. Own suite so an accounts edit does not
+     * stale this bytecode (and reverse).
+     */
+    sources: ['recovery/UserElectedRecovery.sol', 'interfaces/IAccount.sol'],
+  },
+  {
+    name: 'paymaster',
+    expect: 'compiles',
+    /**
+     * S-A10 / `socket.paymaster-policy` — contract half. Holds a native float;
+     * unfunded validation fails. Operator cannot touch user accounts.
+     * Own suite so an accounts edit does not stale this bytecode (and reverse).
+     */
+    sources: ['paymaster/ScopedPaymaster.sol', 'interfaces/IPaymaster.sol', 'interfaces/IAccount.sol'],
+  },
+  {
+    name: 'rwa',
+    expect: 'compiles',
+    /**
+     * S-G4 / `launch.rwa` — licence-gated issuance registry. Zero hash refuses.
+     * Licence *content* is Class X. Own suite so a vaults edit does not stale
+     * this bytecode (and reverse). nft stays last.
+     */
+    sources: ['rwa/RwaRegistry.sol'],
+  },
+  {
+    name: 'card',
+    expect: 'compiles',
+    /**
+     * S-E1 / sovereign-card on-chain half — exact pull from the user's
+     * SmartAccount to a user-chosen settlement. This contract never holds
+     * tokens. nft stays last. Do not compile MockERC20 here.
+     */
+    sources: ['card/CardPull.sol', 'amm/IERC20Minimal.sol'],
+  },
+  {
+    name: 'nft',
+    expect: 'compiles',
+    /**
+     * S-G3 / `launch.nft` — mint, fixed-price list, English auction.
+     * RoyaltyMarket pays ERC-2981 on sale; signalling-only is not this suite.
+     */
+    sources: ['nft/SovereignNft.sol', 'nft/RoyaltyMarket.sol', 'amm/IERC20Minimal.sol'],
   },
 ];
 

@@ -151,6 +151,15 @@ export const GATES = [
       'reason, and that list may only shrink.',
   },
   {
+    id: 'notice-pin',
+    script: 'tooling/ci/notice-pin.mjs',
+    doctrine: 'D26-P3-04 / NOTICE freshness',
+    why:
+      'root NOTICE was compiled 2026-07-29 against 4311cff and can silently diverge from the vendor Apache pin, ' +
+      'compose image tags, jar count, and the Path A charting working tree. This gate fails on that silent drift; ' +
+      'named divergences must be written in NOTICE §11. It does not purchase licences and is not legal advice.',
+  },
+  {
     id: 'brand',
     script: 'tooling/ci/brand-scan.mjs',
     doctrine: '§0.7',
@@ -173,7 +182,10 @@ export const GATES = [
     id: 'custody',
     script: 'tooling/ci/custody-scan.mjs',
     doctrine: '§16.10',
-    why: 'a Protocol Plane service importing a ledger write recipe. NOTE: walks 4 named services only — see the header of custody-scan.mjs',
+    why:
+      'a Protocol Plane service importing a ledger write recipe, plus D26-P2-08: Java money/custody surface is in ' +
+      'the scan object via vendor-java-money-scan successor (fail closed if unscanned). Dual-book rules stay in that ' +
+      'file — custody-scan composes it, it does not fork a third scanner. See the header of custody-scan.mjs',
   },
   {
     id: 'secrets',
@@ -226,8 +238,9 @@ export const GATES = [
     doctrine: '§16 / D26-P2-09',
     why:
       'continuous perimeter regression for 01_wallet_rpc — mainnet / sign / width refuse classes must each keep ' +
-      'firing + silent probe halves, and deleting the class register, counters, claim mint, or any class rule ' +
-      'binding must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
+      'firing + silent probe halves, and chain-id / RPC / key-width / disclosed-secret-width axes must fail closed ' +
+      'independently. Deleting the class or axis register, counters, claim mint, a class rule binding, or a named ' +
+      'axis must go red. Complements wallet-rpc-mainnet (subject + probes) and its checker-mutation suite.',
   },
   {
     id: 'vendor-shell',
@@ -270,6 +283,14 @@ export const GATES = [
     script: 'tooling/ci/vendor-java-money-scan.mjs',
     doctrine: 'dual-book Option B',
     why: 'a Java money mutator is a second book, and there is only one book',
+  },
+  {
+    id: 'vendor-java-jar-truth',
+    script: 'tooling/ci/vendor-java-jar-truth.mjs',
+    doctrine: 'D-S-17 / D26-P2-07 jar truth',
+    why:
+      'Grade D ungated mints must stay deleted, a green source scan must not be read as runtime safety, and the ' +
+      'compose-jar rebuild path (tooling/scripts/vendor-java-rebuild.mjs + vendor-compile package job) must stay real.',
   },
   {
     id: 'fabricated-money',
@@ -379,6 +400,16 @@ export const GATES = [
       'gate reproduces that bug and emits the exact fix that was applied.',
   },
   {
+    id: 'secret-rotation-readiness',
+    script: 'tooling/ci/secret-rotation-readiness-scan.mjs',
+    doctrine: '§16 / D26-P3-05',
+    why:
+      'rotation readiness is a runbook plus the gates that prove a disclosed or unwired secret is refused. ' +
+      'A missing inventory prints as nothing-to-rotate. This gate holds docs/SECRET-ROTATION-READINESS.md, ' +
+      'the OWNER-ACTIONS-WALLET-RPC-SECRETS.md citation (that file is not edited here), EctWithdrawSecretConfig, ' +
+      'and compose-secret-parity / wallet-rpc-auth / secrets remaining in GATES. It never reads secret values.',
+  },
+  {
     id: 'secret-scan-mutation',
     script: 'tooling/ci/secret-scan.mutation.mjs',
     doctrine: '§14',
@@ -449,6 +480,8 @@ export const GATES = [
  * unrun for weeks.
  */
 export const NOT_GATES = {
+  'ci-affected.mjs':
+    'path classifier for named CI test shards and the merge-seal aggregator. Invoked from ci.yml `changes` / `merge-seal` jobs and via `--self-test`. Not a doctrine gate: a laptop verify has no GitHub event payload, and reddening verify over missing GITHUB_OUTPUT is how a classifier gets deleted. Local pre-flight: `node tooling/ci/ci-affected.mjs --self-test`.',
   'gates.mjs': 'this runner — it is the list, so it cannot be an entry in itself.',
   'dod-gate.mjs':
     'run by `pnpm gate`, separately and last — it walks every service and is the §14 Definition of Done, not a repo-wide scan. verify runs it after build/typecheck/test; CI runs it in the `dod` job, which needs [gates, build, test].',

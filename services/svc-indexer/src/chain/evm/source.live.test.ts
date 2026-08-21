@@ -344,7 +344,12 @@ if (!reachable) {
       await expect(absent.head()).rejects.toMatchObject({ code: 'indexer.venue_not_deployed' });
 
       const probe = await absent.probe();
-      expect(probe).toMatchObject({ reachable: true, venueDeployed: false });
+      expect(probe).toMatchObject({
+        reachable: true,
+        venueDeployed: false,
+        refusalCode: 'indexer.venue_not_deployed',
+      });
+      await expect(absent.blockAt(1)).rejects.toMatchObject({ code: 'indexer.venue_not_deployed' });
 
       // …and the control: eth_getLogs against that address really does succeed
       // with an empty array, which is the whole reason the check has to exist.

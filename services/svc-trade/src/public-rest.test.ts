@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { exchangeErrorSchema, marketSchema, ohlcvSchema, orderBookSchema, tickerSchema, tradeSchema } from '@intafaced/exchange-contract';
@@ -12,6 +13,7 @@ import {
   presentPublicTrade,
   presentTicker,
   registerPublicRest,
+  OPEN_POSITION_GATES_NOTE,
   type PublicRestDeps,
 } from './public-rest.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -71,6 +73,7 @@ describe('presenters', () => {
   it('says out loud when a market is simulated', () => {
     const real = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT' }));
     expect(real.paper).toBe(false);
+    expect(real.limits.leverage.max).toBeNull();
     // Still a valid CCXT market — the extra field must not break the schema.
     expect(marketSchema.safeParse(real).success).toBe(true);
 
@@ -79,6 +82,36 @@ describe('presenters', () => {
     expect(marketSchema.safeParse(sim).success).toBe(true);
     // Not disguised as inactive — it IS tradable, just not for real money.
     expect(sim.active).toBe(true);
+    expect(sim.orderable).toBe(true);
+  });
+
+  it('listed futures stay active and are not orderable until the host enables futures', () => {
+    const perp = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }));
+    expect(perp.active).toBe(true);
+    expect(perp.swap).toBe(true);
+    expect(perp.orderable).toBe(false);
+    expect(perp.settle).toBeNull();
+    expect(perp.linear).toBeNull();
+    expect(perp.inverse).toBeNull();
+    expect(perp.limits.leverage.max).toBe('10');
+    expect(perp.limits.leverage.min).toBeNull();
+    expect(marketSchema.safeParse(perp).success).toBe(true);
+
+    const live = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }), Date.now(), {
+      futuresOrderable: true,
+    });
+    expect(live.orderable).toBe(true);
+
+    const halted = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures', status: 'halted' }), Date.now(), {
+      futuresOrderable: true,
+    });
+    expect(halted.active).toBe(false);
+    expect(halted.orderable).toBe(false);
+
+    const opt = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-OPT', kind: 'options' }), Date.now(), {
+      futuresOrderable: true,
+    });
+    expect(opt.orderable).toBe(false);
   });
 
   /**
@@ -290,7 +323,34 @@ describe('public REST routes', () => {
     expect(body).toHaveLength(1);
     expect(marketSchema.safeParse(body[0]).success).toBe(true);
     expect((body[0] as { symbol: string }).symbol).toBe('BTC/USDT');
+    expect((body[0] as { orderable: boolean }).orderable).toBe(true);
     await app.close();
+  });
+
+  it('GET /api/v1/markets lists futures as active but not orderable unless the host enables them', async () => {
+    const perp = fakeMarket({ id: 'm-perp', symbol: 'BTC/USDT-PERP', kind: 'futures' });
+    const app = await build(
+      deps({
+        markets: async () => [perp],
+        futures: { jobsEnabled: false },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    const row = res.json()[0] as { symbol: string; active: boolean; orderable: boolean };
+    expect(row.symbol).toBe('BTC/USDT-PERP');
+    expect(row.active).toBe(true);
+    expect(row.orderable).toBe(false);
+    await app.close();
+
+    const live = await build(
+      deps({
+        markets: async () => [perp],
+        futures: { jobsEnabled: false, orderableEnabled: true },
+      }),
+    );
+    const liveRow = (await live.inject({ method: 'GET', url: '/api/v1/markets' })).json()[0] as { orderable: boolean };
+    expect(liveRow.orderable).toBe(true);
+    await live.close();
   });
 
   it('GET /api/v1/capabilities exposes matrix + refuse arms without auth', async () => {
@@ -301,14 +361,122 @@ describe('public REST routes', () => {
       asOfMs: number;
       routes: Array<{ name: string; kind: string }>;
       refuseArms: Array<{ id: string; httpStatus: number }>;
+      notes: {
+        rateLimit: { enforcedBy: string; publicPerMinute: number; privatePerMinute: number; windowMs: number };
+        algo: { createEnabled: boolean; jobsEnabled: boolean; jobsDefault: false; icebergs: 'out' };
+        futures: { jobsEnabled: boolean; jobsDefault: false; orderableEnabled: boolean; orderableDefault: false };
+        openPositionGates: string;
+      };
     };
     expect(body.asOfMs).toBe(1_700_000_000_000);
     expect(body.routes.length).toBeGreaterThan(10);
-    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'refuse')).toBe(true);
-    expect(body.refuseArms.some((a) => a.id === 'setLeverage' && a.httpStatus === 501)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'supported')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'refuse')).toBe(false);
+    expect(body.routes.some((r) => r.name === 'setMarginMode' && r.kind === 'refuse')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setMarginMode' && r.kind === 'supported')).toBe(false);
+    expect(body.refuseArms.some((a) => a.id === 'setLeverageTooHigh' && a.httpStatus === 400)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'setLeverage' && a.httpStatus === 501)).toBe(false);
+    expect(body.refuseArms.some((a) => a.id === 'setMarginMode' && a.httpStatus === 501)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'setMarginMode' && a.httpStatus === 200)).toBe(false);
     expect(body.routes.some((r) => r.name === 'openPosition')).toBe(true);
     expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
+    expect(body.notes.rateLimit).toEqual({
+      enforcedBy: 'edge',
+      publicPerMinute: 300,
+      privatePerMinute: 300,
+      windowMs: 60_000,
+    });
+    expect(body.notes.algo).toEqual({
+      createEnabled: true,
+      jobsEnabled: false,
+      jobsDefault: false,
+      icebergs: 'out',
+    });
+    expect(body.notes.futures).toEqual({
+      orderableEnabled: false,
+      orderableDefault: false,
+      jobsEnabled: false,
+      jobsDefault: false,
+      profitSourceConfigured: false,
+      profitSourceDefault: false,
+      nextFundingTimestamp: 'unpublished',
+      indexPrice: 'unpublished',
+      ladderNumbers: 'd3_unset',
+      insuranceEmptyBlocksLiveList: true,
+      insuranceTargetSize: 'owner_unset',
+      fundingMaxAbsRateConfigured: false,
+      fundingMaxAbsRateDefault: false,
+      fundingMarketCount: 0,
+      venueMarkConfigured: false,
+      venueMarkDefault: false,
+      fundingIntervalConfigured: false,
+      fundingIntervalDefault: false,
+    });
+    expect(body.notes.openPositionGates).toBe(OPEN_POSITION_GATES_NOTE);
+    expect(body.notes.openPositionGates).toContain('leverage required 400');
+    expect(body.notes.openPositionGates).toContain('unnamed profit pot 403 NotSupported');
+    expect(body.notes.openPositionGates).toContain('no silent 1x');
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports jobsEnabled when the host passes the live flag', async () => {
+    const app = await build(deps({ algo: { createEnabled: true, jobsEnabled: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.algo).toMatchObject({ jobsEnabled: true, jobsDefault: false, icebergs: 'out' });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports futures jobsEnabled only when the host passes the live flag', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({ jobsEnabled: true, jobsDefault: false, orderableEnabled: false });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports futures orderableEnabled only when the host passes the live flag', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, orderableEnabled: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({ orderableEnabled: true, orderableDefault: false });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports profitSourceConfigured only when the host names a pot', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, profitSourceConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({ profitSourceConfigured: true, profitSourceDefault: false });
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports fundingMaxAbsRateConfigured only when the host set D2', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, fundingMaxAbsRateConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    expect(res.json().notes.futures).toMatchObject({
+      fundingMaxAbsRateConfigured: true,
+      fundingMaxAbsRateDefault: false,
+    });
+    expect(JSON.stringify(res.json().notes.futures)).not.toMatch(/0\.01/);
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports venueMarkConfigured without echoing venue id or symbols', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, venueMarkConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    const futures = res.json().notes.futures as Record<string, unknown>;
+    expect(futures).toMatchObject({ venueMarkConfigured: true, venueMarkDefault: false });
+    expect(futures).not.toHaveProperty('venueId');
+    expect(futures).not.toHaveProperty('symbols');
+    expect(JSON.stringify(futures)).not.toMatch(/binance|bybit|okx|BTC\/USDT/i);
+    await app.close();
+  });
+
+  it('GET /api/v1/capabilities reports fundingIntervalConfigured without echoing ms', async () => {
+    const app = await build(deps({ futures: { jobsEnabled: false, fundingIntervalConfigured: true } }));
+    const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
+    const futures = res.json().notes.futures as Record<string, unknown>;
+    expect(futures).toMatchObject({ fundingIntervalConfigured: true, fundingIntervalDefault: false });
+    expect(futures).not.toHaveProperty('fundingIntervalMs');
+    expect(JSON.stringify(futures)).not.toMatch(/28_?800_?000|28800000/);
     await app.close();
   });
 
@@ -698,6 +866,7 @@ describe('public REST routes', () => {
     expect(res.statusCode).toBe(501);
     expect(res.json().code).toBe('NotSupported');
     expect(res.json().intafacedCode).toBe('trade.funding_rate_unavailable');
+    expect(res.json().retryAfter).toBeUndefined();
     expect(JSON.stringify(res.json())).not.toMatch(/"fundingRate"/);
     await app.close();
   });
@@ -726,6 +895,7 @@ describe('public REST routes', () => {
     const body = res.json();
     expect(body.symbol).toBe('BTC/USDT-PERP');
     expect(body.fundingRate).toBe('0.0001');
+    expect(body.nextFundingTimestamp).toBeNull();
     await app.close();
   });
 
@@ -833,5 +1003,13 @@ describe('public REST routes', () => {
       expect(parsed.success, `${url} → ${res.body}`).toBe(true);
     }
     await app.close();
+  });
+
+  it('does not invent nextFundingTimestamp from TRADE_FUTURES_FUNDING_INTERVAL_MS', () => {
+    const src = readFileSync(new URL('./public-rest.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/nextFundingTimestamp:\s*quote\.nextFundingTimestamp/);
+    expect(src).not.toMatch(/TRADE_FUTURES_FUNDING_INTERVAL_MS/);
+    expect(src).not.toMatch(/8 \* 60 \* 60/);
+    expect(src).not.toMatch(/28_?800_?000/);
   });
 });

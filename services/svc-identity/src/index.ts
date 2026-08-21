@@ -14,6 +14,11 @@ import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
 import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter, type IdentityRouter } from './router.js';
+import { bootKycVault } from './kyc/boot-vault.js';
+import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
+import { WaitlistService } from './waitlist/waitlist-service.js';
+import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
+import { registerAffiliateProducerPayout } from './affiliates/producer-payout.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -115,11 +120,26 @@ const accruals = new SqlAccrualStore(sql);
 const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON);
 
 /**
- * The affiliate payout rail. Absent unless an operator configures LEDGER_URL —
- * and payout then refuses `affiliate.payout.ledger_unwired` rather than
- * reporting a payment it could not make.
+ * The affiliate payout rail. Compose sets LEDGER_URL to in-network svc-ledger.
+ * Absent (non-compose / omitted) → payout refuses `affiliate.payout.ledger_unwired`
+ * rather than reporting a payment it could not make. No localhost default.
  */
 const ledger = env.LEDGER_URL ? createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET) : undefined;
+
+/**
+ * §10 KYC encrypted vault. Unset IDENTITY_KYC_DOC_KEY → vault null (procedures
+ * named-refuse `[kyc_doc.unwired]`). Set but invalid → boot throws `kyc_doc.key_missing`
+ * (not a silent missing store). Never invent a key. Live vendor webhook remains Class X.
+ */
+const vault = bootKycVault(sql, env.IDENTITY_KYC_DOC_KEY);
+
+const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
+  drop: env.LAUNCH_DROP,
+  env: {
+    INTAFACED_FLAG_WAITLIST_ENABLED: env.INTAFACED_FLAG_WAITLIST_ENABLED,
+    INTAFACED_FLAG_REFERRAL_QUEUE: env.INTAFACED_FLAG_REFERRAL_QUEUE,
+  },
+});
 
 export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
@@ -129,6 +149,8 @@ export const appRouter = createIdentityRouter(auth, rank, {
   accruals,
   accrualTierLaw,
   ledger,
+  ...(vault ?? {}),
+  waitlist,
 });
 export type AppRouter = typeof appRouter;
 
@@ -142,6 +164,28 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() }));
+
+/**
+ * D26-P1-O2: fee producers (svc-trade / svc-pay) accrue under owner rate law.
+ * Same durable store as affiliates.accrue — no ledger post. Body-bound S2S.
+ */
+registerAffiliateProducerAccrue(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  referral,
+  freeze,
+  accruals,
+  accrualTierLaw,
+});
+
+registerAffiliateProducerPayout(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  freeze,
+  accruals,
+  accrualTierLaw,
+  ledger,
+  // Accrue already installed retainRawBody on this instance.
+  installRawBody: false,
+});
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).

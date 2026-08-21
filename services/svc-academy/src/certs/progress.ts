@@ -10,6 +10,8 @@
  * · Perks remain svc-identity rank SoT — academy never maps cert → perk.
  */
 
+import { assertCertGrantPathHonest } from './grant-ledger.js';
+
 export type EnrollmentRecord = {
   userId: string;
   pathSlug: string;
@@ -78,20 +80,23 @@ export function decideGrant(input: {
     throw new CertError('Cert definition has no required items', 'academy.cert_invalid');
   }
   if (existing) {
+    assertCertGrantPathHonest(existing);
     return { grant: existing, alreadyGranted: true };
   }
   if (!isComplete(cert.requiredItemSlugs, completedSlugs)) {
     throw new CertError('Required curriculum items incomplete', 'academy.cert_incomplete');
   }
   const now = input.now ?? new Date();
+  const grant: CertGrantRecord = {
+    userId,
+    certId: cert.id,
+    grantedAt: now,
+    idempotencyKey: certIdempotencyKey(userId, cert.id),
+  };
+  assertCertGrantPathHonest(grant);
   return {
     alreadyGranted: false,
-    grant: {
-      userId,
-      certId: cert.id,
-      grantedAt: now,
-      idempotencyKey: certIdempotencyKey(userId, cert.id),
-    },
+    grant,
   };
 }
 
@@ -127,6 +132,37 @@ export function decideItemComplete(input: { userId: string; itemSlug: string; ex
       completedAt: input.now ?? new Date(),
     },
   };
+}
+
+/** Named refuse when a workbook slug is not a required item on any cert. */
+export const PAPER_CERT_UNBOUND = 'academy.paper_cert_unbound' as const;
+
+export type WorkbookCertBinding =
+  | {
+      readonly progress: 'bound';
+      readonly certId: string;
+      readonly itemSlug: string;
+    }
+  | {
+      readonly progress: 'unbound';
+      readonly itemSlug: string;
+      readonly reason: typeof PAPER_CERT_UNBOUND;
+    };
+
+/**
+ * Bind a workbook (curriculum item slug) to a cert that lists it as required.
+ * Unbound → honest named refuse, never a fake grant.
+ */
+export function workbookCertBinding(itemSlug: string, certs: readonly CertDefinition[]): WorkbookCertBinding {
+  const slug = itemSlug.trim();
+  if (!slug || slug.length > 120) {
+    throw new CertError('Invalid item slug', 'academy.cert_invalid');
+  }
+  const cert = certs.find((c) => c.requiredItemSlugs.includes(slug));
+  if (!cert) {
+    return { progress: 'unbound', itemSlug: slug, reason: PAPER_CERT_UNBOUND };
+  }
+  return { progress: 'bound', certId: cert.id, itemSlug: slug };
 }
 
 /** In-memory Stage-1 store for tests and early API. */

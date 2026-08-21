@@ -159,8 +159,8 @@ export interface RegistryPart {
  * is down, every market that has ever traded still streams — a public book feed
  * that goes dark because an API container is restarting is a worse service than
  * one that serves the ten books it can prove. If svc-matching is down, the
- * sixteen listed markets still resolve and each opens an empty book, which is
- * the truth anyway while the engine is not answering.
+ * sixteen listed markets still resolve; sockets stay open with no snapshot
+ * until matching has resting depth (empty ≠ zero — not a fabricated ladder).
  *
  * Only when EVERY source fails does this throw, and `DepthHub.refreshMarkets`
  * then keeps serving its last known list rather than refusing the fleet.

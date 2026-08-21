@@ -36,6 +36,12 @@ export const NOTIFY_EVENT_CONSUMERS: readonly NotifyConsumerRow[] = [
     effect: 'Inbox row for the fill owner',
   },
   {
+    event: 'orderUpdated',
+    durable: 'notify-order-updated',
+    subject: 'intafaced.trade.order.updated',
+    effect: 'Inbox row on cancelled / rejected / expired only',
+  },
+  {
     event: 'positionUpdated',
     durable: 'notify-position-updated',
     subject: 'intafaced.trade.position.updated',
@@ -88,6 +94,18 @@ export const NOTIFY_EVENT_CONSUMERS: readonly NotifyConsumerRow[] = [
     durable: 'notify-bank-margin-called',
     subject: 'intafaced.bank.margin_call.created',
     effect: 'Critical inbox row + fan-out when a loan is called',
+  },
+  {
+    event: 'agentActionRejected',
+    durable: 'notify-agent-action-rejected',
+    subject: 'intafaced.agents.action.rejected',
+    effect: 'Inbox row when a guardrail refuses an agent action',
+  },
+  {
+    event: 'agentActionCompleted',
+    durable: 'notify-agent-action-completed',
+    subject: 'intafaced.agents.action.completed',
+    effect: 'Inbox row on completion / session_close only (not tool_call noise)',
   },
 ] as const;
 

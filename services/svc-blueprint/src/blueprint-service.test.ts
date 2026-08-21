@@ -1031,6 +1031,14 @@ if (!available) {
       expect(bus.published.length).toBe(before);
     });
 
+    it('does not write card_asset_url when a stranger views via cardFor', async () => {
+      const service = withRenderer(new StubRenderer(rendered));
+      await service.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }], { visibility: 'public' }));
+
+      await service.cardFor({ viewerId: USER_B, subjectUserId: USER_A, size: 'portrait' });
+      expect((await service.get({ userId: USER_A }))?.cardAssetUrl).toBeNull();
+    });
+
     it('is not written by export — a read path must not persist on every read', async () => {
       // `export` is a tRPC `.query()`: retried, prefetched and cached. It
       // carries the card (§7.2 "JSON + card") but must not acquire `card()`'s
@@ -1068,6 +1076,61 @@ if (!available) {
       await blueprint.erase({ userId: USER_A });
 
       await expect(blueprint.card({ userId: USER_A, size: 'portrait' })).rejects.toMatchObject({ code: 'blueprint.not_found' });
+    });
+  });
+
+  // ── Visibility (§7.1 column · scopes: reading someone else's) ─────────────
+
+  describe('visibility-gated cardFor', () => {
+    const notFound = { code: 'blueprint.not_found' };
+
+    it('lets the owner read their own card even when private', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const own = await blueprint.cardFor({ viewerId: USER_A, subjectUserId: USER_A, size: 'portrait' });
+      expect(own.svg.length).toBeGreaterThan(1_000);
+      expect(own.shareMode).toBe('svg');
+    });
+
+    it('hides a private card from anyone else — same error as missing', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      await expect(blueprint.cardFor({ viewerId: USER_B, subjectUserId: USER_A, size: 'portrait' })).rejects.toMatchObject(notFound);
+      await expect(blueprint.cardFor({ viewerId: USER_B, subjectUserId: uuid(404), size: 'portrait' })).rejects.toMatchObject(notFound);
+    });
+
+    it('setVisibility public then lets any authenticated viewer read the card', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]));
+      const updated = await blueprint.setVisibility({ userId: USER_A, visibility: 'public' });
+      expect(updated.visibility).toBe('public');
+
+      const seen = await blueprint.cardFor({ viewerId: USER_B, subjectUserId: USER_A, size: 'portrait' });
+      expect(seen.svg.length).toBeGreaterThan(1_000);
+    });
+
+    it('flipping public back to private hides immediately', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }], { visibility: 'public' }));
+      await blueprint.setVisibility({ userId: USER_A, visibility: 'private' });
+      await expect(blueprint.cardFor({ viewerId: USER_B, subjectUserId: USER_A, size: 'portrait' })).rejects.toMatchObject(notFound);
+    });
+
+    it('crew visibility is same-crew only — outsiders get not_found', async () => {
+      const first = await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }], { visibility: 'crew' }));
+      await blueprint.onboard(onboardInput(USER_B, sessionJoining([first.blueprint.profile]), { visibility: 'crew' }));
+      expect((await blueprint.export({ userId: USER_B })).crew?.id).toBe(first.placement.crewId);
+
+      const mate = await blueprint.cardFor({ viewerId: USER_A, subjectUserId: USER_B, size: 'portrait' });
+      expect(mate.svg.length).toBeGreaterThan(1_000);
+
+      await expect(blueprint.cardFor({ viewerId: USER_C, subjectUserId: USER_B, size: 'portrait' })).rejects.toMatchObject(notFound);
+    });
+
+    it('erase revokes a previously public card — no leftover read', async () => {
+      await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }], { visibility: 'public' }));
+      await blueprint.erase({ userId: USER_A });
+      await expect(blueprint.cardFor({ viewerId: USER_B, subjectUserId: USER_A, size: 'portrait' })).rejects.toMatchObject(notFound);
+    });
+
+    it('setVisibility on a user with no Blueprint is not_found', async () => {
+      await expect(blueprint.setVisibility({ userId: USER_A, visibility: 'public' })).rejects.toMatchObject(notFound);
     });
   });
 

@@ -1,9 +1,11 @@
 # Coordination truth layers (binding)
 
-**Status:** BINDING · **auto-load enforced** (no Nitro paste · no audit gate before code)  
+**Status:** BINDING · **auto-load enforced** (full access · no human gate before code)  
 **Home for this fact:** this file. Pointers only elsewhere.  
 **Intent:** Denon multi-dev context + zero agent conflict **without** slowing parallel autonomous ship.  
 **Not:** a new project board, every-PR registry tax, or a human Approve gate.
+
+**Authority order for current work:** doctrine and `AGENTS.md` → live GitHub (`origin/main` and open PRs) → `tooling/tracker/features.mjs` (product state and ownership) → `docs/LIVE-LANES.md` and current claim files (session collision paths) → dated campaign boards (sequence/history only). A dated board never overrides live code, ownership, claims, or CI.
 
 ### How this is enforced without you messaging a chat
 
@@ -69,7 +71,8 @@ If a future change breaks a row above, **reject the change**.
 - Pure docs-only PRs that do not change product ownership
 - Path refactors that do not change feature meaning
 
-**Denon intent (plain):** main’s product map must not _lie_ about ownership and free work. That is **not** “maximize `features.mjs` diffs.”
+**Denon intent (plain):** main’s product map must not _lie_ about ownership and free work. That is **not** “maximize `features.mjs` diffs.”  
+**Denon 2026-08-16:** next work is a **user-visible mountain close or cut**, not leftover honesty rebases, i18n pin chains, or occupying N agent slots. `pnpm swarm:next` must not be read as permission to mint sand-castle PRs.
 
 ---
 
@@ -107,6 +110,7 @@ pnpm tracker ready   # or read tooling/tracker/features.mjs owners
 
 ## Related
 
+- Agent batch rule (MAY vs MUST NOT edit `features.mjs`): [`TRACKER-THRASH-PROTOCOL.md`](TRACKER-THRASH-PROTOCOL.md)
 - Plan + anti-list: [`TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md`](TRACKER-COORDINATION-PROPER-PLAN-2026-08-02.md)
 - Evidence: [`DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md`](DENON-TRACKER-TRUTH-AUDIT-2026-08-02.md)
 - Claim how-to: `CONTRIBUTING.md` §3.5 · `AGENTS.md`

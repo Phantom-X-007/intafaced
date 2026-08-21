@@ -2,12 +2,15 @@ import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
+import { userCopy } from './user-copy.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
 import {
   AmbassadorPayRefuseError,
   ambassadorPayPlaneStatus,
-  refuseAmbassadorIfcPay,
-  refuseAmbassadorRevenueShare,
+  attemptAmbassadorPay,
+  attemptResidencyIfcPay,
+  decidePublicAmbassadorPayQuote,
+  decidePublicResidencyPayQuote,
 } from './ambassadors/ifc-pay.js';
 import {
   PrizePoolRefuseError,
@@ -18,6 +21,13 @@ import {
   prizeRefuseStatusLine,
   type PrizeIntentKind,
 } from './tournaments/prize-refuse.js';
+import {
+  AmbassadorRateAuthorityRefuseError,
+  UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+  UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW,
+  type AmbassadorIfcPayLaw,
+  type AmbassadorRevenueShareLaw,
+} from './ambassadors/ifc-pay-rate-law.js';
 import {
   curriculumDepthReport,
   curriculumStudyGuide,
@@ -44,7 +54,7 @@ import {
   valueSimulatedDrill,
   type PublishedFill,
 } from './paper/simulated-result.js';
-import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
+import { assertPaperInputNeverClaimsLive, assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
 import { CERT_XP_ACTION, CERT_XP_SOURCE_MODULE } from './certs/xp-publish.js';
 import {
   CERT_PERK_REFUSE_CODE,
@@ -204,6 +214,9 @@ const curriculumImportStatusOut = z.object({
     i18nStrategyHonest: z.boolean(),
     ready: z.boolean(),
   }),
+  /** D26-P1-C5 — real lesson substance, not char-count theater. */
+  substanceBarMet: z.boolean(),
+  theaterSlugs: z.array(z.string()),
 });
 
 const curriculumItemLocalizedOut = curriculumItemOut.extend({
@@ -257,14 +270,25 @@ const paperDrillOut = z.discriminatedUnion('ok', [
  * book — doctrine §0.6's "never a number" does not have a practice exemption,
  * because a wrong practice figure is still a figure this platform published.
  */
-const publishedFillIn = z.object({
-  fillId: z.string().min(1).max(128),
-  marketId: z.string().min(1),
-  side: z.enum(['buy', 'sell']),
-  price: z.string().min(1),
-  size: z.string().min(1),
-  recordedAt: z.date().optional(),
-});
+const publishedFillIn = z
+  .object({
+    fillId: z.string().min(1).max(128),
+    marketId: z.string().min(1),
+    side: z.enum(['buy', 'sell']),
+    price: z.string().min(1),
+    size: z.string().min(1),
+    recordedAt: z.date().optional(),
+  })
+  .strict();
+
+/** Trade's paper flag only. Extra live/realMoney keys must refuse, not strip. */
+const paperMarketFlagIn = z
+  .object({
+    marketId: z.string().min(1),
+    paper: z.boolean(),
+    symbol: z.string().min(1),
+  })
+  .strict();
 
 const simulatedValuationOut = z.object({
   // Nested seal — valuation alone cannot be read as live money if parent seal stripped
@@ -357,6 +381,30 @@ const residencyOut = z.object({
   decidedBy: z.string().uuid().nullable(),
   decisionNote: z.string().nullable(),
 });
+/** Public IFC / residency pay door — typed refuse only (no quote amounts). */
+const publicAmbassadorPayQuoteOut = z.object({
+  status: z.literal('refuse'),
+  ok: z.literal(false),
+  payable: z.literal(false),
+  inventedIfc: z.literal(false),
+  kind: z.enum(['ifc_pay', 'revenue_share', 'residency']),
+  code: z.enum([
+    'academy.ambassador_pay.rates_unset',
+    'academy.ambassador_pay.class_m',
+    'academy.ambassador_pay.recipe_unset',
+    'academy.ambassador_pay.invent_refused',
+    'academy.ambassador_pay.residency_not_accepted',
+    'academy.ambassador_revenue_share.rates_unset',
+    'academy.ambassador_revenue_share.class_m',
+    'academy.ambassador_revenue_share.recipe_unset',
+    'academy.ambassador_revenue_share.invent_refused',
+    'academy.ambassador_revenue_share.residency_not_accepted',
+  ]),
+  reason: z.enum(['unset', 'invent', 'class_m']),
+  rateAuthorityPublished: z.boolean(),
+  residual: z.string(),
+  message: z.string(),
+});
 
 const certDefinitionOut = z.object({
   id: z.string(),
@@ -415,7 +463,7 @@ const certPerkOutcomeOut = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('refuse'),
     code: z.literal(CERT_PERK_REFUSE_CODE),
-    reason: z.literal('identity_unreadable'),
+    reason: z.enum(['identity_unreadable', 'unpriced']),
     message: z.string(),
     academyHoldsPerkMoney: z.literal(false),
     academyMapsCertToPerk: z.literal(false),
@@ -463,6 +511,13 @@ function toTrpcError(err: unknown): TRPCError {
       cause: err,
     });
   }
+  if (err instanceof AmbassadorRateAuthorityRefuseError) {
+    return new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: err.message,
+      cause: err,
+    });
+  }
   if (err instanceof PrizePoolRefuseError) {
     // PRECONDITION_FAILED: blank pool cannot start; amount present still Class M refuse (no invent IFC).
     return new TRPCError({
@@ -475,21 +530,23 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
   }
 
+  const message = userCopy(err.code);
+
   switch (err.code) {
     case 'academy.room_not_found':
     case 'academy.session_not_found':
     case 'academy.curriculum_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.not_host':
     case 'academy.stake_required':
     case 'academy.invite_required':
     case 'academy.host_rights_required':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
 
     case 'academy.room_full':
     case 'academy.session_not_live':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
     case 'academy.scene_invalid':
     case 'academy.scene_conflict':
@@ -499,11 +556,11 @@ function toTrpcError(err: unknown): TRPCError {
       // Client sent a scene that fails Stage-1 schema or size gate /
       // freeze reason that fails Stage-1 programme rules /
       // residency statement/cohort that fails Stage-1 rules.
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
     case 'academy.ambassador_not_found':
     case 'academy.residency_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.ambassador_already_active':
     case 'academy.ambassador_already_frozen':
@@ -511,27 +568,34 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.residency_not_pending':
     case 'academy.cert_already_granted':
     case 'academy.cert_incomplete':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
     case 'academy.cert_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.cert_invalid':
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
     case 'academy.season_not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
 
     case 'academy.tournament_disabled':
     case 'academy.paper_trading_disabled':
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
+
+    case 'academy.paper_flag_unverified':
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+
+    case 'academy.paper_flag_mismatch':
+    case 'academy.paper_market_unlisted':
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
 
     case 'academy.season_not_live':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
     case 'academy.season_invalid':
     case 'academy.standing_invalid':
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
     case 'academy.paper_price_unavailable':
     case 'academy.paper_result_unlabelled':
@@ -541,20 +605,32 @@ function toTrpcError(err: unknown): TRPCError {
       // simulated label", and "this payload claimed real custody" are all
       // states where the only safe payload is no payload — a 200 carrying a
       // best guess is the incident this row exists to prevent.
-      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
 
     case 'academy.stake_unavailable':
     case 'academy.stream_unavailable':
     case 'academy.host_rights_unavailable':
+    case 'academy.paper_flag_unavailable':
       // All three are OUR infrastructure, not the caller's request, and the
       // distinction matters to a client: a 403 tells someone to go and stake or
       // rank up, and telling them that because svc-token was unreachable sends
       // them to do something they have already done. A 500 says "try again".
-      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
+      return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
   }
 }
 
-export function createAcademyRouter(academy: AcademyService) {
+export type AcademyRouterPayLaws = {
+  readonly ifcPayLaw?: AmbassadorIfcPayLaw;
+  readonly revenueShareLaw?: AmbassadorRevenueShareLaw;
+};
+
+/**
+ * Optional payLaws: owner-published rate authority (D26-P1-C2).
+ * Default unpublished — refuse invent rates; product dry-run when published.
+ */
+export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRouterPayLaws = {}) {
+  const ifcPayLaw = payLaws.ifcPayLaw ?? UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW;
+  const revenueShareLaw = payLaws.revenueShareLaw ?? UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW;
   const guard = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -733,18 +809,19 @@ export function createAcademyRouter(academy: AcademyService) {
      */
     paperDrill: scopedProcedure('academy:read', { module: 'academy' })
       .input(
-        z.object({
-          slug: z.string().min(1),
-          market: z
-            .object({ marketId: z.string().min(1), paper: z.boolean(), symbol: z.string().min(1) })
-            .nullable()
-            .default(null),
-        }),
+        z
+          .object({
+            slug: z.string().min(1),
+            market: paperMarketFlagIn.nullable().default(null),
+          })
+          .strict(),
       )
       .output(paperDrillOut)
       .query(({ input }) =>
         guard(async () => {
+          assertPaperInputNeverClaimsLive(input);
           academy.assertPaperTradingEnabled();
+          await academy.assertCallerPaperFlagVerified(input.market);
           const item = getCurriculumItem(input.slug);
           if (!item) {
             throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
@@ -805,22 +882,23 @@ export function createAcademyRouter(academy: AcademyService) {
      */
     paperDrillResult: scopedProcedure('academy:read', { module: 'academy' })
       .input(
-        z.object({
-          slug: z.string().min(1),
-          market: z
-            .object({ marketId: z.string().min(1), paper: z.boolean(), symbol: z.string().min(1) })
-            .nullable()
-            .default(null),
-          completedStepIds: z.array(z.string().min(1)).max(64).default([]),
-          fills: z.array(publishedFillIn).max(256).default([]),
-          /** Trade's published mark for open size. Absent → reported unmarked. */
-          markPrice: z.string().min(1).nullable().default(null),
-        }),
+        z
+          .object({
+            slug: z.string().min(1),
+            market: paperMarketFlagIn.nullable().default(null),
+            completedStepIds: z.array(z.string().min(1)).max(64).default([]),
+            fills: z.array(publishedFillIn).max(256).default([]),
+            /** Trade's published mark for open size. Absent → reported unmarked. */
+            markPrice: z.string().min(1).nullable().default(null),
+          })
+          .strict(),
       )
       .output(paperDrillResultOut)
       .query(({ input }) =>
         guard(async () => {
+          assertPaperInputNeverClaimsLive(input);
           academy.assertPaperTradingEnabled();
+          await academy.assertCallerPaperFlagVerified(input.market);
           const item = getCurriculumItem(input.slug);
           if (!item) {
             throw new AcademyError(`Curriculum item "${input.slug}" is not in the day-one spine`, 'academy.curriculum_not_found');
@@ -903,9 +981,29 @@ export function createAcademyRouter(academy: AcademyService) {
           flagId: z.literal(PAPER_OPS_FLAG_ID),
           envKey: z.literal(PAPER_OPS_ENV_KEY),
           liveTradeUnaffected: z.literal(true),
+          simulated: z.literal(true),
+          venue: z.literal(SIMULATED_VENUE),
+          realMoney: z.literal(false),
         }),
       )
-      .query(() => academy.paperOpsStatus()),
+      .query(() =>
+        guard(async () => {
+          const status = academy.paperOpsStatus();
+          // Refuse a live/realMoney claim from the service — do not rewrite it quiet.
+          assertPaperNeverReadableAsRealMoney(status);
+          const wire = {
+            enabled: status.enabled,
+            flagId: PAPER_OPS_FLAG_ID,
+            envKey: PAPER_OPS_ENV_KEY,
+            liveTradeUnaffected: true as const,
+            simulated: true as const,
+            venue: SIMULATED_VENUE,
+            realMoney: false as const,
+          };
+          assertPaperNeverReadableAsRealMoney(wire);
+          return wire;
+        }),
+      ),
 
     // ── Lobbies ──────────────────────────────────────────────────────────────
 
@@ -1108,31 +1206,56 @@ export function createAcademyRouter(academy: AcademyService) {
       ),
 
     /**
-     * Class M IFC pay / revenue share — refuse-closed. Never invent rates.
-     * Plane status is always dark until owner-published schedule + ledger recipes.
+     * IFC pay / revenue share under rate authority (D26-P1-C2).
+     * Settlement stays dark (no ledger recipe). Quote path opens when owner rates published.
      */
     ambassadorPayPlane: scopedProcedure('admin:read', { module: 'academy' })
       .output(
         z.object({
           ifcPayEnabled: z.literal(false),
           revenueShareEnabled: z.literal(false),
+          ifcRateAuthorityPublished: z.boolean(),
+          revenueShareRateAuthorityPublished: z.boolean(),
+          ifcPayQuoteEnabled: z.boolean(),
+          revenueShareQuoteEnabled: z.boolean(),
           classM: z.literal(true),
           residualIfcPay: z.string(),
           residualRevenueShare: z.string(),
         }),
       )
-      .query(() => ambassadorPayPlaneStatus()),
+      .query(() => ambassadorPayPlaneStatus({ ifc: ifcPayLaw, revenueShare: revenueShareLaw })),
+
+    /**
+     * Public door (academy:read) — typed refuse, never a fake IFC quote.
+     * Unset rate authority → rates_unset; never payable.
+     */
+    ambassadorPayQuote: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ kind: z.enum(['ifc_pay', 'revenue_share']).optional() }).optional())
+      .output(publicAmbassadorPayQuoteOut)
+      .query(({ input }) =>
+        decidePublicAmbassadorPayQuote({
+          kind: input?.kind ?? 'ifc_pay',
+          law: (input?.kind ?? 'ifc_pay') === 'revenue_share' ? revenueShareLaw : ifcPayLaw,
+        }),
+      ),
 
     ambassadorIfcPay: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
-          beneficiaryId: z.string().uuid().optional(),
+          beneficiaryId: z.string().uuid(),
           dryRun: z.boolean().optional(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']).optional(),
         }),
       )
-      .mutation(async () => {
+      .mutation(async ({ input }) => {
         try {
-          refuseAmbassadorIfcPay();
+          return attemptAmbassadorPay({
+            kind: 'ifc_pay',
+            law: ifcPayLaw,
+            beneficiaryId: input.beneficiaryId,
+            dryRun: input.dryRun,
+            residencyStatus: input.residencyStatus,
+          });
         } catch (err) {
           throw toTrpcError(err);
         }
@@ -1141,13 +1264,55 @@ export function createAcademyRouter(academy: AcademyService) {
     ambassadorRevenueShare: scopedProcedure('admin:write', { module: 'academy' })
       .input(
         z.object({
-          beneficiaryId: z.string().uuid().optional(),
+          beneficiaryId: z.string().uuid(),
           dryRun: z.boolean().optional(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']).optional(),
         }),
       )
-      .mutation(async () => {
+      .mutation(async ({ input }) => {
         try {
-          refuseAmbassadorRevenueShare();
+          return attemptAmbassadorPay({
+            kind: 'revenue_share',
+            law: revenueShareLaw,
+            beneficiaryId: input.beneficiaryId,
+            dryRun: input.dryRun,
+            residencyStatus: input.residencyStatus,
+          });
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /**
+     * Public residency IFC door — refuse when rates unset (accepted residency is not payable).
+     */
+    residencyPayQuote: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ residencyStatus: residencyStatus.optional() }).optional())
+      .output(publicAmbassadorPayQuoteOut)
+      .query(({ input }) =>
+        decidePublicResidencyPayQuote({
+          law: ifcPayLaw,
+          residencyStatus: input?.residencyStatus,
+        }),
+      ),
+
+    /** Operator residency IFC quote under rate authority — accepted residency + published rates. */
+    residencyIfcPayQuote: scopedProcedure('admin:write', { module: 'academy' })
+      .input(
+        z.object({
+          beneficiaryId: z.string().uuid(),
+          residencyStatus: z.enum(['applied', 'accepted', 'rejected', 'withdrawn']),
+          dryRun: z.boolean().optional().default(true),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        try {
+          return attemptResidencyIfcPay({
+            law: ifcPayLaw,
+            beneficiaryId: input.beneficiaryId,
+            residencyStatus: input.residencyStatus,
+            dryRun: input.dryRun,
+          });
         } catch (err) {
           throw toTrpcError(err);
         }

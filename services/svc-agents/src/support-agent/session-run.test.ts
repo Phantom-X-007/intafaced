@@ -5,6 +5,7 @@ import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } fro
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { SUPPORT_DATA_TOOLS } from './data-tools.js';
+import { createFixtureSupportDesk } from './desk-port.js';
 import { supportAgentGuardrail, SUPPORT_MONEY_TOOLS } from './guardrail.js';
 import { runSupportReplySession, SUPPORT_AGENT_ID, SUPPORT_KB_TOOL } from './session-run.js';
 
@@ -43,6 +44,9 @@ const ARTICLE = {
 function kbAsk(articles: readonly (typeof ARTICLE)[] | null = [ARTICLE]) {
   return { tool: SUPPORT_KB_TOOL, articles };
 }
+
+/** Published ops.support catalog — fixture article keys are not a live KB by themselves. */
+const PUBLISHED_KB = [{ id: ARTICLE.articleKey, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }];
 
 function accountAsk(userId = USER) {
   return {
@@ -170,14 +174,25 @@ function runtimeOf(fake: FakeRuntime): AgentRuntime {
   return fake as unknown as AgentRuntime;
 }
 
+function testDesk(overrides: Parameters<typeof createFixtureSupportDesk>[0] = {}) {
+  return createFixtureSupportDesk({
+    articles: [ARTICLE],
+    tickets: [{ ticketId: 'tkt-1', ownerUserId: USER, status: 'open', category: 'withdrawals' }],
+    accounts: [{ userId: USER, status: 'active', kycTier: 'tier2' }],
+    ...overrides,
+  });
+}
+
 function baseInput(fake: FakeRuntime) {
   return {
     runtime: runtimeOf(fake),
     userId: USER,
     feeAssetId: 'IFC',
     plane: 'live' as const,
+    kbCatalog: PUBLISHED_KB,
     tierLaw: law,
     userTier: 'free',
+    desk: testDesk(),
   };
 }
 
@@ -363,10 +378,16 @@ describe('support.reply metered session run', () => {
 
   // ── Honesty: never fabricate what a tool could not return ─────────────────
 
-  it('drops a read the data tool refuses instead of filling it in', async () => {
+  it('refuses when account-state was asked and missing — no invent from KB alone', async () => {
     const fake = new FakeRuntime();
+    const desk = testDesk({ tickets: [] });
+    desk.readAccount = async () => ({
+      status: 'ok',
+      account: { userId: OTHER_USER, status: 'active', kycTier: 'tier2' },
+    });
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk,
       asks: [
         kbAsk(),
         { tool: 'support.ticket.read', ticket: null }, // no row — refused, never stubbed
@@ -374,16 +395,172 @@ describe('support.reply metered session run', () => {
       ],
     });
 
-    expect(result.status).toBe('ok');
-    if (result.status !== 'ok') return;
-    expect(result.answered).toBe(1);
-    expect(result.complete).toBe(false);
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'account_state_missing',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'refuse') return;
     expect(result.unanswered.map((u) => [u.refusedBy, u.reason])).toEqual([
       ['tool', 'missing_fixture'],
       ['tool', 'account_owner_mismatch'],
     ]);
-    // The only facts carried are the ones a tool actually returned.
+    // KB hit is not enough to invent account state — refuse, settle, no silent fee.
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('stops mid-run on abort without running remaining tools or inventing a feeCharge', async () => {
+    const fake = new FakeRuntime();
+    const ac = new AbortController();
+    ac.abort();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      signal: ac.signal,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'stopped',
+      reason: 'aborted',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'stopped') return;
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result.metering.sessionId).toBeNull();
+  });
+
+  it('stops after a partial ask list and still settles the open session', async () => {
+    const fake = new FakeRuntime();
+    const ac = new AbortController();
+    // Abort after the first tool would have been scheduled: pre-abort the signal
+    // once openSession has been called by wrapping act.
+    const originalAct = fake.act.bind(fake);
+    let calls = 0;
+    fake.act = async (input) => {
+      calls += 1;
+      if (calls === 1) ac.abort();
+      return originalAct(input);
+    };
+
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      signal: ac.signal,
+      asks: [kbAsk(), accountAsk(), ticketAsk()],
+    });
+
+    expect(result.status).toBe('stopped');
+    if (result.status !== 'stopped') return;
+    // First ask ran; later asks did not.
+    expect(fake.executed).toEqual([SUPPORT_KB_TOOL]);
     expect(result.findings).toHaveLength(1);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('grounds a reply from published kbCatalog + accountGrounding (no invent)', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: testDesk({
+        articles: [
+          {
+            articleKey: 'kb-account-access',
+            titleKey: 'support.kb.account_access.title',
+            bodyKey: 'support.kb.account_access.body',
+          },
+        ],
+        accounts: [{ userId: USER, status: 'active', kycTier: 'basic' }],
+      }),
+      asks: [
+        { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
+        {
+          tool: 'identity.account.read',
+          accountGrounding: {
+            status: 'read',
+            state: { userId: USER, status: 'active', kycTier: 'basic' },
+            readAt: '2026-08-12T00:00:00.000Z',
+          },
+        },
+      ],
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.citedArticleKeys).toEqual(['kb-account-access']);
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool: 'identity.account.read',
+          account: { userId: USER, status: 'active', kycTier: 'basic' },
+        }),
+      ]),
+    );
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('refuses when accountGrounding is plane_dark — KB alone is not invent account-state', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: testDesk({
+        articles: [
+          {
+            articleKey: 'kb-account-access',
+            titleKey: 'support.kb.account_access.title',
+            bodyKey: 'support.kb.account_access.body',
+          },
+        ],
+        unreadAccounts: true,
+      }),
+      asks: [
+        { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
+        {
+          tool: 'identity.account.read',
+          accountGrounding: { status: 'unread', reason: 'plane_dark' },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'account_state_missing',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    if (result.status !== 'refuse') return;
+    expect(result.unanswered.map((u) => [u.tool, u.reason])).toEqual([['identity.account.read', 'account_plane_dark']]);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(fake.settleCalls).toBe(1);
+    expect(fake.closeCalls).toBe(1);
+  });
+
+  it('escalates when kbQuery misses the catalog but other grounded reads worked', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: testDesk({
+        articles: [
+          {
+            articleKey: 'kb-orders-status',
+            titleKey: 'support.kb.orders_status.title',
+            bodyKey: 'support.kb.orders_status.body',
+          },
+        ],
+      }),
+      // Account is readable; KB miss must not invent an article to answer with.
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'definitely-not-an-article-xyz' }, accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'escalate',
+      reason: 'kb_no_hit',
+      userMessageKey: 'agents.support.escalated',
+    });
+    expect(result.metering.billedAmount).toBe('0');
   });
 
   it('refuses the whole run when NO data source was reachable — no invented answer', async () => {
@@ -392,6 +569,7 @@ describe('support.reply metered session run', () => {
     // reply could have been grounded in is dark.
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk: testDesk({ articles: [], accounts: [], unreadAccounts: true }),
       asks: [kbAsk(null), { tool: 'identity.account.read', account: null }],
     });
 
@@ -414,6 +592,7 @@ describe('support.reply metered session run', () => {
     const fake = new FakeRuntime();
     const result = await runSupportReplySession({
       ...baseInput(fake),
+      desk: testDesk({ articles: [] }),
       // The account state is readable; the knowledge base is not. A reply here
       // would have to come from somewhere other than the KB — so there is none.
       asks: [kbAsk(null), accountAsk()],
@@ -491,6 +670,100 @@ describe('support.reply metered session run', () => {
   });
 
   // ── Free refusals, before a session exists ────────────────────────────────
+
+  it('refuses an ungrounded live KB plane — no invented ops.support answers', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: null,
+      kbCatalog: null,
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'withdrawal-hold' }, accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    // Not a live KB plane: no session, no articles composed, no silent fee.
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+    expect(result).not.toHaveProperty('citedArticleKeys');
+    expect(result).not.toHaveProperty('findings');
+  });
+
+  it('refuses an empty catalog the same way — empty is not a published KB', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: null,
+      kbCatalog: [],
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'account' }],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('live catalog without a desk port refuses no_live_kb — fixtures are not a live KB', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      desk: null,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_kb',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('refuses smuggled article fixtures when the KB catalog is dark — never status ok', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: null,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result.status).not.toBe('ok');
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'kb_plane_ungrounded',
+      userMessageKey: 'agents.support.unavailable',
+    });
+    expect(result).not.toHaveProperty('citedArticleKeys');
+    expect(result).not.toHaveProperty('findings');
+    expect(fake.openCalls).toBe(0);
+    expect(fake.executed).toEqual([]);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('still escalates a money request when the KB catalog is dark', async () => {
+    const fake = new FakeRuntime();
+    const result = await runSupportReplySession({
+      ...baseInput(fake),
+      kbCatalog: null,
+      moneyRequest: true,
+      asks: [kbAsk(), accountAsk()],
+    });
+
+    expect(result.status).not.toBe('ok');
+    expect(result).toMatchObject({ status: 'escalate', reason: 'money_request' });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
 
   it('refuses a dark desk plane before opening a metered session', async () => {
     const fake = new FakeRuntime();

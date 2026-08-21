@@ -44,9 +44,12 @@ import {
   type TradeOutcome,
   type XpPolicy,
 } from './reputation.js';
-import { methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
+import { InstrumentError, methodIdKey, methodsWithLiveDestination, missingSellDestinations, sellOfferBoardable } from './instruments.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 import type { DenialSink } from './instrument-service.js';
 import { withMoneySpan, withSpan } from './tracing.js';
+import { affiliateLegAfterP2pRelease, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 
 /**
  * svc-p2p — PEER-TO-PEER TRADING WITH ESCROW (§6.2).
@@ -238,8 +241,15 @@ export interface TradeInstrumentAttacher {
    * Keys are lowercased (same rule as `methodIdKey` / instrument storage). Used
    * by sell-offer create and the board so a method with no live destination is
    * never advertised — closing the residual named on `TAKE_REFUSED_MESSAGE`.
+   * Empty operator registry ⇒ empty set: a leftover destination is not a rail.
    */
   liveMethodKeys(ownerId: string, fiatCurrency: string): Promise<ReadonlySet<string>>;
+
+  /**
+   * Method ids an operator has registered and left enabled. Empty = no payable
+   * rail exists yet — not "any string the maker types is a method".
+   */
+  enabledMethodKeys(): Promise<ReadonlySet<string>>;
 }
 
 export interface P2pServiceOptions {
@@ -272,6 +282,16 @@ export interface P2pServiceOptions {
    * it. `index.ts` supplies it from `MerchantService`; tests supply a stub.
    */
   merchantStatusOf?: (userId: string) => Promise<MerchantStatus | null>;
+  /**
+   * Identity affiliate accrue after house p2p fees post. Default noop.
+   * Failures must not unwind escrowRelease.
+   */
+  affiliateAccrue?: AffiliateAccruePort;
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind escrowRelease. Body is `{ feeEventId }` only.
+   */
+  affiliatePayout?: AffiliatePayoutPort;
 }
 
 /**
@@ -350,6 +370,12 @@ export interface DisputeRecord {
   id: string;
   tradeId: string;
   openedBy: string;
+  /**
+   * `party` — a natural person called `disputes.open`.
+   * `timeout` — the fiat_sent clock opened it; `openedBy` is the party of
+   * interest (buyer who marked fiat sent), not a filing attribution.
+   */
+  openedVia: 'party' | 'timeout';
   reason: string;
   evidence: readonly EvidenceEntry[];
   moderatorId: string | null;
@@ -414,6 +440,7 @@ interface DisputeRow {
   id: string;
   trade_id: string;
   opened_by: string;
+  opened_via: 'party' | 'timeout';
   reason: string;
   evidence: unknown;
   moderator_id: string | null;
@@ -523,6 +550,8 @@ export class P2pService {
   private readonly offerLimits: OfferLimitPolicy;
   private readonly merchantStatusOf: ((userId: string) => Promise<MerchantStatus | null>) | undefined;
   private readonly instruments: TradeInstrumentAttacher;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
   private tradingEnabled: boolean;
 
   constructor(
@@ -543,6 +572,8 @@ export class P2pService {
     this.referencePrices = options.referencePrices;
     this.offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
     this.merchantStatusOf = options.merchantStatusOf;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   /**
@@ -597,7 +628,23 @@ export class P2pService {
     // refuse at take, honestly — breaking live offers to close a hole would
     // cost makers real liquidity for a fix they did not ask for.
     if (!Array.isArray(input.methods) || input.methods.length === 0) {
-      throw new PricingError('An offer must declare at least one payment method it accepts', 'p2p.offer_methods_required');
+      throw new PricingError(resolveP2pCopy(P2P_COPY.offerMethodsRequired), 'p2p.offer_methods_required');
+    }
+
+    /**
+     * AN EMPTY REGISTRY IS NOT A PAYABLE RAIL.
+     *
+     * `offer_method_no_destination` says "this method exists; go register a
+     * destination." That is the wrong sentence when no operator has registered
+     * a schema: it makes an invented string look like a live rail the seller
+     * merely forgot to fill in. Buy offers used to skip every method check, so
+     * the public board could advertise whatever the maker typed. Both sides
+     * now require an enabled operator schema first. Destinations stay the
+     * second gate, and only for sell.
+     */
+    const registered = await this.instruments.enabledMethodKeys();
+    if (missingSellDestinations(input.methods, registered).length > 0) {
+      throw new InstrumentError(resolveP2pCopy(P2P_COPY.methodUnknown), 'p2p.instrument_method_unknown');
     }
 
     /**
@@ -612,10 +659,7 @@ export class P2pService {
       const live = await this.instruments.liveMethodKeys(input.makerId, fiatCurrency);
       const missing = missingSellDestinations(input.methods, live);
       if (missing.length > 0) {
-        throw new PricingError(
-          'A sell offer can only list payment methods you have an active destination for in this currency. Register the destination first, then list the method.',
-          'p2p.offer_method_no_destination',
-        );
+        throw new PricingError(resolveP2pCopy(P2P_COPY.offerMethodNoDestination), 'p2p.offer_method_no_destination');
       }
     }
 
@@ -627,16 +671,16 @@ export class P2pService {
      * scams. The merchant programme is the record that justifies a bigger
      * promise, so the badge and the ceiling are one control seen from two sides.
      *
-     * CREATE only, and no ceiling is configured by default — `merchant-limits.ts`
-     * says why the numbers are an operator decision rather than invented here.
+     * CREATE only. Standing is read on every create (or treated as not-in-
+     * programme when no reader is wired) so a non-approved maker never inherits
+     * the merchant slot. Missing reader + armed policy still applies the
+     * standard band — skipping the check would let every size through.
      * Existing offers are never re-judged: breaking live liquidity to apply a
      * new rule costs makers real money for a change they did not ask for.
      */
-    if (this.merchantStatusOf) {
-      const standing = await this.merchantStatusOf(input.makerId);
-      const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
-      if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
-    }
+    const standing = this.merchantStatusOf ? await this.merchantStatusOf(input.makerId) : null;
+    const verdict = checkOfferLimit({ status: standing, maxAmt: input.maxAmt, asset: input.asset, policy: this.offerLimits });
+    if (!verdict.withinLimit) throw new P2pError(verdict.reason, 'p2p.offer_limit_exceeded');
 
     const totalAmt = input.totalAmt ?? input.maxAmt;
     const offerId = input.offerId ?? crypto.randomUUID();
@@ -705,8 +749,8 @@ export class P2pService {
   async getOffer(offerId: string): Promise<OfferRecord> {
     const offer = await this.loadOfferRaw(offerId);
     const [projected] = await this.projectBoardMethods([offer]);
-    // Sell with zero live methods is not on the public board — same answer as
-    // missing, so get-by-id cannot confirm "listed rails, no destination".
+    // Zero payable methods is not on the public board — same answer as missing,
+    // so get-by-id cannot confirm "listed rails, no destination / no schema".
     if (!projected) throw new P2pError(`Offer ${offerId} not found`, 'p2p.offer_not_found');
     return projected;
   }
@@ -720,16 +764,20 @@ export class P2pService {
   }
 
   /**
-   * Board honesty: sell offers only expose methods with a live destination.
+   * Board honesty: only methods that are actually payable.
    *
-   * Buy offers pass through unchanged (seller is the taker). Sell offers with
-   * zero live methods drop off the board entirely — an empty methods list would
-   * re-open the "accept anything" take oracle that create already refuses.
+   * Sell offers expose methods with a live destination on an enabled schema.
+   * Buy offers cannot advertise a destination (the seller is the taker) but
+   * they still must not list a method the operator has never registered —
+   * that is how an empty registry looks like a rail. Offers with zero payable
+   * methods drop off the board: an empty methods list would re-open the
+   * "accept anything" take oracle that create already refuses.
    *
    * Live lookup is cached per (maker, fiat) inside one call so a 50-row board
    * does not issue 50 identical queries for one maker.
    */
   private async projectBoardMethods(offers: OfferRecord[]): Promise<OfferRecord[]> {
+    const registered = await this.instruments.enabledMethodKeys();
     const cache = new Map<string, ReadonlySet<string>>();
     const liveFor = async (ownerId: string, fiat: string): Promise<ReadonlySet<string>> => {
       const key = `${ownerId}\0${fiat}`;
@@ -744,7 +792,9 @@ export class P2pService {
     const out: OfferRecord[] = [];
     for (const offer of offers) {
       if (offer.side !== 'sell') {
-        out.push(offer);
+        const methods = methodsWithLiveDestination(offer.methods, registered);
+        if (methods.length === 0) continue;
+        out.push(methods === offer.methods ? offer : { ...offer, methods });
         continue;
       }
       const live = await liveFor(offer.makerId, offer.fiatCurrency);
@@ -1307,9 +1357,9 @@ export class P2pService {
         const opening = envelopesFor(supplied, input.openedBy, now, 0);
 
         const rows = await tx<DisputeRow[]>`
-          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, reason, evidence, status, deadline_at, opened_at)
+          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, opened_via, reason, evidence, status, deadline_at, opened_at)
           VALUES (
-            ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${input.reason ?? ''},
+            ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${origin}, ${input.reason ?? ''},
             ${tx.json(opening as never)}, 'open', ${deadlineAt}, ${now}
           )
           ON CONFLICT (trade_id) DO NOTHING
@@ -1796,6 +1846,8 @@ export class P2pService {
           feeBps: trade.feeBps,
         }),
       );
+      await this.notifyP2pAffiliateAccrue(trade, fee);
+      await this.notifyP2pAffiliatePayout(trade, fee);
     } else if (trade.resolution === 'refunded') {
       await this.ledger.post(
         recipes.escrowRefund({
@@ -1837,6 +1889,32 @@ export class P2pService {
       RETURNING *
     `;
     return rows[0] ? toTrade(rows[0]) : await this.getTrade(tradeId);
+  }
+
+  /** Best-effort; never throws. escrowRelease already posted. */
+  private async notifyP2pAffiliateAccrue(trade: TradeRecord, fee: Amount): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterP2pRelease({
+        tradeId: trade.id,
+        sellerId: trade.sellerId,
+        feeAmount: fee,
+        feeAsset: trade.asset,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. escrowRelease already posted. */
+  private async notifyP2pAffiliatePayout(trade: TradeRecord, fee: Amount): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterP2pRelease({
+        tradeId: trade.id,
+        sellerId: trade.sellerId,
+        feeAmount: fee,
+        feeAsset: trade.asset,
+      }),
+    );
   }
 
   /**
@@ -2433,6 +2511,9 @@ function toDispute(row: DisputeRow): DisputeRecord {
     id: row.id,
     tradeId: row.trade_id,
     openedBy: row.opened_by,
+    // Pre-0006 rows defaulted to 'party' in the column; treat any unexpected
+    // value as party rather than inventing a third origin on the wire.
+    openedVia: row.opened_via === 'timeout' ? 'timeout' : 'party',
     reason: row.reason,
     evidence: normaliseEvidence(row.evidence),
     moderatorId: row.moderator_id,

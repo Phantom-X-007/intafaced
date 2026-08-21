@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
+import { userCopy } from './user-copy.js';
 import { MarketError, type VendorService } from './vendor-service.js';
 
 /**
@@ -411,6 +412,7 @@ describe('svc-market mount — commerce scopes', () => {
     offerType: 'one_time' as const,
     assetId: 'USDT',
     price: '10',
+    periodSeconds: null,
     status: 'active' as const,
     createdAt: '2026-08-09T00:00:00.000Z',
     updatedAt: '2026-08-09T00:00:00.000Z',
@@ -441,8 +443,11 @@ describe('svc-market mount — commerce scopes', () => {
         rejectionCode: null,
         createdAt: '2026-08-09T00:00:00.000Z',
         settledAt: '2026-08-09T00:00:00.000Z',
+        accessUntil: null,
       })),
       purchasesOf: vi.fn(async () => []),
+      cancelSubscription: vi.fn(),
+      subscriptionAccess: vi.fn(),
     };
   }
 
@@ -501,6 +506,24 @@ describe('svc-market mount — commerce scopes', () => {
    * Blank commission must surface as PRECONDITION_FAILED on create + purchase
    * and empty catalogue; never invent success / free rate at the mount.
    */
+  it('maps unset-period createListing refuse to PRECONDITION_FAILED', async () => {
+    const commerce = stubCommerce();
+    commerce.createListing = vi.fn(async () => {
+      throw new MarketError(
+        'Subscription listings need a period in whole seconds — no default cadence is invented',
+        'market.subscription_period_unset',
+      );
+    });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .createListing({ title: 'Sub', description: 'monthly', offerType: 'subscription', assetId: 'USDT', price: '10' }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.subscription_period_unset',
+    });
+  });
+
   it('maps blank-commission createListing refuse to PRECONDITION_FAILED', async () => {
     const commerce = stubCommerce({ commissionBps: null });
     commerce.createListing = vi.fn(async () => {
@@ -510,7 +533,7 @@ describe('svc-market mount — commerce scopes', () => {
       createMarketRouter(stubVendors(), commerce as never)
         .createCaller(signed())
         .createListing({ title: 'Bot', description: 'A bot', offerType: 'one_time', assetId: 'USDT', price: '10' }),
-    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'House commission rate is not configured' });
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', message: 'market.commission_not_configured' });
   });
 
   it('maps blank-commission purchase refuse to PRECONDITION_FAILED', async () => {
@@ -536,10 +559,49 @@ describe('svc-market mount — commerce scopes', () => {
     ).resolves.toEqual([]);
   });
 
+  /**
+   * D26-P1-M1 — recurring subscribe is a mounted public door, not a missing
+   * route. Always named-refuses; never invents a charge or a second book.
+   */
+  it('exposes subscribe as a callable public procedure', () => {
+    const caller = createMarketRouter(stubVendors(), stubCommerce() as never).createCaller(anonymous());
+    expect(typeof caller.subscribe).toBe('function');
+  });
+
+  it('maps public subscribe refuse to PRECONDITION_FAILED without calling purchase', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .subscribe({ listingId }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.subscription_recurring_not_built',
+      cause: { code: 'market.subscription_recurring_not_built' },
+    });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+    expect(commerce.createListing).not.toHaveBeenCalled();
+  });
+
+  it('subscribe still named-refuses for a signed writer (not a one-time purchase)', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .subscribe(),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.subscription_recurring_not_built',
+    });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+  });
+
   it('maps commerce refuse codes to stable tRPC classes', async () => {
     const cases: Array<{ code: string; trpc: string }> = [
       { code: 'market.commission_not_configured', trpc: 'PRECONDITION_FAILED' },
-      { code: 'market.subscription_not_built', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_period_unset', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_past_due', trpc: 'PRECONDITION_FAILED' },
+      { code: 'market.subscription_cancelled', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.listing_slot_missing', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.listing_over_capacity', trpc: 'PRECONDITION_FAILED' },
       { code: 'market.insufficient_funds', trpc: 'PRECONDITION_FAILED' },
@@ -557,7 +619,7 @@ describe('svc-market mount — commerce scopes', () => {
         createMarketRouter(stubVendors(), commerce as never)
           .createCaller(signed())
           .purchase({ listingId, purchaseId }),
-      ).rejects.toMatchObject({ code: c.trpc, message: 'refuse' });
+      ).rejects.toMatchObject({ code: c.trpc, message: userCopy(c.code) });
     }
   });
 

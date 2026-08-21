@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { TournamentError } from './ladder.js';
 import {
@@ -135,5 +138,52 @@ describe('D26-P1-C3 prize pools refuse if unset — no invent IFC', () => {
     expect(prizePoolStartRefuseExportLine(unset)).toBe(`unset,${PRIZE_POOL_UNSET_CODE}`);
     const set = tryRefusePrizePoolStart('10');
     expect(prizePoolStartRefuseExportLine(set)).toBe(`class_m,${PRIZE_REFUSE_CODE}`);
+  });
+});
+
+/**
+ * Pin: start/fund stay refuse-closed for unset pools. Fails if the typed
+ * refuse is removed or a default IFC pool is invented (Class M amounts stay
+ * owner-side — this slice never fills them in).
+ */
+describe('pin: tournament start/fund refuse unset prize pools (no invent IFC)', () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prize-refuse.ts'), 'utf8');
+
+  it('source still pins academy.prize_pool_unset and never returns ok', () => {
+    expect(src).toContain("export const PRIZE_POOL_UNSET_CODE = 'academy.prize_pool_unset'");
+    expect(src).toContain('export function decidePrizePoolStart');
+    expect(src).toContain('export function refuseFundPrizePool');
+    expect(src).toContain('export function assertMayStartPrizeSeason');
+    expect(src).toMatch(/code:\s*PRIZE_POOL_UNSET_CODE/);
+    expect(src).not.toMatch(/status:\s*['"]ok['"]/);
+    expect(src).not.toMatch(/\bDEFAULT_(?:PRIZE|POOL|IFC)/);
+    expect(src).not.toMatch(/inventedIfc:\s*true/);
+    expect(src).toMatch(/inventedIfc:\s*false/);
+  });
+
+  it('start refuses when prize pool is unset — never invents a default pool', () => {
+    for (const unset of [null, undefined, '', '   ', {}, { amount: null }, { amount: '' }]) {
+      const d = decidePrizePoolStart(unset);
+      expect(d.status).toBe('refuse');
+      expect(d.code).toBe(PRIZE_POOL_UNSET_CODE);
+      expect(d.reason).toBe('unset');
+      expect(d.inventedIfc).toBe(false);
+      expect(d.ledgerRecipeReady).toBe(false);
+      expect(d).not.toHaveProperty('amount');
+      expect(d).not.toHaveProperty('prizePool');
+      expect(JSON.stringify(d)).not.toMatch(/"amount"\s*:/);
+      expect(() => assertMayStartPrizeSeason(unset)).toThrow(PrizePoolRefuseError);
+    }
+  });
+
+  it('fund refuses when prize pool is unset — no invented IFC credit', () => {
+    const d = refuseFundPrizePool();
+    expect(d.status).toBe('refuse');
+    expect(d.code).toBe(PRIZE_REFUSE_CODE);
+    expect(d.kind).toBe('fund_pool');
+    expect(d.academyHoldsPrizeBalance).toBe(false);
+    expect(d.ledgerRecipeReady).toBe(false);
+    expect(d).not.toHaveProperty('amount');
+    expect(JSON.stringify(d)).not.toMatch(/\d+\.\d+/);
   });
 });

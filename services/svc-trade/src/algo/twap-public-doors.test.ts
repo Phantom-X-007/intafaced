@@ -22,6 +22,7 @@ import { createTradeRouter, type TradeRouter } from '../router.js';
 import { TradeError, type OrderSide } from '../spot/types.js';
 import type { TradeService } from '../spot/trade-service.js';
 import { MemoryTwapParentStore } from './parent-store.js';
+import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from './hydrate-on-mutate.js';
 import { presentAlgoProgress, FORBIDDEN_PARENT_MONEY_KEYS } from './present.js';
 import { TwapEngine, type TwapEnginePorts } from './twap-engine.js';
 import type { AlgoQuotedMark, CreateTwapInput, TwapParent } from './types.js';
@@ -139,7 +140,7 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
       // Same refuse as TradeService.createTwap — no two-sided mark → no schedule.
       if (!markOk || !liquidity) {
         throw new TradeError(
-          `${SYMBOL}: no two-sided mark at creation — refusing TWAP rather than inventing a feed`,
+          `${SYMBOL}: no two-sided mark at creation — refusing algo rather than inventing a feed`,
           'trade.algo_mark_missing',
         );
       }
@@ -160,18 +161,7 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
       return parent;
     },
     async getAlgo(p: Principal, parentId: string): Promise<TwapParent> {
-      let parent = engine.get(parentId);
-      if (!parent) {
-        const loaded = await store.load(parentId);
-        if (loaded && loaded.parent.userId === p.userId) {
-          engine.hydrate(loaded.parent, loaded.plan);
-          parent = loaded.parent;
-        }
-      }
-      if (!parent || parent.userId !== p.userId) {
-        throw new TradeError(`algo ${parentId} not found`, 'trade.algo_not_found');
-      }
-      return parent;
+      return hydrateAlgoIfMissing(engine, store, p.userId, parentId);
     },
     async algoProgress(p: Principal, parentId: string) {
       const parent = await trade.getAlgo(p, parentId);
@@ -180,16 +170,23 @@ function makeTwapTrade(opts: { liquidity?: boolean; mark?: boolean; algoEnabled?
       return presentAlgoProgress(parent, 0n);
     },
     async pauseAlgo(p: Principal, parentId: string) {
-      return engine.pause(p.userId, parentId);
+      await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
+      return persistAlgoMutation(engine, store, engine.pause(p.userId, parentId));
     },
     async resumeAlgo(p: Principal, parentId: string) {
-      return engine.resume(p.userId, parentId);
+      await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
+      return persistAlgoMutation(engine, store, engine.resume(p.userId, parentId));
     },
     async cancelAlgo(p: Principal, parentId: string) {
-      return engine.cancel(p.userId, parentId);
+      await hydrateAlgoIfMissing(engine, store, p.userId, parentId);
+      return persistAlgoCancelAttempt(engine, store, p.userId, parentId);
     },
     async tickAlgo(parentId: string) {
-      return engine.tick(parentId);
+      await hydrateAlgoFromStore(engine, store, parentId);
+      const result = await engine.tick(parentId);
+      const live = engine.get(parentId);
+      if (live) await persistAlgoMutation(engine, store, live);
+      return result;
     },
   };
 
@@ -331,7 +328,7 @@ describe('D26-P1-T4 public doors — TWAP children pause overdue no fake fills',
       limitPrice: '100',
     });
     expect(refused.statusCode).toBe(400);
-    expect(refused.body.error?.message ?? '').toMatch(/refusing TWAP rather than inventing/);
+    expect(refused.body.error?.message ?? '').toMatch(/refusing algo rather than inventing/);
     await app.close();
   });
 

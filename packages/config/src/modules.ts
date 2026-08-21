@@ -35,6 +35,7 @@ export const MODULE_IDS = [
   // Phase 2 · TRADE
   'matching',
   'trade',
+  'execution',
   'ws',
   // Phase 3 · PAY + P2P
   'pay',
@@ -78,6 +79,9 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
 
   matching: { id: 'matching', service: 'svc-matching', planes: ['fiat'], phase: '2', custodial: false },
   trade: { id: 'trade', service: 'svc-trade', planes: ['fiat'], phase: '2', custodial: true },
+  // House-desk tenancy mechanism only (D26-P0-01 Stage-1). Non-custodial: no
+  // balances, no ledger recipes in this process. Internal-venue half blocked.
+  execution: { id: 'execution', service: 'svc-execution', planes: ['fiat'], phase: '2', custodial: false },
   // Infrastructure, like `edge`. It re-broadcasts public market data and holds
   // nothing: no database, no bus, no INTERNAL_SERVICE_SECRET, no ledger client.
   // `custodial: false` is not an aspiration here — there is no code path in the

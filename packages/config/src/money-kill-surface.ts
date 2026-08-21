@@ -20,9 +20,12 @@
  * Catalogue + invariants only. No I/O. Behaviour is proved by
  * `services/svc-edge/src/money-routes.kill-switch.test.ts` and the money matrix
  * in `control-plane.e2e.test.ts` (flip via `/admin/kill-switches`).
+ *
+ * Operator incident steps stay in `docs/OPS-KILL-SWITCH-RUNBOOK.md` (P3-10).
+ * This file is the mapping the gate enforces — not a second runbook.
  */
 
-import { MODULES, MODULE_IDS, type ModuleId } from './modules.js';
+import { MODULES, MODULE_IDS, isModuleId, type ModuleId } from './modules.js';
 
 /** How a money door is halted from the shared operator surface. */
 export type MoneyKillControl =
@@ -495,5 +498,104 @@ export function assertMoneyKillResidualsPresent(): readonly string[] {
   if (!edgeKillableMoneyModules().includes('agents')) {
     failures.push('agents must be edge-killable — metering bills from the shared kill surface');
   }
+  return failures;
+}
+
+/**
+ * Edge prefix as declared in `svc-edge` `UPSTREAMS`. Passed in so this package
+ * never imports the edge (sibling X6 owns that tree).
+ */
+export interface MoneyEdgeUpstream {
+  readonly prefix: string;
+  readonly module: string;
+}
+
+/**
+ * Modules whose public edge prefixes must have a catalogue kill mapping.
+ *
+ * Custodial modules move value. `agents` is non-custodial in MODULES but
+ * metering bills via ledger recipes, so it sits on the same surface.
+ */
+export function moneyRouteKillModules(): readonly ModuleId[] {
+  return MODULE_IDS.filter((id) => id === 'agents' || MODULES[id].custodial);
+}
+
+function pathUnderPrefix(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}/`);
+}
+
+function longestMatchingPrefix(path: string, upstreams: readonly MoneyEdgeUpstream[]): MoneyEdgeUpstream | undefined {
+  return [...upstreams].filter((u) => pathUnderPrefix(path, u.prefix)).sort((a, b) => b.prefix.length - a.prefix.length)[0];
+}
+
+/**
+ * Fail closed: a new money edge prefix without a `MONEY_PUBLIC_DOORS` row is
+ * an unmapped route — the operator cannot prove it is killable from the
+ * shared surface. Empty upstream lists fail (vacuous green is how the last
+ * hole survived).
+ *
+ * Callers pass the live `UPSTREAMS` table (CI gate parses `routes.ts`; unit
+ * tests pass fixtures including a deliberate unmapped prefix).
+ */
+export function assertMoneyRoutesHaveKillMapping(upstreams: readonly MoneyEdgeUpstream[]): readonly string[] {
+  const failures: string[] = [];
+  if (upstreams.length === 0) {
+    failures.push('no edge upstreams provided — money-route kill mapping would pass vacuously');
+    return failures;
+  }
+
+  const moneyModules = new Set<string>(moneyRouteKillModules());
+
+  for (const upstream of upstreams) {
+    if (!moneyModules.has(upstream.module)) continue;
+    const control = isModuleId(upstream.module) ? moneyKillControlFor(upstream.module) : undefined;
+    if (!control) {
+      failures.push(`money route prefix "${upstream.prefix}" names unknown module "${upstream.module}" — no kill mapping`);
+      continue;
+    }
+    if (control.kind === 'ledger-freeze') {
+      failures.push(
+        `money route prefix "${upstream.prefix}" maps to ledger — the book is halted at /admin/ledger/freeze, not an /api prefix`,
+      );
+      continue;
+    }
+    if (control.kind === 'not-deployed') {
+      failures.push(
+        `money route prefix "${upstream.prefix}" (module ${upstream.module}) is live on the edge but kill control is not-deployed — add a MONEY_PUBLIC_DOORS row and an edge-module mapping`,
+      );
+      continue;
+    }
+    if (control.kind === 'via-sibling') {
+      failures.push(
+        `money route prefix "${upstream.prefix}" (module ${upstream.module}) is live on the edge; halt via ${control.haltVia} is for services with no browser door`,
+      );
+      continue;
+    }
+    const covering = MONEY_PUBLIC_DOORS.filter((d) => d.module === upstream.module && pathUnderPrefix(d.path, upstream.prefix));
+    if (covering.length === 0) {
+      failures.push(
+        `money route prefix "${upstream.prefix}" (module ${upstream.module}) has no kill mapping in MONEY_PUBLIC_DOORS — a new money door that is not in the catalogue cannot be proved killable from /admin/kill-switches`,
+      );
+    }
+  }
+
+  for (const door of MONEY_PUBLIC_DOORS) {
+    if (door.control.kind !== 'edge-module') {
+      failures.push(`money door "${door.id}" must use edge-module kill mapping (shared /admin/kill-switches surface)`);
+      continue;
+    }
+    if (door.control.module !== door.module) {
+      failures.push(`money door "${door.id}" kill mapping module ${door.control.module} !== door module ${door.module}`);
+    }
+    const match = longestMatchingPrefix(door.path, upstreams);
+    if (!match) {
+      failures.push(`money door "${door.id}" path ${door.path} matches no edge prefix — unmapped (will never hit the kill guard)`);
+    } else if (match.module !== door.module) {
+      failures.push(
+        `money door "${door.id}" path ${door.path} resolves to prefix ${match.prefix} module ${match.module}, catalogue says ${door.module}`,
+      );
+    }
+  }
+
   return failures;
 }

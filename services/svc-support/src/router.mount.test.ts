@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createSupportRouter } from './router.js';
-import type { SupportService } from './support-service.js';
+import { SupportError, type SupportService } from './support-service.js';
+import { userCopy } from './user-copy.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -57,16 +58,36 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     listComments: vi.fn(async () => []),
     setStatus: vi.fn(),
     listKb: vi.fn(async () => [
-      { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+      {
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        revision: 1,
+        published: true,
+      },
     ]),
     searchKb: vi.fn(async () => [
-      { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' },
+      {
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        revision: 1,
+        published: true,
+      },
     ]),
-    getKbArticle: vi.fn(async (id: string) =>
-      id === 'kb-account-access'
-        ? { id: 'kb-account-access', titleKey: 'support.kb.account_access.title', bodyKey: 'support.kb.account_access.body' }
-        : null,
-    ),
+    getKbArticle: vi.fn(async (q: string | { id: string }) => {
+      const id = typeof q === 'string' ? q : q.id;
+      return id === 'kb-account-access'
+        ? {
+            id: 'kb-account-access',
+            titleKey: 'support.kb.account_access.title',
+            bodyKey: 'support.kb.account_access.body',
+            version: 1,
+            revision: 1,
+            published: true,
+          }
+        : null;
+    }),
     listOperatorQueue: vi.fn(async () => ({ status: 'empty' as const })),
     peekNext: vi.fn(async () => null),
     claimForOperator: vi.fn(),
@@ -74,6 +95,20 @@ function stubSupport(overrides: Partial<SupportService> = {}): SupportService {
     readAccountState: vi.fn(async () => ({ status: 'unread' as const, reason: 'plane_dark' as const })),
     escalate: vi.fn(),
     getCaseFile: vi.fn(async () => null),
+    publishKb: vi.fn(async () => ({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      revision: 2,
+      published: true,
+    })),
+    unpublishKb: vi.fn(async () => ({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      revision: 1,
+      published: false,
+    })),
     ...overrides,
   } as unknown as SupportService;
 }
@@ -120,6 +155,43 @@ describe('svc-support mount', () => {
     const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
     expect(kb).toHaveLength(1);
     expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
+    expect(kb[0]).toMatchObject({ revision: 1, published: true });
+  });
+
+  it('refuses publishKb / unpublishKb without support:ops', async () => {
+    const support = stubSupport();
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(
+      caller.publishKb({
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        baseRevision: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.unpublishKb({ id: 'kb-account-access', baseRevision: 1 })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(support.publishKb).not.toHaveBeenCalled();
+    expect(support.unpublishKb).not.toHaveBeenCalled();
+  });
+
+  it('publishKb requires support:ops and reaches the service', async () => {
+    const support = stubSupport();
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const published = await createSupportRouter(support).createCaller(signed(op)).publishKb({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      baseRevision: 1,
+    });
+    expect(published.revision).toBe(2);
+    expect(support.publishKb).toHaveBeenCalledWith({
+      id: 'kb-account-access',
+      titleKey: 'support.kb.account_access.title',
+      bodyKey: 'support.kb.account_access.body',
+      baseRevision: 1,
+    });
   });
 
   it('searchKb and getKb are public', async () => {
@@ -127,11 +199,49 @@ describe('svc-support mount', () => {
     const caller = createSupportRouter(support).createCaller(anonymous());
     const found = await caller.searchKb({ q: 'account' });
     expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ revision: 1, published: true });
     expect(support.searchKb).toHaveBeenCalledWith('account');
     const one = await caller.getKb({ id: 'kb-account-access' });
-    expect(one?.id).toBe('kb-account-access');
+    expect(one).toMatchObject({ id: 'kb-account-access', revision: 1, published: true });
+    expect(support.getKbArticle).toHaveBeenCalledWith({ id: 'kb-account-access', version: undefined });
     const missing = await caller.getKb({ id: 'nope' });
     expect(missing).toBeNull();
+  });
+
+  it('getKb passes an explicit version and maps unknown-version refuse by name', async () => {
+    const support = stubSupport({
+      getKbArticle: vi.fn(async (q: { id: string; version?: number }) => {
+        if (q.version === 99) throw new SupportError('support.kb_version_unknown', 'support.kb_version_unknown');
+        return {
+          id: q.id,
+          titleKey: 'support.kb.account_access.title',
+          bodyKey: 'support.kb.account_access.body',
+          version: q.version ?? 1,
+          revision: q.version ?? 1,
+          published: true,
+        };
+      }),
+    });
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    const v1 = await caller.getKb({ id: 'kb-account-access', version: 1 });
+    expect(v1).toMatchObject({ version: 1 });
+    expect(support.getKbArticle).toHaveBeenCalledWith({ id: 'kb-account-access', version: 1 });
+    await expect(caller.getKb({ id: 'kb-account-access', version: 99 })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('support.kb_version_unknown'),
+    });
+  });
+
+  it('searchKb/getKb stay empty when the desk has no published articles', async () => {
+    const support = stubSupport({
+      searchKb: vi.fn(async () => []),
+      getKbArticle: vi.fn(async () => null),
+    });
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    expect(await caller.searchKb({ q: '' })).toEqual([]);
+    expect(await caller.searchKb({ q: 'account' })).toEqual([]);
+    expect(await caller.getKb({ id: 'kb-account-access' })).toBeNull();
+    expect(await caller.getKb({ id: 'kb-default' })).toBeNull();
   });
 
   it('refuses listAll without support:ops', async () => {
@@ -177,6 +287,52 @@ describe('svc-support mount', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('maps a terminal user comment to PRECONDITION_FAILED', async () => {
+    const support = stubSupport({
+      comment: vi.fn(async () => {
+        throw new SupportError('comment refused: ticket is terminal', 'support.comment.terminal');
+      }),
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.comment({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', body: 'Please reopen.' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('maps a missing ticket to catalog not-found copy, not invented English', async () => {
+    const support = stubSupport({
+      getTicket: vi.fn(async () => {
+        throw new SupportError('ticket not found', 'support.not_found');
+      }),
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.get({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: userCopy('support.not_found'),
+    });
+  });
+
+  it('maps a KB stale-revision refuse to the dotted key, not English', async () => {
+    const support = stubSupport({
+      publishKb: vi.fn(async () => {
+        throw new SupportError('KB revision is stale', 'support.kb.revision_stale');
+      }),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    await expect(
+      caller.publishKb({
+        id: 'kb-account-access',
+        titleKey: 'support.kb.account_access.title',
+        bodyKey: 'support.kb.account_access.body',
+        baseRevision: 1,
+      }),
+    ).rejects.toMatchObject({
+      code: 'CONFLICT',
+      message: userCopy('support.kb.revision_stale'),
+    });
+  });
+
   it('listComments requires authentication', async () => {
     const support = stubSupport();
     await expect(
@@ -214,6 +370,8 @@ describe('svc-support mount', () => {
             score: 70,
             ageMs: 0,
             createdAt,
+            timingKind: 'score_not_promise' as const,
+            sla: false as const,
           },
         ],
       })),
@@ -226,6 +384,8 @@ describe('svc-support mount', () => {
         score: 70,
         ageMs: 0,
         createdAt,
+        timingKind: 'score_not_promise' as const,
+        sla: false as const,
       })),
       claimForOperator: vi.fn(async () => ({
         id: ticketId,
@@ -326,6 +486,22 @@ describe('svc-support mount', () => {
     const grounding = await createSupportRouter(support).createCaller(signed(op)).accountState({ ticketId: TICKET });
     expect(grounding).toMatchObject({ status: 'read' });
     expect(support.readAccountState).toHaveBeenCalledWith({ operatorId: OP, ticketId: TICKET });
+  });
+
+  it('accountState names identity grounding unwired as PRECONDITION_FAILED, not unread', async () => {
+    const support = stubSupport({
+      readAccountState: vi.fn(async () => {
+        throw new SupportError(
+          'identity grounding unwired: INTERNAL_SERVICE_SECRET missing (named refuse, not plane_dark)',
+          'support.identity_grounding_unwired',
+        );
+      }),
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    await expect(createSupportRouter(support).createCaller(signed(op)).accountState({ ticketId: TICKET })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('support.identity_grounding_unwired'),
+    });
   });
 
   it('accountState takes NO userId — there is no platform-wide account lookup here', async () => {

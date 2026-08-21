@@ -140,13 +140,13 @@ if (!available) {
                bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
                bank.card_cashback, bank.card_settlements, bank.card_authorizations, bank.cards,
-               bank.ramp_offramps, bank.ramp_onramps
+               bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), { nativeAssetId: 'IFC' });
     router = createBankRouter(bank);
-  });
+  }, 30_000);
 
   /**
    * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
@@ -323,6 +323,40 @@ if (!available) {
       expect(await availableOf(USER_B, 'USDT')).toBe('80');
       expect(ledger.totalsByAsset().USDT).toBe('0');
     });
+
+    it('refuses user-to-user transfer when dest user is missing — nothing posted', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_A, 'USDT', '50');
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+      await expect(
+        bank.transfers.transferToUser({
+          transferId: 'user-transfer-missing',
+          fromSpaceId: a.id,
+          toUserId: USER_C,
+          amount: amt('10'),
+        }),
+      ).rejects.toMatchObject({ code: 'bank.dest_user_missing' });
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(await availableOf(USER_A, 'USDT')).toBe('50');
+    });
+
+    it('transfers to the dest user through ledger-client', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      await fund(USER_A, 'USDT', '25');
+      const moved = await bank.transfers.transferToUser({
+        transferId: 'user-transfer-stored',
+        fromSpaceId: a.id,
+        toUserId: USER_B,
+        amount: amt('25'),
+      });
+      expect(moved.amount).toBe('25');
+      expect(moved.ledgerTxId).toBeTruthy();
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.includes('user-transfer-stored'))).toBe(true);
+      expect(await availableOf(USER_A, 'USDT')).toBe('0');
+      expect(await availableOf(USER_B, 'USDT')).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
   });
 
   // ══ Scheduled transfers ═══════════════════════════════════════════════════
@@ -345,6 +379,47 @@ if (!available) {
       });
       return { primary, rent, schedule };
     }
+
+    it('refuses standing order to a dest user with no primary — no row, nothing posted', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await fund(USER_A, 'USDT', '50');
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+      await expect(
+        bank.transfers.scheduleToUser({
+          userId: USER_A,
+          fromSpaceId: a.id,
+          toUserId: USER_C,
+          amount: amt('10'),
+          cadence: 'monthly',
+          startsAt: new Date('2026-01-01T09:00:00Z'),
+        }),
+      ).rejects.toMatchObject({ code: 'bank.dest_user_missing' });
+      const rows = await sql`SELECT id FROM bank.scheduled_transfers`;
+      expect(rows).toHaveLength(0);
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(await availableOf(USER_A, 'USDT')).toBe('50');
+    });
+
+    it('schedules to the dest user and fires through ledger-client', async () => {
+      const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
+      await bank.spaces.ensurePrimary(USER_B, 'USDT');
+      await fund(USER_A, 'USDT', '100');
+      const schedule = await bank.transfers.scheduleToUser({
+        userId: USER_A,
+        fromSpaceId: a.id,
+        toUserId: USER_B,
+        amount: amt('25'),
+        cadence: 'monthly',
+        startsAt: new Date('2026-01-01T09:00:00Z'),
+      });
+      const now = new Date('2026-01-01T10:00:00Z');
+      const report = await bank.transfers.runDueTransfers({ now });
+      expect(report.settled).toBe(1);
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.includes(schedule.id))).toBe(true);
+      expect(await availableOf(USER_A, 'USDT')).toBe('75');
+      expect(await availableOf(USER_B, 'USDT')).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
 
     it('fires ONCE even when the job runs twice', async () => {
       const { rent, schedule } = await standingOrder('100');
@@ -374,7 +449,7 @@ if (!available) {
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
-    });
+    }, 20_000);
 
     /**
      * Isolation residual (audit B-3 class): a mid-drive throw (frozen ledger,
@@ -1393,6 +1468,24 @@ if (!available) {
       expect(await availableOf(USER_A, 'USDT')).toBe('900');
     });
 
+    it('refuses a deposit id reused by the same caller for a different pool', async () => {
+      const firstPool = await openPool();
+      const otherPool = await openPool({ apr: 1200 });
+      await fund(USER_A, 'USDT', '1000');
+
+      const positionId = '7f000000-0000-4000-8000-00000000bbbd';
+      await bank.earn.deposit({ poolId: firstPool.id, userId: USER_A, amount: amt('100'), positionId });
+
+      await expect(bank.earn.deposit({ poolId: otherPool.id, userId: USER_A, amount: amt('100'), positionId })).rejects.toMatchObject({
+        code: 'bank.position_conflict',
+      });
+
+      expect(await stakedOf(USER_A, 'USDT')).toBe('100');
+      expect(await availableOf(USER_A, 'USDT')).toBe('900');
+      expect(formatAmount(await bank.earn.poolSize(firstPool.id))).toBe('100');
+      expect(formatAmount(await bank.earn.poolSize(otherPool.id))).toBe('0');
+    });
+
     it('still treats a genuine retry of the same deposit as one deposit', async () => {
       const pool = await openPool();
       await fund(USER_A, 'USDT', '1000');
@@ -2066,7 +2159,7 @@ if (!available) {
         // ── Auto-invest (§31:805 F-plane) ────────────────────────────────────
         // Rules are instructions; runs are write-once records. No running balance.
         'auto_invest_rules.threshold': 'a POLICY keep-amount for a threshold sweep; instruction, not a holding',
-        'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule; instruction, not a holding',
+        'auto_invest_rules.amount': 'a POLICY spend for a DCA schedule, or round-up granularity; instruction, not a holding',
         'auto_invest_runs.amount': 'a RECORD of one run (settled or rejected); written once',
         'business_accounts.spend_threshold': 'a POLICY dual-control floor; instruction, not a holding',
         'business_approvals.amount': 'a RECORD of one proposed/approved transfer; written once',

@@ -21,6 +21,7 @@
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down -v && docker compose up -d",
     "platform:up": "docker compose -f docker-compose.apps.yml up -d --build",
+    "fleet:tip-images": "node tooling/scripts/fleet-tip-image.mjs",
     "platform:down": "docker compose -f docker-compose.apps.yml down",
     "platform:logs": "docker compose -f docker-compose.apps.yml logs -f",
     "platform:ps": "docker compose -f docker-compose.apps.yml ps",
@@ -32,6 +33,9 @@
     "tracker": "node tooling/scripts/tracker.mjs",
     "tracker:check": "node tooling/scripts/tracker.mjs --check",
     "scan:agent-autoload": "node tooling/ci/agent-autoload-scan.mjs",
+    "graphify:extract": "graphify extract . --no-cluster && graphify cluster-only . --no-label --no-viz && graphify export html",
+    "graphify:update": "graphify update .",
+    "graphify:peace": "node tooling/scripts/graphify-peace-check.mjs",
     "gates": "node tooling/ci/gates.mjs",
     "value-gate:self-test": "node tooling/ci/value-gate.mjs --self-test",
     "pr": "node tooling/scripts/agent-pr.mjs",
@@ -53,8 +57,13 @@
     "scan:money-property:mutate": "node tooling/ci/money-property.mutation.mjs",
     "scan:wallet-rpc-mainnet:mutate": "node tooling/ci/wallet-rpc-mainnet-scan.mutation.mjs",
     "scan:compose-secrets": "node tooling/ci/compose-secret-parity.mjs",
+    "scan:secret-rotation-readiness": "node tooling/ci/secret-rotation-readiness-scan.mjs",
     "scan:vendor-shell": "node tooling/ci/vendor-shell-scan.mjs",
     "scan:vendor-java-money": "node tooling/ci/vendor-java-money-scan.mjs",
+    "scan:vendor-java-jar-truth": "node tooling/ci/vendor-java-jar-truth.mjs",
+    "vendor-java:rebuild": "node tooling/scripts/vendor-java-rebuild.mjs",
+    "map:vendor-java-money-plane": "node tooling/scripts/vendor-java-money-plane-map.mjs",
+    "map:vendor-java-money-plane:self-test": "node tooling/scripts/vendor-java-money-plane-map.mjs --self-test",
     "scan:dual-book-door": "node tooling/ci/dual-book-door-scan.mjs",
     "scan:test-db": "node tooling/ci/test-db-scan.mjs",
     "scan:skip-honesty": "node tooling/ci/skip-honesty-scan.mjs",
@@ -105,8 +114,8 @@
     "eslint": "^9.17.0",
     "prettier": "^3.4.2",
     "rimraf": "^6.0.1",
-    "tsx": "^4.23.7",
-    "turbo": "^2.10.8",
+    "tsx": "^4.23.12",
+    "turbo": "^2.10.10",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   },
@@ -115,7 +124,8 @@
       "fast-uri@>=3.0.0 <3.1.5": "3.1.5",
       "fast-uri@>=4.0.0 <4.1.2": "4.1.2",
       "js-yaml@>=4.0.0 <4.3.1": "4.3.1",
-      "nanoid@<3.3.17": "3.3.17"
+      "nanoid@<3.3.18": "3.3.18",
+      "nanoid@>=4.0.0 <5.1.6": "5.1.6"
     }
   }
 }

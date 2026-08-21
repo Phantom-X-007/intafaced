@@ -5,8 +5,12 @@
  * No second ranking rule, no invented spreads/fees, no internal house legs.
  */
 export {
+  CROSS_EXCHANGE_DEFAULT_MID,
+  CROSS_EXCHANGE_DEFAULT_SPREAD_BPS,
+  HOUSE_ARB_PREFERENCE_BPS,
   isCrossRailPair,
   isExternalVenueKind,
+  isHouseBookKind,
   scanExternalCrossExchangeArb,
   type ArbInventory,
   type ArbOpportunity,

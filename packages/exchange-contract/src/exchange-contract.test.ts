@@ -11,7 +11,7 @@ import {
   exchangeErrorSchema,
   marketSchema,
 } from './schemas.js';
-import { REST_ROUTES, WS_CHANNELS } from './api.js';
+import { REST_ROUTES, WS_CHANNELS, RATE_LIMITS } from './api.js';
 
 describe('CCXT unified symbols', () => {
   it('parses a spot pair', () => {
@@ -180,6 +180,13 @@ describe('API surface', () => {
   it('marks private WS channels as scoped', () => {
     expect(WS_CHANNELS.orderbook.private).toBe(false);
     expect(WS_CHANNELS.positions.private).toBe(true);
+  });
+
+  it('publishes the edge-enforced 300/min — not a dead 1200/600/20 contract', () => {
+    expect(RATE_LIMITS.publicPerMinute).toBe(300);
+    expect(RATE_LIMITS.privatePerMinute).toBe(300);
+    expect('ordersPerSecond' in RATE_LIMITS).toBe(false);
+    expect('weightPerMinute' in RATE_LIMITS).toBe(false);
   });
 
   it('declares a millisecond span for every timeframe', () => {

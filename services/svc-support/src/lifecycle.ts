@@ -16,8 +16,10 @@ import type { SupportTicketStatus } from '@intafaced/contracts';
  *
  * `resolved → open` IS legal and deliberately so: a user replying "this is not
  * fixed" must be able to reach a human without opening a second ticket that
- * loses the history. That is the reopen path, and it is recorded like any other
- * transition rather than being a special case in the store.
+ * loses the history. The owner path is `comment()` — a user reply on `resolved`
+ * writes this edge (and clears the assignee so the row re-enters the queue).
+ * Operator `setStatus(resolved → open)` remains the staff path. Both record a
+ * trail row; neither invents a second ticket.
  *
  * `closed` has no outgoing edges. That is the whole of the terminality claim —
  * asserted here and, because a psql session can route around TypeScript, again

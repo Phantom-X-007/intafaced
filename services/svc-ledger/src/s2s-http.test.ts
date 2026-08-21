@@ -9,7 +9,15 @@ import {
 } from '@intafaced/ledger-client';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
-import { handleS2sBalance, handleS2sBalances, handleS2sHistory, handleS2sPost, httpError, registerS2sHttp } from './s2s-http.js';
+import {
+  handleS2sBalance,
+  handleS2sBalances,
+  handleS2sHistory,
+  handleS2sPortfolio,
+  handleS2sPost,
+  httpError,
+  registerS2sHttp,
+} from './s2s-http.js';
 import { HISTORY_MAX_ENTRIES, HistoryTooLargeError, type HistoryEntry } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 
@@ -131,6 +139,17 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(byId['avail-1']).toMatchObject({ kind: 'available', purpose: '', amount: '5' });
     // Same asset+kind, different purpose — the whole point of this field.
     expect(byId['hold-a']!.purpose).not.toBe(byId['hold-b']!.purpose);
+  });
+
+  it('returns empty custodial holdings and a named-absent indexer, never a zero chain balance', async () => {
+    const out = await handleS2sPortfolio(stubService({ balances: async () => [] }), {
+      ownerType: 'user',
+      ownerId: USER,
+    });
+
+    expect(out.custodial).toEqual([]);
+    expect(out.indexer).toEqual({ status: 'absent', reason: 'indexer.readmodels_unbuilt' });
+    expect(out.indexer).not.toHaveProperty('amount');
   });
 });
 
@@ -426,7 +445,7 @@ describe('s2s HTTP — service credentials', () => {
   it('refuses unauthenticated reads on every route, not just the write', async () => {
     const app = await mount();
 
-    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history']) {
+    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history', '/trpc/portfolio']) {
       const res = await send(app, path, {}, wire({ ownerType: 'treasury', ownerId: 'rail:crypto-native' }));
       expect(res.statusCode).toBe(401);
     }

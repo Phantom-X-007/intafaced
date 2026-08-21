@@ -21,11 +21,14 @@
  *
  * A dark copy plane is known before any tool is touched. Opening a metered
  * session to discover it would bill a user for the platform's own unreadiness.
+ * A live plane without a sealed trade.copy leaders allowlist is the same class
+ * of unreadiness (Class X) — refuse unbilled.
  */
 
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
+import { isLiveLeaderPlaneAllowlisted, refuseLiveLeaderPlane } from './live-leader-plane-refuse.js';
 import { isForbiddenReturnsRankKey, refuseReturnsRankedMarketingBoard } from './returns-board-refuse.js';
 import { buildLeaderStats, type AuditWrite, type CopyPlaneState, type LeaderPerformanceFixture, type LeaderStat } from './stats.js';
 
@@ -167,6 +170,16 @@ export async function runCopyIntelStatsSession(input: CopyIntelRunInput): Promis
     return {
       status: 'empty',
       userMessageKey: 'agents.copy_intel.empty',
+      metering: unmetered(input.feeAssetId),
+    };
+  }
+
+  // Live trade.copy leader plane is Class X. Caller allowlists do not invent it.
+  if (input.plane === 'live' && !isLiveLeaderPlaneAllowlisted(input.leaderAllowlist)) {
+    return {
+      ...refuseLiveLeaderPlane(),
+      fixturesRefusedByGuardrail: 0,
+      writesRefusedByGuardrail: 0,
       metering: unmetered(input.feeAssetId),
     };
   }

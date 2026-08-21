@@ -319,6 +319,13 @@ jobs:
     # this environment cannot read them.
     environment: staging
 
+    # ADR fail-closed policy switch (D26-P3-01). Named here so a later edit
+    # that sets APP_ENV=dev on this job is a one-line diff against law, not a
+    # silent string buried in the remote script. The step below still asserts
+    # the value before ssh, and the remote script asserts it again.
+    env:
+      APP_ENV: staging
+
     permissions:
       # Read, and nothing else. Note what is NOT here and cannot be added by
       # accident: no `packages: write` (this job publishes nothing), no
@@ -332,6 +339,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.preflight.outputs.sha }}
+
+      - name: APP_ENV is staging (fail-closed)
+        run: |
+          set -euo pipefail
+          if [ "${APP_ENV}" != "staging" ]; then
+            echo "::error::APP_ENV must be staging (ADR 2026-08-08 fail-closed). Got '${APP_ENV:-unset}'"
+            exit 1
+          fi
+          echo "APP_ENV=staging"
 
       # FAIL LOUDLY ON A MISSING SECRET — never skip, never default.
       #
@@ -487,12 +503,16 @@ jobs:
           IMAGE_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          if [ "${APP_ENV}" != "staging" ]; then
+            echo "::error::APP_ENV must be staging (ADR 2026-08-08 fail-closed). Got '${APP_ENV:-unset}'"
+            exit 1
+          fi
           ssh_opts="-i $RUNNER_TEMP/ssh/id -o UserKnownHostsFile=$RUNNER_TEMP/ssh/known_hosts -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes -o BatchMode=yes"
           repo=$(printf '%s' "$IMAGE_REPO" | tr '[:upper:]' '[:lower:]')
 
           # shellcheck disable=SC2086
           ssh $ssh_opts "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
-            "APP_ENV=staging REPO='$repo' APP_DIGEST='$APP_DIGEST' SHELL_DIGEST='$SHELL_DIGEST' bash -s" <<'REMOTE'
+            "APP_ENV='$APP_ENV' REPO='$repo' APP_DIGEST='$APP_DIGEST' SHELL_DIGEST='$SHELL_DIGEST' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "$HOME/intafaced-staging"
 

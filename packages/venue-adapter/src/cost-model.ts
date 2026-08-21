@@ -1,6 +1,7 @@
 import { type Amount, add, mulBps, sub } from '@intafaced/ledger-client';
 import { isGraded, type MarketDataAdapter, type VenueLatencyGrade } from '@intafaced/venue-contracts';
-import { routingWeightFromGrade } from './fabric/latency.js';
+import { routingWeightFromCapture, type CaptureRoutingRecord } from './fabric/capture-routing.js';
+import { measuredLatencyMs, routingWeightFromGrade } from './fabric/latency.js';
 
 /**
  * §28 SMART ORDER ROUTER COST MODEL (D26-P1-X3).
@@ -18,14 +19,21 @@ import { routingWeightFromGrade } from './fabric/latency.js';
  *     (routing weight 0). We do not default impact or transfer to zero: a silent
  *     zero is a claim that the cost is free.
  *   · **Latency grade** — consumed via `routingWeightFromGrade` (D26-P1-X2).
- *     Unscored (`grade: null` / `!isGraded`) → weight **zero**. Letter→bps
- *     scaling is NOT invented here (D-S-14 owner magnitudes); a graded venue
- *     is eligible (weight 1) and its measured `latencyMs` remains the equal-
- *     price tie-break in the router. Inventing a second latency-shaped thumb
- *     on the price scale is forbidden by the house-desk ADR.
+ *     Unscored (`grade: null` / `!isGraded`) **or** no live `p95Ms` → weight
+ *     **zero**. Missing measurement is `null` from `liveLatencyScoreMs`, never
+ *     a sentinel number and never an estimate. Letter→bps scaling is NOT
+ *     invented here (D-S-14 owner magnitudes); a graded venue with a measured
+ *     p95 is eligible (weight 1) and that p95 remains the equal-price
+ *     tie-break in the router. Inventing a second latency-shaped thumb on the
+ *     price scale is forbidden by the house-desk ADR.
+ *   · **Capture fact** (optional, D26-P1-X2 deepen · coords #1739) — when
+ *     supplied, a capture `hole` → weight **zero**. Absence in the lake must
+ *     not be routed as if an empty book were observed. Omit the field when
+ *     capture was not consulted (backward compatible).
  *
- * Leverage: Connect fabric `routingWeightFromGrade` / `isGraded`; existing
- * fee-inclusive `effectivePrice` arithmetic in the router.
+ * Leverage: Connect fabric `routingWeightFromGrade` / `isGraded`; capture
+ * score-feed `routingWeightFromCapture`; existing fee-inclusive
+ * `effectivePrice` arithmetic in the router.
  */
 
 /** One venue's §28:770 cost terms. Every field may be null = unknown. */
@@ -43,6 +51,11 @@ export interface SorCostTerms {
    * Connect latency grade. `null` or ungraded → routing weight 0 (D-S-18).
    */
   readonly latencyGrade: VenueLatencyGrade | null;
+  /**
+   * Optional capture fact (#1739 `CaptureRecord` shape). When set, a hole
+   * refuses the venue (weight 0). Omit when capture was not consulted.
+   */
+  readonly capture?: CaptureRoutingRecord | null;
 }
 
 export type SorStaticCostTerms = Omit<SorCostTerms, 'latencyGrade'>;
@@ -62,7 +75,19 @@ export function sorCostTermsFromAdapter(adapter: MarketDataAdapter, costs: SorSt
   };
 }
 
-export type CostModelRefuseReason = 'missing_fee' | 'missing_impact' | 'missing_transfer' | 'unscored_latency' | 'negative_term';
+/**
+ * Cost-model door for the live latency score.
+ *
+ * `null` means there is no measurement. Never `0`, never a sentinel, never an
+ * estimated round-trip. `scoreSorCost` turns that absence into routing weight 0.
+ */
+export function liveLatencyScoreMs(grade: VenueLatencyGrade | null): number | null {
+  if (grade === null) return null;
+  return measuredLatencyMs(grade);
+}
+
+export type CostModelRefuseReason =
+  'missing_fee' | 'missing_impact' | 'missing_transfer' | 'unscored_latency' | 'capture_hole' | 'negative_term';
 
 export interface CostModelAccepted {
   readonly ok: true;
@@ -94,7 +119,27 @@ function isMissingBps(value: number | null): value is null {
  * the latency grade is unscored. Never fabricates a default for a missing term.
  */
 export function scoreSorCost(terms: SorCostTerms): CostModelScore {
-  if (terms.latencyGrade === null || !isGraded(terms.latencyGrade) || routingWeightFromGrade(terms.latencyGrade) === 0) {
+  // Capture consulted and hole → zero weight before any fee invent temptation.
+  if (terms.capture != null && routingWeightFromCapture(terms.capture) === 0) {
+    const hole = terms.capture;
+    const detail =
+      hole.kind === 'hole'
+        ? (hole.detail ?? `capture hole (${hole.reason}) — D-S-18 forbids routing on absent books`)
+        : 'capture absence — D-S-18 forbids routing on absent books';
+    return {
+      ok: false,
+      routingWeight: 0,
+      reason: 'capture_hole',
+      detail,
+    };
+  }
+
+  if (
+    terms.latencyGrade === null ||
+    !isGraded(terms.latencyGrade) ||
+    routingWeightFromGrade(terms.latencyGrade) === 0 ||
+    liveLatencyScoreMs(terms.latencyGrade) === null
+  ) {
     return {
       ok: false,
       routingWeight: 0,
@@ -149,5 +194,5 @@ export function allInEffectivePrice(price: Amount, totalCostBps: number, side: '
 
 /** Map refuse reason → router rejection tag. */
 export function costRefuseToRouteReason(reason: CostModelRefuseReason): 'incomplete_cost' | 'zero_weight' {
-  return reason === 'unscored_latency' ? 'zero_weight' : 'incomplete_cost';
+  return reason === 'unscored_latency' || reason === 'capture_hole' ? 'zero_weight' : 'incomplete_cost';
 }

@@ -10,8 +10,9 @@
  * Quality is `mid` (two-sided book mid), not `index`. Liquidation consumers
  * already accept mid under the default MarkPolicy.
  *
- * Does not open WS streams here. Streaming/gap-detection stays inside the fabric
- * for adapters that need it.
+ * Snapshot poll remains the default. When `TRADE_VENUE_MARK_STREAM` is on,
+ * `index.ts` owns `MaintainedBook` lifecycle and this file mids the servable
+ * top — it still does not invent a feed.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * OPEN, UNFIXED: THIS FILE POLLS A CONTRACT THAT REFUSES TO OFFER POLLING
@@ -86,8 +87,8 @@
  * `MarkRequest` and is threaded to the level check without being re-decided.
  */
 import { formatAmount } from '@intafaced/ledger-client/money';
-import type { MarketDataAdapter } from '@intafaced/venue-contracts';
-import { BinanceSpotMarketData, BybitSpotMarketData } from '@intafaced/venue-adapter';
+import type { MarketDataAdapter, BookTop } from '@intafaced/venue-contracts';
+import { BinanceSpotMarketData, BybitSpotMarketData, OkxSpotMarketData } from '@intafaced/venue-adapter';
 import type { MarkRequest, MarkSource, QuotedMarkSource } from './liquidation-tick.js';
 import { markSourceFromBook, midFromBook } from './mark-source.js';
 import {
@@ -179,8 +180,9 @@ export function readObservedAt(snapshot: { observedAt?: unknown }): Date | null 
 
 /**
  * MarkSource that mids an external venue public book via MarketDataAdapter.
- * Inject the adapter — a real one (`BinanceSpotMarketData`, `BybitSpotMarketData`)
- * or a test double. This function knows nothing about which venue it is reading,
+ * Inject the adapter — a real one (`BinanceSpotMarketData`, `BybitSpotMarketData`,
+ * `OkxSpotMarketData`) or a test double. The factory below is how ops names it.
+ * This function knows nothing about which venue it is reading,
  * which is why the size-aware gate below applies to every venue for free and no
  * adapter can be given a threshold of its own.
  */
@@ -193,10 +195,8 @@ export function markSourceFromVenuePublicBook(input: {
   depthLimit?: number;
   /**
    * Both depth thresholds — the absolute floor at a best level, and the fraction
-   * of the priced position that must rest behind it. Optional, and omitting it
-   * applies the defaults; see `DEFAULT_MIN_BEST_LEVEL_NOTIONAL` and
-   * `DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL` in `mark-from-depth.ts` for the
-   * numbers and for whose ruling they are awaiting.
+   * of the priced position that must rest behind it. Omitted → D26-P0-14 sealed
+   * pair in `mark-from-depth.ts` (`'100'` quote + 100 bps). Not an open ruling.
    */
   depthPolicy?: DepthQuotePolicy;
 }): QuotedMarkSource {
@@ -221,6 +221,48 @@ export function markSourceFromVenuePublicBook(input: {
         // Venue down / rate limited / malformed — null, never invent a mid.
         return null;
       }
+    },
+  });
+}
+
+/**
+ * Mark from a *maintained* sequenced book (`MaintainedBook` / `book-feed.ts`).
+ *
+ * Polling `snapshotBook` on every liquidation tick is the contract violation
+ * this file's header records. The fabric already joins stream-first + snapshot.
+ * A desynced or unservable feed returns null — matching depth remains the
+ * fallback. Never invents a mid from a withheld book.
+ */
+export interface MaintainedVenueBookPort {
+  readonly servable: boolean;
+  top(): BookTop | null;
+  observedAt(): Date | null;
+}
+
+export function markSourceFromMaintainedVenueBook(input: {
+  resolveSymbol: VenueSymbolResolver;
+  bookForSymbol: (symbol: string) => MaintainedVenueBookPort | null;
+  policy?: MarkPolicy;
+  depthPolicy?: DepthQuotePolicy;
+}): QuotedMarkSource {
+  const depthPolicy = input.depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY;
+  return markSourceFromBook({
+    policy: input.policy,
+    async readBook(marketId, authorisesSize) {
+      const symbol = input.resolveSymbol(marketId);
+      if (symbol == null || symbol.trim() === '') return null;
+      const book = input.bookForSymbol(symbol);
+      if (book == null || !book.servable) return null;
+      const observedAt = book.observedAt();
+      if (observedAt == null) return null;
+      const top = book.top();
+      if (top == null) return null;
+      const snap: VenueTopOfBook = {
+        bids: top.bestBid != null && top.bestBidQty != null ? [[top.bestBid, top.bestBidQty]] : [],
+        asks: top.bestAsk != null && top.bestAskQty != null ? [[top.bestAsk, top.bestAskQty]] : [],
+      };
+      const { bestBid, bestAsk } = bestFromVenueBook(snap, depthRequirement(authorisesSize, depthPolicy));
+      return { bestBid, bestAsk, last: null, observedAt };
     },
   });
 }
@@ -323,25 +365,25 @@ export function parseVenueMarkSymbols(raw: string | undefined): Map<string, stri
  * whichever caller happened to pass the wrong shape.
  */
 export type VenueMarketDataOptions = ConstructorParameters<typeof BinanceSpotMarketData>[0] &
-  ConstructorParameters<typeof BybitSpotMarketData>[0];
+  ConstructorParameters<typeof BybitSpotMarketData>[0] &
+  ConstructorParameters<typeof OkxSpotMarketData>[0];
 
 /**
  * Supported venue ids for this thin mount.
  * Unknown id → null (refuse invent of an adapter).
  * Empty / off / none → null (feature off).
  *
- * Two venues, both PUBLIC market data and neither holding a credential. Two is
- * the number that matters rather than a step toward six: `latency.ts` grades
- * adapters against each other and `cross-check.ts` medians them, and with one
- * adapter both were mechanisms with nothing to compare — a grade with no peer and
- * a median of one. Adding an id here is what makes an adapter REACHABLE; an
- * adapter written and unregistered is a file, not a venue.
+ * Three public MarketDataAdapters, none holding a credential. `cross-check.ts`
+ * medians three mids; two leave the median inconclusive. Adding an id here is
+ * what makes an adapter REACHABLE from TRADE_VENUE_MARK_VENUE; an adapter
+ * written and unregistered is a file, not a venue.
  */
 export function createVenueMarketDataAdapter(venueId: string, options?: VenueMarketDataOptions): MarketDataAdapter | null {
   const id = venueId.trim().toLowerCase();
   if (!id || id === 'off' || id === 'none' || id === 'false') return null;
   if (id === 'binance-spot') return new BinanceSpotMarketData(options);
   if (id === 'bybit-spot') return new BybitSpotMarketData(options);
+  if (id === 'okx-spot') return new OkxSpotMarketData(options);
   return null;
 }
 
@@ -367,6 +409,11 @@ export function createConfiguredVenueMarkSource(input: {
    * `DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL`.
    */
   depthPolicy?: DepthQuotePolicy;
+  /**
+   * When set, marks come from the sequenced MaintainedBook (stream-first).
+   * Default unset keeps the snapshot poll (legacy, gated by staleness).
+   */
+  bookForSymbol?: (symbol: string) => MaintainedVenueBookPort | null;
 }): { source: QuotedMarkSource; venueId: string; symbolCount: number } | null {
   const venueId = input.venueId.trim().toLowerCase();
   // Feature off — empty / off / none never invents a mark port.
@@ -376,14 +423,24 @@ export function createConfiguredVenueMarkSource(input: {
   const adapter = input.adapter === undefined ? createVenueMarketDataAdapter(venueId) : input.adapter;
   if (!adapter) return null;
 
+  const resolveSymbol = (marketId: string) => map.get(marketId) ?? null;
+  const source = input.bookForSymbol
+    ? markSourceFromMaintainedVenueBook({
+        resolveSymbol,
+        bookForSymbol: input.bookForSymbol,
+        policy: input.policy,
+        ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
+      })
+    : markSourceFromVenuePublicBook({
+        adapter,
+        resolveSymbol,
+        policy: input.policy,
+        ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
+      });
+
   return {
     venueId,
     symbolCount: map.size,
-    source: markSourceFromVenuePublicBook({
-      adapter,
-      resolveSymbol: (marketId) => map.get(marketId) ?? null,
-      policy: input.policy,
-      ...(input.depthPolicy ? { depthPolicy: input.depthPolicy } : {}),
-    }),
+    source,
   };
 }

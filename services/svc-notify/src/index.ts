@@ -16,7 +16,7 @@ import { subscribeNotificationEvents } from './events.js';
 import { ALERT_SWEEP_INTERVAL_MS, AlertService, type AlertSweepReport } from './alerts/service.js';
 import { PostgresAlertStore } from './alerts/store.js';
 import { createTradeHttpMarkSource } from './alerts/trade-http-mark.js';
-import type { MarkSource } from './alerts/types.js';
+import { ALERT_KIND_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -183,6 +183,8 @@ app.get('/ready', async () => ({
   // promised evaluation and nothing evaluated.
   alerts: {
     ...alerts.evaluationStatus(),
+    unpublishedKinds: UNPUBLISHED_ALERT_KINDS,
+    unpublishedCode: ALERT_KIND_UNPUBLISHED,
     sweep: { lastAt: lastAlertSweepAt, ...(lastAlertSweep ?? { markets: 0, fired: 0, held: 0, refused: 0, refusals: {} }) },
   },
 }));

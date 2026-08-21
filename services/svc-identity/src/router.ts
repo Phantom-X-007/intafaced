@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
 import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
-import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
+import { AuthError, assertOperatorKycReview, type AuthService, type KycRecordView } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import {
@@ -31,8 +31,12 @@ import {
 } from './affiliates/commission-rate-law.js';
 import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
 import type { AccrualStore } from './affiliates/accrual-store.js';
+import { KYC_VAULT_UNWIRED } from './kyc/boot-vault.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
+import { FlagDisabledError } from '@intafaced/config';
+import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * svc-identity's API (§4.1).
@@ -131,9 +135,31 @@ function toTrpcError(err: unknown): TRPCError {
     });
   }
 
-  if (!(err instanceof AuthError)) {
-    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
+  if (err instanceof FlagDisabledError) {
+    // Drop clock / override / env pin — named code on the message so the
+    // client can tell disabled from drop_pending without a second field.
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
   }
+
+  if (err instanceof WaitlistError) {
+    switch (err.code) {
+      case 'waitlist.unbuilt':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
+      case 'waitlist.not_found':
+      case 'waitlist.unknown_referrer':
+        return new TRPCError({ code: 'NOT_FOUND', message: `${err.message} [${err.code}]`, cause: err });
+      case 'waitlist.self_referral':
+        return new TRPCError({ code: 'CONFLICT', message: `${err.message} [${err.code}]`, cause: err });
+      case 'waitlist.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+    }
+  }
+
+  if (!(err instanceof AuthError)) {
+    return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: userCopy('error.generic'), cause: err });
+  }
+
+  const message = userCopy(err.code);
 
   switch (err.code) {
     case 'auth.invalid_credentials':
@@ -141,37 +167,40 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.domain_not_allowed':
       // Deliberately the same shape as a wrong password: never confirm which
       // half of the credential was right (including "key ok, origin wrong").
-      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.mfa_required':
-      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Two-factor code required', cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.mfa_not_enrolled':
     case 'auth.webauthn_not_enrolled':
       // FORBIDDEN, not UNAUTHORIZED: retrying with a code cannot help. The
       // client has to send the user through enrolment first, and the two
       // need different UI.
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     case 'auth.webauthn_invalid':
-      return new TRPCError({ code: 'UNAUTHORIZED', message: 'Invalid credentials', cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.kyc_not_pending':
       return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+    case 'auth.kyc_agent_refused':
+      // Operator/agent refuse — keep the reviewed_by sentence. Not user catalog copy.
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.session_invalid':
     case 'auth.session_reused':
-      return new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
+      return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     case 'auth.handle_taken':
     case 'auth.email_taken':
     case 'auth.mfa_already_enrolled':
-      return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      return new TRPCError({ code: 'CONFLICT', message, cause: err });
     case 'auth.account_frozen':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     case 'auth.not_found':
-      return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      return new TRPCError({ code: 'NOT_FOUND', message, cause: err });
     case 'auth.sub_account_required':
     case 'auth.sub_account_same':
-      return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+      return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
     case 'auth.sub_account_denied':
     case 'auth.sub_account_revoked':
     case 'auth.sub_account_limit':
-      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
     case 'auth.totp_key_missing':
       // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
       return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
@@ -276,6 +305,11 @@ export function createIdentityRouter(
      * Injected so this router never holds a free SQL handle for records.
      */
     bindKycProviderRef?: (input: BindProviderRefInput) => Promise<BindProviderRefResult>;
+    /**
+     * Drop 0 waitlist + referral queue. Absent → named `waitlist.unbuilt`
+     * (no silent enroll). Wired in index.ts against SqlWaitlistStore.
+     */
+    waitlist?: WaitlistService;
   },
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
@@ -286,6 +320,7 @@ export function createIdentityRouter(
   const ledger = options.ledger;
   const kycDocs = options.kycDocs;
   const bindKycProviderRef = options.bindKycProviderRef;
+  const waitlist = options.waitlist;
 
   function requireReferral(): ReferralService {
     if (!referral) {
@@ -312,7 +347,7 @@ export function createIdentityRouter(
     if (!kycDocs) {
       throw new TRPCError({
         code: 'PRECONDITION_FAILED',
-        message: 'KYC document vault is not configured (set IDENTITY_KYC_DOC_KEY and wire kycDocs)',
+        message: `KYC document vault is not configured [${KYC_VAULT_UNWIRED}]`,
       });
     }
     return kycDocs;
@@ -326,6 +361,16 @@ export function createIdentityRouter(
       });
     }
     return bindKycProviderRef;
+  }
+
+  function requireWaitlist(): WaitlistService {
+    if (!waitlist) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Waitlist capture is not wired [waitlist.unbuilt]',
+      });
+    }
+    return waitlist;
   }
 
   return router({
@@ -711,11 +756,14 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
+            assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
             return presentKyc(
               await auth.approveKycRecord({
                 recordId: input.recordId,
                 reviewerId: ctx.principal.userId,
                 expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+                service: ctx.service,
+                kid: ctx.principal.kid,
               }),
             );
           } catch (err) {
@@ -730,7 +778,15 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            return presentKyc(await auth.rejectKycRecord({ recordId: input.recordId, reviewerId: ctx.principal.userId }));
+            assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
+            return presentKyc(
+              await auth.rejectKycRecord({
+                recordId: input.recordId,
+                reviewerId: ctx.principal.userId,
+                service: ctx.service,
+                kid: ctx.principal.kid,
+              }),
+            );
           } catch (err) {
             throw toTrpcError(err);
           }
@@ -781,6 +837,29 @@ export function createIdentityRouter(
                 storedBy: ctx.principal.userId,
               }),
             );
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * §10 — operator opens a KYC document from the encrypted vault.
+       *
+       * MFA required: same privilege class as store/approve (document = PII).
+       * Refuses a blank IDENTITY_KYC_DOC_KEY before reader — no invented AES key, no plaintext.
+       */
+      getDocument: scopedProcedure('admin:compliance')
+        .input(z.object({ documentId: z.string().uuid() }))
+        .output(kycDocMetaOutput.extend({ bytesBase64: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            const vault = requireKycDocs();
+            const opened = await vault.getFor(input.documentId, {
+              kind: 'compliance',
+              operatorId: ctx.principal.userId,
+            });
+            return { ...presentDocMeta(opened.meta), bytesBase64: opened.bytes.toString('base64') };
           } catch (err) {
             throw toTrpcError(err);
           }
@@ -1718,6 +1797,109 @@ export function createIdentityRouter(
                 asset: r.asset,
                 accruedAt: r.accruedAt.toISOString(),
                 sourceModule: r.sourceModule,
+              })),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+    }),
+
+    /**
+     * Drop 0 tease — email waitlist + referral queue.
+     * Not the affiliate tree (`affiliates.*`). No rewards, no ledger.
+     */
+    waitlist: router({
+      enroll: publicProcedure
+        .input(
+          z.object({
+            email: z.string().email().max(320),
+            referralCode: z
+              .string()
+              .regex(/^[a-fA-F0-9]{12}$/)
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            email: z.string(),
+            position: z.number().int().positive(),
+            referralCode: z.string(),
+            referredCount: z.number().int().min(0),
+            created: z.boolean(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            const out = await requireWaitlist().enroll(input);
+            return {
+              id: out.entry.id,
+              email: out.entry.email,
+              position: out.entry.position,
+              referralCode: out.entry.referralCode,
+              referredCount: out.entry.referredCount,
+              created: out.created,
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      position: publicProcedure
+        .input(z.object({ referralCode: z.string().regex(/^[a-fA-F0-9]{12}$/) }))
+        .output(
+          z.object({
+            position: z.number().int().positive(),
+            referralCode: z.string(),
+            referredCount: z.number().int().min(0),
+            queueLength: z.number().int().min(0),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            return await requireWaitlist().position(input.referralCode);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      list: scopedProcedure('admin:read')
+        .input(
+          z.object({
+            limit: z.number().int().min(1).max(200).default(50),
+            offset: z.number().int().min(0).default(0),
+          }),
+        )
+        .output(
+          z.object({
+            total: z.number().int().min(0),
+            entries: z.array(
+              z.object({
+                id: z.string().uuid(),
+                email: z.string(),
+                position: z.number().int().positive(),
+                referralCode: z.string(),
+                referredBy: z.string().nullable(),
+                referredCount: z.number().int().min(0),
+                createdAt: z.string(),
+              }),
+            ),
+          }),
+        )
+        .query(async ({ input }) => {
+          try {
+            const out = await requireWaitlist().list(input);
+            return {
+              total: out.total,
+              entries: out.entries.map((e) => ({
+                id: e.id,
+                email: e.email,
+                position: e.position,
+                referralCode: e.referralCode,
+                referredBy: e.referredBy,
+                referredCount: e.referredCount,
+                createdAt: e.createdAt.toISOString(),
               })),
             };
           } catch (err) {

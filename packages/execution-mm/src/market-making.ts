@@ -81,8 +81,9 @@ export type MmKillEvaluation = MmKillClear | MmKillTripped;
 
 /**
  * Evaluate MM kill-switches. Admin kill, volatility breach, and inventory
- * breach all halt quoting / hedging. Missing realised vol → volatility_breach
- * (refuse rather than assume calm).
+ * breach all halt quoting. Hedging uses the same evaluator but ignores
+ * inventory_breach so excess can still be sized. Missing realised vol →
+ * volatility_breach (refuse rather than assume calm).
  */
 export function evaluateMmKillSwitches(config: MmKillConfig): MmKillEvaluation {
   const reasons: MmKillReason[] = [];
@@ -149,6 +150,12 @@ export interface QuoteExternalMmInput {
   readonly symbol: string;
   readonly venueId: string;
   readonly kind: VenueKind;
+  /**
+   * Kind of the book that produced `mid`. Defaults to `kind`.
+   * `internal` always refuses — Q3 hard exclusion: an internal book is never
+   * a live mid, even when the quote venue is labelled external.
+   */
+  readonly midKind?: VenueKind;
   /**
    * Mid from a walked / graded external book. `null` → refuse `missing_mid`.
    * Never synthesised from thin or empty depth inside this package.
@@ -227,6 +234,15 @@ export function quoteExternalMm(input: QuoteExternalMmInput): QuoteExternalMmRes
       ok: false,
       reason: 'internal_venue',
       detail: 'D26-P0-01 external-only — internal house MM (seeding/quoting our own books) remains blocked until a later owner ruling',
+    };
+  }
+
+  const midKind = input.midKind ?? input.kind;
+  if (!isExternalVenueKind(midKind)) {
+    return {
+      ok: false,
+      reason: 'internal_venue',
+      detail: 'D26-P0-01 / Q3 — internal book cannot be used as a live mid',
     };
   }
 
@@ -341,6 +357,11 @@ export function refuseInternalMm(detail?: string): MmRefusal {
 export interface MmHedgeVenue {
   readonly venueId: string;
   readonly kind: VenueKind;
+  /**
+   * Kind of the book that produced `mid`. Defaults to `kind`.
+   * Internal books are never a live hedge mid (Q3 hard exclusion).
+   */
+  readonly midKind?: VenueKind;
   /** Mid on the hedge venue — null → refuse missing_mid. */
   readonly mid: Amount | null;
   readonly costTerms: SorCostTerms;
@@ -353,6 +374,11 @@ export interface PlanExternalMmHedgeInput {
   /** Venue we are quoting / holding inventory on. */
   readonly quoteVenueId: string;
   readonly inventory: MmInventoryState;
+  /**
+   * Same kill-switches as quoting. Inventory already outside bands is still
+   * sized; admin kill and unmeasured/breached vol refuse `kill_switch`.
+   */
+  readonly kill: MmKillConfig;
   readonly hedge: MmHedgeVenue;
 }
 
@@ -377,6 +403,8 @@ export type PlanExternalMmHedgeResult = MmHedgePlan | MmRefusal;
  *
  * Sizes only the excess outside owner bands (never invents a hedge size).
  * Internal hedge venues refuse. Missing mid / cost / depth refuse honestly.
+ * Admin kill and unmeasured/breached vol halt the plan; inventory_breach
+ * does not — that is the reason a hedge is sized.
  */
 export function planExternalMmHedge(input: PlanExternalMmHedgeInput): PlanExternalMmHedgeResult {
   if (!isExternalVenueKind(input.hedge.kind)) {
@@ -384,6 +412,15 @@ export function planExternalMmHedge(input: PlanExternalMmHedgeInput): PlanExtern
       ok: false,
       reason: 'internal_venue',
       detail: 'D26-P0-01 external-only — hedge may not target the internal house venue',
+    };
+  }
+
+  const hedgeMidKind = input.hedge.midKind ?? input.hedge.kind;
+  if (!isExternalVenueKind(hedgeMidKind)) {
+    return {
+      ok: false,
+      reason: 'internal_venue',
+      detail: 'D26-P0-01 / Q3 — internal book cannot be used as a live hedge mid',
     };
   }
 
@@ -411,6 +448,23 @@ export function planExternalMmHedge(input: PlanExternalMmHedgeInput): PlanExtern
       reason: 'hedge_not_required',
       detail: 'position inside owner inventory bands — no hedge sized',
     };
+  }
+
+  const kill = evaluateMmKillSwitches({
+    adminKill: input.kill.adminKill,
+    volatility: input.kill.volatility,
+    inventory: input.inventory,
+  });
+  if (kill.killed) {
+    const reasons = kill.reasons.filter((r) => r !== 'inventory_breach');
+    if (reasons.length > 0) {
+      return {
+        ok: false,
+        reason: 'kill_switch',
+        detail: kill.detail,
+        killReasons: reasons,
+      };
+    }
   }
 
   if (input.hedge.mid === null || input.hedge.mid <= 0n) {

@@ -153,6 +153,22 @@ describe('navigator Stage-2 data tools', () => {
     });
   });
 
+  it('undeclared read tools refuse — caller fixtures cannot invent an allowlist grant', () => {
+    const r = invokeNavigatorDataTool({
+      tool: 'trade.fills.history',
+      plane: 'live',
+      tierLaw: { published: true, matrix: { free: ['trade.fills.history', ...NAVIGATOR_DATA_TOOLS] } },
+      userTier: 'free',
+      requesterUserId: 'u1',
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      tool: 'trade.fills.history',
+      reason: 'tool_not_declared',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+  });
+
   it('tool outside published tier grants refuses', () => {
     const r = invokeNavigatorDataTool({
       tool: 'trade.quote',

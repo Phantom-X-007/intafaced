@@ -50,7 +50,7 @@ function stubDeps(): AgentsRouterDeps {
 }
 
 describe('scanner.rankFixtures route (Stage-1)', () => {
-  it('D26-P1-A3: blank P0-11 refuses ranked signals on the wire', async () => {
+  it('D26-P1-A3: omitted law refuse-closed on the wire (no sneak ranked board)', async () => {
     const now = '2026-08-07T12:00:00.000Z';
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())

@@ -66,9 +66,33 @@ if (!available) {
     return v.id;
   }
 
+  /**
+   * A leftover `offer_type=subscription` row — the shape createListing used
+   * to write before this refuse. Schema still stores it (C3 later); the API
+   * must not. Tests that prove leftover honesty go through this, not create.
+   */
+  async function insertLegacySubscription(vendorId: string): Promise<{ id: string }> {
+    const [row] = await sql<Array<{ id: string }>>`
+      INSERT INTO market.listings (vendor_id, title, description, offer_type, asset_id, price, status)
+      VALUES (
+        ${vendorId},
+        'Legacy sub',
+        'pre-refuse leftover',
+        'subscription',
+        'USDT',
+        '10',
+        'active'
+      )
+      RETURNING id
+    `;
+    if (!row) throw new Error('legacy subscription insert returned no row');
+    await vendors.claimSlot({ userId: VENDOR_USER, ref: row.id });
+    return row;
+  }
+
   beforeEach(async () => {
     await sql`
-      TRUNCATE market.purchases, market.listings, market.vendor_slots,
+      TRUNCATE market.subscription_state, market.purchases, market.listings, market.vendor_slots,
                market.vendor_status_events, market.vendors
       RESTART IDENTITY CASCADE
     `;
@@ -264,18 +288,31 @@ if (!available) {
       });
     });
 
-    it('refuses subscription listings until Stage 3', async () => {
-      await approvedVendor(VENDOR_USER);
-      const listing = await commerce.createListing({
-        userId: VENDOR_USER,
-        title: 'Sub',
-        description: 'monthly',
-        offerType: 'subscription',
-        assetId: 'USDT',
-        price: '10',
-      });
-      await expect(commerce.purchase({ buyerId: BUYER, listingId: listing.id, purchaseId: randomUUID() })).rejects.toMatchObject({
-        code: 'market.subscription_not_built',
+    it('refuses createListing for a subscription when period is unset (no default month)', async () => {
+      const vendorId = await approvedVendor(VENDOR_USER);
+      await expect(
+        commerce.createListing({
+          userId: VENDOR_USER,
+          title: 'Sub',
+          description: 'monthly',
+          offerType: 'subscription',
+          assetId: 'USDT',
+          price: '10',
+        }),
+      ).rejects.toMatchObject({ code: 'market.subscription_period_unset' });
+
+      expect((await vendors.slotStatus(VENDOR_USER)).held).toBe(0);
+      const [count] = await sql<Array<{ n: string }>>`
+        SELECT COUNT(*)::text AS n FROM market.listings WHERE vendor_id = ${vendorId}
+      `;
+      expect(count?.n).toBe('0');
+    });
+
+    it('refuses purchase of a leftover subscription row with no period', async () => {
+      const vendorId = await approvedVendor(VENDOR_USER);
+      const leftover = await insertLegacySubscription(vendorId);
+      await expect(commerce.purchase({ buyerId: BUYER, listingId: leftover.id, purchaseId: randomUUID() })).rejects.toMatchObject({
+        code: 'market.subscription_period_unset',
       });
     });
 
@@ -506,16 +543,9 @@ if (!available) {
       expect(Number(countRows[0]?.n)).toBe(1);
     });
 
-    it('hides subscription listings from the public catalogue until Stage C3', async () => {
-      await approvedVendor(VENDOR_USER);
-      const sub = await commerce.createListing({
-        userId: VENDOR_USER,
-        title: 'Sub plan',
-        description: 'monthly residual',
-        offerType: 'subscription',
-        assetId: 'USDT',
-        price: '10',
-      });
+    it('hides leftover subscription rows without a period from the public catalogue', async () => {
+      const vendorId = await approvedVendor(VENDOR_USER);
+      const leftover = await insertLegacySubscription(vendorId);
       const oneTime = await commerce.createListing({
         userId: VENDOR_USER,
         title: 'One-shot',
@@ -526,7 +556,32 @@ if (!available) {
       });
       const publicIds = (await commerce.publicListings()).map((l) => l.id);
       expect(publicIds).toContain(oneTime.id);
-      expect(publicIds).not.toContain(sub.id);
+      expect(publicIds).not.toContain(leftover.id);
+    });
+
+    it('unset subscription period leaves capacity for a one-time listing', async () => {
+      stakes.vendorSlots = 1;
+      await approvedVendor(VENDOR_USER);
+      await expect(
+        commerce.createListing({
+          userId: VENDOR_USER,
+          title: 'Sub plan',
+          description: 'must not steal the only slot',
+          offerType: 'subscription',
+          assetId: 'USDT',
+          price: '10',
+        }),
+      ).rejects.toMatchObject({ code: 'market.subscription_period_unset' });
+
+      const oneTime = await commerce.createListing({
+        userId: VENDOR_USER,
+        title: 'One-shot',
+        description: 'the slot that would have been stolen',
+        offerType: 'one_time',
+        assetId: 'USDT',
+        price: '10',
+      });
+      expect((await commerce.publicListings()).map((l) => l.id)).toEqual([oneTime.id]);
     });
   });
 

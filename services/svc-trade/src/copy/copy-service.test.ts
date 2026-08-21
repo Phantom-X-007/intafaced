@@ -31,6 +31,35 @@ describe('CopyService', () => {
     expect(s.feeSharePublished).toBe(false);
     expect(s.jurisdictionPublished).toBe(false);
     expect(s.residual).toContain('DIRECTION §8');
+    expect(s.residual).toContain('D26-P0-02');
+    expect(s.residual).toContain('D26-P0-15');
+    expect(s.residuals.rates).toContain('D26-P0-02');
+    expect(s.residuals.jurisdiction).toContain('D26-P0-15');
+    expect(s.sovereign).toEqual({
+      shape: 'sovereign',
+      custody: false,
+      feeModel: 'protocol_fee_share',
+      pnlFeeForbidden: true,
+      rankingForbidden: true,
+      killUnfollowReal: true,
+    });
+  });
+
+  it('published empty allowlist serves none — still refuse-closed (D26-P0-15)', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
   it('follow refuses when jurisdiction law blank — never invents allowlist', async () => {
@@ -67,6 +96,130 @@ describe('CopyService', () => {
     ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
   });
 
+  it('published empty allowlist serves none — still refuse-closed (D26-P0-15)', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
+  });
+
+  it('listMyFollows and already-following never scan every follow in the store', async () => {
+    const OTHER = '00000000-0000-4000-8000-000000000099';
+    class SpyStore extends MemoryCopyFollowStore {
+      listFollowsCalls = 0;
+      override async listFollows() {
+        this.listFollowsCalls += 1;
+        return super.listFollows();
+      }
+    }
+    const store = new SpyStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    await svc.follow({ userId: OTHER } as import('@intafaced/auth').Principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['ETH-USDT'],
+      maxNotionalPerOrder: '50',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    store.listFollowsCalls = 0;
+    expect(await svc.listMyFollows(principal)).toEqual([]);
+    const mine = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    const listed = await svc.listMyFollows(principal);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.followId).toBe(mine.followId);
+    expect(listed[0]?.leaderId).toBe(LEADER);
+    expect(store.listFollowsCalls).toBe(0);
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+    expect(store.listFollowsCalls).toBe(0);
+  });
+
+  it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {
+    class RaceStore extends MemoryCopyFollowStore {
+      override async listFollowsByFollower() {
+        return [];
+      }
+    }
+    const store = new RaceStore();
+    const opts = { feeShareLaw: publishedFee, jurisdictionLaw: publishedJur, store };
+    const first = new CopyService(new MemoryLedger(), opts);
+    const second = new CopyService(new MemoryLedger(), opts);
+    await first.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      second.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
+  });
+
+  it('follow maps a leaked Postgres unique_violation to already_following', async () => {
+    class PgLeakStore extends MemoryCopyFollowStore {
+      override async listFollowsByFollower() {
+        return [];
+      }
+      override async saveFollow(): Promise<void> {
+        throw Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+      }
+    }
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store: new PgLeakStore(),
+    });
+    await expect(
+      svc.follow(principal, {
+        leaderId: LEADER,
+        region: 'SG',
+        permittedMarkets: ['BTC-USDT'],
+        maxNotionalPerOrder: '100',
+        maxAggregateExposure: '1000',
+        expiresAt: futureExpiry,
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_already_following' });
+  });
+
   it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {
@@ -97,6 +250,12 @@ describe('CopyService', () => {
     expect(plan.notional).toBe('80');
     expect(plan.fillId).toBe('fill-cap-1');
     expect(plan.reason).toBe('within_envelope');
+
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: plan.fillId, leaderPaper: false }),
+    ).rejects.toMatchObject({
+      code: 'trade.copy_place_disabled',
+    });
 
     await expect(
       svc.planMirrorForFollow(principal, {
@@ -131,6 +290,185 @@ describe('CopyService', () => {
         notional: '10',
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_key_expired' });
+  });
+
+  it('wired placeMirror uses follower placeOrder with plan qty/price — never invents a fill', async () => {
+    const placed: { qty: bigint; price: bigint; clientOrderId: string }[] = [];
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      inspectMarket: async () => ({ paper: false }),
+      placeFollowerOrder: async (_p, input) => {
+        placed.push({ qty: input.qty, price: input.price, clientOrderId: input.clientOrderId });
+        return { orderId: 'ord-1' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-place-1',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    const out = await svc.placeMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-place-1',
+      leaderPaper: false,
+    });
+    expect(out.orderId).toBe('ord-1');
+    expect(out.price).toBe('5000');
+    expect(placed).toHaveLength(1);
+    expect(placed[0]!.qty).toBe(parseAmount('0.01'));
+    expect(placed[0]!.price).toBe(parseAmount('5000'));
+    expect(svc.deskStatus().autoMirrorPlace.published).toBe(true);
+  });
+
+  it('placeMirror redelivery does not place a second order', async () => {
+    let places = 0;
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      inspectMarket: async () => ({ paper: false }),
+      placeFollowerOrder: async () => {
+        places += 1;
+        return { orderId: `ord-${places}` };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-once',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    const first = await svc.placeMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-once',
+      leaderPaper: false,
+    });
+    const second = await svc.placeMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-once',
+      leaderPaper: false,
+    });
+    expect(places).toBe(1);
+    expect(second.orderId).toBe(first.orderId);
+    expect(second.duplicate).toBe(true);
+  });
+
+  it('placeMirror refuses when the place flag is off even if the port is wired', async () => {
+    let places = 0;
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: false,
+      placeFollowerOrder: async () => {
+        places += 1;
+        return { orderId: 'ord-nope' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-flag-off',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-flag-off', leaderPaper: false }),
+    ).rejects.toMatchObject({ code: 'trade.copy_place_disabled' });
+    expect(places).toBe(0);
+  });
+
+  it('placeMirror refuses blank §8 fee-share — never invents leader_share_bps', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: UNPUBLISHED_COPY_FEE_SHARE_LAW,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      placeFollowerOrder: async () => ({ orderId: 'ord-nope' }),
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-blank-env',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-blank-env', leaderPaper: false }),
+    ).rejects.toMatchObject({ code: 'trade.copy_fee_share_blank' });
+  });
+
+  it('placeMirror refuses a paper leader fill onto a live market', async () => {
+    let places = 0;
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: true,
+      inspectMarket: async () => ({ paper: false }),
+      placeFollowerOrder: async () => {
+        places += 1;
+        return { orderId: 'ord-live' };
+      },
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: futureExpiry,
+    });
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-paper',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+    await expect(
+      svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-paper', leaderPaper: true }),
+    ).rejects.toMatchObject({ code: 'trade.copy_paper_live_forbidden' });
+    expect(places).toBe(0);
   });
 
   it('unfollow always works (unilateral revoke)', async () => {

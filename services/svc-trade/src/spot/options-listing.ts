@@ -28,6 +28,27 @@ export type OptionType = 'call' | 'put';
 /** v1 title is European only — American is not modelled. */
 export type OptionStyle = 'european';
 
+/** SOCKET §13 pin — keep this code; do not invent a second refuse. */
+export const OPTIONS_SETTLEMENT_LAW_UNSET = 'trade.options_settlement_law_unset' as const;
+
+/**
+ * First options-listing gate: P0-05 settlement-asset law must be stamped.
+ *
+ * Pin: `TRADE_OPTIONS_SETTLEMENT_FIXING` (and complete European terms) must not
+ * unlock listing while the law stamp is empty/whitespace. Call this before any
+ * fixing or terms check. Opaque stamp is never parsed for assets / matrix / D7.
+ */
+export function assertOptionsSettlementAssetLawStamped(settlementAssetLawConfigured: string): string {
+  const assetLaw = settlementAssetLawConfigured.trim();
+  if (assetLaw.length === 0) {
+    throw new TradeError(
+      'options cannot be listed until D26-P0-05 settlement asset law is published (TRADE_OPTIONS_SETTLEMENT_ASSET_LAW empty) — SOCKET §13 socket.options-settlement-asset-law; empty means refuse, never invent live set / settlement asset / refuse matrix; TRADE_OPTIONS_SETTLEMENT_FIXING alone does not unlock',
+      OPTIONS_SETTLEMENT_LAW_UNSET,
+    );
+  }
+  return assetLaw;
+}
+
 export interface OptionsContractTerms {
   readonly optionType: OptionType;
   readonly optionStyle: OptionStyle;
@@ -81,14 +102,8 @@ export function resolveOptionsListing(input: ResolveOptionsListingInput): Option
   }
 
   // ── SOCKET §13 · `socket.options-settlement-asset-law` (D26-P0-05) ────────
-  // First gate: no invent of live set / settlement asset / refuse matrix.
-  const assetLaw = input.settlementAssetLawConfigured.trim();
-  if (assetLaw.length === 0) {
-    throw new TradeError(
-      'options cannot be listed until D26-P0-05 settlement asset law is published (TRADE_OPTIONS_SETTLEMENT_ASSET_LAW empty) — SOCKET §13 socket.options-settlement-asset-law; empty means refuse, never invent live set / settlement asset / refuse matrix',
-      'trade.options_settlement_law_unset',
-    );
-  }
+  // PIN: law stamp first. Fixing env / terms must not short-circuit this refuse.
+  assertOptionsSettlementAssetLawStamped(input.settlementAssetLawConfigured);
 
   const fixing = input.settlementFixingConfigured.trim();
   if (fixing.length === 0) {

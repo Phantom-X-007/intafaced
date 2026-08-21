@@ -5,6 +5,14 @@ import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-own
 import { PayError, type PayService } from './payment-service.js';
 import type { SubscriptionService } from './subscriptions/subscription-service.js';
 import type { Cadence } from './subscriptions/schedule.js';
+import {
+  CARD_MANDATE_CHARGE_SOCKET,
+  MANDATE_PATH_MATRIX,
+  PRECHARGE_NOTIFY_SOCKET,
+  mandateDunningBound,
+  preChargeNotifyGap,
+  subscriptionsProductPosture,
+} from './subscriptions/mandate-product.js';
 
 /**
  * Merchant subscription surface — mandate + subscription create/get/list/cancel.
@@ -12,6 +20,8 @@ import type { Cadence } from './subscriptions/schedule.js';
  * Invoice runner and capture-watch stay internal (jobs / payment events).
  * This router does not pull on-chain and does not invent dunning.
  * Money paths that open invoices still go through PayService + rails.
+ * `subscription.productReady` seals notify/card residuals so merchants cannot
+ * read "notified" or "card pull live" from silence.
  */
 
 const amountSchema = z
@@ -83,6 +93,8 @@ const cycleView = z.object({
   paymentId: z.string().uuid().nullable(),
   exhausted: z.boolean(),
   settledAt: z.string().datetime({ offset: true }).nullable(),
+  notifyStatus: z.enum(['attempted', 'skipped_unwired', 'failed']).nullable(),
+  notifyCode: z.string().nullable(),
 });
 
 const executionView = z.object({
@@ -96,6 +108,8 @@ const executionView = z.object({
   attemptedAt: z.string().datetime({ offset: true }),
   settledAt: z.string().datetime({ offset: true }).nullable(),
   createdAt: z.string().datetime({ offset: true }),
+  notifyStatus: z.enum(['attempted', 'skipped_unwired', 'failed']).nullable(),
+  notifyCode: z.string().nullable(),
 });
 
 function toMandateOut(m: Awaited<ReturnType<SubscriptionService['getMandate']>>) {
@@ -150,6 +164,8 @@ function toCycleOut(c: Awaited<ReturnType<SubscriptionService['listCycles']>>[nu
     paymentId: c.paymentId,
     exhausted: c.exhaustedAt !== null,
     settledAt: c.settledAt === null ? null : c.settledAt.toISOString(),
+    notifyStatus: c.notifyStatus,
+    notifyCode: c.notifyCode,
   };
 }
 
@@ -165,6 +181,8 @@ function toExecutionOut(e: Awaited<ReturnType<SubscriptionService['listExecution
     attemptedAt: e.attemptedAt.toISOString(),
     settledAt: e.settledAt === null ? null : e.settledAt.toISOString(),
     createdAt: e.createdAt.toISOString(),
+    notifyStatus: e.notifyStatus,
+    notifyCode: e.notifyCode,
   };
 }
 
@@ -179,6 +197,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.merchant_forbidden':
       case 'pay.submerchant_permission_denied':
       case 'pay.merchant_inactive':
+      case 'pay.kyb_required':
         return 'FORBIDDEN' as const;
       case 'pay.mandate_inactive':
       case 'pay.subscription_inactive':
@@ -198,6 +217,8 @@ function toTrpcError(err: unknown): unknown {
        * their bad request. It is refuse-closed until an owner publishes a rate.
        */
       case 'pay.subscription_fee_unpublished':
+      case 'pay.precharge_notify_unpublished':
+      case 'pay.subscription_notify_unwired':
         return 'FORBIDDEN' as const;
       default:
         return 'BAD_REQUEST' as const;
@@ -308,15 +329,113 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
             return toMandateOut(mandate);
           }),
         ),
+
+      /**
+       * Price/ceiling change without re-consent — refused in code (SPEC §4).
+       * Callers must create a new mandate; this door exists so the refuse is
+       * reachable over the mounted merchant surface, not unit-only.
+       */
+      proposeTerms: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            mandateId: z.string().uuid(),
+            amount: amountSchema,
+            ceiling: amountSchema.nullable().optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            const existing = await subscriptions.getMandate(input.mandateId);
+            await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
+            subscriptions.proposeMandateAmountChange(existing, {
+              amount: parseAmount(input.amount),
+              ceiling: input.ceiling === undefined ? existing.ceiling : input.ceiling === null ? null : parseAmount(input.ceiling),
+            });
+          }),
+        ),
     }),
 
     subscription: router({
+      /**
+       * Product Ready / honesty surface (D26-P1-P6 Done bar).
+       * Crypto invoice-and-watch is product-complete; card refuse + pre-charge
+       * notify gap are named. `preChargeNotify.notified` is always false.
+       */
+      productReady: scopedProcedure('pay:read', { module: 'pay' })
+        .output(
+          z.object({
+            mountain: z.literal('pay.subscriptions'),
+            boardDoneBar: z.literal('Mandates product-complete; notify gaps honest'),
+            paths: z.array(
+              z.object({
+                path: z.enum(['crypto_invoice', 'card']),
+                charge: z.enum(['open_crypto_invoice', 'refuse']),
+                opensMoney: z.boolean(),
+                posture: z.string(),
+              }),
+            ),
+            crypto: z.object({
+              status: z.literal('product_complete'),
+              charge: z.literal('open_crypto_invoice'),
+              model: z.literal('invoice-and-watch'),
+            }),
+            card: z.object({
+              status: z.literal('refuse_closed'),
+              code: z.literal('pay.mandate_rail_absent'),
+              socket: z.literal(CARD_MANDATE_CHARGE_SOCKET),
+            }),
+            dunning: z.object({
+              maxAttemptsPerCycle: z.number().int().positive(),
+              then: z.literal('stall_named'),
+              stallReason: z.literal('arrears'),
+            }),
+            preChargeNotify: z.object({
+              status: z.literal('unwired'),
+              notifyStatus: z.literal('skipped_unwired'),
+              code: z.literal('pay.subscription_notify_unwired'),
+              socket: z.literal(PRECHARGE_NOTIFY_SOCKET),
+              inventForbidden: z.literal(true),
+              notified: z.literal(false),
+              merchantReadable: z.string(),
+            }),
+            cancel: z.object({
+              immediacy: z.literal('immediate'),
+              retentionDelayForbidden: z.literal(true),
+            }),
+            reconsent: z.object({
+              priceOrCeilingChange: z.literal('refuse'),
+              code: z.literal('pay.subscription_reconsent_required'),
+            }),
+          }),
+        )
+        .query(() => {
+          const posture = subscriptionsProductPosture();
+          // Pin imports so Ready cannot drift from the fire-path matrix/gap.
+          if (posture.paths.length !== MANDATE_PATH_MATRIX.length) {
+            throw new Error('mandate path matrix drift');
+          }
+          if (preChargeNotifyGap().notified !== false) {
+            throw new Error('pre-charge notify invent');
+          }
+          if (preChargeNotifyGap().code !== 'pay.subscription_notify_unwired') {
+            throw new Error('pre-charge notify unnamed');
+          }
+          if (preChargeNotifyGap().notifyStatus !== 'skipped_unwired') {
+            throw new Error('pre-charge notify silent skip');
+          }
+          if (mandateDunningBound().maxAttemptsPerCycle < 1) {
+            throw new Error('dunning bound missing');
+          }
+          // Mutable copy — zod output schema is not `readonly`.
+          return { ...posture, paths: [...posture.paths] };
+        }),
+
       create: scopedProcedure('pay:write', { module: 'pay' })
         .input(
           z.object({
             mandateId: z.string().uuid(),
             /** Default crypto_invoice — never invents a pull path. */
-            path: z.enum(['crypto_invoice', 'card_mandate']).optional(),
+            path: z.enum(['crypto_invoice', 'card', 'card_mandate']).optional(),
           }),
         )
         .output(subscriptionView)

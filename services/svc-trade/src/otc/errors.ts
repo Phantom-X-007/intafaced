@@ -16,6 +16,7 @@ export type OtcErrorCode =
   | 'trade.otc_last_look_forbidden'
   | 'trade.otc_not_owner'
   | 'trade.otc_quote_missing'
+  | 'trade.otc_already_settled'
   | 'trade.otc_settle_refused';
 
 export class OtcError extends Error {

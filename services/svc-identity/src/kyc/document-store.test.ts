@@ -116,6 +116,26 @@ describe('PII access control — no free cross-user document read', () => {
     });
   });
 
+  it('blank key refuses put before content-type — no invented key', async () => {
+    const store = new MemoryKycDocumentStore('');
+    await expect(store.put({ userId: USER_A, contentType: '', bytes: Buffer.from('x') })).rejects.toMatchObject({
+      code: 'kyc_doc.key_missing',
+    });
+    await expect(store.put({ userId: USER_A, contentType: 'image/png', bytes: Buffer.alloc(0) })).rejects.toMatchObject({
+      code: 'kyc_doc.key_missing',
+    });
+  });
+
+  it('blank key refuses get before reader — no invented key', async () => {
+    const store = new MemoryKycDocumentStore('');
+    await expect(store.getFor('00000000-0000-4000-8000-000000000000', { kind: 'compliance', operatorId: OP })).rejects.toMatchObject({
+      code: 'kyc_doc.key_missing',
+    });
+    await expect(store.getFor('00000000-0000-4000-8000-000000000000', { kind: 'owner', userId: '' })).rejects.toMatchObject({
+      code: 'kyc_doc.key_missing',
+    });
+  });
+
   it('vault surface has no free get(id) / delete(id) — only principal-bound methods', () => {
     const store = new MemoryKycDocumentStore(keyB64()) as unknown as Record<string, unknown>;
     expect(typeof store.get).toBe('undefined');

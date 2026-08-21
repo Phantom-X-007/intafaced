@@ -190,6 +190,15 @@ describe('NullCertXpPublisher — no bus says so, and says nothing else', () => 
     expect(publisher.usable).toBe(false);
     await expect(publisher.publishCertXp(grantOf())).resolves.toEqual({ emitted: false, reason: 'publisher_unavailable' });
   });
+
+  it('names no_policy for an unpriced cert even when the bus is down — publishes nothing', async () => {
+    const store = new MemoryCertStore();
+    store.registerCert({ id: 'not-in-policy-v1', title: 'Unpriced', requiredItemSlugs: ['a'] });
+    store.markComplete(USER, 'a', NOW);
+    const result = await new NullCertXpPublisher().publishCertXp(store.grant(USER, 'not-in-policy-v1', NOW));
+    expect(result).toEqual({ emitted: false, reason: 'no_policy' });
+    expect(result).not.toHaveProperty('xpDelta');
+  });
 });
 
 describe('certXpPlaneStatus — what an operator is told when a rank did not move', () => {

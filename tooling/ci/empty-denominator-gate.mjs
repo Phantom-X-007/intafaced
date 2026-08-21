@@ -146,6 +146,11 @@ export const ENFORCED = {
     must: /missing required auto-load file/,
     note: 'denominator is a fixed required-file list; with the tree gone every entry is missing and it refuses by name.',
   },
+  'notice-pin': {
+    kind: 'guard',
+    must: /NOTICE PIN FAILED — missing required file/,
+    note: 'denominator is a fixed required-file list (NOTICE, vendor NOTICE, LICENSE, compose); with the tree gone every entry is missing and it refuses by name.',
+  },
   tracker: {
     kind: 'guard',
     must: /TRACKER REGISTRY INVALID/,
@@ -217,6 +222,11 @@ export const ENFORCED = {
     must: /vendor\/ tree missing — cannot prove dual-book mutators banned/,
     note: 'phrases the refusal as an inability to PROVE, which is the correct epistemics.',
   },
+  'vendor-java-jar-truth': {
+    kind: 'guard',
+    must: /vendor\/ tree missing — cannot prove Grade D empty or jar posture/,
+    note: 'D26-P2-07 sibling of vendor-java-money: without vendor/ it cannot prove Grade D empty or jar truth.',
+  },
   'dual-book-door': {
     kind: 'guard',
     must: /vendor\/ tree missing — dual-book door cannot be verified/,
@@ -274,6 +284,13 @@ export const ENFORCED = {
     kind: 'uncaught',
     must: /ENOENT[\s\S]*env\.ts/,
     note: 'reads packages/config/src/env.ts to learn which secrets exist. Refuses, by throw.',
+  },
+  'secret-rotation-readiness': {
+    kind: 'guard',
+    must: /SECRET ROTATION READINESS FAILED/,
+    note:
+      'D26-P3-05: denominator is the tip runbook. With the tree gone the file is missing and the scan refuses by name ' +
+      'rather than printing clean over an absent inventory.',
   },
   'money-property-mutation': {
     kind: 'uncaught',

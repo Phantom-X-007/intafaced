@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import { venuesFor, type VenueSetEnv } from './venue-set.js';
+import { ClobFeeUnconfiguredError } from './clob-costs.js';
+
+const base = (overrides: Partial<VenueSetEnv> = {}): VenueSetEnv => ({
+  INDEXER_URL: 'http://indexer.test',
+  MATCHING_URL: 'http://matching.test',
+  QUOTE_MAX_AGE_MS: 2_000,
+  DEX_CLOB_FEE_BPS: undefined,
+  DEX_CLOB_SETTLEMENT_COST: undefined,
+  DEX_INTERNAL_BOOK_ENABLED: true,
+  DEX_INTERNAL_BOOK_FEE_BPS: 20,
+  DEX_EXTERNAL_VENUES: [],
+  ...overrides,
+});
+
+describe('S-I3 venue set — CLOB only with an explicit fee schedule', () => {
+  it('does not quote intachain-clob when both CLOB knobs are unset', () => {
+    expect(venuesFor(base(), 'ROW').map((v) => v.id)).toEqual(['internal-book']);
+  });
+
+  it('quotes intachain-clob when the operator copied both venue figures', () => {
+    const venues = venuesFor(base({ DEX_CLOB_FEE_BPS: 10, DEX_CLOB_SETTLEMENT_COST: '0' }), 'ROW');
+    expect(venues.map((v) => v.id)).toEqual(['intachain-clob', 'internal-book']);
+    expect(venues[0]?.feeBps).toBe(10);
+    expect(venues[0]?.settlementCost).toBe(0n);
+  });
+
+  it('refuses a one-sided CLOB config rather than filling the other knob with zero', () => {
+    expect(() => venuesFor(base({ DEX_CLOB_FEE_BPS: 0 }), 'ROW')).toThrow(ClobFeeUnconfiguredError);
+  });
+});

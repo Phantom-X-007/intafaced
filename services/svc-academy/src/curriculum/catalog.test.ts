@@ -553,6 +553,7 @@ describe('curriculum library integrity', () => {
         order: item.order,
         summary: item.summary,
         body: item.body,
+        objectives: item.objectives,
       });
       expect(result.issues, `${item.slug}: ${result.issues.map((i) => i.message).join('; ')}`).toEqual([]);
       expect(result.ok).toBe(true);

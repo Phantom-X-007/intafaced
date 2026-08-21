@@ -10,9 +10,22 @@
  */
 
 import type { CreateResult, NotifyService } from '../notify-service.js';
-import { evaluatePriceAlert } from './evaluate.js';
+import { acceptAlertMark, outOfAppRequiredRefusal } from './accepted-mark.js';
+import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind as unpublishedKindOutcome } from './evaluate.js';
 import type { AlertStore } from './store.js';
-import type { AlertEvalOutcome, CreatePriceAlertInput, MarkSource, PriceAlert } from './types.js';
+import {
+  AlertKindUnpublishedError,
+  AlertPortfolioUnpublishedError,
+  type AlertEvalOutcome,
+  type AlertRefuseCode,
+  type CreatePortfolioAlertInput,
+  type CreatePriceAlertInput,
+  type CreateUnpublishedAlertInput,
+  type MarkQuote,
+  type MarkSource,
+  type PriceAlert,
+  type UnpublishedAlertKind,
+} from './types.js';
 
 /**
  * How often the mounted sweep evaluates every market holding an active watch.
@@ -44,7 +57,7 @@ export type AlertEvaluationStatus = {
    */
   readonly canFire: boolean;
   /** The refusal every evaluation would record right now, or null. */
-  readonly code: 'alert.price_unavailable' | null;
+  readonly code: Extract<AlertRefuseCode, 'alert.price_unavailable' | 'channel.not_configured' | 'channel.disabled'> | null;
 };
 
 /** One pass of the sweep, in the shape `/ready` reports and a test asserts. */
@@ -69,6 +82,14 @@ export type EvaluateMarketReport = {
   }[];
 };
 
+/** Public-door evaluate — one watch, named refuse, never a fake last. */
+export type EvaluateAlertReport = {
+  readonly alert: PriceAlert | null;
+  readonly outcome: AlertEvalOutcome;
+  readonly evaluation: AlertEvaluationStatus;
+  readonly notificationId: string | null;
+};
+
 export class AlertService {
   constructor(
     private readonly store: AlertStore,
@@ -78,6 +99,36 @@ export class AlertService {
 
   create(input: CreatePriceAlertInput): Promise<PriceAlert> {
     return this.store.create(input);
+  }
+
+  /**
+   * Portfolio watches are refuse-closed. Nothing is stored, no balance is read,
+   * and silence is not a fire. Callers must not invent a second book here.
+   */
+  createPortfolio(_input: CreatePortfolioAlertInput): never {
+    throw new AlertPortfolioUnpublishedError();
+  }
+
+  /**
+   * Unpublished kinds never become an active watch. No store write, no fire.
+   */
+  createUnpublishedKind(input: CreateUnpublishedAlertInput): never {
+    throw new AlertKindUnpublishedError(input.kind);
+  }
+
+  /**
+   * Same refuse as create — evaluate never fires a portfolio watch and never
+   * carries a money field. The sweep does not call this; there is no stored row.
+   */
+  evaluatePortfolio(): AlertEvalOutcome {
+    return evaluatePortfolioAlert();
+  }
+
+  /**
+   * Same refuse as create — no invented funding/whale/liq/intel series.
+   */
+  evaluateUnpublishedKind(kind: UnpublishedAlertKind): AlertEvalOutcome {
+    return unpublishedKindOutcome(kind);
   }
 
   list(userId: string): Promise<readonly PriceAlert[]> {
@@ -94,12 +145,22 @@ export class AlertService {
    * Read by the router so the answer reaches the person who created the watch.
    */
   evaluationStatus(): AlertEvaluationStatus {
-    const live = this.marks.kind === 'live';
-    return {
-      markSource: this.marks.kind,
-      canFire: live,
-      code: live ? null : 'alert.price_unavailable',
-    };
+    if (this.marks.kind !== 'live') {
+      return {
+        markSource: 'dark',
+        canFire: false,
+        code: 'alert.price_unavailable',
+      };
+    }
+    const ooa = this.namedOutOfAppRefusal();
+    if (ooa) {
+      return {
+        markSource: 'live',
+        canFire: false,
+        code: ooa.code,
+      };
+    }
+    return { markSource: 'live', canFire: true, code: null };
   }
 
   /**
@@ -170,31 +231,17 @@ export class AlertService {
    * for a later pass.
    */
   async evaluateMarket(marketId: string, at: Date = new Date()): Promise<EvaluateMarketReport> {
-    const quote = await this.marks.quote(marketId, at);
+    const quote = await this.sourcedQuote(marketId, at);
     const actives = await this.store.listActiveByMarket(marketId);
     const results: EvaluateMarketReport['results'][number][] = [];
 
     for (const alert of actives) {
-      const outcome = evaluatePriceAlert(alert, quote);
-      let notificationId: string | null = null;
-
-      if (outcome.kind === 'fire') {
-        // Create first — never retire the watch on a pure no-op or a throw.
-        const created = await this.fireNotification(alert, outcome.markPrice);
-        // Fan-out off: both null. Redelivery recovery: notification may be null
-        // on the insert conflict path, but dispatch is set after findBySource.
-        const reachedInbox = created.notification !== null || created.dispatch !== null;
-        if (reachedInbox) {
-          await this.store.markFired(alert.userId, alert.id, at);
-          notificationId = created.notification?.id ?? null;
-        }
-      }
-
+      const applied = await this.applyEvaluation(alert, quote, at);
       results.push({
         alertId: alert.id,
         userId: alert.userId,
-        outcome,
-        notificationId,
+        outcome: applied.outcome,
+        notificationId: applied.notificationId,
       });
     }
 
@@ -203,6 +250,61 @@ export class AlertService {
       mark: quote.kind === 'ok' ? quote.price : null,
       results,
     };
+  }
+
+  /**
+   * Public evaluate door. Dark / missing marks refuse by name and never mark
+   * the watch fired — even when the port quotes a last (invented live).
+   */
+  async evaluateAlert(userId: string, alertId: string, at: Date = new Date()): Promise<EvaluateAlertReport> {
+    const evaluation = this.evaluationStatus();
+    const alert = await this.store.get(userId, alertId);
+    if (!alert) {
+      return {
+        alert: null,
+        outcome: { kind: 'refuse', code: 'alert.not_active', detail: 'alert.not_found' },
+        evaluation,
+        notificationId: null,
+      };
+    }
+    const quote = await this.sourcedQuote(alert.marketId, at);
+    const applied = await this.applyEvaluation(alert, quote, at);
+    const refreshed = (await this.store.get(userId, alertId)) ?? alert;
+    return {
+      alert: refreshed,
+      outcome: applied.outcome,
+      evaluation,
+      notificationId: applied.notificationId,
+    };
+  }
+
+  private async sourcedQuote(marketId: string, at: Date): Promise<MarkQuote> {
+    const raw = await this.marks.quote(marketId, at);
+    return acceptAlertMark(this.marks, raw, at);
+  }
+
+  private async applyEvaluation(
+    alert: PriceAlert,
+    quote: MarkQuote,
+    at: Date,
+  ): Promise<{ outcome: AlertEvalOutcome; notificationId: string | null }> {
+    const ooa = this.namedOutOfAppRefusal();
+    let outcome = evaluatePriceAlert(alert, quote);
+    if (outcome.kind === 'fire' && ooa) {
+      outcome = { kind: 'refuse', code: ooa.code, detail: ooa.detail };
+    }
+    let notificationId: string | null = null;
+
+    if (outcome.kind === 'fire') {
+      const created = await this.fireNotification(alert, outcome.markPrice);
+      const reachedInbox = created.notification !== null || created.dispatch !== null;
+      if (reachedInbox) {
+        await this.store.markFired(alert.userId, alert.id, at);
+        notificationId = created.notification?.id ?? null;
+      }
+    }
+
+    return { outcome, notificationId };
   }
 
   private async fireNotification(alert: PriceAlert, markPrice: string): Promise<CreateResult> {
@@ -223,5 +325,11 @@ export class AlertService {
       sourceSubject: 'intafaced.notify.alert.price.crossed',
       sourceIdempotencyKey: `${alert.id}:${markPrice}`,
     });
+  }
+
+  /** Inbox-only NotifyService stubs may omit channelStatus — that means nothing OOA was required. */
+  private namedOutOfAppRefusal() {
+    const status = typeof this.notify.channelStatus === 'function' ? this.notify.channelStatus() : [];
+    return outOfAppRequiredRefusal(status);
   }
 }

@@ -194,11 +194,12 @@ export class VenueLatencyGrader {
     //
     // Every derived statistic is `null` here for the same reason. A 0% reject
     // rate over zero samples reads as "never once refused us", which is a
-    // perfect score awarded for silence.
+    // perfect score awarded for silence. Defaulting p95 to 0ms would be worse:
+    // `gradeFor(0, p95Ms)` is **A** — silence scored as fastest.
     //
-    // `provisional` is true but it is not the point: `provisional` describes a
-    // grade with thin evidence, and this is a grade with NO evidence. Consumers
-    // must branch on `isGraded`, not on `provisional`.
+    // `provisional` is false. The contract word means "thin letter": a letter
+    // with too few samples. There is no letter here. Consumers must branch on
+    // `isGraded`, not on `provisional`.
     if (samples === 0) {
       return {
         venueId: this.venueId,
@@ -210,7 +211,7 @@ export class VenueLatencyGrader {
         rejectRateBps: null,
         errorRateBps: null,
         staleMs,
-        provisional: true,
+        provisional: false,
         reasons: ['ungraded — no observations in the window; not measured, so not scored'],
       };
     }
@@ -325,10 +326,12 @@ export const UNMEASURED_LATENCY_MS = Number.MAX_SAFE_INTEGER;
 /**
  * Connect score-feed routing weight (D26-P1-X2 / D-S-18).
  *
- * An unscored adapter (`grade: null`, `!isGraded`) contributes **zero**. A
- * graded adapter contributes **one** — eligibility only. Letter scaling,
- * expected impact, and transfer cost belong to `execution.sor` (§28); inventing
- * that cost model on the Connect surface would reopen a boarded deferral.
+ * Eligibility is a **measured** rest round-trip, not a letter. An adapter that
+ * has never run (`grade: null`) contributes **zero**. So does a letter with
+ * `p95Ms: null` — answering in errors is not a latency score, and substituting
+ * a sentinel number would treat missing as a score (the residual this door
+ * exists to close). A graded adapter with a live p95 contributes **one** —
+ * eligibility only. Letter scaling belongs to `execution.sor` (§28).
  *
  * Consumers that need a numeric weight MUST call this before using the letter.
  * Returning 0 for null is the safety property; treating null as "no news is
@@ -336,7 +339,24 @@ export const UNMEASURED_LATENCY_MS = Number.MAX_SAFE_INTEGER;
  * gate so weight and routability cannot drift apart.
  */
 export function routingWeightFromGrade(grade: VenueLatencyGrade): 0 | 1 {
-  return isGraded(grade) ? 1 : 0;
+  if (!isGraded(grade)) return 0;
+  // Zero samples is ungraded even if a caller forged a letter. 0ms is grade A;
+  // treating silence as 0ms would score the quietest venue as the fastest.
+  if (grade.samples === 0) return 0;
+  if (grade.p95Ms === null) return 0;
+  return 1;
+}
+
+/**
+ * The live latency score, or `null` when there is none.
+ *
+ * Public cost-model / score-feed door: missing measurement is **absence**, not
+ * `0` (which would win every tie) and not `UNMEASURED_LATENCY_MS` (which is a
+ * number a consumer could rank on). Never an estimate.
+ */
+export function measuredLatencyMs(grade: VenueLatencyGrade): number | null {
+  if (routingWeightFromGrade(grade) === 0) return null;
+  return grade.p95Ms;
 }
 
 export function healthFromGrade(grade: VenueLatencyGrade, lastUpdate: Date): VenueHealth {
@@ -344,24 +364,27 @@ export function healthFromGrade(grade: VenueLatencyGrade, lastUpdate: Date): Ven
   // is consulted first so a future change cannot mark an unscored venue healthy
   // while still advertising weight zero (or the reverse). `isGraded` narrows
   // the graded branch for the type checker.
-  if (routingWeightFromGrade(grade) === 0 || !isGraded(grade)) {
+  const liveMs = measuredLatencyMs(grade);
+  if (routingWeightFromGrade(grade) === 0 || liveMs === null || !isGraded(grade)) {
+    const why = isGraded(grade) ? 'no live latency score' : 'ungraded';
     return {
       healthy: false,
       latencyMs: UNMEASURED_LATENCY_MS,
       lastUpdate,
-      reason: `ungraded: ${grade.reasons.join('; ')}`,
+      reason: `${why}: ${grade.reasons.join('; ')}`,
     };
   }
 
   const failing = grade.grade === 'F';
   // A grade built on too little data may not exclude a venue on its own:
   // excluding on two samples takes real liquidity off the router for no
-  // evidence. The no-samples case never reaches here — it is handled above.
+  // evidence. The no-samples / no-p95 case never reaches here — it is handled
+  // above. `liveMs` is the measured p95, never a substituted sentinel.
   const trusted = !grade.provisional;
 
   return {
     healthy: !(failing && trusted),
-    latencyMs: grade.p95Ms ?? UNMEASURED_LATENCY_MS,
+    latencyMs: liveMs,
     lastUpdate,
     reason: grade.reasons.length > 0 ? `grade ${grade.grade}: ${grade.reasons.join('; ')}` : undefined,
   };

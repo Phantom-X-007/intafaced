@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { userCopy } from './user-copy.js';
 
 /**
  * BROWSER ORIGINS — the door `apps/web` has been knocking on since it was built.
@@ -433,7 +434,7 @@ export function registerCors(app: FastifyInstance, allowlist: OriginAllowlist): 
         // a bare 204 so a developer staring at devtools is told the origin was
         // the problem; it reveals nothing, because the decision was made before
         // anything about the path was looked at.
-        return reply.code(403).send({ error: 'origin not allowed', code: 'edge.origin_not_allowed' });
+        return reply.code(403).send({ error: userCopy('edge.origin_not_allowed'), code: 'edge.origin_not_allowed' });
       }
 
       return reply

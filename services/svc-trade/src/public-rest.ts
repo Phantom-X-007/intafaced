@@ -1,7 +1,10 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import { isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
-import { TIMEFRAMES, timeframeSchema, type Timeframe } from '@intafaced/exchange-contract';
+import { isScheduleKey, isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
+import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
+import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capability.js';
+import { DEFAULT_MAX_LEVERAGE } from './futures/initial-margin.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -77,6 +80,25 @@ export interface PublicRestDeps {
         indexPrice: string | null;
       }
     | null;
+  /**
+   * Algo create vs slice-scheduler flags for the capabilities note.
+   * Omitted → shipped defaults (create on, jobs off). Callers that have env
+   * should pass it so a live enable is not hidden.
+   */
+  algo?: { readonly createEnabled: boolean; readonly jobsEnabled: boolean };
+  /**
+   * Futures liq/funding job flag for the capabilities note.
+   * Omitted → shipped default (jobs off). Does not start ticks.
+   */
+  futures?: {
+    readonly jobsEnabled: boolean;
+    readonly orderableEnabled?: boolean;
+    readonly profitSourceConfigured?: boolean;
+    readonly fundingMaxAbsRateConfigured?: boolean;
+    readonly fundingMarketCount?: number;
+    readonly venueMarkConfigured?: boolean;
+    readonly fundingIntervalConfigured?: boolean;
+  };
 }
 
 /** Send an already-mapped CCXT error. */
@@ -154,6 +176,10 @@ function presentMarketHours(schedule: TradingSchedule):
  * Session open + next flip at `atMs`, from the same predicates as
  * `assertMarketOpen` (risk.ts). Unknown schedule key → closed, no transition
  * guess (fail closed on the public wire for the open flag).
+ *
+ * Order path refuses unknown keys with `trade.unknown_schedule` (D26-P1-T9) —
+ * distinct from session-shut `trade.market_closed`. Public market data cannot
+ * invent hours for a key outside `TRADING_SCHEDULES`, so sessionOpen=false.
  */
 export function sessionStateForMarket(
   market: Pick<Market, 'schedule'>,
@@ -165,11 +191,27 @@ export function sessionStateForMarket(
   schedule: Market['schedule'];
 } {
   const scheduleKey = market.schedule;
+  // Authority guard first (same set as requireTradingSchedule) — never index
+  // TRADING_SCHEDULES with a drifted key and treat undefined as a soft open.
+  if (!isScheduleKey(scheduleKey)) {
+    // Unknown key: order path → trade.unknown_schedule. Public wire says
+    // closed and publishes a zero-width window so `hours.kind` never claims
+    // continuous (always open) when we cannot evaluate hours.
+    return {
+      schedule: scheduleKey,
+      sessionOpen: false,
+      nextSessionChange: null,
+      hours: {
+        kind: 'sessions',
+        timezone: 'UTC',
+        windows: [{ open: { day: 0, time: '00:00' }, close: { day: 0, time: '00:00' } }],
+        holidays: [],
+      },
+    };
+  }
   const schedule = TRADING_SCHEDULES[scheduleKey];
   if (!schedule) {
-    // Unknown key: order path refuses (`trade.market_closed`). Public wire
-    // says closed and publishes a zero-width window so `hours.kind` never
-    // claims continuous (always open) when we cannot evaluate hours.
+    // Defensive — isScheduleKey already proved the key; keep fail-closed.
     return {
       schedule: scheduleKey,
       sessionOpen: false,
@@ -221,14 +263,37 @@ export function sessionStateForMarket(
  * `precisionMode: 'TICK_SIZE'` with the tick and lot themselves is what our
  * engine actually enforces (`snapToTick`, and the lot check in risk.ts), so it
  * is the only report a client can build a fillable order from.
- *
+ */
+
+/**
+ * GET /capabilities note — must name every open-door refuse a bot cannot
+ * discover from a happy-path 200. Unnamed pot is 403 NotSupported (same class
+ * as `trade.futures_disabled`) — not a retryable 503.
+ */
+export const OPEN_POSITION_GATES_NOTE =
+  'caller price 400 · cross margin 400 · leverage required 400 (no silent 1x) · ADL disclosure ack 403 (DIRECTION:34) · unnamed profit pot 403 NotSupported';
+
+/** Listing status vs kill-switch. Options have no engine. */
+export function orderableForListedMarket(market: Market, futuresOrderable: boolean): boolean {
+  if (market.status !== 'active') return false;
+  if (market.kind === 'options') return false;
+  if (market.kind === 'futures') return futuresOrderable === true;
+  return true;
+}
+
+/**
  * HOURS / SESSION — published so a bot can tell "venue shut" from "exchange
  * down" or "empty book". `active` stays listing status; `sessionOpen` is the
  * schedule gate the order path already enforces via `assertMarketOpen`.
  *
+ * `orderable` is the kill-switch the order path already enforces. A listed
+ * active perp with TRADE_FUTURES_ENABLED off is still `active: true` (it is
+ * on the board) and `orderable: false` (place/open refuse). Options stay
+ * unorderable — engine still `trade.market_kind_unsupported`.
+ *
  * @param nowMs response clock — injectable so sessionOpen is testable at a boundary.
  */
-export function presentCcxtMarket(market: Market, nowMs: number = Date.now()) {
+export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), flags: { readonly futuresOrderable?: boolean } = {}) {
   const tick = formatAmount(market.tickSize);
   const lot = formatAmount(market.lotSize);
   const isSpot = market.kind === 'spot';
@@ -249,9 +314,20 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now()) {
     future: false,
     option: market.kind === 'options',
     contract: !isSpot,
-    linear: isSpot ? null : true,
-    inverse: isSpot ? null : false,
+    /**
+     * Linear/inverse are a function of settle (quote vs base). Settle is
+     * unpublished on this listing (`null`), so these stay null too — claiming
+     * `linear: true` while `settle` is null is an invented USDT-margined book.
+     */
+    linear: null as boolean | null,
+    inverse: null as boolean | null,
     active: market.status === 'active',
+    /**
+     * TRUE = the order path will accept a new order/open here (subject to
+     * session, paper, risk). FALSE = listed but refused — futures kill-switch
+     * or options until an engine exists. Distinct from `active` (listing).
+     */
+    orderable: orderableForListedMarket(market, flags.futuresOrderable === true),
     /**
      * TRUE = orders here are SIMULATED. No hold is taken, nothing posts to the
      * ledger, and the position a fill implies does not exist.
@@ -302,7 +378,14 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now()) {
       // than guessing a ceiling a client would clamp against.
       price: { min: tick, max: null as string | null },
       cost: { min: formatAmount(market.minNotional), max: null as string | null },
-      leverage: { min: null as string | null, max: null as string | null },
+      /**
+       * DIRECTION §1 / D26-P0-07 sealed 10× on futures. Spot and options have
+       * no leverage product — leave max null rather than copying the perp cap.
+       */
+      leverage: {
+        min: null as string | null,
+        max: market.kind === 'futures' ? DEFAULT_MAX_LEVERAGE : null,
+      },
     },
   };
 }
@@ -432,9 +515,16 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       refuseArms: CCXT_REFUSE_ARMS,
       notes: {
         paperListPolicy: 'paper markets stay listed with paper:true — exclude-from-list is Nitro product (N3)',
-        rateLimit: 'Published RATE_LIMITS in exchange-contract may differ from edge default 300/min — edge enforces; N4 residual',
+        rateLimit: {
+          enforcedBy: 'edge',
+          publicPerMinute: RATE_LIMITS.publicPerMinute,
+          privatePerMinute: RATE_LIMITS.privatePerMinute,
+          windowMs: 60_000,
+        },
         neverInvent: 'mids, funding rates, candles, leverage live re-set',
-        openPositionGates: 'caller price 400 · cross margin 400 · ADL disclosure ack required 403 (DIRECTION:34)',
+        openPositionGates: OPEN_POSITION_GATES_NOTE,
+        algo: presentAlgoCapabilityNote(deps.algo ?? {}),
+        futures: presentFuturesJobsCapabilityNote(deps.futures ?? {}),
       },
     });
   });
@@ -442,7 +532,8 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
   app.get('/api/v1/markets', async (_req, reply) => {
     const markets = await deps.markets();
     const ts = now();
-    return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts)));
+    const futuresOrderable = deps.futures?.orderableEnabled === true;
+    return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));
   });
 
   app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>('/api/v1/orderbook/:symbol', async (req, reply) => {

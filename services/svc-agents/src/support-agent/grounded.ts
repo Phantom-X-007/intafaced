@@ -7,6 +7,9 @@
 
 export type SupportDeskPlane = 'live' | 'dark';
 
+/** ops.support KB catalog plane — independent of the ticket desk plane. */
+export type SupportKbPlane = 'live' | 'dark';
+
 export type SupportGrounded =
   | {
       readonly status: 'ok';
@@ -20,12 +23,26 @@ export type SupportGrounded =
       readonly userMessageKey: 'agents.support.unavailable';
     };
 
-export function supportGrounded(input: { plane: SupportDeskPlane; kbHitCount?: number; requireKb?: boolean }): SupportGrounded {
+export function supportGrounded(input: {
+  plane: SupportDeskPlane;
+  kbPlane?: SupportKbPlane;
+  kbHitCount?: number;
+  requireKb?: boolean;
+}): SupportGrounded {
   if (input.plane === 'dark') {
     return {
       status: 'refuse',
       plane: 'dark',
       reason: 'desk_plane_dark',
+      userMessageKey: 'agents.support.unavailable',
+    };
+  }
+  // A live desk with a dark/missing KB is not a licence to compose policy or balances.
+  if (input.kbPlane === 'dark') {
+    return {
+      status: 'refuse',
+      plane: 'dark',
+      reason: 'kb_empty',
       userMessageKey: 'agents.support.unavailable',
     };
   }

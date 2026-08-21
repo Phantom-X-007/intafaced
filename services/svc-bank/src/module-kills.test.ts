@@ -10,7 +10,7 @@ import { cardSim } from './cards/issuer.js';
  *
  * 1. Promise: Engine A Done bar — true kills or honest NOT_ENFORCED
  * 2. Break: flags were NOT_ENFORCED; console paint ≠ stop
- * 3. Done bar: BANK_LOANS_ENABLED / BANK_CARDS_ENABLED refuse open/issue with named codes
+ * 3. Done bar: BANK_LOANS_ENABLED / BANK_CARDS_ENABLED refuse open/issue/authorise with named codes
  * 4. Class P (kill switches; no money moved)
  * 5. Paths: packages/config flags + services/svc-bank
  * 6. RED: this suite
@@ -47,6 +47,22 @@ describe('bank module kills (FLAG_REGISTRY service-env)', () => {
         userId: '11111111-1111-4111-8111-111111111111',
         assetId: 'USDT',
         perAuthorizationLimit: parseAmount('100'),
+      }),
+    ).rejects.toMatchObject({ code: 'bank.cards_disabled' });
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('card authorise refuses when moduleEnabled is false — before any hold', async () => {
+    const ledger = new MemoryLedger();
+    const cards = new CardService({} as never, ledger, {
+      issuer: cardSim(),
+      moduleEnabled: false,
+    });
+    await expect(
+      cards.authorize({
+        cardId: '00000000-0000-4000-8000-000000000088',
+        authorizationRef: 'auth-kill',
+        amount: parseAmount('10'),
       }),
     ).rejects.toMatchObject({ code: 'bank.cards_disabled' });
     expect(ledger.reconcile()).toEqual({ ok: true });

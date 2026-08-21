@@ -1,4 +1,5 @@
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
+import { CaptureLog, bookLevelsFromCapture, type CaptureRecord, type VenueConnection } from '@intafaced/connect-data-lake';
 
 /**
  * INCREMENTAL DEPTH (§5.2 ws.gateway).
@@ -268,4 +269,83 @@ export function ladder(book: DepthBook, side: 'bids' | 'asks', limit = 20): Ladd
     rows.push({ price: entry.price, quantity: entry.quantity, cumulative });
   }
   return rows;
+}
+
+export interface VenueDepthSnapshotIngest {
+  readonly venueId: string;
+  readonly marketId: string;
+  readonly connection: VenueConnection;
+  /** Missing / null when the adapter returned no book. Prefer absent over silent empty. */
+  readonly snapshot?: DepthSnapshot | null;
+}
+
+export interface VenueDepthIngestResult {
+  readonly record: CaptureRecord;
+  /** Null when capture is absent — never a synthetic empty DepthBook. */
+  readonly book: DepthBook | null;
+}
+
+/**
+ * Snapshot ingest with a venue id. Unconnected / missing books write an absent
+ * capture hole and return `book: null`. A connected empty snapshot is measured
+ * empty and becomes a real (empty) DepthBook.
+ */
+export function ingestVenueDepthSnapshot(lake: CaptureLog, input: VenueDepthSnapshotIngest): VenueDepthIngestResult {
+  const snapshot = input.snapshot ?? null;
+  const record = lake.captureBook({
+    venueId: input.venueId,
+    marketId: snapshot?.marketId ?? input.marketId,
+    connection: input.connection,
+    snapshot: snapshot ? { sequence: snapshot.sequence, bids: snapshot.bids, asks: snapshot.asks } : null,
+  });
+  if (bookLevelsFromCapture(record) === null || snapshot === null) {
+    return { record, book: null };
+  }
+  return { record, book: bookFromSnapshot(snapshot) };
+}
+
+export interface VenueDepthDeltaIngest {
+  readonly venueId: string;
+  readonly marketId: string;
+  readonly connection: VenueConnection;
+  readonly book?: DepthBook | null;
+  readonly delta?: DepthDelta | null;
+}
+
+export type VenueDeltaIngestResult =
+  | { readonly record: CaptureRecord; readonly apply: ApplyResult }
+  | { readonly record: CaptureRecord; readonly apply: { readonly ok: false; readonly reason: 'absent' } };
+
+/**
+ * Delta ingest. A missing book or unwired venue is an absent hole — the delta
+ * is not applied onto an invented empty book.
+ */
+export function ingestVenueDepthDelta(lake: CaptureLog, input: VenueDepthDeltaIngest): VenueDeltaIngestResult {
+  const book = input.book ?? null;
+  const delta = input.delta ?? null;
+  if (input.connection !== 'connected' || book === null || delta === null) {
+    const record = lake.captureBook({
+      venueId: input.venueId,
+      marketId: delta?.marketId ?? book?.marketId ?? input.marketId,
+      connection: input.connection === 'connected' ? 'connected' : input.connection,
+      snapshot: null,
+    });
+    return { record, apply: { ok: false, reason: 'absent' } };
+  }
+  const apply = applyDelta(book, delta);
+  const record = lake.captureBook({
+    venueId: input.venueId,
+    marketId: book.marketId,
+    connection: 'connected',
+    snapshot: {
+      sequence: apply.ok ? apply.book.sequence : book.sequence,
+      bids: apply.ok
+        ? [...apply.book.bids.entries()].map(([price, qty]) => [price, formatAmount(qty)] as const)
+        : [...book.bids.entries()].map(([price, qty]) => [price, formatAmount(qty)] as const),
+      asks: apply.ok
+        ? [...apply.book.asks.entries()].map(([price, qty]) => [price, formatAmount(qty)] as const)
+        : [...book.asks.entries()].map(([price, qty]) => [price, formatAmount(qty)] as const),
+    },
+  });
+  return { record, apply };
 }

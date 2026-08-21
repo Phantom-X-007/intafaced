@@ -51,8 +51,43 @@ export const supportKbArticleSchema = z.object({
   /** i18n catalog key — never raw third-party product names */
   titleKey: z.string().min(1),
   bodyKey: z.string().min(1),
+  /**
+   * Immutable content version for this `id` (integer ≥ 1). Identity is `id`;
+   * a new published body is a new version, not a mutated row.
+   */
+  version: z.number().int().positive().optional(),
+  /** Operator CAS counter on the head row. Same integer as `version` on the wire. */
+  revision: z.number().int().positive().optional(),
+  /** Public doors return published rows only. Optional so older callers still parse. */
+  published: z.boolean().optional(),
 });
 export type SupportKbArticle = z.infer<typeof supportKbArticleSchema>;
+
+/** Router `searchKb` input — empty/omitted `q` means the published list. */
+export const searchKbInputSchema = z.object({ q: z.string().max(200).optional() }).optional();
+export type SearchKbInput = z.infer<typeof searchKbInputSchema>;
+
+/** Router `getKb` input. Omitted version → latest published. Unknown version is a named refuse, not a silent older body. */
+export const getKbArticleInputSchema = z.object({
+  id: z.string().min(1).max(200),
+  version: z.number().int().positive().optional(),
+});
+export type GetKbArticleInput = z.infer<typeof getKbArticleInputSchema>;
+
+/**
+ * Public get: missing and unpublished are the same answer (`null`).
+ * Never throw — svc-support `getKb` is a query that returns null, not an error.
+ */
+export function publicKbArticleOrNull(article: SupportKbArticle | null | undefined): SupportKbArticle | null {
+  if (article == null) return null;
+  if (article.published === false) return null;
+  return article;
+}
+
+/** Public list/search: omit `published: false`. Omitted `published` stays visible (spine back-compat). */
+export function publishedKbArticles(articles: readonly SupportKbArticle[]): SupportKbArticle[] {
+  return articles.filter((a) => publicKbArticleOrNull(a) !== null);
+}
 
 /* ------------------------------------------------------------------ *
  * AUDIT TRAIL — what happened to this ticket, in order, and who did it
@@ -223,6 +258,15 @@ export interface SupportContract {
   listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]>;
   setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus; note?: string }): Promise<SupportTicket>;
   listKb(): Promise<SupportKbArticle[]>;
+  /** Search published articles by id/key fragment. Empty query → published list. */
+  searchKb(query: string): Promise<SupportKbArticle[]>;
+  /**
+   * One published article, or null when missing / unpublished.
+   * Matches the public `getKb` query without `version`: unknown is null, not a throw.
+   * Explicit version is a service/router concern (`getKbArticleInputSchema.version`).
+   * Workflow triggers are not part of this contract.
+   */
+  getKbArticle(id: string): Promise<SupportKbArticle | null>;
   /** Audit trail, oldest first. Owner sees their own; operators see any. */
   listTicketEvents(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicketEvent[]>;
   /** Read the ticket owner's account state from svc-identity. Records a `grounding_read`. */

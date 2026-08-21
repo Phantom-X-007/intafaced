@@ -48,7 +48,7 @@ export type BankErrorCode =
    */
   | 'bank.position_pending'
   | 'bank.not_owner'
-  // ── Loans (§8.1) ───────────────────────────────────────────────────────────
+  // ── Loans (§8.1) ───────────────────────────────────────────────────────
   | 'bank.loan_product_not_found'
   | 'bank.loan_product_closed'
   | 'bank.loan_not_found'
@@ -128,7 +128,7 @@ export type BankErrorCode =
    * could not cover it. The loudest code in this file.
    */
   | 'bank.bad_debt_uncovered'
-  // ── Cards (§8.1, ledger half) ──────────────────────────────────────────────
+  // ── Cards (§8.1, ledger half) ──────────────────────────────────────
   /**
    * NO ISSUER IS CONFIGURED, so this deployment has no card programme.
    *
@@ -140,6 +140,15 @@ export type BankErrorCode =
    * honest thing an unconfigured deployment can do.
    */
   | 'bank.no_card_issuer'
+  /**
+   * `BANK_CARD_ISSUER=card-sim` under live/production posture.
+   *
+   * The simulator is not an issuing BIN. A deployment that looks live must not
+   * issue or authorise as if a scheme counterparty exists. Distinct from
+   * `bank.no_card_issuer` (nobody chose an issuer) so an operator is not sent
+   * looking for a missing setting when the setting they chose is the simulator.
+   */
+  | 'bank.card_sim_not_live'
   | 'bank.card_not_found'
   /** Frozen or closed. An authorisation on it is declined, never approved. */
   | 'bank.card_not_active'
@@ -173,7 +182,7 @@ export type BankErrorCode =
    * true. The capture it belongs to still stands; only the reward refuses.
    */
   | 'bank.cashback_pot_unfunded'
-  // ── Ramps (§8.1 / D-S-09, crypto ledger half) ──────────────────────────────
+  // ── Ramps (§8.1 / D-S-09, crypto ledger half) ──────────────────────────
   /**
    * NO RAMP PROGRAMME IS CONFIGURED.
    *
@@ -189,6 +198,13 @@ export type BankErrorCode =
    * A bank/PSP partner and money-transmission permission are a commercial
    * relationship. Refusing by this code is the whole fiat half of the ADR split.
    */
+  | 'bank.fiat_ramp_no_pay_adapter'
+  /**
+   * A pay adapter is present but none of its rails is a live fiat settle rail
+   * (sandbox, absent, or missing onramp/offramp capability). Distinct from
+   * empty-port `bank.fiat_ramp_no_pay_adapter` and programme-none `bank.fiat_ramp_socket`.
+   */
+  | 'bank.no_fiat_rail'
   | 'bank.fiat_ramp_socket'
   | 'bank.ramp_invalid_amount'
   /**
@@ -198,6 +214,10 @@ export type BankErrorCode =
    */
   | 'bank.ramp_invalid_asset'
   | 'bank.ramp_invalid_destination'
+  /** Persisted dest missing — later withdraw has no real ref before withdrawHold. */
+  | 'bank.withdraw_destination_missing'
+  /** Dest user has no primary space — refuse before ledger-client posts. */
+  | 'bank.dest_user_missing'
   /** Same (rail, railRef), (user, clientRef), or offramp id already booked with different facts. */
   | 'bank.ramp_conflict'
   /**
@@ -242,10 +262,12 @@ export type BankErrorCode =
   | 'bank.auto_invest_not_found'
   | 'bank.auto_invest_inactive'
   | 'bank.auto_invest_invalid_threshold'
+  /** Second live card_roundup on the same (user, asset). Pause/cancel first. */
+  | 'bank.auto_invest_roundup_exists'
   | 'bank.auto_invest_run_failed'
   | 'bank.auto_invest_below_threshold'
   | 'bank.auto_invest_disabled'
-  // ── Business maker/checker (§31:811 partial) ───────────────────────────────
+  // ── Business maker/checker (§31:811 partial) ───────────────────────────
   | 'bank.business_not_found'
   | 'bank.business_closed'
   | 'bank.business_not_member'

@@ -7,12 +7,15 @@ import { SESSION_SCOPES, issueAccessToken, verifyAccessToken } from '@intafaced/
 import type { Context } from '@intafaced/contracts';
 import { createIdentityRouter } from './router.js';
 import { AuthError, type AuthService, type KycRecordView } from './auth/auth-service.js';
+import { userCopy } from './user-copy.js';
 import type { RankService } from './rank/rank-service.js';
 import { MemoryAccrualStore } from './affiliates/accrual-store.js';
 import type { CommissionRow } from './affiliates/commission.js';
 import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
 import { MemoryKycDocumentStore } from './kyc/document-store.js';
 import type { BindProviderRefInput, BindProviderRefResult } from './kyc/provider-ref-bind.js';
+import { MemoryWaitlistStore } from './waitlist/waitlist-store.js';
+import { WaitlistService } from './waitlist/waitlist-service.js';
 
 /**
  * The tRPC boundary for KYC and step-up.
@@ -41,15 +44,32 @@ const OPERATOR = '22222222-2222-4222-8222-222222222222';
 const RECORD = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 
-async function ctx(scopes: string[], opts: { mfa?: boolean; userId?: string; region?: string } = {}): Promise<Context> {
+async function ctx(
+  scopes: string[],
+  opts: { mfa?: boolean; userId?: string; region?: string; service?: string | null; apiKeyId?: string } = {},
+): Promise<Context> {
   const region = opts.region ?? 'DE';
-  if (scopes.length === 0) return { principal: null, service: null, region, requestId: 'req-1' };
+  if (scopes.length === 0) {
+    return { principal: null, service: opts.service ?? null, region, requestId: 'req-1' };
+  }
 
   const { token } = await issueAccessToken(
-    { userId: opts.userId ?? USER, sessionId: SESSION, scopes, tier: 'none', mfa: opts.mfa ?? true },
+    {
+      userId: opts.userId ?? USER,
+      sessionId: SESSION,
+      scopes,
+      tier: 'none',
+      mfa: opts.mfa ?? true,
+      ...(opts.apiKeyId ? { apiKeyId: opts.apiKeyId } : {}),
+    },
     authConfig,
   );
-  return { principal: await verifyAccessToken(token, authConfig), service: null, region, requestId: 'req-1' };
+  return {
+    principal: await verifyAccessToken(token, authConfig),
+    service: opts.service ?? null,
+    region,
+    requestId: 'req-1',
+  };
 }
 
 // ── The stub ─────────────────────────────────────────────────────────────────
@@ -326,6 +346,29 @@ describe('kyc.approve is the operator action that grants custodial access', () =
     const api = await caller(['admin:compliance'], { userId: OPERATOR });
     expect(codeOf(await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e))).toBe('NOT_FOUND');
   });
+
+  it('refuses an agent service caller writing reviewed_by even with compliance + MFA', async () => {
+    const api = await caller(['admin:compliance'], { userId: OPERATOR, service: 'svc-agents' });
+    const err = await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toMatch(/agent must never write reviewed_by/);
+    expect(stub.calls.filter((c) => c.method === 'approveKycRecord')).toHaveLength(0);
+
+    const rejectErr = await api.kyc.reject({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(rejectErr)).toBe('FORBIDDEN');
+    expect(stub.calls.filter((c) => c.method === 'rejectKycRecord')).toHaveLength(0);
+  });
+
+  it('refuses an API-key (agent) principal writing reviewed_by', async () => {
+    const api = await caller(['admin:compliance'], {
+      userId: OPERATOR,
+      apiKeyId: '55555555-5555-4555-8555-555555555555',
+    });
+    const err = await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toMatch(/agent must never write reviewed_by/);
+    expect(stub.calls.filter((c) => c.method === 'approveKycRecord')).toHaveLength(0);
+  });
 });
 
 // ── Submitting is the user's own act, and only their own ─────────────────────
@@ -393,6 +436,10 @@ describe('kyc.status', () => {
     expect(JSON.stringify(status)).not.toContain('provider-pointer-that-must-not-leak');
     expect(status.records[0]).not.toHaveProperty('providerRef');
     expect(status.records[0]).not.toHaveProperty('reviewedBy');
+    expect(status.records[0]).not.toHaveProperty('bytes');
+    expect(status.records[0]).not.toHaveProperty('bytesBase64');
+    expect(status.records[0]).not.toHaveProperty('ciphertext');
+    expect(JSON.stringify(status)).not.toMatch(/"bytes"|"ciphertext"|"provider_ref"/);
   });
 });
 
@@ -619,6 +666,7 @@ describe('apiKeys.exchange turns a key into an edge-usable access token', () => 
     const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
     const err = await api.apiKeys.exchange({ key: 'ifc_wrong' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect((err as { message?: string }).message).toBe(userCopy('auth.invalid_credentials'));
   });
 });
 
@@ -1342,32 +1390,118 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     expect(bound.document).not.toHaveProperty('bytes');
   });
 
-  it('storeDocument without vault refuses closed — never invents a key', async () => {
+  it('storeDocument without vault refuses closed with named kyc_doc.unwired — never invents a key', async () => {
     const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true });
     const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
-    expect(
-      codeOf(
-        await op.kyc
-          .storeDocument({
-            userId: DOC_USER,
-            contentType: 'image/jpeg',
-            bytesBase64: Buffer.from('x').toString('base64'),
-          })
-          .catch((e: unknown) => e),
-      ),
-    ).toBe('PRECONDITION_FAILED');
+    const err = await op.kyc
+      .storeDocument({
+        userId: DOC_USER,
+        contentType: 'image/jpeg',
+        bytesBase64: Buffer.from('x').toString('base64'),
+      })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect((err as { message?: string }).message).toContain('kyc_doc.unwired');
   });
 });
 
-describe('kyc surface never mounts a document-bytes read procedure', () => {
-  it('router source has no getDocument / readDocument / decryptDocument on the wire path', () => {
-    // router.test.ts lives next to router.ts
+describe('kyc.getDocument is compliance-only bytes, never a public/user read', () => {
+  it('getDocument is mounted behind admin:compliance', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
-    expect(src).not.toMatch(/getDocument|readDocument|downloadDocument/);
-    // getFor may exist only if someone mistakenly mounts it — forbid mounting decrypt on kyc procedures.
-    expect(src).not.toMatch(/vault\.getFor|kycDocs\.getFor|\.getFor\(/);
+    expect(src).toMatch(/getDocument:\s*scopedProcedure\('admin:compliance'\)/);
+    expect(src).toContain('vault.getFor');
+    expect(src).not.toMatch(/readDocument|downloadDocument/);
     expect(src).toContain('storeDocument');
     expect(src).toContain('listDocuments');
     expect(src).toContain('bindDocument');
+  });
+
+  it('a user session cannot open document bytes', async () => {
+    const store = new MemoryKycDocumentStore(randomBytes(32).toString('base64'));
+    const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, kycDocs: store });
+    const user = r.createCaller(await ctx(['identity:read', 'identity:write'], { userId: USER }));
+    const err = await user.kyc.getDocument({ documentId: '55555555-5555-4555-8555-555555555555' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+});
+
+// ── Drop 0 waitlist + referral queue ─────────────────────────────────────────
+
+function waitlistRouter(overrides: Record<string, boolean> = {}) {
+  const store = new MemoryWaitlistStore();
+  const waitlist = new WaitlistService(store, { drop: '0', overrides });
+  return {
+    store,
+    api: createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, waitlist }),
+  };
+}
+
+describe('waitlist door — unbuilt / flag / operator', () => {
+  it('refuses enroll with waitlist.unbuilt when the store is not wired', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true }).createCaller(await ctx([]));
+    const err = await api.waitlist.enroll({ email: 'ada@example.com' }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('waitlist.unbuilt');
+  });
+
+  it('enrolls publicly when the flag is on', async () => {
+    const { api } = waitlistRouter();
+    const out = await api.createCaller(await ctx([])).waitlist.enroll({ email: 'ada@example.com' });
+    expect(out.created).toBe(true);
+    expect(out.position).toBe(1);
+    expect(out.referralCode).toMatch(/^[a-f0-9]{12}$/);
+  });
+
+  it('refuses enroll when waitlist.enabled is off — no silent capture', async () => {
+    const { api, store } = waitlistRouter({ 'waitlist.enabled': false });
+    const err = await api
+      .createCaller(await ctx([]))
+      .waitlist.enroll({ email: 'ada@example.com' })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('flag.waitlist.enabled.disabled');
+    expect(await store.count()).toBe(0);
+  });
+
+  it('refuses a referral code when referral.queue is off — does not discard it', async () => {
+    const store = new MemoryWaitlistStore();
+    const open = new WaitlistService(store, { drop: '0' });
+    const ref = await open.enroll({ email: 'ref@example.com' });
+    const closed = new WaitlistService(store, { drop: '0', overrides: { 'referral.queue': false } });
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, waitlist: closed });
+    const err = await api
+      .createCaller(await ctx([]))
+      .waitlist.enroll({ email: 'ada@example.com', referralCode: ref.entry.referralCode })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as { message?: string }).message)).toContain('flag.referral.queue.disabled');
+    expect(await store.getByEmail('ada@example.com')).toBeNull();
+  });
+
+  it('list requires admin:read', async () => {
+    const { api } = waitlistRouter();
+    const err = await api
+      .createCaller(await ctx([]))
+      .waitlist.list({ limit: 10, offset: 0 })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    const userErr = await api
+      .createCaller(await ctx(['identity:read']))
+      .waitlist.list({ limit: 10, offset: 0 })
+      .catch((e: unknown) => e);
+    expect(codeOf(userErr)).toBe('FORBIDDEN');
+  });
+
+  it('lists FIFO for admin:read including email', async () => {
+    const { api } = waitlistRouter();
+    const publicApi = api.createCaller(await ctx([]));
+    await publicApi.waitlist.enroll({ email: 'a@example.com' });
+    await publicApi.waitlist.enroll({ email: 'b@example.com' });
+    const list = await api.createCaller(await ctx(['admin:read'], { userId: OPERATOR })).waitlist.list({
+      limit: 10,
+      offset: 0,
+    });
+    expect(list.total).toBe(2);
+    expect(list.entries.map((e) => e.email)).toEqual(['a@example.com', 'b@example.com']);
   });
 });

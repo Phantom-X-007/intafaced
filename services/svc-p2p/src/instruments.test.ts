@@ -450,4 +450,13 @@ describe('sell offers only advertise methods with a live destination', () => {
     expect(missingSellDestinations(['sepa', 'wise'], new Set())).toEqual(['sepa', 'wise']);
     expect(sellOfferBoardable(['sepa'], new Set())).toBe(false);
   });
+
+  it('RED: an empty operator registry is not a payable rail', () => {
+    // Same helper the board uses. Empty registered set ⇒ nothing to advertise,
+    // including on buy offers that never held a destination.
+    const empty = new Set<string>();
+    expect(methodsWithLiveDestination(['test-transfer', { id: 'bank_transfer' }], empty)).toEqual([]);
+    expect(missingSellDestinations(['test-transfer'], empty)).toEqual(['test-transfer']);
+    expect(sellOfferBoardable(['test-transfer'], empty)).toBe(false);
+  });
 });

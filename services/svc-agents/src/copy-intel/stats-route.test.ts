@@ -66,6 +66,13 @@ describe('copyIntel.buildStats route (Stage-1 fixtures)', () => {
     expect(result).toMatchObject({ status: 'unavailable', reason: 'copy_plane_dark' });
   });
 
+  it('live copy plane without sealed allowlist refuses invent PnL', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .copyIntel.buildStats({ fixtures: [fixture], copyPlane: 'live', leaderAllowlist: ['leader-1'] });
+    expect(result).toMatchObject({ status: 'unavailable', reason: 'copy_plane_dark' });
+  });
+
   it('empty fixtures → empty (never invent leaders)', async () => {
     const result = await createAgentsRouter(stubDeps()).createCaller(signed()).copyIntel.buildStats({ fixtures: [] });
     expect(result).toEqual({ status: 'empty', userMessageKey: 'agents.copy_intel.empty' });

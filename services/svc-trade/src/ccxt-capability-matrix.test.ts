@@ -18,8 +18,10 @@ import { REST_ROUTES } from '@intafaced/exchange-contract';
 import {
   CALLER_REFUSED_PRICE_FIELDS,
   CCXT_CAPABILITY_MATRIX,
+  CCXT_LEVERAGE_REFUSE_IDS,
   CCXT_REFUSE_ARMS,
   danglingRefuseArmIds,
+  leverageRefuseDrift,
   matrixRestRouteNames,
   orphanRefuseArmIds,
   refuseArmById,
@@ -32,6 +34,7 @@ import { fakeMarket, registerPublicRest, type PublicRestDeps } from './public-re
 const here = dirname(fileURLToPath(import.meta.url));
 const publicRestSource = readFileSync(join(here, 'public-rest.ts'), 'utf8');
 const privateRestSource = readFileSync(join(here, 'private-rest.ts'), 'utf8');
+const positionServiceSource = readFileSync(join(here, 'futures/position-service.ts'), 'utf8');
 
 const SECRET = 'a-ccxt-capability-matrix-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -97,11 +100,24 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
     markets: async () => [market],
     userBalances: async () => [],
     listPositions: async () => [],
+    listClosedPositions: async () => [],
+    getPosition: async () => {
+      throw new Error('getPosition should not run in this matrix test');
+    },
     openPosition: async () => {
       throw new Error('openPosition should not run when price refused');
     },
     closePosition: async () => {
       throw new Error('closePosition should not run when price refused');
+    },
+    setLeverage: async () => {
+      throw new Error('setLeverage should not run in this matrix test');
+    },
+    addIsolatedMargin: async () => {
+      throw new Error('addIsolatedMargin should not run in this matrix test');
+    },
+    reduceIsolatedMargin: async () => {
+      throw new Error('reduceIsolatedMargin should not run in this matrix test');
     },
     getOpenMarginCall: async () => null,
     getAdlDisclosure: async () => ({
@@ -154,13 +170,21 @@ describe('ccxt capability matrix — inventory integrity', () => {
     const ids = CCXT_REFUSE_ARMS.map((a) => a.id).sort();
     expect(ids).toEqual(
       [
+        'addIsolatedMarginInsufficient',
         'adlDisclosureRequired',
         'callerPriceOnClose',
         'callerPriceOnOpen',
         'crossMarginOnOpen',
         'fundingRateSpot',
         'fundingRateUnavailable',
-        'setLeverage',
+        'futuresUnconfiguredOnOpen',
+        'leverageRequiredOnOpen',
+        'profitSourceUnconfiguredOnClose',
+        'reduceIsolatedMarginBelowInitial',
+        'reduceIsolatedMarginWouldLiquidate',
+        'setLeverageInsufficientMargin',
+        'setLeverageTooHigh',
+        'setLeverageWouldLiquidate',
         'setMarginMode',
       ].sort(),
     );
@@ -168,7 +192,20 @@ describe('ccxt capability matrix — inventory integrity', () => {
       refuseOnlyRoutes()
         .map((r) => r.name)
         .sort(),
-    ).toEqual(['setLeverage', 'setMarginMode'].sort());
+    ).toEqual(['setMarginMode']);
+  });
+
+  it('setMarginMode stays refuse 501; setLeverage is a supported 200 path within 10×', () => {
+    expect([...leverageRefuseDrift()]).toEqual([]);
+    expect(CCXT_LEVERAGE_REFUSE_IDS).toEqual(['setMarginMode']);
+    const lev = CCXT_CAPABILITY_MATRIX.find((r) => r.name === 'setLeverage')!;
+    expect(lev.kind).toBe('supported');
+    expect(lev.kind).not.toBe('refuse');
+    const mode = CCXT_CAPABILITY_MATRIX.find((r) => r.name === 'setMarginMode')!;
+    expect(mode.kind).toBe('refuse');
+    const arm = refuseArmById('setMarginMode')!;
+    expect(arm.httpStatus).toBe(501);
+    expect(arm.ccxtCode).toBe('NotSupported');
   });
 
   it('caller-refused price fields pin private-rest PRICE_FIELDS', () => {
@@ -184,12 +221,24 @@ describe('ccxt capability matrix — inventory integrity', () => {
 
   it('openPosition refuse arms pin private-rest domain codes', () => {
     expect(privateRestSource).toContain("'trade.cross_margin_unsupported'");
+    expect(privateRestSource).toContain("'trade.leverage_required'");
     expect(privateRestSource).toContain('AdlDisclosureError');
     expect(privateRestSource).toContain("'/api/v1/futures/adl-disclosure'");
     expect(privateRestSource).toContain("'/api/v1/futures/adl-disclosure/ack'");
     expect(privateRestSource).toContain("'/api/v1/futures/adl-events'");
     expect(refuseArmById('adlDisclosureRequired')!.httpStatus).toBe(403);
     expect(refuseArmById('adlDisclosureRequired')!.intafacedCode).toBe(ADL_DISCLOSURE_REQUIRED);
+    expect(privateRestSource).toContain('FuturesError');
+    const unconfigured = refuseArmById('futuresUnconfiguredOnOpen')!;
+    expect(unconfigured.httpStatus).toBe(403);
+    expect(unconfigured.intafacedCode).toBe('trade.futures_unconfigured');
+    expect(unconfigured.ccxtCode).toBe('NotSupported');
+    expect(positionServiceSource).toContain("'trade.futures_unconfigured', 403");
+    const closeUnconfigured = refuseArmById('profitSourceUnconfiguredOnClose')!;
+    expect(closeUnconfigured.httpStatus).toBe(403);
+    expect(closeUnconfigured.intafacedCode).toBe('trade.profit_source_unconfigured');
+    expect(closeUnconfigured.ccxtCode).toBe('NotSupported');
+    expect(positionServiceSource).toContain("'trade.profit_source_unconfigured'");
   });
 
   it('extension inventory includes capabilities + ADL doors (not only REST_ROUTES)', () => {
@@ -198,6 +247,8 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(names).toContain('fetchAdlDisclosure');
     expect(names).toContain('ackAdlDisclosure');
     expect(names).toContain('fetchAdlDisclosureEvents');
+    expect(names).toContain('fetchClosedPositions');
+    expect(names).toContain('fetchPosition');
     expect(names).toContain('fetchPositionMarginCall');
   });
 });
@@ -217,12 +268,15 @@ describe('ccxt capability matrix — claim ≡ mount source', () => {
     }
   });
 
-  it('refuse-only routes use notSupported + matrix intafacedCode in private-rest', () => {
-    for (const row of refuseOnlyRoutes()) {
-      const arm = refuseArmById(row.refuseArmIds[0]!)!;
-      expect(privateRestSource).toContain(`'${arm.intafacedCode}'`);
-      expect(privateRestSource).toContain(`'${row.path}'`);
-    }
+  it('setMarginMode stays 501; setLeverage is a live isolated path that can 200', () => {
+    expect(privateRestSource).not.toMatch(/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/);
+    expect(privateRestSource).toContain("app.post('/api/v1/positions/leverage'");
+    expect(privateRestSource).toMatch(/app\.post\('\/api\/v1\/positions\/margin-mode',\s*derivativesNotSupported\('setMarginMode'/);
+    expect(privateRestSource).toContain('setMarginMode must stay 501');
+    expect(privateRestSource).toContain('notSupported(');
+    expect(privateRestSource).toContain('reply.code(200).send(pos)');
+    expect(publicRestSource).not.toContain("app.post('/api/v1/positions/leverage'");
+    expect(publicRestSource).not.toContain("app.post('/api/v1/positions/margin-mode'");
   });
 
   it('funding-rate refuse codes appear in public-rest', () => {
@@ -233,20 +287,120 @@ describe('ccxt capability matrix — claim ≡ mount source', () => {
 });
 
 describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
-  it('setLeverage refuse arm: signed → matrix httpStatus + codes', async () => {
-    const arm = refuseArmById('setLeverage')!;
+  it('setLeverage supported: signed → 200 from the injected service', async () => {
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        setLeverage: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', leverage: '5' }) as never,
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/leverage',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', leverage: '5', clientAdjustmentId: 'ccxt-set-leverage-1' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().leverage).toBe('5');
+    await app.close();
+  });
+
+  it('addIsolatedMargin supported: signed → 200 from the injected service', async () => {
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        addIsolatedMargin: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', collateral: '7500' }) as never,
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'ccxt-add-margin-1' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().collateral).toBe('7500');
+    await app.close();
+  });
+
+  it('fetchClosedPositions supported: signed → 200 [] when none', async () => {
     const app = Fastify();
     registerPrivateRest(app, privateDeps());
     await app.ready();
     const res = await app.inject({
-      method: arm.method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS',
+      method: 'GET',
+      url: '/api/v1/positions/closed',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('fetchPosition supported: signed → 200 from the injected service', async () => {
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        getPosition: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', status: 'open' }) as never,
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/positions/pos-1',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().id).toBe('pos-1');
+    await app.close();
+  });
+
+  it('reduceIsolatedMargin supported: signed → 200 from the injected service', async () => {
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        reduceIsolatedMargin: async () => ({ id: 'pos-1', symbol: 'BTC/USDT', collateral: '5000' }) as never,
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin/reduce',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', amount: '2500', clientAdjustmentId: 'ccxt-reduce-margin-1' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().collateral).toBe('5000');
+    await app.close();
+  });
+
+  it('setLeverageTooHigh arm: signed → 400 domain, never clamped to 10×', async () => {
+    const arm = refuseArmById('setLeverageTooHigh')!;
+    const { FuturesError } = await import('./futures/position-service.js');
+    const app = Fastify();
+    registerPrivateRest(
+      app,
+      privateDeps({
+        setLeverage: async () => {
+          throw new FuturesError('11x exceeds 10x', arm.intafacedCode, 400);
+        },
+      }),
+    );
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
       url: arm.path,
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
-      payload: { symbol: 'BTC/USDT', leverage: '10' },
+      payload: { symbol: 'BTC/USDT', positionId: 'pos-1', leverage: '11', clientAdjustmentId: 'ccxt-set-too-high-1' },
     });
     expect(res.statusCode).toBe(arm.httpStatus);
-    expect(res.json().code).toBe(arm.ccxtCode);
-    expect(res.json().intafacedCode).toBe(arm.intafacedCode);
+    expect(res.json().error).toBe(arm.intafacedCode);
     await app.close();
   });
 
@@ -261,9 +415,12 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
       headers: { ...signedHeaders(), 'content-type': 'application/json' },
       payload: { symbol: 'BTC/USDT', marginMode: 'cross' },
     });
+    expect(res.statusCode).not.toBe(200);
     expect(res.statusCode).toBe(arm.httpStatus);
+    expect(arm.httpStatus).toBe(501);
     expect(res.json().code).toBe(arm.ccxtCode);
     expect(res.json().intafacedCode).toBe(arm.intafacedCode);
+    expect(JSON.stringify(res.json())).not.toMatch(/"marginMode"\s*:/);
     await app.close();
   });
 
@@ -436,13 +593,28 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/capabilities' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as {
-      routes: Array<{ name: string; refuseArmIds?: string[] }>;
+      routes: Array<{ name: string; kind?: string; refuseArmIds?: string[] }>;
       refuseArms: Array<{ id: string; httpStatus: number }>;
     };
     expect(body.routes.some((r) => r.name === 'fetchAdlDisclosure')).toBe(true);
     expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('adlDisclosureRequired'))).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'adlDisclosureRequired' && a.httpStatus === 403)).toBe(true);
     expect(body.refuseArms.some((a) => a.id === 'crossMarginOnOpen' && a.httpStatus === 400)).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'leverageRequiredOnOpen' && a.httpStatus === 400)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'openPosition' && r.refuseArmIds?.includes('futuresUnconfiguredOnOpen'))).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'futuresUnconfiguredOnOpen' && a.httpStatus === 403)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'closePosition' && r.refuseArmIds?.includes('profitSourceUnconfiguredOnClose'))).toBe(true);
+    expect(body.refuseArms.some((a) => a.id === 'profitSourceUnconfiguredOnClose' && a.httpStatus === 403)).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setLeverage' && r.kind === 'supported')).toBe(true);
+    expect(body.routes.some((r) => r.name === 'setMarginMode' && r.kind === 'refuse')).toBe(true);
+    for (const id of CCXT_LEVERAGE_REFUSE_IDS) {
+      const route = body.routes.find((r) => r.name === id);
+      expect(route?.kind, id).toBe('refuse');
+      expect(route?.kind, id).not.toBe('supported');
+      const arm = body.refuseArms.find((a) => a.id === id);
+      expect(arm?.httpStatus, id).toBe(501);
+      expect(arm?.httpStatus, id).not.toBe(200);
+    }
     await app.close();
   });
 

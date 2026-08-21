@@ -1,5 +1,7 @@
 # Board Clear — NEXT
 
+> **Historical campaign snapshot — not live authority.** This dated micro-sequence is retained for context. Re-derive current work from live GitHub, the tracker, current claims/lanes, and the run ledger. Its `AGENT-COMPLETE` or `BABYSIT-HUMAN` status must not stop newly authorized work or reopen a human-owned mountain.
+
 > **READ THIS FIRST AFTER COMPACT / continue** for campaign micro-sequence.  
 > **Post-pile deep audit:** **AGENT-COMPLETE** — seal `docs/audit/2026-08-02-post-pile-deep/AGENT-COMPLETE-SEAL-2026-08-02.md`  
 > **Product free / human-owned** → `tooling/tracker/features.mjs` · [`COORDINATION-TRUTH-LAYERS.md`](COORDINATION-TRUTH-LAYERS.md)  

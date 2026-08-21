@@ -4,7 +4,8 @@
  *
  * Until the owner seals which market inputs may contribute to a ranking (and
  * which ranking recipe is allowed), every ranked-signal path is refuse-closed.
- * Agents must not invent score formulas, "hot" lists, or market alpha.
+ * Omitted law must not sneak a default ranked board. Agents must not invent
+ * score formulas, "hot" lists, live tickers, or market alpha.
  */
 
 /** Board id this gate exists to honour. */
@@ -37,12 +38,13 @@ export type ScannerSignalInputsLaw =
       readonly rankingRecipeId: ScannerRankingRecipeId;
     };
 
-/** Production / tip default — P0-11 is not sealed. */
+/** Explicit unpublished / blank P0-11 — refuse-closed. Production default is this. */
 export const UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW: ScannerSignalInputsLaw = { published: false };
 
 /**
  * Test / sealed-path fixture: the only recipe the Stage-1 ranker implements.
  * Not a production default — callers must pass it explicitly after P0-11 seals.
+ * Do not wire this as the omitted-law ranked board.
  */
 export const SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW: Extract<ScannerSignalInputsLaw, { published: true }> = {
   published: true,
@@ -50,6 +52,22 @@ export const SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW: Extract<ScannerSignalInputsLaw,
   allowedInputs: ['last', 'volume24h', 'change24hBps'] as ScannerSignalInputKind[],
   rankingRecipeId: 'abs_change_x_log_volume',
 };
+
+/**
+ * Tip / production default — P0-11 inputs stay blank (Class X live-data residual).
+ * Omitted law resolves here so a default ranked board cannot sneak in.
+ */
+export const PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW: ScannerSignalInputsLaw = UNPUBLISHED_SCANNER_SIGNAL_INPUTS_LAW;
+
+/**
+ * `undefined` (caller omitted) → unpublished / blank → refuse-closed.
+ * `null` or `{ published: false }` → same refuse (`signal_inputs_law_blank`).
+ * Explicit sealed fixture only after owner seal — never invent inputs.
+ */
+export function resolveScannerSignalInputsLaw(law: ScannerSignalInputsLaw | null | undefined): ScannerSignalInputsLaw | null {
+  if (law === undefined) return PRODUCTION_SCANNER_SIGNAL_INPUTS_LAW;
+  return law;
+}
 
 /** Inputs the Stage-1 recipe actually reads — must all be on the sealed allowlist. */
 export const ABS_CHANGE_X_LOG_VOLUME_REQUIRED_INPUTS: readonly ScannerSignalInputKind[] = ['last', 'volume24h', 'change24hBps'];

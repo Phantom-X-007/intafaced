@@ -1,6 +1,24 @@
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { CopyError } from './errors.js';
 import type { CopyFollow } from './follows.js';
+
+/** postgres.js surfaces PG SQLSTATE on `err.code`. */
+export function isPgUniqueViolation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505';
+}
+
+/**
+ * Unique `(follower_id, leader_id)` is the durable already-following gate.
+ * Concurrent follows can both pass the list check; the index must not leak a
+ * raw 23505 onto the wire (same honesty as fill-sequence-conflict).
+ */
+export function rethrowCopyFollowUnique(err: unknown): never {
+  if (isPgUniqueViolation(err)) {
+    throw new CopyError('Already following this leader', 'trade.copy_already_following');
+  }
+  throw err;
+}
 
 /**
  * Durable copy-follow store (trade.copy residual — same pattern as #1010 TWAP).
@@ -87,6 +105,22 @@ export type RunFeeShareSettleOnceResult =
   | { readonly status: 'duplicate'; readonly record: StoredSettledFeeShare }
   | { readonly status: 'claimed'; readonly record: StoredSettledFeeShare };
 
+/** Prior follower place under a claimed (follow, leader fill). */
+export interface StoredPlacedMirror {
+  readonly followId: string;
+  readonly fillId: string;
+  readonly orderId: string;
+  readonly clientOrderId: string;
+  readonly price: Amount;
+}
+
+export type RunPlaceMirrorOnceResult =
+  | { readonly status: 'duplicate'; readonly record: StoredPlacedMirror }
+  | { readonly status: 'claimed'; readonly record: StoredPlacedMirror };
+
+/** Process-local place claims for Sql clones (spot clientOrderId is the durable retry key). */
+const sqlPlacedMirrors = new Map<string, StoredPlacedMirror>();
+
 export interface CopyFollowStore {
   /**
    * Linearize every action for one follow across processes.
@@ -98,8 +132,10 @@ export interface CopyFollowStore {
   saveFollow(follow: CopyFollow, exposure?: Amount): Promise<void>;
   getFollow(followId: string): Promise<CopyFollow | null>;
   deleteFollow(followId: string): Promise<void>;
-  /** All follows (for already-following + hydrate). */
+  /** All follows (hydrate / ops). Product desk uses listFollowsByFollower. */
   listFollows(): Promise<CopyFollow[]>;
+  /** Caller-scoped list — never loads another follower's envelope. */
+  listFollowsByFollower(followerId: string): Promise<CopyFollow[]>;
   getExposure(followId: string): Promise<Amount>;
   setExposure(followId: string, amount: Amount): Promise<void>;
   /**
@@ -151,6 +187,11 @@ export interface CopyFollowStore {
    * `run` (so reserveEarnings does not fire again).
    */
   runFeeShareSettleOnce(followId: string, fillId: string, run: () => Promise<StoredSettledFeeShare>): Promise<RunFeeShareSettleOnceResult>;
+  /**
+   * Run follower place at most once per (followId, fillId).
+   * Redelivery returns the prior order and does not call placeOrder again.
+   */
+  runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult>;
 }
 
 /**
@@ -198,6 +239,8 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   private readonly mirrored = new Map<string, StoredMirrorPlan>();
   /** Keyed `${followId}\0${fillId}` — one fee-share settle per follower fill. */
   private readonly settled = new Map<string, StoredSettledFeeShare>();
+  /** Keyed `${followId}\0${fillId}` — one follower place per leader fill. */
+  private readonly placed = new Map<string, StoredPlacedMirror>();
   private readonly exclusive = createExclusiveQueue();
 
   async runFollowExclusive<T>(followId: string, run: (lockedStore: CopyFollowStore) => Promise<T>): Promise<T> {
@@ -205,6 +248,11 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   }
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
+    for (const existing of this.follows.values()) {
+      if (existing.followerId === follow.followerId && existing.leaderId === follow.leaderId && existing.followId !== follow.followId) {
+        throw new CopyError('Already following this leader', 'trade.copy_already_following');
+      }
+    }
     this.follows.set(follow.followId, follow);
     if (!this.exposure.has(follow.followId)) {
       this.exposure.set(follow.followId, exposure);
@@ -230,10 +278,19 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         this.settled.delete(key);
       }
     }
+    for (const key of [...this.placed.keys()]) {
+      if (key.startsWith(`${followId}\0`)) {
+        this.placed.delete(key);
+      }
+    }
   }
 
   async listFollows(): Promise<CopyFollow[]> {
     return [...this.follows.values()];
+  }
+
+  async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
+    return [...this.follows.values()].filter((f) => f.followerId === followerId);
   }
 
   async getExposure(followId: string): Promise<Amount> {
@@ -346,6 +403,19 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
       }
       const record = await run();
       this.settled.set(key, record);
+      return { status: 'claimed' as const, record };
+    });
+  }
+
+  async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
+    return this.exclusive(`place:${mirrorKey(followId, fillId)}`, async () => {
+      const key = mirrorKey(followId, fillId);
+      const existing = this.placed.get(key);
+      if (existing) {
+        return { status: 'duplicate' as const, record: existing };
+      }
+      const record = await run();
+      this.placed.set(key, record);
       return { status: 'claimed' as const, record };
     });
   }
@@ -471,7 +541,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
 
   async saveFollow(follow: CopyFollow, exposure: Amount = 0n): Promise<void> {
     const markets = JSON.stringify([...follow.envelope.permittedMarkets]);
-    await this.sql`
+    try {
+      await this.sql`
       INSERT INTO copy_follows (
         follow_id, follower_id, leader_id, region, permitted_markets,
         max_notional_per_order, max_aggregate_exposure, expires_at,
@@ -499,6 +570,9 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         region = EXCLUDED.region,
         updated_at = now()
     `;
+    } catch (err) {
+      rethrowCopyFollowUnique(err);
+    }
   }
 
   async getFollow(followId: string): Promise<CopyFollow | null> {
@@ -518,6 +592,11 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     await this.sql`DELETE FROM copy_settled_fee_shares WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_mirrored_fills WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_follows WHERE follow_id = ${followId}`;
+    for (const key of [...sqlPlacedMirrors.keys()]) {
+      if (key.startsWith(`${followId}\0`)) {
+        sqlPlacedMirrors.delete(key);
+      }
+    }
   }
 
   async listFollows(): Promise<CopyFollow[]> {
@@ -526,6 +605,17 @@ export class SqlCopyFollowStore implements CopyFollowStore {
              max_notional_per_order::text, max_aggregate_exposure::text,
              expires_at, fee_share_killed, exposure::text, created_at
         FROM copy_follows
+    `;
+    return rows.map(rowToFollow);
+  }
+
+  async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
+    const rows = await this.sql<FollowRow[]>`
+      SELECT follow_id, follower_id, leader_id, region, permitted_markets,
+             max_notional_per_order::text, max_aggregate_exposure::text,
+             expires_at, fee_share_killed, exposure::text, created_at
+        FROM copy_follows
+       WHERE follower_id = ${followerId}
     `;
     return rows.map(rowToFollow);
   }
@@ -785,6 +875,17 @@ export class SqlCopyFollowStore implements CopyFollowStore {
       return settleOnce();
     }
     return this.withAdvisoryLock(`copy-settle:${followId}:${fillId}`, settleOnce);
+  }
+
+  async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
+    const key = mirrorKey(followId, fillId);
+    const existing = sqlPlacedMirrors.get(key);
+    if (existing) {
+      return { status: 'duplicate' as const, record: existing };
+    }
+    const record = await run();
+    sqlPlacedMirrors.set(key, record);
+    return { status: 'claimed' as const, record };
   }
 }
 

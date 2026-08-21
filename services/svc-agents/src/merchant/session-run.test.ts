@@ -5,7 +5,9 @@ import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } fro
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { merchantAgentGuardrail } from './guardrail.js';
+import type { PayMetricsPort } from './pay-metrics-port.js';
 import { MERCHANT_AGENT_ID, MERCHANT_METRICS_TOOL, runMerchantWatchSession } from './session-run.js';
+import { merchantWatchInventedNumericRate } from './watch.js';
 
 /**
  * The metered `merchant.watch` run.
@@ -134,6 +136,10 @@ function runtimeOf(fake: FakeRuntime): AgentRuntime {
   return fake as unknown as AgentRuntime;
 }
 
+function portOf(points: ReturnType<typeof point>[]): PayMetricsPort {
+  return { sample: async () => points };
+}
+
 function baseInput(fake: FakeRuntime) {
   return {
     runtime: runtimeOf(fake),
@@ -144,12 +150,15 @@ function baseInput(fake: FakeRuntime) {
   };
 }
 
+function liveWithPort(fake: FakeRuntime, points: ReturnType<typeof point>[]) {
+  return { ...baseInput(fake), points, payMetricsPort: portOf(points) };
+}
+
 describe('merchant.watch metered session run', () => {
   it('watches through the runtime, then settles and closes the session', async () => {
     const fake = new FakeRuntime();
     const result = await runMerchantWatchSession({
-      ...baseInput(fake),
-      points: [point('card-visa', { approvalRate: '0.70' }), point('card-mc', { approvalRate: '0.90' })],
+      ...liveWithPort(fake, [point('card-visa', { approvalRate: '0.70' }), point('card-mc', { approvalRate: '0.90' })]),
       threshold: '0.85',
     });
 
@@ -169,7 +178,7 @@ describe('merchant.watch metered session run', () => {
 
   it('bills zero for a run that never called the engine, and does not invent a charge', async () => {
     const fake = new FakeRuntime();
-    const result = await runMerchantWatchSession({ ...baseInput(fake), points: [point('card-visa')] });
+    const result = await runMerchantWatchSession(liveWithPort(fake, [point('card-visa')]));
 
     expect(result.metering.billedAmount).toBe('0');
     expect(result.metering.settlements).toEqual([]);
@@ -197,7 +206,7 @@ describe('merchant.watch metered session run', () => {
       },
     ];
 
-    const result = await runMerchantWatchSession({ ...baseInput(fake), points: [point('card-visa')] });
+    const result = await runMerchantWatchSession(liveWithPort(fake, [point('card-visa')]));
     expect(result.metering.billedAmount).toBe('4');
     expect(result.metering.settlements.map((s) => s.amount)).toEqual(['1.5', '2.5']);
   });
@@ -218,14 +227,14 @@ describe('merchant.watch metered session run', () => {
     expect(fake.openCalls).toBe(0);
     expect(result.metering.sessionId).toBeNull();
     expect(result.metering.billedAmount).toBe('0');
+    expect(merchantWatchInventedNumericRate(result)).toBeNull();
   });
 
   it('D26-P1-A4: mixed missing metrics refuse after session — no invent partial alerts', async () => {
     const fake = new FakeRuntime();
-    const result = await runMerchantWatchSession({
-      ...baseInput(fake),
-      points: [point('card-visa', { approvalRate: '0.70' }), point('card-mc', { approvalRate: null, attempts: null })],
-    });
+    const result = await runMerchantWatchSession(
+      liveWithPort(fake, [point('card-visa', { approvalRate: '0.70' }), point('card-mc', { approvalRate: null, attempts: null })]),
+    );
 
     expect(result).toMatchObject({
       status: 'unavailable',
@@ -236,14 +245,72 @@ describe('merchant.watch metered session run', () => {
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
     expect(result.metering.billedAmount).toBe('0');
+    expect(merchantWatchInventedNumericRate(result)).toBeNull();
   });
 
-  it('is empty — not a session — when nothing was asked for', async () => {
+  it('live without a metrics port refuses no_live_metrics — body points are not live truth', async () => {
     const fake = new FakeRuntime();
-    const result = await runMerchantWatchSession({ ...baseInput(fake), points: [] });
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      points: [point('card-visa', { approvalRate: '0.99', attempts: 10_000 })],
+    });
 
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.merchant.empty' });
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_metrics',
+      userMessageKey: 'agents.merchant.unavailable',
+    });
     expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+    expect(merchantWatchInventedNumericRate(result)).toBeNull();
+  });
+
+  it('live empty port refuses no_live_metrics — never a fake 0.00 approval rate', async () => {
+    const fake = new FakeRuntime();
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      points: [point('card-visa')],
+      payMetricsPort: { sample: async () => [] },
+    });
+
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_metrics' });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+    expect(merchantWatchInventedNumericRate(result)).toBeNull();
+  });
+
+  it('live throwing port refuses no_live_metrics before a session', async () => {
+    const fake = new FakeRuntime();
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      points: [point('card-visa')],
+      payMetricsPort: {
+        sample: async () => {
+          throw new Error('pay metrics unavailable');
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_metrics' });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
+  });
+
+  it('live watch uses port samples and ignores invented request-body points', async () => {
+    const fake = new FakeRuntime();
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      points: [point('invented-visa', { approvalRate: '0.01', attempts: 10_000 })],
+      payMetricsPort: portOf([point('card-mc', { approvalRate: '0.90' })]),
+      threshold: '0.85',
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.alerts).toEqual([]);
+    expect(result.pointsAccepted).toBe(1);
+    expect(result.alerts.some((a) => a.railId === 'invented-visa')).toBe(false);
   });
 
   it('D26-P1-A4 deepen: partial guardrail drop refuses — no invent ok on subset', async () => {
@@ -251,10 +318,7 @@ describe('merchant.watch metered session run', () => {
     fake.guardrail = merchantAgentGuardrail();
     (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
 
-    const result = await runMerchantWatchSession({
-      ...baseInput(fake),
-      points: [point('a'), point('b'), point('c')],
-    });
+    const result = await runMerchantWatchSession(liveWithPort(fake, [point('a'), point('b'), point('c')]));
 
     expect(result).toMatchObject({
       status: 'unavailable',
@@ -271,10 +335,7 @@ describe('merchant.watch metered session run', () => {
     fake.guardrail = merchantAgentGuardrail();
     (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 0;
 
-    const result = await runMerchantWatchSession({
-      ...baseInput(fake),
-      points: [point('a'), point('b')],
-    });
+    const result = await runMerchantWatchSession(liveWithPort(fake, [point('a'), point('b')]));
 
     expect(result).toMatchObject({
       status: 'refuse',
@@ -294,7 +355,7 @@ describe('merchant.watch metered session run', () => {
       throw boom;
     };
 
-    await expect(runMerchantWatchSession({ ...baseInput(fake), points: [point('card-visa')] })).rejects.toThrow('storage exploded');
+    await expect(runMerchantWatchSession(liveWithPort(fake, [point('card-visa')]))).rejects.toThrow('storage exploded');
 
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
@@ -302,9 +363,31 @@ describe('merchant.watch metered session run', () => {
 
   it('only ever asks for the declared read tool — never a money-write or rail-change one', async () => {
     const fake = new FakeRuntime();
-    await runMerchantWatchSession({ ...baseInput(fake), points: [point('a'), point('b')] });
+    await runMerchantWatchSession(liveWithPort(fake, [point('a'), point('b')]));
 
     expect(new Set(fake.toolCalls)).toEqual(new Set([MERCHANT_METRICS_TOOL]));
     expect(fake.toolCalls.some((t) => t === 'pay.route.change' || t.startsWith('ledger.') || t === 'pay.capture')).toBe(false);
+  });
+
+  it('fat fixture rates on a dark plane still refuse — no default live board', async () => {
+    const fake = new FakeRuntime();
+    const result = await runMerchantWatchSession({
+      ...baseInput(fake),
+      plane: 'dark',
+      points: [
+        point('card-visa', { approvalRate: '0.99', attempts: 10_000 }),
+        point('card-mc', { approvalRate: '0.98', attempts: 10_000 }),
+      ],
+      threshold: '0.85',
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'pay_plane_dark',
+      userMessageKey: 'agents.merchant.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result).not.toMatchObject({ status: 'ok' });
+    expect(result.metering.billedAmount).toBe('0');
   });
 });

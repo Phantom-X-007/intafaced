@@ -2,6 +2,8 @@
 
 **One page.** Read this when confused. Agents: load this _after_ `AGENTS.md` if the human needs orientation, not instead of the law.
 
+**Ship rules (Denon / Shehzad / Nitro agents):** [`CONTRIBUTING.md`](../CONTRIBUTING.md) §0 — merge your own green PR; do not wait on Nitro; `audited:true` is not a coding gate.
+
 **Re-derive every session (do not trust frozen SHAs in chat):**  
 `git fetch origin main && git rev-parse --short origin/main` · `gh pr list --state open`  
 **Anti-drift pack (2026-08-03):** product + recovery + owners live in  
@@ -22,6 +24,7 @@ Trust floor history: [`PEACE-OF-MIND-AUDIT-CURRENT.md`](PEACE-OF-MIND-AUDIT-CURR
 - **Send to Denon / partner agent:** [`INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md`](INTERNET-LEVERAGE-PARTNER-BRIEF-2026-08-05.md) — full context pack, no compromise.
 - **Post-Denon close-out (2026-08-05):** [`POST-DENON-REUSE-CLOSEOUT-2026-08-05.md`](POST-DENON-REUSE-CLOSEOUT-2026-08-05.md) — law aligned; what remains Denon vs Nitro residual.
 - **You do not manage this day-to-day.** Agents load it from `AGENTS.md`; CI fails if that chain is removed.
+- **Agents find code via Graphify** (not by re-reading the repo): `graphify query "…"`. The map is **in git** (`graphify-out/graph.json`) so a GitHub clone already has it. You do not run this. Later check: say **graphify peace** — [`GRAPHIFY-PEACE-CHECK.md`](GRAPHIFY-PEACE-CHECK.md).
 
 ## What we are building (one breath)
 

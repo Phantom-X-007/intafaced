@@ -1,8 +1,12 @@
 /**
  * Copy fee-share + jurisdiction product law (D-S-03 / SPEC-SOVEREIGN…).
  *
- * `leader_share_bps` and the served-jurisdiction list are DIRECTION §8 —
- * never defaulted. Blank / unpublished → refuse-closed.
+ * `leader_share_bps` (D26-P0-02) and the served-jurisdiction list (D26-P0-15)
+ * are DIRECTION §8 — never defaulted. Blank / unpublished → refuse-closed.
+ *
+ * Jurisdiction seal (D26-P0-15):
+ * `docs/adr/2026-08-12-copy-jurisdiction-refuse-closed.md` — no invent geo
+ * list; owner publishes `TRADE_COPY_JURISDICTION_LAW` or follow stays closed.
  *
  * Spec formula (no P&L): leader earnings = share of protocol trading fee
  * on follower fill notional. Follower pays the same fee as solo trading.
@@ -163,7 +167,7 @@ export function parseCopyJurisdictionLawJson(raw: string | null | undefined): Co
 export function requirePublishedCopyFeeShareLaw(law: CopyFeeShareLaw | null | undefined): Extract<CopyFeeShareLaw, { published: true }> {
   if (!law || law.published !== true) {
     throw new CopyError(
-      'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 leader_share_bps',
+      'Copy fee-share is refuse-closed until owner publishes DIRECTION §8 / D26-P0-02 leader_share_bps',
       'trade.copy_fee_share_blank',
       COPY_FEE_SHARE_RESIDUAL,
     );
@@ -176,7 +180,7 @@ export function requirePublishedCopyJurisdictionLaw(
 ): Extract<CopyJurisdictionLaw, { published: true }> {
   if (!law || law.published !== true) {
     throw new CopyError(
-      'Copy follow is refuse-closed until owner publishes DIRECTION §8 served-jurisdiction list',
+      'Copy follow is refuse-closed until owner publishes DIRECTION §8 / D26-P0-15 served-jurisdiction list',
       'trade.copy_jurisdiction_blank',
       COPY_JURISDICTION_RESIDUAL,
     );
@@ -184,14 +188,14 @@ export function requirePublishedCopyJurisdictionLaw(
   return law;
 }
 
-/** Combined status — both blanks named. */
+/** Combined status — both blanks named (P0-02 rates · P0-15 jurisdictions). */
 export function copyLawStatusLine(fee: CopyFeeShareLaw, jurisdiction: CopyJurisdictionLaw): string {
   const feePart =
-    fee.published === true ? `feeShare=1 leaderShareBps=${fee.leaderShareBps}` : 'feeShare=0 residual=DIRECTION_§8_leader_share_bps';
+    fee.published === true ? `feeShare=1 leaderShareBps=${fee.leaderShareBps}` : 'feeShare=0 residual=D26-P0-02_leader_share_bps';
   const jurPart =
     jurisdiction.published === true
       ? `jurisdiction=1 regions=${jurisdiction.allowedRegions.length}`
-      : 'jurisdiction=0 residual=DIRECTION_§8_jurisdiction';
+      : 'jurisdiction=0 residual=D26-P0-15_jurisdiction';
   return `${feePart} ${jurPart}`;
 }
 

@@ -103,6 +103,7 @@ describe('scanner Stage-2 routes', () => {
         plane: 'live',
         userTier: 'free',
         law,
+        signalInputsLaw: { published: false },
         tickers: [
           {
             marketId: 'btc-usdt',

@@ -11,8 +11,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { compareDecimalStrings, isValidPositivePrice } from './decimal.js';
-import { evaluatePriceAlert } from './evaluate.js';
-import type { PriceAlert } from './types.js';
+import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind } from './evaluate.js';
+import { ALERT_KIND_UNPUBLISHED, ALERT_PORTFOLIO_VIEW_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type PriceAlert } from './types.js';
 
 const base: PriceAlert = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -90,5 +90,61 @@ describe('evaluatePriceAlert — dark refuse + cross fire', () => {
     const out = evaluatePriceAlert(base, { kind: 'ok', price: 'n/a', at: new Date() });
     expect(out.kind).toBe('refuse');
     if (out.kind === 'refuse') expect(out.code).toBe('alert.price_unavailable');
+  });
+});
+
+function assertNoNumberMoney(value: unknown): void {
+  if (typeof value === 'number') {
+    throw new Error(`invented number money: ${value}`);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoNumberMoney(item);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, nested] of Object.entries(value)) {
+      if (/balance|amount|equity|pnl|total|markPrice|targetPrice/i.test(key) && typeof nested === 'number') {
+        throw new Error(`invented number money at ${key}: ${nested}`);
+      }
+      assertNoNumberMoney(nested);
+    }
+  }
+}
+
+describe('evaluatePortfolioAlert — refuse-closed, no invented book', () => {
+  it('refuses with a stable unpublished code and never fires', () => {
+    const out = evaluatePortfolioAlert();
+    expect(out).toEqual({
+      kind: 'refuse',
+      code: ALERT_PORTFOLIO_VIEW_UNPUBLISHED,
+      detail: 'ledger portfolio view unpublished — notify holds no balance',
+    });
+    expect(out.kind).not.toBe('fire');
+    expect(out.kind).not.toBe('hold');
+    assertNoNumberMoney(out);
+    expect('markPrice' in out).toBe(false);
+  });
+
+  it('silence is not a fire — no quote, no balance, still refuse', () => {
+    const out = evaluatePortfolioAlert();
+    expect(out.kind).toBe('refuse');
+    if (out.kind === 'refuse') {
+      expect(out.code).toBe('alert.portfolio_view_unpublished');
+    }
+    assertNoNumberMoney(out);
+  });
+});
+
+describe('evaluateUnpublishedKind — never fire on an invented series', () => {
+  it.each([...UNPUBLISHED_ALERT_KINDS])('%s refuses alert.kind_unpublished and never fires', (kind) => {
+    const out = evaluateUnpublishedKind(kind);
+    expect(out).toEqual({
+      kind: 'refuse',
+      code: ALERT_KIND_UNPUBLISHED,
+      detail: `${kind} has no sourced series`,
+    });
+    expect(out.kind).not.toBe('fire');
+    expect(out.kind).not.toBe('hold');
+    expect('markPrice' in out).toBe(false);
   });
 });

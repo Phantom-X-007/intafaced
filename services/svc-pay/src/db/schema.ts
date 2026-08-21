@@ -32,9 +32,10 @@ export const merchantStatusEnum = pay.enum('merchant_status', ['pending', 'activ
 /**
  * The payment lifecycle (§6.1), verbatim.
  *
- * `disputed` is declared but unreachable in this PR — chargebacks are their own
- * tracker feature. It is in the enum because the enum is the spec's, and adding
- * a value later is a migration against a live payments table.
+ * `disputed` is reachable via the dispute **case** / webhook writer (D26-P1-P5).
+ * Ledger chargeback recipes remain OWNER SIGN-OFF / NOT WIRED — status + case
+ * only; no invent reverse-money. It is in the enum because the enum is the
+ * spec's, and adding a value later is a migration against a live payments table.
  */
 export const paymentStatusEnum = pay.enum('payment_status', [
   'created',
@@ -729,8 +730,29 @@ export const subscriptionExecutions = pay.table(
   ],
 );
 
+/**
+ * Where a merchant is paid out — kind+ref asserted through
+ * `assertPayoutDestinationKind` before insert. One row per (merchant, rail).
+ * Loaded by payout so withdrawHold never runs against an invented dest.
+ */
+export const merchantPayoutDestinations = pay.table(
+  'merchant_payout_destinations',
+  {
+    merchantId: uuid('merchant_id')
+      .notNull()
+      .references(() => merchants.id),
+    railId: text('rail_id').notNull(),
+    kind: text('kind').notNull(),
+    ref: text('ref').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ name: 'merchant_payout_destinations_pkey', columns: [t.merchantId, t.railId] })],
+);
+
 export const schema = {
   merchants,
+  merchantPayoutDestinations,
   merchantPermissionEvents,
   paymentProfiles,
   paymentLinks,

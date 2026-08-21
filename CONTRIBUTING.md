@@ -10,6 +10,18 @@ Read once, properly. It takes five minutes and saves a week.
 
 ---
 
+## 0 · 60-second ship (Denon, Shehzad, Nitro agents)
+
+1. One service per PR. Worktree. Squash-merge your own green PR.
+2. **Denon / Shehzad** merge when CI is green + self-audit. **Nitro agents** merge Class N/P/M when gates pass. Nobody waits for Nitro to Approve.
+3. CI red → the **job name** is the failure (`Doctrine gates`, `Tests (protocol)`, `Tests (full)`, …). Fix that job. Re-push. Do not ask Nitro.
+4. `audited:true` stays false until a paid external audit. Leave it. Keep shipping.
+5. Money still through `packages/ledger-client`. No balances in a service. No money in a `number`. No fake books, mids, or vendor names in the UI.
+6. Coordination-only PRs (status, keepalive, board unchanged) are forbidden. Near-duplicate unwired series: warn, then block on the fourth; escape is `Serial-Work: <why>`.
+7. Class X (secrets, prod go-live, licences, sanctions, audit **budget**) is Nitro the human. Everything else ships.
+
+---
+
 ## 1 · The model: GitHub Flow, nothing else
 
 ```
@@ -31,22 +43,21 @@ main ─────●──────●──────●─────
 
 ### How "no direct pushes" is actually enforced
 
-Honestly: **partially**, and you should know exactly where the gap is.
+The repo is **public**. Branch protection is free. Intended admin settings live in [`docs/ops/OWNER-GITHUB-CONFIG.md`](docs/ops/OWNER-GITHUB-CONFIG.md) — Denon clicks them; agents do not `PUT` protection.
 
-GitHub's branch protection and rulesets both require a paid plan on a private repository. We are on Free, so `main` has no server-side protection. What we have instead:
+| Layer                              | Enforces                                         | Bypassable                                     |
+| ---------------------------------- | ------------------------------------------------ | ---------------------------------------------- |
+| `.githooks/pre-push`               | blocks `git push` to `main`                      | yes — `--no-verify`                            |
+| Squash-only + auto-delete branches | clean history                                    | no (server-side)                               |
+| CI on every PR                     | doctrine gates, typecheck, tests, secrets, brand | merge still a click until required checks land |
+| Required **human** reviews         | **off on purpose** — nobody waits for Nitro      | —                                              |
+| CODEOWNERS                         | review **request**, not a merge wait             | —                                              |
 
-| Layer                              | Enforces                                | Bypassable          |
-| ---------------------------------- | --------------------------------------- | ------------------- |
-| `.githooks/pre-push`               | blocks `git push` to `main`             | yes — `--no-verify` |
-| Squash-only + auto-delete branches | clean history                           | no (server-side)    |
-| CI on every PR                     | build, typecheck, tests, doctrine gates | no (server-side)    |
-| Us reviewing each other            | everything that matters                 | —                   |
+The hook is installed automatically by `pnpm install` (`core.hooksPath`), and it applies in worktrees too.
 
-The hook is installed automatically by `pnpm install` (`core.hooksPath`), and it applies in worktrees too. It catches the realistic failure — muscle memory, a stray `git push` in the wrong terminal — which between two people who have agreed to this workflow is essentially the whole risk.
+Until required CI checks are on: CI still _runs_ and _reports_; nobody is stopped from clicking merge on a red one. So: **don't.** The job **name** is the failure. Fix that job. Re-push. Do not ask Nitro.
 
-What it does **not** do is make merging conditional on CI passing. CI still _runs_ on every PR and still _reports_; nobody is stopped from clicking merge on a red one. So: **don't.** Check the checks.
-
-> If we later want this enforced properly, GitHub Pro is $4/month and turns on branch protection, required status checks, and required approvals. Worth it the day a third person joins; not worth it for two people who read each other's PRs.
+Do **not** turn on required approvals or required code-owner reviews. That re-creates the human bottleneck this file exists to kill. Auto-merge is an admin click (Denon) so green PRs queue instead of being polled.
 
 ### Branch names
 
@@ -100,12 +111,13 @@ We are not going to maintain a project board. **Product** coordination (what cha
 
 **Description:** the template asks what changed, why, and how you know it works. Fill it in. "Why" is the part reviewers cannot reconstruct from the diff.
 
-**Review is asymmetric (on purpose).** Nitro is not a code reviewer; forcing him to Approve Denon’s PRs is theater and slows shipping.
+**Review is asymmetric (on purpose).** Nitro is not a code reviewer; forcing him to Approve anyone’s PRs is theater and slows shipping.
 
-| Who opened the PR            | Before merge                                                                                   |
-| ---------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Denon**                    | CI green + his agent’s doctrine/money self-audit. He may squash-merge without Nitro’s Approve. |
-| **Nitro** (or Nitro’s agent) | Denon (or Denon’s agent) reviews, then merges.                                                 |
+| Who opened the PR                      | Before merge                                                                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Denon**                              | CI green + doctrine/money self-audit. Squash-merge. No Nitro Approve.                                                                                     |
+| **Shehzad** (protocol/INTACHAIN paths) | CI green + self-audit. Squash-merge. No Nitro Approve.                                                                                                    |
+| **Nitro agent**                        | Class N/P/M: CI green + self-audit (Class M = money self-audit + second-pass). Squash-merge. Denon may review asynchronously. Class X: never agent-merge. |
 
 **Optional, not blocking:** Nitro’s agent may post an audit comment on Denon’s PR. That is signal, not a gate.
 
@@ -168,14 +180,18 @@ Do **not** file an issue for everything. A tracker nobody reads is worse than no
 
 ## 5 · CI
 
-Every PR runs, and all of it must be green to merge:
+Every PR runs, and all of it must be green to merge. The **job name** is the diagnosis — open that log, not Telegram.
 
-| Check                | What it protects                                                        |
-| -------------------- | ----------------------------------------------------------------------- |
-| `Doctrine gates`     | brand-scan (§0.7), custody-scan (§16.10), migration reversibility (§14) |
-| `Typecheck & build`  | the whole monorepo compiles, and formatting is consistent               |
-| `Tests`              | every package's suite, against real Postgres/Redis/NATS                 |
-| `Definition of Done` | the §14 gate per service                                                |
+| Check                                                                       | What it protects                                                                       |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Doctrine gates`                                                            | brand-scan (§0.7), custody-scan (§16.10), migration reversibility (§14), money honesty |
+| `Format`                                                                    | prettier — fails in seconds, not behind typecheck                                      |
+| `Typecheck & build`                                                         | the whole monorepo compiles                                                            |
+| `Tests (protocol)` / `Tests (money)` / `Tests (trade)` / `Tests (pay-bank)` | affected shards only                                                                   |
+| `Tests (full)`                                                              | entire suite: tooling, lockfile, contracts/events, `push:main`, or 3+ shards           |
+| `CI merge seal`                                                             | aggregator so skipped shards cannot pend a required check                              |
+| `Definition of Done`                                                        | the §14 gate per service                                                               |
+| `Gitleaks` / `Dependency audit`                                             | secrets and known CVEs                                                                 |
 
 Run the same thing locally before pushing. It is **required** — not to save anything, but because local is seconds and a CI round trip is minutes:
 

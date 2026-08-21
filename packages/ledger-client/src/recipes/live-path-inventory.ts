@@ -55,12 +55,7 @@ export const RECIPE_MATRIX = {
   marketMakerOrderHoldRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/mm/seed-market.ts' },
   marketMakerMakerFill: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
   futuresMarginLock: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/position-service.ts' },
-  futuresMarginAdd: {
-    kind: 'socket',
-    socket: '§13',
-    reason:
-      '§13 — recipe for isolated-margin top-up on an open position; no production door posts it on tip (open locks via futuresMarginLock; add path parked until a public/admin top-up writer lands).',
-  },
+  futuresMarginAdd: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/position-service.ts' },
   futuresMarginRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/close-planner.ts' },
   futuresRealizeLoss: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/liquidation-planner.ts' },
   futuresRealizeProfit: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/futures/close-planner.ts' },

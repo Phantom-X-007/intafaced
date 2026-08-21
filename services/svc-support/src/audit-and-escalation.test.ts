@@ -3,6 +3,7 @@ import type { AccountState } from '@intafaced/contracts';
 import type { AccountStateSource } from './account-state.js';
 import { listPlatformKb } from './kb-catalog.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
+import { IDENTITY_GROUNDING_UNWIRED, IdentityGroundingUnwiredError } from './identity-grounding-honesty.js';
 import { SupportError, SupportService } from './support-service.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -163,6 +164,19 @@ describe('account-state grounding', () => {
     const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
     expect(trail.at(-1)).toMatchObject({ kind: 'grounding_read', note: 'unread:plane_dark' });
   });
+
+  it('unwired identity secret refuses by name and does not record plane_dark', async () => {
+    const unwired: AccountStateSource = {
+      async stateOf() {
+        throw new IdentityGroundingUnwiredError();
+      },
+    };
+    const { support } = desk(unwired);
+    const t = await openTicket(support);
+    expect(await codeOf(() => support.readAccountState({ operatorId: OP, ticketId: t.id }))).toBe(IDENTITY_GROUNDING_UNWIRED);
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    expect(trail.filter((e) => e.kind === 'grounding_read')).toHaveLength(0);
+  });
 });
 
 describe('escalation carries its case file', () => {
@@ -260,6 +274,10 @@ describe('escalation carries its case file', () => {
         throw new Error('simulated crash mid-escalation');
       },
       latestCaseFile: (id) => base.latestCaseFile(id),
+      listPublishedKb: () => base.listPublishedKb(),
+      getPublishedKb: (id) => base.getPublishedKb(id),
+      listKbVersions: (id) => base.listKbVersions(id),
+      putKbRevision: (i) => base.putKbRevision(i),
     };
     const support = new SupportService(store, new FixedAccountState({ userId: USER, status: 'active', kycTier: 'basic' }));
     const t = await support.createTicket({

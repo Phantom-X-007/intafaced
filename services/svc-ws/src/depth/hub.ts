@@ -8,8 +8,9 @@ import {
   type DepthSnapshot,
   type WireLevel,
 } from '@intafaced/market-data';
+import { resolveWsCopy, WS_COPY } from '../copy.js';
 import type { MarketRegistry } from './registry.js';
-import type { DepthSource } from './source.js';
+import { DepthNoBookError, type DepthSource } from './source.js';
 
 /** True when both sides have the same prices with the same quantities. */
 function sidesEqual(a: DepthSide, b: DepthSide): boolean {
@@ -90,6 +91,25 @@ export const CLOSE_POLICY = 1008;
 export const CLOSE_TRY_LATER = 1013;
 export const CLOSE_GOING_AWAY = 1001;
 
+/**
+ * Named unavailability on a public door — NOT a `DepthMessage` field.
+ * Matching-down / seed-fail must not look like a live empty book (seq-0 snapshot).
+ * Control frame `{ type: 'status', code }` sits beside snapshot/delta; the
+ * market-data package still forbids extending `DepthMessage`.
+ */
+export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
+
+export interface DepthEngineStatusFrame {
+  readonly type: 'status';
+  readonly code: typeof DEPTH_ENGINE_UNAVAILABLE;
+  readonly marketId: string;
+}
+
+export function depthEngineUnavailableFrame(marketId: string): string {
+  const frame: DepthEngineStatusFrame = { type: 'status', code: DEPTH_ENGINE_UNAVAILABLE, marketId };
+  return JSON.stringify(frame);
+}
+
 export interface DepthHubOptions {
   readonly depthLimit: number;
   readonly highWaterBytes: number;
@@ -143,6 +163,16 @@ export function toSnapshot(book: DepthBook): DepthSnapshot {
   return { type: 'snapshot', marketId: book.marketId, sequence: book.sequence, bids: side(book.bids), asks: side(book.asks) };
 }
 
+/** Resting depth on either side. Empty sides are absence, not a live zero book. */
+export function snapshotHasRestingDepth(snapshot: DepthSnapshot): boolean {
+  const book = bookFromSnapshot(snapshot);
+  return book.bids.size > 0 || book.asks.size > 0;
+}
+
+function bookHasRestingDepth(book: DepthBook): boolean {
+  return book.bids.size > 0 || book.asks.size > 0;
+}
+
 const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 
 export class DepthHub {
@@ -171,6 +201,11 @@ export class DepthHub {
   #droppedFrames = 0;
   #evictions = 0;
   #repairs = 0;
+  /**
+   * Markets whose last depth read failed (matching down / seed-fail / 5xx).
+   * Distinct from a listed never-traded book (honest empty at sequence 0).
+   */
+  readonly #unavailable = new Set<string>();
 
   constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
     const { registry, ...rest } = options;
@@ -184,6 +219,11 @@ export class DepthHub {
     return this.#subscriptions.size;
   }
 
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
+  get maxConnections(): number {
+    return this.#options.maxConnections;
+  }
+
   /** Markets with at least one subscriber — exactly what the poller should poll. */
   get activeMarkets(): string[] {
     const active = new Set<string>();
@@ -191,13 +231,35 @@ export class DepthHub {
     return [...active];
   }
 
-  get stats(): { connections: number; books: number; droppedFrames: number; evictions: number; repairs: number } {
+  get matchingAvailable(): boolean {
+    return this.#unavailable.size === 0;
+  }
+
+  get engineCode(): typeof DEPTH_ENGINE_UNAVAILABLE | null {
+    return this.matchingAvailable ? null : DEPTH_ENGINE_UNAVAILABLE;
+  }
+
+  isEngineUnavailable(marketId: string): boolean {
+    return this.#unavailable.has(marketId);
+  }
+
+  get stats(): {
+    connections: number;
+    books: number;
+    droppedFrames: number;
+    evictions: number;
+    repairs: number;
+    matchingAvailable: boolean;
+    code: typeof DEPTH_ENGINE_UNAVAILABLE | null;
+  } {
     return {
       connections: this.#subscriptions.size,
       books: this.#books.size,
       droppedFrames: this.#droppedFrames,
       evictions: this.#evictions,
       repairs: this.#repairs,
+      matchingAvailable: this.matchingAvailable,
+      code: this.engineCode,
     };
   }
 
@@ -221,7 +283,7 @@ export class DepthHub {
    */
   attach(marketId: string, sink: DepthSink): (() => void) | null {
     if (this.#subscriptions.size >= this.#options.maxConnections) {
-      sink.close(CLOSE_TRY_LATER, 'gateway at capacity');
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
       return null;
     }
 
@@ -239,10 +301,10 @@ export class DepthHub {
   async #open(sub: Subscription): Promise<void> {
     try {
       if (!(await this.ensureKnownMarket(sub.marketId))) {
-        // Not listed anywhere. This is the only case that earns `unknown
-        // market` — a LISTED market the engine has never traded is a legitimate
-        // subscription that opens on an empty book (`HttpDepthSource.snapshot`).
-        this.#evict(sub, CLOSE_POLICY, `unknown market "${sub.marketId}"`);
+        // Not listed anywhere. Typed close — never a fabricated empty ladder.
+        // A LISTED market with no book stays open with no snapshot until
+        // matching has resting depth (empty ≠ zero).
+        this.#evict(sub, CLOSE_POLICY, resolveWsCopy(WS_COPY.unknownMarket));
         return;
       }
       if (sub.closed) return;
@@ -255,7 +317,17 @@ export class DepthHub {
         return;
       }
 
-      this.#flush(sub);
+      if (!this.#books.has(sub.marketId)) {
+        // Listed, no proven book. Never-traded (404 / empty ingest) stays
+        // silent absence. Engine-down is named so a terminal cannot confuse
+        // the two.
+        if (this.isEngineUnavailable(sub.marketId)) {
+          this.#write(sub, depthEngineUnavailableFrame(sub.marketId));
+        }
+        return;
+      }
+
+      if (sub.pending !== null) this.#flush(sub);
     } catch (err) {
       this.#evict(sub, CLOSE_TRY_LATER, err instanceof Error ? err.message : 'depth unavailable');
     }
@@ -346,18 +418,17 @@ export class DepthHub {
         }
         this.ingest(snapshot);
       } catch (err) {
-        // A LISTED market whose engine is unreachable opens on an empty book —
-        // the same shape as "never traded". Closing the socket with the raw
-        // upstream error confuses "matching is down" with "this is not a market"
-        // and contradicts the README: engine down → listed markets open empty.
-        // Poll will replace the empty book when matching recovers.
+        // Listed, but matching has no book or is down. Do not invent
+        // `{ bids: [], asks: [], sequence: 0 }` — that is a live zero book.
+        // 404 / DepthNoBookError = honest absence. Anything else = engine-down,
+        // named on the socket + `/ready` so it is not silent.
+        if (!(err instanceof DepthNoBookError)) this.#noteEngineDown(marketId);
         this.#log.warn(
           { marketId, err: err instanceof Error ? err.message : String(err) },
-          'ws: depth seed failed — opening empty book; poll will replace when matching recovers',
+          err instanceof DepthNoBookError
+            ? 'ws: depth seed — matching holds no book (absence, not engine-down)'
+            : 'ws: depth seed failed — disclosing depth.engine_unavailable; poll will replace when matching recovers',
         );
-        if (!this.#books.has(marketId)) {
-          this.ingest({ type: 'snapshot', marketId, sequence: 0, bids: [], asks: [] });
-        }
       } finally {
         this.#seeding.delete(marketId);
       }
@@ -385,8 +456,13 @@ export class DepthHub {
    * Returns the delta that was broadcast, or `null` when there was none.
    */
   ingest(snapshot: DepthSnapshot): DepthDelta | null {
+    this.#noteEngineUp(snapshot.marketId);
     const previous = this.#books.get(snapshot.marketId);
     const next = bookFromSnapshot(snapshot);
+    if (!previous && !bookHasRestingDepth(next)) {
+      // No prior book and no resting depth: absent, not a priced empty book.
+      return null;
+    }
     this.#books.set(snapshot.marketId, next);
 
     if (!previous) {
@@ -441,6 +517,7 @@ export class DepthHub {
 
       if (sub.pending !== null) {
         if (delta !== null) this.#queue(sub, delta);
+        if (bookHasRestingDepth(book)) this.#flush(sub);
         continue;
       }
 
@@ -490,9 +567,11 @@ export class DepthHub {
 
   /** Send the snapshot, then whatever the stream sent while we were producing it. */
   #flush(sub: Subscription): void {
+    if (sub.closed || sub.pending === null) return;
     const book = this.#books.get(sub.marketId);
-    if (!book) {
-      this.#evict(sub, CLOSE_TRY_LATER, 'no book for this market');
+    if (!book || !bookHasRestingDepth(book)) {
+      // Listed, no live book yet. Stay open with no frames — do not emit []
+      // and do not close as unknown. Poll / a later ingest flushes for real.
       return;
     }
 
@@ -546,5 +625,34 @@ export class DepthHub {
   /** The current book for a market, if one is being maintained. */
   bookFor(marketId: string): DepthBook | undefined {
     return this.#books.get(marketId);
+  }
+
+  /** Matching answered (including 404 no-book). Clears engine-down for this id. */
+  noteMatchingReachable(marketId: string): void {
+    this.#noteEngineUp(marketId);
+  }
+
+  /**
+   * Matching could not be read (timeout / 5xx / unreachable). Named disclosure
+   * to current subscribers once per down-edge; `/ready` stays red until a
+   * successful ingest.
+   */
+  markEngineUnavailable(marketId: string): void {
+    const first = !this.#unavailable.has(marketId);
+    this.#noteEngineDown(marketId);
+    if (!first) return;
+    const frame = depthEngineUnavailableFrame(marketId);
+    for (const sub of [...this.#subscriptions]) {
+      if (sub.closed || sub.marketId !== marketId) continue;
+      this.#write(sub, frame);
+    }
+  }
+
+  #noteEngineDown(marketId: string): void {
+    this.#unavailable.add(marketId);
+  }
+
+  #noteEngineUp(marketId: string): void {
+    this.#unavailable.delete(marketId);
   }
 }

@@ -197,10 +197,23 @@ function privateDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps 
     markets: async () => [],
     userBalances: async () => [],
     listPositions: async () => [],
+    listClosedPositions: async () => [],
+    getPosition: async () => {
+      throw new Error('unused');
+    },
     openPosition: async () => {
       throw new Error('unused');
     },
     closePosition: async () => {
+      throw new Error('unused');
+    },
+    setLeverage: async () => {
+      throw new Error('unused');
+    },
+    addIsolatedMargin: async () => {
+      throw new Error('unused');
+    },
+    reduceIsolatedMargin: async () => {
       throw new Error('unused');
     },
     getOpenMarginCall: async () => null,
@@ -240,7 +253,7 @@ describe('D26-P2-01a refuse-closed defaults (no invent)', () => {
 
   it('TWAP create refuses blank two-sided mark rather than inventing a feed', () => {
     const src = readFileSync(join(here, 'spot/trade-service.ts'), 'utf8');
-    expect(src).toMatch(/refusing TWAP rather than inventing a feed/);
+    expect(src).toMatch(/refusing algo rather than inventing a feed/);
     expect(src).toMatch(/trade\.algo_mark_missing/);
   });
 });
@@ -471,7 +484,7 @@ describe('D26-P2-01a public doors — algo refuse invent mark feed', () => {
   it('algo.createTwap refuses missing two-sided mark over the wire', async () => {
     const createTwap = vi.fn(async () => {
       throw new TradeError(
-        'BTC/USDT: no two-sided mark at creation — refusing TWAP rather than inventing a feed',
+        'BTC/USDT: no two-sided mark at creation — refusing algo rather than inventing a feed',
         'trade.algo_mark_missing',
       );
     });
@@ -510,6 +523,126 @@ describe('D26-P2-01a public doors — algo refuse invent mark feed', () => {
     expect(statusCode).toBe(400);
     expect(body.error!.message).toMatch(/trade\.algo_disabled|algo execution is disabled/i);
     expect(createTwap).toHaveBeenCalled();
+    await app.close();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Spine reprove — malformed / unset wire shapes (mounted doors only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('D26-P2-01a spine reprove — malformed / unset over mounted doors', () => {
+  it('GET /api/v1/funding-rate for unknown symbol is badSymbol — never invents a rate', async () => {
+    const app = Fastify({ logger: false });
+    registerPublicRest(app, {
+      markets: async () => [],
+      marketBySymbol: async () => null,
+      depth: async () => ({ bids: [], asks: [], sequence: 0 }),
+      publicTape: async () => [],
+      candles: async () => [],
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/funding-rate/NOPE%2FUSDT-PERP' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().code).toBe('BadSymbol');
+    expect(JSON.stringify(res.json())).not.toMatch(/"fundingRate"/);
+    await app.close();
+  });
+
+  it('convert.quote rejects sub-min symbol at the schema — service never runs', async () => {
+    const convertQuote = vi.fn();
+    const { app } = await mountTrpc({ trade: { convertQuote } });
+
+    const { statusCode } = await getTrpc(app, 'convert.quote', { symbol: 'B', side: 'buy', qty: '1' });
+    expect(statusCode).toBe(400);
+    expect(convertQuote).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('convert.execute rejects blank clientConvertId at the schema', async () => {
+    const convertExecute = vi.fn();
+    const { app } = await mountTrpc({ trade: { convertExecute } });
+
+    const { statusCode } = await postTrpc(app, 'convert.execute', {
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      qty: '1',
+      clientConvertId: '',
+    });
+
+    expect(statusCode).toBe(400);
+    expect(convertExecute).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('algo.createTwap rejects duration below schema minimum — no invent schedule', async () => {
+    const createTwap = vi.fn();
+    const { app } = await mountTrpc({ trade: { createTwap } });
+
+    const { statusCode } = await postTrpc(app, 'algo.createTwap', {
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      totalQty: '1',
+      durationMs: 500,
+      sliceIntervalMs: 10_000,
+      clientAlgoId: 'pf-algo-duration-floor',
+    });
+
+    expect(statusCode).toBe(400);
+    expect(createTwap).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('copy.follow rejects empty permittedMarkets over the wire — never invents a desk', async () => {
+    const copy = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+    });
+    const { app } = await mountTrpc({ copy });
+
+    const { statusCode, body } = await postTrpc(app, 'copy.follow', {
+      leaderId: LEADER,
+      region: 'DE',
+      permittedMarkets: [],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    });
+
+    expect(statusCode).toBe(400);
+    expect(body.error!.message).toMatch(/permittedMarkets|at least one/i);
+    await app.close();
+  });
+
+  it('POST /api/v1/orders without principal never reaches placeOrder', async () => {
+    const placeOrder = vi.fn();
+    const app = Fastify({ logger: false });
+    registerPrivateRest(
+      app,
+      privateDeps({
+        placeOrder,
+        marketBySymbol: async (s) => (s === 'BTC/USDT' ? fakeMarket({ symbol: 'BTC/USDT', kind: 'spot' }) : null),
+      }),
+    );
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        symbol: 'BTC/USDT',
+        type: 'limit',
+        side: 'buy',
+        amount: '0.01',
+        price: '50000',
+        clientOrderId: 'pf-unauth-order-1',
+      },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(placeOrder).not.toHaveBeenCalled();
     await app.close();
   });
 });

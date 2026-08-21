@@ -2,6 +2,7 @@
 
 **Board item:** D26-P4 · Denon lane. **Read-only audit** — no Java file is edited by this branch, no build is added.
 **Date:** 2026-08-09. **Tree:** `vendor/upstream-exchange/` at `2d85e546`.
+**Superseding executable proof (D26-P2-02):** [`VENDOR-JAVA-MONEY-PLANE-MAP-D26-P2-02.md`](VENDOR-JAVA-MONEY-PLANE-MAP-D26-P2-02.md) — re-run with `pnpm map:vendor-java-money-plane`. Tip numbers (door count, ratchet, `/promotion` + `/monitor` fragments, `exchange` door) live there; this narrative stays for depth.
 **Builds on:** ADR [`2026-08-04-java-dual-book-residual.md`](adr/2026-08-04-java-dual-book-residual.md) (D-S-17), `DIRECTION` §4, and the five gates named in §2. It does not re-litigate Option B.
 
 ---

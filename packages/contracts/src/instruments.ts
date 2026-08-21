@@ -225,15 +225,37 @@ export const CME_GLOBEX: TradingSchedule = {
   holidays: [],
 };
 
-/** Stable keys so a database row can name a schedule without embedding it. */
+/**
+ * Stable keys so a database row can name a schedule without embedding it.
+ *
+ * THIS OBJECT IS THE AUTHORITY (ADR 2026-08-04 instrument-enum-authority).
+ * `scheduleKeySchema` is derived from its keys — never a second handwritten
+ * list. A schedule name present in the DB enum but absent here must refuse at
+ * the order path, and adding a key without a definition here is a type error
+ * via `satisfies Record<…, TradingSchedule>` once the key is referenced.
+ */
 export const TRADING_SCHEDULES = {
   'crypto-24x7': CONTINUOUS,
   'fx-global': FX_GLOBAL,
   'cme-globex': CME_GLOBEX,
 } as const satisfies Record<string, TradingSchedule>;
 
-export const scheduleKeySchema = z.enum(['crypto-24x7', 'fx-global', 'cme-globex']);
-export type ScheduleKey = z.infer<typeof scheduleKeySchema>;
+export type ScheduleKey = keyof typeof TRADING_SCHEDULES;
+
+/** Non-empty tuple of every key in `TRADING_SCHEDULES` — single source for zod + refuse messages. */
+export const SCHEDULE_KEYS = Object.keys(TRADING_SCHEDULES) as [ScheduleKey, ...ScheduleKey[]];
+
+export const scheduleKeySchema = z.enum(SCHEDULE_KEYS);
+
+/** Runtime guard — unknown values refuse; they never default to 24/7. */
+export function isScheduleKey(value: unknown): value is ScheduleKey {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(TRADING_SCHEDULES, value);
+}
+
+/** Runtime guard for `asset_class` — permitted set is `ASSET_CLASSES` alone. */
+export function isAssetClass(value: unknown): value is AssetClass {
+  return typeof value === 'string' && (ASSET_CLASSES as readonly string[]).includes(value);
+}
 
 // ── Schedule evaluation ──────────────────────────────────────────────────────
 

@@ -198,6 +198,45 @@ describe('selectSmartCheckoutRail — geo/method/risk product path', () => {
     }
   });
 
+  it('refuses blank approval-rate / geo scores — never invents ranking numbers', () => {
+    expect(() =>
+      selectSmartCheckoutRail({
+        inputs: { geoCountry: 'DE', method: 'crypto', riskBand: 'low', approvalRate: '' },
+        preference,
+        profiles: REFERENCE_RAIL_ROUTING_PROFILES,
+        rails: registry(),
+        policy: 'allow-sandbox',
+      }),
+    ).toThrow(RoutingInputError);
+
+    expect(() =>
+      selectSmartCheckoutRail({
+        inputs: { geoCountry: 'DE', method: 'crypto', riskBand: 'low', geoScore: '   ' },
+        preference,
+        profiles: REFERENCE_RAIL_ROUTING_PROFILES,
+        rails: registry(),
+        policy: 'allow-sandbox',
+      }),
+    ).toThrow(RoutingInputError);
+  });
+
+  it('omitted scores stay omitted on the decision — no default approval-rate', () => {
+    const decision = selectSmartCheckoutRail({
+      inputs: { geoCountry: 'DE', method: 'crypto', riskBand: 'low' },
+      preference,
+      profiles: REFERENCE_RAIL_ROUTING_PROFILES,
+      rails: registry(),
+      policy: 'allow-sandbox',
+    });
+    expect(decision).not.toHaveProperty('approvalRate');
+    expect(decision).not.toHaveProperty('geoScore');
+    expect(decision).not.toHaveProperty('methodRank');
+    const record = toRoutingDecisionRecord(decision);
+    expect(record).not.toHaveProperty('approvalRate');
+    expect(record).not.toHaveProperty('geoScore');
+    expect(record).not.toHaveProperty('methodRank');
+  });
+
   it('decision record for payment_events carries reasons and bans invent scores', () => {
     const decision = selectSmartCheckoutRail({
       inputs: { geoCountry: 'fr', method: 'crypto', riskBand: 'low' },

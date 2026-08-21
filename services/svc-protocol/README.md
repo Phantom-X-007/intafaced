@@ -20,21 +20,22 @@ Internal tRPC (`createProtocolRouter`). Read the guards, not just the procedures
 
 Almost everything is `publicJurisdictionProcedure('protocol', 'protocol')` — **no login, no KYC tier, no account gate.** That is §22 as code: `MODULES.protocol` is `custodial: false` on the `protocol` plane, so `checkAccess` returns `allowed.permissionless`. There is nothing to verify because there is nothing held.
 
-| Procedure                | Guard           | Input                                              | Output                                                     |
-| ------------------------ | --------------- | -------------------------------------------------- | ---------------------------------------------------------- |
-| `health`                 | —               | —                                                  | `{ ok, service, chainId, custodial: false, relayEnabled }` |
-| `predictAddress`         | permissionless  | `{ owner, userSalt? }`                             | `{ address, chainId, factory, implementation, deployed }`  |
-| `buildDeployment`        | permissionless  | `{ owner, userSalt? }`                             | unsigned call + `predictedAddress`                         |
-| `buildSessionGrant`      | permissionless  | `{ account, spec }`                                | unsigned call + `specHash`, `validUntil`                   |
-| `buildSessionRevoke`     | permissionless  | `{ account, sessionKey }`                          | unsigned call                                              |
-| `buildRevokeAllSessions` | permissionless  | `{ account }`                                      | unsigned call                                              |
-| `sessionStatus`          | permissionless  | `{ account, sessionKey }`                          | on-chain record: expiry, `spentWei`, `revoked`, `live`     |
-| `checkSessionCall`       | permissionless  | `{ account, spec, target, value, data, spentWei }` | `{ allowed, code, reason, spentAfterWei }`                 |
-| `sessionSpecHash`        | permissionless  | `{ account, spec }`                                | `{ specHash }`                                             |
-| `relayUserOperation`     | permissionless  | `{ account, userOp }`                              | `{ userOpHash, authority: 'owner' \| 'session' }`          |
-| `bindingMessage`         | `protocol:read` | `{ address }`                                      | `{ message }`                                              |
-| `claimAccount`           | `protocol:read` | `{ owner, address, userSalt?, signature }`         | `{ id, address, owner, deployed }`                         |
-| `myAccounts`             | `protocol:read` | —                                                  | `AccountRecord[]`                                          |
+| Procedure                | Guard           | Input                                              | Output                                                         |
+| ------------------------ | --------------- | -------------------------------------------------- | -------------------------------------------------------------- |
+| `health`                 | —               | —                                                  | `{ ok, service, chainId, custodial: false, relayEnabled }`     |
+| `auditStatus`            | —               | —                                                  | `{ kind: 'internal', artifactHash, signedBy, audited: false }` |
+| `predictAddress`         | permissionless  | `{ owner, userSalt? }`                             | `{ address, chainId, factory, implementation, deployed }`      |
+| `buildDeployment`        | permissionless  | `{ owner, userSalt? }`                             | unsigned call + `predictedAddress`                             |
+| `buildSessionGrant`      | permissionless  | `{ account, spec }`                                | unsigned call + `specHash`, `validUntil`                       |
+| `buildSessionRevoke`     | permissionless  | `{ account, sessionKey }`                          | unsigned call                                                  |
+| `buildRevokeAllSessions` | permissionless  | `{ account }`                                      | unsigned call                                                  |
+| `sessionStatus`          | permissionless  | `{ account, sessionKey }`                          | on-chain record: expiry, `spentWei`, `revoked`, `live`         |
+| `checkSessionCall`       | permissionless  | `{ account, spec, target, value, data, spentWei }` | `{ allowed, code, reason, spentAfterWei }`                     |
+| `sessionSpecHash`        | permissionless  | `{ account, spec }`                                | `{ specHash }`                                                 |
+| `relayUserOperation`     | permissionless  | `{ account, userOp }`                              | `{ userOpHash, authority: 'owner' \| 'session' }`              |
+| `bindingMessage`         | `protocol:read` | `{ address }`                                      | `{ message }`                                                  |
+| `claimAccount`           | `protocol:read` | `{ owner, address, userSalt?, signature }`         | `{ id, address, owner, deployed }`                             |
+| `myAccounts`             | `protocol:read` | —                                                  | `AccountRecord[]`                                              |
 
 ### `launch.*` — ERC-20 deploy from an in-repo template (`launch.token-factory`, §8.4)
 
@@ -238,13 +239,14 @@ pnpm --filter @intafaced/svc-protocol chain:deploy      # + CREATE2 cross-check
 
 ### Still not covered — §13 sockets
 
-| Socket                            | What lands with it                                                                                                                                                                                                                                                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `socket.contract-toolchain`       | **Partly closed.** Compilation and on-chain execution run in CI now, including clone address equality against `AccountFactory.getAddress`. Still open: fuzz/invariant tests for session-key escalation and spend-limit re-entrancy, `validateUserOp` refusing a session op that is not `executeWithSession`, and gas snapshots |
-| `socket.userop-differential-test` | `getUserOperationHash` checked against a live EntryPoint's `getUserOpHash`                                                                                                                                                                                                                                                     |
-| `socket.p256-verifier`            | **CLOSED 2026-08-08 (S-A9).** `contracts/passkey/PasskeyOwner.sol` — ERC-1271 owner verifying WebAuthn assertions via RIP-7212. Residual: origin/rpId on-chain, gas snapshot on ruled rail, external audit                                                                                                                     |
-| `socket.social-recovery`          | Deliberately absent. A guardian set is a second party who can take the account, and the platform must never be one — the design needs its own review                                                                                                                                                                           |
-| `socket.contract-audit`           | External audit before any mainnet deployment. Nothing in this suite has been audited                                                                                                                                                                                                                                           |
+| Socket                            | What lands with it                                                                                                                                                                                                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `socket.contract-toolchain`       | **Partly closed.** solc-js compile + anvil CI remain. Forge fuzz + gas ceilings in `test/forge` (`pnpm test:forge`), including session-key escalation / spend-limit re-entrancy / `validateUserOp` session-op refusal. Still open: external audit                                                  |
+| `socket.userop-differential-test` | `getUserOperationHash` checked against a live EntryPoint's `getUserOpHash`                                                                                                                                                                                                                         |
+| `socket.p256-verifier`            | **CLOSED 2026-08-08 (S-A9).** `contracts/passkey/PasskeyOwner.sol` — ERC-1271 owner verifying WebAuthn assertions via RIP-7212. Residual: origin/rpId on-chain, gas snapshot on ruled rail, external audit                                                                                         |
+| `socket.social-recovery`          | **CLOSED 2026-08-18 (S-A1).** `UserElectedRecovery` is a user-elected M-of-N ERC-1271 owner. Proven in `test/forge/RecoveryOwner.t.sol`: `createAccount(recovery)` sets `SmartAccount.owner` to it; factory still takes the key it is given (not default). Platform is never a guardian. Unaudited |
+| `socket.paymaster-policy`         | **CLOSED 2026-08-08 policy + 2026-08-19 contract.** `ScopedPaymaster` refuses when unfunded. Operator cannot touch user accounts. Depositing the float is Nitro Class X. Unaudited                                                                                                                 |
+| `socket.contract-audit`           | External audit before any mainnet deployment. Nothing in this suite has been audited                                                                                                                                                                                                               |
 
 **Nothing in `contracts/` should be deployed to a chain holding real value until `socket.contract-toolchain` and `socket.contract-audit` are closed.** A local anvil proves these contracts compile and behave as described. It proves nothing about whether they are safe, and choosing a production chain is a separate decision nobody has made.
 
@@ -255,6 +257,8 @@ pnpm --filter @intafaced/svc-protocol chain:deploy      # + CREATE2 cross-check
 `protocol.smartAccounts` in the admin console, or `PROTOCOL_RELAY_ENABLED=false`.
 
 **Effect when off:** `relayUserOperation` refuses. Reads, address prediction and calldata construction continue.
+
+Operator procedure (detect / contain / what you must not pull): [`docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md`](../../docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md). Ledger/trade red is a different page.
 
 Note what a kill-switch can and cannot do on this plane. It stops _us_ relaying. It does not stop a user transacting: their account is on a public chain and the same signed operation goes to any bundler. **A kill-switch here is a switch on our convenience, never on their access.** A kill-switch that could freeze a user's funds would mean we had custody, and this document would be a lie.
 

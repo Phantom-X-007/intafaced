@@ -21,7 +21,7 @@ function sealedOpts(extra: Parameters<typeof rankFixtures>[1] = {}) {
 }
 
 describe('scanner rankFixtures (Stage-1 fixtures)', () => {
-  it('D26-P1-A3: blank P0-11 → refuse ranked signals (no invent alpha)', () => {
+  it('D26-P1-A3: omitted law → refuse ranked signals (no sneak default board)', () => {
     const r = rankFixtures([row({ marketId: 'BTC-USD' })], { now: NOW });
     expect(r).toEqual({
       status: 'refuse',

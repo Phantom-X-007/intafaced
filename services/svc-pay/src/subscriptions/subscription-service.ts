@@ -2,6 +2,8 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { PayError } from '../payment-service.js';
+import { merchantKybMoneyGateRefusal, type MerchantKybStatus } from '../merchant-kyb-money-gate.js';
+import type { ValueMovementPolicy } from '../rails/posture.js';
 import { CADENCES, occurrenceStart, type Cadence } from './schedule.js';
 import {
   MAX_ATTEMPTS_PER_CYCLE,
@@ -19,6 +21,18 @@ import {
   type LastCycle,
   type StallReason,
 } from './charge-cycle.js';
+import {
+  assertChargeTracesToMandate,
+  assertPrechargeNotifyUnpublished,
+  mandateChargeDisposition,
+  normaliseSubscriptionPath,
+  recordPreChargeNotifyAttempt,
+  SUBSCRIPTION_PATHS,
+  type SubscriptionPath,
+  type SubscriptionPreChargeNotify,
+} from './mandate-product.js';
+
+export { normaliseSubscriptionPath, SUBSCRIPTION_PATHS, type SubscriptionPath };
 
 /**
  * SUBSCRIPTION LIFECYCLE AND CHARGE CYCLE (SPEC §4).
@@ -96,6 +110,8 @@ export interface CycleRecord {
   exhaustedAt: Date | null;
   settledAt: Date | null;
   lastAttemptAt: Date | null;
+  notifyStatus: 'attempted' | 'skipped_unwired' | 'failed' | null;
+  notifyCode: string | null;
 }
 
 /** Merchant-facing firing history row (router `listExecutions`). */
@@ -111,24 +127,8 @@ export interface ExecutionRecord {
   attemptedAt: Date;
   settledAt: Date | null;
   createdAt: Date;
-}
-
-/** Paths that may be stored. Anything else is refuse-closed (no silent crypto). */
-export const SUBSCRIPTION_PATHS = ['crypto_invoice', 'card'] as const;
-export type SubscriptionPath = (typeof SUBSCRIPTION_PATHS)[number];
-
-/**
- * Default `crypto_invoice`. `card_mandate` aliases `card` (fire refuses
- * `pay.mandate_rail_absent`). Unknown strings refuse — they used to open a
- * crypto invoice, which is inventing a rail under a wrong name.
- */
-export function normaliseSubscriptionPath(path: string | undefined): SubscriptionPath {
-  const raw = (path ?? 'crypto_invoice').trim();
-  if (raw === 'crypto_invoice') return 'crypto_invoice';
-  if (raw === 'card' || raw === 'card_mandate') return 'card';
-  throw new PayError(`Subscription path ${JSON.stringify(raw)} is not supported — use crypto_invoice or card`, 'pay.subscription_invalid', {
-    path: raw,
-  });
+  notifyStatus: CycleRecord['notifyStatus'];
+  notifyCode: string | null;
 }
 
 interface MandateRow {
@@ -177,6 +177,8 @@ interface CycleRow {
   exhausted_at: Date | null;
   settled_at: Date | null;
   last_attempt_at: Date | null;
+  notify_status: CycleRecord['notifyStatus'];
+  notify_code: string | null;
 }
 
 function toMandate(r: MandateRow): MandateRecord {
@@ -230,6 +232,8 @@ function toCycle(r: CycleRow): CycleRecord {
     exhaustedAt: r.exhausted_at,
     settledAt: r.settled_at,
     lastAttemptAt: r.last_attempt_at,
+    notifyStatus: r.notify_status ?? null,
+    notifyCode: r.notify_code ?? null,
   };
 }
 
@@ -281,6 +285,13 @@ export interface SubscriptionServiceOptions {
    */
   readonly defaultFeeBps?: number;
   readonly resolveMerchantFeeBps?: MerchantFeeBpsResolver;
+  /** Same posture as PayService — rejected KYB cannot open a mandate. */
+  readonly valueMovement?: ValueMovementPolicy;
+  /**
+   * Pre-charge notify (SPEC §4). Same idea as PayService.afterPaymentEvent.
+   * Absent → write notifyStatus skipped_unwired, never pretend the user was messaged.
+   */
+  readonly notifyPreCharge?: SubscriptionPreChargeNotify;
 }
 
 export type FiringOutcome = 'invoiced' | 'rejected' | 'already-fired' | 'skipped';
@@ -303,6 +314,12 @@ export interface RunReport {
     outcome: CycleOutcome;
     rejectionCode?: string;
     stallReason?: StallReason;
+    /**
+     * Named pre-charge notify outcome when an invoice opened.
+     * skipped_unwired / failed never look like the user was messaged.
+     */
+    noticeCode?: string;
+    notifyStatus?: 'attempted' | 'skipped_unwired' | 'failed';
     /** The business key the period was charged under. Never per-attempt. */
     idempotencyKey?: string;
     /** Whole intervals the period was late by. `>= 1` means the frame moved. */
@@ -313,6 +330,8 @@ export interface RunReport {
 export class SubscriptionService {
   private readonly defaultFeeBps: number | undefined;
   private readonly resolveMerchantFeeBps: MerchantFeeBpsResolver | undefined;
+  private readonly valueMovement: ValueMovementPolicy;
+  private readonly notifyPreCharge: SubscriptionPreChargeNotify | undefined;
 
   constructor(
     private readonly sql: Sql,
@@ -326,6 +345,8 @@ export class SubscriptionService {
   ) {
     this.defaultFeeBps = options.defaultFeeBps;
     this.resolveMerchantFeeBps = options.resolveMerchantFeeBps;
+    this.valueMovement = options.valueMovement ?? 'allow-sandbox';
+    this.notifyPreCharge = options.notifyPreCharge;
   }
 
   async createMandate(input: {
@@ -355,9 +376,7 @@ export class SubscriptionService {
     }
 
     const m = await this.requireMerchant(input.merchantId);
-    if (m.status !== 'active') {
-      throw new PayError(`Merchant ${m.id} is ${m.status}`, 'pay.merchant_inactive');
-    }
+    this.assertMerchantMayOpenMoney(m);
 
     const rows = await this.sql<MandateRow[]>`
       INSERT INTO pay.subscription_mandates (
@@ -401,7 +420,7 @@ export class SubscriptionService {
     if (mandate.status !== 'active') {
       throw new PayError(`Mandate ${mandate.id} is ${mandate.status}`, 'pay.mandate_inactive');
     }
-    await this.requireMerchant(mandate.merchantId);
+    this.assertMerchantMayOpenMoney(await this.requireMerchant(mandate.merchantId));
 
     const nextRunAt = occurrenceStart(mandate.startsAt, mandate.cadence, 0);
     const path = normaliseSubscriptionPath(input.path);
@@ -491,7 +510,8 @@ export class SubscriptionService {
   async listCycles(subscriptionId: string): Promise<CycleRecord[]> {
     const rows = await this.sql<CycleRow[]>`
       SELECT occurrence, amount::text, status, idempotency_key, attempt_count,
-             rejection_code, payment_id, exhausted_at, settled_at, last_attempt_at
+             rejection_code, payment_id, exhausted_at, settled_at, last_attempt_at,
+             notify_status, notify_code
         FROM pay.subscription_executions
        WHERE subscription_id = ${subscriptionId}
        ORDER BY occurrence ASC
@@ -570,12 +590,14 @@ export class SubscriptionService {
         attempted_at: Date;
         settled_at: Date | null;
         created_at: Date;
+        notify_status: CycleRecord['notifyStatus'];
+        notify_code: string | null;
       }>
     >`
       SELECT id, subscription_id, occurrence, amount::text, status,
              payment_id, rejection_code,
              COALESCE(last_attempt_at, attempted_at) AS attempted_at,
-             settled_at, created_at
+             settled_at, created_at, notify_status, notify_code
         FROM pay.subscription_executions
        WHERE subscription_id = ${subscriptionId}
        ORDER BY occurrence DESC
@@ -592,6 +614,8 @@ export class SubscriptionService {
       attemptedAt: r.attempted_at,
       settledAt: r.settled_at,
       createdAt: r.created_at,
+      notifyStatus: r.notify_status ?? null,
+      notifyCode: r.notify_code ?? null,
     }));
   }
 
@@ -851,6 +875,8 @@ export class SubscriptionService {
           occurrence: plan.occurrence,
           outcome: attempt.outcome,
           rejectionCode: attempt.rejectionCode,
+          noticeCode: attempt.noticeCode,
+          notifyStatus: attempt.notifyStatus ?? undefined,
           idempotencyKey: attempt.idempotencyKey,
           lateIntervals: plan.kind === 'charge' ? plan.lateIntervals : undefined,
         });
@@ -900,7 +926,13 @@ export class SubscriptionService {
     occurrence: number;
     isRetry: boolean;
     now: Date;
-  }): Promise<{ outcome: CycleOutcome; rejectionCode?: string; idempotencyKey: string }> {
+  }): Promise<{
+    outcome: CycleOutcome;
+    rejectionCode?: string;
+    noticeCode?: string;
+    notifyStatus?: CycleRecord['notifyStatus'];
+    idempotencyKey: string;
+  }> {
     const { sub, mandate, occurrence, now } = input;
     if (sub.status !== 'active')
       return { outcome: 'skipped', idempotencyKey: chargeIdempotencyKey({ subscriptionId: sub.id, occurrence }) };
@@ -993,14 +1025,27 @@ export class SubscriptionService {
           return { outcome: 'rejected' as const, rejectionCode: code, idempotencyKey };
         }
 
-        // Card mandate rail: the port has createMandate/revokeMandate and NO
-        // charge-against-mandate operation. Refuse by name; never invent a pull.
-        if (sub.path === 'card' || sub.path === 'card_mandate') {
-          await this.rejectCycle(tx, executionId, 'pay.mandate_rail_absent', attemptCount, now);
-          return { outcome: 'rejected' as const, rejectionCode: 'pay.mandate_rail_absent', idempotencyKey };
+        /*
+         * Product path law (mandate-product.ts): card refuses by name; crypto
+         * opens an invoice. Trace the period amount to the active mandate
+         * before either arm — a charge without a mandate does not go out.
+         */
+        assertChargeTracesToMandate({
+          executionSubscriptionId: sub.id,
+          subscriptionId: sub.id,
+          mandateId: mandate.id,
+          mandateStatus: mandate.status,
+          amount: chargeAmount,
+          mandateAmount: mandate.amount,
+        });
+
+        const disposition = mandateChargeDisposition(sub.path);
+        if (disposition.kind === 'refuse') {
+          await this.rejectCycle(tx, executionId, disposition.code, attemptCount, now);
+          return { outcome: 'rejected' as const, rejectionCode: disposition.code, idempotencyKey };
         }
 
-        // crypto_invoice (default): open a payment, never pull.
+        // crypto_invoice: open a payment, never pull.
         if (!this.openInvoice) {
           await this.rejectCycle(tx, executionId, 'pay.subscription_driver_absent', attemptCount, now);
           return { outcome: 'rejected' as const, rejectionCode: 'pay.subscription_driver_absent', idempotencyKey };
@@ -1024,6 +1069,31 @@ export class SubscriptionService {
             `;
             paymentId = prior[0]?.payment_id ?? null;
           }
+          /*
+           * SPEC §4 pre-charge notify — record the attempt BEFORE money work,
+           * including invoice reuse. Unwired is skipped_unwired, never silent
+           * notified. Port failures are named failed; they do not unwind money.
+           */
+          const notify = await recordPreChargeNotifyAttempt({
+            notify: this.notifyPreCharge,
+            subscriptionId: sub.id,
+            occurrence,
+            path: sub.path,
+            merchantId: sub.merchantId,
+            customerId: sub.customerId,
+            amount: formatAmount(chargeAmount),
+            assetId: mandate.assetId,
+            idempotencyKey,
+          });
+          assertPrechargeNotifyUnpublished(notify);
+          await tx`
+            UPDATE pay.subscription_executions
+               SET notify_status = ${notify.notifyStatus},
+                   notify_code = ${notify.code},
+                   notified_at = ${now}
+             WHERE id = ${executionId}
+          `;
+
           if (!paymentId) {
             const opened = await this.openInvoice({
               merchantId: sub.merchantId,
@@ -1041,7 +1111,12 @@ export class SubscriptionService {
                SET status = 'invoiced', payment_id = ${paymentId}
              WHERE id = ${executionId}
           `;
-          return { outcome: 'invoiced' as const, idempotencyKey };
+          return {
+            outcome: 'invoiced' as const,
+            idempotencyKey,
+            noticeCode: notify.code ?? undefined,
+            notifyStatus: notify.notifyStatus,
+          };
         } catch (err) {
           const code = err instanceof PayError ? err.code : err instanceof Error ? err.message.slice(0, 120) : 'invoice.failed';
           await this.rejectCycle(tx, executionId, code, attemptCount, now);
@@ -1301,12 +1376,28 @@ export class SubscriptionService {
     return occurrenceDueAt(frame, occurrence + 1);
   }
 
-  private async requireMerchant(merchantId: string): Promise<{ id: string; status: string }> {
-    const rows = await this.sql<Array<{ id: string; status: string }>>`
-      SELECT id, status FROM pay.merchants WHERE id = ${merchantId}
+  private async requireMerchant(merchantId: string): Promise<{ id: string; status: string; kybStatus: MerchantKybStatus }> {
+    const rows = await this.sql<Array<{ id: string; status: string; kyb_status: MerchantKybStatus }>>`
+      SELECT id, status, kyb_status FROM pay.merchants WHERE id = ${merchantId}
     `;
     const row = rows[0];
     if (!row) throw new PayError(`Merchant ${merchantId} not found`, 'pay.merchant_not_found');
-    return row;
+    return { id: row.id, status: row.status, kybStatus: row.kyb_status };
+  }
+
+  /** Mandate / subscription writes — same status + KYB cut-off as PayService money doors. */
+  private assertMerchantMayOpenMoney(merchant: { id: string; status: string; kybStatus: MerchantKybStatus }): void {
+    if (merchant.status !== 'active') {
+      throw new PayError(`Merchant ${merchant.id} is ${merchant.status}`, 'pay.merchant_inactive');
+    }
+    const kybRefuse = merchantKybMoneyGateRefusal({
+      merchantId: merchant.id,
+      status: merchant.status,
+      kybStatus: merchant.kybStatus,
+      valueMovement: this.valueMovement,
+    });
+    if (kybRefuse) {
+      throw new PayError(kybRefuse.message, kybRefuse.code, kybRefuse.detail);
+    }
   }
 }

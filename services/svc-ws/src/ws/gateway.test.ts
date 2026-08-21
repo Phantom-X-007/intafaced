@@ -11,7 +11,7 @@ import {
   type TradePrint,
 } from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
-import type { DepthSource } from '../depth/source.js';
+import { DepthNoBookError, type DepthSource } from '../depth/source.js';
 import { PrivateOrderHub } from '../private/hub.js';
 import { registerRoutes } from '../routes.js';
 import { TradeHub } from '../trade/hub.js';
@@ -249,7 +249,7 @@ describe('the websocket gateway, over a real socket', () => {
     // Policy violation (1008), not an internal error path stacked on top of
     // capacity / try-later codes. Unknown market is a single, stable close.
     expect(closed.code).toBe(1008);
-    expect(closed.reason).toMatch(/unknown market/);
+    expect(closed.reason).toBe('ws.close.unknown_market');
     // And critically: no depth call was made, so nothing was allocated upstream.
     expect(source.snapshotCalls).toEqual([]);
   });
@@ -311,7 +311,7 @@ describe('the websocket gateway, over a real socket', () => {
 
     for (const closed of closures) {
       expect(closed.code).toBe(1008);
-      expect(closed.reason).toMatch(/unknown market/);
+      expect(closed.reason).toBe('ws.close.unknown_market');
     }
     expect(hub.connections).toBe(0);
     expect(source.snapshotCalls).toEqual([]);
@@ -348,11 +348,11 @@ describe('the websocket gateway, over a real socket', () => {
     const client = connect(`market=${MARKET}`);
     await client.frameCount(1);
 
-    await gateway.close('gateway shutting down');
+    await gateway.close('ws.close.shutting_down');
     const closed = await client.closure();
 
     expect(closed.code).toBe(1001);
-    expect(closed.reason).toBe('gateway shutting down');
+    expect(closed.reason).toBe('ws.close.shutting_down');
   });
 
   it('streams public trade prints on channel=trades — no order/account ids, no invented side', async () => {
@@ -426,6 +426,7 @@ describe('the websocket gateway, over a real socket', () => {
 
   it('refuses an unknown channel on the upgrade', async () => {
     expect(await upgradeStatus(`ws://${base}/stream?market=${MARKET}&channel=orders`)).toBe(400);
+    expect(await upgradeStatus(`ws://${base}/stream?market=${MARKET}&channel=positions`)).toBe(400);
   });
 
   it('terminates a public socket that stops answering pings and frees the hub seat', async () => {
@@ -537,7 +538,94 @@ describe('the HTTP half', () => {
     const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/depth' });
 
     expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
     expect(source.snapshotCalls).toEqual([]);
+  });
+
+  it('404s NoBook when matching holds no book — never a 200 empty ladder', async () => {
+    source.snapshot = async (marketId: string) => {
+      source.snapshotCalls.push(marketId);
+      throw new DepthNoBookError(marketId);
+    };
+
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoBook' });
+    expect(response.json()).not.toMatchObject({ bids: [], asks: [] });
+  });
+
+  it('404s NoTape when a listed market has no prints — never a 200 empty tape', async () => {
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/trades` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoTape' });
+    expect(response.json()).not.toMatchObject({ trades: [] });
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('404s an unknown market on the trades GET without a fabricated empty tape', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/trades' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
+    expect(response.json()).not.toMatchObject({ trades: [] });
+  });
+
+  it('404s NoBlotter for a listed market — never a 200 empty orders book', async () => {
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/orders` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoBlotter' });
+    expect(response.json()).not.toMatchObject({ orders: [] });
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('404s an unknown market on the orders GET without a fabricated empty blotter', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/orders' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
+    expect(response.json()).not.toMatchObject({ orders: [] });
+  });
+
+  it('404s NoPositions for a listed market — never a 200 empty positions book', async () => {
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/positions` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'NoPositions' });
+    expect(response.json()).not.toMatchObject({ positions: [] });
+  });
+
+  it('404s an unknown market on the positions GET without a fabricated empty blotter', async () => {
+    const response = await app.inject({ method: 'GET', url: '/markets/NOPE-NOPE/positions' });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ code: 'MarketNotFound' });
+    expect(response.json()).not.toMatchObject({ positions: [] });
+  });
+
+  it('serves recent public prints when the tape is live — not an empty wrapper', async () => {
+    const sink = { bufferedBytes: 0, send: () => undefined, close: () => undefined };
+    tradeHub.attach(MARKET, sink);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    tradeHub.ingest({
+      marketId: MARKET,
+      price: '30100.5',
+      qty: '0.1',
+      sequence: 50,
+      ts: '2026-07-29T12:00:00.000Z',
+    });
+
+    const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/trades` });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { marketId: string; trades: TradePrint[] };
+    expect(body.marketId).toBe(MARKET);
+    expect(body.trades).toHaveLength(1);
+    expect(body.trades[0]).toMatchObject({ type: 'trade', sequence: 50, price: '30100.5', quantity: '0.1' });
+    expect(body.trades[0]).not.toHaveProperty('side');
   });
 
   it('400s a market id that could never be one', async () => {
@@ -568,7 +656,7 @@ describe('the HTTP half', () => {
     const response = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json()).toMatchObject({ code: 'UpstreamUnavailable' });
+    expect(response.json()).toMatchObject({ code: 'depth.engine_unavailable' });
   });
 
   it('reports not-ready when the kill-switch is off, while staying alive', async () => {
@@ -600,6 +688,19 @@ describe('the HTTP half', () => {
       tradesBus: false,
       privateBus: false,
       privateConnections: 0,
+    });
+  });
+
+  it('publishes per-hub connection ceilings on /health without 503ing on occupancy', async () => {
+    const health = await app.inject({ method: 'GET', url: '/health' });
+    expect(health.statusCode).toBe(200);
+    expect(health.json()).toMatchObject({
+      ok: true,
+      capacity: {
+        depth: { connections: 0, maxConnections: 4 },
+        trades: { connections: 0, maxConnections: 4 },
+        private: { connections: 0, maxConnections: 4, maxConnectionsPerUser: 16 },
+      },
     });
   });
 

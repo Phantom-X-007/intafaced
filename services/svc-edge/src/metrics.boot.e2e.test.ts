@@ -108,6 +108,9 @@ beforeAll(async () => {
       OTEL_ENABLED: 'false',
       JWT_ACCESS_SECRET: 'test-only-signing-secret-at-least-32-characters-long',
       EDGE_PRINCIPAL_SECRET: 'test-only-edge-principal-secret-at-least-32-chars',
+      // Listed fixture so the geo-block guard can pass through to the proxy
+      // (unset would 503 as unknown). Placeholder codes only — not counsel content.
+      INTAFACED_SANCTIONS_REGIONS: 'AA:test-fixture-not-a-real-list',
       // Kept out of the repo tree so a test run cannot leave a state file behind.
       EDGE_KILL_STATE_PATH: '',
     },

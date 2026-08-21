@@ -5,11 +5,14 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
+import { tradeConvertPort, usableTradeConvertUrl } from './auto-invest/trade-convert-port.js';
 import { cardIssuerFor } from './cards/issuer.js';
 import { rampProgrammeFor } from './ramps/rails.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
 import { tickerPriceSource } from './loans/prices.js';
 import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { withSpan } from './tracing.js';
 import { verifyServiceHeaders } from '@intafaced/contracts';
@@ -84,6 +87,8 @@ const bank = createBankServices(sql, ledger, history, {
     // a database column and svc-notify's finished consumer never sees one.
     marginCalls: eventMarginCallSink(bus),
     moduleEnabled: env.BANK_LOANS_ENABLED,
+    affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+    affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   },
   /**
    * THE OTHER HALF THAT WAS MISSING, and it was missing in the same shape.
@@ -99,7 +104,7 @@ const bank = createBankServices(sql, ledger, history, {
    * deployment gets by SAYING ANYTHING.
    */
   cards: {
-    issuer: cardIssuerFor(env.BANK_CARD_ISSUER),
+    issuer: cardIssuerFor(env.BANK_CARD_ISSUER, { APP_ENV: env.APP_ENV, NODE_ENV: process.env.NODE_ENV }),
     /**
      * THE JIT CONVERSION RATE (§18), and what this wiring does NOT claim.
      *
@@ -122,11 +127,32 @@ const bank = createBankServices(sql, ledger, history, {
     moduleEnabled: env.BANK_CARDS_ENABLED,
   },
   /**
+   * AUTO-INVEST — threshold / round-up / refuse-closed DCA.
+   *
+   * `enabled` is the same flag as the HTTP/tRPC runner kill. The capture hook
+   * has no other door; without this a flipped AUTO_INVEST_ENABLED would still
+   * sweep spare change on every card capture.
+   *
+   * ConvertPort was the other missing half (same shape as cards / ramps):
+   * createDca already refused `bank.auto_invest_rate_unset` when convert was
+   * null, tests injected a stub, and `index.ts` never passed one — so every
+   * deployment stayed refuse-closed. `trade.convert` (quote + execute) is the
+   * rate counterparty. Unusable TRADE_URL keeps convert unwired. Convert
+   * failure still refuses — this service does not invent a §8 mid.
+   */
+  autoInvest: {
+    enabled: env.AUTO_INVEST_ENABLED,
+    ...(usableTradeConvertUrl(env.TRADE_URL)
+      ? { convert: tradeConvertPort({ baseUrl: env.TRADE_URL, edgeSecret: env.EDGE_PRINCIPAL_SECRET }) }
+      : {}),
+  },
+  /**
    * RAMPS — same missing-wiring shape as cards.
    *
    * Silence is `none` (`BANK_RAMP_MODE` default). `crypto-ledger` turns on the
-   * crypto ledger half only; fiat remains `socket.psp-partners` and refuses by
-   * name. `simulated` is always true on this surface.
+   * crypto ledger half. Fiat resolves through PayFiatRampPort (svc-pay
+   * RailAdapter plane); boot default is empty → `bank.fiat_ramp_no_pay_adapter` until
+   * a live pay rail is injected at the edge. `simulated` is always true.
    */
   ramps: { programme: rampProgrammeFor(env.BANK_RAMP_MODE) },
 });
@@ -195,6 +221,7 @@ app.get('/ready', async () => ({
     displayName: rampProgramme.displayName,
     cryptoRail: rampProgramme.cryptoRail,
     fiatLeg: rampProgramme.fiatLeg,
+    fiatVia: rampProgramme.fiatVia,
   },
 }));
 
@@ -386,6 +413,7 @@ app.log.info(
     rampProgramme: rampProgramme.id,
     rampProgrammeSimulated: rampProgramme.simulated,
     rampFiatLeg: rampProgramme.fiatLeg,
+    rampFiatVia: rampProgramme.fiatVia,
   },
   'svc-bank ready',
 );

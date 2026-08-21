@@ -2,12 +2,18 @@ import { z } from 'zod';
 import { router, scopedProcedure, publicProcedure, TRPCError } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { PayError, type PayService } from './payment-service.js';
+import { DestinationKindError } from './payout-destination.js';
+import {
+  assertOnlyPayoutDestinations,
+  PayoutDestinationMissingError,
+  type MerchantPayoutDestinations,
+} from './merchant-payout-destination.js';
 import type { UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import type { RailRegistry } from './rails/registry.js';
 import { RAIL_CAPABILITIES, RAIL_MODES } from './rails/rail-adapter.js';
 import { PublicCheckoutUnavailable, SandboxRailRefusal } from './rails/posture.js';
 import { assertMerchantAreaAccess, type MerchantAreaFence } from './merchant-ownership.js';
-import type { PermissionArea } from './submerchants.js';
+import { areaForSurface, type PayfacSurface } from './payfac-permissions.js';
 import { assertRoutingInputsPresent, RoutingInputError } from './routing-inputs.js';
 import {
   REFERENCE_RAIL_ROUTING_PROFILES,
@@ -17,6 +23,8 @@ import {
   type RailRoutingProfile,
 } from './routing/decide.js';
 import { evaluateFraud } from './fraud/evaluate.js';
+import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
+import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
 import { PAY_PUBLIC_API_BASE } from './plugins/reference-client.js';
 
 /**
@@ -129,7 +137,13 @@ type WithdrawalViewOut = z.infer<typeof withdrawalView>;
  * `assertSelf`. NOT_FOUND leaks less because it never confirms the id exists,
  * but every id here is a v4 uuid the caller already holds.
  */
-export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney: UserMoneyService, trees: MerchantAreaFence | null = null) {
+export function createPayRouter(
+  pay: PayService,
+  rails: RailRegistry,
+  userMoney: UserMoneyService,
+  trees: MerchantAreaFence | null = null,
+  destinations: MerchantPayoutDestinations = assertOnlyPayoutDestinations(),
+) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -138,8 +152,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
     }
   };
 
-  const assertAccess = (principalUserId: string | undefined, merchantId: string, area: PermissionArea) =>
-    assertMerchantAreaAccess(pay, principalUserId, merchantId, area, trees);
+  const assertAccess = (principalUserId: string | undefined, merchantId: string, surface: PayfacSurface) =>
+    assertMerchantAreaAccess(pay, principalUserId, merchantId, areaForSurface(surface), trees);
 
   return router({
     health: publicProcedure
@@ -176,8 +190,10 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
      *     `amount` is ignored outright — not compared, not validated against the
      *     link, ignored — and the session freezes the link's number.
      *   · THERE IS NO RAIL INPUT, AND THERE WILL NOT BE ONE. The rail is chosen
-     *     server-side from `PAY_CHECKOUT_RAILS`. A hosted checkout that can name
-     *     a rail is the route back to the sandbox-withdrawal P0.
+     *     server-side from `PAY_CHECKOUT_RAILS` via smart routing (geo/method/risk).
+     *     A hosted checkout that can name a rail is the route back to the
+     *     sandbox-withdrawal P0. Country is a routing dim, not a rail name.
+     *     Risk comes from operator `PAY_CHECKOUT_RISK_BAND`, never the payer.
      *   · A SANDBOX RAIL IS REFUSED on the public surface under `live-only`,
      *     even though sandbox `authorize`/`capture` are allowed on the merchant
      *     integration path. See `assertRailMayAcceptPublicPayment`.
@@ -193,6 +209,10 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             amount: amountSchema.optional(),
             /** Honoured only on a link that fixes no currency. Otherwise ignored. */
             assetId: assetIdSchema.optional(),
+            /** Payer-stated ISO country. Blank → pay.routing_input_missing. Not a rail id. */
+            geoCountry: z.string().max(8).optional(),
+            /** Method (`crypto`/`card`), never a rail adapter id. */
+            method: z.string().max(32).optional(),
           }),
         )
         .output(z.object({ sessionToken: z.string(), session: checkoutSessionView }))
@@ -202,6 +222,8 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
               linkToken: input.token,
               amount: input.amount === undefined ? undefined : parseAmount(input.amount),
               assetId: input.assetId,
+              geoCountry: input.geoCountry,
+              method: input.method,
             });
             return { sessionToken, session };
           }),
@@ -292,6 +314,28 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           }),
         ),
 
+      /**
+       * Persist a payout destination through assertPayoutDestinationKind
+       * (IBAN / IFSC / EVM) so a later payout has a real ref before withdrawHold.
+       */
+      setPayoutDestination: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            railId: z.string().min(1),
+            kind: z.string().min(1),
+            ref: z.string().min(1),
+          }),
+        )
+        .output(z.object({ kind: z.string(), ref: z.string(), railId: z.string() }))
+        .mutation(({ ctx, input }) =>
+          wrap(async () => {
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.setPayoutDestination');
+            const dest = await destinations.persist(input);
+            return { ...dest, railId: input.railId };
+          }),
+        ),
+
       /** Current merchant for the principal — null when not yet onboarded. */
       me: scopedProcedure('pay:read', { module: 'pay' })
         .output(
@@ -340,15 +384,36 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'kyb');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.submitKyb');
             const merchant = await pay.submitKyb(input);
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
           }),
         ),
 
       /**
+       * Operator digital-KYB decide (`pay.psp`). `admin:compliance` — not merchant `pay:write`.
+       * Works under live-only. Does not invent a vendor, fee bps, or Layer A scopes.
+       * No merchant-ownership fence: the operator is not the merchant.
+       */
+      decideKyb: scopedProcedure('admin:compliance', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) }))
+        .output(
+          z.object({
+            id: z.string().uuid(),
+            kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
+            kybRef: z.string().nullable(),
+          }),
+        )
+        .mutation(({ input }) =>
+          wrap(async () => {
+            const merchant = await pay.decideKyb(input);
+            return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
+          }),
+        ),
+
+      /**
        * KYB stub decide — allowed only when valueMovement is allow-sandbox.
-       * Under live-only → `pay.kyb_operator_required` (honest refuse).
+       * Under live-only → `pay.kyb_operator_required` (use `merchant.decideKyb`).
        */
       decideKybStub: scopedProcedure('pay:write', { module: 'pay' })
         .input(z.object({ merchantId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) }))
@@ -361,7 +426,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'kyb');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.decideKybStub');
             const merchant = await pay.decideKybStub(input);
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
           }),
@@ -379,7 +444,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.object({ id: z.string().uuid(), merchantId: z.string().uuid() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'checkout.profile');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.profile');
             return pay.createProfile(input);
           }),
         ),
@@ -412,7 +477,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.createLink');
             const link = await pay.createPaymentLink({
               merchantId: input.merchantId,
               label: input.label,
@@ -451,7 +516,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         )
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.listLinks');
             return pay.listPaymentLinks(input.merchantId);
           }),
         ),
@@ -461,7 +526,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.object({ deactivated: z.boolean() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment.link');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.deactivateLink');
             return pay.deactivatePaymentLink(input.merchantId, input.linkId);
           }),
         ),
@@ -477,7 +542,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.object({ clearing: amountSchema, available: amountSchema }))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'merchant.profile');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.balances');
             return {
               clearing: formatAmount(await pay.clearingBalance(input.merchantId, input.assetId)),
               available: formatAmount(await pay.merchantBalance(input.merchantId, input.assetId)),
@@ -504,7 +569,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(paymentView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'payment');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.payment.create');
             return toPaymentOut(
               await pay.createPayment({
                 ...input,
@@ -521,7 +586,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'trpc.payment.authorize');
             return toPaymentOut(await pay.authorize(input.paymentId));
           }),
         ),
@@ -532,7 +597,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'trpc.payment.capture');
             return toPaymentOut(
               await pay.capture(input.paymentId, input.amount === undefined ? {} : { amount: parseAmount(input.amount) }),
             );
@@ -546,7 +611,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal?.userId, payment.merchantId, 'payment.refund');
+            await assertAccess(ctx.principal?.userId, payment.merchantId, 'trpc.payment.refund');
             return toPaymentOut(
               await pay.refund(input.paymentId, parseAmount(input.amount), input.refundId ? { refundId: input.refundId } : {}),
             );
@@ -563,7 +628,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             // is the RESPONSE, and it must come before the return, not after
             // the caller has the object.
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal.userId, payment.merchantId, 'trpc.payment.get');
             return toPaymentOut(payment);
           }),
         ),
@@ -580,7 +645,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.array(paymentView))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal.userId, input.merchantId, 'payment');
+            await assertAccess(ctx.principal.userId, input.merchantId, 'trpc.payment.list');
             return (await pay.listPayments(input)).map(toPaymentOut);
           }),
         ),
@@ -606,7 +671,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             // `payment_events` carries instrument metadata, customer refs and
             // rail references, so this is the more sensitive of the two reads.
             const payment = await pay.getPayment(input.paymentId);
-            await assertAccess(ctx.principal.userId, payment.merchantId, 'payment');
+            await assertAccess(ctx.principal.userId, payment.merchantId, 'trpc.payment.history');
             return (await pay.history(input.paymentId)).map((e) => ({
               id: e.id,
               event: e.event,
@@ -624,7 +689,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(settlementView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.settlement.run');
             return toSettlementOut(await pay.settleWindow(input));
           }),
         ),
@@ -635,15 +700,23 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
           z.object({
             settlementId: z.string().uuid(),
             railId: z.string().min(1),
-            destination: z.object({ kind: z.string().min(1), ref: z.string().min(1) }),
+            destination: z.object({ kind: z.string().min(1), ref: z.string().min(1) }).optional(),
           }),
         )
         .output(settlementView)
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement.payout');
-            return toSettlementOut(await pay.payoutSettlement(input));
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'trpc.settlement.payout');
+            const destination = input.destination
+              ? await destinations.persist({
+                  merchantId: settlement.merchantId,
+                  railId: input.railId,
+                  kind: input.destination.kind,
+                  ref: input.destination.ref,
+                })
+              : await destinations.require({ merchantId: settlement.merchantId, railId: input.railId });
+            return toSettlementOut(await pay.payoutSettlement({ ...input, destination }));
           }),
         ),
 
@@ -655,7 +728,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             // A settlement names gross, fees and net for a window — another
             // merchant's revenue and the rate we charge them.
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertAccess(ctx.principal.userId, settlement.merchantId, 'settlement');
+            await assertAccess(ctx.principal.userId, settlement.merchantId, 'trpc.settlement.get');
             return toSettlementOut(settlement);
           }),
         ),
@@ -674,7 +747,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .output(z.array(settlementView))
         .query(({ ctx, input }) =>
           wrap(async () => {
-            await assertAccess(ctx.principal?.userId, input.merchantId, 'settlement');
+            await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.settlement.list');
             return (await pay.listSettlements(input)).map(toSettlementOut);
           }),
         ),
@@ -689,7 +762,7 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             const settlement = await pay.getSettlement(input.settlementId);
-            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'settlement');
+            await assertAccess(ctx.principal?.userId, settlement.merchantId, 'trpc.settlement.release');
             return toSettlementOut(await pay.releasePendingSettlement(input));
           }),
         ),
@@ -822,8 +895,9 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
     }),
 
     /**
-     * pay.fraud — scoring mechanism only (SPEC §3). Moves no value.
-     * Ledger reverse-money recipes stay unwired (Class X park). Declines always explain.
+     * pay.fraud — scoring + review queue + dispute **case** mechanism (D26-P1-P5).
+     * Moves no ledger value. Chargeback recipes refuse-closed via
+     * `socket.pay-chargeback-ledger-wire` (named §13). List content Class X.
      */
     fraud: router({
       evaluate: publicProcedure
@@ -894,6 +968,223 @@ export function createPayRouter(pay: PayService, rails: RailRegistry, userMoney:
             outcome: decision.outcome,
             reasons: decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
             skippedDisabled: [...decision.skippedDisabled],
+          };
+        }),
+
+      enqueueReview: scopedProcedure('pay:write', { module: 'pay' })
+        .input(
+          z.object({
+            id: z.string().min(1),
+            merchantId: z.string().min(1),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            paymentId: z.string().uuid().nullable().optional(),
+            // Re-evaluate from the same inputs so the queue never accepts a forged review.
+            recentPaymentCount: z.number().int().min(0).optional(),
+            recentVolume: amountSchema.optional(),
+            baselineAmount: amountSchema.nullable().optional(),
+            thresholds: z
+              .object({
+                maxPaymentsInWindow: z.number().int().min(0).optional(),
+                maxVolumeInWindow: amountSchema.optional(),
+                amountAnomalyMultiplier: z.number().positive().optional(),
+                velocityCountAction: z.enum(['review', 'decline']).optional(),
+                velocityVolumeAction: z.enum(['review', 'decline']).optional(),
+                amountAnomalyAction: z.enum(['review', 'decline']).optional(),
+              })
+              .optional(),
+            blocklists: z
+              .object({
+                ips: z.array(z.string()).optional(),
+                devices: z.array(z.string()).optional(),
+              })
+              .optional(),
+            enabled: z
+              .object({
+                velocity_count: z.boolean().optional(),
+                velocity_volume: z.boolean().optional(),
+                amount_anomaly: z.boolean().optional(),
+                blocklist_ip: z.boolean().optional(),
+                blocklist_device: z.boolean().optional(),
+              })
+              .optional(),
+          }),
+        )
+        .mutation(({ input }) => {
+          try {
+            const decision = evaluateFraud({
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              recentPaymentCount: input.recentPaymentCount,
+              recentVolume: input.recentVolume,
+              baselineAmount: input.baselineAmount,
+              thresholds: input.thresholds,
+              blocklists: input.blocklists,
+              enabled: input.enabled,
+            });
+            const c = defaultFraudReviewQueue.enqueue({
+              id: input.id,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              paymentId: input.paymentId ?? null,
+              decision,
+            });
+            return {
+              id: c.id,
+              status: c.status,
+              merchantId: c.merchantId,
+              paymentId: c.paymentId,
+              reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+            };
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      listOpenReviews: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ merchantId: z.string().min(1).optional() }).optional())
+        .query(({ input }) =>
+          defaultFraudReviewQueue.listOpen(input?.merchantId).map((c) => ({
+            id: c.id,
+            merchantId: c.merchantId,
+            paymentId: c.paymentId,
+            amount: c.amount,
+            assetId: c.assetId,
+            status: c.status,
+            createdAt: c.createdAt,
+            reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+          })),
+        ),
+
+      resolveReview: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(
+          z.object({
+            id: z.string().min(1),
+            outcome: z.enum(['allow', 'decline']),
+            note: z.string().max(500).nullable().optional(),
+          }),
+        )
+        .mutation(({ ctx, input }) => {
+          try {
+            const c = defaultFraudReviewQueue.resolve({
+              id: input.id,
+              outcome: input.outcome,
+              actorId: ctx.principal.userId,
+              note: input.note,
+            });
+            return {
+              id: c.id,
+              status: c.status,
+              resolvedBy: c.resolvedBy,
+              resolvedAt: c.resolvedAt,
+            };
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      /**
+       * Dispute case surface — status machine only. Does not call chargeback recipes.
+       */
+      openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(
+          z.object({
+            disputeId: z.string().min(1),
+            paymentId: z.string().uuid(),
+            merchantId: z.string().uuid(),
+            amount: amountSchema,
+            assetId: assetIdSchema,
+            reasonCode: z.string().max(64).nullable().optional(),
+            markPaymentDisputed: z.boolean().optional(),
+          }),
+        )
+        .mutation(async ({ input }) => {
+          try {
+            let marked = false;
+            if (input.markPaymentDisputed) {
+              await pay.markDisputed(input.paymentId, {
+                disputeId: input.disputeId,
+                reasonCode: input.reasonCode ?? null,
+              });
+              marked = true;
+            }
+            const c = defaultDisputeCaseStore.open({
+              disputeId: input.disputeId,
+              paymentId: input.paymentId,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+              reasonCode: input.reasonCode,
+              paymentMarkedDisputed: marked,
+            });
+            return {
+              disputeId: c.disputeId,
+              status: c.status,
+              ledgerWire: c.ledgerWire,
+              ledgerRefuseCode: c.ledgerRefuse.code,
+              ledgerSocket: c.ledgerRefuse.socket,
+              paymentMarkedDisputed: c.paymentMarkedDisputed,
+            };
+          } catch (e) {
+            if (e instanceof DisputeCaseError || e instanceof PayError) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `${'code' in e ? e.code : 'pay.error'}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
+
+      contestDispute: scopedProcedure('admin:treasury', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .mutation(({ input }) => {
+          try {
+            const c = defaultDisputeCaseStore.contest(input.disputeId);
+            return {
+              disputeId: c.disputeId,
+              status: c.status,
+              ledgerWire: c.ledgerWire,
+              ledgerRefuseCode: c.ledgerRefuse.code,
+              ledgerSocket: c.ledgerRefuse.socket,
+            };
+          } catch (e) {
+            if (e instanceof DisputeCaseError) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
+            }
+            throw e;
+          }
+        }),
+
+      getDispute: scopedProcedure('pay:read', { module: 'pay' })
+        .input(z.object({ disputeId: z.string().min(1) }))
+        .query(({ input }) => {
+          const c = defaultDisputeCaseStore.get(input.disputeId);
+          if (!c) {
+            throw new TRPCError({ code: 'NOT_FOUND', message: `pay.dispute_not_found: ${input.disputeId}` });
+          }
+          return {
+            disputeId: c.disputeId,
+            paymentId: c.paymentId,
+            merchantId: c.merchantId,
+            amount: c.amount,
+            assetId: c.assetId,
+            reasonCode: c.reasonCode,
+            status: c.status,
+            ledgerWire: c.ledgerWire,
+            ledgerRefuseCode: c.ledgerRefuse.code,
+            ledgerSocket: c.ledgerRefuse.socket,
+            openedAt: c.openedAt,
+            closedAt: c.closedAt,
           };
         }),
     }),
@@ -1193,6 +1484,12 @@ function toTrpcError(err: unknown): unknown {
   if (err instanceof PublicCheckoutUnavailable) {
     return new TRPCError({ code: 'SERVICE_UNAVAILABLE', message: `${err.code}: ${err.message}`, cause: err });
   }
+  if (err instanceof DestinationKindError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.code}: ${err.message}`, cause: err });
+  }
+  if (err instanceof PayoutDestinationMissingError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.code}: ${err.message}`, cause: err });
+  }
   if (!(err instanceof PayError)) return err;
 
   const code = (() => {
@@ -1220,7 +1517,13 @@ function toTrpcError(err: unknown): unknown {
       /** The caller is anonymous and opening rows in our database. */
       case 'pay.checkout_busy':
         return 'TOO_MANY_REQUESTS' as const;
+      case 'pay.routing_input_missing':
+        return 'BAD_REQUEST' as const;
+      case 'pay.routing_no_rail':
+      case 'pay.payout_destination_missing':
+        return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
+      case 'pay.nothing_captured':
       case 'pay.capture_exceeds_authorized':
       case 'pay.refund_exceeds_captured':
       case 'pay.refund_in_flight':

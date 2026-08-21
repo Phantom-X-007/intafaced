@@ -11,6 +11,7 @@
  */
 
 import type { LeaderStat } from './stats.js';
+import { isForbiddenReturnsRankKey } from './returns-board-refuse.js';
 
 /** Allowed presentation modes. Anything else is a marketing/rank invent path. */
 export type DirectoryMode = 'directory';
@@ -89,7 +90,7 @@ export type PresentDirectoryInput = {
 
 function isReturnsRankSort(sortBy: string | undefined): sortBy is ReturnsRankSortKey {
   if (sortBy === undefined || sortBy === '') return false;
-  return (RETURNS_RANK_SORT_KEYS as readonly string[]).includes(sortBy);
+  return (RETURNS_RANK_SORT_KEYS as readonly string[]).includes(sortBy) || isForbiddenReturnsRankKey(sortBy);
 }
 
 function isMarketingBoardMode(mode: string | undefined): mode is MarketingBoardMode {

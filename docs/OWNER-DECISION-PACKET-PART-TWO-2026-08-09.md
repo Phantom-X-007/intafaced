@@ -1,11 +1,11 @@
 # Owner decision packet, part two — P0-04…17 + completeness home
 
-**Status:** OPEN rulings — shapes only. Nothing in this file is decided by an agent.  
+**Status:** Remaining **Denon** P0 product rulings sealed 2026-08-14 (`adr/2026-08-14-remaining-p0-money-law.md`). Class X / F10 / GitHub admin / token **magnitudes** stay Nitro.  
 **Board:** `DENON-HARD-PARALLEL-BOARD-2026-08-09.md` **D26-P0-04…17** (P0-18 = this packet family).  
 **Companion (part one):** [`OWNER-DECISION-PACKET-2026-08-09.md`](OWNER-DECISION-PACKET-2026-08-09.md) — P0-01…03 plus money-path / dark-feed / token magnitudes / F10.  
 **Machine index (tip SoT for “what is still open”):** [`ops/owner-ruling-packet.json`](ops/owner-ruling-packet.json).
 
-**Rule carried from part one:** a missing number is **refuse-closed**, never a placeholder. Agents implement mechanisms and refuse paths; you publish magnitudes or explicit launch-closed.
+**Rule carried from part one:** a missing number is **refuse-closed**, never a placeholder. Agents implement mechanisms and refuse paths. Denon takes recommendations in this packet; Nitro does **not** gate Denon mountains. Class X (secrets, go-live, licence, sanctions list content) stays Nitro.
 
 ---
 
@@ -33,10 +33,11 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-05 · Options / forex settlement asset law
 
-**Blocks:** `trade.options`, `trade.forex` product-complete paths.  
-**Settled:** tracker may show ready-shaped rows; that is **not** licence to invent settlement assets.  
-**Question:** which instruments may go live, in which settlement asset, and what refuses when the set is empty?  
-**Recommendation:** one ADR — live set · settlement asset · refuse matrix — before any engine claims Done. Options/forex stay socket or refuse until that ADR exists.
+**Status:** **SEALED freeze 2026-08-15** — [`docs/adr/2026-08-13-options-forex-settlement-asset-law.md`](adr/2026-08-13-options-forex-settlement-asset-law.md).  
+**Blocks:** `trade.options`, `trade.forex` product-complete paths (still).  
+**Settled:** (1) live instrument set = **empty** until a later owner stamp; (2) settlement asset = **unset**; (3) empty/unset → named refuse. Opaque `TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` stays empty under this freeze and is never a parsed coin table. T6 already refuse-closes options listing. Forex production waits on **true fiat rails** (euro-stable ≠ rails).  
+**Refuse when unset:** `trade.options_settlement_law_unset` · `trade.options_fixing_unconfigured` · `trade.options_terms_incomplete` · `trade.market_kind_unsupported` (orders) · `trade.unsettled_asset_class_listing` (FX/commodity production).  
+**Not invented here:** USDT/USDC/USD/IFC/quote-as-cash, FX pair list, D7 fixing content, bank rails. This freeze does **not** authorize a host stamp.
 
 ---
 
@@ -50,37 +51,35 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-07 · Leverage / margin / liq params beyond §1 defaults
 
-**Not open:** `DEFAULT_MAX_LEVERAGE = 10` — already DIRECTION §1 (see part one “already decided”).  
-**Still open:** any raise above 10×, margin/liquidation parameters beyond §1’s stated defaults, or market-level overrides.  
-**Recommendation:** publish an owner table **or** freeze “§1 defaults only until liquidation ladder proof exists.” Silent constant edits are doctrine crime.
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-leverage-defaults-frozen.md`](adr/2026-08-13-leverage-defaults-frozen.md).  
+**Not open:** `DEFAULT_MAX_LEVERAGE = 10` — DIRECTION §1, now frozen as the live table. Isolated v1; partial-before-full.  
+**Still owner-open:** any raise above 10×, D3 ladder _numbers_, market-level overrides, cross-margin (own ADR).  
+**Settled:** silent constant edits are doctrine crime. The freeze is the ruling until an owner table exists.
 
 ---
 
 ## P0-08 · `pay:write` / KYB grant mechanism shape
 
-**Blocks:** merchant surfaces that need a real grant path without inventing who may grant.  
-**Shape + Layer B wiring:** [`adr/2026-08-12-pay-write-kyb-grant-mechanism-shape.md`](adr/2026-08-12-pay-write-kyb-grant-mechanism-shape.md) · refuse-closed `issueMerchantPayScopes` in `@intafaced/auth` · live money doors gate on approved KYB (`pay.kyb_required`) via D26-P1-P10 — **still no invented grantor**.  
-**Settled around it:** two layers — (A) scope issuance refuse-closed until you publish grant law; (B) KYB money gate separate from dossier transitions. No auto-grant on `kybStatus: approved`. Full digital KYB operator path is `pay.psp`.  
-**Question (A2 — yours only):** who may invoke the grantor; KYB predicate per `pay:read` / `pay:write` / `pay:refund` / `pay:payout`; sandbox temporary grant rules (if any); revocation / suspension ⇒ strip scopes.  
-**Recommendation:** agents must not invent a grantor. Issuance stays refuse-closed until you seal A2; Layer B live KYB money gate may ship without inventing scopes.
+**Status:** **SEALED 2026-08-13 (D26-P0-08)** — [`adr/2026-08-13-pay-write-grant-a2-unpublished.md`](adr/2026-08-13-pay-write-grant-a2-unpublished.md) (amends 2026-08-12 shape).  
+**Blocks:** production merchants authenticating via granted `pay:*` until Nitro publishes A2.  
+**Ruling:** A2 unpublished = `auth.merchant_pay_scope_grant_unpublished`. Agents do not invent a grantor. Layer B KYB money gate is not a grant. `issueMerchantPayScopes` stays refuse.
 
 ---
 
 ## P0-09 · Fee + revenue recipe map
 
+**Status:** **SEALED 2026-08-15 (D26-P0-09)** — [`adr/2026-08-15-d26-p0-09-fee-revenue-recipe-map.md`](adr/2026-08-15-d26-p0-09-fee-revenue-recipe-map.md).  
 **Blocks:** agents adding ledger recipes because a fee path “needs one.”  
-**Also open:** part one item 5 — `TRADE_FUTURES_PROFIT_SOURCE` has **no default** (index `PKT-B5`).  
-**Question:** for every fee/revenue path, is there a **named** recipe or an explicit §13 socket?  
-**Recommendation:** closed matrix in the packet index (and later a short ADR if the matrix grows). Inventing a recipe is inventing money shape.
+**Still no default:** part one item 5 — `TRADE_FUTURES_PROFIT_SOURCE` has **no compose default** (index `PKT-B5`). Recipe `futuresRealizeProfit` exists; empty host still refuses.  
+**Closed matrix:** every fee/revenue path → named recipe or explicit §13. Live inventory is D26-P2-11 **#1745** (`packages/ledger-client` `live-path-inventory.ts`) — this packet does not duplicate it and does not invent recipes. New recipes require an owner carve-out on this row.
 
 ---
 
 ## P0-10 · Listings / treasury / house commission law
 
-**Blocks:** `market.commerce` commission invent.  
-**Overlaps:** P0-02 market commission rate.  
-**Question:** where does house commission authority live, and does blank refuse?  
-**Recommendation:** authority store + refuse-blank; same pattern as copy fee-share residual. Numbers still P0-02.
+**Status:** **SEALED 2026-08-13 (D26-P0-10)** — [`adr/2026-08-13-house-commission-authority.md`](adr/2026-08-13-house-commission-authority.md).  
+**Blocks:** nothing on mechanism; **P0-02** still owns the bps.  
+**Ruling:** authority is host `MARKET_HOUSE_COMMISSION_BPS` (no in-repo default). Blank is `market.commission_not_configured`. Explicit `0` is owner free-commission. House cut only via `marketPurchase` → `houseFees(market)`. Agents do not seed a rate.
 
 ---
 
@@ -94,9 +93,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-12 · Attestation threat model (`blueprint.attestations`)
 
-**Blocks:** on-chain rank / attestation surfaces.  
+**Status:** **Sealed 2026-08-15.** Dedicated threat model: [`THREAT-MODEL-BLUEPRINT-ATTESTATIONS.md`](THREAT-MODEL-BLUEPRINT-ATTESTATIONS.md).  
+**Blocks:** on-chain rank / attestation surfaces until the zero-PII bar is met. On-chain implement stays Shehzad (`protocol.smart-accounts`).  
 **Question:** threat model + zero-PII bar before any product path claims Done.  
-**Recommendation:** threat model doc first; implementers refuse if the bar is unmet. No PII in attestation payloads.
+**Ruling:** an attestation may prove discrete rank/standing for a named epoch. It must never contain identity, KYC, or addresses that link Fiat and Protocol planes. Implementers refuse if the bar is unmet. No PII in attestation payloads. Product `done` for `blueprint.attestations` stays refused until a verifier meets the bar.
 
 ---
 
@@ -111,15 +111,15 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-14 · `DEFAULT_MIN_BEST_LEVEL_*` + mark dust floor
 
-**Covered in part one item 4** — kept here so the P0 board row has a home in part two’s board span.  
-**Recommendation unchanged:** keep shipped values until a real market lists with observed depth; ties P0-01 Q3 hard exclusion (no inventing a second % cap).
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-mark-dust-floor.md`](adr/2026-08-13-mark-dust-floor.md).  
+**Covered in part one item 4.** Keep shipped `'100'` + 100 bps until a real market lists with observed depth. Ties P0-01 Q3 (no inventing a second % cap).
 
 ---
 
 ## P0-15 · Copy jurisdiction list
 
-**Covered in part one item 3 table** — geo list is counsel/Nitro (see also `CLASS-X-SANCTIONS` in the JSON index).  
-**Recommendation:** list **or** refuse-closed regions; engineers never draft the list.
+**Status:** **SEALED 2026-08-15** — refuse-closed in all regions until a counsel-supplied list exists. No agent-authored country table. ADR: [`adr/2026-08-15-copy-jurisdiction-refuse-closed.md`](adr/2026-08-15-copy-jurisdiction-refuse-closed.md). List content remains `CLASS-X-SANCTIONS`.  
+**Covered in part one item 3 table** — same refuse-closed shape as copy fee-share (`COPY_FEE_SHARE_RESIDUAL`): unset is a closed door, not a guessed ISO table. Engineers never draft the list.
 
 ---
 
@@ -133,10 +133,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## P0-17 · Insurance fund funding policy (futures list gate)
 
-**Blocks:** listing live perps against an empty or undefined fund.  
-**Settled around it:** futures risk ADR refuses inventing a house-fee “insurance” substitute.  
-**Question:** fund exists, is funded by which recipe, and empty → **no list**?  
-**Recommendation:** same honesty as lending reserve — empty fund cannot back a live market. Policy before list.
+**Status:** **SEALED 2026-08-13** — [`docs/adr/2026-08-13-insurance-fund-funding-policy.md`](adr/2026-08-13-insurance-fund-funding-policy.md).  
+**Blocks:** listing live perps against an empty or undefined fund (still, until the pot is actually funded on that deploy).  
+**Settled:** ledger insurance account exists; `futuresInsuranceTopup` funds it; `trade.insurance_fund_empty` refuses real-money active futures while `available ≤ 0`; house fees are not the fund; paper/pending may model.  
+**Not invented here:** target size, fee-share, capitalisation schedule.
 
 ---
 
@@ -156,7 +156,10 @@ P0-18 itself is the meta-seal for that tracking, not a product number.
 
 ## What to answer next (aligned with part one)
 
-1. **P0-03** — one venue sentence (highest unblock per finished code).
-2. **P0-02 / P0-15 / P0-10** — rates + jurisdictions + commission authority (or launch-closed).
-3. **P0-17 + P0-14** — insurance fund policy and mark dust floors before live perps.
-4. Class X wallet rotation / notify credentials when you want out-of-app margin calls.
+Denon P0 product law for custodial engines is sealed (2026-08-14). Remaining clicks are **not** agent-wait:
+
+1. **Nitro Class X** — gateway credentials, wallet rotation, licences, go-live, sanctions **content**.
+2. **PKT-C9 magnitudes** — emission/buyback/burn/staking into `token_params` when those surfaces should go live.
+3. **PKT-D10 F10** — human edit in unreviewed Java (`act/pom.xml`). Denon will not touch it.
+4. **Shehzad** — INTACHAIN / attestations against the P0-12 bar / launchpad chain.
+5. **GitHub admin** — GH-G1…G3, G5.

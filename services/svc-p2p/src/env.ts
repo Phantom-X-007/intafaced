@@ -21,6 +21,12 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().default('http://localhost:4001'),
 
       /**
+       * svc-identity base for affiliate accrue/payout after escrowRelease.
+       * Unset → noop port (release still posts). No localhost default.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * KILL-SWITCH (§14 admin controls).
        *
        * OFF stops new offers and new takes. It deliberately does NOT stop
@@ -38,20 +44,31 @@ const schema = serviceEnvSchema
        * real entitlement (`merchant-limits.ts` argues why the numbers are not
        * invented in code).
        *
-       * DECIMAL STRINGS, not numbers. These are amounts, and an amount that
-       * arrives through `z.coerce.number()` has already been through a float by
-       * the time anything reads it. Left unset they are `null` — unlimited,
-       * which is exactly the behaviour before offer limits existed, so adding
-       * this pair cannot refuse an offer any existing deployment allows today.
+       * DECIMAL STRINGS, not numbers — or the literal `unlimited` when the
+       * owner confirms no ceiling. An amount that arrives through
+       * `z.coerce.number()` has already been through a float by the time
+       * anything reads it. Left unset they are `null` with mode `unset`
+       * (operationally still no cap, same as before Stage 2). That is not the
+       * same claim as writing `unlimited`.
        */
-      P2P_OFFER_MAX_STANDARD: z
-        .string()
-        .regex(/^\d+(\.\d+)?$/, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string')
-        .optional(),
-      P2P_OFFER_MAX_MERCHANT: z
-        .string()
-        .regex(/^\d+(\.\d+)?$/, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string')
-        .optional(),
+      /**
+       * Compose pass-through uses `${VAR:-}` so a clean clone injects "".
+       * Empty is unset (same as omitted) — never a baked magnitude.
+       */
+      P2P_OFFER_MAX_STANDARD: z.preprocess(
+        (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+        z
+          .string()
+          .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_STANDARD must be a non-negative decimal string or the literal unlimited')
+          .optional(),
+      ),
+      P2P_OFFER_MAX_MERCHANT: z.preprocess(
+        (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+        z
+          .string()
+          .regex(/^(unlimited|\d+(\.\d+)?)$/i, 'P2P_OFFER_MAX_MERCHANT must be a non-negative decimal string or the literal unlimited')
+          .optional(),
+      ),
 
       /** `created` → the take never finished escrowing. Nothing is locked yet. */
       P2P_ESCROW_DEADLINE_SECONDS: z.coerce.number().int().min(30).default(120),

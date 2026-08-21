@@ -81,7 +81,7 @@ describe('planOtcSettle / postOtcSettle', () => {
         makerOrderId: 'm1',
         fillId: 'f1',
       }),
-    ).toThrowError(/Maker-routed OTC settle/);
+    ).toThrowError(/socket\.otc-maker-routing/);
   });
 
   it('posts hold + mm hold + fill via ledger-client only at bound quoted notional', async () => {

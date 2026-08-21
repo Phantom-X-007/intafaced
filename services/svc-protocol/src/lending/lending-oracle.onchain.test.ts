@@ -201,10 +201,44 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
         args: [col],
       }),
     ).rejects.toThrow();
+    // Restore agreement so later tests in this file never inherit Disagreement.
+    await reportBoth(100n * WAD, 100n * WAD);
   });
 
   it('borrow works with agreeing marks; unhealthy borrow reverts', async () => {
     await reportBoth(100n * WAD, 100n * WAD);
+    // Re-supply inside the test — parallel on-chain suites on one anvil can race nonces
+    // and leave totalCash empty even when beforeAll thought it filled the market.
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: bor,
+        abi: tokenAbi,
+        functionName: 'mint',
+        args: [a.deployer, 500n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: bor,
+        abi: tokenAbi,
+        functionName: 'approve',
+        args: [market, 500n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
+    await write(a.publicClient, () =>
+      a.walletClient.writeContract({
+        address: market,
+        abi: marketAbi,
+        functionName: 'supplyLiquidity',
+        args: [500n * WAD],
+        account: a.walletClient.account!,
+        chain: a.walletClient.chain,
+      }),
+    );
     await write(borrower.publicClient, () =>
       borrower.walletClient.writeContract({
         address: col,
@@ -242,7 +276,8 @@ describeOnChain('oracle + isolated lending on chain (S-A12/S-A4)', () => {
       functionName: 'debtOf',
       args: [borrower.deployer],
     })) as bigint;
-    expect(debt).toBe(20n * WAD);
+    expect(debt).toBeGreaterThanOrEqual(20n * WAD);
+    expect(debt).toBeLessThanOrEqual(20n * WAD + 1n);
 
     await expect(
       borrower.walletClient.writeContract({

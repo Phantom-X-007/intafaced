@@ -17,6 +17,7 @@ import {
   type PostRequest,
 } from '@intafaced/ledger-client';
 import { PayService, PayError, type PaymentView } from './payment-service.js';
+import { memoryPayoutDestinations } from './merchant-payout-destination.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter, SANDBOX_DECLINE_TOKEN } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
@@ -114,6 +115,7 @@ if (!available) {
   let crypto: CryptoNativeAdapter;
   let rails: RailRegistry;
   let pay: PayService;
+  let dests: ReturnType<typeof memoryPayoutDestinations>;
 
   beforeEach(async () => {
     // A BARE TRUNCATE, deliberately not wrapped in the migration advisory lock.
@@ -131,7 +133,8 @@ if (!available) {
     card = new CardSandboxAdapter({ secret: SECRET });
     crypto = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
     rails = new RailRegistry([card, crypto, new BankPayoutAbsentAdapter()]);
-    pay = new PayService(sql, ledger, rails);
+    dests = memoryPayoutDestinations();
+    pay = new PayService(sql, ledger, rails, { checkoutRiskBand: 'low', payoutDestinations: dests });
   });
 
   afterAll(async () => {
@@ -142,6 +145,45 @@ if (!available) {
 
   async function merchant(feeBps = 250, userId = MERCHANT_USER) {
     return pay.createMerchant({ userId, pricing: { feeBps } });
+  }
+
+  async function beginMerchantCutoff(merchantId: string, cutoff: 'rejected' | 'suspended') {
+    let announceLocked!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>((resolve) => (announceLocked = resolve));
+    const mayCommit = new Promise<void>((resolve) => (release = resolve));
+    const done = sql.begin(async (tx) => {
+      await tx`SELECT id FROM pay.merchants WHERE id = ${merchantId} FOR UPDATE`;
+      if (cutoff === 'rejected') {
+        await tx`UPDATE pay.merchants SET kyb_status = 'rejected' WHERE id = ${merchantId}`;
+      } else {
+        await tx`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${merchantId}`;
+      }
+      announceLocked();
+      await mayCommit;
+    });
+    await locked;
+    return {
+      async commit() {
+        release();
+        await done;
+      },
+    };
+  }
+
+  async function expectEligibilityReadWaiting(): Promise<void> {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [row] = await sql<{ waiting: number }[]>`
+        SELECT count(*)::int AS waiting
+          FROM pg_stat_activity
+         WHERE datname = current_database()
+           AND wait_event_type = 'Lock'
+           AND query ILIKE '%FROM pay.merchants%FOR SHARE%'
+      `;
+      if ((row?.waiting ?? 0) > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error('money door never waited on the concurrent merchant cutoff lock');
   }
 
   /** A card payment, authorized and ready to capture. */
@@ -418,11 +460,29 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('30');
     });
 
-    it('refuses to refund a payment that was never captured', async () => {
+    it('refuses when nothing is captured — nothing posted', async () => {
       const m = await merchant();
       const payment = await cardPayment(m.id, '100');
-      await expect(pay.refund(payment.id, amt('10'))).rejects.toMatchObject({ code: 'pay.invalid_transition' });
-      expect(ledger.journal()).toHaveLength(0);
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+
+      await expect(pay.refund(payment.id, amt('10'))).rejects.toMatchObject({ code: 'pay.nothing_captured' });
+
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(formatAmount((await pay.getPayment(payment.id)).refundedAmount)).toBe('0');
+    });
+
+    it('refunds a captured payment through ledger-client', async () => {
+      const m = await merchant();
+      const payment = await cardPayment(m.id, '100');
+      await pay.capture(payment.id);
+
+      const refunded = await pay.refund(payment.id, amt('40'));
+
+      expect(formatAmount(refunded.refundedAmount)).toBe('40');
+      expect(refunded.status).toBe('captured');
+      expect(ledger.journal().some((tx) => tx.idempotencyKey.startsWith(`payment.refund:${payment.id}:`))).toBe(true);
+      expect(await clearingOf(m.id)).toBe('60');
+      expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
     it('draws a post-settlement refund on the merchant, not on the clearing account', async () => {
@@ -811,6 +871,46 @@ if (!available) {
   // ── Settlement ────────────────────────────────────────────────────────────
 
   describe('settlement', () => {
+    it('uses merchant → payment lock order when capture races a settlement freeze', async () => {
+      const m = await merchant(0);
+      const included = await cardPayment(m.id, '40');
+      await pay.capture(included.id);
+      const toCapture = await cardPayment(m.id, '15');
+
+      let announceMerchantLock!: () => void;
+      let releaseSettlement!: () => void;
+      const merchantLocked = new Promise<void>((resolve) => (announceMerchantLock = resolve));
+      const mayContinue = new Promise<void>((resolve) => (releaseSettlement = resolve));
+      const racing = new PayService(sql, ledger, rails, {
+        checkoutRiskBand: 'low',
+        payoutDestinations: dests,
+        afterSettlementMerchantLock: async () => {
+          announceMerchantLock();
+          await mayContinue;
+        },
+      });
+
+      const settling = racing.settleWindow({
+        merchantId: m.id,
+        window: 'w-capture-race',
+        assetId: 'USDT',
+        from: new Date(Date.now() - 24 * 3600_000),
+        to: new Date(Date.now() + 24 * 3600_000),
+      });
+      await merchantLocked;
+      const capturing = racing.capture(toCapture.id);
+      await expectEligibilityReadWaiting();
+      releaseSettlement();
+
+      const [settled, captured] = await Promise.all([settling, capturing]);
+      expect(settled.status).toBe('posted');
+      expect(formatAmount(settled.gross)).toBe('40');
+      expect(captured.status).toBe('captured');
+      expect(await availableOf(MERCHANT_USER)).toBe('40');
+      expect(await clearingOf(m.id)).toBe('15');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('sweeps every captured payment in the window into one posting', async () => {
       const m = await merchant(200); // 2%
       for (const value of ['10', '20', '30']) {
@@ -1633,6 +1733,46 @@ if (!available) {
       expect(chain.outboundTransfers()).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
+
+    it('refuses crypto payout when no EVM dest is stored — nothing held', async () => {
+      const m = await merchant(0);
+      const payment = await cryptoPayment(m.id, '9');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-payout-no-dest');
+      const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+
+      await expect(pay.payoutSettlement({ settlementId: settlement.id, railId: 'crypto-native' })).rejects.toMatchObject({
+        code: 'pay.payout_destination_missing',
+      });
+
+      expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+      expect(await availableOf(MERCHANT_USER)).toBe('9');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect((await pay.getSettlement(settlement.id)).status).toBe('posted');
+      expect(chain.totalSent('USDT')).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('pays crypto to the stored EVM dest through ledger-client', async () => {
+      const m = await merchant(0);
+      const payment = await cryptoPayment(m.id, '11');
+      await pay.capture(payment.id);
+      const settlement = await settle(m.id, 'w-payout-stored');
+      await dests.persist({
+        merchantId: m.id,
+        railId: 'crypto-native',
+        kind: 'crypto',
+        ref: '0x000000000000000000000000000000000000dEaD',
+      });
+
+      const paid = await pay.payoutSettlement({ settlementId: settlement.id, railId: 'crypto-native' });
+      expect(paid.status).toBe('paid_out');
+      expect(chain.totalSent('USDT')).toBe('11');
+      expect(chain.outboundTransfers()[0]?.to).toBe('0x000000000000000000000000000000000000dEaD');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(await heldTotalOf(MERCHANT_USER)).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
   });
 
   // ── Doctrine and invariants ───────────────────────────────────────────────
@@ -1795,6 +1935,74 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('serializes a concurrent KYB rejection ahead of payment creation', async () => {
+      const m = await merchant();
+      const cutoff = await beginMerchantCutoff(m.id, 'rejected');
+      const creating = pay.createPayment({
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(creating).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.payments WHERE merchant_id = ${m.id}`).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('serializes a concurrent KYB rejection ahead of authorization', async () => {
+      const m = await merchant();
+      const payment = await pay.createPayment({
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'card',
+        railAdapter: 'card-sandbox',
+        instrument: { kind: 'card', token: 'tok_ok' },
+      });
+      const cutoff = await beginMerchantCutoff(m.id, 'rejected');
+      const authorizing = pay.authorize(payment.id);
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(authorizing).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect((await pay.getPayment(payment.id)).status).toBe('created');
+      expect((await pay.history(payment.id)).map((event) => event.event)).toEqual(['created']);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('serializes suspension ahead of capture, while a completed capture retry stays idempotent', async () => {
+      const m = await merchant();
+      const authorized = await cardPayment(m.id, '25');
+      const cutoff = await beginMerchantCutoff(m.id, 'suspended');
+      const capturing = pay.capture(authorized.id);
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(capturing).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      expect((await pay.getPayment(authorized.id)).status).toBe('authorized');
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+
+      await sql`UPDATE pay.merchants SET status = 'active' WHERE id = ${m.id}`;
+      const captured = await pay.capture(authorized.id);
+      await sql`UPDATE pay.merchants SET status = 'suspended', kyb_status = 'rejected' WHERE id = ${m.id}`;
+      const replay = await pay.capture(authorized.id);
+      expect(replay).toEqual(captured);
+      // Capture credits the merchant clearing account; settlement is the
+      // separate transition that moves net value into the user's available
+      // balance. A completed retry must not perform either move again.
+      expect(await availableOf(MERCHANT_USER)).toBe('0');
+      expect(await clearingOf(m.id)).toBe('25');
+      expect((await pay.history(authorized.id)).filter((event) => event.event === 'captured')).toHaveLength(1);
+      expect(ledger.journal().filter((entry) => entry.reason === 'payment.captured')).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+      expect(ledger.verifyChain()).toEqual({ ok: true });
+    });
+
     it('refuses a new payment link for a suspended merchant', async () => {
       const m = await merchant();
       await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
@@ -1925,6 +2133,9 @@ if (!available) {
       return { merchant: m, link };
     }
 
+    /** Operator risk band is on the service; tests still must pass a real country. */
+    const geo = { geoCountry: 'DE' };
+
     const paymentIdFor = async (reference: string) => {
       const rows = await sql<Array<{ id: string }>>`SELECT id FROM pay.payments WHERE rail_ref = ${reference}`;
       return rows[0]!.id;
@@ -1933,7 +2144,7 @@ if (!available) {
     it('opens a session, freezes the amount, and hands the payer a rail reference', async () => {
       const { link } = await linked({ amount: '25.5', currency: 'USDT' });
 
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
 
       expect(session.status).toBe('open');
       expect(session.amount).toBe('25.5');
@@ -1960,7 +2171,12 @@ if (!available) {
     it('IGNORES a payer-supplied amount on a fixed-amount link', async () => {
       const { link } = await linked({ amount: '100', currency: 'USDT' });
 
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('0.01'), assetId: 'BTC' });
+      const { session } = await pay.openCheckoutSession({
+        linkToken: link.token,
+        amount: amt('0.01'),
+        assetId: 'BTC',
+        ...geo,
+      });
 
       expect(session.amount).toBe('100');
       expect(session.currency).toBe('USDT');
@@ -1975,11 +2191,11 @@ if (!available) {
     it('needs the payer to state an amount on a variable-amount link, and freezes what they said', async () => {
       const { link } = await linked({ currency: 'USDT' });
 
-      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_amount_required',
       });
 
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('7.25') });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, amount: amt('7.25'), ...geo });
       expect(session.amount).toBe('7.25');
 
       // Frozen: a later read renders the session's number, never a new one.
@@ -1997,11 +2213,37 @@ if (!available) {
     it('chooses the rail server-side; the payer cannot name one', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
 
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const payment = await pay.getPayment(await paymentIdFor(session.instruction!.reference));
 
       expect(payment.railAdapter).toBe('crypto-native');
       expect(rails.has('card-sandbox')).toBe(true);
+    });
+
+    it('D26-P1-P3: refuses checkout when country is missing — writes nothing', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+        code: 'pay.routing_input_missing',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('D26-P1-P3: refuses checkout when operator risk band is blank — writes nothing', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const blank = new PayService(sql, ledger, rails);
+      await expect(blank.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.routing_input_missing',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+    });
+
+    it('D26-P1-P3: method that no checkout rail accepts refuses without inventing a fallback', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo, method: 'card' })).rejects.toMatchObject({
+        code: 'pay.routing_no_rail',
+      });
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
     });
 
     /**
@@ -2016,9 +2258,9 @@ if (!available) {
      */
     it('REFUSES to open a checkout on a sandbox rail under live-only, and writes nothing', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
-      const strict = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const strict = new PayService(sql, ledger, rails, { valueMovement: 'live-only', checkoutRiskBand: 'low' });
 
-      await expect(strict.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({
+      await expect(strict.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_rail_not_live',
       });
 
@@ -2028,14 +2270,44 @@ if (!available) {
       expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
     });
 
+    it('REFUSES hosted checkout when rails are unset — typed code, no ledger post', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const unset = new PayService(sql, ledger, rails, { checkoutRails: [], checkoutRiskBand: 'low' });
+
+      await expect(unset.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.checkout_rails_unset',
+      });
+
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+      expect(ledger.journal()).toHaveLength(0);
+    });
+
+    it('REFUSES hosted checkout when PSP/card acquiring is unset — typed code, no ledger post', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const noPsp = new PayService(sql, ledger, rails, {
+        checkoutRails: [{ railId: 'card-acquirer', method: 'card' }],
+        routingProfiles: [{ railId: 'card-acquirer', methods: ['card'], countries: ['*'], riskBands: ['low'] }],
+        checkoutRiskBand: 'low',
+      });
+
+      await expect(noPsp.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.psp_unset',
+      });
+
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+      expect(ledger.journal()).toHaveLength(0);
+    });
+
     it('refuses when the link is exhausted, expired or revoked — before any row exists', async () => {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT', maxUses: 1 });
       await sql`UPDATE pay.payment_links SET uses = 1 WHERE id = ${link.id}`;
-      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.link_exhausted' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({ code: 'pay.link_exhausted' });
 
       const second = await pay.createPaymentLink({ merchantId: m.id, label: 'Old', amount: amt('1'), currency: 'USDT' });
       await sql`UPDATE pay.payment_links SET expires_at = now() - interval '1 hour' WHERE id = ${second.id}`;
-      await expect(pay.openCheckoutSession({ linkToken: second.token })).rejects.toMatchObject({ code: 'pay.link_expired' });
+      await expect(pay.openCheckoutSession({ linkToken: second.token, ...geo })).rejects.toMatchObject({ code: 'pay.link_expired' });
 
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
     });
@@ -2043,8 +2315,8 @@ if (!available) {
     it('gives every payer their own session token and their own payment', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
 
-      const first = await pay.openCheckoutSession({ linkToken: link.token });
-      const second = await pay.openCheckoutSession({ linkToken: link.token });
+      const first = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
+      const second = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
 
       expect(first.sessionToken).not.toBe(second.sessionToken);
       expect(first.session.id).not.toBe(second.session.id);
@@ -2055,12 +2327,12 @@ if (!available) {
 
     it('puts a floor under an anonymous caller opening sessions off one URL', async () => {
       const { link } = await linked({ amount: '1', currency: 'USDT' });
-      const bounded = new PayService(sql, ledger, rails, { maxOpenSessionsPerLink: 2 });
+      const bounded = new PayService(sql, ledger, rails, { maxOpenSessionsPerLink: 2, checkoutRiskBand: 'low' });
 
-      await bounded.openCheckoutSession({ linkToken: link.token });
-      await bounded.openCheckoutSession({ linkToken: link.token });
+      await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
+      await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
 
-      await expect(bounded.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.checkout_busy' });
+      await expect(bounded.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({ code: 'pay.checkout_busy' });
     });
 
     /**
@@ -2076,7 +2348,7 @@ if (!available) {
      */
     it('expires the SESSION without expiring the PAYMENT — a late payer is still paid in', async () => {
       const { merchant: m, link } = await linked({ amount: '40', currency: 'USDT' });
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const address = session.instruction!.reference;
 
       // The payer wanders off. The handoff window closes.
@@ -2101,7 +2373,7 @@ if (!available) {
 
     it('counts a completed payment against the link exactly once, however many times the webhook is delivered', async () => {
       const { link } = await linked({ amount: '15', currency: 'USDT', maxUses: 2 });
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const address = session.instruction!.reference;
 
       chain.credit({ address, assetId: 'USDT', amount: amt('15'), from: '0xbuyer', confirmations: 12 });
@@ -2132,7 +2404,7 @@ if (!available) {
      */
     it('resumes a session that was committed before the rail was asked', async () => {
       const { link } = await linked({ amount: '12', currency: 'USDT' });
-      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { sessionToken, session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const address = session.instruction!.reference;
 
       // Simulate the crash: the row as it was between the two phases.
@@ -2149,8 +2421,41 @@ if (!available) {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
       await sql`UPDATE pay.merchants SET status = 'suspended' WHERE id = ${m.id}`;
 
-      await expect(pay.openCheckoutSession({ linkToken: link.token })).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({ code: 'pay.merchant_inactive' });
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+    });
+
+    it('refuses a public checkout when merchant KYB is rejected', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
+      await sql`UPDATE pay.merchants SET kyb_status = 'rejected' WHERE id = ${m.id}`;
+
+      await expect(pay.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('serializes a concurrent KYB rejection ahead of public checkout open', async () => {
+      const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
+      const cutoff = await beginMerchantCutoff(m.id, 'rejected');
+      const opening = pay.openCheckoutSession({ linkToken: link.token, ...geo });
+
+      await expectEligibilityReadWaiting();
+      await cutoff.commit();
+      await expect(opening).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.checkout_sessions WHERE link_id = ${link.id}`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments WHERE merchant_id = ${m.id}`).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('live-only createPaymentLink refuses when KYB is not approved', async () => {
+      const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      await expect(
+        livePay.createPaymentLink({ merchantId: m.id, label: 'Invoice', amount: amt('10'), currency: 'USDT' }),
+      ).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`).toHaveLength(0);
     });
 
     it('reports an unknown session token as not found rather than an empty session', async () => {
@@ -2161,7 +2466,7 @@ if (!available) {
 
     it('sweeps lapsed sessions without touching a payment or a balance', async () => {
       const { merchant: m, link } = await linked({ amount: '10', currency: 'USDT' });
-      const { session } = await pay.openCheckoutSession({ linkToken: link.token });
+      const { session } = await pay.openCheckoutSession({ linkToken: link.token, ...geo });
       const paymentId = await paymentIdFor(session.instruction!.reference);
 
       await sql`UPDATE pay.checkout_sessions SET expires_at = now() - interval '1 second' WHERE id = ${session.id}`;
@@ -2200,6 +2505,67 @@ if (!available) {
       });
     });
 
+    it('live-only money doors: none/pending/rejected refuse; operator decideKyb approved passes KYB gate', async () => {
+      const livePay = new PayService(sql, ledger, rails, {
+        valueMovement: 'live-only',
+        // Isolate Layer B KYB from public-rail posture (crypto MemoryChain is not a live rail).
+        publicCheckoutMovement: 'allow-sandbox',
+        checkoutRails: [{ railId: 'crypto-native', method: 'crypto' }],
+        checkoutRiskBand: 'low',
+      });
+      const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
+      const createArgs = {
+        merchantId: m.id,
+        amount: amt('10'),
+        assetId: 'USDT',
+        method: 'crypto' as const,
+        railAdapter: 'crypto-native',
+      };
+
+      await expect(livePay.createPayment(createArgs)).rejects.toMatchObject({ code: 'pay.kyb_required' });
+
+      // Link minted on the sandbox fixture instance so we can prove checkout KYB
+      // without the live-only createPaymentLink gate blocking the setup.
+      const link = await pay.createPaymentLink({
+        merchantId: m.id,
+        label: 'Live KYB checkout',
+        amount: amt('10'),
+        currency: 'USDT',
+      });
+      const openArgs = { linkToken: link.token, geoCountry: 'DE' };
+      await expect(livePay.openCheckoutSession(openArgs)).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-live-ops' });
+      expect((await livePay.getMerchant(m.id)).kybStatus).toBe('pending');
+      await expect(livePay.createPayment(createArgs)).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      await expect(livePay.openCheckoutSession(openArgs)).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+      await expect(livePay.decideKybStub({ merchantId: m.id, decision: 'rejected' })).rejects.toMatchObject({
+        code: 'pay.kyb_operator_required',
+      });
+
+      const rejected = await livePay.decideKyb({ merchantId: m.id, decision: 'rejected' });
+      expect(rejected.kybStatus).toBe('rejected');
+      await expect(livePay.createPayment(createArgs)).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      await expect(livePay.openCheckoutSession(openArgs)).rejects.toMatchObject({
+        code: 'pay.kyb_required',
+      });
+
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-live-ops-2' });
+      const approved = await livePay.decideKyb({ merchantId: m.id, decision: 'approved' });
+      expect(approved.kybStatus).toBe('approved');
+      expect(approved.kybRef).toBe('case-live-ops-2');
+
+      const payment = await livePay.createPayment(createArgs);
+      expect(payment.status).toBe('created');
+
+      const { session } = await livePay.openCheckoutSession(openArgs);
+      expect(session.status).toBe('open');
+    });
+
     it('live-only money door refuses without approved KYB (D26-P1-P10 Layer B)', async () => {
       const livePay = new PayService(sql, ledger, rails, { valueMovement: 'live-only' });
       const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
@@ -2213,8 +2579,8 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'pay.kyb_required' });
 
-      // Operator-approved KYB (simulated — no invent grant of pay:* scopes).
-      await sql`UPDATE pay.merchants SET kyb_status = 'approved' WHERE id = ${m.id}`;
+      await livePay.submitKyb({ merchantId: m.id, kybRef: 'case-p10' });
+      await livePay.decideKyb({ merchantId: m.id, decision: 'approved' });
       const payment = await livePay.createPayment({
         merchantId: m.id,
         amount: amt('10'),
@@ -2223,6 +2589,21 @@ if (!available) {
         railAdapter: 'crypto-native',
       });
       expect(payment.status).toBe('created');
+    });
+
+    it('rejected KYB cannot createPayment even under allow-sandbox', async () => {
+      const m = await merchant();
+      await sql`UPDATE pay.merchants SET kyb_status = 'rejected' WHERE id = ${m.id}`;
+      await expect(
+        pay.createPayment({
+          merchantId: m.id,
+          amount: amt('10'),
+          assetId: 'USDT',
+          method: 'crypto',
+          railAdapter: 'crypto-native',
+        }),
+      ).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
     });
 
     it('lists payments by durable status projection after card lifecycle', async () => {

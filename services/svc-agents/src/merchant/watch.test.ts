@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { watchApprovalFixtures, type ApprovalRatePoint } from './watch.js';
+import {
+  MERCHANT_WATCH_REFUSE,
+  merchantWatchInventedNumericRate,
+  resolveMerchantPayPlane,
+  watchApprovalFixtures,
+  type ApprovalRatePoint,
+} from './watch.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -15,14 +21,14 @@ function pt(partial: Partial<ApprovalRatePoint> & Pick<ApprovalRatePoint, 'railI
 
 describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
   it('returns empty when no points — no invented rails', () => {
-    const r = watchApprovalFixtures([], { now: NOW });
+    const r = watchApprovalFixtures([], { now: NOW, payPlane: 'live' });
     expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.merchant.empty' });
   });
 
   it('alerts when rate is below threshold — does not change rails', () => {
     const r = watchApprovalFixtures(
       [pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 }), pt({ railId: 'card-b', approvalRate: '0.99' })],
-      { now: NOW, threshold: '0.85' },
+      { now: NOW, threshold: '0.85', payPlane: 'live' },
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
@@ -37,46 +43,53 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
   });
 
   it('never zero-fills missing rates into a green board', () => {
-    const r = watchApprovalFixtures([pt({ railId: 'x', approvalRate: null, attempts: null })], { now: NOW });
+    const r = watchApprovalFixtures([pt({ railId: 'x', approvalRate: null, attempts: null })], { now: NOW, payPlane: 'live' });
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.merchant.unavailable',
       reason: 'no_metrics',
     });
+    expect(merchantWatchInventedNumericRate(r)).toBeNull();
   });
 
   it('D26-P1-A4: mixed missing + usable rates refuse — no partial ok board', () => {
     const r = watchApprovalFixtures(
       [pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 }), pt({ railId: 'card-b', approvalRate: null, attempts: null })],
-      { now: NOW, threshold: '0.85' },
+      { now: NOW, threshold: '0.85', payPlane: 'live' },
     );
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.merchant.unavailable',
-      reason: 'no_metrics',
+      reason: MERCHANT_WATCH_REFUSE.no_metrics,
     });
+    expect(r.status).not.toBe('ok');
+    expect(merchantWatchInventedNumericRate(r)).toBeNull();
   });
 
   it('D26-P1-A4: null rate alone among good siblings refuses (no invent completeness)', () => {
     const r = watchApprovalFixtures(
       [pt({ railId: 'good', approvalRate: '0.99', attempts: 100 }), pt({ railId: 'hole', approvalRate: null, attempts: 50 })],
-      { now: NOW, threshold: '0.85' },
+      { now: NOW, threshold: '0.85', payPlane: 'live' },
     );
     expect(r.status).toBe('unavailable');
     if (r.status !== 'unavailable') return;
-    expect(r.reason).toBe('no_metrics');
+    expect(r.reason).toBe(MERCHANT_WATCH_REFUSE.no_metrics);
+    expect(merchantWatchInventedNumericRate(r)).toBeNull();
   });
 
   it('D26-P1-A4: null attempts alone among good siblings refuses', () => {
     const r = watchApprovalFixtures(
       [pt({ railId: 'good', approvalRate: '0.99', attempts: 100 }), pt({ railId: 'hole', approvalRate: '0.50', attempts: null })],
-      { now: NOW, threshold: '0.85' },
+      { now: NOW, threshold: '0.85', payPlane: 'live' },
     );
     expect(r).toMatchObject({ status: 'unavailable', reason: 'no_metrics' });
   });
 
   it('refuses stale series', () => {
-    const r = watchApprovalFixtures([pt({ railId: 'x', asOf: '2026-08-05T10:00:00.000Z', maxAgeMs: 60_000 })], { now: NOW });
+    const r = watchApprovalFixtures([pt({ railId: 'x', asOf: '2026-08-05T10:00:00.000Z', maxAgeMs: 60_000 })], {
+      now: NOW,
+      payPlane: 'live',
+    });
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.merchant.unavailable',
@@ -90,7 +103,7 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
         pt({ railId: 'fresh', approvalRate: '0.70', attempts: 200 }),
         pt({ railId: 'stale', asOf: '2026-08-05T10:00:00.000Z', maxAgeMs: 60_000, approvalRate: '0.50', attempts: 100 }),
       ],
-      { now: NOW, threshold: '0.85' },
+      { now: NOW, threshold: '0.85', payPlane: 'live' },
     );
     expect(r).toEqual({
       status: 'unavailable',
@@ -100,7 +113,7 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
   });
 
   it('rejects invented non-fraction rates', () => {
-    const r = watchApprovalFixtures([pt({ railId: 'x', approvalRate: '1.5' })], { now: NOW });
+    const r = watchApprovalFixtures([pt({ railId: 'x', approvalRate: '1.5' })], { now: NOW, payPlane: 'live' });
     expect(r.status).toBe('unavailable');
   });
 
@@ -109,13 +122,15 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
     expect(r).toEqual({
       status: 'unavailable',
       userMessageKey: 'agents.merchant.unavailable',
-      reason: 'pay_plane_dark',
+      reason: MERCHANT_WATCH_REFUSE.pay_plane_dark,
     });
+    expect(merchantWatchInventedNumericRate(r)).toBeNull();
   });
 
   it('Stage-2 L3: rail allowlist scopes watch — no invent out-of-scope alerts', () => {
     const r = watchApprovalFixtures([pt({ railId: 'card-a', approvalRate: '0.5' }), pt({ railId: 'card-b', approvalRate: '0.5' })], {
       now: NOW,
+      payPlane: 'live',
       railAllowlist: ['card-b'],
       threshold: '0.85',
     });
@@ -128,7 +143,7 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
   it('never alerts on zero attempts — empty sample is not a rail failure', () => {
     const r = watchApprovalFixtures(
       [pt({ railId: 'ghost', approvalRate: '0.00', attempts: 0 }), pt({ railId: 'real', approvalRate: '0.99', attempts: 100 })],
-      { now: NOW, threshold: '0.85' },
+      { now: NOW, threshold: '0.85', payPlane: 'live' },
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
@@ -139,6 +154,7 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
   it('zero-sample-only series is unavailable (no invent green/red board)', () => {
     const r = watchApprovalFixtures([pt({ railId: 'ghost', approvalRate: '0.00', attempts: 0 })], {
       now: NOW,
+      payPlane: 'live',
       threshold: '0.85',
     });
     expect(r).toEqual({
@@ -151,11 +167,63 @@ describe('merchant watchApprovalFixtures (Stage-1 fixtures)', () => {
   it('minAttempts floor skips low samples — no invent alert from n=1 noise', () => {
     const r = watchApprovalFixtures(
       [pt({ railId: 'tiny', approvalRate: '0.00', attempts: 1 }), pt({ railId: 'solid', approvalRate: '0.70', attempts: 200 })],
-      { now: NOW, threshold: '0.85', minAttempts: 30 },
+      { now: NOW, threshold: '0.85', minAttempts: 30, payPlane: 'live' },
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
     expect(r.skippedLowSample).toBe(1);
     expect(r.alerts.map((a) => a.railId)).toEqual(['solid']);
+  });
+
+  it('omitted pay plane refuses — no default approval-rate board', () => {
+    expect(resolveMerchantPayPlane(undefined)).toBe('dark');
+    const r = watchApprovalFixtures([pt({ railId: 'card-a', approvalRate: '0.70', attempts: 200 })], { now: NOW });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'pay_plane_dark',
+    });
+    expect(r).not.toMatchObject({ status: 'ok' });
+  });
+
+  it('omitted pay plane + empty points still refuses (no sneak empty-as-board)', () => {
+    const r = watchApprovalFixtures([], { now: NOW });
+    expect(r).toEqual({
+      status: 'unavailable',
+      userMessageKey: 'agents.merchant.unavailable',
+      reason: 'pay_plane_dark',
+    });
+  });
+
+  it('D26-P1-A4: missing data must not produce a numeric rate (leak detector)', () => {
+    expect(
+      merchantWatchInventedNumericRate({
+        status: 'unavailable',
+        userMessageKey: 'agents.merchant.unavailable',
+        reason: 'no_metrics',
+        approvalRate: 0.92,
+      }),
+    ).toBe(0.92);
+    expect(
+      merchantWatchInventedNumericRate({
+        status: 'unavailable',
+        alerts: [{ railId: 'x', approvalRate: '0.70', attempts: 10, threshold: '0.85', kind: 'below_threshold' }],
+      }),
+    ).toBe(0.7);
+    const honest = watchApprovalFixtures([pt({ railId: 'good', approvalRate: '0.99' }), pt({ railId: 'hole', attempts: null })], {
+      now: NOW,
+      payPlane: 'live',
+    });
+    expect(honest.status).toBe('unavailable');
+    expect(merchantWatchInventedNumericRate(honest)).toBeNull();
+  });
+
+  it('D26-P1-A4: empty railId among siblings refuses — no invent rate', () => {
+    const r = watchApprovalFixtures([pt({ railId: 'good', approvalRate: '0.99' }), pt({ railId: '', approvalRate: '0.50' })], {
+      now: NOW,
+      payPlane: 'live',
+    });
+    expect(r).toMatchObject({ status: 'unavailable', reason: MERCHANT_WATCH_REFUSE.no_metrics });
+    expect(merchantWatchInventedNumericRate(r)).toBeNull();
   });
 });

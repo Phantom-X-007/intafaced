@@ -16,6 +16,25 @@ only. Research packs **do not** edit `tooling/tracker/features.mjs`.
 
 ---
 
+## Deepen wave 4 — missing implementable specs (tip freeze `318425e8`)
+
+P3: `ops.kb-workflow` had **no** `docs/ops/trk` file (0 lines) while the row
+computed **ready** after `ops.support` flipped `done`. Code-grounded cook spec
+(≥100 lines): Done bar · file map · refuse codes · test names · Class N ·
+Phase A leverage (`svc-support`, not a second service).
+
+| Id                | Spec                                       | Why this wave                                  |
+| ----------------- | ------------------------------------------ | ---------------------------------------------- |
+| `ops.kb-workflow` | [ops.kb-workflow.md](./ops.kb-workflow.md) | Extraction of support KB; workflow half parked |
+
+Inspected and **not** deepened here: `pay.fraud` (done) · `bank.auto-invest`
+(wip/`nitro-w10-l08`) · `tax.engine` (blocked on data-lake + indexer; counsel)
+· `quant.sdk` (invent-risk; blocked on studio + SOR) ·
+`connect.latency-grading` (computed blocked on `venue.aggregation`; fabric
+already on tip).
+
+---
+
 ## Deepen wave 3b — ops.support + academy/agents residual thins (tip freeze `083ef879`)
 
 After #717 wave3 (trade/ops/p2p residual), remaining shorts under 100 lines were

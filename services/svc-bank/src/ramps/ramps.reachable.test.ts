@@ -91,6 +91,7 @@ if (!available) {
         displayName: NO_RAMP_PROGRAMME.displayName,
         cryptoRail: null,
         fiatLeg: 'socket.psp-partners',
+        fiatVia: 'svc-pay.RailAdapter',
       });
     });
   });
@@ -99,7 +100,7 @@ if (!available) {
     let ledger: MemoryLedger;
 
     beforeEach(async () => {
-      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps RESTART IDENTITY CASCADE`;
+      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
     });
 
@@ -115,6 +116,7 @@ if (!available) {
       const programme = await user.ramps.programme();
       expect(programme.simulated).toBe(true);
       expect(programme.fiatLeg).toBe('socket.psp-partners');
+      expect(programme.fiatVia).toBe('svc-pay.RailAdapter');
       expect(programme.cryptoRail).toBeTruthy();
 
       const credited = await ops.ops.creditOnramp({
@@ -135,7 +137,10 @@ if (!available) {
           kind: 'fiat',
           railRef: `fiat-${randomUUID()}`,
         }),
-      ).rejects.toMatchObject({ message: expect.stringMatching(/socket\.psp-partners/) });
+      ).rejects.toMatchObject({
+        message: 'bank.fiat_ramp_no_pay_adapter',
+        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+      });
 
       const offrampId = randomUUID();
       const out = await user.ramps.offramp({
@@ -143,7 +148,7 @@ if (!available) {
         assetId: 'USDT',
         amount: '15',
         kind: 'crypto',
-        destinationRef: '0xdest',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
         clientRef: `c-${offrampId}`,
       });
       expect(out.simulated).toBe(true);
@@ -167,7 +172,7 @@ if (!available) {
           destinationRef: '0x',
           clientRef: 'nope',
         }),
-      ).rejects.toMatchObject({ message: expect.stringMatching(/No bank ramp programme/) });
+      ).rejects.toMatchObject({ message: 'bank.no_ramp_rail', cause: { code: 'bank.no_ramp_rail' } });
     });
 
     /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeUnconfigured, haltBlockedReason, readConsoleStatus } from './console-status';
+import { consoleLooksFullyGreen, describeUnconfigured, haltBlockedReason, readConsoleStatus } from './console-status';
 
 /**
  * The console's own answer to "what can I actually do right now?".
@@ -20,9 +20,28 @@ describe('readConsoleStatus — what this deployment can reach', () => {
     const s = readConsoleStatus(env());
 
     expect(s.canHaltAnything).toBe(false);
+    expect(s.fullyConfigured).toBe(false);
+    expect(consoleLooksFullyGreen(s)).toBe(false);
     expect(s.edgeUrl).toBeNull();
     expect(s.module.configured).toBe(false);
     expect(s.treasury.configured).toBe(false);
+  });
+
+  it('never looks all-green when EDGE_URL or ADMIN_OPERATOR_TOKEN is missing', () => {
+    const cases: Array<Record<string, string>> = [
+      {},
+      { EDGE_URL: 'http://edge:4000' },
+      { ADMIN_OPERATOR_TOKEN: TOKEN },
+      { ADMIN_TREASURY_TOKEN: TREASURY },
+      { ADMIN_OPERATOR_TOKEN: TOKEN, ADMIN_TREASURY_TOKEN: TREASURY },
+      { EDGE_URL: 'http://edge:4000', ADMIN_TREASURY_TOKEN: TREASURY },
+    ];
+
+    for (const over of cases) {
+      const s = readConsoleStatus(env(over));
+      expect(s.fullyConfigured).toBe(false);
+      expect(consoleLooksFullyGreen(s)).toBe(false);
+    }
   });
 
   it('needs BOTH an address and a token — either alone halts nothing', () => {
@@ -50,6 +69,8 @@ describe('readConsoleStatus — what this deployment can reach', () => {
 
     expect(s.module.configured).toBe(true);
     expect(s.treasury.configured).toBe(true);
+    expect(s.fullyConfigured).toBe(true);
+    expect(consoleLooksFullyGreen(s)).toBe(true);
     expect(s.missing).toEqual([]);
     expect(s.edgeUrl).toBe('http://edge:4000'); // trailing slash stripped
   });

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { PayError } from './payment-service.js';
-import { DEFAULT_SANDBOX_RAIL_ID, isSandboxRailId, resolveMerchantRail } from './sandbox-key-routing.js';
+import {
+  DEFAULT_SANDBOX_RAIL_ID,
+  assertSandboxKeyDoesNotLookLive,
+  isSandboxRailId,
+  paymentModeFromRail,
+  resolveMerchantRail,
+} from './sandbox-key-routing.js';
 
 describe('isSandboxRailId', () => {
   it('recognises card-sandbox and *-sandbox suffixes', () => {
@@ -72,5 +78,42 @@ describe('resolveMerchantRail — sandbox vs live key routing (ADR §2.5 step 4)
     const rail = resolveMerchantRail({ keyEnv: 'sandbox', requestedRail: 'anything' });
     expect(rail).toBe('card-sandbox');
     expect(isSandboxRailId(rail)).toBe(true);
+  });
+});
+
+describe('paymentModeFromRail — never invent live', () => {
+  it('discloses sandbox from card-sandbox and live from a non-sandbox rail', () => {
+    expect(paymentModeFromRail('card-sandbox')).toBe('sandbox');
+    expect(paymentModeFromRail('crypto-native')).toBe('live');
+  });
+
+  it('REFUSES a missing rail rather than reporting live', () => {
+    try {
+      paymentModeFromRail(null);
+      expect.unreachable('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PayError);
+      expect((err as PayError).code).toBe('pay.rail_mode_undisclosed');
+    }
+  });
+});
+
+describe('assertSandboxKeyDoesNotLookLive', () => {
+  it('lets a sandbox key observe a sandbox rail', () => {
+    expect(() => assertSandboxKeyDoesNotLookLive('sandbox', 'card-sandbox')).not.toThrow();
+  });
+
+  it('REFUSES a sandbox key observing a live rail', () => {
+    try {
+      assertSandboxKeyDoesNotLookLive('sandbox', 'crypto-native');
+      expect.unreachable('should have refused');
+    } catch (err) {
+      expect(err).toBeInstanceOf(PayError);
+      expect((err as PayError).code).toBe('pay.sandbox_looks_live');
+    }
+  });
+
+  it('does not constrain a live key', () => {
+    expect(() => assertSandboxKeyDoesNotLookLive('live', 'crypto-native')).not.toThrow();
   });
 });

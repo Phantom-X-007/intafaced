@@ -21,6 +21,10 @@ import {
   sceneExportText,
   sceneAvatarCountInRange,
   sceneBytesAtMost,
+  SCENE_NAVIGABLE_SHELL_RESIDUAL,
+  sceneProductHonesty,
+  sceneIsNavigableProductShell,
+  sceneNavigableShellIsResidual,
 } from './scene.js';
 
 describe('spatial scene contract (Stage-1)', () => {
@@ -107,5 +111,29 @@ describe('L3 wave49 scene status/export', () => {
     expect(sceneStatusLineMatches(full)).toBe(true);
     expect(sceneExportLine(full)).toContain('1,1,1,');
     expect(sceneByteSize(full)).toBeGreaterThan(0);
+  });
+});
+
+describe('spatial scene is not a navigable product shell', () => {
+  it('pins Scene v1 as schema+size gate, not Vue/VR/canvas product', () => {
+    const empty = emptyScene();
+    expect(parseScene(empty).ok).toBe(true);
+    expect(SCENE_VERSION).toBe(1);
+    expect(SCENE_MAX_BYTES).toBe(64 * 1024);
+
+    const honesty = sceneProductHonesty();
+    expect(honesty.version).toBe(1);
+    expect(honesty.maxBytes).toBe(SCENE_MAX_BYTES);
+    expect(honesty.isNavigableProductShell).toBe(false);
+    expect(honesty.isFinishedVrProduct).toBe(false);
+    expect(honesty.isFinishedCanvasProduct).toBe(false);
+    expect(honesty.residual).toBe(SCENE_NAVIGABLE_SHELL_RESIDUAL);
+
+    expect(sceneIsNavigableProductShell(empty)).toBe(false);
+    expect(sceneNavigableShellIsResidual()).toBe(true);
+    expect(sceneNavigableShellIsResidual('canvas product done')).toBe(false);
+
+    const withShellKey = parseScene({ version: 1, navigableShell: true });
+    expect(withShellKey.ok).toBe(false);
   });
 });

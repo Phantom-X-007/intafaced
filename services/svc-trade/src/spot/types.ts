@@ -166,6 +166,15 @@ export type TradeErrorCode =
   // halted the listing and the caller should stop asking, this one means the
   // venue is between sessions and the same order will be fine on Monday.
   | 'trade.market_closed'
+  /**
+   * Schedule key present on the row but absent from `TRADING_SCHEDULES`
+   * (D-S-05 / D26-P1-T9). Misconfiguration — not a session boundary.
+   */
+  | 'trade.unknown_schedule'
+  /**
+   * `asset_class` outside `ASSET_CLASSES` (D-S-05). Refusal names the permitted set.
+   */
+  | 'trade.unknown_asset_class'
   | 'trade.market_kind_unsupported'
   | 'trade.order_type_unsupported'
   | 'trade.invalid_qty'
@@ -196,8 +205,9 @@ export type TradeErrorCode =
    */
   | 'trade.fee_exceeds_fill'
   /**
-   * Forex/commodity production listing without fiat settlement rails (D-S-05).
-   * Model/paper listings remain legal; this is the production-list lie.
+   * Forex/commodity production listing or place without settlement law
+   * (D26-P1-T7 / §13 `socket.forex-settlement` — needs D26-P0-05 + fiat rails).
+   * Model/paper listings remain legal; this is the production-list / hold-path lie.
    */
   | 'trade.unsettled_asset_class_listing'
   /**
@@ -243,6 +253,7 @@ export type TradeErrorCode =
   | 'trade.otc_last_look_forbidden'
   | 'trade.otc_not_owner'
   | 'trade.otc_quote_missing'
+  | 'trade.otc_already_settled'
   | 'trade.otc_settle_refused'
   /** Algo (D-S-04 TWAP) kill-switch / schedule / state. */
   | 'trade.algo_disabled'
@@ -261,6 +272,8 @@ export type TradeErrorCode =
   | 'trade.algo_child_cancel_failed'
   | 'trade.algo_principal_unavailable'
   | 'trade.algo_market_closed'
+  | 'trade.algo_volume_immature'
+  | 'trade.algo_no_volume'
   /**
    * Resume would stretch the schedule past 2× the order's own durationMs
    * (ADR 2026-08-08). Trader may cancel-and-recreate; parent stays paused.

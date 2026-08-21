@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
-import { DEFAULT_MAX_LEVERAGE, LEVERAGE_INVALID, LEVERAGE_TOO_HIGH, checkLeverage, initialMargin, maxLeverage } from './initial-margin.js';
+import {
+  DEFAULT_MAX_LEVERAGE,
+  LEVERAGE_INVALID,
+  LEVERAGE_TOO_HIGH,
+  checkLeverage,
+  initialMargin,
+  parseConfiguredMaxLeverage,
+  resolveMaxLeverage,
+} from './initial-margin.js';
+import { TEST_MAX_LEVERAGE } from './initial-margin.test-harness.js';
 
 describe('initialMargin', () => {
   it('1 BTC at 50_000 with 10x → 5_000 quote units (scaled)', () => {
-    // 1e18 * 50000e18 / 1e18 / 10 = 5000e18
     const m = initialMargin({
       size: parseAmount('1'),
       entryPrice: parseAmount('50000'),
@@ -24,48 +32,55 @@ describe('initialMargin', () => {
   });
 });
 
-/**
- * THE CEILING THAT DID NOT EXIST.
- *
- * `grep -rn "MAX_LEVERAGE\|maxLeverage"` returned nothing before this change:
- * `> 0` was the whole check, and the only ceiling in the path was
- * `numeric(8, 2)` overflowing at 1,000,000x into a Postgres `22003` and a 500.
- */
-describe('checkLeverage', () => {
+describe('resolveMaxLeverage', () => {
   const amt = parseAmount;
 
-  it('there is a cap, it is one number, and it is the one the deployment uses', () => {
-    expect(DEFAULT_MAX_LEVERAGE).toBe('10');
-    expect(maxLeverage()).toBe(amt(DEFAULT_MAX_LEVERAGE));
-    // Omitted / non-positive configuration is not "no cap".
-    expect(maxLeverage(null)).toBe(amt('10'));
-    expect(maxLeverage(0n)).toBe(amt('10'));
+  it('unset / non-positive configuration is DIRECTION §1 10×, not refuse-unset', () => {
+    expect(resolveMaxLeverage()).toBe(amt(DEFAULT_MAX_LEVERAGE));
+    expect(resolveMaxLeverage(null)).toBe(amt(DEFAULT_MAX_LEVERAGE));
+    expect(resolveMaxLeverage(0n)).toBe(amt(DEFAULT_MAX_LEVERAGE));
+    expect(parseConfiguredMaxLeverage('')).toBeNull();
+    expect(parseConfiguredMaxLeverage('  ')).toBeNull();
+    expect(resolveMaxLeverage(parseConfiguredMaxLeverage(''))).toBe(amt('10'));
   });
 
-  it('admits the range this repository actually trades, and refuses above it', () => {
-    for (const ok of ['0.5', '1', '2', '5', '10']) expect(checkLeverage(amt(ok))).toEqual({ ok: true });
-    expect(checkLeverage(amt('10.01')).code).toBe(LEVERAGE_TOO_HIGH);
-    expect(checkLeverage(amt('100')).code).toBe(LEVERAGE_TOO_HIGH);
-    expect(checkLeverage(amt('100000')).code).toBe(LEVERAGE_TOO_HIGH);
+  it('honours a named positive cap that tightens ≤ 10×', () => {
+    expect(resolveMaxLeverage(amt('5'))).toBe(amt('5'));
+    expect(parseConfiguredMaxLeverage('5')).toBe(amt('5'));
+    expect(resolveMaxLeverage(amt(TEST_MAX_LEVERAGE))).toBe(amt(TEST_MAX_LEVERAGE));
+    expect(parseConfiguredMaxLeverage(TEST_MAX_LEVERAGE)).toBe(amt(TEST_MAX_LEVERAGE));
   });
 
-  /**
-   * THE 500, AT ITS SOURCE. `numeric(8, 2)` holds 999,999.99; `1000000` raised
-   * `22003` from the INSERT. It is now a refusal, and one the caller can read.
-   */
+  it('refuses a raise above 10× at parse and resolve', () => {
+    expect(() => parseConfiguredMaxLeverage('10.01')).toThrow(/raise/);
+    expect(() => parseConfiguredMaxLeverage('20')).toThrow(/raise/);
+    expect(() => resolveMaxLeverage(amt('20'))).toThrow(/raise/);
+  });
+});
+
+describe('checkLeverage', () => {
+  const amt = parseAmount;
+  const cap = amt(TEST_MAX_LEVERAGE);
+
+  it('admits the range this repository actually trades, and refuses above a named cap', () => {
+    for (const ok of ['0.5', '1', '2', '5', '10']) expect(checkLeverage(amt(ok), cap)).toEqual({ ok: true });
+    expect(checkLeverage(amt('10.01'), cap).code).toBe(LEVERAGE_TOO_HIGH);
+    expect(checkLeverage(amt('100'), cap).code).toBe(LEVERAGE_TOO_HIGH);
+    expect(checkLeverage(amt('100000'), cap).code).toBe(LEVERAGE_TOO_HIGH);
+  });
+
   it('refuses the value that used to reach Postgres and raise 22003', () => {
-    const check = checkLeverage(amt('1000000'));
+    const check = checkLeverage(amt('1000000'), cap);
     expect(check.ok).toBe(false);
     expect(check.code).toBe(LEVERAGE_TOO_HIGH);
     expect(check.reason).toMatch(/1000000x exceeds the maximum of 10x/);
   });
 
   it('separates "not a leverage" from "too much leverage"', () => {
-    expect(checkLeverage(amt('0')).code).toBe(LEVERAGE_INVALID);
-    expect(checkLeverage(-1n).code).toBe(LEVERAGE_INVALID);
+    expect(checkLeverage(amt('0'), cap).code).toBe(LEVERAGE_INVALID);
+    expect(checkLeverage(-1n, cap).code).toBe(LEVERAGE_INVALID);
   });
 
-  /** The ruling has one place to land: an injected maximum, honoured in both directions. */
   it('honours an owner-set maximum without any call site changing', () => {
     expect(checkLeverage(amt('50'), amt('100'))).toEqual({ ok: true });
     expect(checkLeverage(amt('50'), amt('20')).code).toBe(LEVERAGE_TOO_HIGH);

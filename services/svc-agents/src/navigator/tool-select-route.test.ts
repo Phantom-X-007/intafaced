@@ -59,7 +59,24 @@ describe('navigator.selectTools route', () => {
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
     expect(result.selected).toEqual(['trade.quote']);
-    expect(result.refused.map((r) => r.reason).sort()).toEqual(['not_declared', 'write_mode']);
+    expect(result.refused.map((r) => r.reason).sort()).toEqual(['not_declared', 'not_declared']);
+  });
+
+  it('does not let caller-supplied grants widen the product allowlist', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .navigator.selectTools({
+        plane: 'live',
+        candidates: ['trade.fills.history', 'trade.quote'],
+        tools: [
+          { name: 'trade.fills.history', module: 'trade', mode: 'read' },
+          { name: 'trade.quote', module: 'trade', mode: 'read' },
+        ],
+      });
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.selected).toEqual(['trade.quote']);
+    expect(result.refused).toEqual([{ tool: 'trade.fills.history', reason: 'not_declared' }]);
   });
 
   it('dark plane refuses invent', async () => {

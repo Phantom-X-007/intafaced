@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
@@ -8,6 +11,8 @@ import {
   limitsConfigured,
   limitsOnWire,
   NO_OFFER_LIMITS,
+  offerLimitsFromEnv,
+  offerLimitsPosture,
   type OfferLimitPolicy,
 } from './merchant-limits.js';
 import type { MerchantStatus } from './merchant-programme.js';
@@ -20,7 +25,72 @@ const policy = (standard: string | null, merchant: string | null): OfferLimitPol
 /** Every status the programme can be in, so a new one cannot be added silently. */
 const ALL_STATUSES: MerchantStatus[] = ['applied', 'approved', 'rejected', 'suspended', 'withdrawn'];
 
+const here = dirname(fileURLToPath(import.meta.url));
+const limitsSource = readFileSync(join(here, 'merchant-limits.ts'), 'utf8');
+
 describe('merchant offer limits', () => {
+  describe('unset env stays unlimited — no invented ceiling', () => {
+    it('maps missing P2P_OFFER_MAX_STANDARD/MERCHANT to both-null policy', () => {
+      const policy = offerLimitsFromEnv({});
+      expect(policy.standardMaxAmount).toBeNull();
+      expect(policy.merchantMaxAmount).toBeNull();
+      expect(limitsConfigured(policy)).toBe(false);
+      expect(limitsOnWire(policy).standardMax).toBeNull();
+      expect(limitsOnWire(policy).merchantMax).toBeNull();
+      expect(offerLimitsPosture(policy)).toBe('unset');
+      expect(limitsOnWire(policy).posture).toBe('unset');
+    });
+
+    it('treats blank env strings as unset, not as zero or a default max', () => {
+      const policy = offerLimitsFromEnv({
+        P2P_OFFER_MAX_STANDARD: '',
+        P2P_OFFER_MAX_MERCHANT: '   ',
+      });
+      expect(policy).toEqual(NO_OFFER_LIMITS);
+      expect(
+        checkOfferLimit({
+          status: null,
+          maxAmt: parseAmount('999999999'),
+          asset: 'USDT',
+          policy,
+        }).withinLimit,
+      ).toBe(true);
+    });
+
+    it('does not bake a numeric default into NO_OFFER_LIMITS or this module', () => {
+      expect(NO_OFFER_LIMITS.standardMaxAmount).toBeNull();
+      expect(NO_OFFER_LIMITS.merchantMaxAmount).toBeNull();
+      expect(limitsSource).toMatch(/standardMaxAmount:\s*null/);
+      expect(limitsSource).toMatch(/merchantMaxAmount:\s*null/);
+      expect(limitsSource).not.toMatch(/DEFAULT_OFFER_MAX/);
+      expect(limitsSource).not.toMatch(/P2P_OFFER_MAX_(?:STANDARD|MERCHANT).*(?:\?\?|\.default\()/);
+    });
+
+    it('still parses an owner-set decimal when present — magnitudes stay env-only', () => {
+      const policy = offerLimitsFromEnv({
+        P2P_OFFER_MAX_STANDARD: '1000',
+        P2P_OFFER_MAX_MERCHANT: '5000',
+      });
+      expect(policy.standardMaxAmount).toBe(parseAmount('1000'));
+      expect(policy.merchantMaxAmount).toBe(parseAmount('5000'));
+      expect(offerLimitsPosture(policy)).toBe('configured');
+    });
+
+    it('accepts the literal unlimited as owner confirmation, not a magnitude', () => {
+      const policy = offerLimitsFromEnv({
+        P2P_OFFER_MAX_STANDARD: 'unlimited',
+        P2P_OFFER_MAX_MERCHANT: 'UNLIMITED',
+      });
+      expect(policy.standardMaxAmount).toBeNull();
+      expect(policy.merchantMaxAmount).toBeNull();
+      expect(offerLimitsPosture(policy)).toBe('unlimited');
+      expect(limitsOnWire(policy).posture).toBe('unlimited');
+      expect(limitsOnWire(policy).configured).toBe(false);
+      expect(limitsOnWire(policy).standardMode).toBe('unlimited');
+      expect(limitsOnWire(policy).merchantMode).toBe('unlimited');
+    });
+  });
+
   describe('the default is no limit', () => {
     it('lets any account offer any size when nothing is configured', () => {
       // This is the load-bearing non-breaking property: Stage 2 ships the
@@ -151,11 +221,18 @@ describe('merchant offer limits', () => {
       expect(posture.summary).toContain('5000');
     });
 
-    it('names a half-configured posture without pretending the other half exists', () => {
+    it('names a half-configured posture without pretending the other half was confirmed unlimited', () => {
       const posture = describeLimits(policy('1000', null));
       expect(posture.level).toBe('info');
       expect(posture.summary).toContain('1000');
-      expect(posture.summary).toContain('unlimited');
+      expect(posture.summary).toContain('unset');
+      expect(posture.summary).not.toMatch(/owner-confirmed/);
+    });
+
+    it('names owner-confirmed unlimited without inventing a number', () => {
+      const posture = describeLimits(offerLimitsFromEnv({ P2P_OFFER_MAX_STANDARD: 'unlimited', P2P_OFFER_MAX_MERCHANT: 'unlimited' }));
+      expect(posture.level).toBe('info');
+      expect(posture.summary).toMatch(/UNLIMITED \(owner-confirmed\)/);
     });
   });
 
@@ -164,6 +241,9 @@ describe('merchant offer limits', () => {
       expect(limitsConfigured(NO_OFFER_LIMITS)).toBe(false);
       const wire = limitsOnWire(NO_OFFER_LIMITS);
       expect(wire.configured).toBe(false);
+      expect(wire.posture).toBe('unset');
+      expect(wire.standardMode).toBe('unset');
+      expect(wire.merchantMode).toBe('unset');
       expect(wire.standardMax).toBeNull();
       expect(wire.merchantMax).toBeNull();
       expect(wire.summary).toMatch(/NONE CONFIGURED/);
@@ -173,6 +253,9 @@ describe('merchant offer limits', () => {
       expect(limitsConfigured(policy('1000', '5000'))).toBe(true);
       const wire = limitsOnWire(policy('1000', null));
       expect(wire.configured).toBe(true);
+      expect(wire.posture).toBe('configured');
+      expect(wire.standardMode).toBe('capped');
+      expect(wire.merchantMode).toBe('unset');
       expect(wire.standardMax).toBe('1000');
       expect(wire.merchantMax).toBeNull();
     });
@@ -182,21 +265,25 @@ describe('merchant offer limits', () => {
       expect(ceilingOnWire('approved', p)).toEqual({
         maxAmount: '5000',
         band: 'merchant',
+        limitMode: 'capped',
         merchantStatus: 'approved',
       });
       expect(ceilingOnWire('applied', p)).toEqual({
         maxAmount: '1000',
         band: 'standard',
+        limitMode: 'capped',
         merchantStatus: 'applied',
       });
       expect(ceilingOnWire(null, p)).toEqual({
         maxAmount: '1000',
         band: 'standard',
+        limitMode: 'capped',
         merchantStatus: null,
       });
       expect(ceilingOnWire(null, NO_OFFER_LIMITS)).toEqual({
         maxAmount: null,
         band: 'standard',
+        limitMode: 'unset',
         merchantStatus: null,
       });
     });

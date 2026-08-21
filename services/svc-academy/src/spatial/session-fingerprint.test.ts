@@ -3,7 +3,7 @@
  * Without it, expectedFingerprint is unusable after load/reconnect.
  */
 import { describe, expect, it } from 'vitest';
-import { decideHostSceneWrite, sceneFingerprint } from './edit-policy.js';
+import { HOST_SCENE_REFUSE, decideHostSceneWrite, hostSceneWriteRefuseName, sceneFingerprint } from './edit-policy.js';
 import { emptyScene, parseScene } from './scene.js';
 
 /** Mirrors academy-service toSession fingerprint SoT. */
@@ -39,8 +39,7 @@ describe('session sceneFingerprint honesty (read token)', () => {
       expectedFingerprint: 'deadbeef',
     });
     expect(conflict.ok).toBe(false);
-    if (conflict.ok) return;
-    expect(conflict.reason).toBe('conflict');
+    expect(hostSceneWriteRefuseName(conflict)).toBe(HOST_SCENE_REFUSE.fingerprint_mismatch);
     // Correct token from read path accepts
     const ok = decideHostSceneWrite({
       current: d.scene,
@@ -55,6 +54,6 @@ describe('session sceneFingerprint honesty (read token)', () => {
       next: { ...next, stage: { width: 40, height: 40 } },
     });
     expect(omit.ok).toBe(false);
-    if (!omit.ok) expect(omit.reason).toBe('conflict');
+    expect(hostSceneWriteRefuseName(omit)).toBe(HOST_SCENE_REFUSE.fingerprint_required);
   });
 });

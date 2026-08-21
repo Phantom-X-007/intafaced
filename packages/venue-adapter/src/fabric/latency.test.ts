@@ -5,6 +5,7 @@ import {
   healthFromGrade,
   isGraded,
   LatencyGradeRegistry,
+  measuredLatencyMs,
   routingWeightFromGrade,
   UNMEASURED_LATENCY_MS,
   VenueLatencyGrader,
@@ -51,6 +52,40 @@ describe('VenueLatencyGrader', () => {
     expect(grade.p50Ms).toBeNull();
     expect(grade.p95Ms).toBeNull();
     expect(grade.staleMs).toBeNull();
+    // Ungraded is not a thin letter. `provisional` means evidence too thin to
+    // trust the letter; there is no letter.
+    expect(grade.provisional).toBe(false);
+  });
+
+  it('fails if silence is scored as fast', () => {
+    // D26-P1-X1 done-bar (3). Defaulting missing p95 to 0ms would grade A
+    // (`gradeFor(0, p95Ms)` is A) and win every equal-price tie.
+    const grade = new VenueLatencyGrader('silent').grade(T0);
+    const health = healthFromGrade(grade, T0);
+
+    expect(grade.grade).toBeNull();
+    expect(grade.grade).not.toBe('A');
+    expect(grade.p50Ms).not.toBe(0);
+    expect(grade.p95Ms).not.toBe(0);
+    expect(measuredLatencyMs(grade)).toBeNull();
+    expect(measuredLatencyMs(grade)).not.toBe(0);
+    expect(routingWeightFromGrade(grade)).toBe(0);
+    expect(health.healthy).toBe(false);
+    expect(health.latencyMs).toBe(UNMEASURED_LATENCY_MS);
+    expect(health.latencyMs).not.toBe(0);
+  });
+
+  it('computes the letter from recorded samples only', () => {
+    const grader = new VenueLatencyGrader('v');
+    expect(grader.grade(T0).grade).toBeNull();
+    expect(grader.grade(T0).samples).toBe(0);
+
+    feed(grader, 20, 2_000);
+    const measured = grader.grade(at(100));
+    expect(measured.samples).toBe(20);
+    expect(measured.p95Ms).toBe(2_000);
+    expect(measured.grade).toBe('D');
+    expect(measured.grade).not.toBe('A');
   });
 
   it('distinguishes ungraded from a measured F — the two need opposite responses', () => {
@@ -236,6 +271,34 @@ describe('routingWeightFromGrade — D26-P1-X2 score feed', () => {
     // The public door. If this ever returns non-zero for null, an execution
     // consumer can treat "unmeasured" as eligible and D-S-18 is broken.
     expect(routingWeightFromGrade(grade)).toBe(0);
+    expect(measuredLatencyMs(grade)).toBeNull();
+  });
+
+  it('ungraded latency cannot invent routing bps — weight is 0|1 eligibility, never a letter map', () => {
+    const ungraded = new VenueLatencyGrader('never-called').grade(T0);
+    expect(routingWeightFromGrade(ungraded)).toBe(0);
+    expect(measuredLatencyMs(ungraded)).toBeNull();
+
+    const grader = new VenueLatencyGrader('v');
+    feed(grader, 20, 40);
+    const live = grader.grade(at(100));
+    const weight = routingWeightFromGrade(live);
+    expect(weight).toBe(1);
+    // A letter→bps invent would return 5 / 10 / 25 / … here. Eligibility only.
+    expect(weight).not.toBe(5);
+    expect(weight).not.toBe(live.p95Ms);
+  });
+
+  it('a letter with no p95 is still weight zero — missing score is not a number', () => {
+    const grader = new VenueLatencyGrader('errors-only');
+    feed(grader, 2, 5, 'error');
+    const grade = grader.grade(at(50));
+
+    expect(isGraded(grade)).toBe(true);
+    expect(grade.p95Ms).toBeNull();
+    expect(routingWeightFromGrade(grade)).toBe(0);
+    expect(measuredLatencyMs(grade)).toBeNull();
+    expect(measuredLatencyMs(grade)).not.toBe(UNMEASURED_LATENCY_MS);
   });
 
   it('a graded adapter gets positive eligibility weight (letter scaling is §28)', () => {
@@ -552,23 +615,25 @@ describe('latency grading is reachable through MarketDataAdapter', () => {
 });
 
 describe('an unmeasured venue cannot win a routing tie-break', () => {
-  it('loses the equal-price tie to a venue with a real measurement', async () => {
-    // The sentinel is the one number in latency.ts that could be mistaken for a
-    // measurement, and `VenueHealth.latencyMs` has no `null` to use. The
-    // mitigation is directional: the sentinel is the MAXIMUM and router.ts sorts
-    // ascending, so an unmeasured venue always loses a tie it enters.
+  it('gets zero weight — missing p95 is not a sentinel score that still routes', async () => {
+    // Residual this deepen closes: a provisional F with no successful RTT used
+    // to stay healthy and carry UNMEASURED_LATENCY_MS into ranking. That is a
+    // missing score treated as a number. Score-feed weight is now 0, so the
+    // venue is excluded rather than "losing the tie".
     const measured = new VenueLatencyGrader('measured');
     feed(measured, 20, 250);
     const unmeasured = new VenueLatencyGrader('unmeasured');
-    // Answering, never succeeding, and too thin to exclude: graded F but
-    // provisional, so it stays healthy AND carries the sentinel into ranking.
     feed(unmeasured, 2, 5, 'error');
 
-    const measuredHealth = healthFromGrade(measured.grade(at(100)), at(100));
-    const unmeasuredHealth = healthFromGrade(unmeasured.grade(at(100)), at(100));
+    const measuredGrade = measured.grade(at(100));
+    const unmeasuredGrade = unmeasured.grade(at(100));
+    const measuredHealth = healthFromGrade(measuredGrade, at(100));
+    const unmeasuredHealth = healthFromGrade(unmeasuredGrade, at(100));
 
+    expect(routingWeightFromGrade(unmeasuredGrade)).toBe(0);
+    expect(measuredLatencyMs(unmeasuredGrade)).toBeNull();
     expect(measuredHealth.healthy).toBe(true);
-    expect(unmeasuredHealth.healthy).toBe(true);
+    expect(unmeasuredHealth.healthy).toBe(false);
     expect(unmeasuredHealth.latencyMs).toBe(UNMEASURED_LATENCY_MS);
 
     const source = (id: string, health: VenueHealth): LiquiditySource => ({
@@ -596,7 +661,7 @@ describe('an unmeasured venue cannot win a routing tie-break', () => {
       { now: at(100) },
     );
 
-    // Identical price and fee, so the ONLY discriminator is latencyMs.
-    expect(plan.legs[0]!.venueId).toBe('measured');
+    expect(plan.legs.map((leg) => leg.venueId)).toEqual(['measured']);
+    expect(plan.rejected).toEqual(expect.arrayContaining([expect.objectContaining({ venueId: 'unmeasured', reason: 'unhealthy' })]));
   });
 });

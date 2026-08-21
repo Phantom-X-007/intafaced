@@ -21,8 +21,14 @@ import {
   shouldRegisterCardSandbox,
 } from './rails/posture.js';
 import { createPayRouter } from './router.js';
+import { MerchantPayoutDestinationStore } from './merchant-payout-destination.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { MerchantStateService } from './merchant-state-service.js';
 import { createMerchantStateRouter } from './merchant-state-router.js';
+import { KybService } from './kyb-service.js';
+import { PspModeService, assertNoThirdPartyMoneyLibrary } from './psp-mode.js';
+import { createKybPspRouter } from './kyb-router.js';
 import { SubMerchantService } from './submerchants.js';
 import { createSubMerchantRouter } from './submerchant-router.js';
 import { createSubscriptionRouter } from './subscription-router.js';
@@ -50,12 +56,17 @@ registerProcessHooks(
 /**
  * svc-pay — the payments core (§6.1).
  *
- * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode,
- * PayFac trees, smart routing, fraud scoring, the checkout builder,
- * subscriptions and plugins are each a separate tracker feature, and none of
- * them requires a change to the adapter interface — which is the claim
- * `src/rails/conformance.ts` exists to keep testable.
+ * Gateway mode, the `RailAdapter` interface, and the two v1 adapters. PSP mode
+ * (digital KYB + custom pricing durability, no third-party money library —
+ * D-S-10) is mounted beside merchant state. PayFac trees, smart routing, fraud
+ * scoring, the checkout builder, subscriptions and plugins are each a separate
+ * tracker feature, and none of them requires a change to the adapter interface
+ * — which is the claim `src/rails/conformance.ts` exists to keep testable.
  */
+
+// D-S-10 / Doctrine 5 — refuse boot if a third-party money orchestrator landed
+// in svc-pay's package.json. Socket.psp-partners stays a commercial relationship.
+assertNoThirdPartyMoneyLibrary();
 
 const sql = postgres(env.DATABASE_URL, {
   max: env.DATABASE_POOL_MAX,
@@ -151,7 +162,9 @@ for (const { railId } of env.PAY_CHECKOUT_RAILS) {
  */
 const merchantWebhooks = new MerchantWebhookService(new PostgresMerchantWebhookStore(sql));
 
+const payoutDestinations = new MerchantPayoutDestinationStore(sql);
 const pay = new PayService(sql, ledger, rails, {
+  payoutDestinations,
   defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
   valueMovement: railPosture.policy,
   // NOT `railPosture.policy`. `PAY_ALLOW_SANDBOX_RAILS` relaxes the payout gate
@@ -159,10 +172,13 @@ const pay = new PayService(sql, ledger, rails, {
   // hosted checkout is reachable by strangers, so it follows the environment.
   publicCheckoutMovement: railPosture.publicCheckoutPolicy,
   checkoutRails: env.PAY_CHECKOUT_RAILS,
+  checkoutRiskBand: env.PAY_CHECKOUT_RISK_BAND,
   checkoutSessionTtlSeconds: env.PAY_CHECKOUT_SESSION_TTL_SECONDS,
   linkDefaultTtlDays: env.PAY_LINK_DEFAULT_TTL_DAYS,
   linkMaxTtlDays: env.PAY_LINK_MAX_TTL_DAYS,
   maxOpenSessionsPerLink: env.PAY_CHECKOUT_MAX_OPEN_SESSIONS,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   afterPaymentEvent: async (event) => {
     await merchantWebhooks.enqueue(event);
     // Watch half of invoice-and-watch (SPEC §4): capture settles the execution.
@@ -219,6 +235,12 @@ const subscriptions = new SubscriptionService(
      */
     defaultFeeBps: env.PAY_DEFAULT_FEE_BPS,
     resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
+    valueMovement: railPosture.policy,
+    /*
+     * Pre-charge notify port omitted: merchant webhooks are payment-shaped and
+     * fire AFTER money. A no-op port would record `attempted` while messaging
+     * nobody. Unwired writes notifyStatus skipped_unwired on the execution.
+     */
   },
 );
 
@@ -264,6 +286,13 @@ const userMoney = new UserMoneyService(sql, ledger, rails, {
 const merchantState = new MerchantStateService(sql);
 
 /**
+ * Digital KYB (live operator decide + history) and PSP custom-pricing durability.
+ * Path-disjoint from settlement / fraud. See `kyb-service.ts` / `psp-mode.ts`.
+ */
+const kyb = new KybService(sql);
+const pspMode = new PspModeService(sql);
+
+/**
  * PayFac sub-merchant trees and the permissions over them (§6.1).
  *
  * NO LEDGER CLIENT, ON PURPOSE. This service decides who may act on whose behalf
@@ -290,8 +319,9 @@ const subMerchants = new SubMerchantService(sql);
  */
 export const appRouter = mergeRouters(
   // trees fence: gateway money paths check PayFac areas (merchant-ownership).
-  createPayRouter(pay, rails, userMoney, subMerchants),
+  createPayRouter(pay, rails, userMoney, subMerchants, payoutDestinations),
   createMerchantStateRouter(merchantState),
+  createKybPspRouter(kyb, pspMode),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
   // own merchant node from the authenticated principal, because a merchant node
   // taken from a request body would let any merchant claim to be acting as any
@@ -301,6 +331,7 @@ export const appRouter = mergeRouters(
 );
 export type { PayRouter } from './router.js';
 export type { MerchantStateRouter } from './merchant-state-router.js';
+export type { KybPspRouter } from './kyb-router.js';
 export type { SubMerchantRouter } from './submerchant-router.js';
 export type { SubscriptionRouter } from './subscription-router.js';
 

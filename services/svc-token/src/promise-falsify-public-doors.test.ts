@@ -1,8 +1,9 @@
 /**
  * Unit card (D26-P2-01g):
  * Promise: stake / unstake / buyback crash windows refuse invent through mounted
- *   tRPC public doors (createTokenRouter + signed createEdgeContext) and the
- *   S2S emissions HTTP door — not service-unit-only guards.
+ *   Fastify tRPC public doors (`/trpc` + signed createEdgeContext) and the
+ *   S2S emissions HTTP door wired to TokenService.mintNextEpoch — not
+ *   createCaller-only or stub-mint theater.
  * Break: underfunded stake could invent an active row; locked unstake could
  *   invent a return of principal; overlapping buyback windows could invent a
  *   second burn after the irreversible leg; zero tokensBought / bad revenue
@@ -24,14 +25,15 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import postgres from 'postgres';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
-import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
+import { MemoryLedger, formatAmount, houseFees, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { registerInternalEmissions } from './internal-emissions.js';
@@ -115,6 +117,82 @@ if (!available) {
         id: `req-${randomUUID()}`,
       }),
     );
+  }
+
+  type WireBody = {
+    result?: { data?: { json?: unknown } | unknown };
+    error?: {
+      message?: string;
+      data?: { code?: string; httpStatus?: number; cause?: { code?: string } };
+    };
+  };
+
+  function signedHeaders(p: Principal = principal()): Record<string, string> {
+    const raw = encodePrincipal(p);
+    return {
+      'x-intafaced-principal': raw,
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+      'x-intafaced-region': 'DE',
+      'content-type': 'application/json',
+    };
+  }
+
+  function adminHeaders(): Record<string, string> {
+    return signedHeaders(
+      principal({
+        sub: OPERATOR,
+        userId: OPERATOR,
+        scopes: ['admin:treasury', 'token:read'],
+        mfa: true,
+      }),
+    );
+  }
+
+  async function mountDoors(emissionsEnabled = true): Promise<FastifyInstance> {
+    const tokenRouter = createTokenRouter(token, { emissionsEnabled });
+    const app = Fastify({ logger: false });
+    registerInternalEmissions(app, {
+      internalSecret: INTERNAL_SECRET,
+      emissionsEnabled,
+      mintNextEpoch: () => token.mintNextEpoch(),
+    });
+    await app.register(fastifyTRPCPlugin, {
+      prefix: '/trpc',
+      trpcOptions: {
+        router: tokenRouter,
+        createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+      } satisfies FastifyTRPCPluginOptions<typeof tokenRouter>['trpcOptions'],
+    });
+    await app.ready();
+    return app;
+  }
+
+  async function trpcMutate(
+    app: FastifyInstance,
+    path: string,
+    input: Record<string, unknown>,
+    headers: Record<string, string>,
+  ): Promise<{ statusCode: number; body: WireBody }> {
+    const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
+    return { statusCode: res.statusCode, body: res.json() as WireBody };
+  }
+
+  function wireJson(body: WireBody): unknown {
+    const data = body.result?.data;
+    if (data && typeof data === 'object' && data !== null && 'json' in data) {
+      return (data as { json: unknown }).json;
+    }
+    return data;
+  }
+
+  /** Unique half-open window per test — avoids GiST races with sibling files. */
+  function uniqueWindow(tag: string): { from: string; to: string } {
+    let h = 0;
+    for (let i = 0; i < tag.length; i += 1) h = (h * 33 + tag.charCodeAt(i)) >>> 0;
+    const day = (h % 300) + 1;
+    const from = new Date(Date.UTC(2030, 0, 1, 0, 0, 0) + day * 86_400_000);
+    const to = new Date(from.getTime() + 7 * 86_400_000);
+    return { from: from.toISOString(), to: to.toISOString() };
   }
 
   function adminCaller(emissionsEnabled = true) {
@@ -240,16 +318,6 @@ if (!available) {
   });
 
   describe('D26-P2-01g public doors — buyback crash windows', () => {
-    /** Unique half-open window per test — avoids GiST races with sibling files. */
-    function uniqueWindow(tag: string): { from: string; to: string } {
-      let h = 0;
-      for (let i = 0; i < tag.length; i += 1) h = (h * 33 + tag.charCodeAt(i)) >>> 0;
-      const day = (h % 300) + 1;
-      const from = new Date(Date.UTC(2030, 0, 1, 0, 0, 0) + day * 86_400_000);
-      const to = new Date(from.getTime() + 7 * 86_400_000);
-      return { from: from.toISOString(), to: to.toISOString() };
-    }
-
     it('recordBuyback refuses a NEW run id over an identical window — burn does not double', async () => {
       await fundRewards('4000', 'w-door-identical');
       const ops = adminCaller();
@@ -420,6 +488,7 @@ if (!available) {
 
       expect(await sql`SELECT window_id FROM token.yield_windows`).toHaveLength(0);
       expect(await sql`SELECT window_id FROM token.yield_payouts`).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
     });
   });
 
@@ -438,7 +507,7 @@ if (!available) {
     });
 
     it('POST /internal/emissions/mint-next refuses when emissions are disabled — kill-switch door', async () => {
-      const mintNextEpoch = vi.fn(async () => ({ epoch: 0, minted: amt('136000') }));
+      const mintNextEpoch = vi.fn(async () => ({ epoch: 0, minted: amt('1') }));
       const app = Fastify({ logger: false });
       registerInternalEmissions(app, {
         internalSecret: INTERNAL_SECRET,
@@ -456,6 +525,286 @@ if (!available) {
       expect(res.statusCode).toBe(503);
       expect(res.json().code).toBe('token.emissions_disabled');
       expect(mintNextEpoch).not.toHaveBeenCalled();
+      await app.close();
+    });
+
+    it('POST /internal/emissions/mint-next with TokenService wired does not invent an epoch row', async () => {
+      const mintNext = vi.spyOn(token, 'mintNextEpoch');
+      const app = await mountDoors(false);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/internal/emissions/mint-next',
+        headers: serviceAuthHeaders('svc-cron', INTERNAL_SECRET),
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(res.json().code).toBe('token.emissions_disabled');
+      expect(mintNext).not.toHaveBeenCalled();
+      expect(await sql`SELECT epoch FROM token.emission_epochs`).toHaveLength(0);
+      await app.close();
+    });
+  });
+
+  describe('D26-P2-01g mounted Fastify tRPC doors', () => {
+    it('POST /trpc/stake refuses over available — invents no row', async () => {
+      await fund(USER, '100');
+      const app = await mountDoors();
+
+      const { statusCode, body } = await trpcMutate(app, 'stake', { amount: '101', tier: 'flex' }, signedHeaders());
+
+      expect(statusCode).toBe(400);
+      expect(body.error?.data?.code).toBe('BAD_REQUEST');
+      expect(await sql`SELECT id FROM token.stakes`).toHaveLength(0);
+      expect(await balanceOf(USER)).toBe('100');
+      expect(await stakedOf(USER)).toBe('0');
+      await app.close();
+    });
+
+    it('POST /trpc/unstake refuses a locked m12 stake and keeps principal staked', async () => {
+      await fund(USER, '1000');
+      const app = await mountDoors();
+      const opened = await trpcMutate(app, 'stake', { amount: '1000', tier: 'm12' }, signedHeaders());
+      expect(opened.statusCode).toBe(200);
+      const stake = wireJson(opened.body) as { id: string; status: string };
+      expect(stake.status).toBe('active');
+      expect(await stakedOf(USER)).toBe('1000');
+      expect(await balanceOf(USER)).toBe('0');
+
+      const refused = await trpcMutate(app, 'unstake', { stakeId: stake.id }, signedHeaders());
+      expect(refused.statusCode).toBe(400);
+      expect(refused.body.error?.data?.code).toBe('BAD_REQUEST');
+      expect(refused.body.error?.data?.cause?.code ?? refused.body.error?.message).toMatch(/stake_locked|locked/i);
+
+      expect(await balanceOf(USER)).toBe('0');
+      expect(await stakedOf(USER)).toBe('1000');
+      const [row] = await sql<Array<{ status: string }>>`SELECT status FROM token.stakes WHERE id = ${stake.id}`;
+      expect(row?.status).toBe('active');
+      await app.close();
+    });
+
+    it('POST /trpc/unstake concurrent crash does not double-return principal', async () => {
+      await fund(USER, '1000');
+      const app = await mountDoors();
+      const opened = await trpcMutate(app, 'stake', { amount: '1000', tier: 'flex' }, signedHeaders());
+      const stake = wireJson(opened.body) as { id: string };
+
+      const results = await Promise.all(
+        Array.from({ length: 8 }, () => trpcMutate(app, 'unstake', { stakeId: stake.id }, signedHeaders())),
+      );
+
+      expect(results.filter((r) => r.statusCode === 200)).toHaveLength(1);
+      expect(await balanceOf(USER)).toBe('1000');
+      expect(await stakedOf(USER)).toBe('0');
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback overlapping crash does not double-burn', async () => {
+      await fundRewards('4000', 'w-mounted-identical');
+      const app = await mountDoors();
+      const window = uniqueWindow('mounted-identical');
+      const firstId = randomUUID();
+
+      const first = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId: firstId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(first.statusCode).toBe(200);
+      const firstWire = wireJson(first.body) as { burned: string };
+      const burnedAfterFirst = amt(firstWire.burned);
+      expect(burnedAfterFirst).toBeGreaterThan(0n);
+      expect(await token.burnedSupply()).toBe(burnedAfterFirst);
+
+      const second = await trpcMutate(
+        app,
+        'recordBuyback',
+        {
+          runId: randomUUID(),
+          revenueWindow: window,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: '1000',
+        },
+        adminHeaders(),
+      );
+      expect(second.statusCode).toBe(409);
+      expect(second.body.error?.data?.code).toBe('CONFLICT');
+
+      expect(await token.burnedSupply()).toBe(burnedAfterFirst);
+      expect(await token.burnedSupply()).not.toBe(burnedAfterFirst * 2n);
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${firstId}`).toHaveLength(1);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback concurrent same-window crash burns once', async () => {
+      await fundRewards('4000', 'w-mounted-concurrent');
+      const app = await mountDoors();
+      const window = uniqueWindow('mounted-concurrent');
+      const a = randomUUID();
+      const b = randomUUID();
+
+      const [left, right] = await Promise.all([
+        trpcMutate(
+          app,
+          'recordBuyback',
+          { runId: a, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+          adminHeaders(),
+        ),
+        trpcMutate(
+          app,
+          'recordBuyback',
+          { runId: b, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+          adminHeaders(),
+        ),
+      ]);
+
+      const codes = [left.statusCode, right.statusCode].sort((x, y) => x - y);
+      expect(codes).toEqual([200, 409]);
+      const winner = left.statusCode === 200 ? left : right;
+      const burnedOnce = amt((wireJson(winner.body) as { burned: string }).burned);
+      expect(burnedOnce).toBeGreaterThan(0n);
+
+      expect(await token.burnedSupply()).toBe(burnedOnce);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback tail-overlap refuses without a second burn', async () => {
+      await fundRewards('4000', 'w-mounted-tail');
+      const app = await mountDoors();
+      const outer = uniqueWindow('mounted-tail');
+      const outerFrom = new Date(outer.from);
+      const tail = {
+        from: new Date(outerFrom.getTime() + 6 * 86_400_000).toISOString(),
+        to: new Date(outerFrom.getTime() + 10 * 86_400_000).toISOString(),
+      };
+      const firstId = randomUUID();
+
+      const first = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId: firstId, revenueWindow: outer, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(first.statusCode).toBe(200);
+      const burnedAfterFirst = amt((wireJson(first.body) as { burned: string }).burned);
+
+      const second = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId: randomUUID(), revenueWindow: tail, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(second.statusCode).toBe(409);
+
+      expect(await token.burnedSupply()).toBe(burnedAfterFirst);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback same runId on a different window refuses without a second burn', async () => {
+      await fundRewards('4000', 'w-mounted-runid');
+      const app = await mountDoors();
+      const firstWindow = uniqueWindow('mounted-runid');
+      const runId = randomUUID();
+
+      const first = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId, revenueWindow: firstWindow, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(first.statusCode).toBe(200);
+      const burnedAfterFirst = amt((wireJson(first.body) as { burned: string }).burned);
+
+      const other = uniqueWindow('mounted-runid-other');
+      const second = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId, revenueWindow: other, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(second.statusCode).toBe(409);
+      expect(second.body.error?.data?.code).toBe('CONFLICT');
+
+      expect(await token.burnedSupply()).toBe(burnedAfterFirst);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback recovers a pending crash without double-burning', async () => {
+      await fundRewards('2000', 'w-mounted-pending');
+      const app = await mountDoors();
+      const window = uniqueWindow('mounted-pending');
+      const runId = randomUUID();
+
+      await sql`
+        INSERT INTO token.buyback_runs (
+          id, revenue_window_from, revenue_window_to, revenue_total,
+          tokens_bought, tokens_burned, tokens_to_rewards, status
+        ) VALUES (
+          ${runId}, ${new Date(window.from)}, ${new Date(window.to)}, ${sql.json({ IFC: '1000' } as never)},
+          1000::numeric, 0::numeric, 0::numeric, 'pending'
+        )
+      `;
+
+      const retry = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(retry.statusCode).toBe(200);
+      const burnedOnce = amt((wireJson(retry.body) as { burned: string }).burned);
+      expect(burnedOnce).toBeGreaterThan(0n);
+      expect(await token.burnedSupply()).toBe(burnedOnce);
+
+      const again = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(again.statusCode).toBe(409);
+      expect(await token.burnedSupply()).toBe(burnedOnce);
+      await app.close();
+    });
+
+    it('POST /trpc/distributeRevenue over-claim leaves houseFees untouched', async () => {
+      await accrueFees('trade', '100');
+      const app = await mountDoors();
+
+      const refused = await trpcMutate(
+        app,
+        'distributeRevenue',
+        { windowId: 'w-mounted-underfund', sources: [{ module: 'trade', amount: '101' }] },
+        adminHeaders(),
+      );
+      expect(refused.statusCode).toBe(400);
+      expect(refused.body.error?.data?.code).toBe('BAD_REQUEST');
+      expect(refused.body.error?.data?.cause?.code ?? refused.body.error?.message).toMatch(/yield_source_underfunded|underfund/i);
+      expect(await sql`SELECT window_id FROM token.yield_windows`).toHaveLength(0);
+      expect(await sql`SELECT window_id FROM token.yield_payouts`).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
+      await app.close();
+    });
+
+    it('POST /trpc/mintEpoch refuses when emissions are off — no invent supply', async () => {
+      const mintNext = vi.spyOn(token, 'mintNextEpoch');
+      const mintEpoch = vi.spyOn(token, 'mintEpoch');
+      const app = await mountDoors(false);
+
+      const refused = await trpcMutate(app, 'mintEpoch', {}, adminHeaders());
+      expect(refused.statusCode).toBe(412);
+      expect(refused.body.error?.data?.code).toBe('PRECONDITION_FAILED');
+      expect(mintNext).not.toHaveBeenCalled();
+      expect(mintEpoch).not.toHaveBeenCalled();
+      expect(await sql`SELECT epoch FROM token.emission_epochs`).toHaveLength(0);
       await app.close();
     });
   });

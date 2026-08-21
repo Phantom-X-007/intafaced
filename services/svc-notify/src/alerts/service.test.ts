@@ -7,7 +7,15 @@ import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
 import { AlertService } from './service.js';
 import { MemoryAlertStore } from './store.js';
-import type { MarkQuote, MarkSource } from './types.js';
+import {
+  ALERT_KIND_UNPUBLISHED,
+  ALERT_PORTFOLIO_VIEW_UNPUBLISHED,
+  AlertKindUnpublishedError,
+  AlertPortfolioUnpublishedError,
+  UNPUBLISHED_ALERT_KINDS,
+  type MarkQuote,
+  type MarkSource,
+} from './types.js';
 
 function harness(mark: MarkQuote) {
   const notifyStore = new MemoryNotifyStore();
@@ -104,6 +112,80 @@ describe('AlertService — rides notify fan-out, refuses dark marks', () => {
     expect(report.results[0]!.outcome).toEqual({ kind: 'hold', markPrice: '99' });
     expect(await notifyStore.unreadCount('u1')).toBe(0);
     expect((await alerts.list('u1'))[0]!.status).toBe('active');
+  });
+});
+
+describe('AlertService — portfolio watch is refuse-closed', () => {
+  it('createPortfolio throws the unpublished code and stores nothing', async () => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    expect(() => alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' })).toThrow(AlertPortfolioUnpublishedError);
+    try {
+      alerts.createPortfolio({ kind: 'portfolio', userId: 'u1' });
+    } catch (err) {
+      expect(err).toBeInstanceOf(AlertPortfolioUnpublishedError);
+      expect((err as AlertPortfolioUnpublishedError).code).toBe(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
+      expect(String(err)).toContain(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
+    }
+    expect(await alerts.list('u1')).toHaveLength(0);
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it('evaluatePortfolio refuses, writes no inbox, and carries no number balance', async () => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    const out = alerts.evaluatePortfolio();
+    expect(out.kind).toBe('refuse');
+    if (out.kind === 'refuse') {
+      expect(out.code).toBe(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
+    }
+    expect(out.kind).not.toBe('fire');
+    for (const value of Object.values(out)) {
+      expect(typeof value).not.toBe('number');
+    }
+    expect(out).not.toHaveProperty('balance');
+    expect(out).not.toHaveProperty('equity');
+    expect(out).not.toHaveProperty('pnl');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+    expect(await alerts.list('u1')).toHaveLength(0);
+  });
+});
+
+describe('AlertService — unpublished kinds named-refuse, never an active live watch', () => {
+  it.each([...UNPUBLISHED_ALERT_KINDS])('createUnpublishedKind(%s) throws and stores nothing', async (kind) => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    expect(() => alerts.createUnpublishedKind({ kind, userId: 'u1' })).toThrow(AlertKindUnpublishedError);
+    try {
+      alerts.createUnpublishedKind({ kind, userId: 'u1' });
+    } catch (err) {
+      expect(err).toBeInstanceOf(AlertKindUnpublishedError);
+      expect((err as AlertKindUnpublishedError).code).toBe(ALERT_KIND_UNPUBLISHED);
+      expect((err as AlertKindUnpublishedError).alertKind).toBe(kind);
+      expect(String(err)).toContain(ALERT_KIND_UNPUBLISHED);
+    }
+    expect(await alerts.list('u1')).toHaveLength(0);
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+  });
+
+  it.each([...UNPUBLISHED_ALERT_KINDS])('evaluateUnpublishedKind(%s) refuses and never fires', async (kind) => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    const out = alerts.evaluateUnpublishedKind(kind);
+    expect(out).toMatchObject({ kind: 'refuse', code: ALERT_KIND_UNPUBLISHED });
+    expect(out.kind).not.toBe('fire');
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
+    expect(await alerts.list('u1')).toHaveLength(0);
+  });
+
+  it('price above/below against a sourced mark still fires', async () => {
+    const { alerts, notifyStore } = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+    const report = await alerts.evaluateMarket('BTC-USD');
+    expect(report.results[0]!.outcome.kind).toBe('fire');
+    expect((await alerts.list('u1'))[0]!.status).toBe('fired');
+    expect(await notifyStore.unreadCount('u1')).toBe(1);
   });
 });
 
@@ -207,5 +289,33 @@ describe('AlertService — fire only when the inbox can receive it', () => {
     const again = await alertsLive.evaluateMarket('BTC-USD');
     expect(again.results).toHaveLength(0);
     expect(await notifyStore.unreadCount('u1')).toBe(1);
+  });
+
+  it('evaluateAlert refuses a dark port that still quotes a last — never fired as live', async () => {
+    const notifyStore = new MemoryNotifyStore();
+    const lyingDark: MarkSource = {
+      kind: 'dark',
+      async quote() {
+        return { kind: 'ok', price: '999', at: new Date() };
+      },
+    };
+    const alerts = new AlertService(new MemoryAlertStore(), lyingDark, new NotifyService(notifyStore, { fanoutEnabled: true }));
+    const row = await alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      direction: 'above',
+      targetPrice: '100',
+    });
+    const report = await alerts.evaluateAlert('u1', row.id);
+    expect(report.evaluation).toEqual({
+      markSource: 'dark',
+      canFire: false,
+      code: 'alert.price_unavailable',
+    });
+    expect(report.outcome).toMatchObject({ kind: 'refuse', code: 'alert.price_unavailable' });
+    expect(report.alert?.status).toBe('active');
+    expect(report.alert?.status).not.toBe('fired');
+    expect(report.notificationId).toBeNull();
+    expect(await notifyStore.unreadCount('u1')).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { LinearPattern, PatternError } from './linear-pattern.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
 
 /**
  * PAYMENT INSTRUMENTS — the shape, the rules, and none of the I/O (§6.2).
@@ -153,7 +154,7 @@ export class InstrumentError extends Error {
  * offer lists but the seller later removed stays indistinguishable from any
  * other refuse — the board simply stops advertising it.
  */
-export const TAKE_REFUSED_MESSAGE = 'This offer cannot be taken with the selected payment method';
+export const TAKE_REFUSED_MESSAGE = resolveP2pCopy(P2P_COPY.takeRefused);
 
 export function takeRefused(): InstrumentError {
   return new InstrumentError(TAKE_REFUSED_MESSAGE, 'p2p.take_refused');

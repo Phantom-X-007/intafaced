@@ -25,8 +25,9 @@
  *      a solc at first use into a user-level cache, which is a version nobody
  *      reviews.
  *   2. It needs no second package manager, no Rust toolchain, no `foundry.toml`
- *      and no `lib/` submodules. `pnpm install` is the whole setup — on Windows
- *      too, which is where this repo is developed.
+ *      as the *compiler*, and no `lib/` submodules. `pnpm install` is the whole
+ *      compile setup — on Windows too. Foundry is added only as a fuzzer
+ *      (`test/forge`, `pnpm test:forge`) and does not write `contracts/out/`.
  *   3. It is a *compiler*, not a framework. Anvil is still the dev chain (the
  *      `evm` service in docker-compose.yml); this only turns source into
  *      bytecode. Keeping those jobs separate is why the local chain can be
@@ -116,6 +117,8 @@ for (const suite of SUITES) {
       // Interfaces and internal-only libraries compile to empty bytecode.
       // Writing them would be an artefact nobody can deploy.
       if (bytecode === '0x') continue;
+      // MemeLaunch compiles LaunchLpLock to `new` it; vaults owns the artefact.
+      if (suite.name === 'meme' && contractName === 'LaunchLpLock') continue;
 
       writeFileSync(
         join(OUT_DIR, `${contractName}.json`),

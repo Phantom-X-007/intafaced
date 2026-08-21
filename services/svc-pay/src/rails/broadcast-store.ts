@@ -44,6 +44,8 @@ export interface BroadcastStore {
    * return it — never overwrite. Pending sentinels are replaced by the hash.
    */
   put(idempotencyKey: string, txHash: string): Promise<string>;
+  /** True once signed raw is journalled (resume-able). Required before RPC. */
+  hasSigned(idempotencyKey: string): Promise<boolean>;
 }
 
 /** In-memory journal — tests and single-process local runners. Not multi-replica safe. */
@@ -78,6 +80,10 @@ export class MemoryBroadcastStore implements BroadcastStore {
     }
     this.map.set(idempotencyKey, BROADCAST_PENDING);
     return { kind: 'mine' };
+  }
+
+  async hasSigned(idempotencyKey: string): Promise<boolean> {
+    return this.signed.has(idempotencyKey);
   }
 
   async putSigned(idempotencyKey: string, signedRaw: string): Promise<void> {
@@ -200,6 +206,13 @@ export class PostgresBroadcastStore implements BroadcastStore {
       await new Promise((r) => setTimeout(r, pollMs));
     }
     throw new Error(`broadcast claim for ${idempotencyKey} stalled while pending`);
+  }
+
+  async hasSigned(idempotencyKey: string): Promise<boolean> {
+    const rows = (await this.sql`
+      SELECT signed_raw FROM pay.crypto_broadcasts WHERE idempotency_key = ${idempotencyKey}
+    `) as ReadonlyArray<{ signed_raw: string | null }>;
+    return Boolean(rows[0]?.signed_raw);
   }
 
   async putSigned(idempotencyKey: string, signedRaw: string): Promise<void> {

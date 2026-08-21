@@ -130,6 +130,8 @@ export const en = {
   // ── notify · in-app inbox (title + body per kind; keys stored on the row) ──
   'notify.trade.fill.title': 'Order filled',
   'notify.trade.fill.body': '{side} {qty} on {marketId} at {price}.',
+  'notify.trade.order.terminal.title': 'Order {status}',
+  'notify.trade.order.terminal.body': '{side} {qty} on {marketId} is {status}.',
   // Liquidation copy names only fields the payload guarantees are present.
   // Realised loss, mark price and liquidation price are all nullable on
   // `trade.position.updated`, so none of them appears here: a notification that
@@ -151,6 +153,10 @@ export const en = {
   'notify.identity.rank.updated.body': 'You moved from rank {previousRank} to rank {rank}.',
   'notify.token.stake.created.title': 'Stake locked',
   'notify.token.stake.created.body': '{amount} staked on the {tier} tier.',
+  'notify.agents.action.rejected.title': 'Agent action refused',
+  'notify.agents.action.rejected.body': 'A guardrail blocked {tool} ({refusalCode}).',
+  'notify.agents.action.completed.title': 'Agent action finished',
+  'notify.agents.action.completed.body': 'Your agent finished ({kind}).',
   'notify.bank.margin_call.title': 'Margin call on your loan',
   'notify.bank.margin_call.body':
     'Add {cureCollateralAmount} {collateralAssetId} before {graceExpiresAt} or part of your collateral may be sold.',
@@ -241,6 +247,22 @@ export const en = {
   'agents.support.tier_closed':
     'This Sovereign Intelligence support action is closed until product tier rules are published — nothing was read or answered.',
   'agents.support.escalated': 'This one goes to a person — a support ticket has the answer, and nothing was guessed here.',
+
+  // ── admin · operator console (status / kill-switch / banner) ──────────────
+  'admin.console.reach.module': 'halt a module (stop new commitments on one market)',
+  'admin.console.reach.treasury': 'freeze the ledger (stop ALL value movement platform-wide)',
+  'admin.console.unconfigured.one': 'This console cannot {reach} — {name} is not set on this app.',
+  'admin.console.unconfigured.many': 'This console cannot {reach} — {names} are not set on this app.',
+  'admin.console.banner.chip.none': 'Cannot halt anything',
+  'admin.console.banner.chip.partial': 'Partly unconfigured',
+  'admin.console.banner.title.none': 'This console cannot halt anything. Every switch below is inert.',
+  'admin.console.banner.title.partial': 'This console cannot reach every platform switch.',
+  'admin.console.banner.item.lead': 'Cannot {reach} — set',
+  'admin.console.banner.disclaimer':
+    'Nothing here is a value: these are variable names on the admin container. See docs/OWNER-OPS-CHECKLIST-2026-07-31.md §7.',
+  'admin.console.plane.reachable': 'Control plane: reachable',
+  'admin.console.plane.unconfigured': 'Control plane: not configured',
+  'admin.console.plane.unreachable': 'Control plane: unreachable',
 } as const;
 
 /** The English catalog's exact shape — the thing every other language is measured against. */

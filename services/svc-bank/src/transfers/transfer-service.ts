@@ -212,7 +212,68 @@ export class TransferService {
     );
   }
 
+  async transferToUser(input: {
+    transferId: string;
+    fromSpaceId: string;
+    toUserId: string;
+    amount: Amount;
+    now?: Date;
+  }): Promise<TransferResult> {
+    const now = input.now ?? new Date();
+    return withMoneySpan(
+      'bank.transferToUser',
+      { operation: 'transfer', amount: formatAmount(input.amount), spaceId: input.fromSpaceId },
+      async () => {
+        const destUserId = input.toUserId.trim();
+        const from = await this.spaces.resolveForDebit(input.fromSpaceId, now);
+        const dest = destUserId ? await this.spaces.findPrimary(destUserId, from.assetId) : null;
+        if (!dest) {
+          throw new BankError(
+            `Dest user ${destUserId || '(empty)'} has no primary ${from.assetId} space — transfer refused`,
+            'bank.dest_user_missing',
+          );
+        }
+        return this.transfer({
+          transferId: input.transferId,
+          fromSpaceId: input.fromSpaceId,
+          toSpaceId: dest.id,
+          amount: input.amount,
+          now,
+        });
+      },
+    );
+  }
+
   // ── Standing orders ────────────────────────────────────────────────────────
+
+  async scheduleToUser(input: {
+    userId: string;
+    fromSpaceId: string;
+    toUserId: string;
+    amount: Amount;
+    cadence: Cadence;
+    startsAt: Date;
+    endsAt?: Date | null;
+  }): Promise<ScheduleRecord> {
+    const destUserId = input.toUserId.trim();
+    const from = await this.spaces.get(input.fromSpaceId);
+    const dest = destUserId ? await this.spaces.findPrimary(destUserId, from.assetId) : null;
+    if (!dest) {
+      throw new BankError(
+        `Dest user ${destUserId || '(empty)'} has no primary ${from.assetId} space — schedule refused`,
+        'bank.dest_user_missing',
+      );
+    }
+    return this.schedule({
+      userId: input.userId,
+      fromSpaceId: input.fromSpaceId,
+      toSpaceId: dest.id,
+      amount: input.amount,
+      cadence: input.cadence,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+    });
+  }
 
   async schedule(input: {
     userId: string;

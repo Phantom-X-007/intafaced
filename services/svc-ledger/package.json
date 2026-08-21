@@ -20,7 +20,9 @@
     "@intafaced/contracts": "workspace:*",
     "@intafaced/db": "workspace:*",
     "@intafaced/events": "workspace:*",
+    "@intafaced/i18n": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
+    "@intafaced/portfolio-view": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
     "@opentelemetry/api": "^1.9.0",
     "drizzle-orm": "^0.45.2",
@@ -32,7 +34,7 @@
     "@types/node": "^22.10.2",
     "drizzle-kit": "^0.31.10",
     "rimraf": "^6.0.1",
-    "tsx": "^4.23.7",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }

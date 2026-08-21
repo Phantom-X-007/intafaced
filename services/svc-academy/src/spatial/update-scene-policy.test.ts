@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { emptyScene, parseScene } from './scene.js';
-import { decideHostSceneWrite, sceneFingerprint } from './edit-policy.js';
+import { HOST_SCENE_REFUSE, decideHostSceneWrite, hostSceneWriteRefuseName, sceneFingerprint } from './edit-policy.js';
 
 describe('updateScene concurrent edit policy (wired residual)', () => {
   it('stale fingerprint refuses without inventing a merge', () => {
@@ -18,6 +18,7 @@ describe('updateScene concurrent edit policy (wired residual)', () => {
     });
     expect(stale.ok).toBe(false);
     if (!stale.ok) expect(stale.reason).toBe('conflict');
+    expect(hostSceneWriteRefuseName(stale)).toBe(HOST_SCENE_REFUSE.fingerprint_mismatch);
 
     const ok = decideHostSceneWrite({ current, next, expectedFingerprint: fp });
     expect(ok.ok).toBe(true);
@@ -32,6 +33,7 @@ describe('updateScene concurrent edit policy (wired residual)', () => {
     const omitted = decideHostSceneWrite({ current, next });
     expect(omitted.ok).toBe(false);
     if (!omitted.ok) expect(omitted.reason).toBe('conflict');
+    expect(hostSceneWriteRefuseName(omitted)).toBe(HOST_SCENE_REFUSE.fingerprint_required);
 
     const ok = decideHostSceneWrite({
       current,

@@ -10,6 +10,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:forge": "node scripts/forge-test.mjs",
     "test:watch": "vitest",
     "db:migrate": "tsx scripts/migrate.ts",
     "contracts:build": "node scripts/compile-contracts.mjs",
@@ -23,6 +24,7 @@
     "@intafaced/db": "workspace:*",
     "@intafaced/events": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
+    "@noble/curves": "1.9.1",
     "@opentelemetry/api": "^1.9.0",
     "@trpc/server": "^11.0.0-rc.660",
     "drizzle-orm": "^0.45.2",
@@ -36,7 +38,7 @@
     "drizzle-kit": "^0.31.10",
     "rimraf": "^6.0.1",
     "solc": "0.8.28",
-    "tsx": "^4.23.7",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
   }

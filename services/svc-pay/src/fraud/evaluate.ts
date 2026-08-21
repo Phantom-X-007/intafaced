@@ -13,6 +13,7 @@
  *   · sanctions screening (separate knobs — never shared with fraud)
  *   · inventing risk scores, approval rates, or protected-characteristic signals
  *   · silent allow when a configured rule is missing its required signal
+ *   · silent allow when an enabled scoring rule has an unpublished threshold
  *   · silent auto-decline with no reason
  *
  * Pure function of inputs. No DB, no balances, no ledger. Money never moves here.
@@ -76,7 +77,7 @@ export interface FraudEvaluationInput {
   readonly recentPaymentCount?: number;
   /** Gross volume in window as decimal string (caller-owned meter). */
   readonly recentVolume?: string;
-  /** Merchant typical amount as decimal string; absent → amount_anomaly skipped. */
+  /** Merchant typical amount as decimal string; absent → amount_anomaly reviews (signal unpublished). */
   readonly baselineAmount?: string | null;
   readonly thresholds?: FraudThresholds;
   readonly blocklists?: FraudBlocklists;
@@ -85,6 +86,60 @@ export interface FraudEvaluationInput {
    * Explicit `false` = kill-switched off.
    */
   readonly enabled?: FraudRuleSwitches;
+  /**
+   * Named origin of an external score (PSP / adapter). Omitted = rule-only path.
+   * Present-but-blank (null / whitespace) fail-closes — never invent a score.
+   */
+  readonly scoreSource?: string | null;
+}
+
+export const FRAUD_THRESHOLD_UNPUBLISHED = 'pay.fraud_threshold_unpublished' as const;
+
+export type FraudScoreErrorCode = 'pay.fraud_score_source_blank' | 'pay.fraud_score_invented';
+
+/** Thrown when a score source is blank or an inventable rate/magnitude is supplied. */
+export class FraudScoreError extends Error {
+  constructor(
+    message: string,
+    readonly code: FraudScoreErrorCode,
+    readonly field?: string,
+  ) {
+    super(message);
+    this.name = 'FraudScoreError';
+  }
+}
+
+/**
+ * Inventable score fields — never defaulted, never synthesised.
+ * Approval/decline rates and chargeback magnitudes are caller/PSP facts or absent.
+ */
+export const FORBIDDEN_FRAUD_SCORE_FIELDS = ['approvalRate', 'declineRate', 'chargebackMagnitude', 'chargebackRate'] as const;
+
+export function assertNoInventedFraudScores(bag: object): void {
+  const rec = bag as Record<string, unknown>;
+  for (const key of FORBIDDEN_FRAUD_SCORE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(rec, key) && rec[key] !== undefined) {
+      throw new FraudScoreError(`pay.fraud forbids invented field ${key}`, 'pay.fraud_score_invented', key);
+    }
+  }
+}
+
+function scoreSourcePresent(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Fail-closed when a score source key is present but blank.
+ * Omitted key = rule-only evaluation (no model invented).
+ */
+export function assertFraudScoreSourceNotBlank(input: FraudEvaluationInput): void {
+  if (!Object.prototype.hasOwnProperty.call(input, 'scoreSource')) return;
+  if (scoreSourcePresent(input.scoreSource)) return;
+  throw new FraudScoreError(
+    'pay.fraud score source is blank — refuse rather than invent a score',
+    'pay.fraud_score_source_blank',
+    'scoreSource',
+  );
 }
 
 function isRuleEnabled(enabled: FraudRuleSwitches | undefined, ruleId: FraudRuleId): boolean {
@@ -119,6 +174,9 @@ function worse(a: FraudOutcome, b: FraudOutcome): FraudOutcome {
  * Never invents blocklist content, baselines, or velocity meters.
  */
 export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
+  assertNoInventedFraudScores(input);
+  assertFraudScoreSourceNotBlank(input);
+
   const reasons: FraudReason[] = [];
   const skippedDisabled: FraudRuleId[] = [];
   let outcome: FraudOutcome = 'allow';
@@ -164,7 +222,10 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('velocity_count', () => {
     const max = th.maxPaymentsInWindow;
-    if (max === undefined || max < 0) return;
+    if (max === undefined || !Number.isSafeInteger(max) || max < 0) {
+      flag('velocity_count', `${FRAUD_THRESHOLD_UNPUBLISHED}: maxPaymentsInWindow`, 'review');
+      return;
+    }
     const count = input.recentPaymentCount;
     if (count === undefined || !Number.isSafeInteger(count) || count < 0) {
       flag('velocity_count', 'recent payment count signal is unavailable', 'review');
@@ -178,7 +239,10 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('velocity_volume', () => {
     const maxVol = parseDecimal(th.maxVolumeInWindow);
-    if (maxVol === null) return;
+    if (maxVol === null) {
+      flag('velocity_volume', `${FRAUD_THRESHOLD_UNPUBLISHED}: maxVolumeInWindow`, 'review');
+      return;
+    }
     const recent = parseDecimal(input.recentVolume);
     if (recent === null) {
       flag('velocity_volume', 'recent volume signal is unavailable', 'review');
@@ -192,7 +256,10 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('amount_anomaly', () => {
     const mult = th.amountAnomalyMultiplier;
-    if (mult === undefined || !(mult > 1) || !Number.isFinite(mult)) return;
+    if (mult === undefined || !(mult > 1) || !Number.isFinite(mult)) {
+      flag('amount_anomaly', `${FRAUD_THRESHOLD_UNPUBLISHED}: amountAnomalyMultiplier`, 'review');
+      return;
+    }
     const baseline = parseDecimal(input.baselineAmount);
     if (baseline === null || baseline === 0) {
       flag('amount_anomaly', 'merchant amount baseline signal is unavailable', 'review');

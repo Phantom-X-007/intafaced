@@ -1,6 +1,8 @@
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { OrderSide } from '../spot/types.js';
+import type { AlgoPlaceGrant } from './durable-principal.js';
+import { parseAlgoPlaceGrant } from './durable-principal.js';
 import type { AlgoChildRef, AlgoMiss, AlgoScheduleStretchReason, AlgoStatus, TwapParent } from './types.js';
 
 /**
@@ -14,6 +16,8 @@ import type { AlgoChildRef, AlgoMiss, AlgoScheduleStretchReason, AlgoStatus, Twa
 export interface TwapParentRecord {
   readonly parent: TwapParent;
   readonly plan: readonly Amount[];
+  /** Presented at createTwap. Absent on pre-migration rows → place still halts. */
+  readonly grant?: AlgoPlaceGrant | null;
 }
 
 export interface TwapParentStore {
@@ -103,13 +107,26 @@ export class SqlTwapParentStore implements TwapParentStore {
 
   async save(record: TwapParentRecord): Promise<void> {
     const p = record.parent;
+    const existing = record.grant === undefined ? (await this.load(p.id))?.grant : record.grant;
+    const grantJson = existing
+      ? this.sql.json({
+          scopes: [...existing.scopes],
+          sid: existing.sid,
+          tier: existing.tier,
+          mfa: existing.mfa,
+          ...(existing.sub_account ? { sub_account: existing.sub_account } : {}),
+          ...(existing.kid ? { kid: existing.kid } : {}),
+          ...(existing.key_env ? { key_env: existing.key_env } : {}),
+        })
+      : null;
     await this.sql`
       INSERT INTO algo_parents (
         id, user_id, sub_account_id, market_id, symbol, side, kind,
         total_qty, duration_ms, slice_interval_ms, limit_price,
         status, created_at, started_at, next_due_at, projected_ends_at,
         schedule_stretch_reason, paused_at, halt_reason,
-        slices_planned, next_slice_index, plan_slices, children, misses, updated_at
+        slices_planned, next_slice_index, plan_slices, children, misses, grant_claims,
+        participation_bps, lot_size, updated_at
       ) VALUES (
         ${p.id},
         ${p.userId},
@@ -135,6 +152,9 @@ export class SqlTwapParentStore implements TwapParentStore {
         ${this.sql.json(planToJson(record.plan))},
         ${this.sql.json(childrenToJson(p.children))},
         ${this.sql.json(missesToJson(p.misses))},
+        ${grantJson},
+        ${p.participationBps},
+        ${p.lotSize === null ? null : formatAmount(p.lotSize)},
         now()
       )
       ON CONFLICT (id) DO UPDATE SET
@@ -148,6 +168,9 @@ export class SqlTwapParentStore implements TwapParentStore {
         plan_slices = EXCLUDED.plan_slices,
         children = EXCLUDED.children,
         misses = EXCLUDED.misses,
+        grant_claims = COALESCE(EXCLUDED.grant_claims, algo_parents.grant_claims),
+        participation_bps = EXCLUDED.participation_bps,
+        lot_size = COALESCE(EXCLUDED.lot_size, algo_parents.lot_size),
         updated_at = now()
     `;
   }
@@ -192,7 +215,7 @@ function rowToRecord(row: Record<string, unknown>): TwapParentRecord {
     marketId: String(row.market_id),
     symbol: String(row.symbol),
     side: row.side as OrderSide,
-    kind: 'twap',
+    kind: row.kind === 'vwap' || row.kind === 'pov' ? row.kind : 'twap',
     totalQty: parseAmount(String(row.total_qty)),
     durationMs,
     sliceIntervalMs,
@@ -205,12 +228,14 @@ function rowToRecord(row: Record<string, unknown>): TwapParentRecord {
     scheduleStretchReason: stretchFromRow(row.schedule_stretch_reason),
     pausedAt: row.paused_at ? new Date(String(row.paused_at)) : null,
     haltReason: row.halt_reason === null || row.halt_reason === undefined ? null : String(row.halt_reason),
+    lotSize: row.lot_size === null || row.lot_size === undefined ? null : parseAmount(String(row.lot_size)),
+    participationBps: row.participation_bps === null || row.participation_bps === undefined ? null : Number(row.participation_bps),
     slicesPlanned: Number(row.slices_planned),
     nextSliceIndex,
     children: childrenFromJson(row.children),
     misses: missesFromJson(row.misses),
   };
-  return { parent, plan: planFromJson(row.plan_slices) };
+  return { parent, plan: planFromJson(row.plan_slices), grant: parseAlgoPlaceGrant(row.grant_claims) };
 }
 
 /** In-memory store for unit tests (process-local). */
@@ -218,9 +243,12 @@ export class MemoryTwapParentStore implements TwapParentStore {
   private readonly byId = new Map<string, TwapParentRecord>();
 
   async save(record: TwapParentRecord): Promise<void> {
+    const prev = this.byId.get(record.parent.id);
+    const grant = record.grant !== undefined ? record.grant : (prev?.grant ?? null);
     this.byId.set(record.parent.id, {
       parent: record.parent,
       plan: [...record.plan],
+      grant,
     });
   }
 

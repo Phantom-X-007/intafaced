@@ -186,6 +186,18 @@ const schema = serviceEnvSchema
       PAY_CHECKOUT_MAX_OPEN_SESSIONS: z.coerce.number().int().min(1).max(10_000).default(25),
 
       /**
+       * Operator-declared risk band for hosted checkout smart routing (D26-P1-P3).
+       * Blank refuses — never invent `low`. Public callers cannot override this.
+       */
+      PAY_CHECKOUT_RISK_BAND: z.string().optional().default(''),
+
+      /**
+       * svc-identity base for D26-P1-O2 affiliate accrue after merchantSettlement.
+       * Blank → noop port (settlement still posts). Never invent rates.
+       */
+      IDENTITY_URL: z.string().url().optional(),
+
+      /**
        * The prefix a BROWSER sees the hosted checkout under.
        *
        * svc-pay serves `/checkout`; svc-edge is the only public listener and

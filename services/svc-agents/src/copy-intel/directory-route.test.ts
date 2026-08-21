@@ -78,6 +78,19 @@ describe('copyIntel.presentDirectory route (D26-P1-A5)', () => {
     });
   });
 
+  it('refuses the board named returns / roi (not a silent reorder)', async () => {
+    for (const sortBy of ['returns', 'roi', 'winRate'] as const) {
+      const result = await createAgentsRouter(stubDeps())
+        .createCaller(signed())
+        .copyIntel.presentDirectory({ stats: [highPnl, lowPnl], sortBy });
+      expect(result, sortBy).toEqual({
+        status: 'refuse',
+        reason: 'returns_ranked_board',
+        userMessageKey: 'agents.copy_intel.unavailable',
+      });
+    }
+  });
+
   it('refuses marketing board mode', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())

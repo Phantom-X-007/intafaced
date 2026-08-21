@@ -34,6 +34,15 @@ import type { ReputationSnapshot } from './reputation.js';
 export type MerchantStatus = 'applied' | 'approved' | 'rejected' | 'suspended' | 'withdrawn';
 
 /**
+ * Stage 3 merchant API keys / scopes / rate limits are EXPLICITLY CUT.
+ *
+ * `identity.apikeys` already owns named keys. A second mint/revoke/table plane
+ * inside svc-p2p would dual-write credentials. Membership here is standing
+ * only; machine credentials never live in this file.
+ */
+export const MERCHANT_API_KEY_PLANE = 'identity.apikeys' as const;
+
+/**
  * Who may make each transition.
  *
  * `self` is the applicant acting on their own record; `operator` needs the
@@ -168,4 +177,106 @@ export function canTransition(from: MerchantStatus, to: MerchantStatus, by: Tran
 /** Statuses a caller should be treated as an active merchant in. */
 export function isActiveMerchant(status: MerchantStatus): boolean {
   return status === 'approved';
+}
+
+/**
+ * Programme vouch on a public reputation door — same snapshot badges use.
+ *
+ * `null` means the programme is not wired (not "this trader is not a merchant").
+ * Frozen / applied / rejected / withdrawn never read `true`: freeze must be
+ * visible on the same payload as derived badges, or counterparties keep treating
+ * a suspended row as vouched-for.
+ */
+export function programmeVouch(status: MerchantStatus | null | undefined, programmeWired: boolean): boolean | null {
+  if (!programmeWired) return null;
+  return isActiveMerchant(status ?? 'withdrawn');
+}
+
+export interface ReputationPublicDoor {
+  readonly tradesTotal: number;
+  readonly completed: number;
+  readonly cancelled: number;
+  readonly disputed: number;
+  readonly disputesLost: number;
+  readonly totalReleaseSecs: number;
+  readonly releaseSamples: number;
+  readonly completionRate: number;
+  readonly avgReleaseSecs: number;
+  readonly badges: string[];
+  readonly merchant: boolean | null;
+}
+
+/** One payload: derived badges + programme freeze. Never a second scorecard. */
+export function reputationOnPublicDoor(snapshot: ReputationSnapshot, merchant: boolean | null): ReputationPublicDoor {
+  return {
+    tradesTotal: snapshot.tradesTotal,
+    completed: snapshot.completed,
+    cancelled: snapshot.cancelled,
+    disputed: snapshot.disputed,
+    disputesLost: snapshot.disputesLost,
+    totalReleaseSecs: snapshot.totalReleaseSecs,
+    releaseSamples: snapshot.releaseSamples,
+    completionRate: snapshot.completionRate,
+    avgReleaseSecs: snapshot.avgReleaseSecs,
+    badges: [...snapshot.badges],
+    merchant,
+  };
+}
+
+/** Audit line: freeze/restore/approve is checkable against the counters badges use. */
+export function describeReputationSnapshot(snapshot: ReputationSnapshot): string {
+  const badges = snapshot.badges.length === 0 ? 'none' : snapshot.badges.join(',');
+  return `${snapshot.tradesTotal} escrowed trades at ${(snapshot.completionRate * 100).toFixed(2)}% completion, derived badges: ${badges}`;
+}
+
+/**
+ * Stamping `approved` is not a permanent grant — first approval or unfreeze.
+ *
+ * Apply already checks live reputation. Restore already re-checked. First
+ * approval (`applied → approved`) used to skip that snapshot, so an applicant
+ * who was clean at apply, then lost a dispute (or dropped below the rate)
+ * while waiting, could still be stamped merchant. That is the same "fresh
+ * account borrowing merchant trust" hole, one state later.
+ *
+ * Badges stay derived from counters. This only answers: may a human grant
+ * the programme voucher against the snapshot the public door shows right now?
+ */
+export function mayGrantProgrammePrivileges(
+  snapshot: ReputationSnapshot,
+  policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
+): EligibilityVerdict {
+  return checkEligibility(snapshot, policy);
+}
+
+/**
+ * Unfreeze is not a permanent grant. Restoring `suspended → approved` re-runs
+ * the same eligibility rule apply uses; badges stay derived from counters.
+ */
+export function mayRestoreProgrammePrivileges(
+  snapshot: ReputationSnapshot,
+  policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
+): EligibilityVerdict {
+  return mayGrantProgrammePrivileges(snapshot, policy);
+}
+
+/**
+ * After a moderated dispute loss, may this approved standing keep the badge?
+ *
+ * Application eligibility already refuses `disputesLost > maxDisputesLost`.
+ * Leaving an approved row untouched after the same loss would let the badge
+ * keep vouching for someone a human moderator has already ruled against —
+ * the dispute-law half of D26-P1-I2. Non-approved rows are untouched here;
+ * operator grant (first approve or unfreeze) still re-checks live eligibility
+ * (`mayGrantProgrammePrivileges`) so a human cannot stamp approved over a
+ * snapshot that would fail apply.
+ */
+export function standingBrokenByDisputeLaw(
+  status: MerchantStatus,
+  snapshot: ReputationSnapshot,
+  policy: EligibilityPolicy = DEFAULT_ELIGIBILITY,
+): { readonly broken: true; readonly reason: string } | { readonly broken: false } {
+  if (status !== 'approved') return { broken: false };
+  const verdict = checkEligibility(snapshot, policy);
+  if (verdict.eligible) return { broken: false };
+  return { broken: true, reason: verdict.reason };
 }

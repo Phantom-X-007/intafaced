@@ -4,6 +4,9 @@ import {
   canTransition,
   checkEligibility,
   DEFAULT_ELIGIBILITY,
+  describeReputationSnapshot,
+  mayGrantProgrammePrivileges,
+  standingBrokenByDisputeLaw,
   type EligibilityPolicy,
   type MerchantStatus,
   type TransitionActor,
@@ -174,6 +177,33 @@ export class MerchantService {
       throw new P2pError('A reason is required: an unexplained change of standing is not reviewable.', 'p2p.merchant_reason_required');
     }
 
+    const currentStanding = await this.get(input.userId);
+    if (!currentStanding) throw new P2pError('No merchant application for this account.', 'p2p.merchant_not_found');
+
+    const freezing = currentStanding.status === 'approved' && input.to === 'suspended';
+    /**
+     * ANY grant of `approved` re-reads live reputation — first approval as
+     * well as unfreeze. Restore already refused a failing snapshot; first
+     * approval used to stamp the badge on the apply-time row even after a
+     * later dispute loss. Same rule, same sentence, both edges.
+     */
+    const granting = input.to === 'approved';
+    let recordedReason = reason;
+    if (freezing || granting) {
+      const snapshot = await this.p2p.reputationOf(input.userId);
+      if (granting) {
+        const grant = mayGrantProgrammePrivileges(snapshot, this.eligibility);
+        if (!grant.eligible) {
+          throw new P2pError(
+            `Cannot grant programme privileges while live reputation fails the same rule badges use. ${grant.reason}`,
+            'p2p.merchant_ineligible',
+          );
+        }
+      }
+      const moment = granting ? (currentStanding.status === 'suspended' ? 'restore' : 'approve') : 'freeze';
+      recordedReason = `${reason} Snapshot at ${moment}: ${describeReputationSnapshot(snapshot)}.`;
+    }
+
     return transaction(
       this.sql,
       async (tx) => {
@@ -195,7 +225,7 @@ export class MerchantService {
 
         await tx`
           INSERT INTO p2p.p2p_merchant_events (user_id, from_status, to_status, reason, actor_id, actor_scope)
-          VALUES (${input.userId}, ${current.status}, ${input.to}, ${reason}, ${input.actorId}, ${input.actorScope})
+          VALUES (${input.userId}, ${current.status}, ${input.to}, ${recordedReason}, ${input.actorId}, ${input.actorScope})
         `;
 
         return toRecord(row);
@@ -207,6 +237,39 @@ export class MerchantService {
   async get(userId: string): Promise<MerchantRecord | null> {
     const [row] = await this.sql<MerchantRow[]>`SELECT * FROM p2p.p2p_merchants WHERE user_id = ${userId}`;
     return row ? toRecord(row) : null;
+  }
+
+  /**
+   * Suspend approved standing when live reputation no longer meets programme
+   * rules — called after a human moderator attributes a dispute loss.
+   *
+   * Idempotent for non-approved rows. Leaves a reviewable history row naming
+   * the dispute; does not move escrow (the ruling already did, via ledger).
+   */
+  async suspendIfStandingBrokenByDisputeLaw(input: {
+    userId: string;
+    tradeId: string;
+    disputeId: string;
+    actorId: string;
+    actorScope: string;
+  }): Promise<MerchantRecord | null> {
+    const current = await this.get(input.userId);
+    if (!current) return null;
+
+    const snapshot = await this.p2p.reputationOf(input.userId);
+    const broken = standingBrokenByDisputeLaw(current.status, snapshot, this.eligibility);
+    if (!broken.broken) return null;
+
+    return this.transition({
+      userId: input.userId,
+      to: 'suspended',
+      by: 'operator',
+      reason:
+        `Dispute law: merchant standing suspended after moderated ruling on trade ${input.tradeId} ` +
+        `(dispute ${input.disputeId}). ${broken.reason}`,
+      actorId: input.actorId,
+      actorScope: input.actorScope,
+    });
   }
 
   /** Newest first — the current standing is what somebody is usually asking about. */

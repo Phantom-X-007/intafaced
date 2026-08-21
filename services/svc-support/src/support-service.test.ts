@@ -67,6 +67,8 @@ describe('SupportService Stage-1', () => {
     const kb = await svc.listKb();
     expect(kb.length).toBeGreaterThanOrEqual(5);
     expect(kb.every((a) => a.titleKey.startsWith('support.kb.'))).toBe(true);
+    expect(kb.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
+    expect(kb.every((a) => typeof a.version === 'number' && a.version >= 1)).toBe(true);
     expect(kb[0]).not.toHaveProperty('balance');
   });
 });
@@ -100,6 +102,8 @@ describe('SupportService Stage-2 operator queue', () => {
     expect(q.entries.map((e) => e.ticketId)).toEqual([dep.id, other.id]);
     expect(q.entries[0]!).not.toHaveProperty('balance');
     expect(q.entries[0]!).not.toHaveProperty('refundAmount');
+    expect(q.entries[0]!).toMatchObject({ timingKind: 'score_not_promise', sla: false });
+    expect(q.entries[0]!).not.toHaveProperty('slaMinutes');
   });
 
   it('peekNext and claimForOperator — exclusive claim, refuse steal', async () => {
@@ -154,7 +158,7 @@ describe('SupportService Stage-2 operator queue', () => {
  * Answering a foreign ticket with `not_found` rather than a forbidden is a
  * deliberate choice, and it only works if the two are indistinguishable. They
  * were not: the missing case interpolated the id and the foreign case did not,
- * and `mapError` puts `err.message` on the wire — so a caller could ask about
+ * and `mapError` puts i18n `userCopy(err.code)` on the wire — so a caller could ask about
  * any id and read its existence off whether the id came back.
  */
 describe('a foreign ticket is indistinguishable from a missing one', () => {

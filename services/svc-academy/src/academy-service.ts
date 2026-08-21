@@ -3,6 +3,10 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { isPaperOpsEnabled, paperOpsDisabledMessage, paperOpsStatus, type PaperOpsStatus } from './paper/ops-gate.js';
+import { assertPaperNeverReadableAsRealMoney } from './paper/real-money-ban.js';
+import { assertCallerCannotLiePaperFlag, type PaperMarketFlagPort } from './paper/market-flag-verify.js';
+import { recordPaperCertItemProgress, type PaperCertProgressView } from './paper/cert-progress-hook.js';
+import { isDrillComplete, type DrillRun, type PaperMarketRef } from './paper/workbook-loop.js';
 import { emptyScene, parseScene } from './spatial/scene.js';
 import { decideHostSceneWrite, sceneFingerprint } from './spatial/edit-policy.js';
 import {
@@ -197,6 +201,12 @@ export interface AcademyServiceOptions {
   tournamentEnabled?: boolean;
   /** Stage-3 paper-trading ops kill-switch (`ACADEMY_PAPER_TRADING_ENABLED`). */
   paperTradingEnabled?: boolean;
+  /**
+   * Trade public-markets paper flag port. Undefined when TRADE_URL is unset —
+   * paper drills then refuse `academy.paper_flag_unverified` rather than
+   * trusting `paper: true` on the wire.
+   */
+  paperMarketFlagPort?: PaperMarketFlagPort;
 }
 
 export class AcademyService {
@@ -560,9 +570,70 @@ export class AcademyService {
     }
   }
 
+  /**
+   * D26-P1-C4 — claimed `paper: true` must match trade's public listing.
+   * Unset port (no TRADE_URL) refuses by name rather than trusting the caller.
+   */
+  async assertCallerPaperFlagVerified(market: PaperMarketRef | null): Promise<void> {
+    await assertCallerCannotLiePaperFlag(this.options.paperMarketFlagPort, market);
+  }
+
   /** Stage-3 — ops status snapshot (live trade always unaffected). */
   paperOpsStatus(): PaperOpsStatus {
-    return paperOpsStatus(this.options.paperTradingEnabled);
+    const status = paperOpsStatus(this.options.paperTradingEnabled);
+    assertPaperNeverReadableAsRealMoney(status);
+    return status;
+  }
+
+  /**
+   * After a sealed paper drill: record cert *item* completion when the workbook
+   * is bound to a catalog cert. Unbound → `progress: 'unbound'`. Never grantCert,
+   * never invent XP, never perk-map, never ledger.
+   */
+  async recordPaperDrillCertProgress(input: { userId: string; run: DrillRun }): Promise<PaperCertProgressView> {
+    this.assertPaperTradingEnabled();
+    const certs = listCertCatalog();
+    const drillComplete = isDrillComplete(input.run);
+    let existing: ItemCompletionRecord | null = null;
+    if (drillComplete) {
+      const slug = input.run.workbookSlug.trim();
+      const existingRows = await this.sql<Array<{ user_id: string; item_slug: string; completed_at: Date }>>`
+        SELECT user_id, item_slug, completed_at FROM academy.cert_item_completions
+         WHERE user_id = ${input.userId} AND item_slug = ${slug}
+      `;
+      existing = existingRows[0]
+        ? {
+            userId: existingRows[0].user_id,
+            itemSlug: existingRows[0].item_slug,
+            completedAt: existingRows[0].completed_at,
+          }
+        : null;
+    }
+
+    const pending: { record: ItemCompletionRecord | null } = { record: null };
+    const view = recordPaperCertItemProgress({
+      userId: input.userId,
+      run: input.run,
+      certs,
+      existing,
+      persist: (record) => {
+        pending.record = record;
+      },
+    });
+    if (view.progress === 'recorded' && pending.record) {
+      const row = await this.markCurriculumComplete({
+        userId: input.userId,
+        itemSlug: view.itemSlug,
+      });
+      const recorded: PaperCertProgressView = {
+        ...view,
+        completedAt: row.completedAt,
+      };
+      assertPaperNeverReadableAsRealMoney(recorded);
+      return recorded;
+    }
+    assertPaperNeverReadableAsRealMoney(view);
+    return view;
   }
 
   private mapTournamentErr(err: unknown): never {
@@ -1545,6 +1616,8 @@ export class AcademyService {
    * table and no sweep.
    *
    * Perks are read AFTER XP publish and never invented: svc-identity is SoT.
+   * Unpriced certs (`no_policy`) refuse the perk readout so the grant cannot
+   * look like a granted perk or perk money.
    */
   async grantCert(input: {
     userId: string;

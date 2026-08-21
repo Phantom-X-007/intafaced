@@ -13,8 +13,8 @@
  *   · mandate.create / subscription.create / cycle fire refuse inactive,
  *     reconsent, fee_unpublished, and pay.mandate_rail_absent by code on the
  *     mounted path.
- *   · no dispute/chargeback public procedure; disputed status has no writer on
- *     the merchant REST mutate surface; chargeback recipes stay unwired.
+ *   · dispute **case** procedures may exist (D26-P1-P5); merchant REST still
+ *     has no reverse-money dispute door; chargeback ledger recipes stay unwired.
  *   · submerchantPermission.grant refuses self / lateral / unknown area over
  *     the wire; pay:* remains WITHHELD_FROM_SESSION (no invent grant).
  * Class: N (honesty) / M surface (no invent fees or reverse-money). Leverage:
@@ -544,21 +544,24 @@ describe('D26-P2-01b public doors — mandate refuse invent rails / rates', () =
 });
 
 describe('D26-P2-01b public doors — dispute refuse invent reverse-money', () => {
-  it('pay router + public REST have no dispute / chargeback procedure', () => {
+  it('dispute case doors exist; chargeback ledger recipes stay unwired', () => {
     const routerSrc = readFileSync(join(here, 'router.ts'), 'utf8');
     const restSrc = readFileSync(join(here, 'public-rest.ts'), 'utf8');
     const paySrc = readFileSync(join(here, 'payment-service.ts'), 'utf8');
 
-    expect(routerSrc).not.toMatch(/chargeback|dispute\.(open|accept|contest)/i);
+    // D26-P1-P5: case + status writer on admin/tRPC — not invent reverse-money.
+    expect(routerSrc).toMatch(/openDispute|contestDispute|getDispute/);
+    expect(routerSrc).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall|recipes\.chargeback/);
+    // Merchant public REST still has no dispute / chargeback reverse-money door.
     expect(restSrc).not.toMatch(/\/dispute|chargeback/i);
     expect(paySrc).not.toMatch(/recipes\.chargeback|chargebackOpen|chargebackWon|chargebackShortfall/);
   });
 
-  it('payment status map lists disputed as a dead end with no public writer path', () => {
+  it('payment status disputed is case-reachable; merchant REST has no reverse-money dispute door', () => {
     const schema = readFileSync(join(here, 'db/schema.ts'), 'utf8');
-    // Schema declares the status; honesty requires the comment that it is unreachable.
+    // Schema declares the status; honesty requires the case-only / NOT WIRED banner.
     expect(schema).toMatch(/disputed/);
-    expect(schema).toMatch(/unreachable|dead end|chargeback/i);
+    expect(schema).toMatch(/NOT WIRED|OWNER SIGN-OFF|case/i);
 
     const rest = readFileSync(join(here, 'public-rest.ts'), 'utf8');
     // Merchant REST mutates: create / authorize / capture / refund only.

@@ -11,6 +11,7 @@
 
 import type { RankPerks } from '@intafaced/contracts';
 import type { HostRightsSource } from '../host-rights.js';
+import { assertCertGrantPathHonest } from './grant-ledger.js';
 import type { CertXpEmitResult } from './xp-publish.js';
 
 export const CERT_PERK_REFUSE_CODE = 'academy.cert_perk_refuse_closed' as const;
@@ -43,17 +44,21 @@ export type CertPerkReal = {
   readonly perks: RankPerks;
 };
 
+export type CertPerkRefuseReason = 'identity_unreadable' | 'unpriced';
+
 export type CertPerkOutcome =
   | CertPerkReal
   | {
       readonly status: 'refuse';
       readonly code: typeof CERT_PERK_REFUSE_CODE;
-      readonly reason: 'identity_unreadable';
+      readonly reason: CertPerkRefuseReason;
       readonly message: string;
       readonly academyHoldsPerkMoney: false;
       readonly academyMapsCertToPerk: false;
       readonly residual: typeof CERT_PERK_RESIDUAL;
     };
+
+const UNPRICED_MESSAGE = 'Unpriced cert publishes nothing — no XP, no identity perk grant, no invent perk money';
 
 const INVENT_MESSAGE =
   'Cert perk money / cert→perk map is refuse-closed — perks come only from svc-identity rank after XP (§4.1); no invent';
@@ -107,6 +112,7 @@ export function isCertPerkInventRefuseClosed(decision: CertPerkRefuse): boolean 
  * Rank-only / XP-only fields are fine.
  */
 export function assertNoCertPerkMoneyAttachment(payload: unknown): void {
+  assertCertGrantPathHonest(payload);
   if (payload == null || typeof payload !== 'object') return;
   const o = payload as Record<string, unknown>;
   const banned = [
@@ -118,6 +124,9 @@ export function assertNoCertPerkMoneyAttachment(payload: unknown): void {
     'inventedFeeDiscountBps',
     'perkBalance',
     'perkPayout',
+    'perkPayoutAmount',
+    'inventedPerkPayout',
+    'certToPerkMoneyMap',
   ] as const;
   for (const key of banned) {
     if (key in o && o[key] != null) {
@@ -126,17 +135,53 @@ export function assertNoCertPerkMoneyAttachment(payload: unknown): void {
   }
 }
 
+export function refuseUnpricedCertPerk(): Extract<CertPerkOutcome, { status: 'refuse' }> {
+  return {
+    status: 'refuse',
+    code: CERT_PERK_REFUSE_CODE,
+    reason: 'unpriced',
+    message: UNPRICED_MESSAGE,
+    academyHoldsPerkMoney: false,
+    academyMapsCertToPerk: false,
+    residual: CERT_PERK_RESIDUAL,
+  };
+}
+
+/** True when grantCert XP skipped because the cert has no product XP policy. */
+export function isUnpricedCertXp(xp: CertXpEmitResult): boolean {
+  return xp.emitted === false && xp.reason === 'no_policy';
+}
+
 /**
- * After cert + XP: surface real identity perks, or refuse when the SoT is unreadable.
+ * Honesty detector — an unpriced cert must not look like a granted perk or perk money.
+ * Tests fail when this returns true.
+ */
+export function unpricedCertLooksLikeGrantedPerkOrMoney(result: {
+  readonly xp: CertXpEmitResult;
+  readonly perks: CertPerkOutcome;
+}): boolean {
+  if (!isUnpricedCertXp(result.xp)) return false;
+  if ('xpDelta' in result.xp && (result.xp as { xpDelta?: unknown }).xpDelta != null) return true;
+  if (result.perks.status === 'real') return true;
+  if ('perks' in result.perks && result.perks.perks != null) return true;
+  if (result.perks.academyHoldsPerkMoney !== false) return true;
+  return false;
+}
+
+/**
+ * After cert + XP: surface real identity perks, or refuse when the SoT is unreadable
+ * or the cert is unpriced (no XP policy — publish nothing, including perk grant shape).
  * Never invent a RankPerks table on failure.
  */
 export async function resolveCertPerkOutcome(input: {
   readonly userId: string;
   readonly hostRights: HostRightsSource;
-  /** XP result is informational — perks still come from identity, not from inventing on miss. */
+  /** Unpriced (`no_policy`) refuses before identity so the grant cannot look like a perk. */
   readonly xp: CertXpEmitResult;
 }): Promise<CertPerkOutcome> {
-  void input.xp;
+  if (isUnpricedCertXp(input.xp)) {
+    return refuseUnpricedCertPerk();
+  }
   try {
     const perks = await input.hostRights.perksOf(input.userId);
     return {
@@ -210,4 +255,64 @@ export function certPerkRefuseExportHeader(): string {
 
 export function listCertPerkInventKinds(): readonly CertPerkInventKind[] {
   return INVENT_KINDS;
+}
+
+/**
+ * Frozen invent-kind pin. A new payout / map kind that is not refuse-closed
+ * fails `certPerkInventKindsMatchPin` — do not invent a cert→perk money table.
+ */
+export const CERT_PERK_INVENT_KINDS_PIN: readonly CertPerkInventKind[] = [
+  'cert_to_perk_map',
+  'invent_perk_money',
+  'invent_fee_discount',
+  'invent_ifc_grant',
+  'invent_balance',
+] as const;
+
+export function certPerkInventKindsMatchPin(live: readonly CertPerkInventKind[] = listCertPerkInventKinds()): boolean {
+  return live.length === CERT_PERK_INVENT_KINDS_PIN.length && CERT_PERK_INVENT_KINDS_PIN.every((kind, i) => live[i] === kind);
+}
+
+/** grantCert perk payout is refuse-closed — academy never pays invented perk money. */
+export function grantCertPerkPayoutRefuse(): CertPerkRefuse {
+  return refuseInventPerkMoney();
+}
+
+/**
+ * certPerkPlane pin: identity SoT, no academy map, invent payout refuse-closed.
+ * Tests fail if a consolation perk payout or cert→perk money map appears.
+ */
+export function certPerkPlanePinsInventPayoutClosed(plane: CertPerkPlaneStatus = certPerkPlaneStatus()): boolean {
+  return (
+    plane.perksEnabledViaIdentity === true &&
+    plane.academyHoldsPerkMoney === false &&
+    plane.academyMapsCertToPerk === false &&
+    plane.rankWriter === 'svc-identity' &&
+    certPerkInventKindsMatchPin(plane.inventKindsRefuseClosed) &&
+    isCertPerkInventRefuseClosed(grantCertPerkPayoutRefuse()) &&
+    isCertPerkInventRefuseClosed(refuseCertToPerkMap()) &&
+    certPerkResidualIsHonest(plane.residual)
+  );
+}
+
+export type CertGrantPerkView = {
+  readonly xp: CertXpEmitResult;
+  readonly perks: CertPerkOutcome;
+};
+
+/**
+ * Unpriced grant + any grant view must not smuggle invented perk payout.
+ * Returns false when a sneak-in would be visible (tests assert true).
+ */
+export function grantCertMustNotInventPerkPayout(view: CertGrantPerkView): boolean {
+  if (view.perks.academyHoldsPerkMoney !== false) return false;
+  if (view.perks.academyMapsCertToPerk !== false) return false;
+  if (unpricedCertLooksLikeGrantedPerkOrMoney(view)) return false;
+  if (isUnpricedCertXp(view.xp)) {
+    return view.perks.status === 'refuse' && view.perks.reason === 'unpriced' && view.perks.code === CERT_PERK_REFUSE_CODE;
+  }
+  if (view.perks.status === 'refuse') {
+    return view.perks.code === CERT_PERK_REFUSE_CODE;
+  }
+  return view.perks.status === 'real' && view.perks.sot === 'svc-identity' && view.perks.path === 'identity_rank';
 }

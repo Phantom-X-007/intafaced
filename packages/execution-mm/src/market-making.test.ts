@@ -9,6 +9,7 @@ import {
   quoteExternalMm,
   refuseInternalMm,
   type MmKillConfig,
+  type PlanExternalMmHedgeInput,
   type QuoteExternalMmInput,
 } from './market-making.js';
 
@@ -59,6 +60,23 @@ function clearKill(over: Partial<MmKillConfig> = {}): MmKillConfig {
     adminKill: false,
     inventory: { position: amt('0'), minPosition: amt('-10'), maxPosition: amt('10') },
     volatility: { realizedVolBps: 50, maxVolBps: 200 },
+    ...over,
+  };
+}
+
+function baseHedge(over: Partial<PlanExternalMmHedgeInput> = {}): PlanExternalMmHedgeInput {
+  return {
+    symbol: 'BTC/USDT',
+    quoteVenueId: 'binance',
+    inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
+    kill: clearKill(),
+    hedge: {
+      venueId: 'bybit',
+      kind: 'external-cex',
+      mid: amt('100'),
+      costTerms: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+      availableSize: amt('10'),
+    },
     ...over,
   };
 }
@@ -146,6 +164,21 @@ describe('quoteExternalMm — D26-P1-X5', () => {
     expect(result.detail).toMatch(/D26-P0-01/);
   });
 
+  it('refuses an internal book used as a live mid on an external quote venue (Q3)', () => {
+    const result = quoteExternalMm(
+      baseQuote({
+        venueId: 'binance',
+        kind: 'external-cex',
+        midKind: 'internal',
+        mid: amt('100'),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('internal_venue');
+    expect(result.detail).toMatch(/live mid/);
+  });
+
   it('refuseInternalMm always blocks with honest reason', () => {
     const r = refuseInternalMm();
     expect(r.ok).toBe(false);
@@ -157,9 +190,19 @@ describe('quoteExternalMm — D26-P1-X5', () => {
     expect(result).toMatchObject({ ok: false, reason: 'missing_mid' });
   });
 
+  it('refuses non-positive mid rather than inventing a price', () => {
+    const result = quoteExternalMm(baseQuote({ mid: 0n }));
+    expect(result).toMatchObject({ ok: false, reason: 'missing_mid' });
+  });
+
   it('refuses missing book rather than inventing depth', () => {
     const result = quoteExternalMm(baseQuote({ book: null }));
     expect(result).toMatchObject({ ok: false, reason: 'missing_book' });
+  });
+
+  it('refuses empty depth rather than inventing size', () => {
+    const result = quoteExternalMm(baseQuote({ book: { bidSize: 0n, askSize: 0n }, quoteSize: amt('1') }));
+    expect(result).toMatchObject({ ok: false, reason: 'insufficient_book' });
   });
 
   it('refuses insufficient book depth', () => {
@@ -172,9 +215,29 @@ describe('quoteExternalMm — D26-P1-X5', () => {
     expect(result).toMatchObject({ ok: false, reason: 'zero_weight' });
   });
 
-  it('missing fee → incomplete_cost', () => {
+  it('missing fee → incomplete_cost (fees not invented)', () => {
     const result = quoteExternalMm(baseQuote({ costTerms: completeTerms({ feeBps: null }) }));
     expect(result).toMatchObject({ ok: false, reason: 'incomplete_cost' });
+  });
+
+  it('missing impact → incomplete_cost (depth/impact not invented)', () => {
+    const result = quoteExternalMm(baseQuote({ costTerms: completeTerms({ expectedImpactBps: null }) }));
+    expect(result).toMatchObject({ ok: false, reason: 'incomplete_cost' });
+  });
+
+  it('missing transfer cost → incomplete_cost', () => {
+    const result = quoteExternalMm(baseQuote({ costTerms: completeTerms({ transferCostBps: null }) }));
+    expect(result).toMatchObject({ ok: false, reason: 'incomplete_cost' });
+  });
+
+  it('does not invent owner half-spread — invalid halfSpreadBps refuses', () => {
+    const result = quoteExternalMm(baseQuote({ halfSpreadBps: 1.5 }));
+    expect(result).toMatchObject({ ok: false, reason: 'invalid_owner_params' });
+  });
+
+  it('does not invent owner skew — non-integer inventorySkewBps refuses', () => {
+    const result = quoteExternalMm(baseQuote({ inventorySkewBps: 2.25 }));
+    expect(result).toMatchObject({ ok: false, reason: 'invalid_owner_params' });
   });
 
   it('kill_switch blocks quoting on volatility breach', () => {
@@ -206,18 +269,7 @@ describe('quoteExternalMm — D26-P1-X5', () => {
 
 describe('planExternalMmHedge — cross-venue', () => {
   it('plans sell hedge for long excess on a distinct external venue', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'bybit',
-        kind: 'external-cex',
-        mid: amt('100'),
-        costTerms: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
-        availableSize: amt('10'),
-      },
-    });
+    const result = planExternalMmHedge(baseHedge());
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -228,18 +280,18 @@ describe('planExternalMmHedge — cross-venue', () => {
   });
 
   it('plans buy hedge for short excess', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('-15'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'bybit',
-        kind: 'external-cex',
-        mid: amt('100'),
-        costTerms: completeTerms({ feeBps: 10, expectedImpactBps: 0, transferCostBps: 0 }),
-        availableSize: amt('10'),
-      },
-    });
+    const result = planExternalMmHedge(
+      baseHedge({
+        inventory: { position: amt('-15'), minPosition: amt('-10'), maxPosition: amt('10') },
+        hedge: {
+          venueId: 'bybit',
+          kind: 'external-cex',
+          mid: amt('100'),
+          costTerms: completeTerms({ feeBps: 10, expectedImpactBps: 0, transferCostBps: 0 }),
+          availableSize: amt('10'),
+        },
+      }),
+    );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -248,83 +300,124 @@ describe('planExternalMmHedge — cross-venue', () => {
     expect(formatAmount(result.allIn)).toBe('100.1');
   });
 
+  it('still sizes when inventory is already outside bands (inventory_breach does not halt hedge)', () => {
+    const result = planExternalMmHedge(
+      baseHedge({
+        kill: clearKill({
+          inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
+        }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.amount).toBe(amt('5'));
+  });
+
+  it('kill_switch refuses hedge when adminKill is true — never ok: true', () => {
+    const result = planExternalMmHedge(baseHedge({ kill: clearKill({ adminKill: true }) }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('kill_switch');
+    expect(result.killReasons).toContain('admin_kill');
+  });
+
+  it('kill_switch refuses hedge when realizedVolBps is null — never ok: true', () => {
+    const result = planExternalMmHedge(
+      baseHedge({
+        kill: clearKill({ volatility: { realizedVolBps: null, maxVolBps: 200 } }),
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('kill_switch');
+    expect(result.killReasons).toContain('volatility_breach');
+  });
+
   it('refuses internal hedge venue', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'house',
-        kind: 'internal',
-        mid: amt('100'),
-        costTerms: completeTerms(),
-        availableSize: amt('10'),
-      },
-    });
+    const result = planExternalMmHedge(
+      baseHedge({
+        hedge: {
+          venueId: 'house',
+          kind: 'internal',
+          mid: amt('100'),
+          costTerms: completeTerms(),
+          availableSize: amt('10'),
+        },
+      }),
+    );
     expect(result).toMatchObject({ ok: false, reason: 'internal_venue' });
   });
 
+  it('refuses an internal book used as a live hedge mid on an external hedge venue (Q3)', () => {
+    const result = planExternalMmHedge(
+      baseHedge({
+        hedge: {
+          venueId: 'bybit',
+          kind: 'external-cex',
+          midKind: 'internal',
+          mid: amt('100'),
+          costTerms: completeTerms(),
+          availableSize: amt('10'),
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('internal_venue');
+    expect(result.detail).toMatch(/live hedge mid/);
+  });
+
   it('refuses same_venue hedge', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'binance',
-        kind: 'external-cex',
-        mid: amt('100'),
-        costTerms: completeTerms(),
-        availableSize: amt('10'),
-      },
-    });
+    const result = planExternalMmHedge(
+      baseHedge({
+        hedge: {
+          venueId: 'binance',
+          kind: 'external-cex',
+          mid: amt('100'),
+          costTerms: completeTerms(),
+          availableSize: amt('10'),
+        },
+      }),
+    );
     expect(result).toMatchObject({ ok: false, reason: 'same_venue' });
   });
 
   it('hedge_not_required inside bands', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('0'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'bybit',
-        kind: 'external-cex',
-        mid: amt('100'),
-        costTerms: completeTerms(),
-        availableSize: amt('10'),
-      },
-    });
+    const result = planExternalMmHedge(
+      baseHedge({
+        inventory: { position: amt('0'), minPosition: amt('-10'), maxPosition: amt('10') },
+      }),
+    );
     expect(result).toMatchObject({ ok: false, reason: 'hedge_not_required' });
   });
 
   it('refuses missing hedge mid', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'bybit',
-        kind: 'external-cex',
-        mid: null,
-        costTerms: completeTerms(),
-        availableSize: amt('10'),
-      },
-    });
+    const result = planExternalMmHedge(
+      baseHedge({
+        hedge: {
+          venueId: 'bybit',
+          kind: 'external-cex',
+          mid: null,
+          costTerms: completeTerms(),
+          availableSize: amt('10'),
+        },
+      }),
+    );
     expect(result).toMatchObject({ ok: false, reason: 'missing_mid' });
   });
 
   it('refuses insufficient hedge depth', () => {
-    const result = planExternalMmHedge({
-      symbol: 'BTC/USDT',
-      quoteVenueId: 'binance',
-      inventory: { position: amt('15'), minPosition: amt('-10'), maxPosition: amt('10') },
-      hedge: {
-        venueId: 'bybit',
-        kind: 'external-cex',
-        mid: amt('100'),
-        costTerms: completeTerms(),
-        availableSize: amt('1'),
-      },
-    });
+    const result = planExternalMmHedge(
+      baseHedge({
+        hedge: {
+          venueId: 'bybit',
+          kind: 'external-cex',
+          mid: amt('100'),
+          costTerms: completeTerms(),
+          availableSize: amt('1'),
+        },
+      }),
+    );
     expect(result).toMatchObject({ ok: false, reason: 'insufficient_hedge_size' });
   });
 });

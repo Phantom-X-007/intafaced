@@ -11,7 +11,7 @@ import { type MerchantWebhookService, type WebhookDeliveryStatus } from './merch
 import { PayError, type PayService, type PaymentStatus } from './payment-service.js';
 import { SandboxRailRefusal } from './rails/posture.js';
 import { fingerprintRequest, MemoryRestIdempotencyStore, type RestIdempotencyStore } from './rest-idempotency.js';
-import { isSandboxRailId, resolveMerchantRail } from './sandbox-key-routing.js';
+import { assertSandboxKeyDoesNotLookLive, isSandboxRailId, paymentModeFromRail, resolveMerchantRail } from './sandbox-key-routing.js';
 
 /**
  * `pay.public-api` — the merchant REST surface.
@@ -25,11 +25,16 @@ import { isSandboxRailId, resolveMerchantRail } from './sandbox-key-routing.js';
  *   GET /api/pay/v1/balances              scope pay:read   ?merchantId= &assetId=
  *   GET /api/pay/v1/openapi.json          public — the spec
  *
- * STEP 2 — mutations (this PR), every POST requires `Idempotency-Key` (ADR §2.2):
+ * STEP 2 — mutations, every POST requires `Idempotency-Key` (ADR §2.2):
  *   POST /api/pay/v1/payments                    scope pay:write
  *   POST /api/pay/v1/payments/:id/authorize      scope pay:write
  *   POST /api/pay/v1/payments/:id/capture        scope pay:write
  *   POST /api/pay/v1/payments/:id/refund         scope pay:refund
+ *
+ * Payment links (built tRPC rooms — translation only):
+ *   POST   /api/pay/v1/payment-links             scope pay:write  + Idempotency-Key
+ *   GET    /api/pay/v1/payment-links             scope pay:read   ?merchantId=
+ *   DELETE /api/pay/v1/payment-links/:id         scope pay:write  ?merchantId=
  *
  * ── A TRANSLATION, NOT A SECOND IMPLEMENTATION ───────────────────────────
  *
@@ -297,6 +302,7 @@ function statusFor(code: string): number {
     case 'pay.profile_not_found':
     case 'pay.settlement_not_found':
     case 'pay.webhook_endpoint_not_found':
+    case 'pay.link_not_found':
       return 404;
     case 'pay.merchant_forbidden':
     case 'pay.submerchant_permission_denied':
@@ -307,6 +313,7 @@ function statusFor(code: string): number {
     case 'pay.kyb_operator_required':
       return 403;
     case 'pay.invalid_transition':
+    case 'pay.nothing_captured':
     case 'pay.capture_exceeds_authorized':
     case 'pay.refund_exceeds_captured':
     case 'pay.refund_in_flight':
@@ -316,11 +323,15 @@ function statusFor(code: string): number {
     case 'pay.settlement_desynced':
     case 'pay.idempotency_conflict':
     case 'pay.partial_capture_unsupported':
+    case 'pay.link_exhausted':
     case 'pay.submerchant_user_already_merchant':
     case 'pay.submerchant_cycle':
       return 409;
     case 'pay.rail_operation_unsupported':
     case 'pay.sandbox_rail_refused':
+    case 'pay.sandbox_looks_live':
+    case 'pay.rail_mode_undisclosed':
+    case 'pay.webhook_not_configured':
       return 503;
     default:
       return 400;
@@ -411,7 +422,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         },
       },
       security: [{ apiKey: [] }],
-      tags: [{ name: 'payments' }, { name: 'balances' }, { name: 'webhooks' }],
+      tags: [{ name: 'payments' }, { name: 'payment-links' }, { name: 'balances' }, { name: 'webhooks' }],
     },
     /**
      * Routes mount at BASE (`/v1/…`) because that is what arrives after the edge
@@ -538,7 +549,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         tags: ['payments'],
         summary: 'Fetch one payment',
         params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
-        response: { 200: paymentSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+        response: { 200: paymentSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema, 503: errorSchema },
       },
     },
     async (req: FastifyRequest<{ Params: { id: string } }>, reply) => {
@@ -547,6 +558,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
       try {
         const payment = await deps.pay.getPayment(req.params.id);
         await assertAccess(principal.userId, payment.merchantId, areaForSurface('rest.payments.read'));
+        assertSandboxKeyDoesNotLookLive(principal.key_env, payment.railAdapter);
         return reply.send(toPaymentBody(payment));
       } catch (err) {
         return send(reply, err);
@@ -582,7 +594,10 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           status: req.query.status,
           limit: Math.min(req.query.limit ?? DEFAULT_LIMIT, MAX_LIMIT),
         });
-        return reply.send(rows.map(toPaymentBody));
+        // Sandbox keys must not see live rows (Stripe-shaped honesty). Skip, don't
+        // paint them live. Missing rail is skipped rather than invented as live.
+        const visible = principal.key_env === 'sandbox' ? rows.filter((row) => row.railAdapter && isSandboxRailId(row.railAdapter)) : rows;
+        return reply.send(visible.map(toPaymentBody));
       } catch (err) {
         return send(reply, err);
       }
@@ -685,6 +700,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
             customerRef: req.body.customerRef,
             metadata: req.body.metadata,
           });
+          assertSandboxKeyDoesNotLookLive(principal.key_env, payment.railAdapter);
           return reply.send(toPaymentBody(payment));
         } catch (err) {
           return send(reply, err);
@@ -724,6 +740,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.authorize'));
+          assertSandboxKeyDoesNotLookLive(principal.key_env, existing.railAdapter);
           const payment = await deps.pay.authorize(req.params.id);
           return reply.send(toPaymentBody(payment));
         } catch (err) {
@@ -764,6 +781,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.capture'));
+          assertSandboxKeyDoesNotLookLive(principal.key_env, existing.railAdapter);
           const opts = req.body?.amount === undefined ? {} : { amount: parseAmount(requireDecimalString(req.body.amount, 'amount')) };
           const payment = await deps.pay.capture(req.params.id, opts);
           return reply.send(toPaymentBody(payment));
@@ -805,6 +823,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         try {
           const existing = await deps.pay.getPayment(req.params.id);
           await assertAccess(principal.userId, existing.merchantId, areaForSurface('rest.payments.refund'));
+          assertSandboxKeyDoesNotLookLive(principal.key_env, existing.railAdapter);
           const amount = requireDecimalString(req.body.amount, 'amount');
           // The caller's own business key wins; otherwise their Idempotency-Key
           // IS the business key (see `restRefundId`). Never an attempt ordinal.
@@ -824,10 +843,239 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
     },
   );
 
-  // ── WEBHOOKS (step 3) ─────────────────────────────────────────────────────
+  // ── PAYMENT LINKS (tRPC merchant.createLink / listLinks / deactivateLink) ─
+  //
+  // A TRANSLATION. Token returned once on create. List never re-discloses it.
+  // Revocation is one-way. Creating a link does not move value; it mints a
+  // capability URL, so a retry without a journal would issue a second live
+  // token — Idempotency-Key is required on POST.
 
-  if (deps.webhooks) {
-    const webhooks = deps.webhooks;
+  const paymentLinkCreatedSchema = {
+    type: 'object',
+    required: ['id', 'token', 'prefix', 'label', 'expiresAt', 'maxUses'],
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      token: {
+        type: 'string',
+        description: 'Capability token — returned ONLY on create. Store it; we will not show it again.',
+      },
+      prefix: { type: 'string' },
+      label: { type: 'string' },
+      expiresAt: { type: 'string', format: 'date-time', description: 'Always a date. The service defaults and caps it; it is never null.' },
+      maxUses: { type: 'integer', nullable: true },
+    },
+  } as const;
+
+  const paymentLinkListItemSchema = {
+    type: 'object',
+    required: ['id', 'prefix', 'label', 'amount', 'currency', 'active', 'expiresAt', 'maxUses', 'uses', 'createdAt'],
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      prefix: { type: 'string' },
+      label: { type: 'string' },
+      amount: { type: 'string', nullable: true, description: 'Decimal string, or null for an open-amount link.' },
+      currency: { type: 'string', nullable: true },
+      active: { type: 'boolean' },
+      expiresAt: { type: 'string', format: 'date-time', nullable: true },
+      maxUses: { type: 'integer', nullable: true },
+      uses: { type: 'integer' },
+      createdAt: { type: 'string', format: 'date-time' },
+    },
+  } as const;
+
+  type CreateLinkBody = {
+    merchantId: string;
+    label: string;
+    profileId?: string | null;
+    amount?: unknown;
+    currency?: string;
+    expiresAt?: unknown;
+    maxUses?: number;
+  };
+
+  app.post(
+    `${BASE}/payment-links`,
+    {
+      schema: {
+        tags: ['payment-links'],
+        summary: 'Create a payment link',
+        description:
+          'Requires `Idempotency-Key`. Calls the same `PayService.createPaymentLink` the tRPC `merchant.createLink` room uses. The token is a capability URL — returned once. Omit `expiresAt` for the service default; `null` is refused (`pay.link_expiry_invalid`). Does not move value and does not name a rail.',
+        headers: idempotencyHeaderSchema,
+        body: {
+          type: 'object',
+          required: ['merchantId', 'label'],
+          additionalProperties: false,
+          properties: {
+            merchantId: { type: 'string', format: 'uuid' },
+            label: { type: 'string', minLength: 1, maxLength: 120 },
+            profileId: { type: 'string', format: 'uuid', nullable: true },
+            // No `type: string` — Ajv coerceTypes would turn a JSON number into
+            // `"10"` and ADR §2.3 would be decorative. Same as createPayment.
+            amount: {
+              description: 'Optional decimal string. Never a JSON number (ADR §2.3). Omit for an open-amount link.',
+            },
+            currency: {
+              type: 'string',
+              minLength: 1,
+              maxLength: 16,
+              description: 'Asset id for the optional amount. Same field as tRPC `createLink`.',
+            },
+            expiresAt: {
+              description:
+                'ISO-8601 datetime. Omit for the service default. `null` is refused (`pay.link_expiry_invalid`) — a capability URL cannot live forever.',
+            },
+            maxUses: { type: 'integer', minimum: 1, maximum: 1_000_000 },
+          },
+        },
+        response: {
+          200: paymentLinkCreatedSchema,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Body: CreateLinkBody }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:write');
+      if (!principal) return reply;
+      const key = requireIdempotencyKey(req, reply);
+      if (!key) return reply;
+
+      return withIdempotency(req, reply, principal.userId, key, req.body, async () => {
+        try {
+          await assertAccess(principal.userId, req.body.merchantId, areaForSurface('rest.payment-links.create'));
+          const amount = req.body.amount === undefined ? undefined : parseAmount(requireDecimalString(req.body.amount, 'amount'));
+          if (req.body.expiresAt === null) {
+            throw new PayError(
+              'A payment link cannot be created without an expiry — it is a capability URL, and whoever holds it can pay against it. Omit expiresAt for the service default, or name a date.',
+              'pay.link_expiry_invalid',
+            );
+          }
+          let expiresAt: Date | undefined;
+          if (req.body.expiresAt !== undefined) {
+            if (typeof req.body.expiresAt !== 'string') {
+              throw new PayError('expiresAt is not a date', 'pay.link_expiry_invalid');
+            }
+            expiresAt = new Date(req.body.expiresAt);
+          }
+          const link = await deps.pay.createPaymentLink({
+            merchantId: req.body.merchantId,
+            label: req.body.label,
+            profileId: req.body.profileId,
+            amount,
+            currency: req.body.currency,
+            // `undefined`, NOT `null`. Same contract as tRPC createLink: omitted
+            // expiry means the default TTL; explicit null is "never expires" and
+            // is refused above.
+            expiresAt,
+            maxUses: req.body.maxUses,
+          });
+          return reply.send({
+            id: link.id,
+            token: link.token,
+            prefix: link.prefix,
+            label: link.label,
+            expiresAt: link.expiresAt.toISOString(),
+            maxUses: link.maxUses,
+          });
+        } catch (err) {
+          return send(reply, err);
+        }
+      });
+    },
+  );
+
+  app.get(
+    `${BASE}/payment-links`,
+    {
+      schema: {
+        tags: ['payment-links'],
+        summary: 'List a merchant’s payment links, newest first',
+        description: 'Same room as tRPC `merchant.listLinks`. Tokens are never re-disclosed — only the stored prefix.',
+        querystring: {
+          type: 'object',
+          required: ['merchantId'],
+          properties: { merchantId: { type: 'string', format: 'uuid' } },
+        },
+        response: {
+          200: { type: 'array', items: paymentLinkListItemSchema },
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Querystring: { merchantId: string } }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:read');
+      if (!principal) return reply;
+      try {
+        await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.payment-links.list'));
+        return reply.send(await deps.pay.listPaymentLinks(req.query.merchantId));
+      } catch (err) {
+        return send(reply, err);
+      }
+    },
+  );
+
+  app.delete(
+    `${BASE}/payment-links/:id`,
+    {
+      schema: {
+        tags: ['payment-links'],
+        summary: 'Deactivate a payment link',
+        description:
+          'Same room as tRPC `merchant.deactivateLink`. One-way — there is no reactivate. Does not cancel sessions already open. Already-inactive or unknown ids return `{ deactivated: false }`, not 404.',
+        params: { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } },
+        querystring: {
+          type: 'object',
+          required: ['merchantId'],
+          properties: { merchantId: { type: 'string', format: 'uuid' } },
+        },
+        response: {
+          200: { type: 'object', required: ['deactivated'], properties: { deactivated: { type: 'boolean' } } },
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+        },
+      },
+    },
+    async (req: FastifyRequest<{ Params: { id: string }; Querystring: { merchantId: string } }>, reply) => {
+      const principal = principalOf(req, reply, 'pay:write');
+      if (!principal) return reply;
+      try {
+        await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.payment-links.deactivate'));
+        return reply.send(await deps.pay.deactivatePaymentLink(req.query.merchantId, req.params.id));
+      } catch (err) {
+        return send(reply, err);
+      }
+    },
+  );
+
+  // ── WEBHOOKS (step 3) ─────────────────────────────────────────────────────
+  // Always mount. A missing MerchantWebhookService is `pay.webhook_not_configured`,
+  // not a Fastify 404 that looks like the product surface does not exist.
+
+  const requireWebhooks = (): MerchantWebhookService => {
+    if (!deps.webhooks) {
+      throw new PayError(
+        'Merchant outbound webhooks are not configured on this process. NOTHING WAS ATTEMPTED.',
+        'pay.webhook_not_configured',
+      );
+    }
+    return deps.webhooks;
+  };
+
+  {
+    const webhooks = {
+      registerEndpoint: (...args: Parameters<MerchantWebhookService['registerEndpoint']>) => requireWebhooks().registerEndpoint(...args),
+      listEndpoints: (...args: Parameters<MerchantWebhookService['listEndpoints']>) => requireWebhooks().listEndpoints(...args),
+      disableEndpoint: (...args: Parameters<MerchantWebhookService['disableEndpoint']>) => requireWebhooks().disableEndpoint(...args),
+      enableEndpoint: (...args: Parameters<MerchantWebhookService['enableEndpoint']>) => requireWebhooks().enableEndpoint(...args),
+      listDeliveries: (...args: Parameters<MerchantWebhookService['listDeliveries']>) => requireWebhooks().listDeliveries(...args),
+    };
 
     const endpointSchema = {
       type: 'object',
@@ -883,7 +1131,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
               url: { type: 'string', minLength: 8, maxLength: 2048 },
             },
           },
-          response: { 200: endpointSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema },
+          response: { 200: endpointSchema, 400: errorSchema, 401: errorSchema, 403: errorSchema, 404: errorSchema, 503: errorSchema },
         },
       },
       async (req: FastifyRequest<{ Body: { merchantId: string; url: string } }>, reply) => {
@@ -1348,7 +1596,7 @@ function toPaymentBody(view: {
   refundedAmount: Amount;
   createdAt: Date;
 }) {
-  const mode: 'live' | 'sandbox' = view.railAdapter && isSandboxRailId(view.railAdapter) ? 'sandbox' : 'live';
+  const mode = paymentModeFromRail(view.railAdapter);
   return {
     id: view.id,
     merchantId: view.merchantId,

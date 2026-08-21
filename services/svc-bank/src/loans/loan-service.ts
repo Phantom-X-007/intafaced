@@ -19,6 +19,15 @@ import {
 import { BankError } from '../errors.js';
 import { withMoneySpan } from '../tracing.js';
 import {
+  affiliateLegAfterLoanLiquidate,
+  affiliateLegAfterLoanRepay,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+  type AffiliateBankFeeLeg,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
+import {
   DEFAULT_MARK_POLICY,
   assertAcceptableForLiquidation,
   acceptableForMarking,
@@ -276,6 +285,16 @@ export interface LoanServiceOptions {
    * When false, `open` refuses `bank.loans_disabled`.
    */
   readonly moduleEnabled?: boolean;
+  /**
+   * Identity affiliate accrue after house bank fees post. Default noop.
+   * Failures must not unwind loanRepay / loanLiquidate.
+   */
+  readonly affiliateAccrue?: AffiliateAccruePort;
+  /**
+   * Identity affiliate payout after accrue. Default noop. Failures must not
+   * unwind the ledger post. Body is `{ feeEventId }` only.
+   */
+  readonly affiliatePayout?: AffiliatePayoutPort;
 }
 
 const ONE = parseAmount('1');
@@ -291,6 +310,8 @@ export class LoanService {
   private readonly venue: LiquidationVenue;
   private readonly marginCalls: MarginCallSink;
   private readonly markPolicy: MarkPolicy;
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
 
   constructor(
     private readonly sql: Sql,
@@ -300,6 +321,8 @@ export class LoanService {
     this.venue = options.venue ?? marketMakerVenue();
     this.marginCalls = options.marginCalls ?? recordOnlyMarginCallSink;
     this.markPolicy = options.markPolicy ?? DEFAULT_MARK_POLICY;
+    this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
   }
 
   // ── Products ───────────────────────────────────────────────────────────────
@@ -725,15 +748,70 @@ export class LoanService {
    * loan alone. Clearing the call is left to the next mark rather than done here:
    * curing is a question about a price, and this method does not have one.
    */
-  async addCollateral(input: { loanId: string; amount: Amount }): Promise<{ ledgerTxId: string; sequence: number }> {
+  async addCollateral(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+    const now = input.now ?? new Date();
     const loan = await this.loan(input.loanId);
     if (loan.status === 'repaid' || loan.status === 'liquidated') {
       throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
     }
     if (input.amount <= 0n) throw new BankError('Collateral top-up must be positive', 'bank.below_minimum');
 
+    await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+
     const sequence = await this.nextCollateralSequence(loan.id);
     const txId = await this.lockCollateral(loan, input.amount, sequence);
+    return { ledgerTxId: txId, sequence };
+  }
+
+  /**
+   * Release excess collateral from a live loan through ledger-client.
+   *
+   * Marks first. A missing mark refuses `bank.mark_missing` before any release —
+   * withdrawing against a book nobody priced is the same lie as originating on a
+   * default. After-release LTV is computed from those marks and the product cap;
+   * this method does not invent a rate. Curing is still the next mark's job.
+   */
+  async releaseExcess(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+    const now = input.now ?? new Date();
+    const loan = await this.loan(input.loanId);
+    if (loan.status === 'repaid' || loan.status === 'liquidated') {
+      throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
+    }
+    if (loan.status === 'pending') {
+      throw new BankError(
+        `Loan ${loan.id} is pending — abandon it rather than peeling collateral off an undrawn row`,
+        'bank.loan_not_drawable',
+      );
+    }
+    if (input.amount <= 0n) throw new BankError('Collateral release must be positive', 'bank.below_minimum');
+
+    const marks = await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+    const product = await this.product(loan.productId);
+    const debt = await this.outstanding(loan.id);
+    const held = await this.collateralOf(loan);
+    if (input.amount > held) {
+      throw new BankError(
+        `Loan ${loan.id} holds ${formatAmount(held)} ${loan.collateralAssetId}, not ${formatAmount(input.amount)}`,
+        'bank.loan_collateral_short',
+      );
+    }
+
+    const remaining = held - input.amount;
+    const collateralMark = marks.get(loan.collateralAssetId)!;
+    const debtMark = marks.get(loan.debtAssetId)!;
+    const debtValue = quoteValue(debt.total, debtMark.price, 'ceil');
+    const collateralValue = quoteValue(remaining, collateralMark.price, 'floor');
+    const afterLtv = ltvBps(debtValue, collateralValue);
+    if (afterLtv > product.maxLtvBps) {
+      throw new BankError(
+        `Release would put loan ${loan.id} at LTV ${describeLtv(afterLtv)} ` +
+          `above the ${describeLtv(product.maxLtvBps)} limit for "${product.name}"`,
+        'bank.ltv_exceeded',
+      );
+    }
+
+    const sequence = await this.nextCollateralSequence(loan.id);
+    const txId = await this.releaseCollateral(loan, input.amount, sequence);
     return { ledgerTxId: txId, sequence };
   }
 
@@ -766,19 +844,19 @@ export class LoanService {
     });
   }
 
-  private async releaseCollateral(loan: LoanRecord, amount: Amount): Promise<string> {
-    const sequence = await this.nextCollateralSequence(loan.id);
+  private async releaseCollateral(loan: LoanRecord, amount: Amount, sequence?: number): Promise<string> {
+    const seq = sequence ?? (await this.nextCollateralSequence(loan.id));
     return this.drivenPost({
       claim: async (tx) => {
         const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
           INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
-          VALUES (${loan.id}, ${sequence}, 'release', ${formatAmount(amount)}::numeric)
+          VALUES (${loan.id}, ${seq}, 'release', ${formatAmount(amount)}::numeric)
           ON CONFLICT (loan_id, sequence) DO NOTHING
           RETURNING id, ledger_tx_id
         `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
         const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${seq}
         `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
@@ -789,7 +867,7 @@ export class LoanService {
             userId: loan.userId,
             collateralAssetId: loan.collateralAssetId,
             amount,
-            sequence,
+            sequence: seq,
           }),
         ),
       table: 'loan_collateral_events',
@@ -996,6 +1074,25 @@ export class LoanService {
       table: 'loan_repayments',
     });
 
+    await this.notifyBankAffiliateAccrue(
+      affiliateLegAfterLoanRepay({
+        loanId: loan.id,
+        borrowerId: loan.userId,
+        sequence,
+        interest: interestPaid,
+        debtAssetId: loan.debtAssetId,
+      }),
+    );
+    await this.notifyBankAffiliatePayout(
+      affiliateLegAfterLoanRepay({
+        loanId: loan.id,
+        borrowerId: loan.userId,
+        sequence,
+        interest: interestPaid,
+        debtAssetId: loan.debtAssetId,
+      }),
+    );
+
     const remaining = await this.outstanding(loan.id);
 
     // ── SETTLEMENT: the debt is clear, so the collateral goes back ───────────
@@ -1015,6 +1112,107 @@ export class LoanService {
     }
 
     return { ledgerTxId, sequence, interestPaid, principalPaid, remaining, closed };
+  }
+
+  /**
+   * SEIZE one underwater loan through ledger-client.
+   *
+   * Marks first. A missing mark refuses `bank.mark_missing` before any post —
+   * a zero default would read as no collateral and liquidate. The split is
+   * computed from outstanding and the mark; the caller cannot nominate a rate.
+   *
+   * Not a user door. Operator surface (`ops.seizeLoan`) so the borrower cannot
+   * choose the instant their own collateral is marked.
+   */
+  async seize(input: { loanId: string; now?: Date }): Promise<{
+    ledgerTxId: string;
+    collateralSold: Amount;
+    proceeds: Amount;
+    principalRepaid: Amount;
+    interestRepaid: Amount;
+    closed: boolean;
+  }> {
+    if (this.options.moduleEnabled === false) {
+      throw new BankError('Loans module is disabled (BANK_LOANS_ENABLED / bank.loans)', 'bank.loans_disabled');
+    }
+    const now = input.now ?? new Date();
+    const loan = await this.loan(input.loanId);
+
+    if (loan.status === 'repaid' || loan.status === 'liquidated') {
+      throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
+    }
+    if (loan.status === 'pending') {
+      throw new BankError(`Loan ${loan.id} has no drawn principal to seize`, 'bank.loan_not_drawable');
+    }
+
+    const product = await this.product(loan.productId);
+    const marks = await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
+    const collateralMark = marks.get(loan.collateralAssetId)!;
+    const debtMark = marks.get(loan.debtAssetId)!;
+
+    const debt = await this.outstanding(loan.id);
+    const collateral = await this.collateralOf(loan);
+
+    if (debt.total <= 0n) {
+      throw new BankError(`Loan ${loan.id} has nothing outstanding — release its collateral instead`, 'bank.loan_closed');
+    }
+
+    const rung = planLiquidation({
+      debt: debt.total,
+      debtMark,
+      collateral,
+      collateralMark,
+      policy: product.policy,
+      marginCalledAt: loan.marginCalledAt,
+      now,
+    });
+
+    if (rung.action !== 'liquidate') {
+      throw new BankError(`Loan ${loan.id} is not seizable at this mark (LTV ${rung.ltvBps} bps)`, 'bank.margin_call_required');
+    }
+
+    assertAcceptableForLiquidation(collateralMark, loan.lastMarkPrice, now, this.markPolicy);
+
+    await this.liquidateTranche({
+      loan,
+      product,
+      ltv: rung.ltvBps,
+      graceWaived: rung.graceWaived,
+      collateralToSell: rung.collateralToSell,
+      closesPosition: rung.closesPosition,
+      collateralMark,
+      debt,
+      now,
+    });
+
+    const rows = await this.sql<
+      Array<{
+        ledger_tx_id: string | null;
+        collateral_sold: string;
+        proceeds: string;
+        principal_repaid: string;
+        interest_repaid: string;
+      }>
+    >`
+      SELECT ledger_tx_id, collateral_sold, proceeds, principal_repaid, interest_repaid
+        FROM bank.loan_liquidations
+       WHERE loan_id = ${loan.id} AND status = 'settled'
+       ORDER BY tranche DESC
+       LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row?.ledger_tx_id) {
+      throw new BankError(`Loan ${loan.id} seize posted no liquidation`, 'bank.no_liquidation_counterparty');
+    }
+    const closed = (await this.loan(loan.id)).status === 'liquidated';
+    return {
+      ledgerTxId: row.ledger_tx_id,
+      collateralSold: parseAmount(row.collateral_sold),
+      proceeds: parseAmount(row.proceeds),
+      principalRepaid: parseAmount(row.principal_repaid),
+      interestRepaid: parseAmount(row.interest_repaid),
+      closed,
+    };
   }
 
   /**
@@ -1426,6 +1624,27 @@ export class LoanService {
       });
 
       void ledgerTxId;
+
+      await this.notifyBankAffiliateAccrue(
+        affiliateLegAfterLoanLiquidate({
+          loanId: loan.id,
+          borrowerId: loan.userId,
+          tranche,
+          interestRepaid: split.interestRepaid,
+          penalty: split.penalty,
+          debtAssetId: loan.debtAssetId,
+        }),
+      );
+      await this.notifyBankAffiliatePayout(
+        affiliateLegAfterLoanLiquidate({
+          loanId: loan.id,
+          borrowerId: loan.userId,
+          tranche,
+          interestRepaid: split.interestRepaid,
+          penalty: split.penalty,
+          debtAssetId: loan.debtAssetId,
+        }),
+      );
     });
 
     // ── The shortfall, named ────────────────────────────────────────────────
@@ -1489,6 +1708,16 @@ export class LoanService {
          AND bad_debt_ledger_tx_id IS NULL
     `;
     return Number(rows[0]?.n ?? 0) > 0;
+  }
+
+  /** Best-effort; never throws. loanRepay / loanLiquidate already posted. */
+  private async notifyBankAffiliateAccrue(legs: readonly AffiliateBankFeeLeg[]): Promise<void> {
+    await fireAffiliateAccrue(this.affiliateAccrue, legs);
+  }
+
+  /** Best-effort payout after accrue; never throws. House fee already posted. */
+  private async notifyBankAffiliatePayout(legs: readonly AffiliateBankFeeLeg[]): Promise<void> {
+    await fireAffiliatePayout(this.affiliatePayout, legs);
   }
 
   /** Retry any settled liquidations whose shortfall never made it onto the insurance fund (B-01). */

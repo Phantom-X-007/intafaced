@@ -7,10 +7,29 @@ import {
   type ComplianceQueueKind,
 } from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
+import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
+import { isS2sPath, resolve } from './routes.js';
+import { registerQuantHonestyRoutes } from './quant-honesty-door.js';
+import { userCopy } from './user-copy.js';
 
 const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
+
+function geoBlockStatus(region: string) {
+  const decision = evaluateGeoBlock({ region });
+  return {
+    allowed: decision.allowed,
+    code: decision.code,
+    reason: decision.reason,
+    screeningDeclaration: decision.screeningDeclaration,
+    screeningConfigured: decision.screeningConfigured,
+    listHitCount: decision.listHitCount,
+    inventedBlockedList: false as const,
+    regionResolved: decision.regionResolved,
+    enforcedOnApiPath: true,
+  };
+}
 
 /**
  * Parse disposition body for the compliance queue. Unknown status refuses closed.
@@ -91,12 +110,25 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     if (pathname === null) {
       req.log.warn({ rawUrl: req.url }, 'edge: refused — the path cannot be resolved to one upstream');
       return reply.code(400).send({
-        error: 'the request path could not be resolved to a single upstream',
+        error: userCopy('edge.unresolvable_path'),
         code: 'edge.unresolvable_path',
       });
     }
 
     if (!pathname.startsWith('/api/')) return;
+
+    /**
+     * S2S `/internal/*` is not a public route. Pay jobs, token stake, identity
+     * rank, bank cron — all sit at that path behind a service secret the edge
+     * does not hold and will not forward. Refuse here, before the kill-switch
+     * and before the proxy, so a live module cannot 200 an S2S job from the
+     * internet. 404 + `edge.s2s_not_proxied`, never a green pass-through.
+     */
+    const routed = resolve(pathname);
+    if (routed && isS2sPath(routed.path)) {
+      req.log.warn({ path: pathname, module: routed.upstream.module }, 'edge: refused — S2S path is not a public door');
+      return reply.code(404).send({ error: userCopy('edge.s2s_not_proxied'), code: 'edge.s2s_not_proxied' });
+    }
 
     /**
      * FAIL CLOSED, TWICE.
@@ -126,10 +158,13 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
     // completely different responses at 3am.
     if (decision.reason === 'undecidable') {
       req.log.error({ path: pathname }, 'edge: kill-switch check failed — refusing, failing closed');
-      return reply.code(503).header('retry-after', '30').send({
-        error: 'the operator kill-switch could not be evaluated; refusing',
-        code: 'edge.kill_switch_undecidable',
-      });
+      return reply
+        .code(503)
+        .header('retry-after', '30')
+        .send({
+          error: userCopy('edge.kill_switch_undecidable'),
+          code: 'edge.kill_switch_undecidable',
+        });
     }
 
     req.log.warn({ module: decision.module, path: pathname }, 'edge: refused — module killed by operator');
@@ -144,12 +179,47 @@ export function registerKillSwitchGuard(app: FastifyInstance, killSwitches: Kill
       .code(503)
       .header('retry-after', '30')
       .send({
-        error: `module "${decision.module}" is switched off by the operator`,
+        error: userCopy('edge.module_killed'),
         code: 'edge.module_killed',
         module: decision.module,
         haltCode: decision.reason,
         operatorReason,
       });
+  });
+}
+
+/**
+ * Geo-block on the product door (`/api/*`).
+ *
+ * Unset / empty screening is unknown — not a geo-clearance and not an invented
+ * block list. Admin / health / ready stay open so operators can see why.
+ * Does not invent sanctions content (Class X).
+ */
+export function registerGeoBlockGuard(app: FastifyInstance): void {
+  app.addHook('onRequest', async (req, reply) => {
+    const pathname = resolvedPathname(req.url);
+    if (pathname === null) return;
+    if (!pathname.startsWith('/api/')) return;
+
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    const decision = evaluateGeoBlock({ region: region.region });
+    if (decision.allowed) return;
+
+    req.log.warn(
+      {
+        path: pathname,
+        code: decision.code,
+        declaration: decision.screeningDeclaration,
+        region: decision.region,
+      },
+      'edge: refused — geo-block / empty screening',
+    );
+    return reply.code(geoBlockHttpStatus(decision)).send(geoBlockPublicBody(decision));
   });
 }
 
@@ -183,12 +253,15 @@ export function registerNetworkAccessGuard(app: FastifyInstance): void {
       { path: pathname, networkCode: access.code, declaration: access.signal.declaration },
       'edge: refused — network signal fail-closed',
     );
-    return reply.code(503).header('retry-after', '30').send({
-      error: access.reason,
-      code: edgeCode,
-      networkCode: access.code,
-      declaration: access.signal.declaration,
-    });
+    return reply
+      .code(503)
+      .header('retry-after', '30')
+      .send({
+        error: userCopy(edgeCode),
+        code: edgeCode,
+        networkCode: access.code,
+        declaration: access.signal.declaration,
+      });
   });
 }
 
@@ -201,6 +274,8 @@ export function registerNetworkAccessGuard(app: FastifyInstance): void {
  * whether an admin path is real.
  */
 export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void {
+  // Public §29 honesty door — not proxied to svc-quant (that service must not exist yet).
+  registerQuantHonestyRoutes(app);
   /**
    * Authenticate, or answer. Returns null when it has already replied, so a
    * handler cannot forget to stop.
@@ -276,6 +351,8 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         statusLine: regionResolutionStatusLine(region),
         note: region.note,
       },
+      // Geo-block honesty: unset/empty screening is unknown, never a clearance.
+      geoBlock: geoBlockStatus(region.region),
       networkSignal: {
         declaration: ops.network.signal.declaration,
         partnerConfigured: ops.network.signal.partnerConfigured,
@@ -311,6 +388,46 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         etlWatermarkAt: ops.analytics.etlWatermarkAt,
         etlNote: ops.analytics.etlNote,
       },
+    };
+  });
+
+  /**
+   * Geo-block probe — refuse with a typed code when screening is unset/empty.
+   * 409, not 200 green. Never invents a sanctions list.
+   */
+  app.get('/admin/compliance/geo-block', async (req, reply) => {
+    if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
+    const region = resolveRequestRegion({
+      defaultRegion: process.env.DEFAULT_REGION ?? 'XX',
+      trustProxy: process.env.EDGE_TRUST_PROXY !== undefined && process.env.EDGE_TRUST_PROXY !== '',
+      geoHeaderName: process.env.EDGE_GEO_COUNTRY_HEADER,
+      headers: req.headers as Record<string, string | string[] | undefined>,
+    });
+    const decision = evaluateGeoBlock({ region: region.region });
+    const status = geoBlockOpsHttpStatus(decision);
+    if (status !== 200) {
+      return reply.code(status).send({
+        ok: false,
+        error: geoBlockErrorMessage(decision),
+        code: decision.code,
+        reason: decision.reason,
+        region: decision.region,
+        screeningDeclaration: decision.screeningDeclaration,
+        screeningConfigured: decision.screeningConfigured,
+        inventedBlockedList: false,
+        regionResolved: decision.regionResolved,
+      });
+    }
+    return {
+      ok: true,
+      code: decision.code,
+      reason: decision.reason,
+      region: decision.region,
+      screeningDeclaration: decision.screeningDeclaration,
+      screeningConfigured: decision.screeningConfigured,
+      listHitCount: decision.listHitCount,
+      inventedBlockedList: false,
+      regionResolved: decision.regionResolved,
     };
   });
 
@@ -409,24 +526,13 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   });
 
   /**
-   * Analytics warehouse door — dark/unavailable honesty, never live cubes
-   * without lag probe. ETL watermark is operator-stamped or honestly absent.
+   * Analytics warehouse door — real replica lag probe when URLs are set.
+   * Absent URL / connect fail / not-a-standby → unknown, never invented live.
+   * ETL watermark is operator-stamped or honestly absent (does not paint live).
    */
   app.get('/admin/analytics/warehouse', async (req, reply) => {
     if (!(await operator(req.headers.authorization, reply, 'module'))) return reply;
-    const a = admin.opsHonesty().analytics;
-    return {
-      replicaConfigured: a.replicaConfigured,
-      replicaCount: a.replicaCount,
-      refuse: a.refuse,
-      surfaceStatus: a.surface.status,
-      mayLabelLive: a.surface.mayLabelLive,
-      statusLine: a.statusLine,
-      etlWatermark: a.etlWatermark,
-      etlWatermarkAt: a.etlWatermarkAt,
-      etlNote: a.etlNote,
-      surface: a.surface,
-    };
+    return admin.probeWarehouse();
   });
 
   app.get('/admin/kill-switches', async (req, reply) => {

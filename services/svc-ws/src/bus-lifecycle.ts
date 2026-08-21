@@ -10,11 +10,11 @@ import type { HubLogger } from './depth/hub.js';
  *
  * Ownership split (do not blur these):
  * - **Before first attach:** this loop owns retry + `/ready` flags.
- * - **After first attach:** nats.js owns TCP reconnect for that connection.
- *   `tradesBus` / `privateBus` stay true while the consumer is attached for
- *   this process session. They are not a continuous liveness probe of the
- *   remote NATS server. A full mid-session supervisor (drop flags + re-attach
- *   when the connection is gone for good) is not built here — see README.
+ * - **Tape up, private down:** this loop keeps the tape handle and retries
+ *   only `retryPrivate` (do not reconnect, do not tear the public print).
+ * - **After first full attach:** nats.js still owns TCP reconnect on that
+ *   socket. If the connection is gone for good, `sessionLost` (nats `closed()`)
+ *   drops `/ready` flags and this loop re-attaches — depth keeps serving.
  */
 
 export interface BusLifecycleConnectResult {
@@ -24,6 +24,17 @@ export interface BusLifecycleConnectResult {
   readonly tradesUp: boolean;
   /** Private order (and fill/position) consumers attached. */
   readonly privateUp: boolean;
+  /**
+   * When the tape is up but private is not, lifecycle calls this on backoff
+   * instead of tearing the tape and reconnecting. Return true when all three
+   * private consumers are attached. Omit when private is disabled (no JWT).
+   */
+  readonly retryPrivate?: () => Promise<boolean>;
+  /**
+   * Resolves when this session's NATS connection is gone for good.
+   * Omit to park until `stop()` (tests / no closed() hook).
+   */
+  readonly sessionLost?: Promise<void>;
 }
 
 export interface BusLifecycleOptions {
@@ -71,8 +82,48 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
     privateUp = result?.privateUp === true;
   }
 
+  async function retryPrivateHalf(result: BusLifecycleConnectResult, startBackoff: number): Promise<void> {
+    let backoff = startBackoff;
+    while (!stopped) {
+      await sleep(backoff);
+      if (stopped) return;
+      try {
+        const up = await result.retryPrivate!();
+        if (stopped) return;
+        if (up) {
+          apply({
+            close: result.close,
+            tradesUp: true,
+            privateUp: true,
+            retryPrivate: result.retryPrivate,
+          });
+          log.info({ tradesBus: true, privateBus: true }, 'svc-ws: private bus consumers attached after retry');
+          return;
+        }
+      } catch (err) {
+        if (stopped) return;
+        log.warn(
+          { err: String(err), backoffMs: backoff },
+          'svc-ws: private bus still unavailable — trade tape still attached; retrying private half',
+        );
+      }
+      backoff = Math.min(backoff * 2, maxBackoffMs);
+    }
+  }
+
+  async function afterAttach(result: BusLifecycleConnectResult, backoffReset: { value: number }): Promise<'lost' | 'done'> {
+    if (!result.sessionLost) return 'done';
+    await result.sessionLost;
+    if (stopped) return 'done';
+    log.warn({ tradesBus: false, privateBus: false }, 'svc-ws: bus session lost — depth still serves; re-attaching');
+    await result.close().catch(() => undefined);
+    apply(null);
+    backoffReset.value = initialBackoffMs;
+    return 'lost';
+  }
+
   async function run(): Promise<void> {
-    let backoff = initialBackoffMs;
+    const backoff = { value: initialBackoffMs };
     while (!stopped) {
       try {
         const result = await attempt();
@@ -82,9 +133,24 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
           return;
         }
         apply(result);
+        if (result.tradesUp && result.privateUp) {
+          log.info({ tradesBus: true, privateBus: true }, 'svc-ws: bus consumers attached');
+          if ((await afterAttach(result, backoff)) === 'lost' && !stopped) continue;
+          return;
+        }
+        if (result.tradesUp && result.retryPrivate) {
+          // Tape is live. Keep retrying private only — do not close the tape.
+          log.info({ tradesBus: true, privateBus: false }, 'svc-ws: bus consumers attached (private half still retrying)');
+          await retryPrivateHalf(result, backoff.value);
+          if (stopped) return;
+          const live = handle ?? result;
+          if ((await afterAttach(live, backoff)) === 'lost' && !stopped) continue;
+          return;
+        }
         if (result.tradesUp || result.privateUp) {
+          // Partial without a retry hook (JWT unset) — park, or re-attach on sessionLost.
           log.info({ tradesBus: result.tradesUp, privateBus: result.privateUp }, 'svc-ws: bus consumers attached');
-          // Stay parked on success. nats.js owns mid-session reconnect.
+          if ((await afterAttach(result, backoff)) === 'lost' && !stopped) continue;
           return;
         }
         // Connected but nothing subscribed — treat as fail and retry.
@@ -94,13 +160,13 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
         apply(null);
         if (stopped) return;
         log.warn(
-          { err: String(err), backoffMs: backoff },
+          { err: String(err), backoffMs: backoff.value },
           'svc-ws: trade/private bus unavailable — depth still serves; retrying with backoff',
         );
       }
       if (stopped) return;
-      await sleep(backoff);
-      backoff = Math.min(backoff * 2, maxBackoffMs);
+      await sleep(backoff.value);
+      backoff.value = Math.min(backoff.value * 2, maxBackoffMs);
     }
   }
 
@@ -112,13 +178,14 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
     },
     async stop() {
       stopped = true;
-      if (loop) {
-        await loop.catch(() => undefined);
-        loop = null;
-      }
+      // Close first so `sessionLost` (nats closed()) unblocks a parked loop.
       if (handle) {
         await handle.close().catch(() => undefined);
         apply(null);
+      }
+      if (loop) {
+        await loop.catch(() => undefined);
+        loop = null;
       }
     },
     tradesBus: () => tradesUp,

@@ -57,6 +57,11 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     // Both surfaces: reading the list AND creating a watch.
     const createAlert = router.slice(router.indexOf('createAlert:'), router.indexOf('cancelAlert:'));
     expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
+    expect(router).toMatch(/evaluateAlert:/);
+    expect(router).toMatch(/alerts\.evaluateAlert\(/);
+    expect(router).toMatch(/alert\.kind_unpublished/);
+    expect(router).toMatch(/createUnpublishedKind/);
+    expect(router).toMatch(/evaluateUnpublishedKind/);
   });
 
   it('live is only claimed by the trade HTTP factory when TRADE_URL is set — never hardcoded in the entrypoint', () => {
@@ -73,5 +78,28 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     const factory = src('alerts/trade-http-mark.ts');
     expect(factory).toMatch(/kind:\s*'live'/);
     expect(factory).toMatch(/\/api\/v1\/ticker\//);
+  });
+
+  it('evaluateMarket accepts the mark before firing — dark wiring cannot invent live', () => {
+    const service = src('alerts/service.ts');
+    expect(service).toMatch(/acceptAlertMark\(/);
+    expect(service).toMatch(/outOfAppRequiredRefusal\(/);
+  });
+
+  it('accepted-mark refuses a live ok quote whose timestamp is older than the bank marking window', () => {
+    // Inverse of "dark cannot invent live": a live source with a 2023 ticker
+    // timestamp must not fire. Age law lives in accepted-mark (gate) and the
+    // HTTP producer calls the same helper — deleting either is a hole.
+    const accepted = src('alerts/accepted-mark.ts');
+    expect(accepted).toMatch(/ALERT_MARK_MAX_AGE_MS\s*=\s*300_000/);
+    expect(accepted).toMatch(/refuseIfMarkAged\(/);
+    expect(src('alerts/service.ts')).toMatch(/acceptAlertMark\(this\.marks, raw, at\)/);
+    expect(src('alerts/trade-http-mark.ts')).toMatch(/refuseIfMarkAged\(/);
+  });
+
+  it('Fastify /ready names unpublished kinds and the refuse code', () => {
+    const index = src('index.ts');
+    expect(index).toMatch(/unpublishedKinds: UNPUBLISHED_ALERT_KINDS/);
+    expect(index).toMatch(/unpublishedCode: ALERT_KIND_UNPUBLISHED/);
   });
 });

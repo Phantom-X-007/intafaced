@@ -15,6 +15,7 @@ import { invokeScannerDataTool, type TickerFixture } from './data-tools.js';
 import { rankFixtures, type MarketPlaneState, type RankResult } from './rank.js';
 import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+  resolveScannerSignalInputsLaw,
   scannerSignalInputsGate,
   type ScannerSignalInputsGateRefuseReason,
   type ScannerSignalInputsLaw,
@@ -49,10 +50,10 @@ export function rankLiveFromTickers(input: {
   tickers: readonly TickerFixture[];
   now?: Date;
   marketAllowlist?: ReadonlySet<string> | readonly string[];
-  /** D26-P0-11. Blank → refuse before any rank. */
+  /** D26-P0-11. Omitted / blank → refuse before any rank (no default board). */
   signalInputsLaw?: ScannerSignalInputsLaw | null;
 }): RankLiveResult {
-  const inputsGate = scannerSignalInputsGate(input.signalInputsLaw);
+  const inputsGate = scannerSignalInputsGate(resolveScannerSignalInputsLaw(input.signalInputsLaw));
   if (inputsGate.status === 'refuse') {
     return {
       status: 'refuse',
@@ -129,7 +130,7 @@ export function rankLiveFromTickers(input: {
     now,
     limit: tier.maxSignals,
     marketPlane: input.plane,
-    signalInputsLaw: input.signalInputsLaw,
+    signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
     ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
   });
 

@@ -129,14 +129,7 @@ export async function writeFreeze(
         'ledger.freeze_raced',
       );
     }
-    if (current.reason === next.reason && current.actor === next.actor) {
-      return { state: current, switched: false };
-    }
-    throw new LedgerError(
-      `Ledger already frozen by ${current.actor ?? 'unknown'}: ${current.reason ?? 'no reason'} — ` +
-        `refusing to overwrite with ${next.actor}: ${next.reason} (STOP §4.2b #3)`,
-      'ledger.freeze_attributed',
-    );
+    return resolveAttributedFreeze(current, next);
   }
 
   // Thaw only when currently frozen. Already-open → no-op (stable changed_at).
@@ -172,4 +165,65 @@ export function freezeEventKey(state: Pick<FreezeState, 'changedAtPrecise'>): st
 /** The message `post()` refuses with. One phrasing, so callers can match on it. */
 export function frozenMessage(reason: string | null): string {
   return `Ledger posting is frozen${reason ? `: ${reason}` : ''}`;
+}
+
+function attributedOverwriteError(current: FreezeState, next: { reason: string; actor: string }): LedgerError {
+  return new LedgerError(
+    `Ledger already frozen by ${current.actor ?? 'unknown'}: ${current.reason ?? 'no reason'} — ` +
+      `refusing to overwrite with ${next.actor}: ${next.reason} (STOP §4.2b #3)`,
+    'ledger.freeze_attributed',
+  );
+}
+
+/**
+ * Same-attribution re-freeze is a true no-op. A different actor/reason while
+ * already frozen is `ledger.freeze_attributed` — the first reason stands.
+ *
+ * Shared by `writeFreeze` (after the SQL claim misses) and `MemoryPostingFreeze`
+ * so a public-door test ledger cannot silently overwrite what Postgres refuses.
+ */
+export function resolveAttributedFreeze(
+  current: FreezeState,
+  next: { reason: string; actor: string },
+): { state: FreezeState; switched: boolean } {
+  if (current.reason === next.reason && current.actor === next.actor) {
+    return { state: current, switched: false };
+  }
+  throw attributedOverwriteError(current, next);
+}
+
+function snapshotNow(frozen: boolean, reason: string | null, actor: string | null): FreezeState {
+  const changedAt = new Date();
+  return { frozen, reason, actor, changedAt, changedAtPrecise: changedAt.toISOString() };
+}
+
+/**
+ * In-process freeze switch with the same attribution rules as `writeFreeze`.
+ *
+ * Postgres remains the durable book. This exists so mounted-door tests (and any
+ * future in-process replica) cannot implement a freeze that overwrites the
+ * standing reason — the defect STOP §4.2b #3 closed in SQL.
+ */
+export class MemoryPostingFreeze {
+  private state: FreezeState = snapshotNow(false, null, null);
+
+  snapshot(): FreezeState {
+    return this.state;
+  }
+
+  freeze(reason: string, actor: string): FreezeState {
+    if (!this.state.frozen) {
+      this.state = snapshotNow(true, reason, actor);
+      return this.state;
+    }
+    const { state } = resolveAttributedFreeze(this.state, { reason, actor });
+    this.state = state;
+    return this.state;
+  }
+
+  unfreeze(actor: string): FreezeState {
+    if (!this.state.frozen) return this.state;
+    this.state = snapshotNow(false, null, actor);
+    return this.state;
+  }
 }

@@ -15,8 +15,15 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
-import { ceilingOnWire, limitsConfigured, limitsOnWire, NO_OFFER_LIMITS, type OfferLimitPolicy } from './merchant-limits.js';
-import { isActiveMerchant } from './merchant-programme.js';
+import {
+  ceilingOnWire,
+  limitsConfigured,
+  limitsOnWire,
+  NO_OFFER_LIMITS,
+  offerLimitsPosture,
+  type OfferLimitPolicy,
+} from './merchant-limits.js';
+import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 
 export type P2pRouterOptions = {
@@ -112,10 +119,22 @@ const disputeOutput = z.object({
   id: z.string().uuid(),
   tradeId: z.string().uuid(),
   openedBy: z.string(),
+  /**
+   * How the dispute was opened. `timeout` means the fiat_sent clock filed it;
+   * `openedBy` is then the party of interest (buyer), not a claim they pressed
+   * "open dispute". Same honesty class as evidence going write-only.
+   */
+  openedVia: z.enum(['party', 'timeout']),
   reason: z.string(),
   status: z.enum(['open', 'resolved']),
   moderatorId: z.string().nullable(),
   resolution: z.enum(['release', 'refund']).nullable(),
+  /**
+   * Moderator notes on the ruling. Accepted by `disputes.resolve`, stored, and
+   * previously never serialised — the same write-only trap evidence had.
+   * Reviewable afterwards is half of ADR D-S-08's "recorded and reviewable".
+   */
+  resolutionNotes: z.string().nullable(),
   deadlineAt: z.string(),
   openedAt: z.string(),
   resolvedAt: z.string().nullable(),
@@ -393,6 +412,7 @@ export function createP2pRouter(
   });
   const moderationReachable = isModerationConfigured(moderatorUserIds);
   const offerLimitsConfigured = limitsConfigured(offerLimits);
+  const offerLimitsPostureValue = offerLimitsPosture(offerLimits);
 
   /**
    * Programme-gated P2P API procedure.
@@ -420,21 +440,27 @@ export function createP2pRouter(
     });
 
   const offerLimitsOutput = z.object({
-    /** Largest ordinary maxAmt, or null when unlimited. Decimal string. */
+    /** Largest ordinary maxAmt, or null when no numeric cap. Decimal string. */
     standardMax: z.string().nullable(),
-    /** Largest approved-merchant maxAmt, or null when unlimited. Decimal string. */
+    /** Largest approved-merchant maxAmt, or null when no numeric cap. Decimal string. */
     merchantMax: z.string().nullable(),
-    /** False until at least one of the env ceilings is set. */
+    /** True when at least one band is a number. */
     configured: z.boolean(),
+    /** unset = env absent; unlimited = owner confirmed; configured = at least one number. */
+    posture: z.enum(['unset', 'unlimited', 'configured']),
+    standardMode: z.enum(['unset', 'unlimited', 'capped']),
+    merchantMode: z.enum(['unset', 'unlimited', 'capped']),
     /** Same sentence the boot log prints — operator-readable posture. */
     summary: z.string(),
   });
 
   const myOfferCeilingOutput = z.object({
-    /** Ceiling that binds this caller right now, or null when unlimited. */
+    /** Ceiling that binds this caller right now, or null when no numeric cap. */
     maxAmount: z.string().nullable(),
     /** Which policy slot applied — applicant/suspended stay on standard. */
     band: z.enum(['standard', 'merchant']),
+    /** unset vs owner-confirmed unlimited vs capped for the binding band. */
+    limitMode: z.enum(['unset', 'unlimited', 'capped']),
     merchantStatus: z.enum(['applied', 'approved', 'rejected', 'suspended', 'withdrawn']).nullable(),
   });
 
@@ -483,6 +509,8 @@ export function createP2pRouter(
            * not imply the merchant badge buys a higher limit when none is set.
            */
           offerLimitsConfigured: z.boolean(),
+          /** Public three-way posture so probes never need a scoped refuse-first read. */
+          offerLimitsPosture: z.enum(['unset', 'unlimited', 'configured']),
         }),
       )
       .query(() => ({
@@ -490,6 +518,7 @@ export function createP2pRouter(
         service: 'svc-p2p' as const,
         moderationReachable,
         offerLimitsConfigured,
+        offerLimitsPosture: offerLimitsPostureValue,
       })),
 
     /**
@@ -1089,14 +1118,58 @@ export function createP2pRouter(
         .mutation(async ({ ctx, input }) =>
           guard(async () => {
             assertModerator(ctx.principal, moderatorUserIds);
-            return toTradeOut(
-              await p2p.resolveDispute({
+            const trade = await p2p.resolveDispute({
+              tradeId: input.tradeId,
+              moderatorId: ctx.principal.userId,
+              resolution: input.resolution,
+              ...(input.notes ? { notes: input.notes } : {}),
+            });
+
+            /**
+             * D26-P1-I2 / D-S-08: a moderated loss must pull the merchant badge.
+             * Escrow already moved in `resolveDispute`; this only revises
+             * standing so API keys and offer ceilings stop vouching for the loser.
+             * release → seller lost; refund → buyer lost (same attribution as reputation).
+             */
+            if (merchants) {
+              const loserId = input.resolution === 'release' ? trade.sellerId : trade.buyerId;
+              const dispute = await p2p.getDispute(input.tradeId);
+              await merchants.suspendIfStandingBrokenByDisputeLaw({
+                userId: loserId,
                 tradeId: input.tradeId,
-                moderatorId: ctx.principal.userId,
-                resolution: input.resolution,
-                ...(input.notes ? { notes: input.notes } : {}),
-              }),
-            );
+                disputeId: dispute.id,
+                actorId: ctx.principal.userId,
+                actorScope: ctx.principal.scopes.includes('admin:compliance') ? 'admin:compliance' : 'p2p:read',
+              });
+            }
+
+            return toTradeOut(trade);
+          }),
+        ),
+
+      /**
+       * OPERATOR COUNTS for the queue — open / overdue / escalated / neverSeen.
+       *
+       * `/internal/moderation-backlog` already serves this to service callers.
+       * Without a tRPC surface, an allowlisted moderator with ordinary
+       * `p2p:read` could list rows but not see the SLA shape of the backlog
+       * (the number that grows when nobody is on shift). Same gate as `list`.
+       */
+      backlog: scopedProcedure('p2p:read', { module: 'p2p' })
+        .output(
+          z.object({
+            open: z.number().int().nonnegative(),
+            overdue: z.number().int().nonnegative(),
+            escalated: z.number().int().nonnegative(),
+            neverSeen: z.number().int().nonnegative(),
+            moderationReachable: z.boolean(),
+          }),
+        )
+        .query(async ({ ctx }) =>
+          guard(async () => {
+            assertModerator(ctx.principal, moderatorUserIds);
+            const backlog = await p2p.moderationBacklog();
+            return { ...backlog, moderationReachable };
           }),
         ),
     }),
@@ -1225,19 +1298,8 @@ export function createP2pRouter(
         .query(async ({ input }) =>
           guard(async () => {
             const r = await p2p.reputationOf(input.userId);
-            // Absent programme → null, not false. See `merchant` in the schema.
-            const standing = merchants ? isActiveMerchant((await merchants.get(input.userId))?.status ?? 'withdrawn') : null;
-            return {
-              merchant: standing,
-              tradesTotal: r.tradesTotal,
-              completed: r.completed,
-              cancelled: r.cancelled,
-              disputed: r.disputed,
-              disputesLost: r.disputesLost,
-              completionRate: r.completionRate,
-              avgReleaseSecs: r.avgReleaseSecs,
-              badges: [...r.badges],
-            };
+            const record = merchants ? await merchants.get(input.userId) : null;
+            return reputationOnPublicDoor(r, programmeVouch(record?.status, Boolean(merchants)));
           }),
         ),
     }),
@@ -1346,9 +1408,11 @@ export function createP2pRouter(
         ),
 
       /**
-       * Operator decision. `admin:compliance` rather than `p2p:write`: granting
-       * or revoking a badge a stranger relies on is not a trading action, and a
-       * merchant holding `p2p:write` must not be able to reach it.
+       * Operator freeze / restore / reject. `admin:compliance` rather than
+       * `p2p:write` or a minted `p2p:moderate`: granting or revoking programme
+       * privileges a stranger relies on is not a trading action, and a merchant
+       * holding `p2p:write` must not be able to reach it. First approval and
+       * unfreeze re-check the live reputation snapshot; they do not stamp badges.
        */
       decide: scopedProcedure('admin:compliance', { module: 'p2p' })
         .input(
@@ -1452,10 +1516,12 @@ function toDisputeOut(d: DisputeRecord, viewerId: string | null): z.infer<typeof
     id: d.id,
     tradeId: d.tradeId,
     openedBy: d.openedBy,
+    openedVia: d.openedVia,
     reason: d.reason,
     status: d.status,
     moderatorId: d.moderatorId,
     resolution: d.resolution,
+    resolutionNotes: d.resolutionNotes,
     deadlineAt: d.deadlineAt.toISOString(),
     openedAt: d.openedAt.toISOString(),
     resolvedAt: d.resolvedAt?.toISOString() ?? null,

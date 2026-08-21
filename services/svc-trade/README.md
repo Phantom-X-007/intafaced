@@ -124,6 +124,7 @@ open has no client idempotency key — see audit residual).
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **Flag**          | `orders.seeded` + `OrderRecord.seeded` (migration `0004_order_seeded`); MM seed records at rest via `recordSeededOrder` (D26-P1-T10) |
 | **Place**         | `placeOrder({ seeded: true })` only when `seedPlaceEnabled` (wired to `TRADE_MM_SEED_ENABLED`, SD-4)                                 |
+| **Fill account**  | Seeded house-MM `orderFilled` recovers `house:market-maker` (never empty / HOUSE_MM_USER_UUID as a customer-looking id)              |
 | **Public volume** | `publicTape` / candles exclude fills involving any seeded order (SD-3)                                                               |
 | **Cross ban**     | Seed submits are limit `PO`; synchronous engine fills → `manufactured_cross` + hold release (SD-5)                                   |
 | **F8**            | seed↔seed prints never inflate public tape                                                                                           |
@@ -160,31 +161,36 @@ Job stays **OFF** until an operator deliberately enables it. Missing market list
 
 Public mid from §27 venue fabric (`packages/venue-adapter`) preferred over matching depth for futures mark ticks when configured. **Default OFF** — empty venue id means depth-only marks (or null when book empty). Never invents a mid.
 
-| Path                                      | Behavior                                                                                                                                               |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from public book snapshot; futures jobs prefer it, then depth. |
-| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.           |
+| Path                                      | Behavior                                                                                                                                                                                                                                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mark** `TRADE_VENUE_MARK_*`             | When venue id + symbol map set, `createConfiguredVenueMarkSource` builds a `MarkSource` from the public book; futures jobs prefer it, then depth. `TRADE_VENUE_MARK_STREAM` (default OFF) uses sequenced `MaintainedBook` instead of polling `snapshotBook`. Desynced feed → null. |
+| **MM mid** `TRADE_MM_SEED_MID_FROM_VENUE` | Default **OFF**. When true, after env mid map miss, MM seed may use the **same** venue adapter + symbol map. Still skips market if mid null.                                                                                                                                       |
+| **OTC mid** `TRADE_OTC_MID_FROM_VENUE`    | Default **OFF**. When true, OTC RFQ mids come from the **same** public adapter; `TRADE_OTC_VENUE_SYMBOLS` maps pairKey→symbol. Unmapped/dark → null. Boot `TRADE_OTC_MIDS` is not mixed in.                                                                                        |
 
 #### Ops enable path (default safe)
 
-| Env                            | Default | Meaning                                                                                                                                                       |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`** — both keyless. Unknown id → warn once, stay off (never invent). |
-| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                         |
-| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                  |
+| Env                            | Default | Meaning                                                                                                                                                                      |
+| ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_VENUE_MARK_VENUE`       | `""`    | Venue id. Empty = mark port off. Known public adapters: **`binance-spot`**, **`bybit-spot`**, **`okx-spot`** — all keyless. Unknown id → warn once, stay off (never invent). |
+| `TRADE_VENUE_MARK_SYMBOLS`     | `""`    | `marketId:BTC/USDT,other:ETH/USDT` — our market UUID → venue unified symbol. Unmapped market → null mark for that id.                                                        |
+| `TRADE_VENUE_MARK_STREAM`      | `false` | When true, start one `MaintainedBook` per mapped symbol (stream-first + snapshot join). Default off so boot does not open WS. Desynced → null mark.                          |
+| `TRADE_MM_SEED_MID_FROM_VENUE` | `false` | Optional MM mid fallback from the same venue map. Only `1` / `true` / `on` / `yes` turns on.                                                                                 |
+| `TRADE_OTC_MID_FROM_VENUE`     | `false` | Optional OTC observation feed from the same public adapter. Default off.                                                                                                     |
+| `TRADE_OTC_VENUE_SYMBOLS`      | `""`    | `BTC/USDT:BTC/USDT` — OTC pairKey → venue unified symbol. Empty = every pair unmapped (never invent).                                                                        |
 
 **Enable checklist (ops):**
 
-1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget. Both governors reserve 20% headroom, and both refuse rather than silently waiting.
+1. Pick the venue and confirm its public path is acceptable for this environment (egress, rate limits). `binance-spot` spends request WEIGHT against a 6000/min IP budget; `bybit-spot` spends one REQUEST against a 600-per-5s IP budget; `okx-spot` spends against a documented 10 requests / 2 seconds IP budget. Governors reserve 20% headroom, and refuse rather than silently waiting.
 2. Set `TRADE_VENUE_MARK_SYMBOLS` to real `trade.markets.id` → venue symbols only (never invent symbols). The symbol format is the unified one (`BTC/USDT`) for either venue — the venue's own spelling is produced inside the adapter and nowhere else.
-3. Set `TRADE_VENUE_MARK_VENUE=binance-spot` **or** `bybit-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median.
+3. Set `TRADE_VENUE_MARK_VENUE=binance-spot`, `bybit-spot`, **or** `okx-spot` on the svc-trade process that runs futures mark / MM (not every replica blindly if you do not want external polls). One venue at a time: this mount takes a single id, and a mark is preferred-then-fallback, not a cross-venue median. Optional: `TRADE_VENUE_MARK_STREAM=true` to consume `MaintainedBook` instead of polling (still default off).
 4. Health: process log / ready payload includes `venueMark: { venueId, symbols }` when configured; absent when off.
 5. Optional MM: after env mids map is trusted or deliberately empty, set `TRADE_MM_SEED_MID_FROM_VENUE=true` — still skips any market with no mid.
-6. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; never invent.
+6. Optional OTC: set `TRADE_OTC_VENUE_SYMBOLS` to real pair keys (never invent a catalogue) then `TRADE_OTC_MID_FROM_VENUE=true`. Dark/unmapped pairs still refuse. Boot `TRADE_OTC_MIDS` is not a fallback while this is on.
+7. Kill: clear `TRADE_VENUE_MARK_VENUE` or symbols — marks fall back to matching depth mid only; OTC venue feed also goes dark (never invent).
 
 **Honesty bans:** invent mid, invent second venue adapter without fabric support, treat empty/one-sided book as a price, treat account observations as ledger truth, enable trading half of venue (credentials / Vault) as if public mark worked.
 
-**Second venue:** shipped 2026-08-08 as `bybit-spot` (public market data only; no trade or account half exists for it, and no credential is read anywhere in it). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A THIRD venue is not needed by any open residual on `venue.aggregation`.
+**Second venue:** shipped 2026-08-08 as `bybit-spot`. **Third venue:** shipped 2026-08-14 as `okx-spot` (public market data only; no trade or account half; no credential is read). The bar was and remains: a real `MarketDataAdapter` in the fabric **and** `createVenueMarketDataAdapter` knowing the id — do not stub a name. A fourth venue is not needed by any open residual on `venue.aggregation`.
 
 Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
@@ -337,7 +343,9 @@ The service checks these; the database enforces them regardless.
 
 ---
 
-## Copy kill / unfollow guarantee (D26-P1-T3)
+## Copy deepen (D26-P1-T3)
+
+Sovereign shape is always on (`deskStatus().sovereign`): non-custody, protocol fee-share only, P&L fees and returns ranking forbidden, kill/unfollow real. **D26-P0-02** published `TRADE_COPY_FEE_SHARE_LAW` (1000 bps of our fee). **D26-P0-15** owner-published `TRADE_COPY_JURISDICTION_LAW` in `.env.example` (2026-08-14, market-comp CEX copy, not worldwide). Blank env still refuse-closed. Compose has no default.
 
 `copy.killFeeShare` and `copy.unfollow` are unilateral controls and remain reachable while the owner fee-share rates are blank. Every mirror plan, fee-share settlement, kill, and unfollow is serialized per follow:
 
@@ -413,7 +421,7 @@ With it on, futures orders match on the **same** svc-matching book as spot, unde
 - **No funding.** Turning funding on for a market at all is reserved to the owner
   (`docs/adr/2026-08-05-futures-risk-and-mark-law.md`), and it still needs `TRADE_FUTURES_JOBS_ENABLED` plus an
   explicit `TRADE_FUTURES_FUNDING_MARKET_IDS`.
-- **No payout source.** `TRADE_FUTURES_PROFIT_SOURCE` still has no default, on purpose.
+- **No payout source invent.** `TRADE_FUTURES_PROFIT_SOURCE` is owner-named in `.env.example` as `house:fees:trade:available` (PKT-B5). Compose still has no default.
 
 **Convert and TWAP stay spot-only on both settings** (`assertSpotSurface`). They were spot-only for free while
 `assertTradable` refused every non-spot market; now that it does not, they refuse by name, because neither has been

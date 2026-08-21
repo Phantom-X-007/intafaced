@@ -11,7 +11,17 @@ export {
   type SliceTickResult,
 } from './twap-engine.js';
 export { planTwapSlices, type TwapSlicePlan } from './schedule.js';
+export { planVwapSlices, planPovSliceQty, timeframeForSliceInterval, alignLookbackVolumes } from './volume-plan.js';
 export { SqlTwapParentStore, MemoryTwapParentStore, type TwapParentStore, type TwapParentRecord } from './parent-store.js';
+export {
+  hydrateAlgoIfMissing,
+  hydrateAlgoFromStore,
+  persistAlgoMutation,
+  persistAlgoCancelAttempt,
+  type AlgoHydrateTarget,
+  type AlgoCancelTarget,
+} from './hydrate-on-mutate.js';
+export { captureAlgoPlaceGrant, principalFromAlgoGrant, parseAlgoPlaceGrant, type AlgoPlaceGrant } from './durable-principal.js';
 export { startAlgoJobs, type AlgoJobsConfig, type AlgoJobsDeps, type AlgoJobsHandle } from './algo-jobs.js';
 export {
   acceptableForAlgo,

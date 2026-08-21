@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ConsoleStatusBanner } from './console-status-banner';
-import { readConsoleStatus } from '@/lib/console-status';
+import { consoleLooksFullyGreen, readConsoleStatus } from '@/lib/console-status';
 
 /**
  * WHAT THE OPERATOR ACTUALLY READS AT 3AM.
@@ -35,6 +35,32 @@ describe('ConsoleStatusBanner', () => {
     expect(html).toContain('Cannot halt anything');
     expect(html).toContain('Every switch below is inert');
     expect(html).toContain('data-severity="none"');
+  });
+
+  /**
+   * Stage-1 honesty: missing EDGE_URL / ADMIN_OPERATOR_TOKEN must never present
+   * as a healthy control plane. The all-green signal is an empty banner, and
+   * that is reserved for both authorities being wired.
+   */
+  it('never looks all-green when EDGE_URL or ADMIN_OPERATOR_TOKEN is absent', () => {
+    const cases = [
+      env(),
+      env({ EDGE_URL: 'http://edge:4000' }),
+      env({ ADMIN_OPERATOR_TOKEN: TOKEN }),
+      env({ ADMIN_OPERATOR_TOKEN: TOKEN, ADMIN_TREASURY_TOKEN: TREASURY }),
+      env({ EDGE_URL: 'http://edge:4000', ADMIN_TREASURY_TOKEN: TREASURY }),
+    ];
+
+    for (const e of cases) {
+      const status = readConsoleStatus(e);
+      const html = renderToStaticMarkup(<ConsoleStatusBanner status={status} />);
+
+      expect(consoleLooksFullyGreen(status)).toBe(false);
+      expect(html).not.toBe('');
+      expect(html).not.toContain('data-tone="live"');
+      expect(html).toMatch(/data-severity="(?:none|partial)"/);
+      expect(html).toContain('data-tone="danger"');
+    }
   });
 
   /**

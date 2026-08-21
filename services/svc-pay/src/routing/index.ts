@@ -5,6 +5,7 @@
 export {
   assertNoInventedRoutingScores,
   assertRoutingInputsPresent,
+  assertRoutingScoresRefuseBlank,
   FORBIDDEN_ROUTING_SCORE_FIELDS,
   missingRoutingDimensions,
   RoutingInputError,
@@ -12,6 +13,7 @@ export {
   type RoutingInputErrorCode,
   type RoutingInputPolicy,
   type RoutingInputs,
+  type RoutingScoreKey,
 } from '../routing-inputs.js';
 
 export {

@@ -25,7 +25,24 @@ function ticker(partial: Partial<TickerFixture> & Pick<TickerFixture, 'marketId'
 }
 
 describe('rankLiveFromTickers (Stage-2)', () => {
-  it('D26-P1-A3: blank P0-11 refuses before tier / dark checks', () => {
+  it('D26-P1-A3: unpublished P0-11 refuses before tier / dark checks', () => {
+    const r = rankLiveFromTickers({
+      plane: 'live',
+      tierLaw: law,
+      userTier: 'free',
+      now: NOW,
+      signalInputsLaw: { published: false },
+      tickers: [ticker({ marketId: 'BTC-USD' })],
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      reason: 'signal_inputs_law_blank',
+      userMessageKey: 'agents.scanner.tier_closed',
+      residual: SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
+    });
+  });
+
+  it('D26-P1-A3: omitted law → refuse (no sneak default ranked board)', () => {
     const r = rankLiveFromTickers({
       plane: 'live',
       tierLaw: law,

@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
+import { createEdgeContext } from '@intafaced/contracts';
 import { MemoryChainSource } from './chain/memory-source.js';
 import { MemoryProjectionStore } from './projection/memory-store.js';
 import { Indexer, StartHeightAboveTipError, StartHeightUnavailableError } from './indexer.js';
+import { readinessOf } from './ready.js';
+import { createIndexerRouter } from './router.js';
 import { CHAIN_ID } from './testing/conformance.js';
+
+const EDGE_SECRET = 'a-indexer-start-height-edge-secret-long-enough';
+
+function anonymous() {
+  return createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-indexer' })({
+    headers: { 'x-intafaced-region': 'DE' },
+    id: 'req-start-height',
+  });
+}
 
 /**
  * Cold start must honour INDEXER_START_HEIGHT / deps.startHeight.
@@ -124,4 +136,41 @@ it('startHeight missing under a live tip refuses — no healthy empty caughtUp',
   expect(await store.head()).toBeNull();
   expect(indexer.lastError?.code).toBe('indexer.start_height_unavailable');
   expect(indexer.halted).toBeNull();
+});
+
+it('startHeight lastError refuses book/markets and leaves /ready — empty is not a live book', async () => {
+  const source = new MemoryChainSource(CHAIN_ID, 0);
+  source.appendEmpty(3);
+  const store = new MemoryProjectionStore(CHAIN_ID);
+  const indexer = new Indexer({
+    source,
+    store,
+    finalityDepth: 64,
+    ingestEnabled: () => true,
+    startHeight: 50,
+  });
+  await expect(indexer.sync()).rejects.toBeInstanceOf(StartHeightAboveTipError);
+
+  const caller = createIndexerRouter({
+    store,
+    indexer,
+    chainId: CHAIN_ID,
+    finalityDepth: 64,
+    ingestEnabled: () => true,
+    chainSource: 'memory',
+  }).createCaller(anonymous());
+
+  await expect(caller.status()).resolves.toMatchObject({
+    lastError: expect.objectContaining({ code: 'indexer.start_height_above_tip' }),
+    halted: null,
+    indexedHeight: null,
+  });
+  await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
+  await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+
+  const ready = readinessOf(indexer.halted, true, undefined, indexer.lastError);
+  expect(ready.httpStatus).toBe(503);
+  expect(ready.body.ready).toBe(false);
 });

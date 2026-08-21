@@ -120,6 +120,8 @@ export class KycDocumentStore implements KycDocumentVault {
   }
 
   async put(input: PutDocumentInput): Promise<StoredDocumentMeta> {
+    // Refuse before any validation write-up — no invented key, no ciphertext.
+    const key = this.requireKey();
     if (!input.contentType || input.contentType.length > 128 || /[\r\n]/.test(input.contentType)) {
       throw new KycDocumentError('Invalid content type', 'kyc_doc.bad_content_type');
     }
@@ -127,7 +129,6 @@ export class KycDocumentStore implements KycDocumentVault {
       throw new KycDocumentError(`Document must be 1..${MAX_BYTES} bytes`, 'kyc_doc.too_large');
     }
     const storedBy = input.storedBy?.trim() ? input.storedBy.trim() : null;
-    const key = this.requireKey();
     const { ciphertext, nonce } = encryptDocument(key, input.bytes);
 
     const rows = await this.sql<
@@ -164,8 +165,9 @@ export class KycDocumentStore implements KycDocumentVault {
   }
 
   async getFor(id: string, reader: DocReader): Promise<{ meta: StoredDocumentMeta; bytes: Buffer }> {
-    assertReader(reader);
+    // Refuse before reader or row — no invented key, no plaintext.
     const key = this.requireKey();
+    assertReader(reader);
     const rows = await this.sql<
       Array<{
         id: string;
@@ -306,6 +308,8 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
   }
 
   async put(input: PutDocumentInput): Promise<StoredDocumentMeta> {
+    // Refuse before any validation write-up — no invented key, no ciphertext.
+    const key = this.requireKey();
     if (!input.contentType || input.contentType.length > 128 || /[\r\n]/.test(input.contentType)) {
       throw new KycDocumentError('Invalid content type', 'kyc_doc.bad_content_type');
     }
@@ -313,7 +317,6 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
       throw new KycDocumentError(`Document must be 1..${MAX_BYTES} bytes`, 'kyc_doc.too_large');
     }
     const storedBy = input.storedBy?.trim() ? input.storedBy.trim() : null;
-    const key = this.requireKey();
     const { ciphertext, nonce } = encryptDocument(key, input.bytes);
     const id = randomUUID();
     const createdAt = new Date();
@@ -338,8 +341,9 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
   }
 
   async getFor(id: string, reader: DocReader): Promise<{ meta: StoredDocumentMeta; bytes: Buffer }> {
-    assertReader(reader);
+    // Refuse before reader or row — no invented key, no plaintext.
     const key = this.requireKey();
+    assertReader(reader);
     const row = this.rows.get(id);
     if (!row) throw new KycDocumentError('Document not found', 'kyc_doc.not_found');
     assertDocAccess(row.userId, reader);

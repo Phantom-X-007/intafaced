@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryResidencyDesk, ResidencyError } from './residency.js';
+import { ambassadorPayLooksPayable, decidePublicResidencyPayQuote } from './ifc-pay.js';
+import { UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW } from './ifc-pay-rate-law.js';
 
 const NOW = new Date('2026-08-05T12:00:00.000Z');
 
@@ -592,5 +594,24 @@ describe('ambassador Stage-2 residency (no pay)', () => {
     expect(desk.openShareAtLeast(100)).toBe(true);
     expect(desk.clampOpenQueuePageSize(99)).toBe(1);
     expect(desk.applicationDensityExceeds(0)).toBe(true);
+  });
+
+  it('accepted residency is not payable while IFC rate authority is unset', () => {
+    const desk = new MemoryResidencyDesk();
+    const a = desk.apply({
+      userId: 'u-pay',
+      cohortSlug: 'bali-2026',
+      statement: 'I host weekly risk-first lobbies and can commit six hours a week.',
+      now: NOW,
+    });
+    desk.decide({ id: a.id, operatorId: 'op', decision: 'accepted', now: NOW });
+    expect(desk.listAccepted('bali-2026')).toHaveLength(1);
+    const quote = decidePublicResidencyPayQuote({
+      law: UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW,
+      residencyStatus: 'accepted',
+    });
+    expect(quote.status).toBe('refuse');
+    expect(quote.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(ambassadorPayLooksPayable(quote)).toBe(false);
   });
 });

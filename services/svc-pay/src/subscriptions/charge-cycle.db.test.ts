@@ -8,7 +8,7 @@ import { PayError, PayService } from '../payment-service.js';
 import { RailRegistry } from '../rails/registry.js';
 import { CardSandboxAdapter } from '../rails/card-sandbox.js';
 import { signPayload } from '../rails/webhook-signature.js';
-import { SubscriptionService, type SubscriptionInvoiceOpener } from './subscription-service.js';
+import { SubscriptionService, type SubscriptionInvoiceOpener, type SubscriptionServiceOptions } from './subscription-service.js';
 import { MAX_ATTEMPTS_PER_CYCLE, chargeIdempotencyKey } from './charge-cycle.js';
 
 /**
@@ -118,7 +118,9 @@ if (!available) {
   };
 
   /** Builds the pair, with `afterPaymentEvent` wired exactly as `index.ts` does. */
-  function build(options: { defaultFeeBps?: number } = {}): { subs: SubscriptionService } {
+  function build(options: { defaultFeeBps?: number; notifyPreCharge?: SubscriptionServiceOptions['notifyPreCharge'] } = {}): {
+    subs: SubscriptionService;
+  } {
     let subs: SubscriptionService;
     pay = new PayService(sql, ledger, new RailRegistry([card]), {
       defaultFeeBps: options.defaultFeeBps,
@@ -130,6 +132,7 @@ if (!available) {
     subs = new SubscriptionService(sql, () => new Date(), opener, {
       defaultFeeBps: options.defaultFeeBps,
       resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
+      notifyPreCharge: options.notifyPreCharge,
     });
     return { subs };
   }
@@ -888,6 +891,71 @@ if (!available) {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
       await expect(subs.resumeSubscription(sub.id)).rejects.toMatchObject({ code: 'pay.subscription_inactive' });
+    });
+  });
+
+  describe('pre-charge notify is recorded on the execution', () => {
+    it('unwired port writes skipped_unwired and still opens the invoice (money fail-closed on capture)', async () => {
+      const { subs } = build({ defaultFeeBps: 250 });
+      const m = await merchant();
+      const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
+
+      const report = await subs.runDueSubscriptions({ now: JAN });
+      expect(report.fired).toBe(1);
+      expect(report.outcomes[0]!.notifyStatus).toBe('skipped_unwired');
+      expect(report.outcomes[0]!.noticeCode).toBe('pay.subscription_notify_unwired');
+
+      const [cycle] = await cyclesOf(subs, sub.id);
+      expect(cycle!.notifyStatus).toBe('skipped_unwired');
+      expect(cycle!.notifyCode).toBe('pay.subscription_notify_unwired');
+      expect(opened).toHaveLength(1);
+      expect(await clearingOf(m.id)).toBe('0');
+
+      await payInvoice(opened[0]!.paymentId, '10');
+      expect(await clearingOf(m.id)).toBe('10');
+    });
+
+    it('wired port records attempted before the invoice and capture still fail-closes', async () => {
+      const seen: Array<{ type: string; occurrence: number }> = [];
+      const { subs } = build({
+        defaultFeeBps: 250,
+        notifyPreCharge: (event) => {
+          seen.push({ type: event.type, occurrence: event.occurrence });
+        },
+      });
+      const m = await merchant();
+      const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
+
+      await subs.runDueSubscriptions({ now: JAN });
+      expect(seen).toEqual([{ type: 'subscription.invoice_upcoming', occurrence: 0 }]);
+      const [cycle] = await cyclesOf(subs, sub.id);
+      expect(cycle!.notifyStatus).toBe('attempted');
+      expect(cycle!.notifyCode).toBeNull();
+      expect(opened).toHaveLength(1);
+      expect(await clearingOf(m.id)).toBe('0');
+
+      await payInvoice(opened[0]!.paymentId, '10');
+      expect(await clearingOf(m.id)).toBe('10');
+    });
+
+    it('card mandate still refuses pay.mandate_rail_absent with no notify pretence', async () => {
+      const { subs } = build({ defaultFeeBps: 250 });
+      const m = await merchant();
+      const mandate = await subs.createMandate({
+        merchantId: m.id,
+        customerId: CUSTOMER,
+        assetId: 'USDT',
+        amount: amt('10'),
+        cadence: 'monthly',
+        startsAt: JAN,
+      });
+      const sub = await subs.createSubscription({ mandateId: mandate.id, path: 'card_mandate' });
+      await subs.runDueSubscriptions({ now: JAN });
+      const [cycle] = await cyclesOf(subs, sub.id);
+      expect(cycle!.rejectionCode).toBe('pay.mandate_rail_absent');
+      expect(cycle!.notifyStatus).toBeNull();
+      expect(opened).toHaveLength(0);
+      expect(await clearingOf(m.id)).toBe('0');
     });
   });
 }

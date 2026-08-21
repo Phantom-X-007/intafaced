@@ -1,5 +1,15 @@
 import { z } from 'zod';
-import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { envScreeningList, SHIPPED_BUSINESS_BLOCKS } from '@intafaced/config';
+import {
+  router,
+  publicProcedure,
+  scopedProcedure,
+  TRPCError,
+  encodePrincipal,
+  signPrincipalHeader,
+  EDGE_PRINCIPAL_HEADER,
+  EDGE_SIGNATURE_HEADER,
+} from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
 import { AgentError } from './errors.js';
 import type { AuditedAction } from './fleet/audit.js';
@@ -12,7 +22,7 @@ import { scannerAgentGuardrail } from './scanner/guardrail.js';
 import { invokeScannerDataTool } from './scanner/data-tools.js';
 import { scannerTierGate } from './scanner/tier-gate.js';
 import { runScannerRankSession } from './scanner/session-run.js';
-import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
+import { resolveScannerSignalInputsLaw, SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -26,13 +36,19 @@ import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/di
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
-import { parseGuardrail, serialiseGuardrail } from './fleet/guardrails.js';
+import type { PayMetricsPort } from './merchant/pay-metrics-port.js';
+import { serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
 import { supportTierGate } from './support-agent/tier-gate.js';
 import { invokeSupportDataTool, supportAnswerOrEscalate } from './support-agent/data-tools.js';
+import type { SupportDeskPort } from './support-agent/desk-port.js';
 import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
+import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
+import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
+import { envCoachGrounding, runCoachSession, type CoachGrounding } from './coach/grounded-session.js';
+import { envGrowthWarehouse, proposeGrowthCampaign } from './growth/campaign-proposal.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -261,10 +277,21 @@ export interface AgentsRouterDeps {
   readonly gateway: ModelGateway;
   readonly meter: UsageMeter;
   readonly feeAssetId: string;
+  /** Academy spine (or test inject). Absent → `envCoachGrounding()`. */
+  readonly loadCoachGrounding?: () => Promise<CoachGrounding>;
+  /** Live ops.support desk. Absent → support live tools refuse `no_live_kb`. */
+  readonly supportDesk?: SupportDeskPort | null;
+  /** Signs forwarded principal for support ticket `get`. */
+  readonly edgePrincipalSecret?: string;
+  /**
+   * Live pay approval-rate samples. Unset in production (Class X) — live
+   * merchant.runSession then refuses `no_live_metrics` rather than invent rates.
+   */
+  readonly payMetricsPort?: PayMetricsPort;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const { runtime, gateway, meter, feeAssetId } = deps;
+  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret, payMetricsPort } = deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -602,7 +629,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             marketPlane: z.enum(['live', 'dark']).optional(),
             marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
             now: z.string().datetime().optional(),
-            /** D26-P0-11. Blank / omitted → refuse ranked signals (D26-P1-A3). */
+            /** D26-P0-11. Omitted → production sealed v1 recipe. Explicit unpublished still refuses. */
             signalInputsLaw: z
               .union([
                 z.object({ published: z.literal(false) }),
@@ -656,7 +683,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             ...(input.marketPlane === undefined ? {} : { marketPlane: input.marketPlane }),
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
-            signalInputsLaw: input.signalInputsLaw ?? null,
+            signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
           });
           // Strip readonly for the wire shape (zod output is mutable arrays).
           if (result.status === 'ok') {
@@ -1006,7 +1033,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             tierLaw: input.law ?? null,
             userTier: input.userTier,
             tickers: input.tickers,
-            signalInputsLaw: input.signalInputsLaw ?? null,
+            signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
             ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
           });
@@ -1157,7 +1184,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               tierLaw: input.law ?? null,
-              signalInputsLaw: input.signalInputsLaw ?? null,
+              signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
               userTier: input.userTier,
               tickers: input.tickers,
               ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
@@ -1291,9 +1318,10 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .query(() => serialiseGuardrail(navigatorAgentGuardrail())),
 
       /**
-       * Stage-2 tool_select: intersect candidates with declared read tools.
-       * Dark plane / empty candidates refuse; money-write candidates refused.
-       * Caller supplies the session guardrail tool grants — no invent tools.
+       * Stage-2 tool_select: intersect candidates with the product Stage-1
+       * allowlist. Dark plane / empty candidates refuse; money-write and
+       * off-list candidates refused. Caller-supplied `tools` cannot widen
+       * the grant — that was a public-door hole.
        */
       selectTools: scopedProcedure('agents:read', { module: 'agents' })
         .input(
@@ -1332,27 +1360,9 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           ]),
         )
         .query(({ input }) => {
-          const modules = [...new Set(input.tools.map((t) => t.module))];
-          const guardrail = parseGuardrail({
-            agentId: 'navigator',
-            version: 1,
-            tools: input.tools.map((t) => ({
-              name: t.name,
-              module: t.module,
-              mode: t.mode,
-              requiresApproval: t.requiresApproval ?? false,
-            })),
-            limits: {
-              maxActionsPerSession: 100,
-              maxOutputTokensPerCall: 4096,
-              maxSpendPerSession: null,
-              allowedModules: modules,
-              allowedTasks: ['navigator.plan', 'navigator.tool_select'],
-            },
-          });
           const result = selectNavigatorTools({
             plane: input.plane,
-            guardrail,
+            guardrail: navigatorAgentGuardrail(),
             candidates: input.candidates,
           });
           if (result.status === 'ok') {
@@ -1663,7 +1673,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['trade_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_answer']),
+              reason: z.enum(['trade_plane_dark', 'tier_law_blank', 'tier_not_granted', 'tool_not_declared', 'no_grounded_answer']),
               userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
               unanswered: z.array(navigatorUnansweredOutput),
               metering: runMeteringOutput,
@@ -1779,6 +1789,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .input(
           z.object({
             plane: z.enum(['live', 'dark']),
+            kbPlane: z.enum(['live', 'dark']).optional(),
             kbHitCount: z.number().int().min(0).max(10_000).optional(),
             requireKb: z.boolean().optional(),
           }),
@@ -1801,6 +1812,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         .query(({ input }) => {
           const result = supportGrounded({
             plane: input.plane,
+            ...(input.kbPlane === undefined ? {} : { kbPlane: input.kbPlane }),
             ...(input.kbHitCount === undefined ? {} : { kbHitCount: input.kbHitCount }),
             ...(input.requireKb === undefined ? {} : { requireKb: input.requireKb }),
           });
@@ -1937,6 +1949,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .nullable()
               .optional(),
             occurredAt: z.string().datetime().optional(),
+            kbPlane: z.enum(['live', 'dark']).optional(),
           }),
         )
         .output(
@@ -1977,6 +1990,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 tool: z.string(),
                 reason: z.enum([
                   'desk_plane_dark',
+                  'no_live_kb',
                   'kb_empty',
                   'tier_law_blank',
                   'tier_not_granted',
@@ -1991,6 +2005,9 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'incomplete_account',
                   'not_ticket_owner',
                   'account_owner_mismatch',
+                  'balance_field_forbidden',
+                  'account_plane_dark',
+                  'account_not_attempted',
                 ]),
                 userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               }),
@@ -2006,13 +2023,24 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           }),
         )
-        .query(({ ctx, input }) => {
-          const result = invokeSupportDataTool({
+        .query(async ({ ctx, input }) => {
+          const deskHeaders =
+            edgePrincipalSecret === undefined
+              ? undefined
+              : {
+                  [EDGE_PRINCIPAL_HEADER]: encodePrincipal(ctx.principal),
+                  [EDGE_SIGNATURE_HEADER]: signPrincipalHeader(encodePrincipal(ctx.principal), edgePrincipalSecret, ctx.region),
+                  'x-intafaced-region': ctx.region,
+                };
+          const result = await invokeSupportDataTool({
             tool: input.tool,
             plane: input.plane,
+            ...(input.kbPlane === undefined ? {} : { kbPlane: input.kbPlane }),
             requesterUserId: ctx.principal.userId,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
+            desk: supportDesk ?? null,
+            ...(deskHeaders === undefined ? {} : { deskHeaders }),
             articles: input.articles ?? null,
             ticket: input.ticket ?? null,
             account: input.account ?? null,
@@ -2078,6 +2106,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .nullable()
               .optional(),
             moneyRequest: z.boolean().optional(),
+            /** Omitted → dark. Fixture articles are not a live ops.support KB. */
+            kbPlane: z.enum(['live', 'dark']).optional(),
           }),
         )
         .output(
@@ -2093,13 +2123,15 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           ]),
         )
-        .query(({ ctx, input }) => {
-          const kbResult = invokeSupportDataTool({
+        .query(async ({ ctx, input }) => {
+          const kbResult = await invokeSupportDataTool({
             tool: input.tool,
             plane: input.plane,
+            kbPlane: input.kbPlane ?? 'dark',
             requesterUserId: ctx.principal.userId,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
+            desk: supportDesk ?? null,
             articles: input.articles ?? null,
           });
           const decision = supportAnswerOrEscalate({
@@ -2145,6 +2177,21 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .optional(),
             /** The user is asking for money to move. Escalates to a person, free. */
             moneyRequest: z.boolean().optional(),
+            /**
+             * Published ops.support KB spine (contract `SupportKbArticle`).
+             * Used when an ask carries `kbQuery` — never invents articles.
+             */
+            kbCatalog: z
+              .array(
+                z.object({
+                  id: z.string().min(1).max(200),
+                  titleKey: z.string().min(1).max(200),
+                  bodyKey: z.string().min(1).max(200),
+                }),
+              )
+              .max(500)
+              .nullable()
+              .optional(),
             // Capped well under the guardrail's per-session action budget: one
             // read is one audited tool call, refusals included.
             asks: z
@@ -2162,6 +2209,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                     .max(200)
                     .nullable()
                     .optional(),
+                  /** Search fragment against `kbCatalog` when articles omitted. */
+                  kbQuery: z.string().max(200).nullable().optional(),
                   ticket: z
                     .object({
                       ticketId: z.string().min(1).max(120),
@@ -2177,6 +2226,25 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                       status: z.enum(['active', 'frozen', 'closed']),
                       kycTier: z.string().max(64),
                     })
+                    .nullable()
+                    .optional(),
+                  /** Contract grounding — unread/plane-dark refuses invent. */
+                  accountGrounding: z
+                    .discriminatedUnion('status', [
+                      z.object({
+                        status: z.literal('read'),
+                        state: z.object({
+                          userId: z.string().uuid(),
+                          status: z.enum(['active', 'frozen', 'closed']),
+                          kycTier: z.enum(['none', 'basic', 'full', 'institutional']),
+                        }),
+                        readAt: z.string().datetime(),
+                      }),
+                      z.object({
+                        status: z.literal('unread'),
+                        reason: z.enum(['plane_dark', 'not_attempted']),
+                      }),
+                    ])
                     .nullable()
                     .optional(),
                 }),
@@ -2221,20 +2289,32 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               metering: runMeteringOutput,
             }),
             z.object({
-              status: z.literal('empty'),
-              userMessageKey: z.literal('agents.support.empty'),
+              status: z.literal('stopped'),
+              reason: z.literal('aborted'),
+              // No new i18n key — FE fence. Caller keys off status+reason.
+              userMessageKey: z.literal('agents.support.unavailable'),
+              findings: z.array(supportFindingOutput),
+              unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['desk_plane_dark', 'tier_law_blank', 'tier_not_granted', 'no_grounded_read']),
+              reason: z.enum([
+                'desk_plane_dark',
+                'tier_law_blank',
+                'tier_not_granted',
+                'no_grounded_read',
+                'account_state_missing',
+                'kb_plane_ungrounded',
+                'no_live_kb',
+              ]),
               userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
               unanswered: z.array(supportUnansweredOutput),
               metering: runMeteringOutput,
             }),
           ]),
         )
-        .mutation(({ ctx, input }) =>
+        .mutation(({ ctx, input, signal }) =>
           guard(async () => {
             const result = await runSupportReplySession({
               runtime,
@@ -2244,11 +2324,25 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               tierLaw: input.law ?? null,
               userTier: input.userTier,
               ...(input.moneyRequest === undefined ? {} : { moneyRequest: input.moneyRequest }),
+              ...(signal === undefined ? {} : { signal }),
+              kbCatalog: input.kbCatalog ?? null,
+              desk: supportDesk ?? null,
+              ...(edgePrincipalSecret === undefined
+                ? {}
+                : {
+                    deskHeaders: {
+                      [EDGE_PRINCIPAL_HEADER]: encodePrincipal(ctx.principal),
+                      [EDGE_SIGNATURE_HEADER]: signPrincipalHeader(encodePrincipal(ctx.principal), edgePrincipalSecret, ctx.region),
+                      'x-intafaced-region': ctx.region,
+                    },
+                  }),
               asks: input.asks.map((ask) => ({
                 tool: ask.tool,
                 articles: ask.articles ?? null,
+                kbQuery: ask.kbQuery ?? null,
                 ticket: ask.ticket ?? null,
                 account: ask.account ?? null,
+                accountGrounding: ask.accountGrounding ?? null,
               })),
             });
 
@@ -2266,7 +2360,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
 
             if (result.status === 'empty') {
-              return { status: 'empty' as const, userMessageKey: result.userMessageKey, metering };
+              // Empty asks are not a live KB plane — reuse refuse, do not advertise `empty`.
+              return {
+                status: 'refuse' as const,
+                reason: 'kb_plane_ungrounded' as const,
+                userMessageKey: 'agents.support.unavailable' as const,
+                unanswered: [],
+                metering,
+              };
             }
 
             const unanswered = result.unanswered.map((u) => ({
@@ -2291,6 +2392,17 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 ? { status: 'ok' as const, tool: 'support.kb.search' as const, articles: f.articles.map((a) => ({ ...a })) }
                 : f,
             );
+
+            if (result.status === 'stopped') {
+              return {
+                status: 'stopped' as const,
+                reason: result.reason,
+                userMessageKey: result.userMessageKey,
+                findings,
+                unanswered,
+                metering,
+              };
+            }
 
             if (result.status === 'escalate') {
               const cf = result.caseFile;
@@ -2791,6 +2903,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * `openSession → act → settle → closeSession`, so every metrics read is
        * guardrail-checked and audited, and the run settles through the meter.
        * Dark pay plane refuses before any session opens (unbilled).
+       * Live requires PayMetricsPort; request-body points are not live truth.
        */
       runSession: scopedProcedure('agents:execute', { module: 'agents' })
         .input(
@@ -2863,6 +2976,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               feeAssetId,
               plane: input.plane,
               points: input.points,
+              ...(payMetricsPort === undefined ? {} : { payMetricsPort }),
               ...(input.threshold === undefined ? {} : { threshold: input.threshold }),
               ...(input.railAllowlist === undefined ? {} : { railAllowlist: input.railAllowlist }),
               ...(input.minAttempts === undefined ? {} : { minAttempts: input.minAttempts }),
@@ -2919,6 +3033,288 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
           }),
         ),
+    }),
+
+    /**
+     * Risk & Compliance — screening-support drafts (§8.2).
+     * Public door refuses when the sanctions list is empty / unset or inputs
+     * are missing. Drafts are proposals only. Never writes identity.kyc-review
+     * `reviewed_by`. Never invents JURISDICTION_MATRIX `blocked: true`.
+     */
+    riskCompliance: router({
+      draftScreening: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            subjectId: z.string().min(1).max(64).optional(),
+            region: z.string().min(1).max(8).optional(),
+            asDecision: z.boolean().optional(),
+            writeReviewedBy: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['screening_unset', 'screening_empty', 'inputs_missing', 'decision_forbidden']),
+              kind: z.literal('not_a_decision'),
+              isDecision: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+              screeningDeclaration: z.enum(['unset', 'listed', 'reviewed-empty']),
+              screeningConfigured: z.boolean(),
+              screeningSource: z.string(),
+              inventedBlockedList: z.literal(false),
+            }),
+            z.object({
+              status: z.literal('draft'),
+              kind: z.literal('proposal'),
+              isDecision: z.literal(false),
+              subjectId: z.string(),
+              region: z.string(),
+              screeningDeclaration: z.enum(['unset', 'listed', 'reviewed-empty']),
+              screeningConfigured: z.boolean(),
+              screeningSource: z.string(),
+              listHitCount: z.number().int(),
+              businessHitCount: z.number().int(),
+              listHits: z.array(
+                z.object({
+                  region: z.string(),
+                  reason: z.string(),
+                  source: z.string(),
+                  authority: z.literal('screening'),
+                }),
+              ),
+              inventedBlockedList: z.literal(false),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = draftScreeningSupport({
+            screening: envScreeningList(),
+            businessBlocks: SHIPPED_BUSINESS_BLOCKS,
+            ...(input.subjectId === undefined ? {} : { subjectId: input.subjectId }),
+            ...(input.region === undefined ? {} : { region: input.region }),
+            ...(input.asDecision === undefined ? {} : { asDecision: input.asDecision }),
+            ...(input.writeReviewedBy === undefined ? {} : { writeReviewedBy: input.writeReviewedBy }),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_a_decision' as const,
+              isDecision: false as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+              screeningDeclaration: result.screeningDeclaration,
+              screeningConfigured: result.screeningConfigured,
+              screeningSource: result.screeningSource,
+              inventedBlockedList: false as const,
+            };
+          }
+          return {
+            status: 'draft' as const,
+            kind: 'proposal' as const,
+            isDecision: false as const,
+            subjectId: result.subjectId,
+            region: result.region,
+            screeningDeclaration: result.screeningDeclaration,
+            screeningConfigured: result.screeningConfigured,
+            screeningSource: result.screeningSource,
+            listHitCount: result.listHitCount,
+            businessHitCount: result.businessHitCount,
+            listHits: result.listHits.map((hit) => ({
+              region: hit.region,
+              reason: hit.reason,
+              source: hit.source,
+              authority: 'screening' as const,
+            })),
+            inventedBlockedList: false as const,
+          };
+        }),
+
+      refuseKycReview: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            recordId: z.string().min(1).max(64).optional(),
+            reviewerId: z.string().min(1).max(64).optional(),
+            decision: z.string().max(32).optional(),
+          }),
+        )
+        .output(
+          z.object({
+            status: z.literal('refuse'),
+            reason: z.literal('kyc_review_is_operator_only'),
+            kind: z.literal('not_a_decision'),
+            isDecision: z.literal(false),
+            column: z.literal('reviewed_by'),
+            writable: z.literal(false),
+            userMessageKey: z.literal('agents.error.capability_unavailable'),
+          }),
+        )
+        .query(({ input }) => refuseIdentityKycReviewWrite(input)),
+    }),
+
+    /**
+     * AI Coach — curriculum-grounded citations (§8.2). Empty catalog is a
+     * chatbot (refuse). Licensed library titles are never invented. Position
+     * grounding is owner-undecided → refuse. Not a fleet runSession.
+     */
+    coach: router({
+      session: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            ask: z.string().max(2000).optional(),
+            requestedSlug: z.string().min(1).max(128).optional(),
+            includePositions: z.boolean().optional(),
+            asAdvice: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum([
+                'curriculum_empty',
+                'library_import_pending',
+                'invented_library',
+                'positions_not_decided',
+                'advice_forbidden',
+              ]),
+              kind: z.literal('not_advice'),
+              isAdvice: z.literal(false),
+              positionsReferenced: z.literal(false),
+              licensedLibraryImported: z.boolean(),
+              inventedLibrary: z.literal(false),
+              citedCount: z.literal(0),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+            z.object({
+              status: z.literal('grounded'),
+              kind: z.literal('citation'),
+              isAdvice: z.literal(false),
+              positionsReferenced: z.literal(false),
+              licensedLibraryImported: z.boolean(),
+              inventedLibrary: z.literal(false),
+              citedCount: z.number().int(),
+              citations: z.array(z.object({ slug: z.string(), title: z.string() })),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+          ]),
+        )
+        .query(async ({ input }) => {
+          const grounding = (await loadCoachGrounding?.()) ?? envCoachGrounding();
+          const result = runCoachSession({
+            grounding,
+            ...(input.ask === undefined ? {} : { ask: input.ask }),
+            ...(input.requestedSlug === undefined ? {} : { requestedSlug: input.requestedSlug }),
+            ...(input.includePositions === undefined ? {} : { includePositions: input.includePositions }),
+            ...(input.asAdvice === undefined ? {} : { asAdvice: input.asAdvice }),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_advice' as const,
+              isAdvice: false as const,
+              positionsReferenced: false as const,
+              licensedLibraryImported: result.licensedLibraryImported,
+              inventedLibrary: false as const,
+              citedCount: 0 as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+            };
+          }
+          return {
+            status: 'grounded' as const,
+            kind: 'citation' as const,
+            isAdvice: false as const,
+            positionsReferenced: false as const,
+            licensedLibraryImported: result.licensedLibraryImported,
+            inventedLibrary: false as const,
+            citedCount: result.citedCount,
+            citations: result.citations.map((c) => ({ slug: c.slug, title: c.title })),
+            userMessageKey: 'agents.error.capability_unavailable' as const,
+          };
+        }),
+    }),
+
+    /**
+     * Growth — campaign proposals (§8.2). Never publishes. Dark warehouse is
+     * not a funnel. Returns-ranked copy and incentive budgets are refused.
+     * Not a fleet runSession.
+     */
+    growth: router({
+      propose: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            headline: z.string().max(200).optional(),
+            copy: z.string().max(2000).optional(),
+            publish: z.boolean().optional(),
+            incentiveBudget: z.string().max(32).optional(),
+            spendAmount: z.string().max(32).optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['warehouse_dark', 'autonomous_publish', 'returns_claim', 'budget_undecided', 'inputs_missing']),
+              kind: z.literal('not_a_publication'),
+              isPublication: z.literal(false),
+              published: z.literal(false),
+              warehouseConfigured: z.boolean(),
+              warehouseMayLabelLive: z.boolean(),
+              inventedReturns: z.literal(false),
+              inventedBudget: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+            z.object({
+              status: z.literal('proposal'),
+              kind: z.literal('proposal'),
+              isPublication: z.literal(false),
+              published: z.literal(false),
+              headline: z.string(),
+              warehouseConfigured: z.literal(true),
+              warehouseMayLabelLive: z.literal(true),
+              inventedReturns: z.literal(false),
+              inventedBudget: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = proposeGrowthCampaign({
+            warehouse: envGrowthWarehouse(),
+            ...(input.headline === undefined ? {} : { headline: input.headline }),
+            ...(input.copy === undefined ? {} : { copy: input.copy }),
+            ...(input.publish === undefined ? {} : { publish: input.publish }),
+            ...(input.incentiveBudget === undefined ? {} : { incentiveBudget: input.incentiveBudget }),
+            ...(input.spendAmount === undefined ? {} : { spendAmount: input.spendAmount }),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_a_publication' as const,
+              isPublication: false as const,
+              published: false as const,
+              warehouseConfigured: result.warehouseConfigured,
+              warehouseMayLabelLive: result.warehouseMayLabelLive,
+              inventedReturns: false as const,
+              inventedBudget: false as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+            };
+          }
+          return {
+            status: 'proposal' as const,
+            kind: 'proposal' as const,
+            isPublication: false as const,
+            published: false as const,
+            headline: result.headline,
+            warehouseConfigured: true as const,
+            warehouseMayLabelLive: true as const,
+            inventedReturns: false as const,
+            inventedBudget: false as const,
+            userMessageKey: 'agents.error.capability_unavailable' as const,
+          };
+        }),
     }),
   });
 }

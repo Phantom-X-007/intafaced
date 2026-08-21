@@ -1088,6 +1088,24 @@ if (!available) {
     });
 
     /**
+     * Underfunded `loanReserve` must refuse the draw. The reserve is a module
+     * account (hard non-negative); inventing the shortfall would be printing.
+     * Existing product LTV / APR — no invented rates.
+     */
+    it('refuses an underfunded loanReserve draw rather than printing principal', async () => {
+      await fundReserve('USDT', '1000');
+      await fund(BORROWER, 'BTC', '1');
+      const product = await makeProduct();
+
+      await expect(
+        loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now }),
+      ).rejects.toMatchObject({ code: 'bank.loan_reserve_underfunded' });
+
+      expect(formatAmount((await ledger.balance(loanReserve('USDT'))).amount)).toBe('1000');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('0');
+    });
+
+    /**
      * ═══════════════════════════════════════════════════════════════════════════
      * "SAME TERMS" HAS TO INCLUDE WHO IS ASKING
      * ═══════════════════════════════════════════════════════════════════════════
@@ -1149,6 +1167,38 @@ if (!available) {
         expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
         expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'BTC'))).amount)).toBe('5');
       });
+    });
+
+    it('refuses a loan id reused by the same borrower for a different product', async () => {
+      await fundReserve('USDT', '100000');
+      await fund(BORROWER, 'BTC', '1');
+      const firstProduct = await makeProduct({ name: 'First BTC-backed USDT' });
+      const otherProduct = await makeProduct({ name: 'Other BTC-backed USDT' });
+      const loanId = '6f000000-0000-4000-8000-00000000eeef';
+
+      const opened = await loans.open({
+        loanId,
+        productId: firstProduct.id,
+        userId: BORROWER,
+        collateralAmount: amt('1'),
+        principal: amt('5000'),
+        now,
+      });
+
+      await expect(
+        loans.open({
+          loanId,
+          productId: otherProduct.id,
+          userId: BORROWER,
+          collateralAmount: amt('1'),
+          principal: amt('5000'),
+          now,
+        }),
+      ).rejects.toMatchObject({ code: 'bank.loan_borrower_mismatch' });
+
+      expect(opened.loan.productId).toBe(firstProduct.id);
+      expect(formatAmount(await loans.collateralOf(opened.loan))).toBe('1');
+      expect(formatAmount((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount)).toBe('5000');
     });
 
     /**
@@ -1737,7 +1787,7 @@ if (!available) {
         expect((await loans.loan(opened.loan.id)).status).toBe('margin_call');
 
         await fund(BORROWER, 'BTC', '1');
-        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1') });
+        await loans.addCollateral({ loanId: opened.loan.id, amount: amt('1'), now });
 
         const sweep = await sweepAt(new Date(now.getTime() + 60_000));
         expect(sweep.cleared).toBe(1);

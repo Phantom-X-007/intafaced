@@ -360,10 +360,32 @@ describe('emissions off: the mint fails closed', () => {
     const h = await edge();
     await flip(h, 'token', true, 'emission curve under review, stop minting');
 
-    for (const url of ['/api/token/trpc/emissions.mintEpoch', '/api/token/internal/emissions/mint-next']) {
+    const res = await h.app.inject({ method: 'POST', url: '/api/token/trpc/emissions.mintEpoch' });
+    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    // The S2S mint is not a public door — 404 here, never a 200 that reached token.
+    const s2s = await h.app.inject({ method: 'POST', url: '/api/token/internal/emissions/mint-next' });
+    expect(s2s.statusCode).toBe(404);
+    expect(s2s.json()).toMatchObject({ code: 'edge.s2s_not_proxied' });
+    expect(h.reached).toEqual([]);
+  });
+});
+
+describe('S2S /internal/ is not a public door', () => {
+  it('404s pay/identity/token internals even when the module is live', async () => {
+    const h = await edge();
+    for (const url of [
+      '/api/token/internal/emissions/mint-next',
+      '/api/token/internal/stake/11111111-1111-4111-8111-111111111111',
+      '/api/identity/internal/rank/11111111-1111-4111-8111-111111111111/perks',
+      '/api/pay/internal/jobs/run-due-subscriptions',
+      '/api/academy/internal/anything',
+      '/api/support/internal/anything',
+    ]) {
       const res = await h.app.inject({ method: 'POST', url });
-      expect(res.statusCode, url).toBeGreaterThanOrEqual(500);
+      expect(res.statusCode, url).toBe(404);
+      expect(res.json(), url).toMatchObject({ code: 'edge.s2s_not_proxied' });
     }
+    expect(h.reached).toEqual([]);
   });
 });
 

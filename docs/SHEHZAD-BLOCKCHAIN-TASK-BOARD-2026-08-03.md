@@ -1,15 +1,65 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-08  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-20  
 **Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-08 delta — P0 remainder ship
+> ### 2026-08-20 delta — sitting items are not coding gates
 >
-> Shipped on `feat/protocol-p0-remainder` (this PR): **S-A12** FailClosedOracle · **S-A4** IsolatedLendingMarket (ready, not full SPEC done-bar) · **S-A5** SovereignRouter + quote pick · **S-A6** MerchantAccept · **S-A10/A11** paymaster + bundler policy modules + ADR · **S-A13** deployment registry artefact · **S-K7** inheritance ADR · **S-L1** CrewVault · **S-L4** LaunchLpLock (LP leg).
+> §0.5 does not pause the board. Do not ping Nitro to flip `audited:true`. Keep shipping with an honest `audited: false`.
 >
-> Still open / Nitro-gated: S-A1 **external** audit (internal package shipped) · S-A3 escrow (separate PR) · S-A9 passkey (separate PR) · S-C1 venue · S-I3/I4 · S-L2 (ADR only) · S-L3/L5/L6 · S-D2–D4 INTACHAIN · paymaster **funding** · public registry rows.
+> ### 2026-08-19 delta — S-J1 audit pipeline (this PR)
+>
+> **Status + hash + signer, never a fake badge.** `src/audit/pipeline.ts` + public `auditStatus`. The committed smart-accounts package is `kind: internal`, `audited: false`. `audited:true` only exists as a pure-function path for a future external package whose pinned hash matches. `socket.contract-audit` stays a socket (Nitro budget). **Do not ping Nitro to flip it — keep shipping.**
+>
+> ### 2026-08-19 delta — S-J3 protocol incident runbook (#2471)
+>
+> **No pause, no upgrade, no platform guardian.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — contain is edge kill of module `protocol` (or `PROTOCOL_RELAY_ENABLED=false`). That stops _our_ relay. Recovery is user-elected. Do not collide with Denon's money-path runbook.
+>
+> ### 2026-08-19 delta — S-E1 JIT CardPull (#2470)
+>
+> **On-chain half:** `CardPull` — owner is the user's SmartAccount. `pullExact` is `transferFrom(owner, settlement, amount)` so this contract never holds tokens. `kill` is owner-only and strands zero. Session keys may be granted `pullExact` (not an outbound ERC-20 transfer). No issuer key. Unaudited.
+>
+> ### 2026-08-19 delta — S-G4 RWA registry (#2469)
+>
+> **Licence-gated honesty:** `RwaRegistry` refuses `register`/`unlist` while `licenceHash` is `bytes32(0)`. Hash is immutable. Issuer is `msg.sender`; the platform cannot unlist. Licence _content_ stays Class X. Unaudited.
+>
+> ### 2026-08-19 delta — S-A10 paymaster contract (#2468)
+>
+> **Contract half:** `ScopedPaymaster` holds a native float, allowlist + selector + maxCost, refuses `validatePaymasterUserOp` when unfunded. Operator can only withdraw this contract's leftover ETH — never a user account. Nitro still funds the float. Unaudited.
+>
+> ### 2026-08-19 delta — S-A1 recovery as possible SmartAccount owner (#2467)
+>
+> **Wiring proof, not a factory default:** `test/forge/RecoveryOwner.t.sol` — `createAccount(recovery)` sets `SmartAccount.owner` to `UserElectedRecovery`, ERC-1271 forwards to the sitting recovery-owner EOA, a non-owner signature is refused, the EOA cannot `execute` directly, and a second `createAccount(eoa)` still belongs to that EOA. Factory is unchanged. Unaudited.
+>
+> ### 2026-08-19 delta — S-A8 session-key forge (#2466)
+>
+> **Session-key richness:** `test/forge/SessionKey.t.sol` — self-target / outbound-selector refused at grant (fuzz), spend-limit counted before `_call` so re-entrancy cannot double-spend, `validateUserOp` refuses a session op whose selector is not `executeWithSession`. Clones via AccountFactory (implementation stays locked). No forge-std. Residual: external audit.
+>
+> ### 2026-08-19 delta — S-C2 venue reorg (#2465)
+>
+> **Solidity tip replace:** `sovereign-venue-reorg.onchain.test.ts` snapshots, places (BookLevel), mines 5 blocks, reverts — orphaned block hash is gone. Indexer projection unwind stays on 8546. No `evm_increaseTime`.
+>
+> ### 2026-08-19 delta — S-A8 forge fuzz (#2464)
+>
+> **Fuzzer, not compiler:** `test/forge` + `pnpm test:forge` in CI via foundry:v1.5.1. solc-js still writes `contracts/out/`. CrewVault share-sum fuzz + StealthAnnouncer gas ceiling. Session-key richness is #2466. Residual: external audit.
+>
+> ### 2026-08-19 delta — S-L3 ECDH scanner (#2463)
+>
+> **Stealth receive half:** `src/stealth/scan.ts` is ERC-5564 scheme-1 (secp256k1 + view tags). Recipients scan `StealthAnnouncer` logs with a viewing key the service never holds. Keccak `presentationAddress` stays a separate P0 helper — not an ECDH match. Unaudited.
+>
+> ### 2026-08-18 delta — S-I3
+>
+> **S-I3 dex fees:** CLOB knobs no longer default to 0 / `'0'`. Set both from the venue or omit both — omitted means `intachain-clob` is not quoted. Quote path still uses projections, never `eth_call`. Internal-book 20bps remains a configured guess. Tracker `socket.dex-fee-source` → **ready**.
+> **#2364 merged** (S-C1 SovereignVenue + S-L4 trust). Venue publishes `takerFeeBps` + `settlementCostQuote()=0`; this PR makes svc-dex refuse silent zeros instead of quoting from them.
+>
+> ### 2026-08-08 delta — P0 wave (tip)
+>
+> **Merged:** #1153 S-D0/D1 · #1154 S-A9 PasskeyOwner · #1155 S-A3 escrow · #1160 oracle/lending-seed/router/merchant/A10–A13/K7/L1/L4 · #1176 S-A1 **internal** audit package · #1178 S-A2 AMM invariant suite · #1177 S-A4 lending cascade/flash done-bar · #2362 S-L2 LegacyVault · #2363 S-L6/L3/L5.
+> **Nitro rail ruling 2026-08-08:** Base Sepolia → Base is P0 default; HyperEVM later; anvil stays CI. No Class X / mainnet go-live from that ruling.
+>
+> Still open / Nitro-gated: S-A1 **external** audit budget · S-A1/S-A9 live configured-env proof · S-I4 OMS · S-D2–D9 INTACHAIN · paymaster **funding** · public registry rows · Venue Vault HSM/durable store · treasury licence content (Class X).
 >
 > ### 2026-08-07 delta — read this before anything else
 >
@@ -56,18 +106,24 @@
 
 ---
 
-## 0.5 · Waiting on Nitro — not yours to solve, do not stall on them
+## 0.5 · Sitting with Nitro — not coding gates
 
-Added 2026-08-07. Each of these gates something on this board and **no PR closes any of them**. If one blocks you, say so and move to the next item — an owner-gated wall is never your delay.
+These rows cost money, keys, or a live vendor. **They do not pause your board.**
+Do not message Nitro to start the next `S-*`. Do not ping Nitro to flip `audited:true`.
 
-| Blocked on                                     | Whose call         | What it gates                                                                       | Status                                            |
-| ---------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------- |
-| **Which venue this platform quotes**           | **Nitro**          | `socket.dex-venue-set` — svc-dex and the indexer both stay honestly dead until then | Open. Not tracked as pending in any ADR until now |
-| **Money for an external contract audit**       | **Nitro**          | S-J1 / `socket.contract-audit` — `audited:true` is unreachable without it           | Open                                              |
-| **Testnet / mainnet funding, RPC access**      | **Nitro**          | Anything past a local dev chain, incl. S-A13 deployment registry                    | Open                                              |
-| **Which EVM chain P0 deploys to**              | Nitro, on your ADR | S-D1, and every deployed-address item                                               | **You propose in S-D1; Nitro rules**              |
-| **Class X — mainnet keys, go-live, sanctions** | **Nitro human**    | Any live-money posture                                                              | Standing law, unchanged                           |
-| **Gas sponsorship funding** (if we sponsor)    | **Nitro**          | S-A10 paymaster — the contract is yours, the funded account is not                  | Open                                              |
+`audited:true` is a sale/UI flag. It stays false until Nitro pays an external firm
+and the package hash+signer match (`src/audit/pipeline.ts`). Internal packages and
+green CI are not an audit. Your Done-bar is an honest `audited: false` plus the
+pipeline that refuses a fake badge (S-J1 shipped).
+
+| Sitting with                                   | Whose call         | What it gates                                                                       | Status                                                              |
+| ---------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Which venue this platform quotes**           | **Nitro**          | `socket.dex-venue-set` — svc-dex and the indexer both stay honestly dead until then | Sitting — keep shipping                                             |
+| **Money for an external contract audit**       | **Nitro**          | S-J1 / `socket.contract-audit` — `audited:true` is unreachable without it           | Sitting — keep shipping. Do not ping Nitro                          |
+| **Testnet / mainnet funding, RPC access**      | **Nitro**          | Anything past a local dev chain, incl. S-A13 deployment registry                    | Sitting — keep shipping                                             |
+| **Which EVM chain P0 deploys to**              | Nitro, on your ADR | S-D1, and every deployed-address item                                               | **Ruled 2026-08-08: Base Sepolia → Base; HyperEVM later; anvil=CI** |
+| **Class X — mainnet keys, go-live, sanctions** | **Nitro human**    | Any live-money posture                                                              | Standing law, unchanged                                             |
+| **Gas sponsorship funding** (if we sponsor)    | **Nitro**          | S-A10 paymaster — the contract is yours, the funded account is not                  | Sitting — keep shipping                                             |
 
 ---
 
@@ -87,12 +143,12 @@ Definitive build promise: **sovereignty by architecture** — non-custodial plan
 
 This board was written on 2026-08-03 against a picture that was already out of date, and the tracker rows it points at carried ownership stamps instead of state. The result: **four Tier A items read as greenfield and are substantially built.** Re-deriving any of this is our error, not yours.
 
-| Board item                       | Already merged                                                                                                                                                                                        | What is actually left                                                                                                       |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **S-A2 AMM**                     | Compile fix — private `_swap`, external ABI unchanged (**#228, yours**). PoolFactory on the dev chain (**#264**). **mint + swapExactIn proven on a real chain** (**#288**). Pure maths module tested. | **Invariants + LP suite shipped** (`src/amm/invariants.test.ts`) · oracle must NOT read AMM (S-A12) · `audited` stays false |
-| **S-A7 Launch / token factory**  | Fixed-supply ERC-20 + CREATE2 factory, own pinned suite, **proven end to end on the dev chain**, refuses a zero factory before any arithmetic, `audited:false` deliberate (**#217**)                  | The audit itself · launch fee (Fiat Plane) · meme/vesting/NFT surfaces (Tier G)                                             |
-| **S-A8 Toolchain pin**           | solc 0.8.28 pinned, artefacts committed with a re-derived source hash, contracts run against anvil in CI (`REQUIRE_EVM_CHAIN=1`), one `EXPECTED_SOLC` shared with the indexer                         | **Foundry/forge invariant + fuzz suites · gas snapshots** — the part that proves _safe_, not merely _correct_               |
-| **S-A1 Smart accounts (partly)** | SmartAccount / AccountFactory / SessionKeyLib compile and run; **31 contract tests incl. the CREATE2 cross-check** (**#210**); typed refusals on every chain path (**#193**); userop hashing built    | **The adversarial audit package** · S-A9 verifier · S-A11 differential check · gas ownership (S-A10/S-A11)                  |
+| Board item                       | Already merged                                                                                                                                                                                        | What is actually left                                                                                                                                                            |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-A2 AMM**                     | Compile fix — private `_swap`, external ABI unchanged (**#228, yours**). PoolFactory on the dev chain (**#264**). **mint + swapExactIn proven on a real chain** (**#288**). Pure maths module tested. | **Invariants + LP suite shipped** (`src/amm/invariants.test.ts`) · oracle must NOT read AMM (S-A12) · `audited` stays false                                                      |
+| **S-A7 Launch / token factory**  | Fixed-supply ERC-20 + CREATE2 factory, own pinned suite, **proven end to end on the dev chain**, refuses a zero factory before any arithmetic, `audited:false` deliberate (**#217**)                  | The audit itself · launch fee (Fiat Plane) · meme/vesting/NFT surfaces (Tier G)                                                                                                  |
+| **S-A8 Toolchain pin**           | solc 0.8.28 pinned, artefacts committed with a re-derived source hash, contracts run against anvil in CI (`REQUIRE_EVM_CHAIN=1`), one `EXPECTED_SOLC` shared with the indexer                         | **Forge fuzz + gas ceilings in CI** (`test/forge`), including session-key escalation / re-entrancy / validateUserOp. Residual: external audit. solc-js still compiles artefacts. |
+| **S-A1 Smart accounts (partly)** | SmartAccount / AccountFactory / SessionKeyLib compile and run; **31 contract tests incl. the CREATE2 cross-check** (**#210**); typed refusals on every chain path (**#193**); userop hashing built    | **The adversarial audit package** · S-A9 verifier · S-A11 differential check · gas ownership (S-A10/S-A11)                                                                       |
 
 **Your genuinely greenfield Tier A front is four items: S-A3 escrow · S-A4 lending · S-A5 router · S-A6 merchant contracts.**
 
@@ -118,7 +174,7 @@ This board was written on 2026-08-03 against a picture that was already out of d
 | **S-A12** | **Price oracle for marks and liquidations** 🔴    | `socket.price-oracle` · **S-A4 lending cannot ship without it**; existed only as an ADR line                                                   | Source set · staleness bound · disagreement rule between sources · **fail closed (refuse to liquidate), never a fallback price**                                                                                      | TWAP vs feed, own-pool oracles, IFC marks                                                                                      |
 | **S-A13** | **Deployment registry + explorer verification**   | `socket.deployment-registry` · every address in `env.ts` defaults to zero; bytecode-vs-template proof already solved (immutable ranges masked) | A tracked artefact: these addresses, this chain, this source hash, verified on this explorer · reproducible by a third party                                                                                          | Multi-chain topology (S-K4), upgrade records                                                                                   |
 
-> **Doctrine note on recovery (resolved 2026-08-07).** This board previously invited a guardian / multi-sig recovery design, while `socket.social-recovery` in the tracker forbids one: _"a guardian is a second party who can take the account, and the platform must never be one."_ **The tracker wins.** What you may design: guardians the **user** elects and can revoke, where no platform-controlled key is ever eligible and no platform quorum can move funds. If that cannot be built without the platform becoming a party, the honest answer is that it stays a socket — say so rather than shipping it.
+> **Doctrine note on recovery (resolved 2026-08-07).** This board previously invited a guardian / multi-sig recovery design, while `socket.social-recovery` in the tracker forbids one: _"a guardian is a second party who can take the account, and the platform must never be one."_ **The tracker wins.** What you may design: guardians the **user** elects and can revoke, where no platform-controlled key is ever eligible and no platform quorum can move funds. If that cannot be built without the platform becoming a party, the honest answer is that it stays a socket — say so rather than shipping it. **Permitted shape shipped:** `UserElectedRecovery` (user elect/revoke, delay, no platform key). **This PR proves** a SmartAccount may take it as owner. Residual: still not the factory default.
 
 🔴 = named nowhere before 2026-08-07 and blocking something that is already on this board.
 
@@ -134,11 +190,11 @@ This board was written on 2026-08-03 against a picture that was already out of d
 
 ### Tier C — Indexer / venue contracts (chain → read models)
 
-| ID       | Outcome                                 | Done bar                                                                  | Collision                                                            |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **S-C1** | **Real venue contracts (not DevVenue)** | Auditable venue events matching indexer ABI · or explicit socket residual | Indexer adapter exists; **contracts** are the hole (tracker honesty) |
-| **S-C2** | **Reorg-safe event surface**            | Property tests: reorg deeper than history · tip replace                   | Pair with indexer owners; you own Solidity venue                     |
-| **S-C3** | **Permissionless position/fill events** | Document event matrix for agents to WS later                              | Don’t invent futures mids                                            |
+| ID       | Outcome                                 | Done bar                                                                                                                                                                               | Collision                                               |
+| -------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **S-C1** | **Real venue contracts (not DevVenue)** | **Shipped this PR.** `SovereignVenue` — matching CLOB, same BookLevel/Fill/Position as the indexer. Residual: external audit + public deploy address.                                  | Indexer adapter exists; DevVenue stays a fixture        |
+| **S-C2** | **Reorg-safe event surface**            | **Shipped this PR.** Tip replace + 5-block history discard on SovereignVenue BookLevel (`sovereign-venue-reorg.onchain.test.ts`). Indexer unwind remains `reorg.live.test.ts` on 8546. | Pair with indexer; do not share 8545 with indexer reorg |
+| **S-C3** | **Permissionless position/fill events** | Event matrix is the three events on `SovereignVenue` (same as indexer ABI). Don’t invent futures mids.                                                                                 | WS transport is `socket.indexer-stream` (unowned)       |
 
 ### Tier D — INTACHAIN L1 epic (honest sequencing · §17 — YOU OWN THIS)
 
@@ -161,11 +217,11 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier E — Sovereign card / JIT (contract half)
 
-| ID       | Outcome                   | Done bar                                                                                                         |
-| -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **S-E1** | **JIT funding contract**  | Smart-account pull exact amount at auth · issuer never holds user balance · program kill strands zero user funds |
-| **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                           |
-| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                         |
+| ID       | Outcome                   | Done bar                                                                                                                                                                                             |
+| -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-E1** | **JIT funding contract**  | **Shipped #2470.** `CardPull` — exact `transferFrom` owner SA → user settlement; kill strands zero; session may call `pullExact`. Live issuer rail is still Nitro (`socket.live-issuer`). Unaudited. |
+| **S-E2** | **IFC cashback on-chain** | Cashback mint/transfer policy + events                                                                                                                                                               |
+| **S-E3** | **Adapter boundary**      | Contract interfaces for `CardIssuerAdapter` without shipping issuer keys                                                                                                                             |
 
 ### Tier F — Web4 / attestations (on-chain standing, zero PII)
 
@@ -177,12 +233,12 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier G — Launchpad / NFT / RWA (crypto surfaces)
 
-| ID       | Outcome                                | Done bar                                                |
-| -------- | -------------------------------------- | ------------------------------------------------------- |
-| **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                     |
-| **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent |
-| **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                            |
-| **S-G4** | **RWA registry**                       | Licence-gated honesty · §13 if partner blocks           |
+| ID       | Outcome                                | Done bar                                                                                                                                  |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-G1** | **Meme factory + instant market + LP** | Depends AMM honesty                                                                                                                       |
+| **S-G2** | **Presale / fair launch / vesting**    | Staked allocation tiers via stakeOf **read**, no invent                                                                                   |
+| **S-G3** | **NFT mint/list/auction + royalty**    | On-chain royalty enforcement                                                                                                              |
+| **S-G4** | **RWA registry**                       | **Shipped #2469 (contract half).** `RwaRegistry` refuse-closed on `bytes32(0)` licenceHash. Licence _content_ remains Class X. Unaudited. |
 
 ### Tier H — Mining / MatMul PoW interface (crypto)
 
@@ -193,20 +249,20 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 ### Tier I — DEX self-custody surface (`svc-dex`)
 
-| ID       | Outcome                                           | Done bar                                                                                                                                                                                                                                                                                                                                                         |
-| -------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S-I1** | **Pool interface + self-custody flows**           | Contract-held liquidity · no platform custody masquerade                                                                                                                                                                                                                                                                                                         |
-| **S-I2** | **Quote integrity**                               | Fail closed without invent. **Already true on main** — `dex.quote-router` sources live prices, enforces a staleness bound against its own read, has no cache and no fallback, and refuses 503 naming every dead venue. What it lacks is a venue that answers, and that is Nitro's decision (§0.5)                                                                |
-| **S-I3** | **Authoritative venue fees + settlement cost** 🔴 | `socket.dex-fee-source` — fees are configured guesses (`DEX_CLOB_FEE_BPS` 0, internal book 20bps) and settlement cost is a **declared understatement of zero**. Understate either and every quote promises a better price than the user gets. Must be set before the first real on-chain quote                                                                   |
-| **S-I4** | **Execution against a quoted venue** 🔴           | `socket.dex-execution` — and note the size the one-line title hides: this needs a **Venue Vault** (§27) and an **OMS service that does not exist** (§28, `services/svc-execution`). Today every adapter declares quote-only and `submit()` throws loudly rather than returning a plausible rejection. Keep the refusal loud until the vault and the OMS are real |
+| ID       | Outcome                                        | Done bar                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-I1** | **Pool interface + self-custody flows**        | Contract-held liquidity · no platform custody masquerade                                                                                                                                                                                                                                                                                                         |
+| **S-I2** | **Quote integrity**                            | Fail closed without invent. **Already true on main** — `dex.quote-router` sources live prices, enforces a staleness bound against its own read, has no cache and no fallback, and refuses 503 naming every dead venue. What it lacks is a venue that answers, and that is Nitro's decision (§0.5)                                                                |
+| **S-I3** | **Authoritative venue fees + settlement cost** | **Shipped this PR (dex).** CLOB no silent 0: both knobs from the venue or omit both. Residual: internal-book 20bps still configured; quote path does not `eth_call`.                                                                                                                                                                                             |
+| **S-I4** | **Execution against a quoted venue** 🔴        | `socket.dex-execution` — and note the size the one-line title hides: this needs a **Venue Vault** (§27) and an **OMS service that does not exist** (§28, `services/svc-execution`). Today every adapter declares quote-only and `submit()` throws loudly rather than returning a plausible rejection. Keep the refusal loud until the vault and the OMS are real |
 
 ### Tier J — Security / audit factory (your senior edge)
 
-| ID       | Outcome                            | Done bar                                                                                    |
-| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| **S-J1** | **Audit pipeline in svc-protocol** | Status, artifact hash, who signed, never “audited:true” without package                     |
-| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                        |
-| **S-J3** | **Incident runbooks**              | Pause, upgrade, recovery paths (**no platform-guardian path** — see the S-A1 doctrine note) |
+| ID       | Outcome                            | Done bar                                                                                                                                                                                                                   |
+| -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-J1** | **Audit pipeline in svc-protocol** | **Shipped this PR.** `src/audit/pipeline.ts` + `auditStatus` — artefact hash, who signed. Internal package cannot set `audited:true`. External firm still Nitro (`socket.contract-audit`). **Not a reason to ping Nitro.** |
+| **S-J2** | **Adversarial suites**             | Reentrancy, oracle manipulation, session key theft, factory griefing                                                                                                                                                       |
+| **S-J3** | **Incident runbooks**              | **Shipped #2471.** `docs/ops/INCIDENT-PROTOCOL-RUNBOOK.md` — relay kill only; no pause/upgrade; recovery is user-elected. Money-path incidents stay on Denon's runbook.                                                    |
 
 ### Tier K — Spec / ADR factory (plan completeness — you write freely)
 
@@ -224,14 +280,14 @@ This is the **own-the-chain** mountain. Freedom to design the full PR DAG. **Com
 
 Every row here was a **counted gap** in `tooling/coverage.yaml`: the law named the capability, no task carried it, and the ratchet held the number so it could not quietly grow. **Counted is not assigned** — a chain engineer reading this board could not see any of them, so the previous handover was not the complete scope it claimed to be. All six now exist as tracker rows with an owner, and the gap entries are closed.
 
-| ID       | Outcome                         | Why it was not visible                                                                                                                   | Done bar                                                                                                                                                                                                            |
-| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S-L1** | **Crew vaults** (§33)           | Crews are `done` as a social object; a shared treasury for one is a contract and had no row in any form                                  | Member shares · M-of-N spend threshold · **a defined split on exit, designed before anyone deposits** · money-path invariant tests                                                                                  |
-| **S-L2** | **Legacy vaults** (§34) 🔴      | **Arrives with a contradiction.** §34 describes guardian M-of-N recovery; `socket.social-recovery` forbids the platform being a guardian | **S-K7 ADR first.** Then: heirs and time locks the USER sets and revokes · no platform key ever eligible · no platform quorum can move funds. If it cannot be built without us being a party, say it stays a socket |
-| **S-L3** | **Stealth handles** (§26)       | `blueprint.attestations` covered the zero-PII half; the receiving half had no row                                                        | One human, two unlinkable presentations · indexer analytics stay aggregate-only · **cannot be retrofitted once addresses are public**                                                                               |
-| **S-L4** | **Launch trust layer** (§35)    | The law calls trust the moat in meme season; the anti-rug architecture was missing without being recorded as missing                     | LP locks and vesting **enforced by contract, not promised in a listing** · deployer reputation · a badge that would be false must be unissuable                                                                     |
-| **S-L5** | **Treasury yield vaults** (§36) | `launch.rwa` recorded the licence blocker for one half of the pair and nothing recorded the other                                        | Contract half yours · **licence is Class X, Nitro human** — no contract makes that go away                                                                                                                          |
-| **S-L6** | **Venue Vault** (§27) 🔴        | `venue.aggregation` has admitted "Venue Vault absent" in its own note since 2026-08-02 with no row behind it                             | Per-user encrypted external venue keys · **a key carrying withdrawal permission refused at registration, not filtered at use** · this is the hard blocker under S-I4                                                |
+| ID       | Outcome                         | Why it was not visible                                                                                                                   | Done bar                                                                                                                                                                                                                                      |
+| -------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S-L1** | **Crew vaults** (§33)           | Crews are `done` as a social object; a shared treasury for one is a contract and had no row in any form                                  | Member shares · M-of-N spend threshold · **a defined split on exit, designed before anyone deposits** · money-path invariant tests                                                                                                            |
+| **S-L2** | **Legacy vaults** (§34)         | **Arrived with a contradiction.** §34 describes guardian M-of-N recovery; `socket.social-recovery` forbids the platform being a guardian | **Shipped #2362.** S-K7 ADR then LegacyVault: user-set/revocable heirs, inactivity + challenge-window abort via heartbeat, staged tranche claim. No platform key, no guardian role. Residuals: multi-asset, attestation claims, public deploy |
+| **S-L3** | **Stealth handles** (§26)       | `blueprint.attestations` covered the zero-PII half; the receiving half had no row                                                        | **Shipped #2363 + scanner this PR.** Two ephemerals → two unlinkable presentations; StealthAnnouncer has no user id; ERC-5564 scheme-1 ECDH scan of logs. Residual: unaudited. keccak P0 presentations are not ECDH matches.                  |
+| **S-L4** | **Launch trust layer** (§35)    | The law calls trust the moat in meme season; the anti-rug architecture was missing without being recorded as missing                     | **Shipped this PR.** LaunchLpLock + LaunchVesting (no admin unlock) + DeployerReputation counts. Empty history cannot render as a clean badge.                                                                                                |
+| **S-L5** | **Treasury yield vaults** (§36) | `launch.rwa` recorded the licence blocker for one half of the pair and nothing recorded the other                                        | **Shipped #2363 (contract half).** TreasuryYieldVault refuse-closed on bytes32(0) licenceHash. Licence _content_ remains Class X                                                                                                              |
+| **S-L6** | **Venue Vault** (§27)           | `venue.aggregation` has admitted "Venue Vault absent" in its own note since 2026-08-02 with no row behind it                             | **Shipped #2363.** Per-user AES-256-GCM vault; withdrawal/internal-transfer refused at register. Residuals: HSM KEK, durable store, svc-trade/OMS wiring. Still the hard blocker under S-I4 until those residuals + OMS exist                 |
 
 **Yours because it is key custody, not because it is protocol plane** — S-L6 holds credentials to _custodial_ venues. The split: the vault design, key handling and refusal are yours; wiring svc-trade to a vault that exists is agent work.
 
@@ -342,9 +398,9 @@ the moat in meme season), S-L5 tokenised treasury-yield vaults, S-L6 Venue Vault
 API keys — the hard blocker under S-I4, and venue.aggregation has admitted it was absent since
 2026-08-02 with no row behind it).
 
-Recovery / inheritance: doctrine wins — the platform is NEVER a guardian. That collides head-on
-with §34's guardian M-of-N recovery, so S-L2 does not start with code: write the S-K7 ADR first.
-User-elected heirs and time locks only, no platform key ever eligible, or say it stays a socket.
+Recovery / inheritance: doctrine wins — the platform is NEVER a guardian. S-K7 ADR
+accepted; S-L2 LegacyVault (this PR) is user-elected heirs + time locks only — no
+platform key ever eligible. Multi-asset / attestation claims stay residual.
 
 #346 is merged (2026-08-06), your source landed unmodified. Nothing owed. No pay expand.
 

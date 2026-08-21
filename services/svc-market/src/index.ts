@@ -9,6 +9,8 @@ import { createStakeSource } from './stake-source.js';
 import { createMarketRouter, type MarketRouter } from './router.js';
 import { CommerceService } from './commerce/commerce-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createAffiliateAccrueClient } from './affiliate-accrue.js';
+import { createAffiliatePayoutClient } from './affiliate-payout.js';
 
 // §9 — register the TracerProvider before the first span is created.
 registerProcessHooks(
@@ -27,7 +29,8 @@ registerProcessHooks(
  * Balances live in svc-ledger only. Commission bps is owner-gated: unset env
  * refuses createListing + purchase and empties the public catalogue rather
  * than inventing a rate (D26-P1-M1 / M2). Compose wires LEDGER_URL to
- * svc-ledger; MARKET_HOUSE_COMMISSION_BPS stays unset until the owner sets it.
+ * svc-ledger; MARKET_HOUSE_COMMISSION_BPS is owner-published (0 = explicit
+ * free-cut in `.env.example`); compose pass-through, no in-code default.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -49,11 +52,16 @@ await sql`SELECT 1 FROM market.listings LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM market.purchases LIMIT 1`.catch(() => {
   throw new Error('market.purchases is missing — run migrations before starting svc-market');
 });
+await sql`SELECT 1 FROM market.subscription_state LIMIT 1`.catch(() => {
+  throw new Error('market.subscription_state is missing — run migrations before starting svc-market');
+});
 
 const vendors = new VendorService(sql, createStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET));
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 const commerce = new CommerceService(sql, vendors, ledger, {
   commissionBps: env.MARKET_HOUSE_COMMISSION_BPS ?? null,
+  affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
+  affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
 });
 const appRouter = createMarketRouter(vendors, commerce);
 
@@ -65,7 +73,7 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'commerce-one-time',
+  stage: 'commerce-subscriptions',
   commissionConfigured: env.MARKET_HOUSE_COMMISSION_BPS !== undefined,
 }));
 
@@ -81,7 +89,7 @@ await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
   {
     port: env.HTTP_PORT,
-    stage: 'commerce-one-time',
+    stage: 'commerce-subscriptions',
     commissionConfigured: env.MARKET_HOUSE_COMMISSION_BPS !== undefined,
     trpc: true,
   },

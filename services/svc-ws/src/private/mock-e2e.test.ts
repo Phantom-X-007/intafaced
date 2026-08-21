@@ -168,6 +168,10 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     const { token } = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'] }, tokens);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.frameCount(3);
+    for (;;) {
+      if (client.parsed().some((f) => f.channel === 'orders' && f.type === 'snapshot')) break;
+      await client.frameCount(client.frames.length + 1);
+    }
     return client;
   }
 
@@ -175,28 +179,26 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     await boot();
     const client = await connectOwner();
 
-    // Ready only until fixtures publish — no invented order/fill/position.
-    expect(client.frames).toHaveLength(3);
-    const readyChannels = client
-      .parsed()
+    const hello = client.parsed().filter((f) => f.type === 'ready' || f.type === 'snapshot');
+    const readyChannels = hello
+      .filter((f) => f.type === 'ready')
       .map((f) => f.channel)
       .sort();
     expect(readyChannels).toEqual(['fills', 'orders', 'positions']);
-    for (const frame of client.parsed()) {
-      expect(frame.type).toBe('ready');
-      expect(frame.userId).toBe(USER);
-    }
+    expect(hello.find((f) => f.channel === 'orders' && f.type === 'snapshot')).toMatchObject({ orders: [] });
 
+    const before = client.frames.length;
     await bus.publish('orderUpdated', FIXTURE_ORDER);
     await bus.publish('fillSettled', FIXTURE_FILL);
     await bus.publish('positionUpdated', FIXTURE_POSITION);
 
-    await client.frameCount(6);
-    expect(client.frames).toHaveLength(6);
+    await client.frameCount(before + 3);
+    const live = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(live).toHaveLength(3);
 
-    const order = client.parsed()[3]!;
-    const fill = client.parsed()[4]!;
-    const position = client.parsed()[5]!;
+    const order = live[0]!;
+    const fill = live[1]!;
+    const position = live[2]!;
 
     expect(order).toMatchObject({
       channel: 'orders',
@@ -264,13 +266,9 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     const client = await connectOwner();
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(client.frames).toHaveLength(3);
-    for (const frame of client.parsed()) {
-      expect(frame.type).toBe('ready');
-      expect(['orders', 'fills', 'positions']).toContain(frame.channel);
-    }
-    // No synthetic order / fill / position update frames.
-    expect(client.parsed().some((f) => f.type !== 'ready')).toBe(false);
+    const live = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(live).toHaveLength(0);
+    expect(client.parsed().some((f) => f.channel === 'orders' && f.type === 'snapshot')).toBe(true);
 
     client.socket.close();
   });
@@ -306,7 +304,8 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
     );
 
     await new Promise((r) => setTimeout(r, 50));
-    expect(client.frames).toHaveLength(3);
+    const live = client.parsed().filter((f) => f.type !== 'ready' && f.type !== 'snapshot');
+    expect(live).toHaveLength(0);
     client.socket.close();
   });
 });

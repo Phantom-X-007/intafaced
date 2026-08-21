@@ -6,7 +6,7 @@
 # them would put unreviewable binaries in the history of a repo that handles
 # money.
 #
-# The upstream tree already commits 31 `.jar` files as declared dependencies —
+# The upstream tree already commits 32 `.jar` files as declared dependencies —
 # those are tracked, deliberately, and flagged in the integration ADR as
 # unverifiable artefacts on the classpath of services that hold custody. Adding
 # our own build output on top would make that problem indistinguishable from

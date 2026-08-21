@@ -161,6 +161,7 @@ function stubService(): Stub {
     getMerchant: record('getMerchant', merchant),
     getMerchantByUserId: record('getMerchantByUserId', merchant),
     submitKyb: record('submitKyb', () => ({ ...merchant(), kybStatus: 'pending' as const, kybRef: 'dossier-1' })),
+    decideKyb: record('decideKyb', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
     decideKybStub: record('decideKybStub', () => ({ ...merchant(), kybStatus: 'approved' as const, kybRef: 'dossier-1' })),
     listPayments: record('listPayments', () => [paymentView({ status: 'captured', capturedAmount: amt('100') })]),
     createProfile: record('createProfile', () => ({ id: SETTLEMENT, merchantId: MERCHANT })),
@@ -454,6 +455,7 @@ describe('a caller can tell the failures apart', () => {
   it('maps an over-refund and a double-spend guard to CONFLICT', async () => {
     for (const code of [
       'pay.refund_exceeds_captured',
+      'pay.nothing_captured',
       'pay.refund_in_flight',
       'pay.settlement_in_flight',
       'pay.settlement_desynced',
@@ -838,6 +840,21 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     expect(call).toBeDefined();
     expect((call!.args[0] as { userId: string }).userId).toBe(USER);
   });
+
+  it('merchant.decideKyb is operator admin:compliance, not merchant pay:write', async () => {
+    const merchantApi = await caller(['pay:write']);
+    const merchantErr = await merchantApi.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' }).catch((e: unknown) => e);
+    expect(codeOf(merchantErr)).toBe('FORBIDDEN');
+    expect(String((merchantErr as Error).message)).toMatch(/admin:compliance/);
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
+
+    const ops = await caller(['admin:compliance']);
+    const out = await ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' });
+    expect(out).toMatchObject({ id: MERCHANT, kybStatus: 'approved' });
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(1);
+    // Operator is not fenced as the merchant owner.
+    expect(stub.calls.filter((c) => c.method === 'getMerchant')).toHaveLength(0);
+  });
 });
 
 // ── Read surfaces ────────────────────────────────────────────────────────────
@@ -1184,7 +1201,13 @@ describe('hosted checkout is public, and safe because of its shape', () => {
     await api.checkout.open({ token: 'pl_a_link_token_value', railAdapter: 'card-sandbox' } as never);
 
     const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
-    expect(call.args[0]).toEqual({ linkToken: 'pl_a_link_token_value', amount: undefined, assetId: undefined });
+    expect(call.args[0]).toEqual({
+      linkToken: 'pl_a_link_token_value',
+      amount: undefined,
+      assetId: undefined,
+      geoCountry: undefined,
+      method: undefined,
+    });
     expect(JSON.stringify(call.args[0])).not.toContain('card-sandbox');
   });
 
@@ -1194,6 +1217,14 @@ describe('hosted checkout is public, and safe because of its shape', () => {
 
     const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
     expect(call.args[0]).toMatchObject({ amount: amt('7.25'), assetId: 'USDT' });
+  });
+
+  it('D26-P1-P3: forwards payer country and never a risk band from the public door', async () => {
+    const api = await caller([]);
+    await api.checkout.open({ token: 'pl_a_link_token_value', geoCountry: 'DE', riskBand: 'low' } as never);
+    const call = stub.calls.find((c) => c.method === 'openCheckoutSession')!;
+    expect(call.args[0]).toMatchObject({ geoCountry: 'DE' });
+    expect(JSON.stringify(call.args[0])).not.toContain('riskBand');
   });
 
   it('refuses a JSON number for an amount, on the public surface as everywhere else', async () => {
@@ -1228,6 +1259,20 @@ describe('hosted checkout is public, and safe because of its shape', () => {
     const api = await caller([]);
     const err = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('SERVICE_UNAVAILABLE');
+  });
+
+  it('maps unset rails and unset PSP to SERVICE_UNAVAILABLE by their typed codes', async () => {
+    const api = await caller([]);
+
+    stub.fail(new PublicCheckoutUnavailable(null, 'none-configured'));
+    const railsUnset = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(railsUnset)).toBe('SERVICE_UNAVAILABLE');
+    expect(String((railsUnset as Error).message)).toContain('pay.checkout_rails_unset');
+
+    stub.fail(new PublicCheckoutUnavailable(null, 'psp-unset'));
+    const pspUnset = await api.checkout.open({ token: 'pl_a_link_token_value' }).catch((e: unknown) => e);
+    expect(codeOf(pspUnset)).toBe('SERVICE_UNAVAILABLE');
+    expect(String((pspUnset as Error).message)).toContain('pay.psp_unset');
   });
 
   it('maps an exhausted link to CONFLICT and a busy one to TOO_MANY_REQUESTS', async () => {

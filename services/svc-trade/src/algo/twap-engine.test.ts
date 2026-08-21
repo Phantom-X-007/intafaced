@@ -508,6 +508,7 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
     });
     expect(engine.get(parent.id)!.status).not.toBe('cancelled');
     // W4 C1: partial cancel pauses so the next tick cannot place more children.
+    expect(engine.get(parent.id)!.status).not.toBe('active');
     expect(engine.get(parent.id)!.status).toBe('paused');
     expect(engine.get(parent.id)!.haltReason).toBe('cancel_incomplete');
     // Collect-all: both children were asked before the flip decision.
@@ -526,6 +527,38 @@ describe('TwapEngine — cancel honesty (engineering defects A/B)', () => {
       expect(e).toBeInstanceOf(TradeError);
       expect((e as TradeError).code).toBe('trade.algo_cancel_incomplete');
     }
+  });
+
+  it('cancel-fail does not look like the parent died: still gettable, children live, not cancelled', async () => {
+    let durable: { status: string; haltReason: string | null } | undefined;
+    const ports = makePorts({
+      cancelChild: async () => {
+        throw new TradeError('matching down mid-cancel', 'trade.algo_child_cancel_failed');
+      },
+    });
+    const engine = new TwapEngine(ports, {
+      onChange: async (parent) => {
+        await new Promise((r) => setTimeout(r, 15));
+        durable = { status: parent.status, haltReason: parent.haltReason };
+      },
+    });
+    const parent = engine.create(USER, baseInput({ totalQty: parseAmount('0.004'), durationMs: 8_000, sliceIntervalMs: 2_000 }), LOT);
+    await engine.tick(parent.id);
+    expect(engine.get(parent.id)!.children).toHaveLength(1);
+
+    await expect(engine.cancel(USER, parent.id)).rejects.toMatchObject({
+      code: 'trade.algo_child_cancel_failed',
+    });
+
+    const live = engine.get(parent.id);
+    expect(live).toBeDefined();
+    expect(live!.status).not.toBe('cancelled');
+    expect(live!.status).not.toBe('completed');
+    expect(live!.status).not.toBe('active');
+    expect(live!.children).toHaveLength(1);
+    // Awaited onChange: durable park landed before the refuse, so a job host
+    // cannot still list this parent as active after cancel failed.
+    expect(durable).toEqual({ status: 'paused', haltReason: 'cancel_incomplete' });
   });
 
   it('A: parent flips cancelled only after every child cancel succeeds', async () => {
@@ -584,9 +617,56 @@ describe('TwapEngine — tickAll isolation (W4 C2)', () => {
   });
 });
 
-describe('refuse unsupported kinds at call sites', () => {
-  it('documents VWAP/POV out of v1', () => {
-    // Creation refusal lives on TradeService.createTwap — engine only accepts TWAP shape.
-    expect(baseInput().side).toBe('buy');
+describe('VWAP and POV engines', () => {
+  it('VWAP sizes children from observed volume, not equal TWAP slices', async () => {
+    const ports = makePorts();
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(
+      USER,
+      baseInput({
+        kind: 'vwap',
+        volumeProfile: [parseAmount('1'), parseAmount('3'), parseAmount('1'), parseAmount('1'), parseAmount('0')],
+      }),
+      LOT,
+    );
+    expect(parent.kind).toBe('vwap');
+    const plan = engine.planOf(parent.id)!;
+    expect(plan[0]).not.toBe(plan[1]);
+    const first = await engine.tick(parent.id);
+    expect(first.kind).toBe('placed');
+    if (first.kind === 'placed') expect(first.child.qty).toBe(plan[0]);
+  });
+
+  it('VWAP refuses an all-zero lookback rather than inventing equal slices', () => {
+    const engine = new TwapEngine(makePorts());
+    expect(() => engine.create(USER, baseInput({ kind: 'vwap', volumeProfile: [0n, 0n, 0n, 0n, 0n] }), LOT)).toThrow(/immature/);
+  });
+
+  it('POV places participation of observed interval volume; zero tape is a miss', async () => {
+    const ports = makePorts({
+      intervalTakerVolume: async () => parseAmount('1'),
+    });
+    const engine = new TwapEngine(ports);
+    const parent = engine.create(
+      USER,
+      baseInput({ kind: 'pov', participationBps: 1_000, durationMs: 10_000, sliceIntervalMs: 2_000 }),
+      LOT,
+    );
+    expect(parent.kind).toBe('pov');
+    expect(parent.participationBps).toBe(1_000);
+    const placed = await engine.tick(parent.id);
+    expect(placed.kind).toBe('placed');
+    if (placed.kind === 'placed') {
+      // 1.0 * 1000bps = 0.10, remaining 0.010 → 0.010
+      expect(placed.child.qty).toBe(parseAmount('0.010'));
+    }
+
+    const quiet = makePorts({ intervalTakerVolume: async () => 0n });
+    const quietEngine = new TwapEngine(quiet);
+    const quietParent = quietEngine.create(USER, baseInput({ kind: 'pov', participationBps: 1_000, clientAlgoId: 'quiet' }), LOT);
+    const miss = await quietEngine.tick(quietParent.id);
+    expect(miss.kind).toBe('miss');
+    if (miss.kind === 'miss') expect(miss.miss.code).toBe('trade.algo_no_volume');
+    expect(quiet.placed).toHaveLength(0);
   });
 });

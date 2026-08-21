@@ -1,5 +1,12 @@
 import type { Sql } from 'postgres';
-import { formatAmount, parseAmount, recipes, type LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import {
+  affiliateLegAfterMarketPurchase,
+  fireAffiliateAccrue,
+  NoopAffiliateAccrue,
+  type AffiliateAccruePort,
+} from '../affiliate-accrue.js';
+import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
 import { MarketError, type VendorService } from '../vendor-service.js';
 
 /**
@@ -19,6 +26,12 @@ import { MarketError, type VendorService } from '../vendor-service.js';
  * decision, not silence. Ledger recipe refuses blank/invalid bps so a
  * miswired caller cannot invent free commission at post time (#1761 owns
  * listing/premium fee recipe deepen — do not dual-edit market.ts here).
+ *
+ * Stage C3 listing subscriptions: one period is paid with the same
+ * `marketPurchase` recipe as a one-time sale. Period seconds come from the
+ * listing — never a default month. Cancel is a flag (no reverse recipe).
+ * Past-due is computed from the clock vs `access_until`, never a fake paid
+ * status. Leftover subscription rows without a period stay unsellable.
  */
 
 export type OfferType = 'one_time' | 'subscription';
@@ -34,6 +47,11 @@ export interface ListingRecord {
   assetId: string;
   /** Decimal string — never a JS number. */
   price: string;
+  /**
+   * Access window length in whole seconds. Required on subscription listings.
+   * Null on one-time listings and on leftover C3-era rows. Never defaulted.
+   */
+  periodSeconds: number | null;
   status: ListingStatus;
   createdAt: string;
   updatedAt: string;
@@ -53,6 +71,8 @@ export interface PurchaseRecord {
   rejectionCode: string | null;
   createdAt: string;
   settledAt: string | null;
+  /** Paid access end. Set on settled subscription purchases; null for one-time. */
+  accessUntil: string | null;
 }
 
 interface ListingRow {
@@ -63,6 +83,7 @@ interface ListingRow {
   offer_type: OfferType;
   asset_id: string;
   price: string;
+  period_seconds: number | string | null;
   status: ListingStatus;
   created_at: Date;
   updated_at: Date;
@@ -82,6 +103,7 @@ interface PurchaseRow {
   rejection_code: string | null;
   created_at: Date;
   settled_at: Date | null;
+  access_until: Date | null;
 }
 
 function toListing(row: ListingRow): ListingRecord {
@@ -94,6 +116,7 @@ function toListing(row: ListingRow): ListingRecord {
     assetId: row.asset_id,
     // postgres.js returns numeric as string when configured; coerce safely.
     price: typeof row.price === 'string' ? row.price : formatAmount(parseAmount(String(row.price))),
+    periodSeconds: row.period_seconds == null || row.period_seconds === '' ? null : Number(row.period_seconds),
     status: row.status,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -115,7 +138,19 @@ function toPurchase(row: PurchaseRow): PurchaseRecord {
     rejectionCode: row.rejection_code,
     createdAt: row.created_at.toISOString(),
     settledAt: row.settled_at ? row.settled_at.toISOString() : null,
+    accessUntil: row.access_until ? row.access_until.toISOString() : null,
   };
+}
+
+export interface SubscriptionAccess {
+  granted: true;
+  listingId: string;
+  buyerId: string;
+  accessUntil: string;
+}
+
+function addSeconds(from: Date, seconds: number): Date {
+  return new Date(from.getTime() + seconds * 1000);
 }
 
 export interface CommerceConfig {
@@ -124,15 +159,31 @@ export interface CommerceConfig {
    * Null is the refuse-closed default — never silently 0.
    */
   commissionBps: number | null;
+  /** Identity accrue after house commission posts. Default noop without IDENTITY_URL. */
+  affiliateAccrue?: AffiliateAccruePort;
+  /** Identity payout after accrue. Default noop without IDENTITY_URL. */
+  affiliatePayout?: AffiliatePayoutPort;
+  /** Clock for access windows. Tests inject; production uses wall time. */
+  now?: () => Date;
 }
 
 export class CommerceService {
+  private readonly affiliateAccrue: AffiliateAccruePort;
+  private readonly affiliatePayout: AffiliatePayoutPort;
+
   constructor(
     private readonly sql: Sql,
     private readonly vendors: VendorService,
     private readonly ledger: LedgerClient,
     private readonly config: CommerceConfig,
-  ) {}
+  ) {
+    this.affiliateAccrue = config.affiliateAccrue ?? new NoopAffiliateAccrue();
+    this.affiliatePayout = config.affiliatePayout ?? new NoopAffiliatePayout();
+  }
+
+  private now(): Date {
+    return this.config.now?.() ?? new Date();
+  }
 
   /** What this deployment's commission rate is — including that it is not one. */
   programme(): { commissionBps: number | null; commissionConfigured: boolean } {
@@ -164,10 +215,15 @@ export class CommerceService {
     assetId: string;
     /** Decimal string. */
     price: string;
+    /** Whole seconds. Required for subscription; forbidden for one-time. No default. */
+    periodSeconds?: number | null;
   }): Promise<ListingRecord> {
     // Commission law before stake burn: a blank rate must not consume a slot
-    // for inventory that can never settle (D26-P1-M2).
+    // for inventory that can never settle (D26-P1-M2). Same door for
+    // subscription listings — C3 does not invent a free-cut shopfront.
     this.requireCommissionConfigured();
+
+    const periodSeconds = this.resolveCreatePeriod(input.offerType, input.periodSeconds);
 
     const title = input.title.trim();
     const description = input.description.trim();
@@ -204,7 +260,7 @@ export class CommerceService {
 
     // Insert listing first so the id can name the slot claim (idempotent ref).
     const inserted = await this.sql<ListingRow[]>`
-      INSERT INTO market.listings (vendor_id, title, description, offer_type, asset_id, price, status)
+      INSERT INTO market.listings (vendor_id, title, description, offer_type, asset_id, price, period_seconds, status)
       VALUES (
         ${vendor.id},
         ${title},
@@ -212,6 +268,7 @@ export class CommerceService {
         ${input.offerType},
         ${assetId},
         ${priceStr}::numeric,
+        ${periodSeconds},
         'active'
       )
       RETURNING *
@@ -277,8 +334,8 @@ export class CommerceService {
    * Blank house commission → `[]`. Advertising inventory that purchase will
    * refuse invents a working marketplace; empty is the refuse-closed shopfront.
    *
-   * Subscription offers stay out of the shopfront until Stage C3 — purchase
-   * already refuses them; listing them would advertise an always-failing buy.
+   * Subscription listings appear only when they carry a period — leftover rows
+   * without one cannot be sold, so they stay off the shopfront.
    *
    * Order is registration (`created_at ASC`), same boring rule as `listed`
    * vendors — ranking / featured / newest-first is DIRECTION §8 and owner-only.
@@ -294,7 +351,10 @@ export class CommerceService {
     const rows = await this.sql<ListingRow[]>`
       SELECT * FROM market.listings
        WHERE status = 'active'
-         AND offer_type = 'one_time'
+         AND (
+           offer_type = 'one_time'
+           OR (offer_type = 'subscription' AND period_seconds IS NOT NULL)
+         )
        ORDER BY created_at ASC, id ASC
        LIMIT ${limit * 3}
     `;
@@ -319,7 +379,18 @@ export class CommerceService {
   }
 
   /**
-   * One-time purchase. Subscription listings refuse by name until Stage 3.
+   * Automatic recurring charge is not a second recipe. One period is `purchase`.
+   * Named refuse so this door cannot be mistaken for a silent scheduler.
+   */
+  async subscribe(_input?: { listingId?: string }): Promise<never> {
+    throw new MarketError(
+      'Automatic recurring subscribe is not built — buy one period with purchase',
+      'market.subscription_recurring_not_built',
+    );
+  }
+
+  /**
+   * One-time or one-period subscription purchase via `marketPurchase`.
    *
    * Order: commission configured → eligibility → claim row → re-check sell
    * gates → post from the claim snapshot → settle only while still pending.
@@ -338,7 +409,8 @@ export class CommerceService {
       throw new MarketError('No active listing with that id', 'market.listing_not_found');
     }
     if (listing.offerType === 'subscription') {
-      throw new MarketError('Subscription purchase is not built yet (market.commerce Stage 3 residual)', 'market.subscription_not_built');
+      this.requireSubscriptionPeriod(listing);
+      await this.assertNotCancelled(listing.id, input.buyerId);
     }
 
     await this.assertListingSellable(listing);
@@ -367,7 +439,9 @@ export class CommerceService {
       price: formatAmount(price),
       commissionBps,
     });
-    if (claimed.status === 'settled') return claimed;
+    if (claimed.status === 'settled') {
+      return this.ensureSubscriptionAccess(claimed, listing);
+    }
     if (claimed.status === 'rejected') {
       throw new MarketError(claimed.rejectionCode ?? 'Purchase previously rejected', 'market.purchase_conflict');
     }
@@ -378,6 +452,10 @@ export class CommerceService {
       throw new MarketError('No active listing with that id', 'market.listing_not_found');
     }
     await this.assertListingSellable(liveListing);
+    if (liveListing.offerType === 'subscription') {
+      this.requireSubscriptionPeriod(liveListing);
+      await this.assertNotCancelled(liveListing.id, claimed.buyerId);
+    }
 
     // Post only from the claim snapshot — never re-read live env bps or a
     // price that may have changed under a different write path later.
@@ -397,23 +475,27 @@ export class CommerceService {
         }),
       );
 
+      await this.notifyMarketAffiliateAccrue(claimed, snapshotPrice, snapshotBps);
+      await this.notifyMarketAffiliatePayout(claimed, snapshotPrice, snapshotBps);
+
+      const settledAtIso = this.now().toISOString();
       const settledRows = await this.sql<PurchaseRow[]>`
         UPDATE market.purchases
            SET status = 'settled',
                ledger_tx_id = ${tx.id},
-               settled_at = now()
+               settled_at = ${settledAtIso}::timestamptz
          WHERE id = ${claimed.id}
            AND status = 'pending'
         RETURNING *
       `;
       const settled = settledRows[0];
-      if (settled) return toPurchase(settled);
+      if (settled) return this.ensureSubscriptionAccess(toPurchase(settled), liveListing);
 
       // Another resume may have settled first, or a race rejected the row.
       const [reload] = await this.sql<PurchaseRow[]>`
         SELECT * FROM market.purchases WHERE id = ${claimed.id}
       `;
-      if (reload?.status === 'settled') return toPurchase(reload);
+      if (reload?.status === 'settled') return this.ensureSubscriptionAccess(toPurchase(reload), liveListing);
       if (reload?.status === 'rejected') {
         throw new MarketError(reload.rejection_code ?? 'Purchase previously rejected', 'market.purchase_conflict');
       }
@@ -439,11 +521,201 @@ export class CommerceService {
     }
   }
 
+  /** Best-effort; never throws. marketPurchase already posted. */
+  private async notifyMarketAffiliateAccrue(claimed: PurchaseRecord, snapshotPrice: Amount, snapshotBps: number): Promise<void> {
+    await fireAffiliateAccrue(
+      this.affiliateAccrue,
+      affiliateLegAfterMarketPurchase({
+        purchaseId: claimed.id,
+        vendorUserId: claimed.vendorUserId,
+        snapshotPrice,
+        snapshotBps,
+        feeAsset: claimed.assetId,
+      }),
+    );
+  }
+
+  /** Best-effort payout after accrue; never throws. marketPurchase already posted. */
+  private async notifyMarketAffiliatePayout(claimed: PurchaseRecord, snapshotPrice: Amount, snapshotBps: number): Promise<void> {
+    await fireAffiliatePayout(
+      this.affiliatePayout,
+      affiliateLegAfterMarketPurchase({
+        purchaseId: claimed.id,
+        vendorUserId: claimed.vendorUserId,
+        snapshotPrice,
+        snapshotBps,
+        feeAsset: claimed.assetId,
+      }),
+    );
+  }
+
   async purchasesOf(buyerId: string): Promise<PurchaseRecord[]> {
     const rows = await this.sql<PurchaseRow[]>`
       SELECT * FROM market.purchases WHERE buyer_id = ${buyerId} ORDER BY created_at DESC
     `;
     return rows.map(toPurchase);
+  }
+
+  /**
+   * Buyer cancel. Stops new paid windows. Does not post a reverse recipe —
+   * remaining time until `access_until` still grants access; after that the
+   * named code is cancelled, not past-due.
+   */
+  async cancelSubscription(input: {
+    buyerId: string;
+    listingId: string;
+  }): Promise<{ listingId: string; buyerId: string; cancelledAt: string }> {
+    const listing = await this.getListing(input.listingId);
+    if (!listing || listing.offerType !== 'subscription') {
+      throw new MarketError('No subscription listing with that id', 'market.listing_not_found');
+    }
+    const paidUntil = await this.maxAccessUntil(listing.id, input.buyerId);
+    if (!paidUntil) {
+      throw new MarketError('No paid subscription to cancel', 'market.subscription_no_access');
+    }
+    const [existing] = await this.sql<Array<{ cancelled_at: Date | null }>>`
+      SELECT cancelled_at FROM market.subscription_state
+       WHERE listing_id = ${listing.id} AND buyer_id = ${input.buyerId}
+    `;
+    if (existing?.cancelled_at) {
+      return { listingId: listing.id, buyerId: input.buyerId, cancelledAt: existing.cancelled_at.toISOString() };
+    }
+    const at = this.now();
+    await this.sql`
+      INSERT INTO market.subscription_state (listing_id, buyer_id, cancelled_at, updated_at)
+      VALUES (${listing.id}, ${input.buyerId}, ${at.toISOString()}::timestamptz, ${at.toISOString()}::timestamptz)
+      ON CONFLICT (listing_id, buyer_id) DO UPDATE
+        SET cancelled_at = COALESCE(market.subscription_state.cancelled_at, EXCLUDED.cancelled_at),
+            updated_at = EXCLUDED.updated_at
+    `;
+    const [row] = await this.sql<Array<{ cancelled_at: Date }>>`
+      SELECT cancelled_at FROM market.subscription_state
+       WHERE listing_id = ${listing.id} AND buyer_id = ${input.buyerId}
+    `;
+    if (!row?.cancelled_at) {
+      throw new MarketError('Cancel did not persist', 'market.subscription_cancel_failed');
+    }
+    return { listingId: listing.id, buyerId: input.buyerId, cancelledAt: row.cancelled_at.toISOString() };
+  }
+
+  /**
+   * Time-bounded access. Past-due is a named refuse, never a fake paid row.
+   */
+  async subscriptionAccess(input: { buyerId: string; listingId: string }): Promise<SubscriptionAccess> {
+    const listing = await this.getListing(input.listingId);
+    if (!listing || listing.offerType !== 'subscription') {
+      throw new MarketError('No subscription listing with that id', 'market.listing_not_found');
+    }
+    const paidUntil = await this.maxAccessUntil(listing.id, input.buyerId);
+    if (!paidUntil) {
+      throw new MarketError('No paid subscription access', 'market.subscription_no_access');
+    }
+    const cancelledAt = await this.cancelledAt(listing.id, input.buyerId);
+    const now = this.now();
+    if (now >= paidUntil) {
+      if (cancelledAt) {
+        throw new MarketError('Subscription was cancelled and the paid window has ended', 'market.subscription_cancelled');
+      }
+      throw new MarketError('Subscription access is past due', 'market.subscription_past_due');
+    }
+    return {
+      granted: true,
+      listingId: listing.id,
+      buyerId: input.buyerId,
+      accessUntil: paidUntil.toISOString(),
+    };
+  }
+
+  private resolveCreatePeriod(offerType: OfferType, periodSeconds?: number | null): number | null {
+    if (offerType === 'one_time') {
+      if (periodSeconds != null) {
+        throw new MarketError('One-time listings do not take a subscription period', 'market.period_not_applicable');
+      }
+      return null;
+    }
+    if (periodSeconds == null || !Number.isInteger(periodSeconds) || periodSeconds <= 0) {
+      throw new MarketError(
+        'Subscription listings need a period in whole seconds — no default cadence is invented',
+        'market.subscription_period_unset',
+      );
+    }
+    return periodSeconds;
+  }
+
+  private requireSubscriptionPeriod(listing: ListingRecord): number {
+    if (listing.periodSeconds == null || !Number.isInteger(listing.periodSeconds) || listing.periodSeconds <= 0) {
+      throw new MarketError(
+        'This subscription listing has no period — it cannot be sold until the vendor sets one',
+        'market.subscription_period_unset',
+      );
+    }
+    return listing.periodSeconds;
+  }
+
+  private async assertNotCancelled(listingId: string, buyerId: string): Promise<void> {
+    const cancelledAt = await this.cancelledAt(listingId, buyerId);
+    if (cancelledAt) {
+      throw new MarketError('This subscription was cancelled — new access is stopped', 'market.subscription_cancelled');
+    }
+  }
+
+  private async cancelledAt(listingId: string, buyerId: string): Promise<Date | null> {
+    const [row] = await this.sql<Array<{ cancelled_at: Date | null }>>`
+      SELECT cancelled_at FROM market.subscription_state
+       WHERE listing_id = ${listingId} AND buyer_id = ${buyerId}
+    `;
+    return row?.cancelled_at ?? null;
+  }
+
+  private async maxAccessUntil(listingId: string, buyerId: string): Promise<Date | null> {
+    const [row] = await this.sql<Array<{ until: Date | null }>>`
+      SELECT max(access_until) AS until
+        FROM market.purchases
+       WHERE listing_id = ${listingId}
+         AND buyer_id = ${buyerId}
+         AND status = 'settled'
+         AND access_until IS NOT NULL
+    `;
+    return row?.until ?? null;
+  }
+
+  /**
+   * Stamp `access_until` from the listing period. Idempotent on the same
+   * purchase id so a crash re-drive cannot stack extra time.
+   */
+  private async ensureSubscriptionAccess(purchase: PurchaseRecord, listing: ListingRecord): Promise<PurchaseRecord> {
+    if (listing.offerType !== 'subscription') return purchase;
+    if (purchase.accessUntil) return purchase;
+    const period = this.requireSubscriptionPeriod(listing);
+    const now = purchase.settledAt ? new Date(purchase.settledAt) : this.now();
+    const previous = await this.maxAccessUntilExcluding(listing.id, purchase.buyerId, purchase.id);
+    const base = previous && previous > now ? previous : now;
+    const until = addSeconds(base, period);
+    const untilIso = until.toISOString();
+    const updated = await this.sql<PurchaseRow[]>`
+      UPDATE market.purchases
+         SET access_until = ${untilIso}::timestamptz
+       WHERE id = ${purchase.id}
+         AND access_until IS NULL
+      RETURNING *
+    `;
+    const row = updated[0];
+    if (row) return toPurchase(row);
+    const [reload] = await this.sql<PurchaseRow[]>`SELECT * FROM market.purchases WHERE id = ${purchase.id}`;
+    return reload ? toPurchase(reload) : purchase;
+  }
+
+  private async maxAccessUntilExcluding(listingId: string, buyerId: string, exceptPurchaseId: string): Promise<Date | null> {
+    const [row] = await this.sql<Array<{ until: Date | null }>>`
+      SELECT max(access_until) AS until
+        FROM market.purchases
+       WHERE listing_id = ${listingId}
+         AND buyer_id = ${buyerId}
+         AND status = 'settled'
+         AND access_until IS NOT NULL
+         AND id <> ${exceptPurchaseId}
+    `;
+    return row?.until ?? null;
   }
 
   private async requireOwnedListing(userId: string, listingId: string): Promise<ListingRecord> {

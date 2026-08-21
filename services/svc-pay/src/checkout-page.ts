@@ -33,6 +33,7 @@
 
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
+import { PAYER_COPY_KEYS, payerTranslator, resolvePayerCopy } from './payer-copy.js';
 
 export type CheckoutLinkView = {
   id: string;
@@ -71,6 +72,8 @@ export type CheckoutPay = {
     linkToken: string;
     amount?: bigint;
     assetId?: string;
+    geoCountry?: string;
+    method?: string;
   }): Promise<{ sessionToken: string; session: CheckoutSessionPageView }>;
   getCheckoutSession(sessionToken: string): Promise<CheckoutSessionPageView>;
 };
@@ -152,12 +155,18 @@ export function renderCheckoutPage(state: CheckoutPageState, paths: CheckoutPath
     case 'missing_token':
       return {
         status: 400,
-        html: pageShell(errorBody('Missing link', 'This checkout URL needs a payment link token.'), 'Missing link'),
+        html: pageShell(
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.required), resolvePayerCopy(PAYER_COPY_KEYS.notFound)),
+          resolvePayerCopy(PAYER_COPY_KEYS.required),
+        ),
       };
     case 'not_found':
       return {
         status: 404,
-        html: pageShell(errorBody('Link not found', 'This payment link does not exist or is no longer active.'), 'Link not found'),
+        html: pageShell(
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.notFound), resolvePayerCopy(PAYER_COPY_KEYS.notFound)),
+          resolvePayerCopy(PAYER_COPY_KEYS.notFound),
+        ),
       };
     case 'expired':
       return {
@@ -192,8 +201,8 @@ export function renderCheckoutPage(state: CheckoutPageState, paths: CheckoutPath
       return {
         status: 429,
         html: pageShell(
-          errorBody('Too many checkouts open', 'Too many people are paying this link at once. Try again in a few minutes.'),
-          'Too many checkouts open',
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.rateLimited), resolvePayerCopy(PAYER_COPY_KEYS.rateLimited)),
+          resolvePayerCopy(PAYER_COPY_KEYS.rateLimited),
         ),
       };
     case 'amount_required':
@@ -202,8 +211,8 @@ export function renderCheckoutPage(state: CheckoutPageState, paths: CheckoutPath
       return {
         status: 500,
         html: pageShell(
-          errorBody('Something went wrong', state.message ?? 'The checkout page could not load this link.'),
-          'Checkout error',
+          errorBody(resolvePayerCopy(PAYER_COPY_KEYS.generic), state.message ?? resolvePayerCopy(PAYER_COPY_KEYS.generic)),
+          resolvePayerCopy(PAYER_COPY_KEYS.generic),
         ),
       };
   }
@@ -232,12 +241,12 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
   // here rather than a control somebody had to remember to add.
   //
   // The amount field exists ONLY on a variable-amount link. There is no rail
-  // field and no method field, on any link, ever.
+  // field on any link, ever. Country is a routing dim (D26-P1-P3), not a rail name.
   const amountField = fixedAmount
     ? ''
     : `
       <label class="field">
-        <span>Amount${link.currency ? ` (${escapeHtml(link.currency)})` : ''}</span>
+        <span>${escapeHtml(resolvePayerCopy(PAYER_COPY_KEYS.amount))}${link.currency ? ` (${escapeHtml(link.currency)})` : ''}</span>
         <input name="amount" inputmode="decimal" autocomplete="off" required pattern="[0-9]+(\\.[0-9]{1,18})?" placeholder="0.00" />
       </label>${
         link.currency
@@ -248,6 +257,12 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
         <input name="assetId" autocomplete="off" required maxlength="16" placeholder="USDT" />
       </label>`
       }`;
+
+  const geoField = `
+      <label class="field">
+        <span>Country</span>
+        <input name="geoCountry" autocomplete="country" required minlength="2" maxlength="8" placeholder="DE" />
+      </label>`;
 
   const tokenField = link.token ? `<input type="hidden" name="token" value="${escapeHtml(link.token)}" />` : '';
 
@@ -261,8 +276,8 @@ function linkBody(link: CheckoutLinkView, paths: CheckoutPaths, problem?: string
       ${amountLine}
       ${problemLine}
       <form method="POST" action="${escapeHtml(paths.basePath)}/checkout/session" class="pay">
-        ${tokenField}${amountField}
-        <button type="submit">Continue to payment</button>
+        ${tokenField}${amountField}${geoField}
+        <button type="submit">${escapeHtml(resolvePayerCopy(PAYER_COPY_KEYS.continue))}</button>
       </form>
       <p class="hint">Nothing is charged until you send the payment yourself. This page never asks for card details.</p>
     </section>
@@ -360,7 +375,7 @@ function readSafeString(config: Record<string, unknown>, key: string): string | 
 function pageShell(body: string, title: string, refreshSeconds?: number): string {
   const refresh = refreshSeconds ? `\n  <meta http-equiv="refresh" content="${refreshSeconds}" />` : '';
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(payerTranslator().renderedLocale)}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -428,13 +443,24 @@ export function stateForError(err: unknown): CheckoutPageState {
       return { kind: 'exhausted' };
     case 'pay.checkout_busy':
       return { kind: 'busy' };
-    // The posture refusal, a rail that cannot move value, and a suspended
-    // merchant all land on the same page on purpose: each means "this merchant
-    // cannot take payment right now", and telling a payer which one it is
-    // discloses our rail estate to the internet.
+    // Live acquiring refuses that still reached this switch as a 500. Each
+    // means "this merchant cannot take payment right now". Same page as #1808:
+    // nothing charged, no try-again, no estate leak. Operator stubs
+    // (`pay.kyb_operator_required`) and per-payment rail declines stay unmapped
+    // — those are not "merchant cannot take live payment", and the unavailable
+    // copy says no payment was started.
     case 'pay.checkout_rail_not_live':
+    case 'pay.checkout_rails_unset':
+    case 'pay.psp_unset':
     case 'pay.rail_not_live':
+    case 'pay.sandbox_rail_refused':
     case 'pay.merchant_inactive':
+    case 'pay.merchant_not_found':
+    case 'pay.merchant_pricing_invalid':
+    case 'pay.routing_no_rail':
+    case 'pay.rail_unknown':
+    case 'pay.rail_capability':
+    case 'pay.kyb_required':
       return { kind: 'unavailable' };
     default:
       return { kind: 'error' };
@@ -555,11 +581,12 @@ async function registerRoutes(app: FastifyInstance, pay: CheckoutPay, paths: Che
     if (!token) return send(reply, renderCheckoutPage({ kind: 'missing_token' }, paths));
 
     const amount = parsePayerAmount(body.amount);
-    if (amount === null) return showLink(token, reply, 'Enter an amount as a plain number, for example 19.99.');
+    if (amount === null) return showLink(token, reply, resolvePayerCopy(PAYER_COPY_KEYS.invalidAmount));
     const assetId = typeof body.assetId === 'string' && body.assetId.trim() ? body.assetId.trim().slice(0, 16) : undefined;
+    const geoCountry = typeof body.geoCountry === 'string' && body.geoCountry.trim() ? body.geoCountry.trim().slice(0, 8) : undefined;
 
     try {
-      const { sessionToken } = await pay.openCheckoutSession({ linkToken: token, amount, assetId });
+      const { sessionToken } = await pay.openCheckoutSession({ linkToken: token, amount, assetId, geoCountry });
       // 303, so a refresh of the resulting page does not re-POST and open a
       // second session — and a second payment — against the same link.
       return reply
@@ -570,7 +597,10 @@ async function registerRoutes(app: FastifyInstance, pay: CheckoutPay, paths: Che
         .send();
     } catch (err) {
       if (errorCode(err) === 'pay.checkout_amount_required') {
-        return showLink(token, reply, 'This payment link needs you to enter an amount.');
+        return showLink(token, reply, resolvePayerCopy(PAYER_COPY_KEYS.invalidAmount));
+      }
+      if (errorCode(err) === 'pay.routing_input_missing') {
+        return showLink(token, reply, resolvePayerCopy(PAYER_COPY_KEYS.required));
       }
       return send(reply, renderCheckoutPage(stateForError(err), paths));
     }

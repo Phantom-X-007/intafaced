@@ -276,8 +276,9 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
     if (record.kind === 'submit') {
       const book = bookFor(record.marketId);
       book.submit(fromWire(record.order));
-      // Reject-only opens must not survive replay either — same honesty as live.
-      if (book.currentSequence === 0) books.delete(record.marketId);
+      // Reject-only and IOC/market-remainder opens must not survive replay
+      // either — same honesty as live dropIfNeverTraded (print or rest, or drop).
+      if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
     /**
@@ -309,7 +310,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
         books.set(record.marketId, book);
       }
       book.submit(fromWire(record.order));
-      if (book.currentSequence === 0) books.delete(record.marketId);
+      if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
     // Same rule as full replay: cancel never invents a market.

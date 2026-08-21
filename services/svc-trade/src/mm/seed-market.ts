@@ -37,17 +37,17 @@ import { mmSeedOrderIdFor } from '../spot/ids.js';
 import { assertTradable } from '../spot/risk.js';
 import { TradeError, type Market } from '../spot/types.js';
 import { classifySeedSubmitResult, MM_SEED_ORDER_SEEDED, seedSubmitShape } from './seed-honesty.js';
+import { MM_MATCHING_ACCOUNT_ID } from './fill-account.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
 
-/** Matching STP account for house market-maker — distinct from user ids. */
-export const MM_MATCHING_ACCOUNT_ID = 'house:market-maker';
+export { MM_MATCHING_ACCOUNT_ID };
 
 export function isHouseMmAccount(accountId: string): boolean {
   return accountId === MM_MATCHING_ACCOUNT_ID;
 }
 
 /** Fields assertTradable reads — same surface as placeOrder's market row. */
-export type SeedTradableMarket = Pick<Market, 'symbol' | 'kind' | 'status'>;
+export type SeedTradableMarket = Pick<Market, 'symbol' | 'kind' | 'status' | 'assetClass'>;
 
 export interface SeedMarketSpec extends SeedPlanInput {
   marketId: string;
@@ -146,7 +146,7 @@ function defaultOrderId(runId: string, marketId: string, intent: SeedLevelIntent
 export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Promise<SeedMarketResult> {
   // Same gate as user placeOrder — before plan work that is cheap, and before
   // any hold/submit that is money. Catch so jobs get a soft skip, not a crash.
-  // Cast: assertTradable's param is full Market; it only reads symbol/kind/status.
+  // Cast: assertTradable's param is full Market; seed path supplies symbol/kind/status/assetClass.
   try {
     assertTradable(deps.market as Market, { futuresEnabled: deps.futuresEnabled });
   } catch (err) {

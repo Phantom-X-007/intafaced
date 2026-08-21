@@ -4,7 +4,7 @@
 
 Owns four things: a provider-agnostic model gateway, a per-task routing table, exact per-user metering billed through the ledger, and the `agent_actions` audit trail that makes an agent accountable.
 
-**What this service is:** the fleet runtime **and** the five Stage-1 product factories (navigator / support / scanner / merchant / copy-intel). Boot upserts their guardrails into `agent_definitions`; each mounts a metered `*.runSession`. Portfolio / launch / risk / coach / growth remain doctrine names only until product law.
+**What this service is:** the fleet runtime **and** the five Stage-1 product factories (navigator / support / scanner / merchant / copy-intel). Boot upserts their guardrails into `agent_definitions`; each mounts a metered `*.runSession`. `riskCompliance`, `coach`, and `growth` are refuse/proposal doors (not fleet `runSession` factories). Portfolio / launch remain doctrine names only until product law. An ungrounded coach is a typed refuse, not a chatbot. Growth proposes and never publishes; a dark warehouse is not a funnel.
 
 It also holds no balances and prices nothing it does not have a rate for. Metered usage moves value exactly once, through `feeCharge`, into svc-ledger.
 
@@ -72,23 +72,25 @@ None of them calls the engine — a rank is arithmetic, and an answer is an echo
 
 Identity-scoped navigator tools are also bound to the authenticated requester. `identity.session.read` refuses `subject_mismatch` when the supplied session belongs to another user; both the direct tool route and the metered runtime pass `ctx.principal.userId` into that check. The refusal is audited, returns no session data, and a tool-only run with no engine usage bills `0`.
 
-`support.runSession` is the same spine with the desk's own honesty rules, because this is the agent whose wrong answer a user acts on. A reply cites only the article keys `support.kb.search` actually returned. A KB that refused, missed, or was never asked for **escalates to a person** (`agents.support.escalated`) — a first-class product outcome, not an error, and never a hedged sentence. A run where no source at all was reachable **refuses** (`no_grounded_read`), because an `ok` carrying an empty finding list would read like an answer. A request to move money escalates before a session opens: refunds are `ops.support` plus a `packages/ledger-client` recipe, and reading the KB to discover that would bill a user for a lookup that cannot change the outcome. The requester is always `ctx.principal.userId`, so a ticket or account projection belonging to someone else refuses rather than reads, and the account projection is status + KYC tier with no balance field to leak (§0.6). Money tools are undeclared on `supportAgentGuardrail()`, so a tier matrix that granted `pay.refund` still never reaches its executor — `session-run.test.ts` asserts that over the whole `SUPPORT_MONEY_TOOLS` denylist.
+`support.runSession` is the same spine with the desk's own honesty rules, because this is the agent whose wrong answer a user acts on. A reply cites only the article keys `support.kb.search` actually returned. A KB that refused, missed, or was never asked for **escalates to a person** (`agents.support.escalated`) — a first-class product outcome, not an error, and never a hedged sentence. A run where no source at all was reachable **refuses** (`no_grounded_read`), because an `ok` carrying an empty finding list would read like an answer. When `identity.account.read` was asked and the fixture is missing, incomplete, owner-mismatched, or smuggles a balance field, the run **refuses** (`account_state_missing` / `balance_field_forbidden`) rather than answering from the KB as if the account were checked. Tool calls are **stoppable** via `AbortSignal`: abort returns `stopped`, settles/closes what opened, and never invents a silent `feeCharge`. A request to move money escalates before a session opens: refunds are `ops.support` plus a `packages/ledger-client` recipe, and reading the KB to discover that would bill a user for a lookup that cannot change the outcome. The requester is always `ctx.principal.userId`, so a ticket or account projection belonging to someone else refuses rather than reads, and the account projection is status + KYC tier with no balance field to leak (§0.6). Money tools are undeclared on `supportAgentGuardrail()`, so a tier matrix that granted `pay.refund` still never reaches its executor — `session-run.test.ts` asserts that over the whole `SUPPORT_MONEY_TOOLS` denylist.
 
 Also `GET /health` and `GET /ready`.
 
 ### `/ready` — honest, not decorative
 
-| Field                  | Meaning                                                                                             |
-| ---------------------- | --------------------------------------------------------------------------------------------------- |
-| `ready`                | Process is up (schema + listen succeeded). Always true after boot.                                  |
-| `providerMode`         | `mock` (default) or `upstream`. **Mock is not production inference.**                               |
-| `providers[]`          | Logical provider ids + usable/healthy (no vendor names — §0.7).                                     |
-| `meteringEnabled`      | Billing kill-switch. When off: no bill; token counts stay on the action audit only.                 |
-| `fleet`                | Stage-1 matrix card (agents / runSession / bootRegistered / missing routes). Zeros if not supplied. |
-| `tasks`                | Routing task ids currently configured.                                                              |
-| `usefulPath.available` | Whether a **completion** can leave this process right now.                                          |
-| `usefulPath.task`      | First completion task that is currently servable, or null.                                          |
-| `usefulPath.residual`  | Why not / what this still is not (mock residual, orphan routes, outage).                            |
+| Field                     | Meaning                                                                                             |
+| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ready`                   | Process is up (schema + listen succeeded). Always true after boot.                                  |
+| `providerMode`            | `mock` (default) or `upstream`. **Mock is not production inference.**                               |
+| `providers[]`             | Logical provider ids + usable/healthy (no vendor names — §0.7).                                     |
+| `meteringEnabled`         | Billing kill-switch. When off (D26-P1-A6): audit-only forever — no usage_records, no feeCharge.     |
+| `meteringMode`            | `billed` when the kill-switch is on; `audit_only` when off.                                         |
+| `meteringAllowsFeeCharge` | Forever `false` while metering is off. Process-ready is not a silent bill.                          |
+| `fleet`                   | Stage-1 matrix card (agents / runSession / bootRegistered / missing routes). Zeros if not supplied. |
+| `tasks`                   | Routing task ids currently configured.                                                              |
+| `usefulPath.available`    | Whether a **completion** can leave this process right now.                                          |
+| `usefulPath.task`         | First completion task that is currently servable, or null.                                          |
+| `usefulPath.residual`     | Why not / what this still is not (mock residual, orphan routes, outage).                            |
 
 A green container with `providerMode: mock` and `usefulPath.available: true` means the gateway answers with the deterministic stand-in. It does **not** mean production inference is live — mock residual is intentional. Stage-1 product agents (navigator / support / scanner / merchant / copy-intel) **are** boot-registered and counted on `productAgentsRegistered` + the `fleet` card; registration is not the same as upstream AI. Process stays in the fleet when the engine is down so operators can still read session logs; degradation is `usefulPath.available: false`, not 503.
 
@@ -239,6 +241,7 @@ AGENTS_PROVIDER=mock                     # 'mock' (default) or 'upstream'
 AGENTS_FEE_ASSET_ID=IFC
 AGENTS_USAGE_WINDOW_MINUTES=60           # must divide 1440
 AGENTS_METERING_ENABLED=true
+ACADEMY_URL=http://svc-academy:4016      # coach spine; blank = empty catalog refuse
 
 # Only when AGENTS_PROVIDER=upstream. Secrets come from vault in prod (§9).
 AGENTS_UPSTREAM_BASE_URL=https://…

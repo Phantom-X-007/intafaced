@@ -5,8 +5,71 @@
  * the platform can source, plus watchlists. Intelligence tiers, funding, whale
  * flow, and mobile sync are out of scope for this residual.
  *
+ * Portfolio is in the tracker TITLE, not in the price core. Until ledger-client
+ * publishes a portfolio view, the honest slice is refuse-closed
+ * (`alert.portfolio_view_unpublished`) — notify never invents a second book
+ * (Doctrine §0.6) and never fires on silence.
+ *
  * Money discipline: every price is a decimal *string*. Nothing is a `number`.
+ * The portfolio refuse arm carries zero money fields.
  */
+
+/**
+ * Price watches are live. Portfolio and the Phase-5 / futures-tied kinds are
+ * named so the door can refuse them — never an invented series.
+ */
+export type UnpublishedAlertKind = 'funding' | 'whale' | 'liquidation_proximity' | 'intelligence';
+
+export const UNPUBLISHED_ALERT_KINDS = [
+  'funding',
+  'whale',
+  'liquidation_proximity',
+  'intelligence',
+] as const satisfies readonly UnpublishedAlertKind[];
+
+export type AlertKind = 'price' | 'portfolio' | UnpublishedAlertKind;
+
+/** Stable refuse until a ledger portfolio view exists. Never invent a balance. */
+export const ALERT_PORTFOLIO_VIEW_UNPUBLISHED = 'alert.portfolio_view_unpublished' as const;
+
+/** Stable refuse for kinds with no sourced series. Never fire, never store. */
+export const ALERT_KIND_UNPUBLISHED = 'alert.kind_unpublished' as const;
+
+export class AlertKindUnpublishedError extends Error {
+  readonly code: typeof ALERT_KIND_UNPUBLISHED = ALERT_KIND_UNPUBLISHED;
+  readonly alertKind: UnpublishedAlertKind;
+  constructor(alertKind: UnpublishedAlertKind) {
+    super(`${ALERT_KIND_UNPUBLISHED}: ${alertKind} has no sourced series`);
+    this.name = 'AlertKindUnpublishedError';
+    this.alertKind = alertKind;
+  }
+}
+
+export function isUnpublishedAlertKind(kind: string | undefined): kind is UnpublishedAlertKind {
+  return (UNPUBLISHED_ALERT_KINDS as readonly string[]).includes(kind ?? '');
+}
+
+export type CreateUnpublishedAlertInput = {
+  readonly kind: UnpublishedAlertKind;
+  readonly userId: string;
+};
+
+export class AlertPortfolioUnpublishedError extends Error {
+  readonly code: typeof ALERT_PORTFOLIO_VIEW_UNPUBLISHED = ALERT_PORTFOLIO_VIEW_UNPUBLISHED;
+  constructor(detail = 'ledger portfolio view unpublished — notify holds no balance') {
+    super(`${ALERT_PORTFOLIO_VIEW_UNPUBLISHED}: ${detail}`);
+    this.name = 'AlertPortfolioUnpublishedError';
+  }
+}
+
+/**
+ * Create a portfolio watch — zero money fields on purpose.
+ * Create always throws `AlertPortfolioUnpublishedError`; nothing is stored.
+ */
+export type CreatePortfolioAlertInput = {
+  readonly kind: 'portfolio';
+  readonly userId: string;
+};
 
 /** Above / below a target. Crossing fires once (status becomes `fired`). */
 export type AlertDirection = 'above' | 'below';
@@ -65,11 +128,20 @@ export type MarkSource = {
   quote(marketId: string, at?: Date): Promise<MarkQuote>;
 };
 
+export type AlertRefuseCode =
+  | 'alert.price_unavailable'
+  | 'alert.not_active'
+  | 'alert.invalid_price'
+  | 'alert.portfolio_view_unpublished'
+  | 'alert.kind_unpublished'
+  | 'channel.not_configured'
+  | 'channel.disabled';
+
 export type AlertEvalOutcome =
   | { readonly kind: 'hold'; readonly markPrice: string }
   | { readonly kind: 'fire'; readonly markPrice: string }
   | {
       readonly kind: 'refuse';
-      readonly code: 'alert.price_unavailable' | 'alert.not_active' | 'alert.invalid_price';
+      readonly code: AlertRefuseCode;
       readonly detail: string;
     };

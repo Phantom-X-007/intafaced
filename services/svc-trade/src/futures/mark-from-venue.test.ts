@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { parseAmount } from '@intafaced/ledger-client/money';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseAmount, formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketDataAdapter, VenueBookSnapshot } from '@intafaced/venue-contracts';
 import type { HttpPort } from '@intafaced/venue-adapter';
 import {
@@ -7,6 +10,7 @@ import {
   createConfiguredVenueMarkSource,
   createVenueMarketDataAdapter,
   markSourceFromVenuePublicBook,
+  markSourceFromMaintainedVenueBook,
   markSourcePrefer,
   midFromVenueBook,
   parseVenueMarkSymbols,
@@ -212,6 +216,32 @@ describe('createVenueMarketDataAdapter', () => {
     // a venue the operator did not name.
     expect(createVenueMarketDataAdapter('bybit')).toBeNull();
     expect(createVenueMarketDataAdapter('bybit-futures')).toBeNull();
+    expect(createVenueMarketDataAdapter('okx')).toBeNull();
+    expect(createVenueMarketDataAdapter('okx-futures')).toBeNull();
+  });
+
+  it('okx-spot → real public MarketDataAdapter, reached by its id', () => {
+    const a = createVenueMarketDataAdapter('okx-spot');
+    expect(a).not.toBeNull();
+    expect(a!.venue.id).toBe('okx-spot');
+    expect(a!.venue.kind).toBe('external-cex');
+    expect(a!.venue.sequencedDepth).toBe(true);
+    expect(createVenueMarketDataAdapter('  OKX-SPOT  ')!.venue.id).toBe('okx-spot');
+  });
+
+  it('boot warn and env comments list okx-spot now that the factory knows it', () => {
+    const root = dirname(fileURLToPath(import.meta.url));
+    const indexSrc = readFileSync(join(root, '../index.ts'), 'utf8');
+    const envSrc = readFileSync(join(root, '../env.ts'), 'utf8');
+    expect(indexSrc).toMatch(/Supported: binance-spot, bybit-spot, okx-spot/);
+    expect(envSrc).toMatch(/`binance-spot`, `bybit-spot`, `okx-spot`/);
+  });
+
+  it('the three ids resolve to DIFFERENT adapters — a median of one is not a check', () => {
+    const binance = createVenueMarketDataAdapter('binance-spot');
+    const bybit = createVenueMarketDataAdapter('bybit-spot');
+    const okx = createVenueMarketDataAdapter('okx-spot');
+    expect(new Set([binance!.venue.id, bybit!.venue.id, okx!.venue.id]).size).toBe(3);
   });
 });
 
@@ -332,6 +362,79 @@ describe('bybit-spot reaches the mark path, and refuses on it', () => {
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
     expect(await src.quote({ marketId: 'm1', at: new Date() })).toBeNull();
     expect(DEFAULT_MIN_BEST_LEVEL_NOTIONAL).toBe('100');
+  });
+});
+
+const okxBook = (over: { bids?: [string, string][]; asks?: [string, string][]; code?: string }): unknown => ({
+  code: over.code ?? '0',
+  msg: '',
+  data: [
+    {
+      asks: (over.asks ?? []).map(([p, q]) => [p, q, '0', '1']),
+      bids: (over.bids ?? []).map(([p, q]) => [p, q, '0', '1']),
+      ts: String(Date.now()),
+      seqId: 7,
+    },
+  ],
+});
+
+function okxMarkSource(http: HttpPort) {
+  const configured = createConfiguredVenueMarkSource({
+    venueId: 'okx-spot',
+    symbols: 'm1:BTC/USDT',
+    adapter: createVenueMarketDataAdapter('okx-spot', { http, restBase: 'https://rest.test', heartbeatMs: 0 }),
+  });
+  expect(configured).not.toBeNull();
+  return configured!.source;
+}
+
+describe('okx-spot reaches the mark path, and refuses on it', () => {
+  it('the ops factory builds the venue from its id with nothing injected', () => {
+    const configured = createConfiguredVenueMarkSource({ venueId: 'okx-spot', symbols: 'm1:BTC/USDT' });
+    expect(configured).not.toBeNull();
+    expect(configured!.venueId).toBe('okx-spot');
+  });
+
+  it('a real two-sided book with real size behind it mids normally', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [['99000', '1']], asks: [['101000', '1']] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('100000');
+  });
+
+  it('EMPTY book → null', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [], asks: [] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('ONE-SIDED book → null', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [['99000', '1']], asks: [] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNKNOWN instrument (non-zero code) → null, never an empty book', async () => {
+    const src = okxMarkSource(fixedHttp({ code: '51001', msg: 'Instrument ID does not exist', data: [] }));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('UNMAPPED symbol → null, and the venue is never called', async () => {
+    const configured = createConfiguredVenueMarkSource({
+      venueId: 'okx-spot',
+      symbols: 'm1:BTC/USDT',
+      adapter: createVenueMarketDataAdapter('okx-spot', {
+        http: {
+          async get() {
+            throw new Error('must not call the venue for an unmapped market');
+          },
+        },
+        restBase: 'https://rest.test',
+        heartbeatMs: 0,
+      }),
+    });
+    expect(await configured!.source.markPrice({ marketId: 'm-other', at: new Date() })).toBeNull();
+  });
+
+  it('two dust orders mint nothing — same threshold, no second policy', async () => {
+    const src = okxMarkSource(fixedHttp(okxBook({ bids: [['1000', DUST]], asks: [['3000', DUST]] })));
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
   });
 });
 
@@ -534,5 +637,71 @@ describe('honesty: fabric snapshot is the only data path', () => {
     await src.markPrice({ marketId: 'm-eth', at: new Date() });
     expect(snapshotBook).toHaveBeenCalledTimes(1);
     expect(snapshotBook).toHaveBeenCalledWith('ETH/USDT', 5);
+  });
+});
+
+describe('markSourceFromMaintainedVenueBook', () => {
+  const observedAt = new Date('2026-08-14T05:00:00.000Z');
+  const twoSided = {
+    bestBid: parseAmount('100'),
+    bestAsk: parseAmount('102'),
+    bestBidQty: parseAmount('10'),
+    bestAskQty: parseAmount('10'),
+    spread: parseAmount('2'),
+    mid: parseAmount('101'),
+  };
+
+  it('mids a servable sequenced top and keeps tracker observedAt', async () => {
+    const src = markSourceFromMaintainedVenueBook({
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    const q = await src.quote!({ marketId: 'm1', at: new Date('2026-08-14T05:00:01.000Z') });
+    expect(q && formatAmount(q.price)).toBe('101');
+    expect(q?.asOf).toEqual(observedAt);
+  });
+
+  it('withholds the mark while the feed is desynced — never invents from a gap', async () => {
+    const src = markSourceFromMaintainedVenueBook({
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: false,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('withholds when the tracker has no observedAt — a book without an age is not a mark', async () => {
+    const src = markSourceFromMaintainedVenueBook({
+      resolveSymbol: () => 'BTC/USDT',
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => null,
+      }),
+    });
+    expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBeNull();
+  });
+
+  it('does not poll snapshotBook when createConfigured is given a maintained port', async () => {
+    const snapshotBook = vi.fn(async () => snap({ bids: [['50', '10']], asks: [['50', '10']] }));
+    const cfg = createConfiguredVenueMarkSource({
+      venueId: 'binance-spot',
+      symbols: 'm1:BTC/USDT',
+      adapter: fakeAdapter(snapshotBook),
+      bookForSymbol: () => ({
+        servable: true,
+        top: () => twoSided,
+        observedAt: () => observedAt,
+      }),
+    });
+    expect(await cfg!.source.markPrice({ marketId: 'm1', at: observedAt })).toBe('101');
+    expect(snapshotBook).not.toHaveBeenCalled();
   });
 });

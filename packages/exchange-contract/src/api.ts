@@ -108,12 +108,11 @@ export type WsChannel = keyof typeof WS_CHANNELS;
  * hammers the gateway.
  */
 export const RATE_LIMITS = {
-  /** Public endpoints, per IP. */
-  publicPerMinute: 1200,
-  /** Private endpoints, per API key. */
-  privatePerMinute: 600,
-  /** Order placement/cancellation, per API key — the expensive path. */
-  ordersPerSecond: 20,
-  /** Weight-based budget, mirroring how CCXT models cost. */
-  weightPerMinute: 6000,
+  /**
+   * What svc-edge actually enforces (`EDGE_RATE_LIMIT_MAX` default 300 per
+   * `EDGE_RATE_LIMIT_WINDOW_MS` default 60s). One bucket — public and private
+   * share it. There is no separate order/weight governor.
+   */
+  publicPerMinute: 300,
+  privatePerMinute: 300,
 } as const;

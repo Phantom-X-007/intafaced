@@ -3,9 +3,12 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader, BASE_PERKS } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 import { createAcademyRouter } from './router.js';
+import { userCopy } from './user-copy.js';
 import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
 import { certPerkPlaneStatus } from './certs/perk-plane.js';
 import type { AcademyService } from './academy-service.js';
+import type { PaperOpsStatus } from './paper/ops-gate.js';
+import { assertCallerCannotLiePaperFlag, memoryPaperFlagPort } from './paper/market-flag-verify.js';
 
 /**
  * THE MOUNT BOUNDARY for svc-academy (docs/decisions/mount-boundary.md).
@@ -63,6 +66,12 @@ function forged(p: Principal = principal()) {
   });
 }
 
+/** Trade listing the mount stub consults — caller `paper: true` is not enough. */
+const MOUNT_PAPER_FLAG_PORT = memoryPaperFlagPort([
+  { marketId: 'mkt-paper-1', symbol: 'BTC-USDT', paper: true },
+  { marketId: 'mkt-live-1', symbol: 'BTC/USDT', paper: false },
+]);
+
 const room = {
   id: ROOM,
   slug: 'meme-war-room',
@@ -99,11 +108,17 @@ function stubAcademy(overrides: Partial<AcademyService> = {}): AcademyService {
     createRoom: vi.fn(async () => room),
     invite: vi.fn(async () => undefined),
     assertPaperTradingEnabled: vi.fn(() => undefined),
-    paperOpsStatus: vi.fn(() => ({
+    assertCallerPaperFlagVerified: vi.fn(async (market) => {
+      await assertCallerCannotLiePaperFlag(MOUNT_PAPER_FLAG_PORT, market);
+    }),
+    paperOpsStatus: vi.fn((): PaperOpsStatus => ({
       enabled: true,
-      flagId: 'academy.paper-trading' as const,
-      envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
-      liveTradeUnaffected: true as const,
+      flagId: 'academy.paper-trading',
+      envKey: 'ACADEMY_PAPER_TRADING_ENABLED',
+      liveTradeUnaffected: true,
+      simulated: true,
+      venue: 'paper',
+      realMoney: false,
     })),
     // The real plane over the real null publisher — a hand-written literal here
     // would pass while the shape drifted underneath it.
@@ -144,7 +159,10 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'ambassadors',
         'ambassadorIfcPay',
         'ambassadorPayPlane',
+        'ambassadorPayQuote',
         'ambassadorRevenueShare',
+        'residencyIfcPayQuote',
+        'residencyPayQuote',
         'appointAmbassador',
         'freezeAmbassador',
         'unfreezeAmbassador',
@@ -210,7 +228,10 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     const item = await caller.curriculumItem({ slug: 'foundations-risk-first' });
     expect(item.body).toContain('# Risk first');
 
-    await expect(caller.curriculumItem({ slug: 'no-such-playbook' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(caller.curriculumItem({ slug: 'no-such-playbook' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      message: userCopy('academy.curriculum_not_found'),
+    });
   });
 
   it('refuses curriculum without academy:read', async () => {
@@ -234,6 +255,8 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
     const status = await caller.curriculumImportStatus();
     expect(status.stage3Polish.ready).toBe(true);
     expect(status.titlePromiseMet).toBe(true);
+    expect(status.substanceBarMet).toBe(true);
+    expect(status.theaterSlugs).toEqual([]);
     const localized = await caller.curriculumItemLocalized({ slug: 'foundations-risk-first', locale: 'fr' });
     expect(localized.fellBack).toBe(true);
     expect(localized.locale).toBe('en');
@@ -484,6 +507,26 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
     expect(result).toMatchObject({ ok: false, reason: 'not_paper' });
   });
 
+  it('REFUSES when the caller labels a live listing as paper', async () => {
+    await expect(
+      caller().paperDrill({
+        slug: 'foundations-paper-workbook',
+        market: { marketId: 'mkt-live-1', paper: true, symbol: 'BTC/USDT' },
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('REFUSES paper: true when TRADE_URL / verification port is unset', async () => {
+    const academy = stubAcademy({
+      assertCallerPaperFlagVerified: vi.fn(async (market) => {
+        await assertCallerCannotLiePaperFlag(undefined, market);
+      }),
+    });
+    await expect(
+      createAcademyRouter(academy).createCaller(signed()).paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  });
+
   it('refuses with no market rather than defaulting to one', async () => {
     const result = await caller().paperDrill({ slug: 'foundations-paper-workbook', market: null });
 
@@ -515,13 +558,44 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('Stage-3 paperOpsStatus reports enable + liveTradeUnaffected', async () => {
+  it('Stage-3 paperOpsStatus reports enable + liveTradeUnaffected + realMoney false', async () => {
     const status = await caller().paperOpsStatus();
     expect(status).toEqual({
       enabled: true,
       flagId: 'academy.paper-trading',
       envKey: 'ACADEMY_PAPER_TRADING_ENABLED',
       liveTradeUnaffected: true,
+      simulated: true,
+      venue: 'paper',
+      realMoney: false,
+    });
+    expect(JSON.stringify(status)).not.toContain('"realMoney":true');
+    expect(JSON.stringify(status)).not.toContain('"live":true');
+  });
+
+  it('REFUSES paperDrill when the body claims realMoney or live', async () => {
+    await expect(
+      caller().paperDrill({ slug: 'foundations-paper-workbook', market: paperMarket, realMoney: true } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      caller().paperDrill({ slug: 'foundations-paper-workbook', market: { ...paperMarket, live: true } } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('REFUSES paperOpsStatus when the service presents paper as live money', async () => {
+    const academy = stubAcademy({
+      paperOpsStatus: vi.fn(() => ({
+        enabled: true,
+        flagId: 'academy.paper-trading' as const,
+        envKey: 'ACADEMY_PAPER_TRADING_ENABLED' as const,
+        liveTradeUnaffected: true as const,
+        simulated: true as const,
+        venue: 'paper' as const,
+        realMoney: true,
+      })) as unknown as AcademyService['paperOpsStatus'],
+    });
+    await expect(createAcademyRouter(academy).createCaller(signed()).paperOpsStatus()).rejects.toMatchObject({
+      code: 'INTERNAL_SERVER_ERROR',
     });
   });
 
@@ -608,9 +682,24 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
     expect(flat).not.toContain('holdAmount');
   });
 
+  it('REFUSES a result body that claims live money on the wire', async () => {
+    await expect(caller().paperDrillResult(drill({ realMoney: true }) as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      caller().paperDrillResult(
+        drill({ fills: [{ fillId: 'f-1', marketId: 'mkt-paper-1', side: 'buy', price: '1', size: '1', live: true }] }) as never,
+      ),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
   it('REFUSES a live market — a result is never produced off a real book', async () => {
     const result = await caller().paperDrillResult(drill({ market: { ...paperMarket, paper: false } }) as never);
     expect(result).toMatchObject({ ok: false, reason: 'not_paper' });
+  });
+
+  it('REFUSES a result when the caller labels a live listing as paper', async () => {
+    await expect(
+      caller().paperDrillResult(drill({ market: { marketId: 'mkt-live-1', paper: true, symbol: 'BTC/USDT' } }) as never),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('refuses with no market rather than picking one', async () => {
@@ -686,44 +775,124 @@ describe('svc-academy mount — a paper drill produces a labelled simulated resu
   });
 });
 
-// ── Ambassador IFC pay / revenue share — Class M refuse on the mount ────────
+// ── Ambassador IFC pay / revenue share — under rate authority on the mount ──
 //
-// Pure ifc-pay tests prove refuse. Without a mount test an operator path could
-// start returning 200 with invented amounts and only unit files would stay green.
-describe('svc-academy mount — ambassador pay stays refuse-closed', () => {
+// Pure ifc-pay tests prove refuse + quote. Without a mount test an operator path
+// could start returning 200 with invented amounts and only unit files would stay green.
+describe('svc-academy mount — ambassador pay under rate authority', () => {
   const admin = () =>
     principal({
       scopes: ['admin:read', 'admin:write', 'academy:read', 'academy:write'],
     });
+  const BENEFICIARY = '11111111-1111-4111-8111-111111111111';
 
-  it('ambassadorPayPlane is always dark (no invent enabled=true)', async () => {
+  it('ambassadorPayPlane is dark for settlement (no invent enabled=true)', async () => {
     const plane = await createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorPayPlane();
     expect(plane.ifcPayEnabled).toBe(false);
     expect(plane.revenueShareEnabled).toBe(false);
+    expect(plane.ifcRateAuthorityPublished).toBe(false);
+    expect(plane.ifcPayQuoteEnabled).toBe(false);
     expect(plane.classM).toBe(true);
     expect(plane).not.toHaveProperty('rate');
     expect(plane).not.toHaveProperty('amount');
     expect(plane).not.toHaveProperty('bps');
-    expect(plane.residualIfcPay).toMatch(/Class M/);
-    expect(plane.residualIfcPay).toMatch(/refuse-closed/);
+    expect(plane.residualIfcPay).toMatch(/refuse-closed|owner-only/);
   });
 
-  it('ambassadorIfcPay refuses closed — PRECONDITION_FAILED, no amount fields', async () => {
-    await expect(createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorIfcPay({})).rejects.toMatchObject({
-      code: 'PRECONDITION_FAILED',
-    });
-  });
-
-  it('ambassadorRevenueShare refuses closed — including dryRun', async () => {
+  it('ambassadorIfcPay refuses closed without rate authority — PRECONDITION_FAILED', async () => {
     await expect(
-      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorRevenueShare({ dryRun: true }),
+      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorIfcPay({ beneficiaryId: BENEFICIARY }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
   });
 
+  it('ambassadorRevenueShare refuses closed — including dryRun without authority', async () => {
+    await expect(
+      createAcademyRouter(stubAcademy()).createCaller(signed(admin())).ambassadorRevenueShare({ beneficiaryId: BENEFICIARY, dryRun: true }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+  });
+
+  it('published rate authority + dryRun returns quote from owner rates only', async () => {
+    const ifcPayLaw = {
+      published: true as const,
+      sessionCredit: '7.25000000',
+      asset: 'IFC',
+      period: 'session',
+    };
+    const caller = createAcademyRouter(stubAcademy(), { ifcPayLaw }).createCaller(signed(admin()));
+    const plane = await caller.ambassadorPayPlane();
+    expect(plane.ifcRateAuthorityPublished).toBe(true);
+    expect(plane.ifcPayQuoteEnabled).toBe(true);
+    expect(plane.ifcPayEnabled).toBe(false);
+
+    const quote = await caller.ambassadorIfcPay({
+      beneficiaryId: BENEFICIARY,
+      dryRun: true,
+      residencyStatus: 'accepted',
+    });
+    expect(quote).toMatchObject({
+      ok: true,
+      kind: 'ifc_pay',
+      sessionCredit: '7.25000000',
+      asset: 'IFC',
+      authority: 'owner_published',
+      settlement: 'refuse_recipe_unset',
+    });
+  });
+
+  it('residencyIfcPayQuote refuses non-accepted residency even with authority', async () => {
+    const ifcPayLaw = {
+      published: true as const,
+      sessionCredit: '1.00000000',
+      asset: 'IFC',
+      period: 'session',
+    };
+    await expect(
+      createAcademyRouter(stubAcademy(), { ifcPayLaw })
+        .createCaller(signed(admin()))
+        .residencyIfcPayQuote({ beneficiaryId: BENEFICIARY, residencyStatus: 'applied' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  });
+
   it('pay plane is not readable without admin:read', async () => {
     await expect(createAcademyRouter(stubAcademy()).createCaller(signed()).ambassadorPayPlane()).rejects.toBeTruthy();
+  });
+
+  it('public ambassadorPayQuote returns typed refuse when rates unset — not a fake quote', async () => {
+    const quote = await createAcademyRouter(stubAcademy()).createCaller(signed()).ambassadorPayQuote();
+    expect(quote.status).toBe('refuse');
+    expect(quote.ok).toBe(false);
+    expect(quote.payable).toBe(false);
+    expect(quote.inventedIfc).toBe(false);
+    expect(quote.reason).toBe('unset');
+    expect(quote.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(quote.rateAuthorityPublished).toBe(false);
+    expect(quote).not.toHaveProperty('sessionCredit');
+    expect(quote).not.toHaveProperty('amount');
+    expect(quote).not.toHaveProperty('shareOfFeeBps');
+  });
+
+  it('public residencyPayQuote refuses unset rates even for accepted residency', async () => {
+    const quote = await createAcademyRouter(stubAcademy()).createCaller(signed()).residencyPayQuote({ residencyStatus: 'accepted' });
+    expect(quote.status).toBe('refuse');
+    expect(quote.kind).toBe('residency');
+    expect(quote.code).toBe('academy.ambassador_pay.rates_unset');
+    expect(quote.payable).toBe(false);
+    expect(quote).not.toHaveProperty('sessionCredit');
+  });
+
+  it('unset public doors never look payable', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    const ifc = await caller.ambassadorPayQuote({ kind: 'ifc_pay' });
+    const share = await caller.ambassadorPayQuote({ kind: 'revenue_share' });
+    const residency = await caller.residencyPayQuote();
+    expect(ifc.ok).toBe(false);
+    expect(share.ok).toBe(false);
+    expect(residency.ok).toBe(false);
+    expect(ifc.payable || share.payable || residency.payable).toBe(false);
   });
 });
 
@@ -782,6 +951,35 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
     expect(result.grant.certId).toBe('foundations-v1');
     expect(result.xp).toEqual({ emitted: false, reason: 'publisher_unavailable' });
     expect(result.perks.status).toBe('refuse');
+  });
+
+  it('grantCert unpriced cert publishes nothing — perk outcome is refuse, not granted money', async () => {
+    const academy = stubAcademy({
+      grantCert: vi.fn(async () => ({
+        alreadyGranted: false,
+        grant: { userId: USER, certId: 'not-in-policy-v1', grantedAt: new Date(), idempotencyKey: `cert:${USER}:not-in-policy-v1` },
+        xp: { emitted: false as const, reason: 'no_policy' as const },
+        perks: {
+          status: 'refuse' as const,
+          code: 'academy.cert_perk_refuse_closed' as const,
+          reason: 'unpriced' as const,
+          message: 'Unpriced cert publishes nothing — no XP, no identity perk grant, no invent perk money',
+          academyHoldsPerkMoney: false as const,
+          academyMapsCertToPerk: false as const,
+          residual: 'TRK-academy.certs D26-P1-C1 — perks via svc-identity rank only; cert→perk money refuse-closed (no invent)' as const,
+        },
+      })),
+    });
+
+    const result = await createAcademyRouter(academy).createCaller(signed()).grantCert({ certId: 'not-in-policy-v1' });
+
+    expect(result.xp).toEqual({ emitted: false, reason: 'no_policy' });
+    expect(result.xp).not.toHaveProperty('xpDelta');
+    expect(result.perks.status).toBe('refuse');
+    if (result.perks.status !== 'refuse') throw new Error('expected refuse');
+    expect(result.perks.reason).toBe('unpriced');
+    expect(result.perks).not.toHaveProperty('perks');
+    expect(result.perks.academyHoldsPerkMoney).toBe(false);
   });
 
   it('certXpPlane names svc-identity as the rank writer, never academy', async () => {
