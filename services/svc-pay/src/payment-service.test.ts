@@ -26,16 +26,6 @@ import { BankPayoutAbsentAdapter } from './rails/bank-payout.js';
 import { MemoryChain } from './rails/chain-port.js';
 import { signPayload } from './rails/webhook-signature.js';
 
-/** Test-only operator-declared fractions — never baked into REFERENCE profiles. */
-function withDeclaredRates(profiles: readonly RailRoutingProfile[]): RailRoutingProfile[] {
-  return profiles.map((p) => ({
-    ...p,
-    successRate: p.railId === 'card-sandbox' ? '0.88' : '0.91',
-  }));
-}
-
-const TEST_ROUTING_PROFILES = withDeclaredRates(REFERENCE_RAIL_ROUTING_PROFILES);
-
 /**
  * svc-pay money paths.
  *
@@ -161,7 +151,7 @@ if (!available) {
     pay = new PayService(sql, ledger, rails, {
       checkoutRiskBand: 'low',
       payoutDestinations: dests,
-      routingProfiles: TEST_ROUTING_PROFILES,
+      routingProfiles: TEST_CHECKOUT_PROFILES,
     });
   });
 
@@ -2367,7 +2357,7 @@ if (!available) {
       const bounded = new PayService(sql, ledger, rails, {
         maxOpenSessionsPerLink: 2,
         checkoutRiskBand: 'low',
-        routingProfiles: TEST_ROUTING_PROFILES,
+        routingProfiles: TEST_CHECKOUT_PROFILES,
       });
 
       await bounded.openCheckoutSession({ linkToken: link.token, ...geo });
@@ -2553,7 +2543,7 @@ if (!available) {
         publicCheckoutMovement: 'allow-sandbox',
         checkoutRails: [{ railId: 'crypto-native', method: 'crypto' }],
         checkoutRiskBand: 'low',
-        routingProfiles: TEST_ROUTING_PROFILES,
+        routingProfiles: TEST_CHECKOUT_PROFILES,
       });
       const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
       const createArgs = {
