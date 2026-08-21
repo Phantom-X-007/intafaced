@@ -1009,7 +1009,24 @@ module.exports = {
             joined: "Joined",
             left: "Left",
             role: "Role",
-            streamIssued: "Stream credential issued"
+            streamIssued: "Stream credential issued",
+            curriculum: "Curriculum",
+            curriculumLead: "Playbooks on one of four paths. Complete one. An unknown slug is refused by name.",
+            paths: {
+                foundations: "Foundations",
+                markets: "Markets",
+                builder: "Builder",
+                sovereign: "Sovereign"
+            },
+            playbook: "Playbook",
+            path: "Path",
+            complete: "Complete",
+            completeSlug: "Complete slug",
+            completed: "Completed",
+            itemSlug: "Item slug",
+            itemSlugHint: "known slug, or one that is not",
+            signInToComplete: "Sign in to complete",
+            emptyCurriculum: "No playbooks on this path."
         },
         market: {
             nav: { aria: "Market sections", catalogue: "Catalogue", mine: "My market" },

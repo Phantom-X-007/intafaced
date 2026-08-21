@@ -127,6 +127,8 @@
         <IxState v-else :loading="streamAction.busy" :reason="streamAction.reason" :message="streamAction.message" endpoint="/api/academy/trpc/streamCredential"></IxState>
       </div>
     </div>
+
+    <IxAcademyCurriculum />
   </div>
 </template>
 
@@ -139,12 +141,13 @@
  * rather than minting a fake A/V token.
  */
 import IxState from '../../components/intafaced/IxState.vue';
+import IxAcademyCurriculum from './academy/Curriculum.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxAcademy',
-  components: { IxState },
+  components: { IxState, IxAcademyCurriculum },
   mixins: [ixModule],
   data() {
     return {
