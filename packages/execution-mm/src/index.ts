@@ -37,3 +37,4 @@ export {
   type QuoteExternalMmInput,
   type QuoteExternalMmResult,
 } from './market-making.js';
+export { describeMarketMakingPolicy, type MarketMakingPolicySummary } from './mm-policy.js';
