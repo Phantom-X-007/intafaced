@@ -1,5 +1,20 @@
 import type { Amount } from '@intafaced/ledger-client';
 import { TradeError, type MarketKind } from './types.js';
+import {
+  OPTIONS_FIXING_UNCONFIGURED,
+  OPTIONS_SETTLEMENT_LAW_UNSET,
+  OPTIONS_TERMS_INCOMPLETE,
+  type OptionStyle,
+  type OptionType,
+} from './options-policy.js';
+
+export {
+  OPTIONS_FIXING_UNCONFIGURED,
+  OPTIONS_SETTLEMENT_LAW_UNSET,
+  OPTIONS_TERMS_INCOMPLETE,
+  type OptionStyle,
+  type OptionType,
+} from './options-policy.js';
 
 /**
  * OPTIONS LISTING — refuse-closed until D26-P0-05 (settlement asset law).
@@ -23,13 +38,6 @@ import { TradeError, type MarketKind } from './types.js';
  * Listing is not trading: `assertTradable` still refuses options orders by kind
  * until an options engine exists.
  */
-
-export type OptionType = 'call' | 'put';
-/** v1 title is European only — American is not modelled. */
-export type OptionStyle = 'european';
-
-/** SOCKET §13 pin — keep this code; do not invent a second refuse. */
-export const OPTIONS_SETTLEMENT_LAW_UNSET = 'trade.options_settlement_law_unset' as const;
 
 /**
  * First options-listing gate: P0-05 settlement-asset law must be stamped.
@@ -95,7 +103,7 @@ export function resolveOptionsListing(input: ResolveOptionsListingInput): Option
     if (hasAnyTerm) {
       throw new TradeError(
         'option contract terms are only valid when kind is options — refuse half-shaped listings',
-        'trade.options_terms_incomplete',
+        OPTIONS_TERMS_INCOMPLETE,
       );
     }
     return null;
@@ -109,29 +117,26 @@ export function resolveOptionsListing(input: ResolveOptionsListingInput): Option
   if (fixing.length === 0) {
     throw new TradeError(
       'options cannot be listed until settlement fixing is configured (TRADE_OPTIONS_SETTLEMENT_FIXING empty) — D7 is owner law; empty means refuse',
-      'trade.options_fixing_unconfigured',
+      OPTIONS_FIXING_UNCONFIGURED,
     );
   }
 
   if (input.optionType !== 'call' && input.optionType !== 'put') {
-    throw new TradeError(
-      'options listing requires optionType call|put — half-listed options are refused',
-      'trade.options_terms_incomplete',
-    );
+    throw new TradeError('options listing requires optionType call|put — half-listed options are refused', OPTIONS_TERMS_INCOMPLETE);
   }
 
   // Default european when omitted: product title is European v1. Explicit non-european refuses.
   const optionStyle: OptionStyle = input.optionStyle ?? 'european';
   if (optionStyle !== 'european') {
-    throw new TradeError('v1 options are european only — half-listed or unsupported style is refused', 'trade.options_terms_incomplete');
+    throw new TradeError('v1 options are european only — half-listed or unsupported style is refused', OPTIONS_TERMS_INCOMPLETE);
   }
 
   if (input.strike == null || input.strike <= 0n) {
-    throw new TradeError('options listing requires strike > 0 — half-listed options are refused', 'trade.options_terms_incomplete');
+    throw new TradeError('options listing requires strike > 0 — half-listed options are refused', OPTIONS_TERMS_INCOMPLETE);
   }
 
   if (!(input.expiryAt instanceof Date) || Number.isNaN(input.expiryAt.getTime())) {
-    throw new TradeError('options listing requires a valid expiryAt — half-listed options are refused', 'trade.options_terms_incomplete');
+    throw new TradeError('options listing requires a valid expiryAt — half-listed options are refused', OPTIONS_TERMS_INCOMPLETE);
   }
 
   return {
