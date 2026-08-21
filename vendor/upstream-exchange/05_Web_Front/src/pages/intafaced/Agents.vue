@@ -77,6 +77,48 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.agents.noActions') }}</div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.agents.coach.title') }}</h2>
+        <span class="ix-sub">coach.session</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.agents.coach.lead') }}</p>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-coach-ask">{{ $t('intafaced.agents.coach.ask') }}</label>
+          <Input element-id="ix-coach-ask" v-model="ask" :placeholder="$t('intafaced.agents.coach.askHint')" @on-enter="askCoach"></Input>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="coach.loading" @click="askCoach">{{ $t('intafaced.agents.coach.run') }}</Button>
+        </div>
+      </div>
+      <IxState v-if="coach.reason || coach.loading" :loading="coach.loading" :reason="coach.reason" :message="coach.message" endpoint="/api/agents/trpc/coach.session">
+        <div v-if="coach.data && coach.data.status === 'refuse'" class="ix-note">
+          {{ $t('intafaced.agents.coach.refused') }} · {{ coach.data.reason }}
+        </div>
+        <div v-else-if="coach.data && coach.data.status === 'grounded'">
+          <div class="ix-note ix-note-quiet" style="margin-bottom:12px;">{{ $t('intafaced.agents.coach.grounded') }}</div>
+          <div v-if="coach.data.citations && coach.data.citations.length" class="ix-scroll">
+            <table class="ix-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('intafaced.agents.coach.slug') }}</th>
+                  <th>{{ $t('intafaced.agents.coach.citationTitle') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in coach.data.citations" :key="c.slug">
+                  <td>{{ c.slug }}</td>
+                  <td>{{ c.title }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
+        </div>
+      </IxState>
+    </div>
   </div>
 </template>
 
@@ -89,10 +131,9 @@
  * prices as decimal strings, and `log.mine` returns this account's own action
  * log. Both sit behind `agents:read`, which an interactive session holds.
  *
- * There is no "run an agent" control on this screen, and that is deliberate:
- * `session.open` and `run.complete` want `agents:execute`, which svc-identity
- * issues to nobody. A button that could only ever produce a 403 is worse than
- * no button, because it implies the feature is one click away.
+ * Fleet runSession still wants agents:execute (issued to nobody) and is not
+ * offered here. Coach is a query on tip — citations or a named refuse, never
+ * advice and never positions.
  *
  * No model vendor is named anywhere here. The routing table speaks in tasks and
  * aliases, and the concrete upstream id never leaves the adapter.
@@ -108,13 +149,20 @@ export default {
   data() {
     return {
       routes: this.emptySection(),
-      log: this.emptySection()
+      log: this.emptySection(),
+      coach: { loading: false, reason: null, message: '', data: null },
+      ask: ''
     };
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.load('routes', query('agents', 'routes.list', undefined, this.ixToken));
     this.load('log', query('agents', 'log.mine', { limit: 50 }, this.ixToken));
+  },
+  methods: {
+    askCoach() {
+      this.load('coach', query('agents', 'coach.session', { ask: this.ask }, this.ixToken));
+    }
   }
 };
 </script>
