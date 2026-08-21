@@ -945,7 +945,8 @@ module.exports = {
                 done: "Held",
                 tradeId: "Trade",
                 status: "Status",
-                fiatAmount: "Fiat"
+                fiatAmount: "Fiat",
+                noMethodRegistry: "The operator has not registered any payment method. Empty registry is a named refuse, not a missing button."
             }
         },
         token: {

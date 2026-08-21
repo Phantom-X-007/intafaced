@@ -22,10 +22,13 @@
       <div class="ix-form-row" style="margin-bottom:16px;">
         <div class="ix-field">
           <label for="ix-p2p-amount">{{ $t('intafaced.p2p.take.amount') }}</label>
-          <Input element-id="ix-p2p-amount" :value="takeAmount" :placeholder="$t('intafaced.bank.amountHint')" @on-change="setTakeAmount" />
+          <Input element-id="ix-p2p-amount" v-model="takeAmount" :placeholder="$t('intafaced.p2p.take.amountHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-method">{{ $t('intafaced.p2p.take.method') }}</label>
+          <Input element-id="ix-p2p-method" v-model="takeMethod" :placeholder="$t('intafaced.p2p.take.methodHint')" />
         </div>
       </div>
-      <div v-if="takeLocalRefuse" class="ix-note" style="margin-bottom:16px;">{{ takeLocalRefuse }}</div>
       <IxState :loading="offers.loading" :reason="offers.reason" :message="offers.message" endpoint="/api/p2p/trpc/offers.list">
         <div v-if="offers.data && offers.data.length" class="ix-scroll">
           <table class="ix-table">
@@ -46,13 +49,14 @@
                 <td>{{ o.asset }}</td>
                 <td>{{ o.price }} {{ o.fiatCurrency }}</td>
                 <td>{{ o.minAmount }} – {{ o.maxAmount }}</td>
-                <td>{{ methodFor(o) || $t('intafaced.p2p.take.noMethod') }}</td>
+                <td>{{ methodIds(o) }}</td>
                 <td>{{ o.status }}</td>
                 <td>
                   <Button
                     v-if="ixToken"
                     size="small"
                     :loading="take.busy && takingId === o.id"
+                    :disabled="!canTake"
                     @click="takeOffer(o)"
                   >{{ $t('intafaced.p2p.take.action') }}</Button>
                   <router-link v-else to="/platform">{{ $t('intafaced.p2p.take.signIn') }}</router-link>
@@ -69,7 +73,7 @@
           <div class="ix-kv" style="margin-top:8px;">
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ take.data.id }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.status') }}</span><span class="v">{{ take.data.status }}</span></div>
-            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.escrowAmount') }}</span><span class="v">{{ take.data.amount }} {{ take.data.asset }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.amount') }}</span><span class="v">{{ take.data.amount }} {{ take.data.asset }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.fiatAmount') }}</span><span class="v">{{ take.data.fiatAmount }} {{ take.data.fiatCurrency }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.method') }}</span><span class="v">{{ take.data.method }}</span></div>
           </div>
@@ -133,8 +137,6 @@ import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
-var AMOUNT_RE = /^\d+(\.\d{1,18})?$/;
-
 export default {
   name: 'IxP2P',
   components: { IxState },
@@ -146,13 +148,16 @@ export default {
       methods: this.emptySection(),
       take: this.emptyAction(),
       takeAmount: '',
-      takingId: '',
-      takeLocalRefuse: ''
+      takeMethod: '',
+      takingId: ''
     };
   },
   computed: {
     registryEmpty() {
       return this.methods.reason === 'ok' && Array.isArray(this.methods.data) && this.methods.data.length === 0;
+    },
+    canTake() {
+      return !!(this.takeAmount && this.takeMethod && !this.take.busy);
     }
   },
   created() {
@@ -162,63 +167,24 @@ export default {
     this.load('methods', query('p2p', 'instruments.methods.list', undefined, this.ixToken));
   },
   methods: {
-    setTakeAmount(value) {
-      this.takeAmount = value == null ? '' : String(value);
-    },
-    offerMethodIds(offer) {
+    methodIds(offer) {
       var out = [];
       var methods = offer && offer.methods;
-      if (!methods || !methods.length) return out;
+      if (!methods || !methods.length) return '';
       for (var i = 0; i < methods.length; i++) {
         var x = methods[i];
         if (typeof x === 'string' && x) out.push(x);
-        else if (x && typeof x.methodId === 'string' && x.methodId) out.push(x.methodId);
         else if (x && typeof x.id === 'string' && x.id) out.push(x.id);
       }
-      return out;
-    },
-    methodFor(offer) {
-      if (this.methods.reason !== 'ok' || !Array.isArray(this.methods.data) || !this.methods.data.length) return '';
-      var ids = [];
-      for (var i = 0; i < this.methods.data.length; i++) {
-        var row = this.methods.data[i];
-        if (row && row.methodId) ids.push(String(row.methodId));
-      }
-      if (!ids.length) return '';
-      var named = this.offerMethodIds(offer);
-      if (named.length) {
-        for (var j = 0; j < named.length; j++) {
-          if (ids.indexOf(named[j]) !== -1) return named[j];
-        }
-        return '';
-      }
-      return ids[0];
+      return out.join(', ');
     },
     takeOffer(offer) {
       var self = this;
-      if (this.take.busy || !offer) return;
-      this.takeLocalRefuse = '';
-      if (!this.ixToken) {
-        this.takeLocalRefuse = this.$t('intafaced.p2p.take.needSession');
-        return;
-      }
-      if (this.methods.reason && this.methods.reason !== 'ok') {
-        this.takeLocalRefuse = this.methods.message || this.$t('intafaced.p2p.take.noMethod');
-        return;
-      }
-      if (!AMOUNT_RE.test(this.takeAmount)) {
-        this.takeLocalRefuse = this.$t('intafaced.p2p.take.amountFormat');
-        return;
-      }
-      var method = this.methodFor(offer);
-      if (!method) {
-        this.takeLocalRefuse = this.$t('intafaced.p2p.take.noMethod');
-        return;
-      }
+      if (!this.canTake || !offer) return;
       this.takingId = offer.id;
       this.act(
         'take',
-        mutate('p2p', 'trades.take', { offerId: offer.id, amount: String(this.takeAmount), method: method }, this.ixToken)
+        mutate('p2p', 'trades.take', { offerId: offer.id, amount: this.takeAmount, method: this.takeMethod }, this.ixToken)
       ).then(function () {
         self.takingId = '';
       });
