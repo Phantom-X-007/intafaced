@@ -1407,7 +1407,9 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
         }),
       ),
 
-    tournamentPolicy: publicProcedure.query(() => describeTournamentPolicy()),
+    tournaments: router({
+      policy: publicProcedure.query(() => describeTournamentPolicy()),
+    }),
 
     standings: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid() }))
