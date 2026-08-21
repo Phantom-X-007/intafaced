@@ -1091,15 +1091,23 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
-    /** The cheapest way out of a margin call, and the one everyone wants taken. */
+    /**
+     * `eventId` is supplied by the client so a timed-out retry is the same lock,
+     * not a second one (§5). Sequence is allocated server-side; without a client
+     * id, MAX+1 after the first lock posted would pledge collateral twice.
+     */
     addCollateral: scopedProcedure('bank:write', { module: 'bank' })
-      .input(z.object({ loanId: z.string().uuid(), amount: amountString }))
+      .input(z.object({ loanId: z.string().uuid(), eventId: z.string().uuid(), amount: amountString }))
       .output(z.object({ ledgerTxId: z.string(), sequence: z.number().int() }))
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
           const loan = await bank.loans.loan(input.loanId);
           assertSelf(ctx.principal.userId, loan.userId);
-          return bank.loans.addCollateral({ loanId: input.loanId, amount: parseAmount(input.amount) });
+          return bank.loans.addCollateral({
+            loanId: input.loanId,
+            eventId: input.eventId,
+            amount: parseAmount(input.amount),
+          });
         }),
       ),
 

@@ -747,8 +747,18 @@ export class LoanService {
    * reason `loan_collateral_events` is keyed on (loan, sequence) rather than the
    * loan alone. Clearing the call is left to the next mark rather than done here:
    * curing is a question about a price, and this method does not have one.
+   *
+   * `eventId` is accepted from the caller so a timed-out retry is the same lock
+   * rather than a second one (§5: idempotency keys are business keys). Sequence
+   * is allocated with MAX+1 only for a *new* event; resolving the client id
+   * first is what stops a retry minting sequence N+1 after the first lock posted.
    */
-  async addCollateral(input: { loanId: string; amount: Amount; now?: Date }): Promise<{ ledgerTxId: string; sequence: number }> {
+  async addCollateral(input: {
+    loanId: string;
+    eventId?: string;
+    amount: Amount;
+    now?: Date;
+  }): Promise<{ ledgerTxId: string; sequence: number }> {
     const now = input.now ?? new Date();
     const loan = await this.loan(input.loanId);
     if (loan.status === 'repaid' || loan.status === 'liquidated') {
@@ -758,8 +768,34 @@ export class LoanService {
 
     await this.marksFor(loan.collateralAssetId, loan.debtAssetId, loan.quoteAssetId, now);
 
+    const eventId = input.eventId ?? randomUUID();
+    const existing = await this.collateralEventById(eventId);
+    if (existing) {
+      if (existing.loan_id !== loan.id) {
+        throw new BankError(
+          `Collateral event ${eventId} already exists on a different loan — a retry must carry the same terms`,
+          'bank.loan_borrower_mismatch',
+        );
+      }
+      if (existing.direction !== 'lock') {
+        throw new BankError(
+          `Collateral event ${eventId} is a ${existing.direction}, not a lock — a retry must carry the same terms`,
+          'bank.loan_collateral_mismatch',
+        );
+      }
+      if (parseAmount(existing.amount) !== input.amount) {
+        throw new BankError(
+          `Collateral event ${eventId} already exists for ${formatAmount(parseAmount(existing.amount))} ${loan.collateralAssetId}, but this request asks for ` +
+            `${formatAmount(input.amount)} — a retry must carry the same terms. Use a new event id to post a different amount`,
+          'bank.loan_collateral_mismatch',
+        );
+      }
+      const txId = await this.lockCollateral(loan, input.amount, existing.sequence, eventId);
+      return { ledgerTxId: txId, sequence: existing.sequence };
+    }
+
     const sequence = await this.nextCollateralSequence(loan.id);
-    const txId = await this.lockCollateral(loan, input.amount, sequence);
+    const txId = await this.lockCollateral(loan, input.amount, sequence, eventId);
     return { ledgerTxId: txId, sequence };
   }
 
@@ -815,19 +851,30 @@ export class LoanService {
     return { ledgerTxId: txId, sequence };
   }
 
-  private async lockCollateral(loan: LoanRecord, amount: Amount, sequence: number): Promise<string> {
+  private async lockCollateral(loan: LoanRecord, amount: Amount, sequence: number, eventId?: string): Promise<string> {
     return this.drivenPost({
       claim: async (tx) => {
-        const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
-          VALUES (${loan.id}, ${sequence}, 'lock', ${formatAmount(amount)}::numeric)
-          ON CONFLICT (loan_id, sequence) DO NOTHING
-          RETURNING id, ledger_tx_id
-        `;
+        const rows = eventId
+          ? await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
+              INSERT INTO bank.loan_collateral_events (id, loan_id, sequence, direction, amount)
+              VALUES (${eventId}, ${loan.id}, ${sequence}, 'lock', ${formatAmount(amount)}::numeric)
+              ON CONFLICT (id) DO NOTHING
+              RETURNING id, ledger_tx_id
+            `
+          : await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
+              INSERT INTO bank.loan_collateral_events (loan_id, sequence, direction, amount)
+              VALUES (${loan.id}, ${sequence}, 'lock', ${formatAmount(amount)}::numeric)
+              ON CONFLICT (loan_id, sequence) DO NOTHING
+              RETURNING id, ledger_tx_id
+            `;
         if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
-        const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
-        `;
+        const existing = eventId
+          ? await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
+              SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE id = ${eventId}
+            `
+          : await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
+              SELECT id, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+            `;
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
       post: () =>
@@ -1973,6 +2020,21 @@ export class LoanService {
   private async collateralEvent(loanId: string, sequence: number): Promise<{ amount: string; ledger_tx_id: string | null } | null> {
     const rows = await this.sql<Array<{ amount: string; ledger_tx_id: string | null }>>`
       SELECT amount, ledger_tx_id FROM bank.loan_collateral_events WHERE loan_id = ${loanId} AND sequence = ${sequence}
+    `;
+    return rows[0] ?? null;
+  }
+
+  private async collateralEventById(eventId: string): Promise<{
+    loan_id: string;
+    sequence: number;
+    direction: string;
+    amount: string;
+    ledger_tx_id: string | null;
+  } | null> {
+    const rows = await this.sql<
+      Array<{ loan_id: string; sequence: number; direction: string; amount: string; ledger_tx_id: string | null }>
+    >`
+      SELECT loan_id, sequence, direction, amount, ledger_tx_id FROM bank.loan_collateral_events WHERE id = ${eventId}
     `;
     return rows[0] ?? null;
   }

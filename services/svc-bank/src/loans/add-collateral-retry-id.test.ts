@@ -1,0 +1,310 @@
+/**
+ * Unit card — addCollateral retry is one lock (client eventId)
+ *
+ * 1. Promise: a timed-out loans.addCollateral retry with the same eventId and
+ *    amount posts recipes.loanCollateralLock once. Sequence is MAX+1 only for a
+ *    new event; the client id is the retry key (same shape as loans.open loanId).
+ * 2. Break: timeout after the lock posts, retry the same amount with no client
+ *    id (or a fresh MAX+1) double-locks the borrower.
+ * 3. Done bar: timeout after lock posts, retry addCollateral same amount +
+ *    eventId → one extra loan.collateral.locked and one extra collateral event.
+ *    Two extra events is RED; one lock is GREEN. Amount mismatch on the same
+ *    eventId refuses bank.loan_collateral_mismatch and posts nothing more.
+ * 4. Class M
+ * 5. Paths: services/svc-bank/src/loans/loan-service.ts, router.ts (addCollateral)
+ * 6. RED: first addCollateral times out after the lock posts; retry same amount
+ *    allocates MAX+1 and posts a second lock
+ * 7. Collision: night #2681 Bank.vue; closed #2698 amountFromSql mill — this
+ *    file does not touch either
+ */
+import { randomUUID } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { MemoryLedger, parseAmount as amt, recipes, userAvailable, type PostRequest } from '@intafaced/ledger-client';
+import { memoryLedgerHistory } from '../analytics/ledger-history.js';
+import { createBankServices } from '../bank-service.js';
+import { createBankRouter, type BankRouter } from '../router.js';
+import { fixedPriceSource } from './prices.js';
+import { DEFAULT_LIQUIDATION_POLICY } from './risk.js';
+
+const SECRET = 'bank-loan-add-collateral-retry-id-secret32';
+const BORROWER = '11111111-1111-4111-8111-111111111111';
+const PAYER = '99999999-9999-4999-8999-999999999999';
+const NOW = new Date('2026-06-01T12:00:00.000Z');
+
+const here = dirname(fileURLToPath(import.meta.url));
+const drizzle = join(here, '..', '..', 'drizzle');
+const MIGRATIONS = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+
+const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+
+type WireBody = {
+  result?: { data?: unknown };
+  error?: { message?: string; data?: { code?: string; httpStatus?: number } };
+};
+
+describe('addCollateral pins eventId before MAX+1 sequence allocation', () => {
+  it('addCollateral resolves the client event id before nextCollateralSequence', () => {
+    const src = readFileSync(join(here, 'loan-service.ts'), 'utf8');
+    const addAt = src.indexOf('async addCollateral(input:');
+    const relAt = src.indexOf('async releaseExcess(input:', addAt);
+    const body = src.slice(addAt, relAt);
+    expect(addAt).toBeGreaterThan(-1);
+    expect(body).toMatch(/eventId/);
+    const lookupAt = body.indexOf('collateralEventById');
+    const nextAt = body.indexOf('nextCollateralSequence');
+    expect(lookupAt).toBeGreaterThan(-1);
+    expect(nextAt).toBeGreaterThan(lookupAt);
+    expect(src).toMatch(/FROM bank\.loan_collateral_events WHERE id =/);
+  });
+
+  it('public door requires eventId the way open requires loanId', () => {
+    const src = readFileSync(join(here, '..', 'router.ts'), 'utf8');
+    const doorAt = src.indexOf("addCollateral: scopedProcedure('bank:write'");
+    const relAt = src.indexOf("releaseExcess: scopedProcedure('bank:write'", doorAt);
+    const body = src.slice(doorAt, relAt);
+    expect(doorAt).toBeGreaterThan(-1);
+    expect(body).toMatch(/eventId:\s*z\.string\(\)\.uuid\(\)/);
+    expect(body).toMatch(/eventId:\s*input\.eventId/);
+  });
+});
+
+const db: TestDatabase = await createTestDatabase({ service: 'bank', url: DB_URL, migrations: MIGRATIONS });
+const sql = db.sql;
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
+
+afterAll(async () => {
+  await db.drop();
+}, 30_000);
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: BORROWER,
+    userId: BORROWER,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['bank:read', 'bank:write'],
+    tier: 'full',
+    mfa: true,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+function signedHeaders(p: Principal = principal()): Record<string, string> {
+  const raw = encodePrincipal(p);
+  return {
+    'x-intafaced-principal': raw,
+    'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+    'x-intafaced-region': 'DE',
+    'content-type': 'application/json',
+  };
+}
+
+async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
+  const router = createBankRouter(bank);
+  const app = Fastify({ logger: false });
+  await app.register(fastifyTRPCPlugin, {
+    prefix: '/trpc',
+    trpcOptions: {
+      router,
+      createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
+  });
+  await app.ready();
+  return app;
+}
+
+async function post(
+  app: FastifyInstance,
+  path: string,
+  input: Record<string, unknown>,
+  headers: Record<string, string> = signedHeaders(),
+): Promise<{ statusCode: number; body: WireBody }> {
+  const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
+  return { statusCode: res.statusCode, body: res.json() as WireBody };
+}
+
+function procedureData(body: WireBody): unknown {
+  const data = body.result?.data;
+  if (data && typeof data === 'object' && data !== null && 'json' in data) {
+    return (data as { json: unknown }).json;
+  }
+  return data;
+}
+
+async function fund(ledger: MemoryLedger, userId: string, assetId: string, value: string) {
+  await ledger.post(
+    recipes.deposit({
+      userId,
+      assetId,
+      amount: amt(value),
+      rail: 'test',
+      railRef: `${userId}:${assetId}:${randomUUID()}`,
+    }),
+  );
+}
+
+async function seedOpenLoan(bank: ReturnType<typeof createBankServices>, ledger: MemoryLedger, now: Date = NOW) {
+  await fund(ledger, PAYER, 'USDT', '100000');
+  await bank.loans.fundReserve({
+    debtAssetId: 'USDT',
+    fundingId: `f:${randomUUID()}`,
+    amount: amt('100000'),
+    from: userAvailable(PAYER, 'USDT'),
+  });
+  // Three BTC: one to open, one for the top-up, one leftover so a buggy retry
+  // can actually post a second lock instead of failing insufficient-funds.
+  await fund(ledger, BORROWER, 'BTC', '3');
+  const product = await bank.loans.createProduct({
+    name: 'BTC-backed USDT',
+    debtAssetId: 'USDT',
+    collateralAssetId: 'BTC',
+    quoteAssetId: 'USDT',
+    aprBps: 1_000,
+    maxLtvBps: 5_000,
+    policy: DEFAULT_LIQUIDATION_POLICY,
+  });
+  return bank.loans.open({
+    productId: product.id,
+    userId: BORROWER,
+    collateralAmount: amt('1'),
+    principal: amt('5000'),
+    now,
+  });
+}
+
+function lockCount(ledger: MemoryLedger): number {
+  return ledger.journal().filter((tx) => tx.reason === 'loan.collateral.locked').length;
+}
+
+function isTopUpLock(request: PostRequest): boolean {
+  const sequence = request.meta && typeof request.meta === 'object' ? Number((request.meta as { sequence?: unknown }).sequence) : NaN;
+  return request.reason === 'loan.collateral.locked' && sequence > 0;
+}
+
+describe('LoanService.addCollateral — timed-out retry is one lock', () => {
+  let ledger: MemoryLedger;
+
+  beforeEach(async () => {
+    await sql`
+      TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+               bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+               bank.loan_reserve_fundings
+      RESTART IDENTITY CASCADE
+    `;
+    ledger = new MemoryLedger();
+  });
+
+  it('timeout after lock posts, retry same eventId + amount — one extra lock, not two', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW) },
+    });
+    const opened = await seedOpenLoan(bank, ledger);
+    const locksAtOpen = lockCount(ledger);
+    const eventId = randomUUID();
+
+    const innerPost = ledger.post.bind(ledger);
+    let timedOut = false;
+    ledger.post = async (request) => {
+      const posted = await innerPost(request);
+      if (!timedOut && isTopUpLock(request)) {
+        timedOut = true;
+        throw new Error('timed out after lock posted');
+      }
+      return posted;
+    };
+
+    await expect(bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('1'), now: NOW })).rejects.toThrow(
+      /timed out after lock posted/,
+    );
+    expect(timedOut).toBe(true);
+    expect(lockCount(ledger)).toBe(locksAtOpen + 1);
+
+    const retry = await bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('1'), now: NOW });
+    expect(retry.sequence).toBeGreaterThan(0);
+    expect(retry.ledgerTxId.length).toBeGreaterThan(0);
+
+    expect(lockCount(ledger)).toBe(locksAtOpen + 1);
+    const events = await sql<Array<{ id: string; sequence: number; direction: string }>>`
+      SELECT id, sequence, direction FROM bank.loan_collateral_events
+       WHERE loan_id = ${opened.loan.id} AND direction = 'lock'
+       ORDER BY sequence
+    `;
+    expect(events).toHaveLength(2);
+    expect(events.filter((e) => e.sequence > 0)).toHaveLength(1);
+    expect(events.some((e) => e.id === eventId)).toBe(true);
+    expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(amt('1'));
+  });
+
+  it('same eventId with a different amount refuses and does not post a second lock', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW) },
+    });
+    const opened = await seedOpenLoan(bank, ledger);
+    const eventId = randomUUID();
+    const first = await bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('1'), now: NOW });
+    const locksAfter = lockCount(ledger);
+
+    await expect(bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('0.5'), now: NOW })).rejects.toMatchObject({
+      code: 'bank.loan_collateral_mismatch',
+    });
+
+    expect(lockCount(ledger)).toBe(locksAfter);
+    const retry = await bank.loans.addCollateral({ loanId: opened.loan.id, eventId, amount: amt('1'), now: NOW });
+    expect(retry.ledgerTxId).toBe(first.ledgerTxId);
+    expect(retry.sequence).toBe(first.sequence);
+    expect(lockCount(ledger)).toBe(locksAfter);
+  });
+});
+
+describe('HTTP /trpc/loans.addCollateral — retry with the same eventId is one lock', () => {
+  let ledger: MemoryLedger;
+
+  beforeEach(async () => {
+    await sql`
+      TRUNCATE bank.loan_liquidations, bank.loan_margin_calls, bank.loan_repayments,
+               bank.loan_interest_accruals, bank.loan_collateral_events, bank.loans, bank.loan_products,
+               bank.loan_reserve_fundings
+      RESTART IDENTITY CASCADE
+    `;
+    ledger = new MemoryLedger();
+  });
+
+  it('two HTTP posts with the same eventId and amount lock once', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }) },
+    });
+    const opened = await seedOpenLoan(bank, ledger, new Date());
+    const locksAtOpen = lockCount(ledger);
+    const eventId = randomUUID();
+    const app = await mountDoors(bank);
+
+    const first = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, eventId, amount: '1' });
+    expect(first.statusCode).toBe(200);
+    const firstData = procedureData(first.body) as { ledgerTxId: string; sequence: number };
+
+    const retry = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, eventId, amount: '1' });
+    expect(retry.statusCode).toBe(200);
+    const retryData = procedureData(retry.body) as { ledgerTxId: string; sequence: number };
+    expect(retryData.ledgerTxId).toBe(firstData.ledgerTxId);
+    expect(retryData.sequence).toBe(firstData.sequence);
+    await app.close();
+
+    expect(lockCount(ledger)).toBe(locksAtOpen + 1);
+    const events = await sql<Array<{ id: string }>>`
+      SELECT id FROM bank.loan_collateral_events WHERE loan_id = ${opened.loan.id} AND sequence > 0
+    `;
+    expect(events).toHaveLength(1);
+    expect(events[0]!.id).toBe(eventId);
+  });
+});
