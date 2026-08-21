@@ -231,6 +231,7 @@ export function fixedPriceSource(
         }
         const entry = prices[assetId];
         if (!entry) continue;
+        if (typeof entry.price !== 'string') continue;
         out.set(assetId, { assetId, price: parseAmount(entry.price), asOf: now, quality: entry.quality ?? 'mid' });
       }
       return out;
@@ -279,7 +280,7 @@ export function tickerPriceSource(options: { baseUrl: string; fetchImpl?: typeof
             const body = (await res.json()) as TickerResponse;
             const asOf = typeof body.timestamp === 'number' ? new Date(body.timestamp) : new Date();
 
-            if (body.bid && body.ask) {
+            if (typeof body.bid === 'string' && typeof body.ask === 'string' && body.bid && body.ask) {
               const bid = parseAmount(body.bid);
               const ask = parseAmount(body.ask);
               if (bid > 0n && ask > 0n) {
@@ -289,7 +290,7 @@ export function tickerPriceSource(options: { baseUrl: string; fetchImpl?: typeof
                 return;
               }
             }
-            if (body.last) {
+            if (typeof body.last === 'string' && body.last) {
               const last = parseAmount(body.last);
               if (last > 0n) out.set(assetId, { assetId, price: last, asOf, quality: 'last' });
             }

@@ -265,4 +265,33 @@ describe('HTTP /trpc/loans.open — originate through ledger-client', () => {
     expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(amt('5000'));
     expect((await ledger.balance(userAvailable(BORROWER, 'BTC'))).amount).toBe(0n);
   });
+
+  it('refuses principal: 1.1 (number) and accepts "1.1"', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }) },
+    });
+    const product = await seedProduct(bank, ledger);
+    const app = await mountDoors(bank);
+
+    const numbered = await post(app, 'loans.open', {
+      loanId: randomUUID(),
+      productId: product.id,
+      collateralAmount: '1',
+      principal: 1.1,
+    });
+    expect(numbered.statusCode).toBe(400);
+    expect(JSON.stringify(numbered.body.error ?? numbered.body)).toMatch(/principal|decimal string|invalid/i);
+
+    const opened = await post(app, 'loans.open', {
+      loanId: randomUUID(),
+      productId: product.id,
+      collateralAmount: '1',
+      principal: '1.1',
+    });
+    expect(opened.statusCode).toBe(200);
+    const data = procedureData(opened.body) as { status: string };
+    expect(data.status).toBe('active');
+    expect((await ledger.balance(userAvailable(BORROWER, 'USDT'))).amount).toBe(amt('1.1'));
+    await app.close();
+  });
 });

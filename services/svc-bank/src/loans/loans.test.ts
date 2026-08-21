@@ -6,6 +6,7 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import {
   InvalidEntryError,
   MemoryLedger,
+  MoneyError,
   formatAmount,
   houseFees,
   insuranceFund,
@@ -18,8 +19,15 @@ import {
   userCollateral,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import { LoanService, marketMakerVenue, type LiquidationVenue, type MarginCallSink } from './loan-service.js';
-import { DEFAULT_MARK_POLICY, acceptableForLiquidation, acceptableForMarking, fixedPriceSource, type QuotedMark } from './prices.js';
+import { amountFromSql, LoanService, marketMakerVenue, type LiquidationVenue, type MarginCallSink } from './loan-service.js';
+import {
+  DEFAULT_MARK_POLICY,
+  acceptableForLiquidation,
+  acceptableForMarking,
+  fixedPriceSource,
+  tickerPriceSource,
+  type QuotedMark,
+} from './prices.js';
 import {
   DEFAULT_LIQUIDATION_POLICY,
   RiskError,
@@ -88,6 +96,48 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1 · ARITHMETIC — no database, no ledger, no clock.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+describe('principal/collateral/price values refuse JS numbers', () => {
+  it('amountFromSql rejects principal: 1.1 (number) and accepts "1.1"', () => {
+    expect(() => amountFromSql(1.1)).toThrow(MoneyError);
+    expect(() => amountFromSql(1.1)).toThrow(/decimal string, got number/);
+    expect(amountFromSql('1.1')).toBe(amt('1.1'));
+  });
+
+  it('String() is not used to launder SQL principal/collateral/price into parseAmount', () => {
+    const src = readFileSync(join(here, 'loan-service.ts'), 'utf8');
+    expect(src).not.toMatch(/parseAmount\(String\(row\.(principal|min_principal|last_mark_price)/);
+    expect(src).toMatch(/principal: amountFromSql\(row\.principal\)/);
+    expect(src).toMatch(/minPrincipal: amountFromSql\(row\.min_principal\)/);
+  });
+
+  it('tickerPriceSource omits a mark whose bid/ask/last arrived as JSON numbers', async () => {
+    const src = tickerPriceSource({
+      baseUrl: 'http://trade.test',
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ bid: 1.1, ask: 1.2, last: 1.15, timestamp: Date.now() }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    });
+    const marks = await src.marks(['BTC'], 'USDT');
+    expect(marks.has('BTC')).toBe(false);
+  });
+
+  it('tickerPriceSource accepts decimal-string bid/ask', async () => {
+    const src = tickerPriceSource({
+      baseUrl: 'http://trade.test',
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ bid: '10000', ask: '10002', last: '10001', timestamp: Date.now() }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    });
+    const marks = await src.marks(['BTC'], 'USDT');
+    expect(marks.get('BTC')?.quality).toBe('mid');
+    expect(marks.get('BTC')?.price).toBe(amt('10001'));
+  });
+});
 
 describe('LTV is integer arithmetic, and rounds against optimism', () => {
   it('computes basis points exactly, with no float anywhere in the path', () => {

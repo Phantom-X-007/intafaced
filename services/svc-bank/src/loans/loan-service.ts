@@ -4,6 +4,7 @@ import { transaction } from '@intafaced/db';
 import {
   InsufficientFundsError,
   LedgerError,
+  MoneyError,
   formatAmount,
   insuranceFund,
   loanCollateralAccount,
@@ -299,6 +300,19 @@ export interface LoanServiceOptions {
 
 const ONE = parseAmount('1');
 
+/**
+ * SQL numeric → Amount. postgres.js already returns numeric as a string; wrapping
+ * with `String()` would launder a JS number (1.1 → "1.1") past parseAmount.
+ * LTV/APR bps stay integer. Bigint is already scaled — pass through.
+ */
+export function amountFromSql(value: unknown): Amount {
+  if (typeof value === 'bigint') return value;
+  if (typeof value !== 'string') {
+    throw new MoneyError(`Amount must be a decimal string, got ${typeof value}`);
+  }
+  return parseAmount(value);
+}
+
 /** price × quantity, both scaled. Rounding is the caller's decision to state. */
 function quoteValue(quantity: Amount, price: Amount, rounding: 'floor' | 'ceil'): Amount {
   const raw = quantity * price;
@@ -446,8 +460,8 @@ export class LoanService {
 
     if (rows.length === 0) throw new BankError(`No loan ${loanId}`, 'bank.loan_not_found');
 
-    const principal = parseAmount(rows[0]!.principal);
-    const interest = parseAmount(rows[0]!.interest);
+    const principal = amountFromSql(rows[0]!.principal);
+    const interest = amountFromSql(rows[0]!.interest);
     return { principal, interest, total: principal + interest };
   }
 
@@ -564,7 +578,7 @@ export class LoanService {
     }
 
     const storedOpening =
-      loan.openingCollateral ?? (await this.collateralEvent(loan.id, 0).then((e) => (e ? parseAmount(e.amount) : null)));
+      loan.openingCollateral ?? (await this.collateralEvent(loan.id, 0).then((e) => (e ? amountFromSql(e.amount) : null)));
     if (storedOpening !== null && storedOpening !== input.collateralAmount) {
       throw new BankError(
         `Loan ${loan.id} already exists with opening collateral of ${formatAmount(storedOpening)} ${loan.collateralAssetId}, but this request asks for ` +
@@ -700,7 +714,7 @@ export class LoanService {
           out.push({ loanId: loan.id, outcome: 'failed', reason: 'no collateral event to resume from' });
           continue;
         }
-        await this.completePending(loan, parseAmount(locked.amount), 0, new Date());
+        await this.completePending(loan, amountFromSql(locked.amount), 0, new Date());
         out.push({ loanId: loan.id, outcome: 'completed' });
       } catch (err) {
         out.push({ loanId: loan.id, outcome: 'failed', reason: err instanceof Error ? err.message : String(err) });
@@ -948,7 +962,7 @@ export class LoanService {
         const existing = await this.sql<Array<{ interest_amount: string }>>`
           SELECT interest_amount FROM bank.loan_interest_accruals WHERE loan_id = ${loan.id} AND accrual_date = ${day}
         `;
-        const actual = parseAmount(existing[0]!.interest_amount);
+        const actual = amountFromSql(existing[0]!.interest_amount);
         debt += actual;
         results.push({ date: day, interest: actual, basis: debt - actual, alreadyAccrued: true });
         continue;
@@ -1207,10 +1221,10 @@ export class LoanService {
     const closed = (await this.loan(loan.id)).status === 'liquidated';
     return {
       ledgerTxId: row.ledger_tx_id,
-      collateralSold: parseAmount(row.collateral_sold),
-      proceeds: parseAmount(row.proceeds),
-      principalRepaid: parseAmount(row.principal_repaid),
-      interestRepaid: parseAmount(row.interest_repaid),
+      collateralSold: amountFromSql(row.collateral_sold),
+      proceeds: amountFromSql(row.proceeds),
+      principalRepaid: amountFromSql(row.principal_repaid),
+      interestRepaid: amountFromSql(row.interest_repaid),
       closed,
     };
   }
@@ -1732,7 +1746,7 @@ export class LoanService {
        ORDER BY tranche ASC
     `;
     for (const row of rows) {
-      await this.coverShortfallTranche(loan, Number(row.tranche), parseAmount(row.shortfall));
+      await this.coverShortfallTranche(loan, Number(row.tranche), amountFromSql(row.shortfall));
     }
   }
 
@@ -1766,7 +1780,7 @@ export class LoanService {
       if (!row) {
         throw new BankError(`Funding ${input.fundingId} disappeared after a conflict`, 'bank.loan_not_found');
       }
-      if (row.debt_asset_id !== input.debtAssetId || parseAmount(row.amount) !== input.amount) {
+      if (row.debt_asset_id !== input.debtAssetId || amountFromSql(row.amount) !== input.amount) {
         throw new BankError(`Funding ${input.fundingId} already exists on different terms`, 'bank.loan_principal_mismatch');
       }
       if (row.status === 'settled' && row.ledger_tx_id) {
@@ -1853,13 +1867,13 @@ export class LoanService {
     `;
 
     const row = rows[0]!;
-    const drawn = parseAmount(row.drawn);
-    const repaid = parseAmount(row.repaid);
-    const recovered = parseAmount(row.recovered);
-    const badDebt = parseAmount(row.bad_debt);
+    const drawn = amountFromSql(row.drawn);
+    const repaid = amountFromSql(row.repaid);
+    const recovered = amountFromSql(row.recovered);
+    const badDebt = amountFromSql(row.bad_debt);
     const outstandingPrincipal = drawn - repaid - recovered - badDebt;
     const outstandingClamped = outstandingPrincipal < 0n ? 0n : outstandingPrincipal;
-    const funded = parseAmount(row.funded);
+    const funded = amountFromSql(row.funded);
     // Identity: funded − badDebt = reserve + outstanding  →  drift zero when healthy.
     const drift = funded - badDebt - reserve.amount - outstandingClamped;
     const independent = true;
@@ -1995,7 +2009,7 @@ function toProduct(row: Record<string, unknown>): LoanProductRecord {
     quoteAssetId: String(row.quote_asset_id),
     aprBps: Number(row.apr_bps),
     maxLtvBps: Number(row.max_ltv_bps),
-    minPrincipal: parseAmount(String(row.min_principal)),
+    minPrincipal: amountFromSql(row.min_principal),
     policy: {
       marginCallLtvBps: Number(row.margin_call_ltv_bps),
       liquidationLtvBps: Number(row.liquidation_ltv_bps),
@@ -2019,13 +2033,13 @@ function toLoan(row: Record<string, unknown>): LoanRecord {
     collateralAssetId: String(row.collateral_asset_id),
     quoteAssetId: String(row.quote_asset_id),
     aprBps: Number(row.apr_bps),
-    principal: parseAmount(String(row.principal)),
-    openingCollateral: openingRaw === null || openingRaw === undefined ? null : parseAmount(String(openingRaw)),
+    principal: amountFromSql(row.principal),
+    openingCollateral: openingRaw === null || openingRaw === undefined ? null : amountFromSql(openingRaw),
     status: row.status as LoanRecord['status'],
     drawLedgerTxId: row.draw_ledger_tx_id === null ? null : String(row.draw_ledger_tx_id),
     openedAt: row.opened_at as Date,
     marginCalledAt: row.margin_called_at === null ? null : (row.margin_called_at as Date),
-    lastMarkPrice: row.last_mark_price === null || row.last_mark_price === undefined ? null : parseAmount(String(row.last_mark_price)),
+    lastMarkPrice: row.last_mark_price === null || row.last_mark_price === undefined ? null : amountFromSql(row.last_mark_price),
     closedAt: row.closed_at === null ? null : (row.closed_at as Date),
   };
 }
