@@ -18,6 +18,7 @@ import {
   usableProviderCountInRange,
   isMockEngineResidual,
 } from './readiness.js';
+import { describeAgentsLivePlanes } from './live-planes.js';
 
 /**
  * HONEST READINESS — what `/ready` may and may not claim.
@@ -233,5 +234,25 @@ describe('D26-P1-A6 public /ready door — metering-off never advertises feeChar
     expect(status.ready).toBe(true);
     expect(status.meteringAllowsFeeCharge).toBe(false);
     expect(JSON.stringify(status)).not.toMatch(/"meteringAllowsFeeCharge":true/);
+  });
+});
+
+describe('Class X live planes on /ready', () => {
+  it('includes livePlanes with storesMayStillRefuse honesty', () => {
+    const livePlanes = describeAgentsLivePlanes({
+      TRADE_URL: 'http://svc-trade:4004',
+      PAY_URL: 'http://svc-pay:4006',
+    });
+    const status = agentsReadiness({
+      providerMode: 'mock',
+      providers: [new MockModelProvider({ id: 'primary' })],
+      table: TABLE,
+      meteringEnabled: false,
+      livePlanes,
+    });
+    expect(status.livePlanes).toEqual(livePlanes);
+    expect(status.livePlanes.storesMayStillRefuse).toBe(true);
+    expect(status.livePlanes.tradeUrlConfigured).toBe(true);
+    expect(status.livePlanes.supportUrlConfigured).toBe(false);
   });
 });
