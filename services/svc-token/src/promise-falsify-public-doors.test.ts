@@ -662,7 +662,13 @@ if (!available) {
       ]);
 
       const codes = [left.statusCode, right.statusCode].sort((x, y) => x - y);
-      expect(codes).toEqual([200, 409]);
+      expect(
+        codes,
+        `recordBuyback concurrent same-window: ${JSON.stringify({
+          left: { status: left.statusCode, error: left.body.error },
+          right: { status: right.statusCode, error: right.body.error },
+        })}`,
+      ).toEqual([200, 409]);
       const winner = left.statusCode === 200 ? left : right;
       const burnedOnce = amt((wireJson(winner.body) as { burned: string }).burned);
       expect(burnedOnce).toBeGreaterThan(0n);

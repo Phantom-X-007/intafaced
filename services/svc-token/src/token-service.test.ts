@@ -1022,6 +1022,40 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('concurrent same-window claims burn once and refuse the loser by name', async () => {
+      await fundRewards('4000', 'w-claim-concurrent');
+      const a = crypto.randomUUID();
+      const b = crypto.randomUUID();
+
+      const results = await Promise.allSettled([
+        token.recordBuyback({
+          runId: a,
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+        token.recordBuyback({
+          runId: b,
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ]);
+
+      const wins = results.filter(
+        (r): r is PromiseFulfilledResult<{ runId: string; burned: bigint; toRewards: bigint }> => r.status === 'fulfilled',
+      );
+      const losses = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+      expect(wins).toHaveLength(1);
+      expect(losses).toHaveLength(1);
+      expect(losses[0]?.reason).toMatchObject({ name: 'TokenError', code: 'token.buyback_window_overlap' });
+
+      expect(await token.burnedSupply()).toBe(wins[0]?.value.burned);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     // The failure the ADR describes verbatim: "neither a TokenError nor a
     // LedgerError, so it falls through to an opaque INTERNAL_SERVER_ERROR".
     // The raw PostgresError that used to escape here carried code '23505'.
