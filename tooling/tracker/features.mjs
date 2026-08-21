@@ -665,19 +665,20 @@ export const FEATURES = [
   f('pay.payfac', 'PayFac mode — sub-merchant trees, 14 permission areas', {
     module: 'pay',
     phase: '3',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.psp'],
     requires: [
+      'services/svc-pay/src/payfac-mount-vs-tracker.ts',
+      'services/svc-pay/src/payfac-mount-vs-tracker.test.ts',
       'services/svc-pay/src/payfac-permissions.ts',
       'services/svc-pay/src/public-rest.payfac-permissions.test.ts',
-      'docs/pay/PAYFAC-PERMISSIONS-PARTIAL-2026-08-12.md',
+      'services/svc-pay/src/router.payfac-area.test.ts',
     ],
     note:
-      '**READY 2026-08-16 (#2210)** — REST + tRPC money doors now read `PAYFAC_SURFACE_AREAS` ' +
-      '(ancestor-or-self + area). Hosted `checkout.open` stays public (payer, no principal). Title still says 14; eleven shipped ' +
-      '(owner decision). STILL NOT done: §13 sockets `socket.payfac-settling-party-partner` + `socket.payfac-split-fee-recipes` ' +
-      '(no invent settling partner / split-fee recipes). Trees + journal + REST permissions #1741. Not full underwriting.',
+      '**D26-P1-P2 Done 2026-08-21:** sub-merchant trees + eleven permission areas (`payfac-mount-vs-tracker.ts`). ' +
+      'REST + tRPC money doors read `PAYFAC_SURFACE_AREAS`; never invent fourteenth area or underwriting. ' +
+      'Class X residual: socket.payfac-settling-party-partner + socket.payfac-split-fee-recipes.',
   }),
   f('pay.rails', 'RailAdapter interface + crypto-native + card-sandbox', {
     module: 'pay',
