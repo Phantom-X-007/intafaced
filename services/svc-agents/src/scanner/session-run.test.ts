@@ -6,6 +6,7 @@ import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { scannerAgentGuardrail, SCANNER_DATA_TOOLS } from './guardrail.js';
 import { runScannerRankSession, SCANNER_AGENT_ID, SCANNER_TICKER_TOOL } from './session-run.js';
+import type { SpotTickersPort } from './spot-tickers-port.js';
 import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL, SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './signal-inputs-law.js';
 
 /**
@@ -153,6 +154,10 @@ function runtimeOf(fake: FakeRuntime): AgentRuntime {
   return fake as unknown as AgentRuntime;
 }
 
+function portOf(tickers: ReturnType<typeof ticker>[]): SpotTickersPort {
+  return { sample: async () => tickers };
+}
+
 function baseInput(fake: FakeRuntime) {
   return {
     runtime: runtimeOf(fake),
@@ -166,12 +171,18 @@ function baseInput(fake: FakeRuntime) {
   };
 }
 
+function liveWithPort(fake: FakeRuntime, tickers: ReturnType<typeof ticker>[]) {
+  return { ...baseInput(fake), tickers, spotTickersPort: portOf(tickers) };
+}
+
 describe('scanner.rank metered session run', () => {
   it('ranks through the runtime, then settles and closes the session', async () => {
     const fake = new FakeRuntime();
     const result = await runScannerRankSession({
-      ...baseInput(fake),
-      tickers: [ticker('btc-usdt', { volume24h: '100', change24hBps: 10 }), ticker('eth-usdt', { volume24h: '5000', change24hBps: 200 })],
+      ...liveWithPort(fake, [
+        ticker('btc-usdt', { volume24h: '100', change24hBps: 10 }),
+        ticker('eth-usdt', { volume24h: '5000', change24hBps: 200 }),
+      ]),
     });
 
     expect(result.status).toBe('ok');
@@ -194,7 +205,7 @@ describe('scanner.rank metered session run', () => {
 
   it('bills zero for a run that never called the engine, and does not invent a charge', async () => {
     const fake = new FakeRuntime();
-    const result = await runScannerRankSession({ ...baseInput(fake), tickers: [ticker('btc-usdt')] });
+    const result = await runScannerRankSession(liveWithPort(fake, [ticker('btc-usdt')]));
 
     expect(result.metering.billedAmount).toBe('0');
     expect(result.metering.settlements).toEqual([]);
@@ -224,7 +235,7 @@ describe('scanner.rank metered session run', () => {
       },
     ];
 
-    const result = await runScannerRankSession({ ...baseInput(fake), tickers: [ticker('btc-usdt')] });
+    const result = await runScannerRankSession(liveWithPort(fake, [ticker('btc-usdt')]));
 
     // 1.5 + 2.5 = 4 at the ledger's scale — summed as bigint, formatted once.
     expect(result.metering.billedAmount).toBe('4');
@@ -290,23 +301,87 @@ describe('scanner.rank metered session run', () => {
     expect(fake.openCalls).toBe(0);
   });
 
-  it('is empty — not a session — when nothing was asked for', async () => {
+  it('live without a tickers port refuses no_live_tickers — body tickers are not live truth', async () => {
+    const fake = new FakeRuntime();
+    const result = await runScannerRankSession({
+      ...baseInput(fake),
+      tickers: [ticker('btc-usdt', { last: '999999', volume24h: '999999', change24hBps: 9999 })],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_tickers',
+      userMessageKey: 'agents.scanner.unavailable',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('live empty port refuses no_live_tickers — never a fake zero-filled ticker', async () => {
+    const fake = new FakeRuntime();
+    const result = await runScannerRankSession({
+      ...baseInput(fake),
+      tickers: [ticker('btc-usdt')],
+      spotTickersPort: { sample: async () => [] },
+    });
+
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_tickers' });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('live throwing port refuses no_live_tickers before a session', async () => {
+    const fake = new FakeRuntime();
+    const result = await runScannerRankSession({
+      ...baseInput(fake),
+      tickers: [ticker('btc-usdt')],
+      spotTickersPort: {
+        sample: async () => {
+          throw new Error('spot quotes unavailable');
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ status: 'refuse', reason: 'no_live_tickers' });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
+  });
+
+  it('live rank uses port samples and ignores invented request-body tickers', async () => {
+    const fake = new FakeRuntime();
+    const result = await runScannerRankSession({
+      ...baseInput(fake),
+      tickers: [ticker('invented-usdt', { volume24h: '999999', change24hBps: 9999 })],
+      spotTickersPort: portOf([ticker('eth-usdt', { volume24h: '5000', change24hBps: 200 })]),
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.signals.map((s) => s.marketId)).toEqual(['eth-usdt']);
+    expect(result.signals.some((s) => s.marketId === 'invented-usdt')).toBe(false);
+  });
+
+  it('live without a tickers port refuses no_live_tickers even when body tickers are empty', async () => {
     const fake = new FakeRuntime();
     const result = await runScannerRankSession({ ...baseInput(fake), tickers: [] });
 
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_tickers',
+      userMessageKey: 'agents.scanner.unavailable',
+    });
     expect(fake.openCalls).toBe(0);
   });
 
   it('drops a ticker the data tool refuses instead of filling it in', async () => {
     const fake = new FakeRuntime();
     const result = await runScannerRankSession({
-      ...baseInput(fake),
-      tickers: [
+      ...liveWithPort(fake, [
         ticker('btc-usdt'),
         ticker('ghost-usdt', { last: null }), // no quote — refused, never zero-filled
         ticker('stale-usdt', { asOf: '2026-08-07T00:00:00.000Z' }), // older than maxAgeMs
-      ],
+      ]),
     });
 
     expect(result.status).toBe('ok');
@@ -319,8 +394,7 @@ describe('scanner.rank metered session run', () => {
   it('refuses the whole run when every ticker was refused — no invented list', async () => {
     const fake = new FakeRuntime();
     const result = await runScannerRankSession({
-      ...baseInput(fake),
-      tickers: [ticker('a-usdt', { last: null }), ticker('b-usdt', { volume24h: null })],
+      ...liveWithPort(fake, [ticker('a-usdt', { last: null }), ticker('b-usdt', { volume24h: null })]),
     });
 
     expect(result).toMatchObject({
@@ -342,8 +416,7 @@ describe('scanner.rank metered session run', () => {
     (fake.guardrail as { limits: { maxActionsPerSession: number } }).limits.maxActionsPerSession = 1;
 
     const result = await runScannerRankSession({
-      ...baseInput(fake),
-      tickers: [ticker('btc-usdt'), ticker('eth-usdt'), ticker('sol-usdt')],
+      ...liveWithPort(fake, [ticker('btc-usdt'), ticker('eth-usdt'), ticker('sol-usdt')]),
     });
 
     expect(result.status).toBe('ok');
@@ -359,9 +432,11 @@ describe('scanner.rank metered session run', () => {
   it('honours the tier depth cap rather than the caller', async () => {
     const fake = new FakeRuntime();
     const result = await runScannerRankSession({
-      ...baseInput(fake),
+      ...liveWithPort(fake, [
+        ticker('btc-usdt', { volume24h: '100', change24hBps: 10 }),
+        ticker('eth-usdt', { volume24h: '5000', change24hBps: 200 }),
+      ]),
       tierLaw: { published: true, matrix: { free: { maxSignals: 1, tools: [...SCANNER_DATA_TOOLS] } } },
-      tickers: [ticker('btc-usdt', { volume24h: '100', change24hBps: 10 }), ticker('eth-usdt', { volume24h: '5000', change24hBps: 200 })],
     });
 
     expect(result.status).toBe('ok');
@@ -377,7 +452,7 @@ describe('scanner.rank metered session run', () => {
       throw boom;
     };
 
-    await expect(runScannerRankSession({ ...baseInput(fake), tickers: [ticker('btc-usdt')] })).rejects.toThrow('storage exploded');
+    await expect(runScannerRankSession(liveWithPort(fake, [ticker('btc-usdt')]))).rejects.toThrow('storage exploded');
 
     // No leaked open session, no unbilled window left for a sweep nobody runs.
     expect(fake.settleCalls).toBe(1);
@@ -386,7 +461,7 @@ describe('scanner.rank metered session run', () => {
 
   it('only ever asks for the declared read tool — never a money-write one', async () => {
     const fake = new FakeRuntime();
-    await runScannerRankSession({ ...baseInput(fake), tickers: [ticker('btc-usdt'), ticker('eth-usdt')] });
+    await runScannerRankSession(liveWithPort(fake, [ticker('btc-usdt'), ticker('eth-usdt')]));
 
     expect(new Set(fake.toolCalls)).toEqual(new Set([SCANNER_TICKER_TOOL]));
     expect(fake.toolCalls.some((t) => t.startsWith('ledger.') || t.startsWith('trade.order'))).toBe(false);

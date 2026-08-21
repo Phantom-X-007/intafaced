@@ -133,7 +133,32 @@ describe('scanner.runSession route', () => {
     expect(result.metering.sessionId).toBeNull();
   });
 
-  it('is empty when no tickers were supplied', async () => {
+  it('live without a tickers port refuses no_live_tickers — body tickers are not live truth', async () => {
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .scanner.runSession({
+        plane: 'live',
+        userTier: 'free',
+        law,
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+        tickers: [ticker],
+      });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_tickers',
+      userMessageKey: 'agents.scanner.unavailable',
+    });
+    expect(result.metering).toEqual({
+      sessionId: null,
+      billedAmount: '0',
+      assetId: 'IFC',
+      sessionClosed: false,
+      settlements: [],
+    });
+  });
+
+  it('live without a tickers port refuses no_live_tickers even when body tickers are empty', async () => {
     const result = await createAgentsRouter(stubDeps()).createCaller(signed()).scanner.runSession({
       plane: 'live',
       userTier: 'free',
@@ -142,7 +167,11 @@ describe('scanner.runSession route', () => {
       tickers: [],
     });
 
-    expect(result).toMatchObject({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_live_tickers',
+      userMessageKey: 'agents.scanner.unavailable',
+    });
     expect(result.metering.billedAmount).toBe('0');
   });
 

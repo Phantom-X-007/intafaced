@@ -43,6 +43,7 @@ import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import { invokeScannerDataTool, type TickerFixture } from './data-tools.js';
+import { readLiveSpotTickers, type SpotTickersPort } from './spot-tickers-port.js';
 import { rankFixtures, type MarketPlaneState, type RankedSignal } from './rank.js';
 import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
@@ -52,6 +53,8 @@ import {
   type ScannerSignalInputsLaw,
 } from './signal-inputs-law.js';
 import { scannerTierGate, type ScannerTierLaw } from './tier-gate.js';
+
+export type { SpotTickersPort } from './spot-tickers-port.js';
 
 /** The agent id the scanner guardrail is registered under. */
 export const SCANNER_AGENT_ID = 'scanner';
@@ -175,7 +178,13 @@ export type ScannerRunInput = {
   /** Product-law tier matrix. Blank → refuse-closed, before any session opens. */
   readonly tierLaw?: ScannerTierLaw | null;
   readonly userTier: string;
+  /**
+   * Fixture/dark body tickers. Ignored when `plane === 'live'` — live truth is
+   * `spotTickersPort` only.
+   */
   readonly tickers: readonly TickerFixture[];
+  /** Required for live. Unset in production until Class X spot quotes exist. */
+  readonly spotTickersPort?: SpotTickersPort;
   readonly now?: Date;
   readonly marketAllowlist?: ReadonlySet<string> | readonly string[];
 };
@@ -242,7 +251,23 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
     };
   }
 
-  if (input.tickers.length === 0) {
+  let tickers = input.tickers;
+  if (input.plane === 'live') {
+    const live = await readLiveSpotTickers(input.spotTickersPort);
+    if (!live.ok) {
+      return {
+        status: 'refuse',
+        reason: 'no_live_tickers',
+        userMessageKey: 'agents.scanner.unavailable',
+        tickersRefusedByTool: 0,
+        tickersRefusedByGuardrail: 0,
+        metering: unmetered(input.feeAssetId),
+      };
+    }
+    tickers = live.tickers;
+  }
+
+  if (tickers.length === 0) {
     // Nothing was asked for. Opening a session to rank nothing would be a
     // charge for a scan that never happened.
     return {
@@ -261,7 +286,7 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
     let tickersRefusedByTool = 0;
     let tickersRefusedByGuardrail = 0;
 
-    for (const ticker of input.tickers) {
+    for (const ticker of tickers) {
       let toolResult: ReturnType<typeof invokeScannerDataTool>;
       try {
         const act = await input.runtime.act({

@@ -42,6 +42,7 @@ import { describeSupportPolicy } from './support-agent/policy.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
 import type { PayMetricsPort } from './merchant/pay-metrics-port.js';
+import type { SpotTickersPort } from './scanner/spot-tickers-port.js';
 import { serialiseGuardrail } from './fleet/guardrails.js';
 import { draftTicketComment } from './support-agent/comment-draft.js';
 import { supportGrounded } from './support-agent/grounded.js';
@@ -294,10 +295,16 @@ export interface AgentsRouterDeps {
    * merchant.runSession then refuses `no_live_metrics` rather than invent rates.
    */
   readonly payMetricsPort?: PayMetricsPort;
+  /**
+   * Live spot ticker samples. Unset in production (Class X) — live
+   * scanner.runSession then refuses `no_live_tickers` rather than invent quotes.
+   */
+  readonly spotTickersPort?: SpotTickersPort;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
-  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret, payMetricsPort } = deps;
+  const { runtime, gateway, meter, feeAssetId, loadCoachGrounding, supportDesk, edgePrincipalSecret, payMetricsPort, spotTickersPort } =
+    deps;
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -1076,6 +1083,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * so every ticker fetch is guardrail-checked and audited, and the run
        * settles through `UsageMeter` → ledger — the only accounting path.
        *
+       * Live requires SpotTickersPort; request-body tickers are not live truth.
+       *
        * A mutation, not a query: it opens a session and writes audit rows.
        */
       runSession: scopedProcedure('agents:execute', { module: 'agents' })
@@ -1195,6 +1204,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               signalInputsLaw: resolveScannerSignalInputsLaw(input.signalInputsLaw),
               userTier: input.userTier,
               tickers: input.tickers,
+              ...(spotTickersPort === undefined ? {} : { spotTickersPort }),
               ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });
