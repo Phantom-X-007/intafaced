@@ -4,7 +4,6 @@ import { createVenueTradeAdapter } from '@intafaced/venue-adapter';
 import {
   assertTradeOnly,
   VenueCredentialScopeError,
-  VenueCredentialsMissingError,
   type TradeAdapter,
   type VenueCredentials,
   type VenueOrder,
@@ -147,19 +146,19 @@ describe('buildExecutionVenueTradeMaps', () => {
     expect(opens[0]!.status).toBe('open');
   });
 
-  it('missing credentials throw on use, not at map build', async () => {
+  it('skips venues without credentials — refuse-closed via missing map entry', () => {
     const maps = buildExecutionVenueTradeMaps(['binance-spot'], {
       credentialsFor: () => null,
       createAdapter: (id, creds) => createVenueTradeAdapter(id, creds),
     });
-    await expect(
-      maps.submitByVenue['binance-spot']!({
-        symbol: 'BTC/USDT',
-        side: 'buy',
-        amount: parseAmount('1'),
-        limitPrice: parseAmount('100'),
-        clientOrderId: 'c1',
-      }),
-    ).rejects.toBeInstanceOf(VenueCredentialsMissingError);
+    expect(maps.wiredVenueIds).toEqual([]);
+    expect(maps.submitByVenue['binance-spot']).toBeUndefined();
+  });
+});
+
+describe('wireExecutionVenueTradeAdapter', () => {
+  it('throws typed refuse for unknown venue and unset credentials', () => {
+    expect(() => wireExecutionVenueTradeAdapter('kraken-spot', tradeOnly('kraken-spot'))).toThrow(ExecutionVenueUnknownError);
+    expect(() => wireExecutionVenueTradeAdapter('binance-spot', null)).toThrow(ExecutionVenueCredentialsUnsetError);
   });
 });

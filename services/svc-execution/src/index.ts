@@ -19,7 +19,18 @@ registerProcessHooks(
 /**
  * svc-execution — house tenancy (D26-P0-01) + OMS plan/execute (D26-P1-X3).
  *
- * External spot venues wire from EXECUTION_VENUE_IDS + per-venue EXECUTION_VENUE_{ID}_* credentials.
+ * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
+ * (SOR `planRoute`, does not submit), `execution.oms.execute` (same plan,
+ * then injected submit; `tradeAdapterSubmit` maps `TradeAdapter.placeOrder`),
+ * `execution.oms.cancel` (client order id),
+ * `execution.oms.fetch` (client order id), `execution.oms.openOrders`,
+ * `execution.oms.balances`, `execution.oms.positions`,
+ * `execution.oms.rails` (not a transfer), `execution.oms.funding`
+ * (not a settlement), `execution.oms.borrow` (not a loan),
+ * `execution.oms.latency` (venue observation — not a routing weight),
+ * `execution.oms.markets` (instrument catalog — not a route), and
+ * `execution.oms.snapshot` (seed book — not a mark).
+ * External spot venues wire from EXECUTION_VENUE_IDS + per-venue credentials.
  * Internal venues refused. No matching-path privilege. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
