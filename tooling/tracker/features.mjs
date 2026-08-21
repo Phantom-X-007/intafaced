@@ -1863,8 +1863,19 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.analytics'],
-    note: 'Law §8.2:388 ("v2: ... Growth") and §25:719, which names the Growth Agent inside the marketing-engine matrix row — so this row is claimed by both the fleet capability and the marketing one. Gap-closed 2026-08-08; one of the five v2 agents with no row. Blocked on ops.analytics (`ready`, not `done`), the warehouse a growth agent would read cohorts and funnels from; agents.gateway is `done`. WHAT IT MUST NOT BECOME: §8.2\'s Agentic Law plus the platform\'s own honesty doctrine mean this agent may propose a campaign and may not publish a claim. Every returns-adjacent statement is already banned in three places — no returns-ranked leaderboards (§8 and D-S-18), no curve-fit marketing on-platform (§29:785) — and an agent generating acquisition copy is the single most likely thing on this board to breach them by accident. Proposals to a human, never autonomous publication. NOT DECIDED: incentive budgets. Any spend the agent proposes is an economic magnitude and owner-only under D-S-14.',
+    requires: [
+      'services/svc-agents/src/growth/mount-vs-tracker.ts',
+      'services/svc-agents/src/growth/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/growth/campaign-proposal.ts',
+      'services/svc-agents/src/growth/growth-route.test.ts',
+    ],
+    note:
+      '**D26-P1-G1 Done 2026-08-21:** campaign proposals mounted (`mount-vs-tracker.ts`); never publishes. ' +
+      'Dark warehouse + returns-ranked copy + budget invent refused. ' +
+      'Class X residual: incentive budgets; live warehouse cubes.',
   }),
   f('academy.video', 'Video library — stored playback, tier-gated (§25:707)', {
     module: 'academy',
