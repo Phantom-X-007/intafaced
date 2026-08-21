@@ -798,6 +798,10 @@ module.exports = {
                 withdrawLead: "The amount leaves your balance the moment svc-pay accepts it. There is no cancelling a payout, which is why your own reference is required rather than generated.",
                 stepUpTitle: "This needs a stepped-up session",
                 stepUpBody: "Withdrawing carries an interactive-only scope: no API key may hold it, and an ordinary session has to pass two-factor step-up first. If your session has not, the refusal below will say so by name.",
+                stepUpBtn: "Step up",
+                stepUpBtnDone: "Session stepped up",
+                stepUpTotp: "Authenticator code",
+                stepUpTotpHint: "Six digits, or a recovery code",
                 noRailToUse: "svc-pay has no rail registered, so there is nothing to withdraw over."
             },
 
