@@ -14,6 +14,7 @@ import {
   type PriceAlert,
 } from './alerts/types.js';
 import { describeChannelsPolicy } from './channels-policy.js';
+import { describeAlertsPolicy } from './alerts-policy.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -272,6 +273,14 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * runtime credentials; use `channels` for deploy-specific availability.
        */
       channelsPolicy: publicProcedure.query(() => describeChannelsPolicy()),
+
+      /**
+       * v22.alerts refuse honesty — price watch core, unpublished kinds, dark marks.
+       *
+       * Static board — integrators read this before wiring watch UI. Does not
+       * reflect runtime mark wiring; use `alerts` / `evaluateAlert` for that.
+       */
+      alertsPolicy: publicProcedure.query(() => describeAlertsPolicy()),
 
       /**
        * Which channels can reach anyone right now, and what is missing.
