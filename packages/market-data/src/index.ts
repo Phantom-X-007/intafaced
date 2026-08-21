@@ -9,5 +9,6 @@
  * `orderFilled`, with order ids stripped before they can touch a public wire.
  */
 export * from './depth.js';
+export * from './depth-policy.js';
 export * from './trade.js';
 export { CaptureLog, bookLevelsFromCapture, classifyBookObservation, isAbsentCapture, isMeasuredBook } from '@intafaced/connect-data-lake';
