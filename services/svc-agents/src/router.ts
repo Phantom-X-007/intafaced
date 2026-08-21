@@ -34,6 +34,7 @@ import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
 import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
+import { describeCopyIntelPolicy } from './copy-intel/policy.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
 import type { PayMetricsPort } from './merchant/pay-metrics-port.js';
@@ -2448,6 +2449,28 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * Spec: docs/ops/trk/agents.copy-intel.md Stage 1.
      */
     copyIntel: router({
+      policy: publicProcedure
+        .output(
+          z.object({
+            moneyWriteTools: z.array(z.string()),
+            moneyDeny: z.object({
+              tools: z.number().int(),
+              hasLedgerPost: z.number().int(),
+              hasTradeOrder: z.number().int(),
+              hasCopyFollow: z.number().int(),
+            }),
+            moneyDenyStatusLine: z.string(),
+            moneyDenyExport: z.string(),
+            returnsRankForbiddenKeys: z.array(z.string()),
+            returnsRankSortKeys: z.array(z.string()),
+            marketingBoardModes: z.array(z.string()),
+            returnsRankedBoardRefuseReason: z.literal('returns_ranked_board_forbidden'),
+            directorySortKey: z.literal('leaderId'),
+            rankedByReturns: z.literal(false),
+          }),
+        )
+        .query(() => describeCopyIntelPolicy()),
+
       buildStats: scopedProcedure('agents:read', { module: 'agents' })
         .input(
           z.object({
