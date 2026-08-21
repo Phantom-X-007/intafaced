@@ -35,6 +35,7 @@ import { createSubscriptionRouter } from './subscription-router.js';
 import { registerCheckoutRoutes } from './checkout-page.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { SubscriptionService, registerSubscriptionCycleRoutes } from './subscriptions/index.js';
+import { createMerchantWatchMetricsStore } from './agents/merchant-watch-metrics-store.js';
 import { registerMerchantWatchMetricsRoutes } from './agents/merchant-watch-metrics-routes.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
@@ -413,8 +414,10 @@ registerSubscriptionCycleRoutes(app, {
   subscriptions,
 });
 
+const merchantWatchMetricsStore = createMerchantWatchMetricsStore(sql);
 registerMerchantWatchMetricsRoutes(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
+  store: merchantWatchMetricsStore,
 });
 
 /**

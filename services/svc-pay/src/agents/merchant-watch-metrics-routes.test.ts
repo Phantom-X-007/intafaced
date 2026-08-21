@@ -6,6 +6,7 @@ import {
   MERCHANT_WATCH_METRICS_PUBLISH_PATH,
   registerMerchantWatchMetricsRoutes,
 } from './merchant-watch-metrics-routes.js';
+import type { MerchantWatchMetricPoint, MerchantWatchMetricsStore } from './merchant-watch-metrics-store.js';
 
 const SECRET = 'a-merchant-watch-metrics-internal-secret-long-enough';
 
@@ -13,10 +14,40 @@ function serviceHeaders(): Record<string, string> {
   return serviceAuthHeaders('svc-agents', SECRET);
 }
 
+function memoryStore(): MerchantWatchMetricsStore {
+  const points: MerchantWatchMetricPoint[] = [];
+  return {
+    async listPoints() {
+      return points;
+    },
+    async publishPoint(point) {
+      const idx = points.findIndex((p) => p.railId === point.railId);
+      if (idx >= 0) points[idx] = point;
+      else points.push(point);
+    },
+  };
+}
+
 describe('merchant watch metrics internal route', () => {
-  it('refuses no_live_metrics with service auth', async () => {
+  it('refuses no_live_metrics with service auth when store absent', async () => {
     const app = Fastify();
     registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET });
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: MERCHANT_WATCH_METRICS_PATH,
+      headers: serviceHeaders(),
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ ok: false, reason: 'no_live_metrics' });
+    await app.close();
+  });
+
+  it('refuses no_live_metrics when store is empty', async () => {
+    const app = Fastify();
+    registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET, store: memoryStore() });
     await app.ready();
 
     const res = await app.inject({
@@ -40,7 +71,7 @@ describe('merchant watch metrics internal route', () => {
     await app.close();
   });
 
-  it('publish refuses no_metrics_store with service auth', async () => {
+  it('publish refuses no_metrics_store when store absent', async () => {
     const app = Fastify();
     registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET });
     await app.ready();
@@ -54,6 +85,34 @@ describe('merchant watch metrics internal route', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.json()).toEqual({ ok: false, reason: 'no_metrics_store' });
+    await app.close();
+  });
+
+  it('publish then GET returns operator-owned points', async () => {
+    const app = Fastify();
+    const store = memoryStore();
+    registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET, store });
+    await app.ready();
+
+    const publish = await app.inject({
+      method: 'POST',
+      url: MERCHANT_WATCH_METRICS_PUBLISH_PATH,
+      headers: serviceHeaders(),
+      payload: { railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 },
+    });
+    expect(publish.statusCode).toBe(200);
+    expect(publish.json()).toEqual({ ok: true });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: MERCHANT_WATCH_METRICS_PATH,
+      headers: serviceHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      ok: true,
+      points: [{ railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 }],
+    });
     await app.close();
   });
 });
