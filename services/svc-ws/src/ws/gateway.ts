@@ -43,7 +43,8 @@ import type { TradeHub } from '../trade/hub.js';
  *
  * `?market=<id>` alone is depth (snapshot + deltas), unchanged. Pass
  * `channel=trades` for the public trade tape. Orders and positions are
- * per-principal and are deliberately not on this port.
+ * per-principal on `/private/stream?channel=orders|positions` (see
+ * `private/gateway.ts`) — deliberately not on this public port.
  *
  * ── Why not through svc-edge ────────────────────────────────────────────────
  *

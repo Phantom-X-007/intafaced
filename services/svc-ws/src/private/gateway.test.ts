@@ -768,6 +768,28 @@ describe('private WebSocket gateway', () => {
     client.socket.close();
   });
 
+  it('channel=orders sends empty snapshot when book read fails — not a live zero blotter', async () => {
+    await boot({
+      tokens,
+      book: {
+        async listOpenOrders() {
+          throw new Error('svc-trade unreachable');
+        },
+        async listOpenPositions() {
+          return [];
+        },
+      },
+    });
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
+    await client.frameCount(1);
+    await client.untilSnapshot('orders');
+    const snap = client.parsed().find((f) => f.channel === 'orders' && f.type === 'snapshot');
+    expect(snap).toEqual({ channel: 'orders', type: 'snapshot', userId: USER, orders: [] });
+    expect(client.parsed().every((f) => f.channel === 'orders')).toBe(true);
+    client.socket.close();
+  });
+
   it('sends an empty orders snapshot when the user has none', async () => {
     await boot();
     const token = await accessToken(['trade:read']);
