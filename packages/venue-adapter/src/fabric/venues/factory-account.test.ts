@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
 import { VenueCredentialScopeError, VenueCredentialsMissingError } from '@intafaced/venue-contracts';
-import { createVenueAccountAdapter } from './factory-account.js';
+import { createVenueAccountAdapter } from './factory.js';
 import { BinanceSpotAccount } from './binance-spot-account.js';
 import { BybitSpotAccount } from './bybit-spot-account.js';
 import { OkxSpotAccount } from './okx-spot-account.js';
