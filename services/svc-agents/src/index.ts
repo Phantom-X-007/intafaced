@@ -17,6 +17,7 @@ import { AgentRuntime } from './runtime.js';
 import { registerProductAgentsAtBoot } from './fleet/boot-register.js';
 import { fleetMatrixBoardCard } from './fleet/matrix.js';
 import { agentsReadiness } from './readiness.js';
+import { describeAgentsLivePlanes } from './live-planes.js';
 import { createAcademyCurriculumSource } from './coach/academy-curriculum-source.js';
 import { createHttpSupportDeskPort } from './support-agent/desk-port.js';
 import { createHttpSpotTickersPort } from './scanner/trade-tickers-http-port.js';
@@ -198,6 +199,7 @@ app.get('/ready', async () =>
     meteringEnabled: env.AGENTS_METERING_ENABLED,
     productAgentsRegistered: bootAgents.count,
     fleet: fleetMatrixBoardCard(),
+    livePlanes: describeAgentsLivePlanes(env),
   }),
 );
 

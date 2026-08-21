@@ -1,6 +1,7 @@
 import { isUsable, supports, type ModelProvider } from './providers/provider.js';
 import type { RoutingTable } from './gateway/routing.js';
 import { meteringPublicCard, type MeteringPublicMode } from './metering/product-law.js';
+import { describeAgentsLivePlanes, type AgentsLivePlanesSummary } from './live-planes.js';
 
 /**
  * HONEST READINESS FOR svc-agents (Board Clear A-P5-AGENTS).
@@ -48,6 +49,8 @@ export interface AgentsReadinessInput {
    * When omitted, `/ready` reports zeros — never invents a five-agent fleet.
    */
   readonly fleet?: FleetReadinessCard;
+  /** Class X fleet URL pins — configured ≠ upstream store live. */
+  readonly livePlanes?: AgentsLivePlanesSummary;
   readonly now?: Date;
 }
 
@@ -93,6 +96,7 @@ export interface AgentsReadiness {
    * "five agents are live". Mount honesty stays in `fleet/matrix.ts` tests.
    */
   readonly fleet: FleetReadinessCard;
+  readonly livePlanes: AgentsLivePlanesSummary;
   readonly usefulPath: UsefulPathStatus;
 }
 
@@ -147,6 +151,7 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     bootRegistered: 0,
     tasksMissingRoute: 0,
   };
+  const livePlanes = input.livePlanes ?? describeAgentsLivePlanes();
 
   // Mock mode always carries an honesty residual even when the path works: the
   // engine answers, but it is not production inference. Upstream mode drops
@@ -174,6 +179,7 @@ export function agentsReadiness(input: AgentsReadinessInput): AgentsReadiness {
     tasks,
     productAgentsRegistered,
     fleet,
+    livePlanes,
     usefulPath: {
       available: usefulTask !== null,
       task: usefulTask,
