@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**125 of 158 shipped (79%)** · 2 in progress · 20 ready to claim · 11 blocked · 30 deliberate §13 sockets
+**126 of 158 shipped (80%)** · 2 in progress · 19 ready to claim · 11 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -30,7 +30,6 @@ pnpm wt feat/<the-thing>
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
 | INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
 | 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
-| Certifications → XP → real perks | `academy` | 5 | `academy.certs` |
 | RWA issuance registry, licence-gated | `launch` | 5 | `launch.rwa` |
 | Tokenized T-bill vaults — stable balances opt into RWA yield (§36) | `launch` | 5 | `launch.treasury-yield` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
@@ -210,7 +209,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (37/59)
+### Phase 5 — Surfaces (38/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -230,7 +229,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Live lobbies, LiveKit SFU, capacity tiers <br/>_svc-academy on 4016, mounted at /api/academy. §8.3 capacity tiers free/staked/invite in one pure decideSeat(); seat claimed under FOR UPDATE so a race cannot oversell the last seat; staked tier reads token.stakeOf and fails closed, and only for staked rooms. Hosting gated on §4.1 rank_thresholds.perks.lobbyHostRights read from svc-identity, NOT on the scope — academy:write is now issued to every session so a seat is takeable. Sessions carry a serializable jsonb scene (the §8.3 VR-ready 2D layer). NO SFU: ACADEMY_STREAM_PROVIDER=none, NullStreamProvider REFUSES a join credential rather than fabricating one — socket.stream-provider. Non-custodial: no LEDGER_URL, no ledger client; min_stake is a threshold, never a balance. Curriculum/certs/ambassador pay deliberately not built here._ | F |  | `academy.lobbies` |
 | 🟢 | 2D navigable room canvas, VR-ready scene state <br/>_Stage-1 2026-08-04: versioned Scene v1 schema + size gate (`spatial/scene.ts`); updateScene rejects invalid/oversized. Canvas product residual. Not tracker done until navigable shell uses server scene._ | F |  | `academy.spatial` |
 | ✅ | DERIV//DESK library import — 20 playbooks + 3 workbooks <br/>_**D26-P1-C5 Done-bar sealed 2026-08-12 (#1738):** import substance bar (not char-count theater); `lessonSubstanceChecklist` + `substanceBarMet` on spine (20 playbooks + 3 workbooks platform-native). Licensed DERIV//DESK dump assets remain Class X residual (not agent invent)._ | F |  | `academy.curriculum` |
-| 🟢 | Certifications → XP → real perks <br/>_D26-P1-C1 2026-08-12: grantCert → XP → real identity perks OR refuse invent perk money (certs/perk-plane.ts · certPerkPlane · certPerkIntent). svc-identity remains SoT; no academy cert→perk map / perk book. Unpriced cert still publishes nothing. NOT tracker done on full title until multi-svc cert→perk product law (contracts) — honesty plane is sealed._ | F |  | `academy.certs` |
+| ✅ | Certifications → XP → real perks <br/>_**D26-P1-C1 Done 2026-08-21:** cert→XP→identity perks or refuse invent (`mount-vs-tracker.ts`). grantCert + certPerkPlane + certPerkIntent refuse-closed. Class X residual: multi-svc perk product law; full title real perks._ | F |  | `academy.certs` |
 | ✅ | Residencies, IFC pay, revenue share <br/>_**D26-P1-C2 Done-bar sealed 2026-08-12 (#1725):** residencies / IFC pay under rate authority — owner-published JSON law only; refuse invent rates; dry-run quote when authority present; accepted-residency gate. SOCKET residual: live settlement Class M until ledger recipe (no recipes in ambassadors); seasons product residual._ | F |  | `academy.ambassadors` |
 | ✅ | Seasonal ladders, IFC prize pools <br/>_**D26-P1-C3 Done 2026-08-21:** Stage-1 ladder + season lifecycle (`mount-vs-tracker.ts`); prize pools refuse `academy.prize_pool_unset`. Never invent IFC credits or prize balances; calendar never implies payout. Class M residual: owner fund/payout ledger recipes until signed amounts._ | F |  | `academy.tournaments` |
 | ✅ | Paper-trading market flag for workbooks <br/>_DONE 2026-08-15: title bar met on tip — paper market flag + placeOrder zero-ledger isolation, workbook drill loop with trade fill-refs only, ACADEMY_PAPER_TRADING_ENABLED kill-switch (live trade unaffected, #1001). XP/rank from paper is academy.certs (not this row). Stage-1 2026-08-04: trade.markets.paper + placeOrder isolation. Stage-2 workbook wire. Stage-3 ops gate._ | F |  | `academy.paper-trading` |
