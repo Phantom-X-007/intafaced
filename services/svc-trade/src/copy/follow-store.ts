@@ -35,11 +35,14 @@ export function rethrowCopyFollowUnique(err: unknown): never {
  * same business-key shape as fee-share settle / ledger fill keys. Mirror claims
  * serialise on `exp:${followId}` so they compose with addExposureIfUnderCap.
  *
- * Fee-share settle is claimed once per fillId (any follow). A redelivered
- * settle on the same follow returns the prior attribution and never re-runs
- * reserveEarnings. A second follow on the same fill refuses — sweep key is
- * fill-only, so two leaders must not share one pot. Ledger keys alone are
- * not enough: reserve runs *before* the post.
+ * Fee-share settle is claimed once per fillId (any follow). Unique fill_id
+ * INSERT commits **before** ledger recipes (`copy-fee:${fillId}` sweep,
+ * `copy-leader-share:${fillId}:${leaderId}` payout). Crash after post cannot
+ * pay a second leader: the row is already there, unique-violation refuses.
+ * Same-follow redelivery returns the prior row and never re-runs `run`.
+ * A failed `run` (pre-follow / not mirrored) deletes the claim so a later
+ * valid follow is not poisoned. Ledger keys alone are not enough: payout
+ * keys include leaderId, so two leaders would both post from one house pot.
  */
 
 export interface CopyPeriodStats {
@@ -184,6 +187,7 @@ export interface CopyFollowStore {
   getSettledFeeShare(followId: string, fillId: string): Promise<StoredSettledFeeShare | null>;
   /**
    * Run fee-share settle body at most once per fillId (all follows).
+   * Claims the unique fill_id row **before** `run` (ledger sweep + rewardPay).
    * Same follow redelivery returns the prior record without re-running `run`.
    * A different follow on the same fill throws `trade.copy_settle_refused`.
    */
@@ -229,6 +233,26 @@ function mirrorKey(followId: string, fillId: string): string {
 
 function settleKey(followId: string, fillId: string): string {
   return `${followId}\0${fillId}`;
+}
+
+/**
+ * Unique fill_id claim written *before* ledger recipes. Zeros / blank asset
+ * until `run` completes; crash leftover still unique-violates a second leader.
+ */
+function pendingFeeShareClaim(followId: string, fillId: string, leaderId: string, followerId: string): StoredSettledFeeShare {
+  return {
+    fillId,
+    followId,
+    leaderId,
+    followerId,
+    assetId: '',
+    protocolFee: 0n,
+    appliedShareBps: 0,
+    grossLeaderShare: 0n,
+    cappedLeaderShare: 0n,
+    skippedReason: null,
+    settled: false,
+  };
 }
 
 /** In-memory store — default for unit tests and single-process dev. */
@@ -398,7 +422,9 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     run: () => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
     // Exclusive on fillId so two follows cannot both pass a null lookup
-    // and both reserve / pay two leaders from one house fee.
+    // and both reserve / pay two leaders from one house fee. Claim the
+    // fill *before* `run` so a second follow sees the once-key even while
+    // ledger recipes are in flight (SQL unique fill_id is the durable form).
     return this.exclusive(`settle-fill:${fillId}`, async () => {
       const existing = this.settledByFill.get(fillId);
       if (existing) {
@@ -407,10 +433,21 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         }
         return { status: 'duplicate' as const, record: existing };
       }
-      const record = await run();
-      this.settled.set(settleKey(followId, fillId), record);
-      this.settledByFill.set(fillId, record);
-      return { status: 'claimed' as const, record };
+      const follow = this.follows.get(followId);
+      const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
+      this.settled.set(settleKey(followId, fillId), claim);
+      this.settledByFill.set(fillId, claim);
+      try {
+        const record = await run();
+        this.settled.set(settleKey(followId, fillId), record);
+        this.settledByFill.set(fillId, record);
+        return { status: 'claimed' as const, record };
+      } catch (err) {
+        this.settled.delete(settleKey(followId, fillId));
+        const cur = this.settledByFill.get(fillId);
+        if (cur?.followId === followId) this.settledByFill.delete(fillId);
+        throw err;
+      }
     });
   }
 
@@ -866,7 +903,12 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         }
         return { status: 'duplicate' as const, record: existing };
       }
-      const record = await run();
+
+      // Claim unique fill_id BEFORE ledger recipes. Payout keys include
+      // leaderId (`copy-leader-share:${fillId}:${leaderId}`); a crash after
+      // post used to leave no row, so a second follow paid a second leader.
+      const follow = await this.getFollow(followId);
+      const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
       try {
         await this.sql`
           INSERT INTO copy_settled_fee_shares (
@@ -874,17 +916,17 @@ export class SqlCopyFollowStore implements CopyFollowStore {
             protocol_fee, applied_share_bps, gross_leader_share, capped_leader_share,
             skipped_reason, settled, created_at
           ) VALUES (
-            ${record.followId},
-            ${record.fillId},
-            ${record.leaderId},
-            ${record.followerId},
-            ${record.assetId},
-            ${formatAmount(record.protocolFee)},
-            ${record.appliedShareBps},
-            ${formatAmount(record.grossLeaderShare)},
-            ${formatAmount(record.cappedLeaderShare)},
-            ${record.skippedReason},
-            ${record.settled},
+            ${claim.followId},
+            ${claim.fillId},
+            ${claim.leaderId},
+            ${claim.followerId},
+            ${claim.assetId},
+            ${formatAmount(claim.protocolFee)},
+            ${claim.appliedShareBps},
+            ${formatAmount(claim.grossLeaderShare)},
+            ${formatAmount(claim.cappedLeaderShare)},
+            ${claim.skippedReason},
+            ${claim.settled},
             now()
           )
         `;
@@ -900,13 +942,42 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         }
         throw err;
       }
+
+      let record: StoredSettledFeeShare;
+      try {
+        record = await run();
+      } catch (err) {
+        try {
+          await this.sql`
+            DELETE FROM copy_settled_fee_shares
+             WHERE follow_id = ${followId} AND fill_id = ${fillId}
+          `;
+        } catch {
+          // Leftover claim is fail-closed: second leader still unique-violates.
+        }
+        throw err;
+      }
+
+      await this.sql`
+        UPDATE copy_settled_fee_shares
+           SET leader_id = ${record.leaderId},
+               follower_id = ${record.followerId},
+               asset_id = ${record.assetId},
+               protocol_fee = ${formatAmount(record.protocolFee)},
+               applied_share_bps = ${record.appliedShareBps},
+               gross_leader_share = ${formatAmount(record.grossLeaderShare)},
+               capped_leader_share = ${formatAmount(record.cappedLeaderShare)},
+               skipped_reason = ${record.skippedReason},
+               settled = ${record.settled}
+         WHERE follow_id = ${followId} AND fill_id = ${fillId}
+      `;
       const saved = (await this.getSettledFeeShare(followId, fillId)) ?? record;
       return { status: 'claimed' as const, record: saved };
     };
     const fillLockKey = `copy-settle-fill:${fillId}`;
     // CopyService holds the per-follow lock on this pinned connection.
     // Take the fill lock on the SAME session so two follows cannot both
-    // run() (ledger posts) before unique fill_id insert.
+    // pass the empty lookup. Unique INSERT is the crash-safe once-key.
     if (this.lockedFollowId === followId) {
       await this.sql`SELECT pg_advisory_lock(hashtext(${fillLockKey}))`;
       try {
