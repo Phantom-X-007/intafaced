@@ -931,7 +931,23 @@ module.exports = {
             minorUnits: "Minor units",
             side: "Side",
             price: "Price",
-            limits: "Limits"
+            limits: "Limits",
+            take: {
+                title: "Take",
+                action: "Take",
+                lead: "Name a decimal-string amount and an operator-registered method, then take. Empty registry is a named refuse. This screen never holds the locked amount.",
+                amount: "Amount",
+                amountHint: "Unsigned decimal string",
+                method: "Method",
+                methodHint: "Operator-registered instrument id",
+                methods: "Methods",
+                signIn: "Sign in to take",
+                done: "Held",
+                tradeId: "Trade",
+                status: "Status",
+                fiatAmount: "Fiat",
+                noMethodRegistry: "The operator has not registered any payment method. Empty registry is a named refuse, not a missing button."
+            }
         },
         token: {
             lead: "Figures for the account holding this platform session.",
