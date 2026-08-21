@@ -16,12 +16,7 @@ import { tradeAdapterCancel } from './oms-trade-cancel.js';
 import { tradeAdapterFetch } from './oms-trade-fetch.js';
 import { tradeAdapterOpenOrders } from './oms-trade-open-orders.js';
 import { tradeAdapterSubmit } from './oms-trade-submit.js';
-import type {
-  ExecutionCancelMap,
-  ExecutionFetchMap,
-  ExecutionOpenOrdersMap,
-  ExecutionSubmitMap,
-} from './router.js';
+import type { ExecutionCancelMap, ExecutionFetchMap, ExecutionOpenOrdersMap, ExecutionSubmitMap } from './router.js';
 
 const OFF_TOKENS = new Set(['', 'off', 'none', 'false']);
 

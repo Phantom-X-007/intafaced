@@ -11,9 +11,12 @@ import {
 } from '@intafaced/venue-contracts';
 import {
   buildExecutionVenueTradeMaps,
+  ExecutionVenueCredentialsUnsetError,
+  ExecutionVenueUnknownError,
   executionVenueCredentialEnvPrefix,
   loadExecutionVenueCredentials,
   parseExecutionVenueIds,
+  wireExecutionVenueTradeAdapter,
 } from './venue-adapters.js';
 
 const now = new Date('2026-08-17T12:00:00.000Z');
@@ -59,11 +62,7 @@ const tradeOnly = (venueId: string): VenueCredentials => ({
 
 describe('parseExecutionVenueIds', () => {
   it('splits comma list, normalizes, and treats off tokens as empty', () => {
-    expect(parseExecutionVenueIds('binance-spot, bybit-spot ,okx-spot')).toEqual([
-      'binance-spot',
-      'bybit-spot',
-      'okx-spot',
-    ]);
+    expect(parseExecutionVenueIds('binance-spot, bybit-spot ,okx-spot')).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
     expect(parseExecutionVenueIds('')).toEqual([]);
     expect(parseExecutionVenueIds('off')).toEqual([]);
     expect(parseExecutionVenueIds('none')).toEqual([]);
