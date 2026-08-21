@@ -7,9 +7,10 @@ import { env } from './env.js';
 import { BlueprintService } from './blueprint-service.js';
 import { HttpNeuralEngineClient } from './engine/http-engine.js';
 import { MockNeuralEngine } from './engine/mock-engine.js';
-import { isUsable, type NeuralEngineClient } from './engine/neural-engine.js';
+import type { NeuralEngineClient } from './engine/neural-engine.js';
 import { UnconfiguredCardRenderer, type CardRenderer } from './card/card-renderer.js';
 import { HttpCardRenderer } from './card/http-renderer.js';
+import { blueprintReadiness } from './readiness.js';
 import { createBlueprintRouter, type BlueprintRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -102,22 +103,19 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
 /**
- * Readiness includes the engine, because a Blueprint cannot be produced without
- * it. Reporting ready while the engine is down would route onboarding traffic
- * at a service that can only fail it.
+ * Process readiness. Engine `usable` is reported, not a gate — see
+ * `blueprintReadiness`. The card renderer is reported but does NOT gate
+ * readiness: a card can be produced without a rasterizer, and refusing traffic
+ * because the PNG rail is absent would take down onboarding over a share image.
  */
-/**
- * The card renderer is reported but does NOT gate readiness. A Blueprint cannot
- * be produced without the engine; a card can be produced without a rasterizer,
- * and refusing traffic because the PNG rail is absent would take down onboarding
- * over a share image. It is on this response so an operator can see which
- * renderer is live without reading the deployment's environment.
- */
-app.get('/ready', async () => ({
-  ready: true,
-  engine: { id: engine.id, usable: isUsable(engine), mode: env.BLUEPRINT_ENGINE_MODE },
-  cardRenderer: { id: cardRenderer.id, configured: Boolean(env.BLUEPRINT_CARD_RENDERER_URL) },
-}));
+app.get('/ready', async () =>
+  blueprintReadiness({
+    engine,
+    engineMode: env.BLUEPRINT_ENGINE_MODE,
+    cardRenderer,
+    cardRendererConfigured: Boolean(env.BLUEPRINT_CARD_RENDERER_URL),
+  }),
+);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',

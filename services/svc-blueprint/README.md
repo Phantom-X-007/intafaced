@@ -39,7 +39,7 @@ tRPC (`src/router.ts`). Owner procedures operate on `ctx.principal.userId` and n
 | `export`        | `blueprint:read`  | **§7.2 portable** — everything this service holds, as JSON                      |
 | `erase`         | `blueprint:write` | **§7.2 deletable** — hard delete that cascades                                  |
 
-HTTP: `GET /health`, `GET /ready`. Readiness reports the engine, because a Blueprint cannot be produced without it and reporting ready while it is down routes onboarding at a service that can only fail it. It reports the card renderer too, but does **not** gate on it: a card can be produced without a rasterizer, and refusing traffic because the PNG rail is absent would take onboarding down over a share image.
+HTTP: `GET /health`, `GET /ready`. `/ready` is process-up (`ready: true` after listen). It reports `engine.usable` and `engine.mode` but does **not** flip `ready` off the 60s `isUsable` window — the HTTP adapter starts unusable until the first profile call, and gating kube on that would never admit the pod. Prod refuses `BLUEPRINT_ENGINE_MODE=mock` and a loopback/unset `BLUEPRINT_ENGINE_URL` at boot. The card renderer is reported and does **not** gate either: a card can be produced without a rasterizer, and refusing traffic because the PNG rail is absent would take down onboarding over a share image.
 
 `blueprint` is non-custodial and `minTier: 'none'` in `JURISDICTION_MATRIX`, so the guard checks scope and region, not verification tier.
 
