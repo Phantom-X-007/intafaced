@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAmount } from '@intafaced/ledger-client/money';
+import { parseAmount } from '@intafaced/ledger-client';
 import { CaptureLog, bookLevelsFromCapture, isAbsentCapture, type CaptureRecord } from './capture.js';
 import {
   absentReasonFromCaptureLakeHole,
