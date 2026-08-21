@@ -92,6 +92,13 @@ const schema = serviceEnvSchema
        */
       SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
 
+      /**
+       * svc-trade base for scanner live spot tickers (`GET /api/v1/tickers`).
+       * Unset / blank → scanner rank runs refuse `no_live_tickers`.
+       * No localhost default — unset is honest dark, not a guessed venue.
+       */
+      TRADE_URL: blankAsAbsent(z.string().url().optional()),
+
       /** Asset premium agent tiers are billed in (§8.2). */
       AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
 

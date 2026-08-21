@@ -19,6 +19,7 @@ import { fleetMatrixBoardCard } from './fleet/matrix.js';
 import { agentsReadiness } from './readiness.js';
 import { createAcademyCurriculumSource } from './coach/academy-curriculum-source.js';
 import { createHttpSupportDeskPort } from './support-agent/desk-port.js';
+import { createHttpSpotTickersPort } from './scanner/trade-tickers-http-port.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -133,6 +134,8 @@ const supportDesk = env.SUPPORT_URL
     })
   : undefined;
 
+const spotTickersPort = env.TRADE_URL ? createHttpSpotTickersPort({ tradeUrl: env.TRADE_URL }) : undefined;
+
 const appRouter = createAgentsRouter({
   runtime,
   gateway,
@@ -140,6 +143,7 @@ const appRouter = createAgentsRouter({
   feeAssetId: env.AGENTS_FEE_ASSET_ID,
   ...(loadCoachGrounding ? { loadCoachGrounding } : {}),
   ...(supportDesk ? { supportDesk, edgePrincipalSecret: env.EDGE_PRINCIPAL_SECRET } : {}),
+  ...(spotTickersPort ? { spotTickersPort } : {}),
 });
 
 // Built before the listener opens: a service that cannot authenticate the edge
