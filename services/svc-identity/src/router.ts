@@ -18,6 +18,7 @@ import {
   planAffiliatePayout,
   postAffiliatePayout,
 } from './affiliates/payout-engine.js';
+import { describeAffiliatesPolicy } from './affiliates/affiliates-policy.js';
 import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
@@ -1209,6 +1210,8 @@ export function createIdentityRouter(
      * Spec: docs/ops/trk/ops.affiliates.md Slice A.
      */
     affiliates: router({
+      policy: publicProcedure.query(() => describeAffiliatesPolicy()),
+
       attribute: scopedProcedure('identity:write')
         .input(z.object({ referrerId: z.string().uuid() }))
         .output(
