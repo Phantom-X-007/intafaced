@@ -84,7 +84,16 @@ describe('venueOrderToExecution', () => {
       expect(ex.status).toBe('rejected');
       expect(ex.filledAmount).toBe(ZERO);
       expect(ex.feeAmount).toBe(ZERO);
-      expect(ex.averagePrice).toBe(parseAmount('100'));
+      expect(ex.averagePrice).toBe(ZERO);
+    }
+  });
+
+  it('does not substitute request.limitPrice when averagePrice is null (rejected/canceled/open filled=0)', () => {
+    const req = request();
+    for (const status of ['rejected', 'canceled', 'open'] as const) {
+      const ex = venueOrderToExecution(order({ status, filled: ZERO, remaining: parseAmount('1'), averagePrice: null }), req);
+      expect(ex.averagePrice).toBe(ZERO);
+      expect(ex.averagePrice).not.toBe(req.limitPrice);
     }
   });
 

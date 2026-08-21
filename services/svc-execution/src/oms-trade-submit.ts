@@ -1,7 +1,8 @@
 /**
  * Bridge TradeAdapter.placeOrder → LiquiditySource.submit (OMS execute).
  *
- * Does not invent an average on a fill. Does not treat pending as executed.
+ * Does not invent an average from the request limit. Filled + null average
+ * throws. Unfilled + null average is ZERO. Does not treat pending as executed.
  * Unknown fees are 0 — never a fabricated venue fee.
  */
 import { ZERO, type Amount } from '@intafaced/ledger-client';
@@ -44,7 +45,7 @@ export function venueOrderToExecution(order: VenueOrder, request: SubmitRequest)
     throw new Error('filled venue order has null averagePrice — refusing to invent a fill price');
   }
 
-  const averagePrice = order.averagePrice ?? request.limitPrice;
+  const averagePrice = order.averagePrice ?? ZERO;
 
   return {
     venueId: order.venueId,
