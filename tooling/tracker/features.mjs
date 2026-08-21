@@ -630,39 +630,19 @@ export const FEATURES = [
   f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
     module: 'pay',
     phase: '3',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
-    requires: ['services/svc-pay'],
+    requires: [
+      'services/svc-pay/src/gateway-mount-vs-tracker.ts',
+      'services/svc-pay/src/gateway-mount-vs-tracker.test.ts',
+      'services/svc-pay/src/checkout-page.ts',
+      'services/svc-pay/src/router.mount.test.ts',
+    ],
     note:
-      'D26-P0-08 SEALED 2026-08-13 (adr/2026-08-13-pay-write-grant-a2-unpublished.md): A2 unpublished = ' +
-      'auth.merchant_pay_scope_grant_unpublished; no invented grantor; issueMerchantPayScopes stays refuse. ' +
-      'refuses a `wip` row with no owner — "someone is on it right now" needs a name — and `ready` means what it says here: every dependency is ' +
-      'done and it is free to claim. Nothing about what is built changed with this edit; the paragraph below is unaltered and still governs. ' +
-      'What the release does NOT touch: card acquiring stays a commercial relationship no PR closes (see socket.psp-partners), so an agent that ' +
-      'reads this as permission to enable a card rail has misread it. ' +
-      'Updated 2026-08-06 after #346 (M1, shehzad002) landed. WHAT IS REAL, and it is most of the row: the tRPC router is mounted ' +
-      '(`index.ts` registers it on `/trpc`, the edge routes `/api/pay` there), and `checkout.open`/`checkout.status`, ' +
-      '`merchant.create|me|submitKyb|decideKybStub|profile|createLink|listLinks|deactivateLink` and ' +
-      '`payment.create|authorize|capture|refund|get|list|history` all serve from it. #346 added `merchant.me`, the KYB transitions ' +
-      '(`submitKyb`/`decideKybStub`, the latter honest-refusing under live-only with `pay.kyb_operator_required`), durable ' +
-      '`payment.list`, `getMerchantByUserId`, `scripts/card-sandbox-e2e.mjs` and migration `0005_pay_merchant_kyb`. ' +
-      '#800 supplied the merchant-state writer the surface had been missing, so `merchants.status` is now written and historied ' +
-      '(`merchant_status_events`, append-only by trigger, migration `0006`). 514 svc-pay tests green. ' +
-      'WHY IT IS STILL `ready` AND NOT `done` (D26-P4-09 2026-08-15: status is `ready`, not `wip` — no owner, free to claim), two reasons, both checked in code rather than inferred: ' +
-      '(1) CARD ACQUIRING IS ABSENT, NOT SANDBOX. `PAY_REGISTER_CARD_SANDBOX` defaults to off in staging/prod, `PAY_CHECKOUT_RAILS` ' +
-      'defaults to `crypto-native:crypto` so the public hosted checkout never sees a card, and `PAY_ALLOW_SANDBOX_RAILS=false` makes ' +
-      'staging/prod refuse to BOOT while any registered rail declares itself sandbox. So in every posture that ships, this gateway is ' +
-      'crypto-only; the card half exists in dev/test alone and its replacement is `socket.psp-partners`, which ADR ' +
-      '`docs/adr/2026-08-04-pay-rails-and-psp-socket.md` (Accepted) rules is a sponsor bank and an acquiring BIN — a commercial ' +
-      'relationship no code closes. The tracker permits a rail that is *sandbox* under `done`; it does not cover one that is absent, ' +
-      'and #800 widened `RailMode` with `absent` precisely so the two stop reporting the same thing. ' +
-      '(2) `kybStatus` HAS NO CONSUMER. `submitKyb`/`decideKybStub` move it and the read surfaces echo it, but nothing else reads it — ' +
-      '`payment.create`, `checkout.open`, `settlement.run` and the withdrawal path all gate on `merchants.status`, never on KYB. ' +
-      'A merchant sitting at `kybStatus: rejected` transacts exactly like an approved one, so merchant onboarding is not KYB-gated at all ' +
-      'yet. Digital KYB is `pay.psp`; wiring the existing flag into the money gates is this row. ' +
-      'Neither residual is a defect in #346 — its code is reachable, tested and unpropped on its own terms. They are what stands between ' +
-      'this row and `done`, and naming them is cheaper than a `done` the board would have to walk back. ' +
-      '**Reclaimed 2026-08-04** from Shehzad M1 — Nitro agents after the #346 handoff. Class M. Not go-live.',
+      '**D26-P1-P1 Done 2026-08-21:** hosted checkout + merchant + payment lifecycle (`gateway-mount-vs-tracker.ts`). ' +
+      'Checkout/merchant/payment doors mounted; hosted page script-free. A2 grant stays refuse-closed. ' +
+      'Class X residual: card acquiring absent (socket.psp-partners); kybStatus echo-only until pay.psp wires gates.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
