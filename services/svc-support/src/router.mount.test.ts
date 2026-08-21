@@ -167,6 +167,17 @@ describe('svc-support mount', () => {
     expect(unwired.identityGrounding).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
   });
 
+  it('kbPolicy is public and reports spine catalog honesty without SLA fields', async () => {
+    const support = stubSupport();
+    const policy = await createSupportRouter(support).createCaller(anonymous()).kbPolicy();
+    expect(policy.spineArticleCount).toBeGreaterThan(0);
+    expect(policy.keysUnderSupportKb).toBe(true);
+    expect(policy.slaTimingsForbidden).toBe(true);
+    expect(policy.inventsRefundAmounts).toBe(false);
+    expect(policy.refuseCodes).toContain('support.kb_vendor_name');
+    expect(JSON.stringify(policy)).not.toMatch(/slaMinutes|dueAt|eta/i);
+  });
+
   it('listKb is public and returns Stage-2 spine from service', async () => {
     const support = stubSupport();
     const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
