@@ -1869,7 +1869,11 @@ module.exports = {
             success: 'Success',
             signedOut: 'Signed out',
             goregister: "To Regist",
-            getlostpwd: "Forget Password"
+            getlostpwd: "Forget Password",
+            passkey: "Passkey",
+            passkeyNeedIdentifier: "Enter your handle or email to use a passkey",
+            webauthnUnavailable: "This browser cannot use a passkey",
+            webauthnCancelled: "Passkey sign-in was cancelled"
         },
         forget: {
             hasaccount: 'Have a Account?To Log In',
