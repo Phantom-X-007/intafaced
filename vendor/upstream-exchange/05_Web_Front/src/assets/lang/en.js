@@ -1038,12 +1038,13 @@ module.exports = {
             noTickets: "No tickets yet.",
             status: "Status",
             commentOpen: "Open",
+            commentPick: "Open",
             comments: "Comments",
             commentEmpty: "No comments yet.",
             commentBody: "Comment",
             commentHint: "Write a reply",
             commentSubmit: "Send comment",
-            commentPosted: "Comment posted",
+            commented: "Comment posted",
             categories: { account: "Account", trading: "Trading", deposit_withdraw: "Deposit or withdrawal", other: "Other" }
         },
         portfolio: {
