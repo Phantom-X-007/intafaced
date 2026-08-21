@@ -13,7 +13,8 @@ const SESSION = '44444444-4444-4444-8444-444444444444';
 const API_KEY = '55555555-5555-4555-8555-555555555555';
 
 function decodePayload(token: string): Record<string, unknown> {
-  const [, payload] = token.split('.');
+  const payload = token.split('.')[1];
+  if (payload === undefined) throw new Error('JWT missing payload segment');
   return JSON.parse(Buffer.from(payload, 'base64url').toString()) as Record<string, unknown>;
 }
 
