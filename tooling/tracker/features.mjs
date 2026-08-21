@@ -1390,11 +1390,15 @@ export const FEATURES = [
     dependsOn: ['academy.lobbies', 'token.staking'],
     status: 'done',
     owner: 'Phantom-X-007',
-    requires: ['services/svc-academy/src/ambassadors/ifc-pay-rate-law.ts', 'services/svc-academy/src/ambassadors/ifc-pay.ts'],
+    requires: [
+      'services/svc-academy/src/ambassadors/mount-vs-tracker.ts',
+      'services/svc-academy/src/ambassadors/mount-vs-tracker.test.ts',
+      'services/svc-academy/src/ambassadors/ifc-pay-rate-law.ts',
+      'services/svc-academy/src/ambassadors/ifc-pay.ts',
+    ],
     note:
-      '**D26-P1-C2 Done-bar sealed 2026-08-12 (#1725):** residencies / IFC pay under rate authority — owner-published ' +
-      'JSON law only; refuse invent rates; dry-run quote when authority present; accepted-residency gate. ' +
-      'SOCKET residual: live settlement Class M until ledger recipe (no recipes in ambassadors); seasons product residual.',
+      '**D26-P1-C2 Done-bar sealed 2026-08-12 (#1725):** IFC pay under owner rate law — refuse invent rates. ' +
+      'D26-P1-C2M mount-vs-tracker seals public quote + residency gate paths. Class X: ledger settlement recipe.',
   }),
   f('academy.tournaments', 'Seasonal ladders, IFC prize pools', {
     module: 'academy',
