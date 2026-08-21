@@ -116,6 +116,7 @@ function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
     userId: FOLLOWER,
     feeAsset: 'USDT',
     feeAmount: parseAmount(feeAmount),
+    createdAt: new Date(Date.now() + 60_000),
   });
 }
 
@@ -230,6 +231,22 @@ describe('trade.copy product mount', () => {
       maxNotionalPerOrder: '1000',
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
+    });
+    await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'fill-before-kill',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.001',
+      notional: '10',
+    });
+    await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'fill-after-kill',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.001',
+      notional: '10',
     });
 
     ledger.arm();

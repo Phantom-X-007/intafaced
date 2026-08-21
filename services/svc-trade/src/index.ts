@@ -202,15 +202,17 @@ const copy = new CopyService(ledger, {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
       return null;
     }
-    const [row] = await sql<Array<{ id: string; user_id: string; fee_asset: string; fee_amount: string }>>`
-      SELECT id, user_id, fee_asset, fee_amount FROM trade.fills WHERE id = ${id} LIMIT 1
+    const [row] = await sql<Array<{ id: string; user_id: string; fee_asset: string; fee_amount: string; created_at: Date }>>`
+      SELECT id, user_id, fee_asset, fee_amount, created_at FROM trade.fills WHERE id = ${id} LIMIT 1
     `;
     if (!row) return null;
+    const createdAt = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
     return {
       fillId: row.id,
       userId: row.user_id,
       feeAsset: row.fee_asset,
       feeAmount: parseAmount(row.fee_amount),
+      createdAt,
     };
   },
 });

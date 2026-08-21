@@ -56,6 +56,8 @@ export type FollowerFillFee = {
   readonly userId: string;
   readonly feeAsset: string;
   readonly feeAmount: Amount;
+  /** Fill timestamp — refuse when before follow.createdAt (pre-follow volume). */
+  readonly createdAt?: Date;
 };
 
 /** Production wires `trade.fills`. Absent or missing fill row → refuse-closed. */
@@ -472,6 +474,10 @@ export class CopyService {
     if (fill.feeAmount < 0n) {
       throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
     }
+    const filledAt = fill.createdAt?.getTime();
+    if (filledAt === undefined || Number.isNaN(filledAt) || filledAt < follow.createdAt.getTime()) {
+      throw new CopyError('Fill predates this follow — refuse fee-share', 'trade.copy_settle_refused');
+    }
     return fill.feeAmount;
   }
 
@@ -488,6 +494,9 @@ export class CopyService {
    *
    * Ledger keys stay on fillId. Period boundary (D11) is not invented here —
    * pair-lifetime counters remain as today.
+   * Expired envelope refuses (same as placeMirror). One fillId pays one
+   * leader (global settle once-key). Fill must be copy-mirrored under this
+   * follow and not predate follow.createdAt.
    * Same-fill redelivery on the mirror path is closed via claimMirrorFill.
    * Same-fill redelivery on **this** path is closed via runFeeShareSettleOnce —
    * reserveEarnings must not fire twice for one fillId (period poison).
@@ -504,6 +513,9 @@ export class CopyService {
     if (follow.followerId !== principal.userId) {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
+    if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
+      throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
+    }
 
     const fillId = canonicalizeCopyFillId(input.fillId);
     const assetId = input.assetId.trim();
@@ -511,6 +523,10 @@ export class CopyService {
       const key = `${follow.leaderId}:${follow.followerId}`;
       const period = await store.getPeriodStats(key);
       requirePublishedCopyFeeShareLaw(this.feeShareLaw);
+      const mirrored = await store.getMirroredFill(follow.followId, fillId);
+      if (!mirrored) {
+        throw new CopyError('Fill is not a copy-mirrored fill for this follow — refuse fee-share', 'trade.copy_settle_refused');
+      }
       const settledFee = await this.resolveSettledProtocolFee(follow, fillId, assetId);
       const attribution = attributeCopyFeeShare({
         law: this.feeShareLaw,

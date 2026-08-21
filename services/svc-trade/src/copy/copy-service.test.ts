@@ -7,6 +7,7 @@ import { CopyError } from './errors.js';
 
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
 const LEADER = '00000000-0000-4000-8000-000000000002';
+const LEADER_B = '00000000-0000-4000-8000-000000000003';
 const principal = { userId: FOLLOWER } as import('@intafaced/auth').Principal;
 
 const publishedFee: CopyFeeShareLaw = {
@@ -30,6 +31,7 @@ function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
     userId: FOLLOWER,
     feeAsset: 'USDT',
     feeAmount: parseAmount(feeAmount),
+    createdAt: new Date(Date.now() + 60_000),
   });
 }
 
@@ -589,6 +591,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, 'fill-ok');
     const settled = await svc.settleFeeShare(principal, {
       followId: follow.followId,
       fillId: 'fill-ok',
@@ -631,7 +634,15 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       lookupFollowerFillFee: async (id) =>
-        id === fillId ? { fillId, userId: FOLLOWER, feeAsset: 'USDT', feeAmount: parseAmount('0.7') } : null,
+        id === fillId
+          ? {
+              fillId,
+              userId: FOLLOWER,
+              feeAsset: 'USDT',
+              feeAmount: parseAmount('0.7'),
+              createdAt: new Date(Date.now() + 60_000),
+            }
+          : null,
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -641,6 +652,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, fillId);
     const settled = await svc.settleFeeShare(principal, {
       followId: follow.followId,
       fillId,
@@ -668,6 +680,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, 'fill-no-row');
     await expect(
       svc.settleFeeShare(principal, {
         followId: follow.followId,
@@ -712,6 +725,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, 'fill-invented-pot');
     await expect(
       svc.settleFeeShare(principal, {
         followId: follow.followId,
@@ -731,7 +745,13 @@ describe('CopyService', () => {
       const id = raw.trim();
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
       if (id.toLowerCase() !== fillId) return null;
-      return { fillId, userId: FOLLOWER, feeAsset: 'USDT', feeAmount: parseAmount('1') };
+      return {
+        fillId,
+        userId: FOLLOWER,
+        feeAsset: 'USDT',
+        feeAmount: parseAmount('1'),
+        createdAt: new Date(Date.now() + 60_000),
+      };
     };
     const ledger = new MemoryLedger();
     await ledger.post(
@@ -768,6 +788,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, fillId);
     const settle = (id: string) =>
       svc.settleFeeShare(principal, {
         followId: follow.followId,
@@ -1126,6 +1147,8 @@ describe('CopyService', () => {
       maxAggregateExposure: '100000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, 'fill-race-a');
+    await planOneMirror(svc, follow.followId, 'fill-race-b');
 
     // notional 10000, fee 10 bps → protocol fee 10; share 50% → 5 intended each.
     // Cap is 1 — without atomic reserve both concurrent settlers pay 1 → total 2.
@@ -1198,6 +1221,9 @@ describe('CopyService', () => {
       maxAggregateExposure: '100000',
       expiresAt: futureExpiry,
     });
+    for (let i = 0; i < 8; i += 1) {
+      await planOneMirror(svc, follow.followId, `fill-race8-${i}`);
+    }
 
     const results = await Promise.all(
       Array.from({ length: 8 }, (_, i) =>
@@ -1242,6 +1268,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '100000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, 'fill-ledger-fail');
 
     await expect(
       svc.settleFeeShare(principal, {
@@ -1353,6 +1380,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
     });
+    await planOneMirror(svc, follow.followId, 'fill-once-only');
 
     const input = {
       followId: follow.followId,
@@ -1397,5 +1425,156 @@ describe('CopyService', () => {
     expect(afterConcurrent.roundTrips).toBe(1);
     expect(afterConcurrent.earningsPaid).toBe(parseAmount('0.5'));
     expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(leaderAfterFirst);
+  });
+
+  async function seedHouseFees(ledger: MemoryLedger, railRef: string, house = '10') {
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('1000'),
+        rail: 'test',
+        railRef,
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: `${railRef}-fee`,
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount(house),
+      }),
+    );
+  }
+
+  const copyEnvelope = {
+    region: 'SG' as const,
+    permittedMarkets: ['BTC-USDT'],
+    maxNotionalPerOrder: '1000',
+    maxAggregateExposure: '10000',
+    expiresAt: futureExpiry,
+  };
+
+  async function planOneMirror(svc: CopyService, followId: string, fillId: string) {
+    await svc.planMirrorForFollow(principal, {
+      followId,
+      fillId,
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.001',
+      notional: '10',
+    });
+  }
+
+  it('settleFeeShare refuses after envelope expiry — never pays a lapsed follow', async () => {
+    let now = new Date('2026-06-01T00:00:00.000Z');
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-expired-follow');
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      now: () => now,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      ...copyEnvelope,
+      expiresAt: '2026-06-02T00:00:00.000Z',
+    });
+    await planOneMirror(svc, follow.followId, 'fill-after-expiry');
+    now = new Date('2026-06-03T00:00:00.000Z');
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: 'fill-after-expiry',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_key_expired' });
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare refuses a second leader on the same fill — one fill one share', async () => {
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-two-leaders', '100');
+    // Extra rewards so a second payout would succeed if the once-key leaked.
+    await ledger.post(
+      recipes.sweepFeesToRewards({
+        windowId: 'two-leader-seed',
+        sourceModule: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('20'),
+      }),
+    );
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    await planOneMirror(svc, followA.followId, 'shared-fill');
+    await planOneMirror(svc, followB.followId, 'shared-fill');
+
+    const first = await svc.settleFeeShare(principal, {
+      followId: followA.followId,
+      fillId: 'shared-fill',
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10,
+    });
+    expect(first.settled).toBe(true);
+    expect(first.cappedLeaderShare).toBe('0.5');
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followB.followId,
+        fillId: 'shared-fill',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare refuses a fill from before the follow — never shares pre-follow volume', async () => {
+    const followedAt = new Date('2026-08-01T00:00:00.000Z');
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-pre-follow');
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      now: () => followedAt,
+      lookupFollowerFillFee: async (fillId) => ({
+        fillId,
+        userId: FOLLOWER,
+        feeAsset: 'USDT',
+        feeAmount: parseAmount('1'),
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+      }),
+    });
+    const follow = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    await planOneMirror(svc, follow.followId, 'pre-follow-fill');
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: 'pre-follow-fill',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
   });
 });

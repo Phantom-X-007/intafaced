@@ -35,10 +35,11 @@ export function rethrowCopyFollowUnique(err: unknown): never {
  * same business-key shape as fee-share settle / ledger fill keys. Mirror claims
  * serialise on `exp:${followId}` so they compose with addExposureIfUnderCap.
  *
- * Fee-share settle is claimed by the same (followId, fillId) shape. A redelivered
- * settle must return the prior attribution and never re-run reserveEarnings
- * (period earningsPaid / roundTrips poison). Ledger keys alone are not enough:
- * reserve runs *before* the post.
+ * Fee-share settle is claimed once per fillId (any follow). A redelivered
+ * settle on the same follow returns the prior attribution and never re-runs
+ * reserveEarnings. A second follow on the same fill refuses — sweep key is
+ * fill-only, so two leaders must not share one pot. Ledger keys alone are
+ * not enough: reserve runs *before* the post.
  */
 
 export interface CopyPeriodStats {
@@ -177,14 +178,14 @@ export interface CopyFollowStore {
     plan: Omit<StoredMirrorPlan, 'nextExposure'>;
   }): Promise<ClaimMirrorFillResult>;
   /**
-   * Look up a previously claimed fee-share settle for (follow, follower fill).
+   * Look up a previously claimed fee-share settle for (follow, fill).
    * Null when this fill has never been settled under this follow.
    */
   getSettledFeeShare(followId: string, fillId: string): Promise<StoredSettledFeeShare | null>;
   /**
-   * Run fee-share settle body at most once per (followId, fillId).
-   * Redelivery / concurrent callers receive the prior record without re-running
-   * `run` (so reserveEarnings does not fire again).
+   * Run fee-share settle body at most once per fillId (all follows).
+   * Same follow redelivery returns the prior record without re-running `run`.
+   * A different follow on the same fill throws `trade.copy_settle_refused`.
    */
   runFeeShareSettleOnce(followId: string, fillId: string, run: () => Promise<StoredSettledFeeShare>): Promise<RunFeeShareSettleOnceResult>;
   /**
@@ -239,6 +240,8 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   private readonly mirrored = new Map<string, StoredMirrorPlan>();
   /** Keyed `${followId}\0${fillId}` — one fee-share settle per follower fill. */
   private readonly settled = new Map<string, StoredSettledFeeShare>();
+  /** Keyed fillId — one fill shares with at most one leader, including after unfollow. */
+  private readonly settledByFill = new Map<string, StoredSettledFeeShare>();
   /** Keyed `${followId}\0${fillId}` — one follower place per leader fill. */
   private readonly placed = new Map<string, StoredPlacedMirror>();
   private readonly exclusive = createExclusiveQueue();
@@ -278,6 +281,7 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         this.settled.delete(key);
       }
     }
+    // Keep settledByFill — a fill already shared must not pay a new follow.
     for (const key of [...this.placed.keys()]) {
       if (key.startsWith(`${followId}\0`)) {
         this.placed.delete(key);
@@ -393,16 +397,19 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     fillId: string,
     run: () => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
-    // Exclusive on settle key so concurrent redeliveries of the same fill
-    // cannot both pass a null lookup and both reserve.
-    return this.exclusive(`settle:${settleKey(followId, fillId)}`, async () => {
-      const key = settleKey(followId, fillId);
-      const existing = this.settled.get(key);
+    // Exclusive on fillId so two follows cannot both pass a null lookup
+    // and both reserve / pay two leaders from one house fee.
+    return this.exclusive(`settle-fill:${fillId}`, async () => {
+      const existing = this.settledByFill.get(fillId);
       if (existing) {
+        if (existing.followId !== followId) {
+          throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+        }
         return { status: 'duplicate' as const, record: existing };
       }
       const record = await run();
-      this.settled.set(key, record);
+      this.settled.set(settleKey(followId, fillId), record);
+      this.settledByFill.set(fillId, record);
       return { status: 'claimed' as const, record };
     });
   }
@@ -589,7 +596,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   }
 
   async deleteFollow(followId: string): Promise<void> {
-    await this.sql`DELETE FROM copy_settled_fee_shares WHERE follow_id = ${followId}`;
+    // Keep copy_settled_fee_shares — unique fill_id must survive unfollow
+    // so a re-follow cannot share the same fill with a second leader.
     await this.sql`DELETE FROM copy_mirrored_fills WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_follows WHERE follow_id = ${followId}`;
     for (const key of [...sqlPlacedMirrors.keys()]) {
@@ -832,49 +840,82 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     return row ? rowToSettled(row) : null;
   }
 
+  private async getSettledFeeShareByFillId(fillId: string): Promise<StoredSettledFeeShare | null> {
+    const rows = await this.sql<SettledFeeShareRow[]>`
+      SELECT fill_id, follow_id, leader_id, follower_id, asset_id,
+             protocol_fee::text, applied_share_bps, gross_leader_share::text,
+             capped_leader_share::text, skipped_reason, settled
+        FROM copy_settled_fee_shares
+       WHERE fill_id = ${fillId}
+       LIMIT 1
+    `;
+    const row = rows[0];
+    return row ? rowToSettled(row) : null;
+  }
+
   async runFeeShareSettleOnce(
     followId: string,
     fillId: string,
     run: () => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
     const settleOnce = async () => {
-      const existing = await this.getSettledFeeShare(followId, fillId);
+      const existing = await this.getSettledFeeShareByFillId(fillId);
       if (existing) {
+        if (existing.followId !== followId) {
+          throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+        }
         return { status: 'duplicate' as const, record: existing };
       }
       const record = await run();
-      await this.sql`
-        INSERT INTO copy_settled_fee_shares (
-          follow_id, fill_id, leader_id, follower_id, asset_id,
-          protocol_fee, applied_share_bps, gross_leader_share, capped_leader_share,
-          skipped_reason, settled, created_at
-        ) VALUES (
-          ${record.followId},
-          ${record.fillId},
-          ${record.leaderId},
-          ${record.followerId},
-          ${record.assetId},
-          ${formatAmount(record.protocolFee)},
-          ${record.appliedShareBps},
-          ${formatAmount(record.grossLeaderShare)},
-          ${formatAmount(record.cappedLeaderShare)},
-          ${record.skippedReason},
-          ${record.settled},
-          now()
-        )
-        ON CONFLICT (follow_id, fill_id) DO NOTHING
-      `;
-      // Concurrent winner may have inserted first under a race after unlock window —
-      // re-read wins. In practice the advisory lock prevents this path.
+      try {
+        await this.sql`
+          INSERT INTO copy_settled_fee_shares (
+            follow_id, fill_id, leader_id, follower_id, asset_id,
+            protocol_fee, applied_share_bps, gross_leader_share, capped_leader_share,
+            skipped_reason, settled, created_at
+          ) VALUES (
+            ${record.followId},
+            ${record.fillId},
+            ${record.leaderId},
+            ${record.followerId},
+            ${record.assetId},
+            ${formatAmount(record.protocolFee)},
+            ${record.appliedShareBps},
+            ${formatAmount(record.grossLeaderShare)},
+            ${formatAmount(record.cappedLeaderShare)},
+            ${record.skippedReason},
+            ${record.settled},
+            now()
+          )
+        `;
+      } catch (err) {
+        if (isPgUniqueViolation(err)) {
+          const saved = await this.getSettledFeeShareByFillId(fillId);
+          if (saved && saved.followId !== followId) {
+            throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+          }
+          if (saved) {
+            return { status: 'duplicate' as const, record: saved };
+          }
+        }
+        throw err;
+      }
       const saved = (await this.getSettledFeeShare(followId, fillId)) ?? record;
       return { status: 'claimed' as const, record: saved };
     };
-    // CopyService holds the stronger per-follow lock for the whole money path.
-    // Avoid reserving a second pool connection while that lock is held.
+    const fillLockKey = `copy-settle-fill:${fillId}`;
+    // CopyService holds the per-follow lock on this pinned connection.
+    // Take the fill lock on the SAME session so two follows cannot both
+    // run() (ledger posts) before unique fill_id insert.
     if (this.lockedFollowId === followId) {
-      return settleOnce();
+      await this.sql`SELECT pg_advisory_lock(hashtext(${fillLockKey}))`;
+      try {
+        return await settleOnce();
+      } finally {
+        await this.sql`SELECT pg_advisory_unlock(hashtext(${fillLockKey}))`;
+      }
     }
-    return this.withAdvisoryLock(`copy-settle:${followId}:${fillId}`, settleOnce);
+    return this.withAdvisoryLock(fillLockKey, settleOnce);
   }
 
   async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
