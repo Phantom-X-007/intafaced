@@ -6,7 +6,9 @@ import {
   recipes,
   userAvailable,
   withdrawalHoldAccount,
+  MoneyError,
   type Amount,
+  type AmountString,
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { PayError } from './payment-service.js';
@@ -179,12 +181,13 @@ export class UserMoneyService {
   async credit(input: {
     userId: string;
     assetId: string;
-    amount: Amount;
+    amount: Amount | AmountString;
     rail: string;
     railRef: string;
     creditedBy: string;
   }): Promise<DepositRecord> {
-    if (input.amount <= 0n) throw new PayError('Deposit amount must be positive', 'pay.invalid_amount');
+    const amount = requireUserMoneyAmount(input.amount);
+    if (amount <= 0n) throw new PayError('Deposit amount must be positive', 'pay.invalid_amount');
 
     // The rail must be one the platform actually has, so `railBoundary(rail)` is
     // a boundary account reconciliation already knows about. The adapter is NOT
@@ -203,9 +206,9 @@ export class UserMoneyService {
 
     return withMoneySpan(
       'pay.deposit',
-      { operation: 'deposit', rail: input.rail, railRef: input.railRef, amount: formatAmount(input.amount) },
+      { operation: 'deposit', rail: input.rail, railRef: input.railRef, amount: formatAmount(amount) },
       async (span) => {
-        const claimed = await this.claimDeposit(input);
+        const claimed = await this.claimDeposit({ ...input, amount });
 
         if (claimed.status === 'credited') return claimed;
 
@@ -314,12 +317,13 @@ export class UserMoneyService {
   async withdraw(input: {
     userId: string;
     assetId: string;
-    amount: Amount;
+    amount: Amount | AmountString;
     rail: string;
     destination: { kind: string; ref: string };
     clientRef: string;
   }): Promise<WithdrawalRecord> {
-    if (input.amount <= 0n) throw new PayError('Withdrawal amount must be positive', 'pay.invalid_amount');
+    const amount = requireUserMoneyAmount(input.amount);
+    if (amount <= 0n) throw new PayError('Withdrawal amount must be positive', 'pay.invalid_amount');
 
     // Resolved before a row exists, so an unknown or payout-incapable rail fails
     // before anything is claimed — and long before anything is held.
@@ -344,8 +348,8 @@ export class UserMoneyService {
       throw err;
     }
 
-    return withMoneySpan('pay.withdraw', { operation: 'withdraw', rail: input.rail, amount: formatAmount(input.amount) }, async (span) => {
-      let claimed = await this.claimWithdrawal(input);
+    return withMoneySpan('pay.withdraw', { operation: 'withdraw', rail: input.rail, amount: formatAmount(amount) }, async (span) => {
+      let claimed = await this.claimWithdrawal({ ...input, amount });
 
       // Already finished. Returning it is the only correct answer to a retry:
       // the money is gone and asking the rail again would send it twice.
@@ -599,6 +603,26 @@ export class UserMoneyService {
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Amounts enter this service as a decimal string (the wire) or a scaled bigint
+ * (already parsed by the router). A JSON/JS number is refused here so a bypass
+ * of `amountSchema` cannot post IEEE-float money.
+ */
+export function requireUserMoneyAmount(raw: unknown): Amount {
+  if (typeof raw === 'number') {
+    throw new PayError('Amount must be a decimal string, not a JSON number', 'pay.invalid_amount', { got: 'number' });
+  }
+  if (typeof raw !== 'string' && typeof raw !== 'bigint') {
+    throw new PayError(`Amount must be a decimal string, got ${typeof raw}`, 'pay.invalid_amount', { got: typeof raw });
+  }
+  try {
+    return parseAmount(raw);
+  } catch (err) {
+    if (err instanceof MoneyError) throw new PayError(err.message, 'pay.invalid_amount');
+    throw err;
+  }
+}
 
 function toDeposit(row: DepositRow): DepositRecord {
   return {

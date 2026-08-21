@@ -1,16 +1,16 @@
-# Graph Report - chore-graphify-permanent  (2026-08-21)
+# Graph Report - feat-harden-svc-pay-user-money  (2026-08-21)
 
 ## Corpus Check
-- 2314 files · ~1,954,469 words
+- 2315 files · ~1,955,417 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 19879 nodes · 41864 edges · 907 communities (674 shown, 233 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 883 edges (avg confidence: 0.81)
+- 19901 nodes · 41902 edges · 904 communities (672 shown, 232 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 884 edges (avg confidence: 0.81)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d7c25e47`
+- Built from commit: `a116f743`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -21,8 +21,8 @@
 - payment-service.ts
 - scanner/session-run.ts
 - svc-pay/src/public-rest.ts
-- spot/testing.ts
-- runtime.ts
+- spot/types.ts
+- meter.ts
 - instrument-service.ts
 - ladder.ts
 - svc-trade/src/index.ts
@@ -37,20 +37,20 @@
 - webauthn.ts
 - venue-adapter/src/router.ts
 - funding-tick.ts
-- support-agent/session-run.ts
+- createAgentsRouter
 - svc-trade/src/public-rest.ts
 - position-service.ts
 - alerts/service.ts
 - curriculum/catalog.ts
 - svc-bank/src/router.ts
-- profit-source.ts
+- position-service.test.ts
 - merchant-webhooks.ts
 - admin-tree-read.ts
 - dev-chain.ts
 - notify-service.ts
-- gateway-wire.test.ts
+- channel.ts
 - ops-analytics.ts
-- fraud/index.ts
+- runtime.ts
 - bank-service.test.ts
 - combined.ts
 - P2pService
@@ -59,14 +59,14 @@
 - connect-data-lake/src/index.ts
 - guardrails.ts
 - createIdentityRouter
-- navigator/session-run.ts
+- svc-agents/src/router.ts
 - liquidation-tick.ts
-- spot/types.ts
+- private-rest.ts
 - adl-last-resort.ts
 - copy/index.ts
 - commission.ts
 - chain/source.ts
-- svc-pay/src/router.ts
+- user-money-service.ts
 - createAcademyRouter
 - ifc-pay.ts
 - svc-pay/src/index.ts
@@ -76,13 +76,13 @@
 - stats.ts
 - src/client.ts
 - kyb-router.ts
-- svc-p2p/src/promise-falsify-public-doors.test.ts
+- svc-p2p/src/index.ts
 - reorg.live.test.ts
 - mute.ts
 - svc-indexer/src/router.mount.test.ts
 - auth.test.ts
 - src/types.ts
-- academy-service.ts
+- progress.ts
 - waitlist-store.ts
 - svc-bank/src/index.ts
 - svc-p2p/src/router.ts
@@ -97,7 +97,7 @@
 - svc-protocol/src/router.ts
 - futures-jobs.ts
 - trade/hub.ts
-- progress.ts
+- svc-agents/src/index.ts
 - dependencies
 - dependencies
 - prize-refuse.ts
@@ -107,7 +107,7 @@
 - perk-plane.ts
 - svc-identity/src/router.ts
 - journal.ts
-- engine-ledger-reconcile.ts
+- matching-client.ts
 - flags.ts
 - telemetry/src/index.ts
 - blueprint.ts
@@ -116,19 +116,19 @@
 - EarnService
 - RankService
 - LedgerService
-- SubscriptionService
+- JobHost
 - dependencies
 - dependencies
 - svc-matching/src/router.ts
 - academy-cert-perks.ts
 - quote-service.ts
 - svc-indexer/src/router.ts
-- engine/book.ts
+- engine/types.ts
 - spec.ts
 - dependencies
 - events/src/catalog.ts
 - svc-academy/src/index.ts
-- p2p-service.ts
+- AgentsRouterDeps
 - router.live-chain.test.ts
 - mark-from-venue.ts
 - amount
@@ -152,18 +152,18 @@
 - okx-spot.ts
 - providers/provider.ts
 - evm/source.ts
-- channel.ts
+- refusal-code-honesty.ts
 - mountain-vs-sockets.ts
 - telemetry/package.json
 - contracts/src/instruments.ts
 - format.ts
 - venue-adapter/package.json
-- vr-export.ts
+- merchant-watch-metrics-routes.ts
 - HttpPort
 - payout-engine.ts
 - engine.ts
 - events/package.json
-- plugins/index.ts
+- svc-pay/src/router.ts
 - contracts/package.json
 - xp-policy.ts
 - bank-service.ts
@@ -171,7 +171,7 @@
 - SupportService
 - execution-mm/src/index.ts
 - MemoryResidencyDesk
-- svc-agents/src/router.ts
+- academy-service.ts
 - KillSwitchState
 - OrderBook
 - svc-notify/src/router.ts
@@ -200,13 +200,13 @@
 - svc-identity/src/index.ts
 - adapters.test.ts
 - geo-block.ts
-- matching-client.ts
+- orderable-path.test.ts
 - private/hub.ts
 - identity.ts
 - ops-analytics-cube.ts
 - support.ts
 - MemoryAmbassadorProgramme
-- svc-agents/src/errors.ts
+- copy-intel/policy.ts
 - svc-edge/src/index.ts
 - svc-notify/src/events.ts
 - config/src/env.ts
@@ -239,10 +239,10 @@
 - svc-trade/src/db/schema.ts
 - subject.ts
 - factory.ts
-- svc-p2p/src/index.ts
-- quote-service.test.ts
+- p2p-service.ts
+- venue.ts
 - token-service.ts
-- hours-public-doors.test.ts
+- xp-publish.ts
 - trpc.ts
 - socket-inventory.ts
 - t.ts
@@ -250,16 +250,16 @@
 - quant-honesty/package.json
 - curriculumSpineSize
 - svc-academy/src/db/schema.ts
-- svc-agents/src/index.ts
+- routing.ts
 - screening-draft.ts
-- xp-publish.ts
+- ccxt-capability-matrix.test.ts
 - observability-wiring.test.ts
 - svc-ledger/src/db/schema.ts
 - postgres-ledger.ts
 - token-service.test.ts
 - exchange-contract.test.ts
 - adapter.ts
-- MemoryNotifyStore
+- PostgresNotifyStore
 - erase-take-race.test.ts
 - fiat-currency-honesty.ts
 - arbitrage.ts
@@ -323,7 +323,7 @@
 - ui/src/tokens.ts
 - svc-academy/tsconfig.json
 - boot-config.test.ts
-- season-calendar.ts
+- freezeSeasonWithSnapshot
 - svc-agents/tsconfig.json
 - svc-bank/tsconfig.json
 - svc-blueprint/tsconfig.json
@@ -365,11 +365,11 @@
 - svc-notify/src/db/schema.ts
 - src/market.ts
 - portfolio-view/package.json
-- passkey-owner.onchain.test.ts
-- edit-policy.ts
+- operator-queue.ts
+- copy-intel/mount-vs-tracker.ts
 - router-mount.test.ts
 - DepthSource
-- modules.ts
+- module-id-honesty.ts
 - SupportContract
 - safe-regex/src/index.ts
 - devDependencies
@@ -422,7 +422,7 @@
 - auth/tsconfig.test.json
 - config/package.json
 - exports
-- compliance-queue.ts
+- config/src/index.ts
 - config/tsconfig.test.json
 - catalogKindSnapshot
 - contracts/tsconfig.test.json
@@ -441,7 +441,7 @@
 - venue-adapter/tsconfig.test.json
 - venue-contracts/src/errors.ts
 - venue-contracts/tsconfig.test.json
-- i18n-strategy.ts
+- edit-policy.ts
 - svc-academy/tsconfig.test.json
 - svc-agents/tsconfig.test.json
 - svc-bank/tsconfig.test.json
@@ -560,11 +560,11 @@
 - execution-house-tenant/package.json
 - isolated-margin-storage.test.ts
 - ./env
-- ./fiat
+- merchant-payout-destination.ts
 - ./flags
 - ./jurisdiction
-- ./marketing-language
 - svc-indexer/src/testing/conformance.ts
+- cross-check.ts
 - ./network-signal
 - ./screening
 - wire-tx-atomic.test.ts
@@ -589,21 +589,21 @@
 - @intafaced/contracts
 - options-listing.ts
 - src/pay.ts
-- svc-dex/src/router.ts
-- fastify
+- vr-export.ts
+- scene-state.ts
 - earn-unset-rate-pin.test.ts
 - @intafaced/ledger-client
 - zod
 - kill-enable-preserve.test.ts
 - request-id-metering-off.test.ts
 - futures-dust-floor-p0-14-sealed.test.ts
-- @intafaced/config
+- svc-p2p/src/promise-falsify-public-doors.test.ts
 - @intafaced/contracts
 - oms-market-making.test.ts
 - futures-ladder-default-not-production.test.ts
 - fastify
 - @intafaced/auth
-- review-queue.ts
+- svc-bank/src/router.mount.test.ts
 - @intafaced/events
 - zod
 - env-schema.test.ts
@@ -616,10 +616,10 @@
 - zod
 - fastify
 - mock-engine.ts
-- navigator/grounded.ts
+- scanner/mount-vs-tracker.ts
 - quant-honesty-door.ts
 - oms-open-orders.test.ts
-- fastify
+- svc-indexer/src/index.ts
 - futures-no-invented-funding-ceiling.test.ts
 - Client
 - zod
@@ -629,7 +629,7 @@
 - freeze-attributed-public-doors.test.ts
 - academy-url-compose-pin.test.ts
 - env-retention.test.ts
-- planBoardCard
+- passkey-owner.onchain.test.ts
 - @intafaced/auth
 - futures-capability-margin-call-no-grace.test.ts
 - futures-host-funding-index-null.test.ts
@@ -645,13 +645,13 @@
 - fastify
 - futures-jobs-capability-d3.test.ts
 - @intafaced/contracts
-- @intafaced/ledger-client
-- scene-state.ts
+- otc/mount-vs-tracker.ts
+- planSkipCount
 - oms-balances.test.ts
 - @intafaced/contracts
 - @intafaced/db
 - @intafaced/exchange-contract
-- @intafaced/telemetry
+- close-planner.ts
 - @intafaced/venue-adapter
 - postgres
 - @trpc/server
@@ -676,13 +676,13 @@
 - futures-ws-open-close-unrealized-null.test.ts
 - router-no-futures-positions.test.ts
 - oms-borrow.test.ts
-- @intafaced/contracts
-- drizzle-orm
+- planActionHistogram
+- FakeGateway
 - @intafaced/db
 - postgres
-- @intafaced/config
+- ./fiat
 - @intafaced/i18n
-- drizzle-orm
+- ./money-kill-surface
 - @intafaced/db
 - postgres
 - @intafaced/i18n
@@ -698,26 +698,26 @@
 - oms-positions.test.ts
 - oms-rails.test.ts
 - oms-snapshot.test.ts
+- Position
 - createExecutionRouter
-- oms-latency.test.ts
 - oms-markets.test.ts
 - svc-execution/tsconfig.json
 - dependencies
 - bybit-spot-trade.ts
 - support-kb-proxy.test.ts
-- algo-policy.ts
-- support-agent/action-audit.ts
-- svc-bank/src/router.mount.test.ts
+- drizzle-orm
+- @intafaced/ledger-client
+- drizzle-orm
 - commission-tier-honesty.test.ts
-- svc-indexer/src/index.ts
+- @intafaced/ledger-client
 - svc-matching/src/promise-falsify-public-doors.test.ts
-- src/pricing.ts
+- ./modules
 - plugins/mount-vs-tracker.ts
 - scan.test.ts
 - portfolio-view.ts
-- MemoryCertStore
+- @intafaced/config
 - tournaments/mount-vs-tracker.ts
-- dispute-case.ts
+- fraud/index.ts
 - svc-pay/src/gateway-mount-vs-tracker.ts
 - academy-ambassadors-pay/tsconfig.json
 - connect-data-lake/tsconfig.json
@@ -727,8 +727,8 @@
 - portfolio-view/tsconfig.json
 - auto-invest/mount-vs-tracker.ts
 - affiliates/mount-vs-tracker.ts
-- MemoryDisputeCaseStore
-- MemoryChain
+- decideChannelDelivery
+- @fastify/swagger
 - register-card-sandbox-compose-pin.test.ts
 - buyback.ts
 - copy/mount-vs-tracker.ts
@@ -747,7 +747,7 @@
 - portfolio-agent/mount-vs-tracker.ts
 - risk-compliance/mount-vs-tracker.ts
 - devDependencies
-- oms-trade-submit.ts
+- StandingRecord
 - devDependencies
 - amm/mount-vs-tracker.ts
 - svc-protocol/src/launch/mount-vs-tracker.ts
@@ -762,12 +762,12 @@
 - svc-ws/src/gateway-mount-vs-tracker.ts
 - scripts
 - scripts
-- venue-latency-health.test.ts
+- @intafaced/contracts
 - capture-lake-policy.ts
 - MarketDataSource
 - scripts
-- oms-arbitrage.ts
-- DisputeCaseStore
+- oms-arbitrage.test.ts
+- @intafaced/config
 - moneyMetricCount
 - svc-blueprint/src/env.ts
 - oms-market-borrow.test.ts
@@ -796,7 +796,7 @@
 - token-url-compose-pin.test.ts
 - compose-heartbeat-backpressure-pin.test.ts
 - compose-trade-tape-durable-pin.test.ts
-- market
+- fastify
 - identity-url-compose-pin.test.ts
 - svc-agents/src/jwt-access-ttl-issuer-audience-compose-pin.test.ts
 - upstream-auth-header-prefix-compose-pin.test.ts
@@ -812,12 +812,12 @@
 - engine-kill-switch-compose-pin.test.ts
 - journal-path-compose-pin.test.ts
 - compose-instrument-retention-pin.test.ts
-- fraud/evaluate.test.ts
+- drizzle-orm
 - svc-support/src/jwt-access-compose-pin.test.ts
 - emissions-compose-pin.test.ts
 - compose-spot-kill-pin.test.ts
 - compose-refresh-cap-pin.test.ts
-- ./modules
+- drizzle-orm
 - package-export-mount.test.ts
 - ambassador-rate-law-compose-pin.test.ts
 - internal-curriculum-mount.test.ts
@@ -850,7 +850,7 @@
 - @intafaced/academy-ambassadors-pay
 - @intafaced/execution-house-tenant
 - @intafaced/execution-mm
-- Balances
+- @intafaced/config
 - @intafaced/auth
 - @intafaced/db
 - @opentelemetry/api
@@ -880,7 +880,6 @@
 - zod
 - @intafaced/contracts
 - fastify
-- @intafaced/db
 - @intafaced/events
 - @intafaced/telemetry
 - postgres
@@ -892,8 +891,6 @@
 - @intafaced/config
 - @intafaced/db
 - postgres
-- drizzle-orm
-- @intafaced/auth
 
 ## God Nodes (most connected - your core abstractions)
 1. `MemoryAmbassadorProgramme` - 112 edges
@@ -922,15 +919,15 @@
 ## Import Cycles
 - 2-file cycle: `services/svc-academy/src/spatial/scene-state.ts -> services/svc-academy/src/spatial/scene.ts -> services/svc-academy/src/spatial/scene-state.ts`
 
-## Communities (907 total, 233 thin omitted)
+## Communities (904 total, 232 thin omitted)
 
 ### Community 0 - "rail-adapter.ts"
 Cohesion: 0.02
-Nodes (107): authConfig, caller(), ctx(), paymentView(), here, linked(), merchant(), migrations (+99 more)
+Nodes (101): nextId(), publicCheckoutStatus(), here, linked(), merchant(), migrations, signed(), BankPayoutAbsentAdapter (+93 more)
 
 ### Community 1 - "subscriptions/index.ts"
-Cohesion: 0.04
-Nodes (95): PayError, here, assertKeyedByPeriod(), assertWithinMandateCeiling(), assertWithinMandateWindow(), chargeIdempotencyKey(), CycleDisposition, CycleFrame (+87 more)
+Cohesion: 0.03
+Nodes (108): MerchantKybStatus, PayError, here, createSubscriptionRouter(), assertKeyedByPeriod(), assertWithinMandateCeiling(), assertWithinMandateWindow(), chargeIdempotencyKey() (+100 more)
 
 ### Community 2 - "algo/index.ts"
 Cohesion: 0.03
@@ -938,23 +935,23 @@ Nodes (88): AlgoPlaceGrant, captureAlgoPlaceGrant(), parseAlgoPlaceGrant(), prin
 
 ### Community 3 - "payment-service.ts"
 Cohesion: 0.04
-Nodes (64): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, affiliateLegAfterPaySettlement(), AffiliateLegAfterPaySettlementInput, AffiliatePayFeeLeg, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+56 more)
+Nodes (60): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, affiliateLegAfterPaySettlement(), AffiliateLegAfterPaySettlementInput, AffiliatePayFeeLeg, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+52 more)
 
 ### Community 4 - "scanner/session-run.ts"
 Cohesion: 0.03
-Nodes (114): BookTopFixture, invokeScannerDataTool(), isFresh(), MarketListFixture, parseUnsignedDecimal(), ScannerDataToolOk, ScannerDataToolRefuse, ScannerDataToolRefuseReason (+106 more)
+Nodes (98): settleAndClose(), settleAndClose(), settleAndClose(), BookTopFixture, invokeScannerDataTool(), isFresh(), MarketListFixture, parseUnsignedDecimal() (+90 more)
 
 ### Community 5 - "svc-pay/src/public-rest.ts"
-Cohesion: 0.05
-Nodes (50): Captured, balanceSchema, captureBodySchema, createBodySchema, ErrorBody, errorSchema, idempotencyHeaderSchema, authorizedPayment() (+42 more)
-
-### Community 6 - "spot/testing.ts"
-Cohesion: 0.05
-Nodes (44): looksLikeAnonymousCustomerFill(), MM_MATCHING_ACCOUNT_ID, recoverMatchingAccountId(), here, seedOrderIdsForRun(), drizzle, fund(), here (+36 more)
-
-### Community 7 - "runtime.ts"
 Cohesion: 0.02
-Nodes (83): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, AffiliateAgentsFeeLeg, affiliateLegAfterUsageFeeCharge(), AffiliateLegAfterUsageFeeInput, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+75 more)
+Nodes (103): assertMerchantAreaAccess(), assertMerchantOwnership(), MerchantAreaFence, areaForSurface(), isPayfacPermissionPort(), MONEY_PERMISSION_AREAS, MoneyPermissionArea, PAYFAC_PERMISSION_SOCKETS (+95 more)
+
+### Community 6 - "spot/types.ts"
+Cohesion: 0.04
+Nodes (53): looksLikeAnonymousCustomerFill(), MM_MATCHING_ACCOUNT_ID, recoverMatchingAccountId(), here, AffiliatePayoutPort, drizzle, fund(), here (+45 more)
+
+### Community 7 - "meter.ts"
+Cohesion: 0.06
+Nodes (44): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, AffiliateAgentsFeeLeg, affiliateLegAfterUsageFeeCharge(), AffiliateLegAfterUsageFeeInput, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+36 more)
 
 ### Community 8 - "instrument-service.ts"
 Cohesion: 0.04
@@ -965,8 +962,8 @@ Cohesion: 0.05
 Nodes (108): allScoresEqual(), assertSeasonSlug(), averageScore(), averageScoreLabel(), averageTopNScore(), bottomNStandings(), bottomUser(), clampStandingsPageIndex() (+100 more)
 
 ### Community 10 - "svc-trade/src/index.ts"
-Cohesion: 0.02
-Nodes (82): AlgoJobsConfig, AlgoJobsDeps, AlgoJobsHandle, envSrc, here, indexSrc, jobsSrc, startAlgoJobs() (+74 more)
+Cohesion: 0.03
+Nodes (63): Env, schema, ADR-2026, FuturesJobsHealth, FuturesJobsHealthReason, presentFuturesJobsHealth(), presentVenueLatencyHealth(), gradedA() (+55 more)
 
 ### Community 11 - "season-lifecycle.ts"
 Cohesion: 0.06
@@ -974,7 +971,7 @@ Nodes (103): ALLOWED, allowedNextStatuses(), allSeasonsEnded(), allSeasonsFrozen
 
 ### Community 12 - "workbook-loop.ts"
 Cohesion: 0.05
-Nodes (99): completeRun(), assertWorkbookKind(), attachPaperFillRef(), clampRemainingStepsPageIndex(), clampRemainingStepsPageSize(), completeDrillStep(), completedStepCount(), completedStepCountLabel() (+91 more)
+Nodes (100): completeRun(), assertWorkbookKind(), attachPaperFillRef(), clampRemainingStepsPageIndex(), clampRemainingStepsPageSize(), completeDrillStep(), completedStepCount(), completedStepCountLabel() (+92 more)
 
 ### Community 13 - "loan-service.ts"
 Cohesion: 0.04
@@ -986,7 +983,7 @@ Nodes (18): AccountRow, ApprovalRow, BusinessAccount, BusinessApproval, Business
 
 ### Community 15 - "svc-academy/src/router.ts"
 Cohesion: 0.03
-Nodes (77): assertPaperInputNeverClaimsLive(), assertPaperNeverReadableAsRealMoney(), BANNED, isPaperRealMoneyBannedKey(), PAPER_REAL_MONEY_BANNED_KEYS, PAPER_SEAL_FALSE_KEYS, PAPER_VENUE, refuse() (+69 more)
+Nodes (85): CertPerkInventKind, CURRICULUM_DEFAULT_LOCALE, CURRICULUM_LOCALES_WITH_BODIES, curriculumBodyForLocale(), curriculumI18nStrategyHonest(), curriculumI18nStrategyLine(), CurriculumLocale, CurriculumLocaleResolution (+77 more)
 
 ### Community 16 - "ramp-service.ts"
 Cohesion: 0.04
@@ -1010,23 +1007,23 @@ Nodes (81): consolidateBook(), ConsolidatedBook, ConsolidatedLevel, Contribution
 
 ### Community 21 - "funding-tick.ts"
 Cohesion: 0.05
-Nodes (52): listOpenForMarket(), longShort(), AT_MS, listOpenForMarket(), longShort(), fixedRate(), positionsOf(), recordingLedger() (+44 more)
+Nodes (43): listOpenForMarket(), longShort(), AT_MS, listOpenForMarket(), longShort(), fixedRate(), positionsOf(), recordingLedger() (+35 more)
 
-### Community 22 - "support-agent/session-run.ts"
+### Community 22 - "createAgentsRouter"
 Cohesion: 0.03
-Nodes (127): ARTICLE, baseInput(), law, NOW, AccountProjectionFixture, accountProjectionHasInventMoney(), articlesOrRefuse(), invokeSupportDataTool() (+119 more)
+Nodes (128): edgeContext, principal(), signed(), createAgentsRouter(), AccountProjectionFixture, accountProjectionHasInventMoney(), articlesOrRefuse(), invokeSupportDataTool() (+120 more)
 
 ### Community 23 - "svc-trade/src/public-rest.ts"
-Cohesion: 0.06
-Nodes (43): CALLER_REFUSED_PRICE_FIELDS, CCXT_CAPABILITY_MATRIX, CCXT_LEVERAGE_REFUSE_IDS, CCXT_REFUSE_ARMS, CcxtCapabilityKind, CcxtCapabilityRow, CcxtLeverageRefuseId, CcxtRefuseArm (+35 more)
+Cohesion: 0.05
+Nodes (55): market(), AlgoCapabilityNote, presentAlgoCapabilityNote(), ALGO_CANCEL_INCOMPLETE_CODE, ALGO_CANCEL_INCOMPLETE_HALT, ALGO_IMMATURE_KINDS, ALGO_PRODUCT_KIND, ALGO_VOLUME_IMMATURE_CODE (+47 more)
 
 ### Community 24 - "position-service.ts"
-Cohesion: 0.05
-Nodes (44): acceptedMark(), breakerBasis(), FIRST_VALUATION, PreviousMark, readAcceptedMark(), ClosePlan, ClosePlanInput, ClosePosition (+36 more)
+Cohesion: 0.06
+Nodes (41): acceptedMark(), AcceptedMarkStore, breakerBasis(), FIRST_VALUATION, PreviousMark, readAcceptedMark(), derive(), positionIdFor() (+33 more)
 
 ### Community 25 - "alerts/service.ts"
 Cohesion: 0.04
-Nodes (59): acceptAlertMark(), ALERT_MARK_FUTURE_SLACK_MS, ALERT_MARK_MAX_AGE_MS, AlertChannelStatusSlice, outOfAppRequiredRefusal, refuseIfMarkAged(), here, compareDecimalStrings() (+51 more)
+Nodes (56): acceptAlertMark(), ALERT_MARK_FUTURE_SLACK_MS, ALERT_MARK_MAX_AGE_MS, AlertChannelStatusSlice, outOfAppRequiredRefusal, refuseIfMarkAged(), here, compareDecimalStrings() (+48 more)
 
 ### Community 26 - "curriculum/catalog.ts"
 Cohesion: 0.06
@@ -1036,9 +1033,9 @@ Nodes (86): allPathsHaveContent(), builderItemCount(), BY_SLUG, clampCurriculumP
 Cohesion: 0.02
 Nodes (110): memoryLedgerHistory(), createBankServices(), BUSINESS_ROLES, BusinessPolicySummary, describeBusinessPolicy(), amt(), drizzle, fund() (+102 more)
 
-### Community 28 - "profit-source.ts"
+### Community 28 - "position-service.test.ts"
 Cohesion: 0.05
-Nodes (44): drizzle, here, migrations, NOW, PROFIT_SOURCE, ADR-2026, TEST_MAX_LEVERAGE, TEST_MAX_LEVERAGE_AMOUNT (+36 more)
+Nodes (54): bus(), ledger(), drizzle, here, migrations, NOW, PROFIT_SOURCE, ADR-2026 (+46 more)
 
 ### Community 29 - "merchant-webhooks.ts"
 Cohesion: 0.04
@@ -1054,39 +1051,39 @@ Nodes (49): cases, chainId, clients, entryPoint, expected, factory, factoryArtif
 
 ### Community 32 - "notify-service.ts"
 Cohesion: 0.06
-Nodes (48): ChannelTarget, DeliveryRecord, ChannelDeliveryError, ChannelRefusal, NotificationChannel, OutOfAppChannel, RefusalCode, NOTIFICATION (+40 more)
+Nodes (33): ChannelTarget, DeliveryRecord, ChannelDeliveryError, OutOfAppChannel, NOTIFICATION, normaliseLocale(), RenderedCopy, renderInboxCopy() (+25 more)
 
-### Community 33 - "gateway-wire.test.ts"
-Cohesion: 0.06
-Nodes (24): RFC-5321, routerDeps(), composeSms(), EmailChannel, PushChannel, SmsChannel, SmsConfig, DeliveryReceipt (+16 more)
+### Community 33 - "channel.ts"
+Cohesion: 0.05
+Nodes (48): RFC-5321, composeSms(), EmailChannel, PushChannel, SmsChannel, SmsConfig, CHANNEL_IDS, channelCatalogBoardCard() (+40 more)
 
 ### Community 34 - "ops-analytics.ts"
 Cohesion: 0.07
 Nodes (83): AggregateLag, aggregateSourceLags(), allSourcesRepresented(), ANALYTICS_LAG_SLO_SECONDS, analyticsAmountString, analyticsCatalogBoardCard(), analyticsCatalogBoardNonEmpty(), analyticsMetricCatalogSize() (+75 more)
 
-### Community 35 - "fraud/index.ts"
-Cohesion: 0.14
-Nodes (24): base, here, scoringOff, assertFraudScoreSourceNotBlank(), assertNoInventedFraudScores(), evaluateFraud(), FORBIDDEN_FRAUD_SCORE_FIELDS, FRAUD_THRESHOLD_UNPUBLISHED (+16 more)
+### Community 35 - "runtime.ts"
+Cohesion: 0.03
+Nodes (72): COPY_INTEL_AGENT_ID, baseInput(), fakeAction(), FakeRuntime, NOW, runtimeOf(), ActionKind, ActionRow (+64 more)
 
 ### Community 36 - "bank-service.test.ts"
 Cohesion: 0.11
 Nodes (25): accrueBankFees(), drizzle, firedStandingOrder(), fund(), fundedPool(), here, migrations, pausedAfterFirstFiring() (+17 more)
 
 ### Community 37 - "combined.ts"
-Cohesion: 0.07
-Nodes (74): channelsHeldForDigest(), channelsSkippedMuted(), channelsToSendNow(), clampPlanPageSize(), CombinedNotifyPrefs, countHoldingChannels(), countPlanAction(), countSendNow() (+66 more)
+Cohesion: 0.08
+Nodes (70): channelsHeldForDigest(), channelsToSendNow(), clampPlanPageSize(), CombinedNotifyPrefs, countHoldingChannels(), countPlanAction(), countSendNow(), countSendNowChannels() (+62 more)
 
 ### Community 38 - "P2pService"
-Cohesion: 0.09
-Nodes (14): assertDisputeCursor(), assertEvidenceAcceptable(), assertReleasePostable(), describeFailure(), envelopesFor(), normaliseEvidence(), P2pService, toDispute() (+6 more)
+Cohesion: 0.06
+Nodes (37): assertDisputeCursor(), assertEvidenceAcceptable(), assertReleasePostable(), describeFailure(), envelopesFor(), methodAllowed(), normaliseEvidence(), P2pService (+29 more)
 
 ### Community 39 - "svc-trade/src/router.ts"
-Cohesion: 0.11
-Nodes (30): otcMakerRoutingStatus(), OTC_MID_FEED_RESIDUAL, OTC_MID_FEED_SOCKET, otcMidFeedStatus(), OTC_DONE_BAR_TEST_FILES, OTC_HONEST_GAPS, OTC_MOUNTED_DOORS, OTC_TRACKER_ID (+22 more)
+Cohesion: 0.15
+Nodes (21): OTC_MAKER_ROUTING_RESIDUAL, OTC_MAKER_ROUTING_SOCKET, OTC_MID_FEED_RESIDUAL, OTC_MID_FEED_SOCKET, otcMidFeedStatus(), buildDesk(), describeOtcPolicy(), OtcPolicySummary (+13 more)
 
 ### Community 40 - "evm-chain.ts"
-Cohesion: 0.04
-Nodes (35): BROADCAST_PENDING, BroadcastSql, BroadcastStore, ClaimResult, MemoryBroadcastStore, PostgresBroadcastStore, ChainSendRequest, ConfirmedTransfer (+27 more)
+Cohesion: 0.03
+Nodes (40): BROADCAST_PENDING, BroadcastSql, BroadcastStore, ClaimResult, MemoryBroadcastStore, PostgresBroadcastStore, ChainNotConfiguredError, ChainPosture (+32 more)
 
 ### Community 41 - "connect-data-lake/src/index.ts"
 Cohesion: 0.05
@@ -1094,31 +1091,31 @@ Nodes (72): AbsentCapture, AbsentReason, bookLevelsFromCapture(), BookObservatio
 
 ### Community 42 - "guardrails.ts"
 Cohesion: 0.05
-Nodes (64): copyIntelAgentGuardrail(), copyIntelDeclaredInRange(), copyIntelDeclaredToolCount(), copyIntelDeclaredTools(), copyIntelGuardrailBoardCard(), copyIntelGuardrailExportHeader(), copyIntelGuardrailExportLine(), copyIntelGuardrailExportText() (+56 more)
+Nodes (58): copyIntelAgentGuardrail(), copyIntelDeclaredInRange(), copyIntelDeclaredToolCount(), copyIntelDeclaredTools(), copyIntelGuardrailBoardCard(), copyIntelGuardrailExportHeader(), copyIntelGuardrailExportLine(), copyIntelGuardrailExportText() (+50 more)
 
 ### Community 43 - "createIdentityRouter"
 Cohesion: 0.05
 Nodes (46): RFC-4226, RFC-6238, ignoreProjectionError(), syncNavigatorSessionClosed(), syncNavigatorSessionOpen(), syncNavigatorSessionsClosedForUser(), apiKeyOriginAllowed(), normalizeOriginHost() (+38 more)
 
-### Community 44 - "navigator/session-run.ts"
-Cohesion: 0.04
-Nodes (76): appendNavigatorAudit(), auditNavigatorDataTool(), emptyNavigatorAuditLog(), navigatorAuditBoardCard(), NavigatorAuditEntry, NavigatorAuditLog, NavigatorAuditStatus, navigatorAuditStatusLine() (+68 more)
+### Community 44 - "svc-agents/src/router.ts"
+Cohesion: 0.03
+Nodes (101): appendNavigatorAudit(), auditNavigatorDataTool(), emptyNavigatorAuditLog(), navigatorAuditBoardCard(), NavigatorAuditEntry, NavigatorAuditLog, NavigatorAuditStatus, navigatorAuditStatusLine() (+93 more)
 
 ### Community 45 - "liquidation-tick.ts"
 Cohesion: 0.04
-Nodes (56): AcceptedMarkStore, deepBook, POLICY, DEFAULT_FUTURES_LADDER_POLICY, LiquidationDecision, LiquidationPlan, LiquidationPlanInput, LiquidationPosition (+48 more)
+Nodes (58): fundUser(), seedInsurance(), seedPositionMargin(), deepBook, POLICY, DEFAULT_FUTURES_LADDER_POLICY, LiquidationDecision, LiquidationPlan (+50 more)
 
-### Community 46 - "spot/types.ts"
-Cohesion: 0.04
-Nodes (62): Arm, AUTH_ERROR_MAP, badRequest(), badSymbol(), CCXT_AUTH_MAPPING, CCXT_ERROR_MAPPING, CcxtErrorBody, CcxtErrorResponse (+54 more)
+### Community 46 - "private-rest.ts"
+Cohesion: 0.06
+Nodes (36): AdlDisclosureWire, isOperatorProfitPotCode(), OPERATOR_PROFIT_POT_CODES, OperatorProfitPotCode, presentFuturesErrorWire(), here, privateRestSource, FuturesError (+28 more)
 
 ### Community 47 - "adl-last-resort.ts"
 Cohesion: 0.06
 Nodes (39): AdlDisclosureAck, AdlDisclosureError, AdlDisclosureStore, assertAdlDisclosureAcked(), memoryAdlDisclosureStore(), presentAdlDisclosureWire(), sqlAdlDisclosureStore(), AT (+31 more)
 
 ### Community 48 - "copy/index.ts"
-Cohesion: 0.05
-Nodes (74): autoMirrorPlaceStatus(), COPY_AUTO_MIRROR_PLACE_RESIDUAL, COPY_AUTO_MIRROR_PLACE_SOCKET, COPY_MIRROR_CLIENT_ORDER_ID_MAX, COPY_PAPER_LIVE_RESIDUAL, COPY_PLACE_DISABLED_RESIDUAL, copyLimitPriceFromPlan(), copyMirrorClientOrderId() (+66 more)
+Cohesion: 0.06
+Nodes (71): autoMirrorPlaceStatus(), COPY_AUTO_MIRROR_PLACE_RESIDUAL, COPY_AUTO_MIRROR_PLACE_SOCKET, COPY_MIRROR_CLIENT_ORDER_ID_MAX, COPY_PAPER_LIVE_RESIDUAL, COPY_PLACE_DISABLED_RESIDUAL, copyLimitPriceFromPlan(), copyMirrorClientOrderId() (+63 more)
 
 ### Community 49 - "commission.ts"
 Cohesion: 0.07
@@ -1128,25 +1125,25 @@ Nodes (52): accrualTreeAuthorityStatusLine(), AccrueTreeMode, AccrueTreeUnderAut
 Cohesion: 0.07
 Nodes (33): amountOf(), assertAddress(), assertBlockHash(), assertValidBlock(), BlockHash, BookLevelEvent, BookSide, EventBase (+25 more)
 
-### Community 51 - "svc-pay/src/router.ts"
-Cohesion: 0.03
-Nodes (64): describeFraudPolicy(), FRAUD_RULE_IDS, FraudPolicySummary, assertOnlyPayoutDestinations(), assertPersistableDestination(), memoryPayoutDestinations(), MerchantPayoutDestinations, MerchantPayoutDestinationStore (+56 more)
+### Community 51 - "user-money-service.ts"
+Cohesion: 0.05
+Nodes (29): SettlementRecord, anonymous(), edgeContext, forged(), rails, router(), signed(), authConfig (+21 more)
 
 ### Community 52 - "createAcademyRouter"
-Cohesion: 0.08
-Nodes (12): AcademyService, toRoom(), AmbassadorBadge, AmbassadorProgrammeError, AmbassadorProgrammeErrorCode, AmbassadorRecord, AmbassadorStatus, assertFreezeReason() (+4 more)
+Cohesion: 0.06
+Nodes (20): AcademyService, toRoom(), AmbassadorBadge, AmbassadorProgrammeError, AmbassadorProgrammeErrorCode, AmbassadorRecord, AmbassadorStatus, assertFreezeReason() (+12 more)
 
 ### Community 53 - "ifc-pay.ts"
 Cohesion: 0.06
 Nodes (60): AMBASSADOR_IFC_PAY_RECIPE_RESIDUAL, AMBASSADOR_IFC_PAY_RESIDUAL, AMBASSADOR_RESIDENCY_GATE_RESIDUAL, AMBASSADOR_REVENUE_SHARE_RECIPE_RESIDUAL, AMBASSADOR_REVENUE_SHARE_RESIDUAL, ambassadorIfcDefaultsCarryNoRates(), AmbassadorIfcPayQuote, AmbassadorPayAttemptInput (+52 more)
 
 ### Community 54 - "svc-pay/src/index.ts"
-Cohesion: 0.03
-Nodes (65): here, formatApprovalRate(), listProjectedPayMetrics(), PAY_MERCHANT_WATCH_PROJECT_WINDOW_MS, PaymentAggRow, MERCHANT_WATCH_METRICS_PATH, MERCHANT_WATCH_METRICS_PUBLISH_PATH, MERCHANT_WATCH_METRICS_REFRESH_PATH (+57 more)
+Cohesion: 0.05
+Nodes (42): Env, schema, app, appRouter, broadcasts, chain, cryptoRail, edgeContext (+34 more)
 
 ### Community 55 - "channel-store.ts"
-Cohesion: 0.04
-Nodes (32): BUS_ACK_WAIT_MS, CLAIM_LEASE_ACK_SLACK_MS, claimLeaseMsFromGatewayTimeout(), ClaimResult, DEFAULT_CLAIM_LEASE_MS, DELIVERY_REAP_INTERVAL_MS, deliveryKey(), DeliveryPgRow (+24 more)
+Cohesion: 0.03
+Nodes (44): BUS_ACK_WAIT_MS, CLAIM_LEASE_ACK_SLACK_MS, claimLeaseMsFromGatewayTimeout(), ClaimResult, DEFAULT_CLAIM_LEASE_MS, DELIVERY_REAP_INTERVAL_MS, deliveryKey(), DeliveryPgRow (+36 more)
 
 ### Community 56 - "jurisdiction.ts"
 Cohesion: 0.05
@@ -1158,7 +1155,7 @@ Nodes (43): citext, Db, DbOptions, Isolation, isSerializationFailure(), serializ
 
 ### Community 58 - "stats.ts"
 Cohesion: 0.03
-Nodes (104): createHttpCopyLeaderFixturesPort(), FixturesBody, HttpCopyLeaderFixturesOptions, TRADE_COPY_LEADER_FIXTURES_PATH, directoryBoardCard(), DirectoryEmpty, DirectoryMode, DirectoryOk (+96 more)
+Nodes (114): createHttpCopyLeaderFixturesPort(), FixturesBody, HttpCopyLeaderFixturesOptions, TRADE_COPY_LEADER_FIXTURES_PATH, directoryBoardCard(), DirectoryEmpty, DirectoryMode, DirectoryOk (+106 more)
 
 ### Community 59 - "src/client.ts"
 Cohesion: 0.08
@@ -1168,17 +1165,17 @@ Nodes (36): userEscrow(), userHold(), userStake(), accountKey(), assertAvailable
 Cohesion: 0.06
 Nodes (33): createKybPspRouter(), kybEventView, KybPspRouter, kybStatusSchema, pricingEventView, toTrpcError(), KYB_STATUSES, KybError (+25 more)
 
-### Community 61 - "svc-p2p/src/promise-falsify-public-doors.test.ts"
-Cohesion: 0.08
-Nodes (40): canTransition(), checkEligibility(), DEFAULT_ELIGIBILITY, describeReputationSnapshot(), EligibilityPolicy, EligibilityVerdict, mayGrantProgrammePrivileges(), mayRestoreProgrammePrivileges() (+32 more)
+### Community 61 - "svc-p2p/src/index.ts"
+Cohesion: 0.06
+Nodes (44): bool, Env, schema, app, AppRouter, edgeContext, erasure, instruments (+36 more)
 
 ### Community 62 - "reorg.live.test.ts"
 Cohesion: 0.07
 Nodes (37): clients, market, assertDisposableChain(), bumpNextTimestamp(), deployDevVenue(), DeployedVenue, DEV_CHAIN_ID, devAccount() (+29 more)
 
 ### Community 63 - "mute.ts"
-Cohesion: 0.08
-Nodes (44): Harness, DispatchOptions, dispatcher, NotifyServiceDeps, productHarness(), allMuteableChannels(), allMuteableMuted(), applyMuteToggle() (+36 more)
+Cohesion: 0.09
+Nodes (40): DispatchOptions, dispatcher, allMuteableChannels(), allMuteableMuted(), applyMuteToggle(), ChannelMutePrefs, countMutedChannels(), countMuteExportDataLines() (+32 more)
 
 ### Community 64 - "svc-indexer/src/router.mount.test.ts"
 Cohesion: 0.08
@@ -1192,9 +1189,9 @@ Nodes (45): config, principal(), bearerToken(), requireMfa(), requireOwnership()
 Cohesion: 0.06
 Nodes (40): burnAccount(), houseHold(), moduleAccount(), MODULE, subAccountAvailable(), userCollateral(), venueBoundary(), rehydrateLedgerHttpError() (+32 more)
 
-### Community 67 - "academy-service.ts"
-Cohesion: 0.07
-Nodes (36): AcademyServiceOptions, AttendeeRole, RoomKind, RoomRecord, RoomRow, SessionRecord, SessionRow, SessionStatus (+28 more)
+### Community 67 - "progress.ts"
+Cohesion: 0.09
+Nodes (38): grantOf(), alreadyGrantedAfterInsert(), CertError, CertErrorCode, certIdempotencyKey(), completedCountInRange(), completedItemCount(), countProgressExportDataLines() (+30 more)
 
 ### Community 68 - "waitlist-store.ts"
 Cohesion: 0.08
@@ -1221,8 +1218,8 @@ Cohesion: 0.08
 Nodes (20): CharSet, Compiler, complementRanges(), DIGIT, DOT_EXCLUDED, Fragment, hexDigit(), inSet() (+12 more)
 
 ### Community 74 - "trade-service.ts"
-Cohesion: 0.05
-Nodes (49): ConvertQuoteInput, ConvertQuoteResult, DepthLevel, estimateConvert(), parseLevel(), presentConvertQuote(), snapToTick(), TICK (+41 more)
+Cohesion: 0.04
+Nodes (81): ConvertQuoteInput, ConvertQuoteResult, DepthLevel, estimateConvert(), parseLevel(), presentConvertQuote(), snapToTick(), TICK (+73 more)
 
 ### Community 75 - "depth/hub.ts"
 Cohesion: 0.10
@@ -1233,12 +1230,12 @@ Cohesion: 0.16
 Nodes (50): marketMaker(), marketMakerOrderHoldAccount(), mintBoundary(), orderHoldAccount(), positionCollateralAccount(), rewardsEngine(), tokenStakeAccount(), tradeEscrowAccount() (+42 more)
 
 ### Community 77 - "xp-emit.test.ts"
-Cohesion: 0.23
-Nodes (20): countXpPublishExportDataLines(), mayPublishXp(), parseXpPublishExportLine(), parseXpPublishStatusLine(), publishShapeHasPositiveXp(), NOW, toXpEarnedPublish(), XpEarnedPublishShape (+12 more)
+Cohesion: 0.24
+Nodes (19): countXpPublishExportDataLines(), mayPublishXp(), parseXpPublishExportLine(), parseXpPublishStatusLine(), publishShapeHasPositiveXp(), NOW, toXpEarnedPublish(), XpEarnedPublishShape (+11 more)
 
 ### Community 78 - "svc-pay/src/promise-falsify-public-doors.test.ts"
-Cohesion: 0.04
-Nodes (56): areaForSurface(), isPayfacPermissionPort(), MONEY_PERMISSION_AREAS, MoneyPermissionArea, PAYFAC_PERMISSION_SOCKETS, PAYFAC_SURFACE_AREAS, PayfacPermissionPort, permissionAreaCoverage() (+48 more)
+Cohesion: 0.08
+Nodes (26): edgeContext, here, mandateRecord(), mountDoors(), PayStubs, rails, subRecord(), SubStubs (+18 more)
 
 ### Community 79 - "svc-protocol/src/router.ts"
 Cohesion: 0.06
@@ -1246,15 +1243,15 @@ Nodes (49): tokenCases, buildMintLiquidity(), Address, Hex, deployedCodeMatches(
 
 ### Community 80 - "futures-jobs.ts"
 Cohesion: 0.06
-Nodes (42): bus(), ledger(), sqlAcceptedMarkStore(), drizzle, here, migrations, memoryFundingRateBook(), FuturesJobsConfig (+34 more)
+Nodes (36): sqlAcceptedMarkStore(), drizzle, here, migrations, FundingRateEntry, FundingRatePolicy, isFiniteDecimal(), isRateFresh() (+28 more)
 
 ### Community 81 - "trade/hub.ts"
 Cohesion: 0.04
 Nodes (22): CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, DepthSink, FakeSink, FakeSource, rebuild(), CountingSource (+14 more)
 
-### Community 82 - "progress.ts"
-Cohesion: 0.13
-Nodes (34): alreadyGrantedAfterInsert(), CertError, CertErrorCode, completedCountInRange(), completedItemCount(), countProgressExportDataLines(), decideGrant(), isAlreadyGranted() (+26 more)
+### Community 82 - "svc-agents/src/index.ts"
+Cohesion: 0.05
+Nodes (56): liveTradeCopyLeaderIds(), liveTradeCopyLeaderPlaneOpen(), bool, Env, schema, parseRoutingTable(), app, appRouter (+48 more)
 
 ### Community 83 - "dependencies"
 Cohesion: 0.13
@@ -1265,8 +1262,8 @@ Cohesion: 0.13
 Nodes (15): dependencies, drizzle-orm, @intafaced/auth, @intafaced/db, @intafaced/i18n, @opentelemetry/api, postgres, @trpc/server (+7 more)
 
 ### Community 85 - "prize-refuse.ts"
-Cohesion: 0.12
-Nodes (31): assertMayStartPrizeSeason(), decidePrizeIntent(), decidePrizePoolStart(), isBlankAmount(), isPrizePoolUnset(), isPrizePoolUnsetRefuse(), isPrizeRefuseClosed(), PRIZE_POOL_CLASS_M_RESIDUAL (+23 more)
+Cohesion: 0.09
+Nodes (42): TournamentError, assertMayStartPrizeSeason(), assertNoPrizeAttachment(), decidePrizeIntent(), decidePrizePoolStart(), isBlankAmount(), isPrizePoolUnset(), isPrizePoolUnsetRefuse() (+34 more)
 
 ### Community 86 - "svc-bank/src/db/schema.ts"
 Cohesion: 0.04
@@ -1274,15 +1271,15 @@ Nodes (47): autoInvestKindEnum, autoInvestRules, autoInvestRuleStatusEnum, autoI
 
 ### Community 87 - "dependencies"
 Cohesion: 0.13
-Nodes (15): dependencies, fastify, @intafaced/config, @intafaced/ledger-client, @intafaced/market-data, @intafaced/telemetry, ws, zod (+7 more)
+Nodes (15): dependencies, fastify, @intafaced/auth, @intafaced/ledger-client, @intafaced/market-data, @intafaced/telemetry, ws, zod (+7 more)
 
 ### Community 88 - "bybit-spot.ts"
-Cohesion: 0.08
-Nodes (19): AsyncFrameQueue, FakeStream, venueSymbolOf(), wireLevels(), BYBIT_IP_BACKOFF_MS, BYBIT_SPOT_RATE_LIMIT, BybitSpotMarketData, bybitSymbolOf() (+11 more)
+Cohesion: 0.09
+Nodes (18): AsyncFrameQueue, FakeStream, venueSymbolOf(), wireLevels(), BYBIT_IP_BACKOFF_MS, BYBIT_SPOT_RATE_LIMIT, BybitSpotMarketData, bybitSymbolOf() (+10 more)
 
 ### Community 89 - "perk-plane.ts"
 Cohesion: 0.14
-Nodes (30): CERT_PERK_INVENT_KINDS_PIN, CERT_PERK_REFUSE_CODE, CERT_PERK_RESIDUAL, CertGrantPerkView, CertPerkInventKind, certPerkInventKindsMatchPin(), certPerkPlanePinsInventPayoutClosed(), certPerkPlaneStatus (+22 more)
+Nodes (30): assertNoCertPerkMoneyAttachment(), CERT_PERK_INVENT_KINDS_PIN, CERT_PERK_REFUSE_CODE, CERT_PERK_RESIDUAL, CertGrantPerkView, certPerkInventKindsMatchPin(), certPerkPlanePinsInventPayoutClosed(), certPerkPlaneStatus (+22 more)
 
 ### Community 90 - "svc-identity/src/router.ts"
 Cohesion: 0.04
@@ -1292,9 +1289,9 @@ Nodes (52): AuthError, KycRecordView, bootKycVault(), keyMaterialPresent(), KYC_
 Cohesion: 0.07
 Nodes (27): MatchingEngineOptions, ACCOUNTS, build(), ExplodingJournal, fixedClock(), MARKETS, mulberry32(), order() (+19 more)
 
-### Community 92 - "engine-ledger-reconcile.ts"
-Cohesion: 0.13
-Nodes (23): diffMarketIds(), EngineLedgerReconcileTickDeps, EngineLedgerReconcileTickResult, EngineLedgerReconcileJobsConfig, EngineLedgerReconcileJobsDeps, startEngineLedgerReconcileJobs(), listMarkets(), loadTradeMarketIds() (+15 more)
+### Community 92 - "matching-client.ts"
+Cohesion: 0.08
+Nodes (35): diffMarketIds(), EngineLedgerReconcileTickDeps, EngineLedgerReconcileTickResult, EngineLedgerReconcileJobsConfig, EngineLedgerReconcileJobsDeps, startEngineLedgerReconcileJobs(), listMarkets(), loadTradeMarketIds() (+27 more)
 
 ### Community 93 - "flags.ts"
 Cohesion: 0.06
@@ -1313,8 +1310,8 @@ Cohesion: 0.06
 Nodes (49): ANALYTICS_SOURCE_DBS, AnalyticsSourceDb, lagFreshness, mayLabelLive(), ALLOWED_ANALYTICS_READONLY_USER_MARKERS, ANALYTICS_ETL_WATERMARK_AT_ENV, ANALYTICS_REPLICA_LAG_SQL, ANALYTICS_REPLICA_ROLES (+41 more)
 
 ### Community 97 - "svc-agents/src/copy.ts"
-Cohesion: 0.05
-Nodes (58): COPY_KEYS, copyCatalogBoardCard(), copyCatalogEnComplete(), copyCatalogExportHeader(), copyCatalogExportLines(), copyCatalogExportText(), copyCatalogStatusLine(), copyCatalogStatusLineMatches() (+50 more)
+Cohesion: 0.04
+Nodes (62): COPY_KEYS, copyCatalogBoardCard(), copyCatalogEnComplete(), copyCatalogExportHeader(), copyCatalogExportLines(), copyCatalogExportText(), copyCatalogStatusLine(), copyCatalogStatusLineMatches() (+54 more)
 
 ### Community 98 - "EarnService"
 Cohesion: 0.08
@@ -1328,9 +1325,9 @@ Nodes (37): applyBlueprintCreated(), applyBlueprintDeleted(), readBlueprintId(),
 Cohesion: 0.10
 Nodes (14): attributedOverwriteError(), freezeEventKey(), FreezeRow, FreezeState, MemoryPostingFreeze, readFreeze(), resolveAttributedFreeze(), snapshotNow() (+6 more)
 
-### Community 101 - "SubscriptionService"
-Cohesion: 0.04
-Nodes (35): MerchantKybStatus, assertMerchantAreaAccess(), assertMerchantOwnership(), MerchantAreaFence, authConfig, createBody, money, paymentView() (+27 more)
+### Community 101 - "JobHost"
+Cohesion: 0.07
+Nodes (27): AlgoJobsConfig, AlgoJobsDeps, AlgoJobsHandle, envSrc, here, indexSrc, jobsSrc, startAlgoJobs() (+19 more)
 
 ### Community 102 - "dependencies"
 Cohesion: 0.05
@@ -1349,16 +1346,16 @@ Cohesion: 0.08
 Nodes (41): assertNoCertPerkMoneyAttachment(), CERT_PERK_BANNED_PAYLOAD_KEYS, CERT_PERK_LAW, CERT_PERK_REFUSE_CODE, CERT_PERK_RESIDUAL, CertPerkBannedPayloadKey, certPerkFromIdentityRead(), CertPerkIdentityDoors (+33 more)
 
 ### Community 106 - "quote-service.ts"
-Cohesion: 0.15
-Nodes (22): asConsolidatedBook(), describe(), Priced, QuotedVenue, QuoteRefusalCode, refusalFor(), SourcedQuote, sourceQuote() (+14 more)
+Cohesion: 0.09
+Nodes (35): asConsolidatedBook(), describe(), Priced, QuotedVenue, QuoteRefusalCode, QuoteRefusedError, refusalFor(), SourcedQuote (+27 more)
 
 ### Community 107 - "svc-indexer/src/router.ts"
 Cohesion: 0.06
 Nodes (38): apps, edgeContext, getTrpc(), mountPublicDoor(), regionHeaders(), TrpcWire, HaltState, idleResult() (+30 more)
 
-### Community 108 - "engine/book.ts"
-Cohesion: 0.09
-Nodes (31): EffectiveOrder, MatchOutcome, PriceLevel, RestingOrder, SELF_TRADE_PREVENTION, StopOrder, busyBook(), nextId() (+23 more)
+### Community 108 - "engine/types.ts"
+Cohesion: 0.10
+Nodes (26): crossesLevel(), EffectiveOrder, RestingOrder, StopOrder, busyBook(), order(), OrderSpec, primed() (+18 more)
 
 ### Community 109 - "spec.ts"
 Cohesion: 0.07
@@ -1374,11 +1371,11 @@ Nodes (40): agentActionCompleted, agentActionRejected, agentUsageSettled, assetI
 
 ### Community 112 - "svc-academy/src/index.ts"
 Cohesion: 0.08
-Nodes (27): Env, schema, academy, app, AppRouter, edgeContext, hostRights, sql (+19 more)
+Nodes (28): Env, schema, AcademyError, academy, app, AppRouter, edgeContext, hostRights (+20 more)
 
-### Community 113 - "p2p-service.ts"
-Cohesion: 0.07
-Nodes (43): Actor, DisputeRow, EvidenceEntry, EvidenceEnvelope, MAX_EVIDENCE_ENTRIES, MAX_EVIDENCE_ITEM_BYTES, methodAllowed(), NATURAL_PERSON_ID (+35 more)
+### Community 113 - "AgentsRouterDeps"
+Cohesion: 0.03
+Nodes (37): edgeContext, signed(), spine, edgeContext, highPnl, lowPnl, signed(), edgeContext (+29 more)
 
 ### Community 114 - "router.live-chain.test.ts"
 Cohesion: 0.07
@@ -1386,7 +1383,7 @@ Nodes (26): AccountAddressInput, accountSalt(), AddressDerivationError, computeA
 
 ### Community 115 - "mark-from-venue.ts"
 Cohesion: 0.05
-Nodes (57): MarkRequest, DEFAULT_DEPTH_QUOTE_POLICY, DepthQuotePolicy, DepthQuoteRequirement, bestFromVenueBook(), createConfiguredVenueMarkSource(), createVenueMarketDataAdapter, MaintainedVenueBookPort (+49 more)
+Nodes (57): MarkRequest, DepthQuotePolicy, bestFromVenueBook(), createConfiguredVenueMarkSource(), createVenueMarketDataAdapter, MaintainedVenueBookPort, markSourceFromMaintainedVenueBook(), markSourceFromVenuePublicBook() (+49 more)
 
 ### Community 116 - "amount"
 Cohesion: 0.06
@@ -1398,7 +1395,7 @@ Nodes (53): CURRICULUM_MIN_BODY_CHARS, CurriculumKind, CurriculumPath, listCurri
 
 ### Community 118 - "merchant/session-run.ts"
 Cohesion: 0.05
-Nodes (71): isMerchantMoneyDenied(), merchantGuardrailBoardCard(), merchantGuardrailExportHeader(), merchantGuardrailExportLine(), merchantGuardrailExportText(), merchantGuardrailStatusLine(), merchantGuardrailStatusLineConsistent(), merchantGuardrailStatusLineMatches() (+63 more)
+Nodes (75): EMPTY_SESSION_STATE, isMerchantMoneyDenied(), merchantGuardrailBoardCard(), merchantGuardrailExportHeader(), merchantGuardrailExportLine(), merchantGuardrailExportText(), merchantGuardrailStatusLine(), merchantGuardrailStatusLineConsistent() (+67 more)
 
 ### Community 119 - "svc-blueprint/src/index.ts"
 Cohesion: 0.11
@@ -1406,7 +1403,7 @@ Nodes (17): engineResponseSchema, HttpNeuralEngineClient, HttpNeuralEngineOption
 
 ### Community 120 - "MemoryCopyFollowStore"
 Cohesion: 0.04
-Nodes (13): PgLeakStore, RaceStore, SpyStore, marketsFromJson(), MemoryCopyFollowStore, mirrorKey(), rowToFollow(), rowToMirrored() (+5 more)
+Nodes (15): PgLeakStore, RaceStore, SpyStore, isPgUniqueViolation(), marketsFromJson(), MemoryCopyFollowStore, mirrorKey(), rethrowCopyFollowUnique() (+7 more)
 
 ### Community 121 - "digest.ts"
 Cohesion: 0.12
@@ -1425,8 +1422,8 @@ Cohesion: 0.03
 Nodes (48): subjectCommitment(), COMMITMENT, SCHEMA, ArtifactName, ContractArtifact, loadArtifact(), MissingArtifactError, openAndLock() (+40 more)
 
 ### Community 125 - "svc-notify/src/index.ts"
-Cohesion: 0.05
-Nodes (31): channelsFromEnv(), DEFAULT_SMS_MAX_CHARS, parseRequiredChannels(), ENFORCED_APP_ENVS, Env, envSchema, schema, BASE (+23 more)
+Cohesion: 0.06
+Nodes (27): AlertSweepReport, AlertSweepRecorder, runAlertSweepPass(), parseRequiredChannels(), ENFORCED_APP_ENVS, Env, envSchema, schema (+19 more)
 
 ### Community 126 - "mock-e2e.test.ts"
 Cohesion: 0.12
@@ -1465,20 +1462,20 @@ Cohesion: 0.08
 Nodes (23): StreamHandle, ALLOWED_DEPTH, capDepth(), DEFAULT_FEE_BPS, firstDataObject(), isChannel(), OKX_SPOT_RATE_LIMIT, OkxSpotMarketData (+15 more)
 
 ### Community 135 - "providers/provider.ts"
-Cohesion: 0.03
-Nodes (99): ProviderError, buildRequest(), digestOf(), GatewayCompletion, GatewayEmbedding, ModelGateway, TaskRequest, resolveRoute() (+91 more)
+Cohesion: 0.04
+Nodes (83): ProviderError, buildRequest(), digestOf(), GatewayCompletion, GatewayEmbedding, ModelGateway, TaskRequest, RouteDef (+75 more)
 
 ### Community 136 - "evm/source.ts"
 Cohesion: 0.10
 Nodes (27): BLOCK_ABSENT_ERROR_NAMES, causeChain(), ChainRefusalCode, ChainUnavailableError, classifyChainError(), codeOf(), isBlockNotFound(), isZeroAddress() (+19 more)
 
-### Community 137 - "channel.ts"
-Cohesion: 0.14
-Nodes (29): allRefusalCodes(), CHANNEL_IDS, channelCatalogBoardCard(), channelCatalogExportHeader(), channelCatalogExportLines(), channelCatalogExportText(), channelCatalogSize(), channelCatalogSizeInRange() (+21 more)
+### Community 137 - "refusal-code-honesty.ts"
+Cohesion: 0.20
+Nodes (16): allRefusalCodes(), refusalCodeCount(), here, readme, isDeclaredRefusalCode(), parseRefusalCodeCatalogStatusLine(), refusalCodeCatalogBoardCard(), refusalCodeCatalogExportHeader() (+8 more)
 
 ### Community 138 - "mountain-vs-sockets.ts"
-Cohesion: 0.14
-Nodes (32): OUT_OF_APP_CHANNELS, CHANNEL_TO_SOCKET, channelForSocketId(), channelSocketMatrixComplete(), FANOUT_MOUNTAIN_ID, HONEST_GAPS, HonestGapId, isDeclaredHonestGap() (+24 more)
+Cohesion: 0.13
+Nodes (34): OUT_OF_APP_CHANNELS, CHANNEL_TO_SOCKET, channelForSocketId(), channelSocketMatrixComplete(), FANOUT_MOUNTAIN_ID, HONEST_GAPS, HonestGapId, isDeclaredHonestGap() (+26 more)
 
 ### Community 139 - "telemetry/package.json"
 Cohesion: 0.06
@@ -1496,9 +1493,9 @@ Nodes (35): CurrencyDisplay, dateFormat(), dateFormatCache, DateInput, DecimalPa
 Cohesion: 0.05
 Nodes (37): dependencies, @intafaced/config, @intafaced/connect-data-lake, @intafaced/exchange-contract, @intafaced/ledger-client, @intafaced/market-data, @intafaced/venue-contracts, zod (+29 more)
 
-### Community 143 - "vr-export.ts"
-Cohesion: 0.16
-Nodes (17): SCENE_MAX_BYTES, SCENE_VERSION, SceneV1, assertExportVrScene(), DEFAULT_STAGE, exportVrScene(), ExportVrSceneErr, ExportVrSceneOk (+9 more)
+### Community 143 - "merchant-watch-metrics-routes.ts"
+Cohesion: 0.09
+Nodes (22): here, formatApprovalRate(), listProjectedPayMetrics(), PAY_MERCHANT_WATCH_PROJECT_WINDOW_MS, PaymentAggRow, MERCHANT_WATCH_METRICS_PATH, MERCHANT_WATCH_METRICS_PUBLISH_PATH, MERCHANT_WATCH_METRICS_REFRESH_PATH (+14 more)
 
 ### Community 144 - "HttpPort"
 Cohesion: 0.05
@@ -1510,23 +1507,23 @@ Nodes (55): AccrualRow, AccrualStore, MemoryAccrualStore, SqlAccrualStore, toRow
 
 ### Community 146 - "engine.ts"
 Cohesion: 0.11
-Nodes (16): cancelledEvent(), disabled(), filledEvent(), MatchingEngine, PendingEvent, snapshotAll(), toWire(), CancelResult (+8 more)
+Nodes (15): cancelledEvent(), disabled(), filledEvent(), MatchingEngine, PendingEvent, snapshotAll(), toWire(), CancelResult (+7 more)
 
 ### Community 147 - "events/package.json"
 Cohesion: 0.06
 Nodes (34): nats, dependencies, @intafaced/config, @intafaced/safe-regex, nats, zod, devDependencies, @intafaced/db (+26 more)
 
-### Community 148 - "plugins/index.ts"
-Cohesion: 0.09
-Nodes (55): CmsPluginFamilyStatus, CmsPluginStatusSummary, describeCmsPluginStatus(), familyStatus(), CMS_PLUGIN_FAMILIES, CMS_PLUGIN_SOCKET, CmsPluginFamily, CmsPluginRefuse (+47 more)
+### Community 148 - "svc-pay/src/router.ts"
+Cohesion: 0.06
+Nodes (74): describeFraudPolicy(), FRAUD_RULE_IDS, FraudPolicySummary, CmsPluginFamilyStatus, CmsPluginStatusSummary, describeCmsPluginStatus(), familyStatus(), CMS_PLUGIN_FAMILIES (+66 more)
 
 ### Community 149 - "contracts/package.json"
 Cohesion: 0.05
 Nodes (37): default, types, dependencies, @intafaced/auth, @intafaced/config, @trpc/server, zod, devDependencies (+29 more)
 
 ### Community 150 - "xp-policy.ts"
-Cohesion: 0.15
-Nodes (33): CERT_CATALOG, FOUNDATIONS_V1, listCertCatalog(), CertDefinition, certIdempotencyKey(), CertXpPolicy, countXpPolicyExportDataLines(), hasAnyXpPolicy() (+25 more)
+Cohesion: 0.16
+Nodes (31): CERT_CATALOG, FOUNDATIONS_V1, listCertCatalog(), CertXpPolicy, countXpPolicyExportDataLines(), hasAnyXpPolicy(), hasAtLeastXpPolicies(), hasXpPolicy() (+23 more)
 
 ### Community 151 - "bank-service.ts"
 Cohesion: 0.05
@@ -1544,21 +1541,21 @@ Nodes (7): resolvedTicket(), createSupportRouter(), SupportStore, SupportService
 Cohesion: 0.09
 Nodes (40): HouseTenantExternalOk, HouseTenantPinResult, HouseTenantRefusal, HouseTenantRefuseReason, HouseTenantTarget, pinHouseTenantTarget(), refuseHouseTenantInternalBook(), bpsDelta() (+32 more)
 
-### Community 156 - "svc-agents/src/router.ts"
-Cohesion: 0.03
-Nodes (84): edgeContext, signed(), spine, edgeContext, highPnl, lowPnl, signed(), edgeContext (+76 more)
+### Community 156 - "academy-service.ts"
+Cohesion: 0.07
+Nodes (35): AcademyServiceOptions, AttendeeRole, RoomKind, RoomRecord, RoomRow, SessionRecord, SessionRow, SessionStatus (+27 more)
 
 ### Community 157 - "KillSwitchState"
 Cohesion: 0.12
 Nodes (14): createAdminApi(), LedgerOperatorCall, api(), tokens, asOperator(), asTreasury(), asUser(), bearer() (+6 more)
 
 ### Community 158 - "OrderBook"
-Cohesion: 0.11
-Nodes (10): crossesLevel(), locate(), OrderBook, reject(), rejected(), toEffective(), BookState, RejectReason (+2 more)
+Cohesion: 0.10
+Nodes (15): locate(), MatchOutcome, OrderBook, PriceLevel, reject(), rejected(), SELF_TRADE_PREVENTION, toEffective() (+7 more)
 
 ### Community 159 - "svc-notify/src/router.ts"
-Cohesion: 0.10
-Nodes (21): alertEvaluationOutput, channelSchema, deliveryOutput, deliveryToWire(), loadOperatorDeliveries(), anonymous(), edgeContext, forged() (+13 more)
+Cohesion: 0.07
+Nodes (28): isUnpublishedAlertKind(), darkMarks, here, mount(), running, alertEvaluationOutput, channelSchema, createNotifyRouter() (+20 more)
 
 ### Community 160 - "svc-protocol/src/index.ts"
 Cohesion: 0.08
@@ -1577,8 +1574,8 @@ Cohesion: 0.12
 Nodes (29): ALLOWED_STRATEGY_COMPARISON_ORDERS, assessBacktestSurface(), assessStrategyComparisonOrder(), BacktestCostDisclosure, BacktestCostModel, BacktestSurfaceAssessment, BacktestSurfaceCandidate, BacktestSurfaceRefusal (+21 more)
 
 ### Community 164 - "navigator/guardrail.ts"
-Cohesion: 0.10
-Nodes (41): isNavigatorAllowlistedTool(), isNavigatorMoneyWriteTool(), navigatorAgentGuardrail(), navigatorDeclaredInRange(), navigatorDeclaredToolCount(), navigatorDeclaredTools(), navigatorGuardrailBoardCard(), navigatorGuardrailExportHeader() (+33 more)
+Cohesion: 0.07
+Nodes (59): isNavigatorAllowlistedTool(), isNavigatorMoneyWriteTool(), NAVIGATOR_MONEY_WRITE_TOOLS, navigatorAgentGuardrail(), navigatorDeclaredInRange(), navigatorDeclaredToolCount(), navigatorDeclaredTools(), navigatorGuardrailBoardCard() (+51 more)
 
 ### Community 165 - "blueprint-service.test.ts"
 Cohesion: 0.08
@@ -1660,9 +1657,9 @@ Nodes (24): indexerVenue(), liveStatus, matchingVenue(), ok(), recorder(), trpc(
 Cohesion: 0.14
 Nodes (19): geoBlockStatus(), apps, tokens, evaluateGeoBlock(), GEO_BLOCK_EMPTY_CODE, GEO_BLOCK_HIT_CODE, GEO_BLOCK_REGION_UNKNOWN_CODE, GEO_BLOCK_SCREENED_CODE (+11 more)
 
-### Community 186 - "matching-client.ts"
-Cohesion: 0.09
-Nodes (35): bestFromDepth(), bestLevelIsQuotable(), DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL, DEFAULT_MIN_BEST_LEVEL_NOTIONAL, DepthReader, depthRequirement(), minBestLevelBpsOfNotional(), minBestLevelNotional() (+27 more)
+### Community 186 - "orderable-path.test.ts"
+Cohesion: 0.13
+Nodes (27): bestFromDepth(), bestLevelIsQuotable(), DEFAULT_DEPTH_QUOTE_POLICY, DEFAULT_MIN_BEST_LEVEL_BPS_OF_NOTIONAL, DEFAULT_MIN_BEST_LEVEL_NOTIONAL, DepthQuoteRequirement, DepthReader, depthRequirement() (+19 more)
 
 ### Community 187 - "private/hub.ts"
 Cohesion: 0.08
@@ -1680,9 +1677,9 @@ Nodes (22): ANALYTICS_METRICS_V0, AnalyticsMetricDef, assertMetricPoint(), consu
 Cohesion: 0.06
 Nodes (38): CreateTicketInput, createTicketInputSchema, EscalateTicketInput, escalateTicketInputSchema, GetKbArticleInput, getKbArticleInputSchema, publicKbArticleOrNull(), publishedKbArticles() (+30 more)
 
-### Community 192 - "svc-agents/src/errors.ts"
-Cohesion: 0.08
-Nodes (47): COPY_INTEL_MONEY_WRITE_TOOLS, copyIntelMoneyDenyBoardCard(), copyIntelMoneyDenyExportHeader(), copyIntelMoneyDenyExportLine(), copyIntelMoneyDenyExportText(), copyIntelMoneyDenyStatusLine(), copyIntelMoneyDenyStatusLineConsistent(), copyIntelMoneyDenyStatusLineMatches() (+39 more)
+### Community 192 - "copy-intel/policy.ts"
+Cohesion: 0.25
+Nodes (15): COPY_INTEL_MONEY_WRITE_TOOLS, copyIntelMoneyDenyBoardCard(), copyIntelMoneyDenyExportHeader(), copyIntelMoneyDenyExportLine(), copyIntelMoneyDenyExportText(), copyIntelMoneyDenyStatusLine(), copyIntelMoneyDenyStatusLineConsistent(), copyIntelMoneyDenyStatusLineMatches() (+7 more)
 
 ### Community 193 - "svc-edge/src/index.ts"
 Cohesion: 0.09
@@ -1709,8 +1706,8 @@ Cohesion: 0.12
 Nodes (22): AccessTier, accessTierFor(), assertValidDate(), DEFAULT_FEE_DISCOUNT_SCHEDULE, FeeDiscountBasis, feeDiscountBps(), FeeDiscountSchedule, FeeDiscountStep (+14 more)
 
 ### Community 199 - "liquidation-tick.test.ts"
-Cohesion: 0.08
-Nodes (18): memoryAcceptedMarkStore(), fundUser(), seedInsurance(), seedPositionMargin(), memoryLiquidationAttemptStore(), stubMarginCallNotifier, healthyLong(), listOpen() (+10 more)
+Cohesion: 0.10
+Nodes (16): memoryAcceptedMarkStore(), memoryLiquidationAttemptStore(), stubMarginCallNotifier, healthyLong(), listOpen(), marginCallLong(), recordingLedger(), tick() (+8 more)
 
 ### Community 200 - "jetstream-bus.ts"
 Cohesion: 0.13
@@ -1729,8 +1726,8 @@ Cohesion: 0.13
 Nodes (28): CheckoutLinkView, CheckoutPageState, CheckoutPaths, CheckoutPay, CheckoutSessionPageView, errorBody(), errorCode(), escapeHtml() (+20 more)
 
 ### Community 204 - "quote-store.ts"
-Cohesion: 0.15
-Nodes (12): boundFromQuote(), iso(), MemoryOtcQuoteStore, OtcQuoteLifecycle, OtcQuoteStore, OtcStoredQuote, quoteFromParts(), QuoteRow (+4 more)
+Cohesion: 0.14
+Nodes (14): OtcCounterpartyMode, boundFromQuote(), iso(), MemoryOtcQuoteStore, OtcQuoteLifecycle, OtcQuoteStore, OtcStoredQuote, quoteFromParts() (+6 more)
 
 ### Community 205 - "DepthHub"
 Cohesion: 0.11
@@ -1770,7 +1767,7 @@ Nodes (19): ADVERSARIAL_AMOUNTS, bruteCumulative(), migrationSql, PUBLISHED_FEE_
 
 ### Community 214 - "CopyFollowStore"
 Cohesion: 0.11
-Nodes (5): CopyFollowStore, parseCopyEnvelope(), presentCopyFollow, parseLeaderFillObservation(), presentMirrorPlan
+Nodes (6): planCopyFeeShareSettle(), CopyFollowStore, parseCopyEnvelope(), presentCopyFollow, parseLeaderFillObservation(), presentMirrorPlan
 
 ### Community 215 - "TradeHub"
 Cohesion: 0.14
@@ -1778,11 +1775,11 @@ Nodes (4): HubLogger, TradeHub, TradeSourceOptions, WebSocketGatewayOptions
 
 ### Community 216 - "decide.ts"
 Cohesion: 0.08
-Nodes (45): PUBLIC_CHECKOUT_CAPABILITIES, RailSkipReason, EligibleSlot, geoMatches(), methodMatches(), norm(), normCountry(), PresentRoutingInputs (+37 more)
+Nodes (48): PayServiceOptions, assertRailMayAcceptPublicPayment(), ValueMovementPolicy, EligibleSlot, geoMatches(), methodMatches(), norm(), normCountry() (+40 more)
 
 ### Community 217 - "otc-service.ts"
 Cohesion: 0.06
-Nodes (62): OtcCounterpartyMode, OtcDeskLaw, otcDeskLawStatusLine(), parseOtcDeskLawJson(), requirePublishedOtcDeskLaw(), UNPUBLISHED_OTC_DESK_LAW, OTC_DESK_LAW_RESIDUAL, OtcError (+54 more)
+Nodes (57): OtcDeskLaw, otcDeskLawStatusLine(), parseOtcDeskLawJson(), requirePublishedOtcDeskLaw(), UNPUBLISHED_OTC_DESK_LAW, OTC_DESK_LAW_RESIDUAL, OtcError, OtcErrorCode (+49 more)
 
 ### Community 219 - "target-rate-limit.ts"
 Cohesion: 0.11
@@ -1805,24 +1802,24 @@ Cohesion: 0.22
 Nodes (9): defineEvent(), assertValidSubject(), InvalidSubjectError, ParsedSubject, parseSubject(), subject(), SUBJECT_PREFIX, TOKEN_RE (+1 more)
 
 ### Community 224 - "factory.ts"
-Cohesion: 0.08
-Nodes (26): crossCheckMids(), CrossCheckOptions, CrossCheckReport, CrossCheckVerdict, DEFAULTS, deviationInBps(), median(), mid() (+18 more)
+Cohesion: 0.12
+Nodes (15): createVenueAccountAdapter(), createVenueMarketDataAdapter(), createVenueTradeAdapter(), describeVenueAggregationPolicy(), VenueAggregationPolicySummary, PUBLIC_MARKET_DATA_VENUE_IDS, PublicMarketDataVenueId, publicVenueBookMid() (+7 more)
 
-### Community 225 - "svc-p2p/src/index.ts"
+### Community 225 - "p2p-service.ts"
 Cohesion: 0.06
-Nodes (33): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, affiliateLegAfterP2pRelease(), AffiliateLegAfterP2pReleaseInput, AffiliateP2pFeeLeg, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+25 more)
+Nodes (44): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, affiliateLegAfterP2pRelease(), AffiliateLegAfterP2pReleaseInput, AffiliateP2pFeeLeg, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+36 more)
 
-### Community 226 - "quote-service.test.ts"
-Cohesion: 0.15
-Nodes (8): QuoteRefusedError, at(), buyOne, FakeVenue, FakeVenueOptions, NOW, BookLevel, FakeVenueOptions
+### Community 226 - "venue.ts"
+Cohesion: 0.16
+Nodes (9): at(), buyOne, FakeVenue, FakeVenueOptions, NOW, BookLevel, VenueCapabilityList, VenueExecutionRefused (+1 more)
 
 ### Community 227 - "token-service.ts"
 Cohesion: 0.10
 Nodes (20): BuybackParams, BuybackRunStatus, isExclusionViolation(), iso(), isUniqueViolation(), normaliseRevenueTotal(), pgCode(), PROPOSAL_MIN_STAKE (+12 more)
 
-### Community 228 - "hours-public-doors.test.ts"
-Cohesion: 0.07
-Nodes (36): privateDeps(), basePublicDeps(), fakeOrder(), fakeMarket(), assertProductionUnsettledAssetClassListing(), assertSettlementRails(), FOREX_SETTLEMENT_REFUSE_CODE, FOREX_SETTLEMENT_RESIDUAL (+28 more)
+### Community 228 - "xp-publish.ts"
+Cohesion: 0.10
+Nodes (34): assertCertGrantNeverPostsLedger(), assertCertGrantPathHonest(), assertMayPublishCertXpOnIdentityGraph(), assertNoFakeCertPerks(), CERT_FAKE_PERK_BANNED_KEYS, CERT_GRANT_LEDGER_BANNED_KEYS, CERT_GRANT_LEDGER_REFUSE_CODE, CERT_GRANT_LEDGER_RESIDUAL (+26 more)
 
 ### Community 229 - "trpc.ts"
 Cohesion: 0.11
@@ -1852,17 +1849,17 @@ Nodes (23): catalogBoardHeadline(), catalogSpineNonEmpty(), catalogStatusLine(),
 Cohesion: 0.11
 Nodes (21): academy, ambassadors, ambassadorStatusEnum, attendeeRoleEnum, certEnrollments, certGrants, certItemCompletions, residencyApplications (+13 more)
 
-### Community 236 - "svc-agents/src/index.ts"
-Cohesion: 0.05
-Nodes (59): bool, Env, schema, amountString, completeRouteCount(), DEFAULT_ROUTING_TABLE, modelPriceSchema, parseRoutingTable() (+51 more)
+### Community 236 - "routing.ts"
+Cohesion: 0.12
+Nodes (31): amountString, completeRouteCount(), DEFAULT_ROUTING_TABLE, modelPriceSchema, parseRoutingTableStatusLine(), resolveRoute(), routeCount(), routeCountInRange() (+23 more)
 
 ### Community 237 - "screening-draft.ts"
 Cohesion: 0.14
 Nodes (19): KycReviewWriteInput, KycReviewWriteRefuse, refuseIdentityKycReviewWrite(), here, assertProposalOnly(), draftPresentedAsDecision(), draftScreeningSupport(), inventedBlockedTrueList() (+11 more)
 
-### Community 238 - "xp-publish.ts"
-Cohesion: 0.08
-Nodes (37): certById(), assertCertGrantNeverPostsLedger(), assertCertGrantPathHonest(), assertMayPublishCertXpOnIdentityGraph(), assertNoFakeCertPerks(), CERT_FAKE_PERK_BANNED_KEYS, CERT_GRANT_LEDGER_BANNED_KEYS, CERT_GRANT_LEDGER_REFUSE_CODE (+29 more)
+### Community 238 - "ccxt-capability-matrix.test.ts"
+Cohesion: 0.09
+Nodes (25): CALLER_REFUSED_PRICE_FIELDS, CCXT_CAPABILITY_MATRIX, CCXT_LEVERAGE_REFUSE_IDS, CCXT_REFUSE_ARMS, CcxtCapabilityKind, CcxtCapabilityRow, CcxtLeverageRefuseId, CcxtRefuseArm (+17 more)
 
 ### Community 239 - "observability-wiring.test.ts"
 Cohesion: 0.14
@@ -1888,17 +1885,17 @@ Nodes (18): balancesSchema, createOrderRequestSchema, decimal, EXCHANGE_ERROR_CO
 Cohesion: 0.14
 Nodes (15): TransferRail, VenueBalance, VenueOrderStatus, VenueOrderType, VenuePosition, AccountAdapter, assertTradeOnly(), BookSubscription (+7 more)
 
-### Community 245 - "MemoryNotifyStore"
-Cohesion: 0.06
-Nodes (13): Mounted, ENGINES, here, MIGRATIONS, OTHER_USER, USER, dedupeKey(), fromPg() (+5 more)
+### Community 245 - "PostgresNotifyStore"
+Cohesion: 0.10
+Nodes (9): ENGINES, here, MIGRATIONS, OTHER_USER, USER, fromPg(), here, MIGRATIONS (+1 more)
 
 ### Community 246 - "erase-take-race.test.ts"
 Cohesion: 0.07
 Nodes (26): blockedBackends(), fund(), here, migrations, seedPaymentRails(), tradedOffer(), waitUntilBlocked(), ErasureLine (+18 more)
 
 ### Community 247 - "fiat-currency-honesty.ts"
-Cohesion: 0.18
-Nodes (15): BY_CODE, FIAT_CODES, fiatCurrencyCatalogBoardCard(), fiatCurrencyCatalogExportHeader(), fiatCurrencyCatalogExportLines(), fiatCurrencyCatalogExportText(), fiatCurrencyCatalogStatusLine(), fiatCurrencyCatalogStatusLineConsistent() (+7 more)
+Cohesion: 0.38
+Nodes (11): FIAT_CODES, fiatCurrencyCatalogBoardCard(), fiatCurrencyCatalogExportHeader(), fiatCurrencyCatalogExportLines(), fiatCurrencyCatalogExportText(), fiatCurrencyCatalogStatusLine(), fiatCurrencyCatalogStatusLineConsistent(), fiatCurrencyCatalogStatusLineMatches() (+3 more)
 
 ### Community 248 - "arbitrage.ts"
 Cohesion: 0.15
@@ -1933,8 +1930,8 @@ Cohesion: 0.07
 Nodes (32): env, schema, SupportEnv, createSupportHttpApp(), SupportHttpAppDeps, accounts, appRouter, edgeContext (+24 more)
 
 ### Community 256 - "support-service.ts"
-Cohesion: 0.10
-Nodes (28): buildCaseFile(), BuildCaseFileResult, CaseFileRefuseReason, cite(), citeAccountState(), citeComment(), citeKbArticle(), digestOf() (+20 more)
+Cohesion: 0.15
+Nodes (19): buildCaseFile(), BuildCaseFileResult, CaseFileRefuseReason, cite(), citeAccountState(), citeComment(), citeKbArticle(), digestOf() (+11 more)
 
 ### Community 257 - "order-path-smoke.mjs"
 Cohesion: 0.23
@@ -1945,8 +1942,8 @@ Cohesion: 0.07
 Nodes (24): DepthHubOptions, HttpMarketRegistry, HttpMarketRegistryOptions, MarketRegistry, MarketRegistryError, RegistryPart, ENGINE, LISTED (+16 more)
 
 ### Community 259 - "money-kill-surface.ts"
-Cohesion: 0.26
-Nodes (14): isModuleId(), assertCustodialMoneyKillsComplete(), assertMoneyKillResidualsPresent(), assertMoneyRoutesHaveKillMapping(), edgeKillableMoneyModules(), longestMatchingPrefix(), MONEY_KILL_RESIDUAL_DOOR_IDS, MONEY_PUBLIC_DOORS (+6 more)
+Cohesion: 0.15
+Nodes (20): isModuleId(), moduleDef, MODULES, Phase, PHASES, PLANES, protocolPlaneOnlyModules(), assertCustodialMoneyKillsComplete() (+12 more)
 
 ### Community 260 - "edge.ts"
 Cohesion: 0.16
@@ -1973,8 +1970,8 @@ Cohesion: 0.17
 Nodes (21): ANALYTICS_METRIC_KINDS, analyticsMetricCatalogBoardCard(), analyticsMetricCatalogExportHeader(), analyticsMetricCatalogExportLines(), analyticsMetricCatalogExportText(), analyticsMetricCatalogStatusLine(), analyticsMetricCatalogStatusLineConsistent(), analyticsMetricCatalogStatusLineMatches() (+13 more)
 
 ### Community 266 - "venue-adapters.ts"
-Cohesion: 0.07
-Nodes (33): OmsCancelFn, adapter(), now, order(), tradeAdapterCancel(), OmsFetchFn, adapter(), now (+25 more)
+Cohesion: 0.06
+Nodes (41): OmsCancelFn, adapter(), now, order(), tradeAdapterCancel(), OmsFetchFn, adapter(), now (+33 more)
 
 ### Community 267 - "venue-contracts.test.ts"
 Cohesion: 0.47
@@ -1982,7 +1979,7 @@ Nodes (7): readDecimal(), readInteger(), readLevels(), readOptionalDecimal(), re
 
 ### Community 268 - "grounded-session.ts"
 Cohesion: 0.08
-Nodes (29): asItems(), CoachCurriculumSource, createAcademyCurriculumSource(), EMPTY, EmptyAcademyCurriculumSource, FixedAcademyCurriculumSource, parseAcademyCurriculumPayload(), parseItem() (+21 more)
+Nodes (31): asItems(), CoachCurriculumSource, createAcademyCurriculumSource(), EMPTY, EmptyAcademyCurriculumSource, FixedAcademyCurriculumSource, parseAcademyCurriculumPayload(), parseItem() (+23 more)
 
 ### Community 269 - "totp-enrol-public-door.test.ts"
 Cohesion: 0.10
@@ -2018,11 +2015,11 @@ Nodes (27): adminKill(), authorizeTenantVenue(), HOUSE_INTERNAL_VENUE_DETAIL, Ho
 
 ### Community 277 - "api.ts"
 Cohesion: 0.12
-Nodes (12): RATE_LIMITS, REST_ROUTES, RestRouteName, WS_CHANNELS, WsChannel, CreateOrderRequest, FundingRate, Market (+4 more)
+Nodes (12): RATE_LIMITS, REST_ROUTES, RestRouteName, WS_CHANNELS, WsChannel, Balances, CreateOrderRequest, FundingRate (+4 more)
 
 ### Community 278 - "ExchangeApi"
 Cohesion: 0.16
-Nodes (5): ExchangeApi, Order, OrderBook, Ticker, Trade
+Nodes (5): ExchangeApi, Order, Ticker, Trade, TradingFee
 
 ### Community 279 - "compose.ts"
 Cohesion: 0.22
@@ -2033,7 +2030,7 @@ Cohesion: 0.11
 Nodes (33): appendPortfolioAudit(), emptyPortfolioAuditLog(), PortfolioAuditEntry, PortfolioAuditLog, PortfolioAuditStatus, isPortfolioAgentKilled(), OFF, ON (+25 more)
 
 ### Community 281 - "host-rights.ts"
-Cohesion: 0.26
+Cohesion: 0.29
 Nodes (13): BaseHostRights, createHostRightsSource(), hostRightsBoardCard(), hostRightsExportHeader(), hostRightsExportLine(), hostRightsExportText(), HostRightsSource, hostRightsStatusLine() (+5 more)
 
 ### Community 282 - "svc-p2p/src/db/schema.ts"
@@ -2041,20 +2038,20 @@ Cohesion: 0.11
 Nodes (17): disputeResolutionEnum, disputeStatusEnum, instrumentAccessLog, offers, offerSideEnum, offerStatusEnum, p2p, p2pDisputes (+9 more)
 
 ### Community 283 - "audit-and-escalation.test.ts"
-Cohesion: 0.11
-Nodes (14): AccountStateSource, createAccountStateClient(), DarkAccountState, FixedAccountState, frozen, openTicket(), describeSupportDeskPolicy(), SupportDeskPolicy (+6 more)
+Cohesion: 0.12
+Nodes (11): AccountStateSource, createAccountStateClient(), DarkAccountState, FixedAccountState, frozen, openTicket(), composePretendsGroundingLoopServing(), IDENTITY_GROUNDING_UNWIRED (+3 more)
 
 ### Community 284 - "oms-execute.ts"
-Cohesion: 0.08
-Nodes (30): completeTerms(), edgeContext, scanBody, signed(), executeOmsRoute(), OmsExecuteInput, OmsExecuteOk, OmsExecuteRefuse (+22 more)
+Cohesion: 0.09
+Nodes (27): completeTerms(), executeOmsRoute(), OmsExecuteInput, OmsExecuteOk, OmsExecuteRefuse, OmsExecuteResult, OmsExecuteVenue, OmsSubmitFn (+19 more)
 
 ### Community 285 - "dependencies"
 Cohesion: 0.12
-Nodes (17): @fastify/swagger, dependencies, drizzle-orm, fastify, @fastify/swagger, @intafaced/config, @intafaced/contracts, @intafaced/events (+9 more)
+Nodes (17): dependencies, drizzle-orm, fastify, @intafaced/config, @intafaced/contracts, @intafaced/db, @intafaced/events, postgres (+9 more)
 
 ### Community 286 - "dependencies"
 Cohesion: 0.12
-Nodes (17): dependencies, drizzle-orm, @intafaced/auth, @intafaced/db, @intafaced/events, @intafaced/telemetry, @opentelemetry/api, postgres (+9 more)
+Nodes (17): dependencies, @intafaced/auth, @intafaced/config, @intafaced/db, @intafaced/events, @intafaced/telemetry, @opentelemetry/api, postgres (+9 more)
 
 ### Community 287 - "devDependencies"
 Cohesion: 0.12
@@ -2074,15 +2071,15 @@ Nodes (17): dependencies, drizzle-orm, @intafaced/config, @intafaced/events, @in
 
 ### Community 291 - "dependencies"
 Cohesion: 0.12
-Nodes (17): dependencies, drizzle-orm, @intafaced/auth, @intafaced/db, @intafaced/events, @intafaced/telemetry, @opentelemetry/api, postgres (+9 more)
+Nodes (17): dependencies, fastify, @intafaced/auth, @intafaced/db, @intafaced/events, @intafaced/telemetry, @opentelemetry/api, postgres (+9 more)
 
 ### Community 292 - "svc-academy/src/errors.ts"
 Cohesion: 0.10
-Nodes (32): ACADEMY_ERROR_CODES, AcademyError, academyErrorCatalogBoardCard(), academyErrorCatalogExportHeader(), academyErrorCatalogExportLines(), academyErrorCatalogExportText(), academyErrorCatalogStatusLine(), academyErrorCatalogStatusLineMatches() (+24 more)
+Nodes (31): ACADEMY_ERROR_CODES, academyErrorCatalogBoardCard(), academyErrorCatalogExportHeader(), academyErrorCatalogExportLines(), academyErrorCatalogExportText(), academyErrorCatalogStatusLine(), academyErrorCatalogStatusLineMatches(), AcademyErrorCode (+23 more)
 
 ### Community 293 - "dependencies"
 Cohesion: 0.12
-Nodes (17): dependencies, @intafaced/auth, @intafaced/events, @intafaced/i18n, @intafaced/ledger-client, @intafaced/telemetry, @opentelemetry/api, @trpc/server (+9 more)
+Nodes (17): dependencies, drizzle-orm, @intafaced/auth, @intafaced/events, @intafaced/i18n, @intafaced/telemetry, @opentelemetry/api, @trpc/server (+9 more)
 
 ### Community 294 - "auto-invest-service.ts"
 Cohesion: 0.06
@@ -2090,7 +2087,7 @@ Nodes (27): drizzle, here, migrations, ROOT, advanceCadence(), AutoInvestKind, A
 
 ### Community 295 - "venue-account-adapters.ts"
 Cohesion: 0.08
-Nodes (21): accountAdapterBalances(), OmsBalancesFn, now, accountAdapterPositions(), OmsPositionsFn, now, accountAdapterRails(), OmsRailsFn (+13 more)
+Nodes (22): accountAdapterBalances(), OmsBalancesFn, now, accountAdapterPositions(), OmsPositionsFn, now, accountAdapterRails(), OmsRailsFn (+14 more)
 
 ### Community 296 - "registerAdminRoutes"
 Cohesion: 0.10
@@ -2110,15 +2107,15 @@ Nodes (13): LEDGER_CONNECT_TIMEOUT_S, LEDGER_STATEMENT_TIMEOUT_MS, LedgerConnect
 
 ### Community 300 - "dependencies"
 Cohesion: 0.12
-Nodes (17): dependencies, @intafaced/auth, @intafaced/events, @intafaced/i18n, @intafaced/ledger-client, @intafaced/telemetry, @opentelemetry/api, @trpc/server (+9 more)
+Nodes (17): dependencies, drizzle-orm, @intafaced/auth, @intafaced/events, @intafaced/i18n, @intafaced/telemetry, @opentelemetry/api, @trpc/server (+9 more)
 
 ### Community 301 - "dependencies"
 Cohesion: 0.12
-Nodes (17): dependencies, drizzle-orm, @intafaced/auth, @intafaced/events, @intafaced/i18n, @intafaced/telemetry, @opentelemetry/api, @trpc/server (+9 more)
+Nodes (17): dependencies, @intafaced/auth, @intafaced/events, @intafaced/i18n, @intafaced/ledger-client, @intafaced/telemetry, @opentelemetry/api, @trpc/server (+9 more)
 
 ### Community 302 - "dependencies"
 Cohesion: 0.12
-Nodes (17): dependencies, fastify, @intafaced/auth, @intafaced/config, @intafaced/events, @intafaced/ledger-client, @intafaced/venue-contracts, @opentelemetry/api (+9 more)
+Nodes (17): dependencies, fastify, @intafaced/auth, @intafaced/events, @intafaced/ledger-client, @intafaced/telemetry, @intafaced/venue-contracts, @opentelemetry/api (+9 more)
 
 ### Community 304 - "network-signal.ts"
 Cohesion: 0.24
@@ -2140,9 +2137,9 @@ Nodes (15): compilerOptions, lib, outDir, rootDir, types, exclude, extends, incl
 Cohesion: 0.20
 Nodes (12): composeEnvironmentFor(), envExample, envTsTradeKeys(), interpolate(), isRequiredChain(), joinChains(), read(), requiredEnvVars() (+4 more)
 
-### Community 309 - "season-calendar.ts"
-Cohesion: 0.12
-Nodes (20): ScorePatch, RankedStanding, SeasonRecord, SeasonStatus, StandingRecord, TournamentError, assertNoPrizeAttachment(), PrizeDecision (+12 more)
+### Community 309 - "freezeSeasonWithSnapshot"
+Cohesion: 0.67
+Nodes (4): assertMayFreeze(), freezeSeasonWithSnapshot(), snapshotStandingsAtFreeze(), transitionSeason()
 
 ### Community 310 - "svc-agents/tsconfig.json"
 Cohesion: 0.12
@@ -2253,12 +2250,12 @@ Cohesion: 0.13
 Nodes (15): devDependencies, drizzle-kit, rimraf, solc, tsx, @types/node, typescript, vitest (+7 more)
 
 ### Community 339 - "svc-support/src/router.mount.test.ts"
-Cohesion: 0.12
-Nodes (14): mapError(), anonymous(), CITATION, edgeContext, signed(), assertScoreNotPromise(), looksLikeSlaPromise(), PROMISE_KEYS (+6 more)
+Cohesion: 0.17
+Nodes (9): mapError(), anonymous(), CITATION, edgeContext, signed(), SupportError, CATALOG_ALIAS, translator (+1 more)
 
 ### Community 340 - "spot/affiliate-accrue.ts"
-Cohesion: 0.14
-Nodes (17): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, AffiliateFeeLeg, affiliateLegsAfterFill(), AffiliateLegsAfterFillInput, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue (+9 more)
+Cohesion: 0.16
+Nodes (14): AFFILIATE_PRODUCER_PATH, AffiliateAccruePort, AffiliateFeeLeg, AffiliateLegsAfterFillInput, createAffiliateAccrueClient(), fireAffiliateAccrue(), NoopAffiliateAccrue, baseLegs (+6 more)
 
 ### Community 341 - "bus-lifecycle.ts"
 Cohesion: 0.20
@@ -2304,13 +2301,13 @@ Nodes (9): parseUnifiedSymbol(), roundToLot(), roundToTick(), unifiedSymbol(), V
 Cohesion: 0.07
 Nodes (27): dependencies, @intafaced/ledger-client, zod, devDependencies, rimraf, @types/node, typescript, vitest (+19 more)
 
-### Community 352 - "passkey-owner.onchain.test.ts"
-Cohesion: 0.29
-Nodes (10): rpcUrl, base64UrlEncode32(), buildAuthData(), buildGetClientDataJSON(), encodePasskeySignature(), lowS(), makeP256KeyPair(), P256_HALF_N (+2 more)
+### Community 352 - "operator-queue.ts"
+Cohesion: 0.14
+Nodes (17): describeSupportDeskPolicy(), SupportDeskPolicy, assignNext(), buildOperatorQueue(), CATEGORY_WEIGHT, ClaimOk, ClaimRefuse, claimTicket() (+9 more)
 
-### Community 353 - "edit-policy.ts"
-Cohesion: 0.17
-Nodes (22): toSession(), conflictRefuse(), decideHostSceneWrite(), hasExpectedFingerprint(), HOST_SCENE_REFUSE, HostSceneWriteConflictErr, HostSceneWriteErr, HostSceneWriteInput (+14 more)
+### Community 353 - "copy-intel/mount-vs-tracker.ts"
+Cohesion: 0.20
+Nodes (21): COPY_INTEL_BLOCKER_TRACKER_ID, COPY_INTEL_DECLARED_TASK, COPY_INTEL_MOUNTED_DOORS, COPY_INTEL_TRACKER_ID, copyIntelDeclaredTaskMatchesGuardrail(), copyIntelDoorsInRouterSource(), CopyIntelMountedDoor, copyIntelMountMatrixComplete() (+13 more)
 
 ### Community 354 - "router-mount.test.ts"
 Cohesion: 0.16
@@ -2320,9 +2317,9 @@ Nodes (6): anonymous(), BlockingLedger, edgeContext, publishedFee, publishedJur,
 Cohesion: 0.08
 Nodes (8): DepthPoller, DepthSource, FakeSource, FakeSource, FakeSource, RouteOptions, StubSource, StubSource
 
-### Community 356 - "modules.ts"
-Cohesion: 0.18
-Nodes (17): isDeclaredModuleId(), moduleIdCatalogBoardCard(), moduleIdCatalogExportHeader(), moduleIdCatalogExportLines(), moduleIdCatalogExportText(), moduleIdCatalogStatusLine(), moduleIdCatalogStatusLineConsistent(), moduleIdCatalogStatusLineMatches() (+9 more)
+### Community 356 - "module-id-honesty.ts"
+Cohesion: 0.37
+Nodes (11): isDeclaredModuleId(), moduleIdCatalogBoardCard(), moduleIdCatalogExportHeader(), moduleIdCatalogExportLines(), moduleIdCatalogExportText(), moduleIdCatalogStatusLine(), moduleIdCatalogStatusLineConsistent(), moduleIdCatalogStatusLineMatches() (+3 more)
 
 ### Community 358 - "safe-regex/src/index.ts"
 Cohesion: 0.24
@@ -2469,8 +2466,8 @@ Cohesion: 0.44
 Nodes (10): parseRenderedCopyStatusLine(), renderedBodyLenAtLeast(), renderedCopyBoardCard(), RenderedCopyBoardInput, renderedCopyExportHeader(), renderedCopyExportLine(), renderedCopyExportText(), renderedCopyStatusLine() (+2 more)
 
 ### Community 395 - "svc-p2p/src/router.mount.test.ts"
-Cohesion: 0.12
-Nodes (23): applyOutcome(), avgReleaseSecs(), BADGE_RULES, BadgeRule, badgesFor(), completionRate(), DEFAULT_XP_POLICY, EMPTY_COUNTERS (+15 more)
+Cohesion: 0.11
+Nodes (24): toPgTextArray(), applyOutcome(), avgReleaseSecs(), BADGE_RULES, BadgeRule, badgesFor(), completionRate(), DEFAULT_XP_POLICY (+16 more)
 
 ### Community 396 - "connect-data-lake/package.json"
 Cohesion: 0.08
@@ -2522,11 +2519,11 @@ Nodes (9): dependencies, zod, zod, main, name, private, type, types (+1 more)
 
 ### Community 409 - "exports"
 Cohesion: 0.20
-Nodes (10): default, types, exports, ./compliance-queue, ./freeze-authority, ./money-kill-surface, default, types (+2 more)
+Nodes (10): default, types, exports, ./compliance-queue, ./freeze-authority, ./marketing-language, default, types (+2 more)
 
-### Community 410 - "compliance-queue.ts"
-Cohesion: 0.29
-Nodes (8): applyComplianceQueueDisposition(), ComplianceQueueDispositionRequest, ComplianceQueueDispositionResult, ComplianceQueueItem, ComplianceQueueKind, complianceQueueSnapshot, filterComplianceQueue(), ITEM
+### Community 410 - "config/src/index.ts"
+Cohesion: 0.13
+Nodes (12): applyComplianceQueueDisposition(), ComplianceQueueDispositionRequest, ComplianceQueueDispositionResult, ComplianceQueueItem, ComplianceQueueKind, complianceQueueSnapshot, filterComplianceQueue(), ITEM (+4 more)
 
 ### Community 411 - "config/tsconfig.test.json"
 Cohesion: 0.20
@@ -2600,9 +2597,9 @@ Nodes (5): VenueCapabilityError, VenueCredentialScopeError, VenueCredentialsMiss
 Cohesion: 0.20
 Nodes (9): compilerOptions, noEmit, exclude, extends, include, dist, node_modules, src/**/* (+1 more)
 
-### Community 431 - "i18n-strategy.ts"
-Cohesion: 0.36
-Nodes (8): CURRICULUM_DEFAULT_LOCALE, CURRICULUM_LOCALES_WITH_BODIES, curriculumBodyForLocale(), curriculumI18nStrategyHonest(), curriculumI18nStrategyLine(), CurriculumLocale, CurriculumLocaleResolution, resolveCurriculumLocale()
+### Community 431 - "edit-policy.ts"
+Cohesion: 0.17
+Nodes (22): toSession(), conflictRefuse(), decideHostSceneWrite(), hasExpectedFingerprint(), HOST_SCENE_REFUSE, HostSceneWriteConflictErr, HostSceneWriteErr, HostSceneWriteInput (+14 more)
 
 ### Community 432 - "svc-academy/tsconfig.test.json"
 Cohesion: 0.20
@@ -3032,9 +3029,9 @@ Nodes (3): drizzle, here, migrations
 Cohesion: 0.67
 Nodes (3): default, types, ./env
 
-### Community 561 - "./fiat"
-Cohesion: 0.67
-Nodes (3): ./fiat, default, types
+### Community 561 - "merchant-payout-destination.ts"
+Cohesion: 0.13
+Nodes (17): assertOnlyPayoutDestinations(), assertPersistableDestination(), memoryPayoutDestinations(), MerchantPayoutDestinations, MerchantPayoutDestinationStore, PAY_PAYOUT_DESTINATION_MISSING, PayoutDestination, PayoutDestinationMissingError (+9 more)
 
 ### Community 562 - "./flags"
 Cohesion: 0.67
@@ -3044,13 +3041,13 @@ Nodes (3): ./flags, default, types
 Cohesion: 0.67
 Nodes (3): ./jurisdiction, default, types
 
-### Community 564 - "./marketing-language"
-Cohesion: 0.67
-Nodes (3): ./marketing-language, default, types
-
-### Community 565 - "svc-indexer/src/testing/conformance.ts"
+### Community 564 - "svc-indexer/src/testing/conformance.ts"
 Cohesion: 0.15
 Nodes (15): ReorgTooDeepError, downFiles, drizzleDir, here, migrationFiles, migrations, block(), CHAIN_ID (+7 more)
+
+### Community 565 - "cross-check.ts"
+Cohesion: 0.21
+Nodes (12): crossCheckMids(), CrossCheckOptions, CrossCheckReport, CrossCheckVerdict, DEFAULTS, deviationInBps(), median(), mid() (+4 more)
 
 ### Community 566 - "./network-signal"
 Cohesion: 0.67
@@ -3061,12 +3058,12 @@ Cohesion: 0.67
 Nodes (3): ./screening, default, types
 
 ### Community 584 - "room-access.ts"
-Cohesion: 0.20
+Cohesion: 0.17
 Nodes (18): decideSeat(), inviteIsLive(), isRoomAccessKind(), needsStakeCheck(), parseSeatDecisionStatusLine(), ROOM_ACCESS_KINDS, roomAccessKindBoardCard(), RoomTerms (+10 more)
 
 ### Community 586 - "svc-execution/src/router.ts"
-Cohesion: 0.10
-Nodes (20): decimalString, describeOutput, ExecutionBorrowMap, ExecutionFundingMap, ExecutionLatencyMap, ExecutionMarketsMap, ExecutionSnapshotMap, latencyGradeInput (+12 more)
+Cohesion: 0.07
+Nodes (28): anonymous(), edgeContext, describeExecutionSpine(), EXECUTION_SPINE_DOORS, ExecutionSpineDoor, ExecutionSpineSummary, here, routerSource (+20 more)
 
 ### Community 588 - "options-listing.ts"
 Cohesion: 0.18
@@ -3076,9 +3073,13 @@ Nodes (18): assertOptionsSettlementAssetLawStamped(), OptionsContractTerms, reso
 Cohesion: 0.24
 Nodes (16): ACADEMY_AMBASSADOR_SHARE_BPS_ENV, AMBASSADOR_PAY_EXPORT_NAMES, AmbassadorPayInput, AmbassadorPayKind, AmbassadorPayRefuse, AmbassadorPayRefuseCode, decideAmbassadorPay(), EnvBag (+8 more)
 
-### Community 590 - "svc-dex/src/router.ts"
-Cohesion: 0.15
-Nodes (14): createDexRouter(), decimal, DexRouter, effectivePrice(), route, RouteLeg, RouteRequest, VenueQuote (+6 more)
+### Community 590 - "vr-export.ts"
+Cohesion: 0.16
+Nodes (17): SCENE_MAX_BYTES, SCENE_VERSION, SceneV1, assertExportVrScene(), DEFAULT_STAGE, exportVrScene(), ExportVrSceneErr, ExportVrSceneOk (+9 more)
+
+### Community 591 - "scene-state.ts"
+Cohesion: 0.19
+Nodes (15): isBlankStored(), isDurableSceneEmpty(), loadSceneState(), okFromScene(), persistSceneState(), RequirePopulatedOk, RequirePopulatedRefuse, RequirePopulatedResult (+7 more)
 
 ### Community 592 - "earn-unset-rate-pin.test.ts"
 Cohesion: 0.40
@@ -3088,6 +3089,10 @@ Nodes (4): here, interestSrc, listPools, serviceSrc
 Cohesion: 0.40
 Nodes (4): depth, here, mm, venue
 
+### Community 598 - "svc-p2p/src/promise-falsify-public-doors.test.ts"
+Cohesion: 0.20
+Nodes (15): createSellOfferViaDoor(), edgeContext, fund(), get(), here, migrations, mountMoney(), mountStub() (+7 more)
+
 ### Community 600 - "oms-market-making.test.ts"
 Cohesion: 0.14
 Nodes (16): OmsMmBookDepthInput, OmsMmHedgeInput, OmsMmHedgeVenueInput, OmsMmKillInput, OmsMmQuoteInput, parseKill(), planOmsExternalMmHedge(), quoteOmsExternalMm() (+8 more)
@@ -3096,9 +3101,9 @@ Nodes (16): OmsMmBookDepthInput, OmsMmHedgeInput, OmsMmHedgeVenueInput, OmsMmKil
 Cohesion: 0.40
 Nodes (4): harness, here, jobsHost, production
 
-### Community 604 - "review-queue.ts"
-Cohesion: 0.13
-Nodes (9): FraudDecision, defaultFraudReviewQueue, EnqueueFraudReviewInput, FraudReviewCase, FraudReviewError, FraudReviewQueue, FraudReviewStatus, MemoryFraudReviewQueue (+1 more)
+### Community 604 - "svc-bank/src/router.mount.test.ts"
+Cohesion: 0.23
+Nodes (9): AUTO_INVEST_DISABLED, AUTO_INVEST_KINDS, AUTO_INVEST_RATE_UNSET, AutoInvestPolicySummary, describeAutoInvestPolicy(), anonymous(), edgeContext, forged() (+1 more)
 
 ### Community 611 - "svc-support/src/mount-vs-tracker.ts"
 Cohesion: 0.20
@@ -3116,9 +3121,9 @@ Nodes (12): firstDataRow(), mapOkxSpotOrder(), OKX_ORDER_STATE, OkxSpotTrade, Ok
 Cohesion: 0.18
 Nodes (16): RFC-4122, deterministicUuid(), digest(), pick(), windowAt(), canonical(), CREW_ROLES, CURRICULUM_PATHS (+8 more)
 
-### Community 618 - "navigator/grounded.ts"
-Cohesion: 0.23
-Nodes (14): GroundedOk, GroundedRefuse, GroundedResult, isNavigatorGroundedOk(), isTradePlaneLive(), navigatorGroundedBoardCard(), navigatorGroundedExportHeader(), navigatorGroundedExportLine() (+6 more)
+### Community 618 - "scanner/mount-vs-tracker.ts"
+Cohesion: 0.42
+Nodes (9): SCANNER_HONEST_GAPS, SCANNER_MOUNTED_DOORS, SCANNER_TRACKER_ID, scannerDoorsInRouterSource(), ScannerMountedDoor, scannerMountMatrixComplete(), scannerMountVsTrackerBoardCard(), scannerProductionLawRefuseClosed() (+1 more)
 
 ### Community 619 - "quant-honesty-door.ts"
 Cohesion: 0.24
@@ -3127,6 +3132,10 @@ Nodes (14): asRecord(), assessBacktestFromBody(), assessComparisonFromBody(), as
 ### Community 620 - "oms-open-orders.test.ts"
 Cohesion: 0.16
 Nodes (12): listErrorMessage(), listOmsOpenOrders(), OmsOpenOrdersFn, OmsOpenOrdersInput, OmsOpenOrdersOk, OmsOpenOrdersRefuse, OmsOpenOrdersResult, OmsOpenOrdersStatus (+4 more)
+
+### Community 621 - "svc-indexer/src/index.ts"
+Cohesion: 0.15
+Nodes (10): Env, schema, app, AppRouter, db, edgeContext, indexer, sovereignty (+2 more)
 
 ### Community 622 - "futures-no-invented-funding-ceiling.test.ts"
 Cohesion: 0.40
@@ -3140,9 +3149,9 @@ Nodes (3): cap, here, src
 Cohesion: 0.14
 Nodes (7): AttributedPublicDoorLedger, servicePost(), TOKENS, wirePost(), frozenMessage(), LedgerStatusPort, registerLedgerStatusHttp()
 
-### Community 631 - "planBoardCard"
-Cohesion: 0.12
-Nodes (18): parsePlanStatusLine(), planActionsPresent(), planActionsPresentJoined(), planBoardCard(), planBoardHasSends(), planBoardIsEmpty(), planDecisionCount(), planDecisionCountLabel() (+10 more)
+### Community 631 - "passkey-owner.onchain.test.ts"
+Cohesion: 0.29
+Nodes (10): rpcUrl, base64UrlEncode32(), buildAuthData(), buildGetClientDataJSON(), encodePasskeySignature(), lowS(), makeP256KeyPair(), P256_HALF_N (+2 more)
 
 ### Community 642 - "latency-mount-vs-tracker.ts"
 Cohesion: 0.25
@@ -3152,17 +3161,41 @@ Nodes (13): describeLatencyGradingPolicy(), LATENCY_GRADING_MEASUREMENT, Latency
 Cohesion: 0.28
 Nodes (15): isEmptyDefaultReconnect(), isReconnectOk(), isReconnectRefused(), isServerSourced(), parseReconnectStatusLine(), reconnectBoardCard(), reconnectExportHeader(), reconnectExportLine() (+7 more)
 
-### Community 649 - "scene-state.ts"
-Cohesion: 0.19
-Nodes (15): isBlankStored(), isDurableSceneEmpty(), loadSceneState(), okFromScene(), persistSceneState(), RequirePopulatedOk, RequirePopulatedRefuse, RequirePopulatedResult (+7 more)
+### Community 648 - "otc/mount-vs-tracker.ts"
+Cohesion: 0.31
+Nodes (11): OTC_DONE_BAR_TEST_FILES, OTC_HONEST_GAPS, OTC_MOUNTED_DOORS, OTC_TRACKER_ID, otcDoneBarTestsPresent(), otcDoorsInRouterSource(), OtcMountedDoor, otcMountMatrixComplete() (+3 more)
+
+### Community 649 - "planSkipCount"
+Cohesion: 0.20
+Nodes (10): channelsSkippedMuted(), countSkippedMuted(), planHasNoMutes(), planSkipChannelsJoined(), planSkipChannelsSorted(), planSkipCount(), planSkipCountAtMost(), planSkipCountLabel() (+2 more)
 
 ### Community 650 - "oms-balances.test.ts"
 Cohesion: 0.15
 Nodes (11): observeErrorMessage(), observeOmsBalances(), OmsBalancesFn, OmsBalancesInput, OmsBalancesOk, OmsBalancesRefuse, OmsBalancesResult, edgeContext (+3 more)
 
+### Community 654 - "close-planner.ts"
+Cohesion: 0.28
+Nodes (5): ClosePlan, ClosePlanInput, ClosePosition, planClose(), summarizeClose()
+
 ### Community 686 - "oms-borrow.test.ts"
 Cohesion: 0.15
 Nodes (11): observeErrorMessage(), observeOmsBorrow(), OmsBorrowFn, OmsBorrowInput, OmsBorrowOk, OmsBorrowRefuse, OmsBorrowResult, edgeContext (+3 more)
+
+### Community 687 - "planActionHistogram"
+Cohesion: 0.25
+Nodes (8): planActionCountsConsistent(), planActionHistogram(), planActionSnapshot(), planHistogramOnlyHolds(), planHistogramOnlySends(), planHistogramOnlySkips(), planNonZeroActions(), plansSameActionHistogram()
+
+### Community 688 - "FakeGateway"
+Cohesion: 0.33
+Nodes (3): routerDeps(), FakeGateway, gateway()
+
+### Community 691 - "./fiat"
+Cohesion: 0.67
+Nodes (3): ./fiat, default, types
+
+### Community 693 - "./money-kill-surface"
+Cohesion: 0.67
+Nodes (3): ./money-kill-surface, default, types
 
 ### Community 700 - "oms-cancel.test.ts"
 Cohesion: 0.15
@@ -3188,13 +3221,9 @@ Nodes (11): observeErrorMessage(), observeOmsRails(), OmsRailsFn, OmsRailsInput,
 Cohesion: 0.15
 Nodes (11): observeErrorMessage(), observeOmsSnapshot(), OmsSnapshotFn, OmsSnapshotInput, OmsSnapshotOk, OmsSnapshotRefuse, OmsSnapshotResult, edgeContext (+3 more)
 
-### Community 709 - "createExecutionRouter"
-Cohesion: 0.17
-Nodes (11): describeExecutionSpine(), EXECUTION_SPINE_DOORS, ExecutionSpineDoor, ExecutionSpineSummary, here, routerSource, createExecutionRouter(), isRefusal() (+3 more)
-
-### Community 710 - "oms-latency.test.ts"
-Cohesion: 0.17
-Nodes (10): observeErrorMessage(), observeOmsLatency(), OmsLatencyFn, OmsLatencyInput, OmsLatencyOk, OmsLatencyRefuse, OmsLatencyResult, edgeContext (+2 more)
+### Community 710 - "createExecutionRouter"
+Cohesion: 0.12
+Nodes (15): observeErrorMessage(), observeOmsLatency(), OmsLatencyFn, OmsLatencyInput, OmsLatencyOk, OmsLatencyRefuse, OmsLatencyResult, edgeContext (+7 more)
 
 ### Community 711 - "oms-markets.test.ts"
 Cohesion: 0.17
@@ -3216,33 +3245,17 @@ Nodes (9): BybitSpotTrade, BybitSpotTradeOptions, encodeQuery(), mapBybitSpotOrd
 Cohesion: 0.18
 Nodes (10): asRecord(), ENTRYPOINT, envelope(), handleSupportKb(), HERE, listenStub(), procedureName(), PublicKbArticle (+2 more)
 
-### Community 716 - "algo-policy.ts"
-Cohesion: 0.25
-Nodes (11): AlgoCapabilityNote, presentAlgoCapabilityNote(), ALGO_CANCEL_INCOMPLETE_CODE, ALGO_CANCEL_INCOMPLETE_HALT, ALGO_IMMATURE_KINDS, ALGO_PRODUCT_KIND, ALGO_VOLUME_IMMATURE_CODE, AlgoPolicySummary (+3 more)
-
-### Community 717 - "support-agent/action-audit.ts"
-Cohesion: 0.25
-Nodes (12): appendSupportAudit(), auditSupportDataTool(), emptySupportAuditLog(), supportAuditBoardCard(), SupportAuditEntry, SupportAuditLog, SupportAuditStatus, supportAuditStatusLine() (+4 more)
-
-### Community 718 - "svc-bank/src/router.mount.test.ts"
-Cohesion: 0.23
-Nodes (9): AUTO_INVEST_DISABLED, AUTO_INVEST_KINDS, AUTO_INVEST_RATE_UNSET, AutoInvestPolicySummary, describeAutoInvestPolicy(), anonymous(), edgeContext, forged() (+1 more)
-
 ### Community 719 - "commission-tier-honesty.test.ts"
 Cohesion: 0.34
 Nodes (12): defaultTierCatalogBoardCard(), defaultTierCatalogExportHeader(), defaultTierCatalogExportLines(), defaultTierCatalogExportText(), defaultTierCatalogStatusLine(), defaultTierCatalogStatusLineConsistent(), defaultTierCatalogStatusLineMatches(), defaultTierRatesAreDecimalStrings() (+4 more)
-
-### Community 720 - "svc-indexer/src/index.ts"
-Cohesion: 0.15
-Nodes (10): Env, schema, app, AppRouter, db, edgeContext, indexer, sovereignty (+2 more)
 
 ### Community 721 - "svc-matching/src/promise-falsify-public-doors.test.ts"
 Cohesion: 0.23
 Nodes (10): buildEngine(), cancel(), drive(), fixedClock(), ghostLimitBody(), limitBody(), mount(), orders() (+2 more)
 
-### Community 722 - "src/pricing.ts"
-Cohesion: 0.26
-Nodes (11): assertWithinBounds(), effectivePrice(), EffectivePriceInput, minorUnitQuantum(), OfferBounds, partiesFor(), PricingError, quantiseFiat() (+3 more)
+### Community 722 - "./modules"
+Cohesion: 0.67
+Nodes (3): ./modules, default, types
 
 ### Community 723 - "plugins/mount-vs-tracker.ts"
 Cohesion: 0.26
@@ -3256,17 +3269,13 @@ Nodes (10): previewStealthPresentation(), presentationAddress(), STEALTH_SCHEME_
 Cohesion: 0.33
 Nodes (10): CustodialHolding, custodialHoldingSchema, INDEXER_ABSENT, IndexerAbsent, indexerAbsentSchema, PORTFOLIO_INDEXER_UNWIRED, PortfolioView, portfolioViewFromLedgerBalances() (+2 more)
 
-### Community 726 - "MemoryCertStore"
-Cohesion: 0.26
-Nodes (3): grantOf(), MemoryCertStore, grantOf()
-
 ### Community 727 - "tournaments/mount-vs-tracker.ts"
 Cohesion: 0.29
 Nodes (11): TOURNAMENT_DONE_BAR_TEST_FILES, TOURNAMENT_HONEST_GAPS, TOURNAMENT_LIFECYCLE_SYMBOLS, TOURNAMENT_MOUNTED_DOORS, tournamentDoneBarTestsPresent(), tournamentDoorsInRouterSource(), tournamentLifecycleOnRouter(), tournamentPolicyHonestInSource() (+3 more)
 
-### Community 728 - "dispute-case.ts"
-Cohesion: 0.26
-Nodes (9): CHARGEBACK_LEDGER_REFUSE_CODE, CHARGEBACK_LEDGER_SOCKET_ID, ChargebackLedgerRefuse, refuseChargebackLedgerPost(), defaultDisputeCaseStore, DisputeCase, DisputeCaseStatus, OpenDisputeCaseInput (+1 more)
+### Community 728 - "fraud/index.ts"
+Cohesion: 0.04
+Nodes (53): base, here, scoringOff, CHARGEBACK_LEDGER_REFUSE_CODE, CHARGEBACK_LEDGER_SOCKET_ID, ChargebackLedgerRefuse, refuseChargebackLedgerPost(), defaultDisputeCaseStore (+45 more)
 
 ### Community 729 - "svc-pay/src/gateway-mount-vs-tracker.ts"
 Cohesion: 0.32
@@ -3304,9 +3313,9 @@ Nodes (10): AUTO_INVEST_DONE_BAR_TEST_FILES, AUTO_INVEST_HONEST_GAPS, AUTO_INVES
 Cohesion: 0.35
 Nodes (10): AFFILIATES_BLOCKER_TRACKER_ID, AFFILIATES_HONEST_GAPS, AFFILIATES_MOUNTED_DOORS, AFFILIATES_TRACKER_ID, affiliatesDoorsInRouterSource(), AffiliatesMountedDoor, affiliatesMountMatrixComplete(), affiliatesMountVsTrackerBoardCard() (+2 more)
 
-### Community 738 - "MemoryDisputeCaseStore"
-Cohesion: 0.23
-Nodes (3): DisputeCaseError, MemoryDisputeCaseStore, here
+### Community 738 - "decideChannelDelivery"
+Cohesion: 0.67
+Nodes (3): criticalAlwaysImmediate(), decideChannelDelivery(), planFanoutDelivery()
 
 ### Community 740 - "register-card-sandbox-compose-pin.test.ts"
 Cohesion: 0.17
@@ -3380,10 +3389,6 @@ Nodes (9): agentsRiskComplianceMountVsTrackerBoardCard(), agentsRiskComplianceTr
 Cohesion: 0.18
 Nodes (11): devDependencies, rimraf, tsx, @types/node, typescript, vitest, rimraf, tsx (+3 more)
 
-### Community 758 - "oms-trade-submit.ts"
-Cohesion: 0.29
-Nodes (8): hasFill(), mapStatus(), OmsSubmitFn, adapter(), now, order(), tradeAdapterSubmit(), venueOrderToExecution()
-
 ### Community 759 - "devDependencies"
 Cohesion: 0.18
 Nodes (11): devDependencies, rimraf, tsx, @types/node, typescript, vitest, rimraf, tsx (+3 more)
@@ -3440,10 +3445,6 @@ Nodes (9): scripts, build, clean, db:migrate, dev, start, test, test:watch (+1 m
 Cohesion: 0.22
 Nodes (9): scripts, build, clean, db:migrate, dev, start, test, test:watch (+1 more)
 
-### Community 773 - "venue-latency-health.test.ts"
-Cohesion: 0.33
-Nodes (7): presentVenueLatencyHealth(), gradedA(), letterWithoutP95(), ungraded(), venue, VenueLatencyHealth, zeroWeight()
-
 ### Community 774 - "capture-lake-policy.ts"
 Cohesion: 0.43
 Nodes (6): allowsPersistenceClaim(), allowsQuietMarketBook(), CAPTURE_LAKE_RECORD_KINDS, CaptureLakePolicySummary, describeCaptureLakePolicy(), wouldCollapseHoleToEmptyBook()
@@ -3452,9 +3453,9 @@ Nodes (6): allowsPersistenceClaim(), allowsQuietMarketBook(), CAPTURE_LAKE_RECOR
 Cohesion: 0.25
 Nodes (8): scripts, build, clean, dev, start, test, test:watch, typecheck
 
-### Community 777 - "oms-arbitrage.ts"
-Cohesion: 0.32
-Nodes (7): OmsArbOpportunityWire, OmsArbQuoteInput, OmsArbScanInput, OmsArbScanResultWire, scanOmsExternalArb(), wireOpportunity(), wireScanResult()
+### Community 777 - "oms-arbitrage.test.ts"
+Cohesion: 0.21
+Nodes (10): OmsArbOpportunityWire, OmsArbQuoteInput, OmsArbScanInput, OmsArbScanResultWire, scanOmsExternalArb(), edgeContext, scanBody, signed() (+2 more)
 
 ### Community 779 - "moneyMetricCount"
 Cohesion: 0.33
@@ -3496,37 +3497,25 @@ Nodes (3): AUTH_ENV, COMPOSE, ENV_TS
 Cohesion: 0.40
 Nodes (3): docker, forge, root
 
-### Community 807 - "market"
-Cohesion: 0.50
-Nodes (3): market(), deps(), deps()
-
-### Community 823 - "fraud/evaluate.test.ts"
-Cohesion: 0.50
-Nodes (3): base, here, scoringOff
-
-### Community 828 - "./modules"
-Cohesion: 0.67
-Nodes (3): ./modules, default, types
-
 ## Knowledge Gaps
-- **5469 isolated node(s):** `name`, `version`, `private`, `type`, `main` (+5464 more)
+- **5470 isolated node(s):** `name`, `version`, `private`, `type`, `main` (+5465 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **233 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **232 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ledger()` connect `futures-jobs.ts` to `loan-service.ts`, `merchant-webhooks.ts`, `matching-client.ts`, `src/client.ts`, `profit-source.ts`, `svc-p2p/src/promise-falsify-public-doors.test.ts`?**
-  _High betweenness centrality (0.072) - this node is a cross-community bridge._
-- **Why does `deps()` connect `market` to `mark-from-venue.ts`?**
+- **Why does `ledger()` connect `position-service.test.ts` to `loan-service.ts`, `futures-jobs.ts`, `svc-p2p/src/promise-falsify-public-doors.test.ts`, `orderable-path.test.ts`, `src/client.ts`, `merchant-webhooks.ts`?**
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
+- **Why does `deps()` connect `svc-trade/src/public-rest.ts` to `private-rest.ts`?**
   _High betweenness centrality (0.033) - this node is a cross-community bridge._
-- **Why does `market()` connect `market` to `exchange-contract.test.ts`, `loadArtifact`?**
+- **Why does `market()` connect `svc-trade/src/public-rest.ts` to `exchange-contract.test.ts`, `loadArtifact`?**
   _High betweenness centrality (0.029) - this node is a cross-community bridge._
 - **Are the 44 inferred relationships involving `createAcademyRouter()` (e.g. with `.ambassadorBadge()` and `.applyResidency()`) actually correct?**
   _`createAcademyRouter()` has 44 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `name`, `version`, `private` to the rest of the system?**
-  _5469 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _5470 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `rail-adapter.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.02334194659776055 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.024485656331498115 - nodes in this community are weakly interconnected._
 - **Should `subscriptions/index.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.04380504991192014 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.03134570347685102 - nodes in this community are weakly interconnected._
