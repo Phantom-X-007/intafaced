@@ -119,6 +119,69 @@
         </div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.agents.growth.title') }}</h2>
+        <span class="ix-sub">growth.propose</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.agents.growth.lead') }}</p>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-growth-headline">{{ $t('intafaced.agents.growth.headline') }}</label>
+          <Input element-id="ix-growth-headline" v-model="growthForm.headline" :placeholder="$t('intafaced.agents.growth.headlineHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-growth-copy">{{ $t('intafaced.agents.growth.copy') }}</label>
+          <Input element-id="ix-growth-copy" v-model="growthForm.copy" :placeholder="$t('intafaced.agents.growth.copyHint')"></Input>
+        </div>
+      </div>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button type="primary" :loading="growth.loading" @click="proposeGrowth">{{ $t('intafaced.agents.growth.run') }}</Button>
+      </div>
+      <IxState v-if="growth.reason || growth.loading" :loading="growth.loading" :reason="growth.reason" :message="growth.message" endpoint="/api/agents/trpc/growth.propose">
+        <div v-if="growth.data && growth.data.status === 'refuse'" class="ix-note">
+          {{ $t('intafaced.agents.growth.refused') }} · {{ growth.data.reason }}
+        </div>
+        <div v-else-if="growth.data && growth.data.status === 'proposal'" class="ix-done">
+          <strong>{{ $t('intafaced.agents.growth.proposal') }}</strong>
+          <div style="margin-top:6px;">{{ growth.data.headline }}</div>
+        </div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.agents.risk.title') }}</h2>
+        <span class="ix-sub">riskCompliance.draftScreening</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.agents.risk.lead') }}</p>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-risk-subject">{{ $t('intafaced.agents.risk.subjectId') }}</label>
+          <Input element-id="ix-risk-subject" v-model="riskForm.subjectId" :placeholder="$t('intafaced.agents.risk.subjectHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-risk-region">{{ $t('intafaced.agents.risk.region') }}</label>
+          <Input element-id="ix-risk-region" v-model="riskForm.region" :placeholder="$t('intafaced.agents.risk.regionHint')"></Input>
+        </div>
+      </div>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button type="primary" :loading="risk.loading" @click="draftScreening">{{ $t('intafaced.agents.risk.run') }}</Button>
+      </div>
+      <IxState v-if="risk.reason || risk.loading" :loading="risk.loading" :reason="risk.reason" :message="risk.message" endpoint="/api/agents/trpc/riskCompliance.draftScreening">
+        <div v-if="risk.data && risk.data.status === 'refuse'" class="ix-note">
+          {{ $t('intafaced.agents.risk.refused') }} · {{ risk.data.reason }}
+        </div>
+        <div v-else-if="risk.data && risk.data.status === 'draft'" class="ix-done">
+          <strong>{{ $t('intafaced.agents.risk.draft') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.agents.risk.listHits') }}</span><span class="v">{{ risk.data.listHitCount }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.agents.risk.businessHits') }}</span><span class="v">{{ risk.data.businessHitCount }}</span></div>
+          </div>
+        </div>
+      </IxState>
+    </div>
   </div>
 </template>
 
@@ -132,8 +195,8 @@
  * log. Both sit behind `agents:read`, which an interactive session holds.
  *
  * Fleet runSession still wants agents:execute (issued to nobody) and is not
- * offered here. Coach is a query on tip — citations or a named refuse, never
- * advice and never positions.
+ * offered here. Coach, growth, and screening drafts are queries — named refuse
+ * or a draft. Never publish, never a KYC decision, never list contents.
  *
  * No model vendor is named anywhere here. The routing table speaks in tasks and
  * aliases, and the concrete upstream id never leaves the adapter.
@@ -151,7 +214,11 @@ export default {
       routes: this.emptySection(),
       log: this.emptySection(),
       coach: { loading: false, reason: null, message: '', data: null },
-      ask: ''
+      growth: { loading: false, reason: null, message: '', data: null },
+      risk: { loading: false, reason: null, message: '', data: null },
+      ask: '',
+      growthForm: { headline: '', copy: '' },
+      riskForm: { subjectId: '', region: '' }
     };
   },
   created() {
@@ -162,6 +229,18 @@ export default {
   methods: {
     askCoach() {
       this.load('coach', query('agents', 'coach.session', { ask: this.ask }, this.ixToken));
+    },
+    proposeGrowth() {
+      this.load(
+        'growth',
+        query('agents', 'growth.propose', { headline: this.growthForm.headline, copy: this.growthForm.copy }, this.ixToken)
+      );
+    },
+    draftScreening() {
+      var input = {};
+      if (this.riskForm.subjectId) input.subjectId = this.riskForm.subjectId;
+      if (this.riskForm.region) input.region = this.riskForm.region;
+      this.load('risk', query('agents', 'riskCompliance.draftScreening', input, this.ixToken));
     }
   }
 };
