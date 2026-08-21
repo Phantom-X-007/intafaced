@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { DepthSnapshot } from '@intafaced/market-data';
-import { DEPTH_ENGINE_UNAVAILABLE } from './depth/hub.js';
 import {
+  DEPTH_ENGINE_UNAVAILABLE,
   GATEWAY_DEPTH_REFUSE_CODES,
   allowsConnectDepthSnapshot,
   describeGatewayPolicy,
@@ -11,12 +10,18 @@ import {
 
 const MARKET = 'BTC-USDT';
 
-function emptySnapshot(marketId = MARKET): DepthSnapshot {
-  return { type: 'snapshot', marketId, sequence: 0, bids: [], asks: [] };
+function emptySnapshot(marketId = MARKET) {
+  return { type: 'snapshot' as const, marketId, sequence: 0, bids: [] as const, asks: [] as const };
 }
 
-function liveSnapshot(sequence: number, marketId = MARKET): DepthSnapshot {
-  return { type: 'snapshot', marketId, sequence, bids: [['100', '1']], asks: [['101', '1']] };
+function liveSnapshot(sequence: number, marketId = MARKET) {
+  return {
+    type: 'snapshot' as const,
+    marketId,
+    sequence,
+    bids: [['100', '1']] as const,
+    asks: [['101', '1']] as const,
+  };
 }
 
 describe('describeGatewayPolicy', () => {

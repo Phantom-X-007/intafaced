@@ -5,13 +5,23 @@
  * Pure mechanism: consolidates the public-door posture already enforced in the hubs.
  */
 
-import type { DepthSnapshot } from '@intafaced/market-data';
-import { DEPTH_ENGINE_UNAVAILABLE, snapshotHasRestingDepth } from './depth/hub.js';
+/** Mirrors `depth/hub.ts` — named unavailability, not a priced empty ladder. */
+export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 
 /** HTTP + WS refuse/close codes on the public depth door. */
 export const GATEWAY_DEPTH_REFUSE_CODES = ['NoBook', 'MarketNotFound', DEPTH_ENGINE_UNAVAILABLE] as const;
 
+export interface DepthSnapshotSides {
+  readonly bids: readonly (readonly [string, string])[];
+  readonly asks: readonly (readonly [string, string])[];
+}
+
 export type GatewayPolicySummary = ReturnType<typeof describeGatewayPolicy>;
+
+/** Resting depth on either side. Empty sides are absence, not a live zero book. */
+export function snapshotHasRestingDepth(snapshot: DepthSnapshotSides): boolean {
+  return snapshot.bids.length > 0 || snapshot.asks.length > 0;
+}
 
 /** Public honesty board for ws.gateway HTTP + websocket fan-out. */
 export function describeGatewayPolicy() {
@@ -44,7 +54,7 @@ export function allowsConnectDepthSnapshot(hasRestingDepth: boolean, hasPriorBoo
  * seq-0 (or any snapshot) with empty sides reads as a priced zero book when there
  * was no prior hub book. That is invention, not honest empty.
  */
-export function wouldInventInitialEmptyLadder(snapshot: DepthSnapshot, hasPriorBook: boolean): boolean {
+export function wouldInventInitialEmptyLadder(snapshot: DepthSnapshotSides, hasPriorBook: boolean): boolean {
   return !hasPriorBook && !snapshotHasRestingDepth(snapshot);
 }
 
