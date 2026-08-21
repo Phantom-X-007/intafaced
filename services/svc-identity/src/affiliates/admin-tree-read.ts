@@ -50,6 +50,10 @@ export type AffiliatePayoutRefuseCode =
    * One fee lands in one houseFees(module); mixed pools is corruption, not multi-module pay.
    */
   | 'affiliate.payout.mixed_source_module'
+  /** Rows of one fee event disagree on feeAmount — corruption, not multi-fee pay. */
+  | 'affiliate.payout.fee_mismatch'
+  /** Row commissionAmount does not equal feeAmount×rate at published precision. */
+  | 'affiliate.payout.commission_mismatch'
   /** Legs do not sum to the reported total. */
   | 'affiliate.payout.plan_unbalanced'
   /** No durable accrual rows — refuse rather than report a paid zero. */

@@ -9,6 +9,7 @@ import {
   AFFILIATE_PAYOUT_SOURCE_MODULE,
   MAX_PAYOUT_TIER_DEPTH,
   affiliatePayoutRowKey,
+  assertAccrualRowCommissionMath,
   assertPayoutRateProvenance,
   payoutKeysAreBusinessDerived,
   payoutKeysAreDistinct,
@@ -652,5 +653,45 @@ describe('fan-out integrity', () => {
     // 10% of 33.333333333333333333, truncated at 18dp by decimalMul.
     expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe('3.333333333333333333');
     expect(await bal(ledger, rewardsEngine(ASSET))).toBe('0');
+  });
+
+  it('tampered commissionAmount refuses even when the rate matches owner law', async () => {
+    const ledger = await fundedLedger();
+    const base = rows()[0]!;
+    const inflated: CommissionRow = { ...base, commissionAmount: '99' };
+    expect(() => assertAccrualRowCommissionMath(inflated)).toThrow(AffiliatePayoutRefuseError);
+    try {
+      planAffiliatePayout({ feeEventId: FEE_EVENT, rows: [inflated], law: PUBLISHED });
+      expect.unreachable('must refuse tampered commission');
+    } catch (err) {
+      expect((err as AffiliatePayoutRefuseError).code).toBe('affiliate.payout.commission_mismatch');
+    }
+    expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe('0');
+  });
+
+  it('mixed feeAmount on one fee event refuses before any ledger post', async () => {
+    const ledger = await fundedLedger();
+    const base = rows();
+    expect(base.length).toBeGreaterThanOrEqual(2);
+    const mixed: CommissionRow[] = [base[0]!, { ...base[1]!, feeAmount: '50' }];
+    const beforeHop0 = await bal(ledger, userAvailable(HOP0, ASSET));
+    try {
+      planAffiliatePayout({ feeEventId: FEE_EVENT, rows: mixed, law: PUBLISHED });
+      expect.unreachable('must refuse mixed fee amounts');
+    } catch (err) {
+      expect((err as AffiliatePayoutRefuseError).code).toBe('affiliate.payout.fee_mismatch');
+    }
+    expect(await bal(ledger, userAvailable(HOP0, ASSET))).toBe(beforeHop0);
+  });
+
+  it('every leg sweep and payout wire the same amount as the row claims', () => {
+    const plan = planAffiliatePayout({ feeEventId: FEE_EVENT, rows: rows(), law: PUBLISHED });
+    for (const leg of plan.legs) {
+      const claimed = parseAmount(leg.commissionAmount);
+      const sweepCredit = leg.sweep.entries.filter((e) => e.direction === 'credit').reduce((s, e) => s + e.amount, 0n);
+      const payoutCredit = leg.payout.entries.filter((e) => e.direction === 'credit').reduce((s, e) => s + e.amount, 0n);
+      expect(sweepCredit).toBe(claimed);
+      expect(payoutCredit).toBe(claimed);
+    }
   });
 });
