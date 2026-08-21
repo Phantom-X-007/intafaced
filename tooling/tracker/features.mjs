@@ -1342,13 +1342,18 @@ export const FEATURES = [
     phase: '5',
     dependsOn: ['academy.lobbies', 'trade.spot'],
     owner: 'Phantom-X-007',
-    status: 'wip',
-    // Path-narrowed 2026-08-15: was whole svc-academy; fence matches tournaments dir like bank.auto-invest.
-    requires: ['services/svc-academy/src/tournaments'],
+    status: 'done',
+    requires: [
+      'services/svc-academy/src/tournaments/mount-vs-tracker.ts',
+      'services/svc-academy/src/tournaments/mount-vs-tracker.test.ts',
+      'services/svc-academy/src/tournaments/tournament-policy.ts',
+      'services/svc-academy/src/tournaments/prize-refuse.test.ts',
+      'services/svc-academy/src/tournaments/season-lifecycle.test.ts',
+    ],
     note:
-      'D26-P1-C3 2026-08-12: blank/unset prize pools typed refuse `academy.prize_pool_unset` — cannot start; no invent IFC. ' +
-      'Ladder Stage-1+lifecycle on tip; Class M fund/payout recipes still refuse-closed until owner amounts + ledger. ' +
-      'Fence: requires narrowed to src/tournaments so path-disjoint academy residual is not HUMAN-CLAIMED.',
+      '**D26-P1-C3 Done 2026-08-21:** Stage-1 ladder + season lifecycle (`mount-vs-tracker.ts`); prize pools refuse `academy.prize_pool_unset`. ' +
+      'Never invent IFC credits or prize balances; calendar never implies payout. ' +
+      'Class M residual: owner fund/payout ledger recipes until signed amounts.',
   }),
   f('academy.paper-trading', 'Paper-trading market flag for workbooks', {
     module: 'academy',
