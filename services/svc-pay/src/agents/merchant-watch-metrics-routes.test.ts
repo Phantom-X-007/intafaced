@@ -1,7 +1,11 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { serviceAuthHeaders } from '@intafaced/contracts';
-import { MERCHANT_WATCH_METRICS_PATH, registerMerchantWatchMetricsRoutes } from './merchant-watch-metrics-routes.js';
+import {
+  MERCHANT_WATCH_METRICS_PATH,
+  MERCHANT_WATCH_METRICS_PUBLISH_PATH,
+  registerMerchantWatchMetricsRoutes,
+} from './merchant-watch-metrics-routes.js';
 
 const SECRET = 'a-merchant-watch-metrics-internal-secret-long-enough';
 
@@ -33,6 +37,23 @@ describe('merchant watch metrics internal route', () => {
 
     const res = await app.inject({ method: 'GET', url: MERCHANT_WATCH_METRICS_PATH });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('publish refuses no_metrics_store with service auth', async () => {
+    const app = Fastify();
+    registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET });
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: MERCHANT_WATCH_METRICS_PUBLISH_PATH,
+      headers: serviceHeaders(),
+      payload: { railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 },
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ ok: false, reason: 'no_metrics_store' });
     await app.close();
   });
 });
