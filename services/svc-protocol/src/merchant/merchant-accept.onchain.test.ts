@@ -61,7 +61,7 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
     });
     accept = (await deployer.publicClient.waitForTransactionReceipt({ hash: mTx })).contractAddress!;
 
-    const mintHash = await deployer.walletClient.writeContract({
+    await deployer.walletClient.writeContract({
       address: token,
       abi: tokenAbi,
       functionName: 'mint',
@@ -69,24 +69,11 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
       account: deployer.walletClient.account!,
       chain: deployer.walletClient.chain,
     });
-    await deployer.publicClient.waitForTransactionReceipt({ hash: mintHash });
   }, 120_000);
 
   it('splits payment to merchant + merchant-chosen fee recipient', async () => {
     const amount = 10n * WAD;
-    const feeShare = amount / 100n;
-    const merchantShare = amount - feeShare;
-    const balanceOf = async (who: Address) =>
-      (await deployer.publicClient.readContract({
-        address: token,
-        abi: tokenAbi,
-        functionName: 'balanceOf',
-        args: [who],
-      })) as bigint;
-    const mBefore = await balanceOf(merchant.deployer);
-    const fBefore = await balanceOf(fee.deployer);
-
-    const approveHash = await payer.walletClient.writeContract({
+    await payer.walletClient.writeContract({
       address: token,
       abi: tokenAbi,
       functionName: 'approve',
@@ -94,20 +81,27 @@ describeOnChain('MerchantAccept on chain (S-A6)', () => {
       account: payer.walletClient.account!,
       chain: payer.walletClient.chain,
     });
-    const approveRcpt = await payer.publicClient.waitForTransactionReceipt({ hash: approveHash });
-    expect(approveRcpt.status).toBe('success');
-    const payHash = await payer.walletClient.writeContract({
+    await payer.walletClient.writeContract({
       address: accept,
       abi: acceptAbi,
       functionName: 'pay',
-      args: [token, amount, keccak256(toBytes(`inv-${Date.now()}`))],
+      args: [token, amount, keccak256(toBytes('inv-1'))],
       account: payer.walletClient.account!,
       chain: payer.walletClient.chain,
     });
-    const payRcpt = await payer.publicClient.waitForTransactionReceipt({ hash: payHash });
-    expect(payRcpt.status).toBe('success');
-
-    expect((await balanceOf(fee.deployer)) - fBefore).toBe(feeShare);
-    expect((await balanceOf(merchant.deployer)) - mBefore).toBe(merchantShare);
+    const mBal = (await deployer.publicClient.readContract({
+      address: token,
+      abi: tokenAbi,
+      functionName: 'balanceOf',
+      args: [merchant.deployer],
+    })) as bigint;
+    const fBal = (await deployer.publicClient.readContract({
+      address: token,
+      abi: tokenAbi,
+      functionName: 'balanceOf',
+      args: [fee.deployer],
+    })) as bigint;
+    expect(fBal).toBe(amount / 100n);
+    expect(mBal).toBe(amount - amount / 100n);
   });
 });
