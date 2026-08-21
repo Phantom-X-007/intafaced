@@ -576,11 +576,19 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'F',
-    status: 'wip',
+    status: 'done',
     owner: 'Nitro',
     dependsOn: ['execution.sor'],
-    requires: ['packages/execution-house-tenant', 'services/svc-execution'],
-    note: 'Law §28:777, gap-closed 2026-08-08. OWNER RULING SEALED 2026-08-12 (D26-P0-01) in `docs/adr/2026-08-08-house-desk-and-market-making-fairness.md` (+ owner packet §A1): Q1 v1 is EXTERNAL-ONLY — house desk may trade external venues; pointing this tenant at our own matching book stays BLOCKED until a later explicit ruling. Q2 existence-disclosure deferred (not decided; internal trading off for v1). Q3 hard mark exclusion binds when any internal quotes exist. Five mechanism rules still Accepted: no structural queue advantage, D-S-06 one book / no extra preference, sealed ≠ unaudited (ledger recipes), kill-switches apply first. STAGE-1 MECHANISM (2026-08-16): `@intafaced/execution-house-tenant` + thin `svc-execution` tRPC `execution.tenant.describe|kill`; `internal_venue` refuse for `kind:internal` / matching-book; adminKill first. Internal-venue half still blocked. §30:795 plane "—"; `F` here means house money is custodial platform value, not a plane decision. Still dependsOn `execution.sor`.',
+    requires: [
+      'packages/execution-house-tenant/src/house-mount-vs-tracker.ts',
+      'packages/execution-house-tenant/src/house-mount-vs-tracker.test.ts',
+      'packages/execution-house-tenant/src/house-tenant-policy.ts',
+      'services/svc-execution/src/execution-policy-route.test.ts',
+    ],
+    note:
+      '**D26-P0-01 Done 2026-08-21:** Stage-1 external-only tenant (`house-mount-vs-tracker.ts`); kill-first adminKill. ' +
+      'execution.tenant.describe|kill mounted; internal_venue + matching-book refuse. ' +
+      'Class X residual: internal-venue half blocked until owner ruling; existence disclosure deferred.',
   }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
