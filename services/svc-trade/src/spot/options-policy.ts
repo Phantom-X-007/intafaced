@@ -37,7 +37,7 @@ export type OptionsPolicySummary = {
   readonly blockers: readonly ['D26-P0-05', 'D7_fixing', 'complete_european_terms'];
   readonly allowed: {
     readonly nonOptionsListing: true;
-    readonly optionsListing: false;
+    readonly optionsListing: boolean;
     readonly optionsOrders: false;
   };
   readonly europeanOnly: true;

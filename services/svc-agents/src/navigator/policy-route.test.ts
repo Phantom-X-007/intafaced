@@ -3,6 +3,7 @@ import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
 import { NAVIGATOR_MONEY_WRITE_TOOLS } from './guardrail.js';
 import { describeNavigatorPolicy } from './policy.js';
+import { createEdgeContext } from '@intafaced/contracts';
 
 function stubDeps(): AgentsRouterDeps {
   return {
@@ -13,9 +14,12 @@ function stubDeps(): AgentsRouterDeps {
   };
 }
 
+const edgeContext = createEdgeContext({ secret: 'a-policy-route-test-edge-secret-long', serviceName: 'svc-test' });
+const anonymous = () => edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+
 describe('navigator.policy route (agents.navigator honesty door)', () => {
   it('public query mirrors describeNavigatorPolicy', async () => {
-    const result = await createAgentsRouter(stubDeps()).createCaller({}).navigator.policy();
+    const result = await createAgentsRouter(stubDeps()).createCaller(anonymous()).navigator.policy();
     expect(result).toEqual(describeNavigatorPolicy());
     expect(result.moneyWriteTools).toEqual(NAVIGATOR_MONEY_WRITE_TOOLS);
     expect(result.moneyDenyBilledAmount).toBe('0');

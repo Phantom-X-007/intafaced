@@ -22,7 +22,7 @@ describe('merchant mount vs tracker honest gaps (D26-P1-A4)', () => {
   it('backend done bar met on tip — mount matrix + merchant.watch task', () => {
     expect(merchantDeclaredTaskMatchesGuardrail()).toBe(true);
     expect(DEFAULT_ROUTING_TABLE.routes.map((r) => r.task)).toContain('merchant.watch');
-    expect(merchantDoorsInRouterSource().sort()).toEqual([...MERCHANT_MOUNTED_DOORS].sort());
+    expect(Array.from(merchantDoorsInRouterSource()).sort()).toEqual(Array.from(MERCHANT_MOUNTED_DOORS).sort());
     expect(merchantMountMatrixComplete()).toBe(true);
     expect(merchantTrackerBackendDoneBarMet()).toBe(true);
     expect(merchantMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);

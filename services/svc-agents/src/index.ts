@@ -199,7 +199,7 @@ app.get('/ready', async () =>
     meteringEnabled: env.AGENTS_METERING_ENABLED,
     productAgentsRegistered: bootAgents.count,
     fleet: fleetMatrixBoardCard(),
-    livePlanes: describeAgentsLivePlanes(env),
+    livePlanes: describeAgentsLivePlanes(process.env),
   }),
 );
 

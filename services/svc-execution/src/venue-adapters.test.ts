@@ -103,10 +103,10 @@ describe('loadExecutionVenueCredentials', () => {
     expect(() =>
       buildExecutionVenueTradeMaps(['bybit-spot'], {
         credentialsFor: () => ({ venueId: 'bybit-spot', apiKey: 'k', apiSecret: 's', scopes: ['trade', 'withdraw'] }),
-        createAdapter: (id, creds) => {
+        createAdapter: ((id, creds) => {
           if (creds) assertTradeOnly(creds);
           return fakeTradeAdapter(id);
-        },
+        }) as typeof createVenueTradeAdapter,
       }),
     ).toThrow(VenueCredentialScopeError);
   });
@@ -116,7 +116,7 @@ describe('buildExecutionVenueTradeMaps', () => {
   it('wires known venues and skips unknown ids', () => {
     const maps = buildExecutionVenueTradeMaps(['binance-spot', 'kraken-spot'], {
       credentialsFor: () => tradeOnly('binance-spot'),
-      createAdapter: (id) => (id === 'binance-spot' ? fakeTradeAdapter(id) : null),
+      createAdapter: ((id) => (id === 'binance-spot' ? fakeTradeAdapter(id) : null)) as typeof createVenueTradeAdapter,
     });
     expect(maps.wiredVenueIds).toEqual(['binance-spot']);
     expect(maps.submitByVenue['kraken-spot']).toBeUndefined();
@@ -125,7 +125,7 @@ describe('buildExecutionVenueTradeMaps', () => {
   it('submit/cancel/fetch/openOrders forward to injected fake adapter', async () => {
     const maps = buildExecutionVenueTradeMaps(['binance-spot'], {
       credentialsFor: () => tradeOnly('binance-spot'),
-      createAdapter: (id) => fakeTradeAdapter(id),
+      createAdapter: ((id) => fakeTradeAdapter(id)) as typeof createVenueTradeAdapter,
     });
     const submit = await maps.submitByVenue['binance-spot']!({
       symbol: 'BTC/USDT',
@@ -150,7 +150,7 @@ describe('buildExecutionVenueTradeMaps', () => {
   it('missing credentials throw on use, not at map build', async () => {
     const maps = buildExecutionVenueTradeMaps(['binance-spot'], {
       credentialsFor: () => null,
-      createAdapter: (id, creds) => createVenueTradeAdapter(id, creds),
+      createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
     });
     await expect(
       maps.submitByVenue['binance-spot']!({

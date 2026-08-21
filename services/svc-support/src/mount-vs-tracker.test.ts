@@ -11,7 +11,7 @@ import {
 describe('ops.support mount vs tracker honest gaps (D26-P1-O3)', () => {
   it('backend done bar met on tip — ticket+KB+audit+identity doors mounted', () => {
     expect(OPS_SUPPORT_TRACKER_ID).toBe('ops.support');
-    expect(opsSupportDoorsInRouterSource().sort()).toEqual([...OPS_SUPPORT_MOUNTED_DOORS].sort());
+    expect([...opsSupportDoorsInRouterSource()].slice().sort()).toEqual([...OPS_SUPPORT_MOUNTED_DOORS].slice().sort());
     expect(opsSupportMountMatrixComplete()).toBe(true);
     expect(opsSupportTrackerBackendDoneBarMet()).toBe(true);
     expect(opsSupportMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);

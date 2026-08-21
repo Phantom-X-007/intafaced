@@ -19,7 +19,7 @@ describe('scanner mount vs tracker honest gaps (D26-P1-A3)', () => {
 
   it('backend done bar met — mount + P0-11 refuse-closed + SpotTickersPort on index', () => {
     expect(scannerProductionLawRefuseClosed()).toBe(true);
-    expect(scannerDoorsInRouterSource().sort()).toEqual([...SCANNER_MOUNTED_DOORS].sort());
+    expect(Array.from(scannerDoorsInRouterSource()).sort()).toEqual(Array.from(SCANNER_MOUNTED_DOORS).sort());
     expect(scannerMountMatrixComplete()).toBe(true);
     expect(scannerTrackerBackendDoneBarMet()).toBe(true);
     expect(scannerMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);

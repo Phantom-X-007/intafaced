@@ -59,7 +59,7 @@ describe('copy-intel mount vs tracker honest gaps (D26-P1-A5)', () => {
 
 describe('copy-intel public doors are mounted on router.ts', () => {
   it('every declared door is present in the copyIntel namespace', () => {
-    expect(copyIntelDoorsInRouterSource().sort()).toEqual([...COPY_INTEL_MOUNTED_DOORS].sort());
+    expect(Array.from(copyIntelDoorsInRouterSource()).sort()).toEqual(Array.from(COPY_INTEL_MOUNTED_DOORS).sort());
     expect(copyIntelMountMatrixComplete()).toBe(true);
   });
 

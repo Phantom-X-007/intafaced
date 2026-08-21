@@ -5,9 +5,13 @@ import { describe, expect, it } from 'vitest';
 import { ALERT_MARK_MAX_AGE_MS } from './alerts/accepted-mark.js';
 import { ALERT_SWEEP_INTERVAL_MS } from './alerts/service.js';
 import { ALERT_KIND_UNPUBLISHED, ALERT_PORTFOLIO_VIEW_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS } from './alerts/types.js';
+import { createEdgeContext } from '@intafaced/contracts';
 import { createNotifyRouter } from './router.js';
 import type { NotifyService } from './notify-service.js';
 import { describeAlertsPolicy } from './alerts-policy.js';
+
+const edgeContext = createEdgeContext({ secret: 'a-notify-policy-test-edge-secret-long', serviceName: 'svc-notify' });
+const anonymous = () => edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
 
 const here = dirname(fileURLToPath(import.meta.url));
 const routerSource = readFileSync(join(here, 'router.ts'), 'utf8');
@@ -42,7 +46,7 @@ describe('notify.alertsPolicy route (v22.alerts honesty door)', () => {
   });
 
   it('public query mirrors describeAlertsPolicy', async () => {
-    const result = await createNotifyRouter(stubNotify()).createCaller({}).notify.alertsPolicy();
+    const result = await createNotifyRouter(stubNotify()).createCaller(anonymous()).notify.alertsPolicy();
     expect(result).toEqual(describeAlertsPolicy());
   });
 });

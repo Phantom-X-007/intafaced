@@ -302,7 +302,7 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
       const tool = ask.tool.trim();
       let quote = ask.quote ?? null;
       let markets = ask.markets ?? null;
-      let session = ask.session ?? null;
+      let sessionFixture = ask.session ?? null;
 
       if (input.plane === 'live' && input.tradeDataPort) {
         if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
@@ -318,9 +318,9 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
         }
       }
 
-      if (input.plane === 'live' && input.identitySessionPort && tool === 'identity.session.read' && session?.sessionId?.trim()) {
-        const liveSession = await readLiveNavigatorSession(input.identitySessionPort, session.sessionId, input.userId);
-        if (liveSession.ok) session = liveSession.session;
+      if (input.plane === 'live' && input.identitySessionPort && tool === 'identity.session.read' && sessionFixture?.sessionId?.trim()) {
+        const liveSession = await readLiveNavigatorSession(input.identitySessionPort, sessionFixture.sessionId, input.userId);
+        if (liveSession.ok) sessionFixture = liveSession.session;
       }
 
       let toolResult: DataToolResult;
@@ -341,7 +341,7 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
               now,
               quote,
               markets,
-              session,
+              session: sessionFixture,
             }),
         });
         toolResult = act.result as DataToolResult;

@@ -10,7 +10,7 @@ import {
 describe('ws.gateway mount vs tracker honest gaps (D26-P4-06)', () => {
   it('backend done bar met on tip — empty book honesty + engine unavailable', () => {
     expect(WS_GATEWAY_TRACKER_ID).toBe('ws.gateway');
-    expect(gatewaySymbolsInProductSource().sort()).toEqual([...GATEWAY_PRODUCT_SYMBOLS].sort());
+    expect(Array.from(gatewaySymbolsInProductSource()).sort()).toEqual(Array.from(GATEWAY_PRODUCT_SYMBOLS).sort());
     expect(wsGatewayTrackerBackendDoneBarMet()).toBe(true);
     expect(wsGatewayMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });

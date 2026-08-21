@@ -6,7 +6,7 @@
  * Unset TRADE_URL → no map entry → honest observe_failed at call time.
  */
 
-import type { PriceLevel, VenueBookSnapshot } from '@intafaced/venue-contracts';
+import { readLevels, type PriceLevel, type VenueBookSnapshot } from '@intafaced/venue-contracts';
 import type { OmsSnapshotFn } from './oms-snapshot.js';
 
 export const TRADE_BOOK_SNAPSHOT_VENUE_ID = 'intafaced-spot' as const;
@@ -22,14 +22,12 @@ const orderBookWireSchema = {
     if (raw === null || typeof raw !== 'object') return null;
     const o = raw as Record<string, unknown>;
     if (!Array.isArray(o.bids) || !Array.isArray(o.asks)) return null;
-    const levels = (side: 'bids' | 'asks'): PriceLevel[] | null => {
-      const out: PriceLevel[] = [];
-      for (const row of o[side] as unknown[]) {
-        if (!Array.isArray(row) || row.length < 2) return null;
-        if (typeof row[0] !== 'string' || typeof row[1] !== 'string') return null;
-        out.push([row[0], row[1]]);
+    const levels = (side: 'bids' | 'asks') => {
+      try {
+        return readLevels(o[side], side, TRADE_BOOK_SNAPSHOT_VENUE_ID);
+      } catch {
+        return null;
       }
-      return out;
     };
     const bids = levels('bids');
     const asks = levels('asks');

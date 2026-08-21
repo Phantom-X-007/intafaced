@@ -11,7 +11,7 @@ import {
 describe('execution.arbitrage mount vs tracker honest gaps (D26-P1-X4)', () => {
   it('backend done bar met on tip', () => {
     expect(EXECUTION_ARB_TRACKER_ID).toBe('execution.arbitrage');
-    expect(arbExportsInIndexSource().sort()).toEqual([...ARB_PRODUCT_EXPORTS].sort());
+    expect(Array.from(arbExportsInIndexSource()).sort()).toEqual(Array.from(ARB_PRODUCT_EXPORTS).sort());
     expect(arbProductPathComplete()).toBe(true);
     expect(executionArbTrackerBackendDoneBarMet()).toBe(true);
     expect(executionArbMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);

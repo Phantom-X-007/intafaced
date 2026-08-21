@@ -34,7 +34,8 @@ describe('capture-lake-bridge — fabric → connect-data-lake', () => {
     const row = ingestFabricCaptureRecord(log, fabric.records()[0]!);
 
     expect(row).toMatchObject({ status: 'measured', kind: 'book', occupancy: 'empty' });
-    expect(row.status === 'measured' && row.bids).toEqual([]);
+    if (row.status !== 'measured' || row.kind !== 'book') throw new Error('expected measured book');
+    expect(row.bids).toEqual([]);
   });
 
   it('populated book preserves wire levels', () => {
@@ -53,7 +54,7 @@ describe('capture-lake-bridge — fabric → connect-data-lake', () => {
     const row = ingestFabricCaptureRecord(log, fabric.records()[0]!);
 
     expect(row).toMatchObject({ status: 'measured', occupancy: 'populated', sequence: 42 });
-    if (row.status !== 'measured') throw new Error('expected measured');
+    if (row.status !== 'measured' || row.kind !== 'book') throw new Error('expected measured book');
     expect(row.bids[0]).toEqual(['100', '1']);
     expect(row.asks[0]).toEqual(['101', '2']);
   });

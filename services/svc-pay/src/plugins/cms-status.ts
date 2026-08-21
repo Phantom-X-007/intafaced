@@ -7,7 +7,6 @@ import {
   SHIPPED_CMS_PLUGIN_FAMILY,
   UNWIRED_CMS_PLUGIN_FAMILIES,
   cmsPluginsShipped,
-  isCmsPluginShipped,
   refuseCmsPlugin,
   type CmsPluginFamily,
   type CmsPluginRefuse,
@@ -19,15 +18,15 @@ export type CmsPluginFamilyStatus =
   | { readonly family: UnwiredCmsPluginFamily; readonly shipped: false; readonly refuse: CmsPluginRefuse };
 
 export type CmsPluginStatusSummary = {
-  readonly socket: typeof CMS_PLUGIN_SOCKET;
-  readonly shipped: boolean;
-  readonly shippedFamily: typeof SHIPPED_CMS_PLUGIN_FAMILY;
-  readonly unwiredFamilies: readonly UnwiredCmsPluginFamily[];
-  readonly families: readonly CmsPluginFamilyStatus[];
+  socket: typeof CMS_PLUGIN_SOCKET;
+  shipped: boolean;
+  shippedFamily: typeof SHIPPED_CMS_PLUGIN_FAMILY;
+  unwiredFamilies: UnwiredCmsPluginFamily[];
+  families: CmsPluginFamilyStatus[];
 };
 
 function familyStatus(family: CmsPluginFamily): CmsPluginFamilyStatus {
-  if (isCmsPluginShipped(family)) {
+  if (family === SHIPPED_CMS_PLUGIN_FAMILY) {
     return { family: SHIPPED_CMS_PLUGIN_FAMILY, shipped: true, refuse: null };
   }
   return { family, shipped: false, refuse: refuseCmsPlugin(family) };
@@ -39,7 +38,7 @@ export function describeCmsPluginStatus(): CmsPluginStatusSummary {
     socket: CMS_PLUGIN_SOCKET,
     shipped: cmsPluginsShipped(),
     shippedFamily: SHIPPED_CMS_PLUGIN_FAMILY,
-    unwiredFamilies: UNWIRED_CMS_PLUGIN_FAMILIES,
+    unwiredFamilies: [...UNWIRED_CMS_PLUGIN_FAMILIES],
     families: CMS_PLUGIN_FAMILIES.map(familyStatus),
   };
 }
