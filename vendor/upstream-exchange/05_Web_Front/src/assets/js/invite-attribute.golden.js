@@ -25,7 +25,10 @@ function mustNot(hay, needle, where) {
 mustHave(page, "mutate('identity', 'affiliates.attribute'", 'Invite.vue');
 mustHave(page, "query('identity', 'affiliates.myReferrer'", 'Invite.vue');
 mustHave(page, "query('identity', 'affiliates.policy'", 'Invite.vue');
+mustHave(page, "query('identity', 'affiliates.myAccruals'", 'Invite.vue');
+mustHave(page, "query('identity', 'affiliates.myAncestors'", 'Invite.vue');
 mustHave(page, 'invite.referrer.empty', 'Invite.vue');
+mustHave(page, 'invite.accruals.empty', 'Invite.vue');
 mustHave(page, 'IxState', 'Invite.vue');
 
 mustNot(page, 'IxNoSurface', 'Invite.vue');
@@ -41,13 +44,17 @@ if (page.indexOf('%') !== -1) {
 mustHave(lang, 'invite: {', 'en.js');
 mustHave(lang, 'attribute: {', 'en.js');
 mustHave(lang, 'referrer: {', 'en.js');
+mustHave(lang, 'accruals: {', 'en.js');
 
 var copy = require('../lang/en.js').invite;
-if (!copy || typeof copy.attribute !== 'object' || typeof copy.referrer !== 'object') {
-  throw new Error('en.js invite.attribute and invite.referrer must be objects');
+if (!copy || typeof copy.attribute !== 'object' || typeof copy.referrer !== 'object' || typeof copy.accruals !== 'object') {
+  throw new Error('en.js invite.attribute, invite.referrer and invite.accruals must be objects');
 }
 if (!copy.referrer.empty) {
   throw new Error('en.js missing invite.referrer.empty');
+}
+if (!copy.accruals.empty) {
+  throw new Error('en.js missing invite.accruals.empty');
 }
 if (!copy.attribute.btn) {
   throw new Error('en.js missing invite.attribute.btn');
@@ -75,4 +82,4 @@ function walkCopy(node, path) {
 }
 walkCopy(copy, 'invite');
 
-console.log('ok: invite attribute referrer');
+console.log('ok: invite attribute referrer + accruals honesty');
