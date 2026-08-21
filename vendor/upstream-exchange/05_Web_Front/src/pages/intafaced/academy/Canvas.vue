@@ -76,7 +76,7 @@ export default {
   data() {
     return {
       sessionId: '',
-      session: this.emptySection(),
+      session: { loading: false, reason: null, message: '', data: null },
       sceneAction: this.emptyAction()
     };
   },
@@ -97,6 +97,12 @@ export default {
         this.sessionId = id;
         this.reload();
       }
+    }
+  },
+  created() {
+    if (this.sessionIdFromHub) {
+      this.sessionId = this.sessionIdFromHub;
+      this.reload();
     }
   },
   methods: {
