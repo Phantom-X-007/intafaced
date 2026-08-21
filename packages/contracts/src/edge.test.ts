@@ -206,4 +206,24 @@ describe('createEdgeContext', () => {
 
     expect(built.principal).not.toBeNull();
   });
+
+  // S13-6: a service caller and a user principal are independent. Omitting
+  // internalSecret must not invent a service identity from serviceName or
+  // from an unsigned header — otherwise every public request looks like S2S.
+  it('omitting internalSecret yields service:null rather than inventing a service identity', () => {
+    const ctx = createEdgeContext({ secret: SECRET, serviceName: 'svc-test' });
+
+    expect(ctx({ headers: {} }).service).toBeNull();
+    expect(ctx({ headers: { 'x-intafaced-service': 'svc-ledger' } }).service).toBeNull();
+  });
+
+  // verifyServiceHeaders fails closed on missing credentials (service:null,
+  // rejected:'missing'). Wiring it when the secret IS set must not 500 a
+  // public request and tell an attacker they got close.
+  it('with internalSecret set but no S2S headers, service is still null rather than a 500', () => {
+    const ctx = createEdgeContext({ secret: SECRET, serviceName: 'svc-test', internalSecret: OTHER_SECRET });
+
+    expect(() => ctx({ headers: {} })).not.toThrow();
+    expect(ctx({ headers: {} }).service).toBeNull();
+  });
 });
