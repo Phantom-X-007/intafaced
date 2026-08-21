@@ -148,7 +148,7 @@ describe('s2s-http (graph W1-C money surface)', () => {
     });
 
     expect(out.custodial).toEqual([]);
-    expect(out.indexer).toEqual({ status: 'absent', reason: 'indexer.readmodels_unbuilt' });
+    expect(out.indexer).toEqual({ status: 'absent', reason: 'indexer.portfolio_positions_unwired' });
     expect(out.indexer).not.toHaveProperty('amount');
   });
 });

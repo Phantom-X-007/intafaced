@@ -2,25 +2,25 @@
  * Portfolio Stage-1 — a VIEW over the ledger book. Not a second book.
  *
  * Law §25:723 / D-S-18: a holding the platform cannot read is ABSENT AND NAMED,
- * never zero. Indexer read-models are unbuilt, so the on-chain half is named
- * `indexer.readmodels_unbuilt`. Custodial holdings are whatever `ledger.balances`
- * already returned — empty is empty, never invented volume.
+ * never zero. Indexer readmodels ship on main; composite wire is still pending,
+ * so the on-chain half is `indexer.portfolio_positions_unwired`. Custodial
+ * holdings are whatever `ledger.balances` already returned — empty is empty.
  */
 import { z } from 'zod';
 import { formatAmount, type Balance, type OwnerType } from '@intafaced/ledger-client';
 
-export const INDEXER_READMODELS_UNBUILT = 'indexer.readmodels_unbuilt' as const;
+export const PORTFOLIO_INDEXER_UNWIRED = 'indexer.portfolio_positions_unwired' as const;
 
 export const INDEXER_ABSENT = {
   status: 'absent',
-  reason: INDEXER_READMODELS_UNBUILT,
+  reason: PORTFOLIO_INDEXER_UNWIRED,
 } as const;
 
 export type IndexerAbsent = typeof INDEXER_ABSENT;
 
 export const indexerAbsentSchema = z.object({
   status: z.literal('absent'),
-  reason: z.literal(INDEXER_READMODELS_UNBUILT),
+  reason: z.literal(PORTFOLIO_INDEXER_UNWIRED),
 });
 
 export const custodialHoldingSchema = z.object({

@@ -10,13 +10,13 @@
 
 <!-- tracker:start -->
 
-`████████████████░░░░` **78%** — 123 of 158 features shipped
+`████████████████░░░░` **78%** — 124 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 35/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 36/59 · **5P** 4/7
 
-**In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03) · Portfolio suite — users and house, views over ledger and indexer (§25:723) (ZenYoda3)
+**In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
 
-**🟢 18 ready to claim** — nothing blocks these:
+**🟢 19 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `web.mobile-apps` — Native mobile apps — iOS and Android, own name, zero attribution (§25:727)
@@ -26,7 +26,7 @@ Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 14/15 �
 - `academy.certs` — Certifications → XP → real perks
 - `launch.token-factory` — ERC-20 deploy from audited templates
 - `mining.pool` — Stratum share protocol, PPLNS payouts
-- …and 10 more
+- …and 11 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
