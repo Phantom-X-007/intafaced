@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { copyIntelAgentGuardrail } from './guardrail.js';
-import { LIVE_TRADE_COPY_LEADER_PLANE_OPEN } from './live-leader-plane-refuse.js';
+import { liveTradeCopyLeaderPlaneOpen } from './live-leader-plane-refuse.js';
 
 /** Tracker id for Copy-Intel — audited leader stats mountain. */
 export const COPY_INTEL_TRACKER_ID = 'agents.copy-intel' as const;
@@ -48,7 +48,7 @@ export function isDeclaredHonestGap(id: string): id is HonestGapId {
  * stay refused. Flipping the tracker to `done` while the live plane is still
  * sealed is forbidden (TRK pack + TRACKER row).
  */
-export function trackerDoneForbiddenWhileLiveRefuse(liveLeaderPlaneOpen: boolean = LIVE_TRADE_COPY_LEADER_PLANE_OPEN): boolean {
+export function trackerDoneForbiddenWhileLiveRefuse(liveLeaderPlaneOpen: boolean = liveTradeCopyLeaderPlaneOpen()): boolean {
   return !liveLeaderPlaneOpen;
 }
 
@@ -93,7 +93,7 @@ export function copyIntelMountVsTrackerBoardCard(): {
     doors: COPY_INTEL_MOUNTED_DOORS.length,
     doorsMounted: mounted.length,
     gaps: HONEST_GAPS.length,
-    liveOpen: LIVE_TRADE_COPY_LEADER_PLANE_OPEN,
+    liveOpen: liveTradeCopyLeaderPlaneOpen(),
     trackerDoneForbidden: trackerDoneForbiddenWhileLiveRefuse(),
     taskDeclared: copyIntelDeclaredTaskMatchesGuardrail(),
     mountComplete: mounted.length === COPY_INTEL_MOUNTED_DOORS.length,

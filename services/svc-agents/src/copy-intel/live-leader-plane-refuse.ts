@@ -6,8 +6,7 @@
  * closed door: an empty sealed allowlist cannot be bypassed by caller ids,
  * invented PnL, or a fake ranked board.
  *
- * Phase A: existing `returns-board-refuse` + `presentLeaderDirectory`.
- * Do not invent leader stats. Do not mark the tracker done from this pin.
+ * Owner opens the plane via env only — unset / blank env stays refuse-closed.
  */
 
 import { AgentError } from '../errors.js';
@@ -15,17 +14,28 @@ import type { LeaderStat } from './stats.js';
 import { presentLeaderDirectory, type DirectoryResult } from './directory.js';
 import { isForbiddenReturnsRankKey } from './returns-board-refuse.js';
 
-/**
- * Sealed product flag. Flip only when a live trade.copy leader plane exists
- * (Class X). Agents must not set this true to ship a fixture leaderboard.
- */
-export const LIVE_TRADE_COPY_LEADER_PLANE_OPEN = false;
+/** Refuse-closed unless owner sets LIVE_TRADE_COPY_LEADER_PLANE_OPEN=true. */
+export function liveTradeCopyLeaderPlaneOpen(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.LIVE_TRADE_COPY_LEADER_PLANE_OPEN?.trim() === 'true';
+}
 
-/**
- * Sealed live leader ids. Empty until Class X names real allowlisted leaders.
- * Caller-supplied ids never populate this list.
- */
-export const LIVE_TRADE_COPY_LEADER_IDS: readonly string[] = Object.freeze([]);
+/** Comma-separated owner allowlist — blank env → empty (refuse). */
+export function liveTradeCopyLeaderIds(env: NodeJS.ProcessEnv = process.env): readonly string[] {
+  const raw = env.LIVE_TRADE_COPY_LEADER_IDS?.trim();
+  if (!raw) return Object.freeze([]);
+  return Object.freeze(
+    raw
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean),
+  );
+}
+
+/** Default refuse-closed snapshot at module load (tests pin this stays false). */
+export const LIVE_TRADE_COPY_LEADER_PLANE_OPEN = liveTradeCopyLeaderPlaneOpen();
+
+/** Default empty allowlist at module load. */
+export const LIVE_TRADE_COPY_LEADER_IDS = liveTradeCopyLeaderIds();
 
 export type LiveLeaderIds = ReadonlySet<string> | readonly string[];
 
@@ -35,17 +45,17 @@ function asSet(ids: LiveLeaderIds | undefined): ReadonlySet<string> {
 }
 
 /** Sealed allowlist only — never the caller's invented ids. */
-export function sealedLiveLeaderAllowlist(): ReadonlySet<string> {
-  return new Set(LIVE_TRADE_COPY_LEADER_IDS);
+export function sealedLiveLeaderAllowlist(env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+  return new Set(liveTradeCopyLeaderIds(env));
 }
 
 /**
  * True only when the sealed live plane is open AND the caller named a
  * non-empty subset of sealed ids. Fake / extra ids fail closed.
  */
-export function isLiveLeaderPlaneAllowlisted(requested?: LiveLeaderIds): boolean {
-  if (!LIVE_TRADE_COPY_LEADER_PLANE_OPEN) return false;
-  const sealed = sealedLiveLeaderAllowlist();
+export function isLiveLeaderPlaneAllowlisted(requested?: LiveLeaderIds, env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!liveTradeCopyLeaderPlaneOpen(env)) return false;
+  const sealed = sealedLiveLeaderAllowlist(env);
   if (sealed.size === 0) return false;
   const asked = asSet(requested);
   if (asked.size === 0) return false;
@@ -89,16 +99,14 @@ export function refuseLiveLeaderBoard(rankBy = 'live'): never {
  */
 export function presentLiveLeaderBoard(
   stats: readonly LeaderStat[],
-  options: { readonly rankBy?: string; readonly leaderAllowlist?: LiveLeaderIds } = {},
+  options: { readonly rankBy?: string; readonly leaderAllowlist?: LiveLeaderIds; readonly env?: NodeJS.ProcessEnv } = {},
 ): DirectoryResult | LiveLeaderPlaneRefuse | never {
+  const env = options.env ?? process.env;
   if (options.rankBy !== undefined && isForbiddenReturnsRankKey(options.rankBy)) {
     return refuseLiveLeaderBoard(options.rankBy);
   }
-  if (!isLiveLeaderPlaneAllowlisted(options.leaderAllowlist)) {
-    // Missing live trade.copy leaders — named refuse, never an invented ROI board.
+  if (!isLiveLeaderPlaneAllowlisted(options.leaderAllowlist, env)) {
     return refuseLiveLeaderPlane();
   }
-  // Unreachable while LIVE_TRADE_COPY_LEADER_PLANE_OPEN is false / ids empty.
-  // Directory only — never a returns rank — if Class X later opens the seal.
   return presentLeaderDirectory({ stats, mode: 'directory', sortBy: 'leaderId' });
 }
