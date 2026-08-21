@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createAgentsRouter } from '../router.js';
+import type { AgentsRouterDeps } from '../router.js';
 import { invokeNavigatorDataTool, isNavigatorDataToolOk, NAVIGATOR_DATA_TOOLS } from './data-tools.js';
 
 const publishedAll = {
@@ -120,7 +124,7 @@ describe('navigator Stage-2 data tools', () => {
     ).toMatchObject({ status: 'refuse', reason: 'empty_markets' });
   });
 
-  it('reads identity session fixture', () => {
+  it('echoes a resolved identity session — never invents fields', () => {
     const r = invokeNavigatorDataTool({
       tool: 'identity.session.read',
       plane: 'live',
@@ -134,6 +138,35 @@ describe('navigator Stage-2 data tools', () => {
       tool: 'identity.session.read',
       session: { sessionId: 's1', userId: 'u1', status: 'open' },
     });
+  });
+
+  it('null live identity session refuses no_live_session — never invents an open session', () => {
+    const r = invokeNavigatorDataTool({
+      tool: 'identity.session.read',
+      plane: 'live',
+      tierLaw: publishedAll,
+      userTier: 'free',
+      requesterUserId: 'u1',
+      session: null,
+    });
+    expect(r).toEqual({
+      status: 'refuse',
+      tool: 'identity.session.read',
+      reason: 'no_live_session',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+  });
+
+  it('incomplete identity session fields refuse incomplete_session', () => {
+    const r = invokeNavigatorDataTool({
+      tool: 'identity.session.read',
+      plane: 'live',
+      tierLaw: publishedAll,
+      userTier: 'free',
+      requesterUserId: 'u1',
+      session: { sessionId: 's1', userId: '  ', status: 'open' },
+    });
+    expect(r).toMatchObject({ status: 'refuse', reason: 'incomplete_session' });
   });
 
   it('refuses an identity session owned by another user', () => {
@@ -179,5 +212,133 @@ describe('navigator Stage-2 data tools', () => {
       now,
     });
     expect(r).toMatchObject({ status: 'refuse', reason: 'tool_not_in_tier' });
+  });
+});
+
+const SECRET = 'an-agents-navigator-identity-miss-invoke-test-secret';
+const USER = '11111111-1111-4111-8111-111111111111';
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-agents' });
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: USER,
+    userId: USER,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['agents:read'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+function signed(p: Principal = principal()) {
+  const raw = encodePrincipal(p);
+  return edgeContext({
+    headers: {
+      'x-intafaced-principal': raw,
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+      'x-intafaced-region': 'DE',
+    },
+    id: 'req-signed',
+  });
+}
+
+function stubDeps(overrides: Partial<AgentsRouterDeps> = {}): AgentsRouterDeps {
+  return {
+    runtime: {} as AgentsRouterDeps['runtime'],
+    gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
+    meter: {} as AgentsRouterDeps['meter'],
+    feeAssetId: 'IFC',
+    navigatorTradeUrl: 'http://svc-trade:4004',
+    ...overrides,
+  };
+}
+
+const fatSession = { sessionId: 'sess-1', userId: USER, status: 'open' as const };
+
+describe('invokeDataTool live identity miss (S11-6)', () => {
+  it('unset identity port refuses no_live_session — caller fixture is not live truth', async () => {
+    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).navigator.invokeDataTool({
+      tool: 'identity.session.read',
+      plane: 'live',
+      userTier: 'free',
+      law: publishedAll,
+      session: fatSession,
+      occurredAt: '2026-08-07T12:00:01.000Z',
+    });
+    expect(result.result).toEqual({
+      status: 'refuse',
+      tool: 'identity.session.read',
+      reason: 'no_live_session',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+    expect(result.audit).toMatchObject({ status: 'refused', reason: 'no_live_session' });
+  });
+
+  it('throwing identity port refuses no_live_session — does not keep caller session', async () => {
+    const result = await createAgentsRouter(
+      stubDeps({
+        navigatorIdentitySessionPort: {
+          read: async () => {
+            throw new Error('identity down');
+          },
+        },
+      }),
+    )
+      .createCaller(signed())
+      .navigator.invokeDataTool({
+        tool: 'identity.session.read',
+        plane: 'live',
+        userTier: 'free',
+        law: publishedAll,
+        session: fatSession,
+        occurredAt: '2026-08-07T12:00:01.000Z',
+      });
+    expect(result.result).toMatchObject({ status: 'refuse', reason: 'no_live_session' });
+    expect(result.result).not.toMatchObject({ status: 'ok', session: fatSession });
+    expect(result.audit.status).toBe('refused');
+  });
+
+  it('null identity read refuses no_live_session — catch must not echo caller fixture', async () => {
+    const result = await createAgentsRouter(
+      stubDeps({
+        navigatorIdentitySessionPort: { read: async () => null },
+      }),
+    )
+      .createCaller(signed())
+      .navigator.invokeDataTool({
+        tool: 'identity.session.read',
+        plane: 'live',
+        userTier: 'free',
+        law: publishedAll,
+        session: fatSession,
+        occurredAt: '2026-08-07T12:00:01.000Z',
+      });
+    expect(result.result).toMatchObject({ status: 'refuse', reason: 'no_live_session' });
+  });
+
+  it('live identity uses the port session, not the caller fixture status', async () => {
+    const result = await createAgentsRouter(
+      stubDeps({
+        navigatorIdentitySessionPort: {
+          read: async () => ({ sessionId: 'sess-1', userId: USER, status: 'closed' as const }),
+        },
+      }),
+    )
+      .createCaller(signed())
+      .navigator.invokeDataTool({
+        tool: 'identity.session.read',
+        plane: 'live',
+        userTier: 'free',
+        law: publishedAll,
+        session: fatSession,
+        occurredAt: '2026-08-07T12:00:01.000Z',
+      });
+    expect(result.result).toEqual({
+      status: 'ok',
+      tool: 'identity.session.read',
+      session: { sessionId: 'sess-1', userId: USER, status: 'closed' },
+    });
   });
 });

@@ -154,7 +154,7 @@ const navigatorTradeDataPort = env.TRADE_URL ? createHttpNavigatorTradeDataPort(
 
 const navigatorIdentitySessionPort = env.IDENTITY_URL
   ? createHttpNavigatorIdentitySessionPort({ identityUrl: env.IDENTITY_URL, internalSecret: env.INTERNAL_SERVICE_SECRET })
-  : undefined;
+  : undefined; // blank / unset IDENTITY_URL → live identity.session.read refuses, never a caller fixture
 
 const appRouter = createAgentsRouter({
   runtime,

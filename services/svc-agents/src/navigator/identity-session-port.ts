@@ -1,8 +1,8 @@
 /**
  * Live identity session projection for navigator identity.session.read.
  *
- * Production leave unset: live session reads refuse honestly — never an
- * invented open session for another user.
+ * Production leave unset: live session reads refuse `no_live_session` —
+ * never an invented open session, never a caller fixture as live truth.
  */
 
 import type { SessionFixture } from './data-tools.js';

@@ -142,7 +142,7 @@ describe('navigator Stage-2 routes', () => {
         },
         occurredAt: '2026-08-07T12:00:01.000Z',
       });
-    expect(result.result).toMatchObject({ status: 'refuse', reason: 'subject_mismatch' });
-    expect(result.audit).toMatchObject({ status: 'refused', reason: 'subject_mismatch' });
+    expect(result.result).toMatchObject({ status: 'refuse', reason: 'no_live_session' });
+    expect(result.audit).toMatchObject({ status: 'refused', reason: 'no_live_session' });
   });
 });

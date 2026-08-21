@@ -350,12 +350,85 @@ describe('navigator.answer metered session run', () => {
     expect(result).toMatchObject({
       status: 'refuse',
       reason: 'no_grounded_answer',
-      unanswered: [{ tool: 'identity.session.read', refusedBy: 'tool', reason: 'subject_mismatch' }],
+      unanswered: [{ tool: 'identity.session.read', refusedBy: 'tool', reason: 'no_live_session' }],
       metering: { billedAmount: '0', settlements: [] },
     });
     expect(fake.toolCalls).toEqual(['identity.session.read']);
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
+  });
+
+  it('live without an identity port refuses — caller session fixture is not live truth', async () => {
+    const fake = new FakeRuntime();
+    const result = await runNavigatorAnswerSession({
+      ...baseInput(fake),
+      asks: [
+        {
+          tool: 'identity.session.read',
+          session: { sessionId: 'sess-1', userId: USER, status: 'open' as const },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_grounded_answer',
+      unanswered: [{ tool: 'identity.session.read', refusedBy: 'tool', reason: 'no_live_session' }],
+      metering: { billedAmount: '0', settlements: [] },
+    });
+    expect(result.status === 'ok' ? result.findings : []).toEqual([]);
+    expect(fake.toolCalls).toEqual(['identity.session.read']);
+  });
+
+  it('live identity miss from a throwing port refuses — does not echo caller fixture', async () => {
+    const fake = new FakeRuntime();
+    const result = await runNavigatorAnswerSession({
+      ...baseInput(fake),
+      identitySessionPort: {
+        read: async () => {
+          throw new Error('identity down');
+        },
+      },
+      asks: [
+        {
+          tool: 'identity.session.read',
+          session: { sessionId: 'sess-1', userId: USER, status: 'open' as const },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'no_grounded_answer',
+      unanswered: [{ tool: 'identity.session.read', refusedBy: 'tool', reason: 'no_live_session' }],
+    });
+    expect(result.metering.billedAmount).toBe('0');
+  });
+
+  it('live identity uses the port session, not the caller fixture status', async () => {
+    const fake = new FakeRuntime();
+    const result = await runNavigatorAnswerSession({
+      ...baseInput(fake),
+      identitySessionPort: {
+        read: async () => ({ sessionId: 'sess-1', userId: USER, status: 'closed' as const }),
+      },
+      asks: [
+        {
+          tool: 'identity.session.read',
+          session: { sessionId: 'sess-1', userId: USER, status: 'open' as const },
+        },
+      ],
+    });
+
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.findings).toEqual([
+      {
+        status: 'ok',
+        tool: 'identity.session.read',
+        session: { sessionId: 'sess-1', userId: USER, status: 'closed' },
+      },
+    ]);
   });
 
   it('refuses the whole run when nothing was reachable — no empty answer dressed as a result', async () => {
