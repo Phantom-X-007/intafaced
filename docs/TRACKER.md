@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**121 of 158 shipped (77%)** · 3 in progress · 18 ready to claim · 16 blocked · 30 deliberate §13 sockets
+**122 of 158 shipped (77%)** · 3 in progress · 18 ready to claim · 15 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -28,7 +28,7 @@ pnpm wt feat/<the-thing>
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | Native mobile apps — iOS and Android, own name, zero attribution (§25:727) | `core-ops` | 2 | `web.mobile-apps` |
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
-| AMM pools from audited templates | `protocol` | 3P | `protocol.amm` |
+| INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
 | 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
 | Certifications → XP → real perks | `academy` | 5 | `academy.certs` |
 | ERC-20 deploy from audited templates | `launch` | 5 | `launch.token-factory` |
@@ -50,14 +50,14 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **10** | AMM pools from audited templates | 🟢 ready | `protocol.amm` |
 | **9** | ERC-20 deploy from audited templates | 🟢 ready | `launch.token-factory` |
-| **6** | INTACHAIN — CometBFT + native CLOB module | ⛔ blocked | `chain.mainnet` |
+| **6** | INTACHAIN — CometBFT + native CLOB module | 🟢 ready | `chain.mainnet` |
 | **5** | Unified data lake — normalised ticks, books and fills to a time-series store (§27) | 🔨 wip | `connect.data-lake` |
 | **3** | Live cross-venue quote — real prices or a typed refusal | 🟢 ready | `dex.quote-router` |
 | **2** | Strategy Studio — no-code builder, mandatory risk blocks (§29) | ⛔ blocked | `quant.studio` |
 | **1** | 2D navigable room canvas, VR-ready scene state | 🟢 ready | `academy.spatial` |
 | **1** | Growth Agent — acquisition and campaign proposals (§8.2) | 🟢 ready | `agents.growth` |
+| **1** | Portfolio suite — users and house, views over ledger and indexer (§25:723) | 🔨 wip | `ops.portfolio` |
 
 ## 🔨 In progress
 
@@ -170,12 +170,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | Wire svc-pay dispute open to ledger chargeback recipes <br/>_§13 residual (named 2026-08-12 under D26-P1-P5) — packages/ledger-client already has chargebackOpen / Shortfall / Won / ShortfallRecovered with an explicit Class M owner-sign-off banner. svc-pay records dispute cases and projects payment → disputed, but must not call those recipes until the four named questions in chargeback.ts are signed. The seam refuses by name (`refuseChargebackLedgerPost` → pay.chargeback_ledger_unwired) so the Done bar is mechanism + honest socket, not a silent book entry or an unwired stub string. Closing = owner sign-off then wire dispute open to post; inventing split legs or shortfall policy is forbidden. Blocklist / scheme list content remains Class X._ | F |  | `socket.pay-chargeback-ledger-wire` |
 | 🔌 | Resolve the caller’s region per request instead of stamping one constant <br/>_§13 — svc-edge resolves `region` ONCE, from `DEFAULT_REGION` (services/svc-edge/src/env.ts, default `XX`), and stamps that same value onto the principal of EVERY request (src/index.ts, the `exchangePrincipal` call). There is no geo-IP handling anywhere in the repo: no `cf-ipcountry`, no `x-vercel-ip-country`, no provider database, nothing. WHAT THAT MEANS FOR SCREENING: `checkAccess`, JURISDICTION_MATRIX and the sanctions list are all correct and armed, and they evaluate ONE CONSTANT REGION for all traffic. Even with a counsel-supplied `INTAFACED_SANCTIONS_REGIONS`, no real caller’s jurisdiction is ever tested against it — a listed region can only ever match if an operator happened to set DEFAULT_REGION to that same code. So `assertScreeningConfigured` passing in prod means "a list was supplied", NOT "traffic is screened against it", and this row exists so the first is never read as the second. It understates matrix enforcement (tiers, limits, per-module blocks) for the same reason, not only sanctions. WHY IT IS NOT A ONE-LINER: region must never be caller-supplied — a caller who could set it would choose its own regulator — so closing this needs a TRUSTED upstream geo header from whatever CDN or proxy fronts the edge, a stated precedence between headers, proof the header cannot be spoofed by a direct-to-origin request, and a fail-closed answer when it is absent or untrusted. That is a deployment-topology decision with an owner, not just code._ | F |  | `socket.geo-region-resolution` |
 
-### Phase 3P — Protocol P0 (13/15)
+### Phase 3P — Protocol P0 (14/15)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
 | ✅ | Passkey smart accounts, session keys (§17.4) <br/>_**D26-P1-S1 Done 2026-08-21:** passkey smart accounts + session keys mounted (`smart-accounts-mount-vs-tracker.ts`). Factory predict/build, session grant/revoke, relay userOp with typed chain refusals. Class X residual: paymaster funding float; public deployment registry Nitro RPC._ | P |  | `protocol.smart-accounts` |
-| 🟢 | AMM pools from audited templates <br/>_HUMAN Protocol Plane @shehzad002 after SA. Agents babysit only. THE COMPILE-AND-PROVE HALF IS ALREADY MERGED — recorded 2026-08-07 because this row stated only who owns it, and the blockchain task board consequently asks its owner for work that landed eight days earlier. The pool once did not compile at all (swapExactIn called an `external swap` by name); fixed with a private `_swap` shared by both entrypoints, external ABI unchanged for calldata builders (#228, by @shehzad002). PoolFactory then landed on the dev chain (#264), and mint + swapExactIn are PROVEN ON A CHAIN rather than asserted in a unit test (#288 — src/amm/mint-swap-onchain.test.ts, src/amm/pool-factory-onchain.test.ts). Constant-product maths is a pure tested module (src/amm/math.ts). INVARIANTS + LP ACCOUNTING 2026-08-08 (S-A2 residual): src/amm/invariants.test.ts — k never decreases, no free extraction on round-trip, MINIMUM_LIQUIDITY + pro-rata mint/burn, fee tiers, no setFee/pause. STATUS stays ready: oracle coupling is deliberately NOT reading AMM for marks (S-A12); audited:false until socket.contract-audit. Do not rebuild mint/swap on-chain proof (#288)._ | P |  | `protocol.amm` |
+| ✅ | AMM pools from audited templates <br/>_**D26-P1-A2 Done 2026-08-21:** constant-product pools mounted (`mount-vs-tracker.ts`); mint/swap on-chain proven. quoteExactIn + quoteFromPool + buildCreatePool + buildSwapExactIn on router. Class X residual: external contract audit; live chain RPC Nitro._ | P |  | `protocol.amm` |
 | ✅ | On-chain lending markets, keeper liquidations <br/>_CLOSED engineering bar 2026-08-08 (S-A4): IsolatedLendingMarket + FailClosedOracle marks, immutable kink rates (no invent / no AMM), cascade suite + flash/reentrancy adversarial pack (lending-cascade-flash.onchain.test.ts, lending-honesty.test.ts). RESIDUAL named Nitro RPC gate: persistent public testnet (Base Sepolia → Base P0) with verified source — dev-anvil is not that row. Unaudited: no real deposits until socket.contract-audit._ | P |  | `protocol.lending` |
 | ✅ | Non-custodial P2P escrow contracts <br/>_CLOSED 2026-08-08 (S-A3). SovereignEscrow.sol — open/lock/release/refund/dispute + keeper settleTimeout with immutable TimeoutDisposition; optional user-elected arbiter; no platform key. Distinct from custodial svc-p2p escrow (ADR 2026-08-04). On-chain suite: release, refund, timeout refund, early-timeout refusal. Residuals: multi-asset, richer fee splits, svc wiring, indexer events. Law: docs/adr/2026-08-08-sovereign-p2p-escrow.md._ | P |  | `protocol.escrow` |
 | ✅ | Sovereign router — book vs pool best execution <br/>_S-A5 2026-08-08: on-chain SovereignRouter executes pool swaps with minOut fail-closed; TypeScript pickBestRoute compares caller-supplied book quotes vs pool maths without inventing a mid. Split routes / MEV notes residual._ | P |  | `protocol.router` |
@@ -207,7 +207,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| ⛔ | INTACHAIN — CometBFT + native CLOB module <br/>_HUMAN INTACHAIN P1 @shehzad002 (§17). Plan ADR before large implement. Agents babysit only._ | P | `protocol.amm` | `chain.mainnet` |
+| 🟢 | INTACHAIN — CometBFT + native CLOB module <br/>_HUMAN INTACHAIN P1 @shehzad002 (§17). Plan ADR before large implement. Agents babysit only._ | P |  | `chain.mainnet` |
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
