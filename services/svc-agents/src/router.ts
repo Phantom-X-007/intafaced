@@ -1262,7 +1262,27 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * Spec: docs/ops/trk/agents.navigator.md Stage 2.
      */
     navigator: router({
-      policy: publicProcedure.query(() => describeNavigatorPolicy()),
+      policy: publicProcedure
+        .output(
+          z.object({
+            moneyWriteTools: z.array(z.string()),
+            moneyDeny: z.object({
+              tools: z.number().int(),
+              hasLedgerPost: z.number().int(),
+              hasTradeOrder: z.number().int(),
+              hasBankTransfer: z.number().int(),
+            }),
+            moneyDenyStatusLine: z.string(),
+            moneyDenyExport: z.string(),
+            moneyDenyBilledAmount: z.literal('0'),
+            darkPlaneRefuse: z.object({
+              reason: z.literal('trade_plane_dark'),
+              userMessageKey: z.literal('agents.navigator.unavailable'),
+            }),
+            liveAllowedTasks: z.tuple([z.literal('navigator.plan'), z.literal('navigator.tool_select')]),
+          }),
+        )
+        .query(() => describeNavigatorPolicy()),
 
       grounded: scopedProcedure('agents:read', { module: 'agents' })
         .input(z.object({ plane: z.enum(['live', 'dark']) }))

@@ -6,6 +6,7 @@ import { BankError } from './errors.js';
 import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
 import type { BankServices } from './bank-service.js';
 import { userFacingBankMessage } from './user-copy.js';
+import { describeAutoInvestPolicy } from './auto-invest/auto-invest-policy.js';
 
 /**
  * svc-bank's API.
@@ -441,6 +442,8 @@ export type BankRouterOptions = {
   loanRiskSweepEnabled?: boolean;
   /** When false, `ops.runAutoInvest` refuses with `bank.auto_invest_disabled`. Default true. */
   autoInvestEnabled?: boolean;
+  /** True when trade.convert ConvertPort is wired at boot. */
+  autoInvestConvertWired?: boolean;
 };
 
 export function createBankRouter(bank: BankServices, options: BankRouterOptions = {}) {
@@ -449,6 +452,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   const loanAccrualEnabled = options.loanAccrualEnabled ?? true;
   const loanRiskSweepEnabled = options.loanRiskSweepEnabled ?? true;
   const autoInvestEnabled = options.autoInvestEnabled ?? true;
+  const autoInvestConvertWired = options.autoInvestConvertWired ?? false;
 
   const spaces = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
@@ -2016,6 +2020,8 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   }
 
   const autoInvest = router({
+    policy: publicProcedure.query(() => describeAutoInvestPolicy({ enabled: autoInvestEnabled, convertWired: autoInvestConvertWired })),
+
     /**
      * List this user's auto-invest rules. Rules hold no balance — they are
      * instructions; the ledger answers "how much".
