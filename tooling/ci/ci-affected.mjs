@@ -160,6 +160,10 @@ function selfTest() {
       expected: { ...empty, money: true },
     },
     {
+      files: ['services/svc-token/src/token-service.ts'],
+      expected: { ...empty, money: true },
+    },
+    {
       files: ['services/svc-protocol/x.ts', 'packages/ledger-client/src/x.ts'],
       expected: { ...empty, protocol: true, money: true },
     },
