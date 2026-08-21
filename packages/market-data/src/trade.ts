@@ -131,12 +131,31 @@ export function ingestVenueFill(lake: CaptureLog, input: VenueFillIngest): Venue
   return { record, print };
 }
 
-/** Tick ingest. Same absent-vs-measured rule as fills. */
+/**
+ * Tick ingest. Same absent-vs-measured rule as fills: JSON numbers are
+ * refuse, never a live tape print. Unconnected / missing ticks write absent
+ * without minting a measured row.
+ */
 export function ingestVenueTick(lake: CaptureLog, input: VenueTickIngest): CaptureRecord {
+  const tick = input.tick ?? null;
+  if (input.connection !== 'connected' || tick === null) {
+    return lake.captureTick({
+      venueId: input.venueId,
+      marketId: input.marketId,
+      connection: input.connection,
+      tick: null,
+    });
+  }
+  if (typeof tick.price !== 'string' || !DECIMAL.test(tick.price)) {
+    throw new Error('tick price must be a non-negative decimal string');
+  }
+  if (typeof tick.quantity !== 'string' || !DECIMAL.test(tick.quantity)) {
+    throw new Error('tick quantity must be a non-negative decimal string');
+  }
   return lake.captureTick({
     venueId: input.venueId,
     marketId: input.marketId,
-    connection: input.connection,
-    tick: input.tick ?? null,
+    connection: 'connected',
+    tick: { price: tick.price, quantity: tick.quantity, ts: tick.ts },
   });
 }
