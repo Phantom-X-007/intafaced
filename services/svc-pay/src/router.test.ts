@@ -798,6 +798,16 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     await expect(api.plugins.publicBase()).resolves.toEqual({ base: '/api/pay/v1' });
   });
 
+  it('plugins.policy exposes integrator honesty board', async () => {
+    const api = await caller([]);
+    const p = await api.plugins.policy();
+    expect(p.publicApiBase).toBe('/api/pay/v1');
+    expect(p.cmsShippedFamily).toBe('woocommerce');
+    expect(p.cmsUnwiredFamilies).toEqual(['magento', 'opencart']);
+    expect(p.inventsProviderCredentials).toBe(false);
+    expect(p.inventsSecondCheckoutBook).toBe(false);
+  });
+
   it('refuses with FORBIDDEN rather than NOT_FOUND, consistently, on all three', async () => {
     stub.ownedBy(ANOTHER_USER);
     const api = await caller(['pay:read']);
