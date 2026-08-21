@@ -4,6 +4,7 @@ import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/so
 import type { TradeHub } from './trade/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
+import { describeGatewayPolicy } from './gateway-policy.js';
 
 /**
  * The HTTP half of the gateway.
@@ -107,6 +108,8 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       privateBus: privateBus(),
     };
   });
+
+  app.get('/policy', async () => describeGatewayPolicy());
 
   app.get('/markets/:marketId/depth', async (req, reply) => {
     reply.header('access-control-allow-origin', '*');
