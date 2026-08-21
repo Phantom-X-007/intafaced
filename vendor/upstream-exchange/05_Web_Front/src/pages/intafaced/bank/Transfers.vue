@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.transfersPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.transfersPage.lead') }}</p>
-      <div class="ix-source">svc-bank · transfers.create · transfers.toUser · transfers.schedule · transfers.listSchedules · transfers.executions · transfers.pause · transfers.resume · transfers.cancel</div>
+      <div class="ix-source">svc-bank · transfers.create · transfers.toUser · transfers.schedule · transfers.scheduleToUser · transfers.listSchedules · transfers.executions · transfers.pause · transfers.resume · transfers.cancel</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -157,6 +157,64 @@
           <div style="margin-top:6px;">{{ $t('intafaced.bank.nextRun') }}: {{ scheduled.data.nextRunAt }}</div>
         </div>
         <IxState v-else :loading="scheduled.busy" :reason="scheduled.reason" :message="scheduled.message" endpoint="/api/bank/trpc/transfers.schedule"></IxState>
+      </div>
+    </div>
+
+    <!-- ── standing order to a user ───────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.transfers.scheduleToUser') }}</h2>
+        <span class="ix-sub">transfers.scheduleToUser</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.transfers.scheduleToUserLead') }}</p>
+
+      <div v-if="spaces.data && spaces.data.length">
+        <div class="ix-field-grid">
+          <div class="ix-field">
+            <label>{{ $t('intafaced.bank.fromSpace') }}</label>
+            <Select v-model="standingToUser.fromSpaceId" :placeholder="$t('intafaced.bank.chooseSpace')">
+              <Option v-for="s in spaces.data" :key="s.id" :value="s.id" :label="s.name + ' · ' + s.assetId"></Option>
+            </Select>
+          </div>
+          <div class="ix-field">
+            <label for="ix-so-to-user">{{ $t('intafaced.bank.transfers.toUserId') }}</label>
+            <Input element-id="ix-so-to-user" v-model="standingToUser.toUserId" :placeholder="$t('intafaced.bank.transfers.toUserIdHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label for="ix-so-to-user-amount">{{ $t('intafaced.pay.amount') }}</label>
+            <Input element-id="ix-so-to-user-amount" v-model="standingToUser.amount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label>{{ $t('intafaced.bank.cadence') }}</label>
+            <Select v-model="standingToUser.cadence">
+              <Option value="daily" :label="$t('intafaced.bank.daily')"></Option>
+              <Option value="weekly" :label="$t('intafaced.bank.weekly')"></Option>
+              <Option value="monthly" :label="$t('intafaced.bank.monthly')"></Option>
+            </Select>
+          </div>
+          <div class="ix-field">
+            <label for="ix-so-to-user-start">{{ $t('intafaced.bank.startsAt') }}</label>
+            <Input element-id="ix-so-to-user-start" v-model="standingToUser.startsAt" :placeholder="$t('intafaced.bank.isoHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label for="ix-so-to-user-end">{{ $t('intafaced.bank.endsAtOptional') }}</label>
+            <Input element-id="ix-so-to-user-end" v-model="standingToUser.endsAt" :placeholder="$t('intafaced.bank.isoHint')"></Input>
+          </div>
+        </div>
+        <div class="ix-actions">
+          <Button type="primary" :loading="scheduledToUser.busy" :disabled="!canScheduleToUser" @click="submitScheduleToUser">
+            {{ $t('intafaced.bank.transfers.scheduleToUserSend') }}
+          </Button>
+        </div>
+      </div>
+      <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.transfersPage.needSpace') }}</div>
+
+      <div v-if="scheduledToUser.ran" style="margin-top:14px;">
+        <div v-if="scheduledToUser.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.transfers.scheduleToUserPosted') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.bank.nextRun') }}: {{ scheduledToUser.data.nextRunAt }}</div>
+        </div>
+        <IxState v-else :loading="scheduledToUser.busy" :reason="scheduledToUser.reason" :message="scheduledToUser.message" endpoint="/api/bank/trpc/transfers.scheduleToUser"></IxState>
       </div>
     </div>
 
@@ -322,6 +380,7 @@ export default {
       transfer: { fromSpaceId: '', toSpaceId: '', amount: '' },
       toUser: { fromSpaceId: '', toUserId: '', amount: '' },
       standing: { fromSpaceId: '', toSpaceId: '', amount: '', cadence: 'monthly', startsAt: '', endsAt: '' },
+      standingToUser: { fromSpaceId: '', toUserId: '', amount: '', cadence: 'monthly', startsAt: '', endsAt: '' },
       cancellingId: '',
       actingId: '',
       openScheduleId: '',
@@ -331,6 +390,7 @@ export default {
       created: this.emptyAction(),
       sentToUser: this.emptyAction(),
       scheduled: this.emptyAction(),
+      scheduledToUser: this.emptyAction(),
       paused: this.emptyAction(),
       resumed: this.emptyAction(),
       cancelled: this.emptyAction()
@@ -345,6 +405,9 @@ export default {
     },
     canSchedule() {
       return Boolean(this.standing.fromSpaceId && this.standing.toSpaceId && this.standing.amount && this.standing.startsAt);
+    },
+    canScheduleToUser() {
+      return Boolean(this.standingToUser.fromSpaceId && this.standingToUser.toUserId && this.standingToUser.amount && this.standingToUser.startsAt);
     }
   },
   created() {
@@ -411,6 +474,21 @@ export default {
       };
       if (this.standing.endsAt) input.endsAt = this.standing.endsAt;
       this.act('scheduled', mutate('bank', 'transfers.schedule', input, this.ixToken)).then(function(res) {
+        if (res.ok) self.reloadSchedules();
+      });
+    },
+    submitScheduleToUser() {
+      var self = this;
+      if (!this.canScheduleToUser) return;
+      var input = {
+        fromSpaceId: this.standingToUser.fromSpaceId,
+        toUserId: this.standingToUser.toUserId,
+        amount: this.standingToUser.amount,
+        cadence: this.standingToUser.cadence,
+        startsAt: this.standingToUser.startsAt
+      };
+      if (this.standingToUser.endsAt) input.endsAt = this.standingToUser.endsAt;
+      this.act('scheduledToUser', mutate('bank', 'transfers.scheduleToUser', input, this.ixToken)).then(function(res) {
         if (res.ok) self.reloadSchedules();
       });
     },

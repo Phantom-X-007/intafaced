@@ -624,7 +624,11 @@ module.exports = {
                 toUserId: "To user id",
                 toUserIdHint: "The destination user's id",
                 toUserSend: "Send to user",
-                toUserPosted: "Transfer to user posted"
+                toUserPosted: "Transfer to user posted",
+                scheduleToUser: "Standing order to a user",
+                scheduleToUserLead: "Same standing-order contract, to another user's primary space for the from-space's asset. svc-bank resolves the destination and runs the cadence.",
+                scheduleToUserSend: "Schedule to user",
+                scheduleToUserPosted: "Standing order to user created"
             },
 
             transfersPage: {
