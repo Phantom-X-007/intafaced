@@ -23,6 +23,7 @@ import {
   type RailRoutingProfile,
 } from './routing/decide.js';
 import { evaluateFraud } from './fraud/evaluate.js';
+import { describeFraudPolicy } from './fraud/fraud-policy.js';
 import { defaultFraudReviewQueue, FraudReviewError } from './fraud/review-queue.js';
 import { defaultDisputeCaseStore, DisputeCaseError } from './fraud/dispute-case.js';
 import { describeCmsPluginStatus } from './plugins/cms-status.js';
@@ -909,6 +910,8 @@ export function createPayRouter(
      * `socket.pay-chargeback-ledger-wire` (named §13). List content Class X.
      */
     fraud: router({
+      policy: publicProcedure.query(() => describeFraudPolicy()),
+
       evaluate: publicProcedure
         .input(
           z.object({
