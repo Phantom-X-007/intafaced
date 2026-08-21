@@ -124,9 +124,7 @@ describe('merchant watch metrics internal route', () => {
   });
 
   it('refresh materializes projected metrics then GET succeeds', async () => {
-    const projected = [
-      { railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 },
-    ];
+    const projected = [{ railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 }];
     const app = Fastify();
     const store = memoryStore(projected);
     registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET, store });
