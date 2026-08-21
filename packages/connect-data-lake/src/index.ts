@@ -23,6 +23,7 @@ export {
   type VenueConnection,
   type WireLevel,
 } from './capture.js';
+export { describeCapturePolicy, CAPTURE_KINDS, type CapturePolicySummary } from './capture-policy.js';
 export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
