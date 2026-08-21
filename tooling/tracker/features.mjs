@@ -528,8 +528,16 @@ export const FEATURES = [
     status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation'],
-    requires: ['packages/venue-adapter/src/fabric/capture-lake.ts'],
-    note: 'Law §27:762, gap-closed 2026-08-08. §30:793 phases Connect at 2. The law calls this our data moat and the backtest fuel for §29, and `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) records the cost of its absence from the other side: §29 Quant is blocked on this lake, which is blocked on §27 adapters. WHAT IS DECIDED: capture only, and per D-S-18 a venue that is not connected is ABSENT in the record, never an empty book — a hole in capture must be readable as a hole, not as a quiet market. WHAT IS NOT DECIDED: the store itself. No time-series database is chosen, provisioned or in either compose file, retention is unwritten, and whether §29 ships to users at all is explicitly left with the owner by D-S-18. CAPTURE HONESTY SHIPPED 2026-08-12 (feat/connect-capture-lake-honesty): `packages/venue-adapter` `CaptureLake` append log — null/mismatched adapter → typed `hole` (`not_connected`); `VenueUnavailableError` → hole with venue reason (incl. `no_depth`); connected empty snapshot → `book` quiet-market fact; `bookFromCapture(hole)` is null (never synthetic empty). Second public venue (`bybit-spot`) already on tip (#1148) so the old "one adapter" lake blocker is spent for capture shape. Still `wip` / not `done`: no TSDB, no retention, no tick/fill normalisation pipeline, no compose store, Quant product still owner-gated by D-S-18.',
+    requires: [
+      'packages/connect-data-lake/src/mount-vs-tracker.ts',
+      'packages/connect-data-lake/src/mount-vs-tracker.test.ts',
+      'packages/connect-data-lake/src/data-lake-stage1.ts',
+      'packages/connect-data-lake/src/capture-policy.ts',
+      'packages/venue-adapter/src/fabric/capture-lake.ts',
+    ],
+    note:
+      'WIP Stage-1 D26-P2-DL1: `@intafaced/connect-data-lake` mount-vs-tracker — capture log only; `describeDataLakeStage1` refuses TSDB/persist. ' +
+      'Unconnected venue = absent hole, never synthetic empty book. Class X residual: TSDB/compose unchosen; tick/fill normalisation pipeline; retention owner.',
   }),
   f('execution.sor', 'svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports (§28)', {
     module: 'trade',
