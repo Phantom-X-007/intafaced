@@ -1648,11 +1648,17 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['identity.kyc'],
-    requires: ['packages/config/src/screening.ts', 'packages/config/src/jurisdiction.ts'],
+    requires: [
+      'packages/config/src/compliance-mount-vs-tracker.ts',
+      'packages/config/src/compliance-mount-vs-tracker.test.ts',
+      'packages/config/src/screening.ts',
+      'packages/config/src/jurisdiction.ts',
+      'packages/config/src/compliance-queue.ts',
+    ],
     note:
-      '**D26-P1-O1 Done-bar sealed 2026-08-12 (#1734):** screening *mechanism* — `INTAFACED_SCREENING_FAIL_CLOSED` → ' +
-      '`denied.screening_unconfigured` when list unset; honesty-only default OFF. List *content* remains Class X (Nitro/counsel). ' +
-      'VPN partner / geo-IP socket / case-management UI residual. Avoid dual-edit Nitro #1659 svc-edge control-plane.',
+      '**D26-P1-O1 Done-bar sealed 2026-08-12 (#1734):** screening *mechanism* — fail-closed when list unset. ' +
+      'D26-P1-O1M mount-vs-tracker seals screening + queue disposition paths. List *content* Class X (counsel). ' +
+      'VPN partner / geo-IP socket / case-management UI residual.',
   }),
   f('ops.analytics', 'Warehouse — read replica + cube layer', {
     module: 'core-ops',
