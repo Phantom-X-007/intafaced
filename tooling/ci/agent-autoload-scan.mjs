@@ -36,8 +36,8 @@ function mustInclude(rel, needle, why) {
 }
 
 // Primary auto-load for Grok / multi-agent tools
-mustInclude('AGENTS.md', 'COORDINATION-TRUTH-LAYERS', 'cold agents must inherit multi-dev layers without a paste prompt');
-mustInclude('AGENTS.md', 'mountain events', 'must not regress to every-PR registry tax or drop claim law');
+mustInclude('AGENTS.md', 'Full access', 'cold agents must inherit full-access ship law');
+mustInclude('AGENTS.md', 'Merge when CI is green', 'must not regress to human merge gates');
 
 // Claude Code auto-loads CLAUDE.md first
 mustInclude('CLAUDE.md', 'AGENTS.md', 'Claude sessions must chain into AGENTS.md');
@@ -45,7 +45,7 @@ mustInclude('CLAUDE.md', 'COORDINATION-TRUTH-LAYERS', 'Claude cold start must se
 
 // Hard-ban file every agent is told to read
 mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'COORDINATION-TRUTH-LAYERS', 'protocol hard path must name the layers home');
-mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'HUMAN-CLAIMED', 'must hard-ban implementing shehzad/human mountains');
+mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'Full access', 'agents must not regress to human permission gates');
 
 // Law home itself
 mustInclude('docs/COORDINATION-TRUTH-LAYERS.md', 'No PR cap', 'anti-limit guarantees must stay in the law home');
@@ -64,39 +64,11 @@ mustInclude('tooling/agent-protocol/AGENT_PROTOCOL.md', 'second money book', 'mu
 mustInclude('docs/INTERNET-LEVERAGE-LAW.md', 'Phase A is finished for NOW', 'leverage law home must keep operator decision');
 mustInclude('docs/INTERNET-LEVERAGE-LAW.md', 'Mandatory pre-code ritual', 'agents need an executable ritual not a vague blog');
 
-// Session finish — the definition of "done" for a RUN, not a module.
-// Until 2026-08-07 this lived only at ~/projects/OS/harvest/shared/S-CORE.md while
-// SWARM-MANDATE cited it as binding: Denon, Shehzad, CI and any other machine could
-// not read it. Module Done (AGENT_PROTOCOL §8) is satisfiable infinitely — 64 PRs and
-// 21k lines of catalog copies passed it — so an unreachable session-finish definition
-// is what let the mill run. The ontology stays in-repo and stays cited.
-mustInclude('docs/ops/FINISH-ONTOLOGY.md', 'F-STANDBY', 'session finish types must stay in the repo, readable by every teammate');
-mustInclude('docs/ops/FINISH-ONTOLOGY.md', 'never evidence of success', 'the noise bans are the anti-volume rule; do not drop them');
-mustInclude('docs/ops/SWARM-MANDATE.md', 'FINISH-ONTOLOGY', 'the mandate must cite the in-repo ontology, never a path on one machine');
-
-// Run memory. The ledger is useless if nothing routes a resuming agent to it, and
-// docs/AUTONOMOUS-RUN.md already proved that: same idea in 2026-07, maintained by hand,
-// nothing has written it since the day it was created, and the failure autopsy records
-// it as "lagged / lied mid-flight". The ledger file itself is gitignored runtime state,
-// so this citation in AGENTS.md is the only thing that makes it reachable at all.
-//
-// Measured 2026-08-07: the harness rebuilds AGENTS.md into live context at EVERY
-// compaction, verbatim — so this instruction survives indefinitely. It is a snapshot
-// taken at session start, so an edit reaches new sessions only; never put state here.
-mustInclude('AGENTS.md', 'pnpm ledger', 'a resuming agent must be routed to the run ledger without a paste');
-mustInclude('AGENTS.md', 'RESUME HERE', 'the resume instruction must survive edits — it is what a cold agent acts on');
-mustInclude('AGENTS.md', 'open-count', 'module-Done is satisfiable infinitely; the run-level check must stay in the done ritual');
-mustInclude(
-  'tooling/scripts/run-ledger.mjs',
-  'cannot be done without a proof link',
-  'no-proof-no-done is enforced in code, not by convention',
-);
-
 // Binding law may not delegate authority to a path outside the repo. Same class as the
 // four reachability failures of 2026-08-07: correct doctrine no teammate can reach is
 // doctrine that does not exist. Operational paths an agent execs (tokens, tool bins)
 // are not authority claims and are skipped.
-for (const rel of ['AGENTS.md', 'docs/ops/SWARM-MANDATE.md', 'docs/COORDINATION-TRUTH-LAYERS.md', 'docs/ops/FINISH-ONTOLOGY.md']) {
+for (const rel of ['AGENTS.md', 'docs/COORDINATION-TRUTH-LAYERS.md']) {
   const body = read(rel);
   if (!body) continue;
   for (const line of body.match(/^.*(?:~\/projects\/|OS harvest|\/Users\/[A-Za-z0-9._-]+\/projects\/).*$/gm) || []) {

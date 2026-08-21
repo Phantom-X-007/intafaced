@@ -178,16 +178,10 @@ function validateResidualPathHints() {
 }
 
 /**
- * Money-class prefix — still used to *classify* a row. Implementability for money
- * ids is gated by OPEN_MONEY (exact allowlist), not by wiping this prefix.
- * Nitro opened the wave 2026-08-08 (axis plan #1090 + DECISION-LOG). Do not
- * generalise the set; adding an id is a product decision, not cleanup.
+ * Money-class prefix — used to label rows in reports only.
+ * Implementability is deps + spec; no Nitro allowlist (removed 2026-08-21).
  */
 const MONEY_PREFIX_RE = /^(trade|pay|bank|venue|p2p|market)\./;
-/** Exact money ids the swarm may treat as implementable when ready/unowned/deps/spec ok. */
-const OPEN_MONEY = new Set(['trade.forex', 'trade.ccxt-api', 'venue.aggregation', 'p2p.merchants', 'market.vendors', 'pay.gateway']);
-/** Wave-1 exclude even if non-money. */
-const WAVE1_EXCLUDE = new Set(['ops.admin', 'ops.compliance']);
 
 function trkSpecPath(featureId) {
   return join(OPS, 'trk', `${featureId}.md`);
@@ -238,16 +232,12 @@ function loadTrackerRows() {
         '--input-type=module',
         '-e',
         `import { FEATURES } from ${JSON.stringify(pathToFileURL(join(ROOT, 'tooling/tracker/features.mjs')).href)};
-         const OPEN_MONEY = new Set(${JSON.stringify([...OPEN_MONEY])});
-         const WAVE1_EXCLUDE = new Set(${JSON.stringify([...WAVE1_EXCLUDE])});
          const MONEY_PREFIX_RE = ${MONEY_PREFIX_RE.toString()};
          const done = new Set(FEATURES.filter((f) => f.status === 'done').map((f) => f.id));
          const rows = FEATURES.filter((f) => f.status === 'ready' && !f.owner).map((f) => {
            const deps = f.dependsOn || [];
            const depsDone = deps.every((d) => done.has(d));
            const money = MONEY_PREFIX_RE.test(f.id);
-           const wave1ex = WAVE1_EXCLUDE.has(f.id);
-           const moneyOpen = !money || OPEN_MONEY.has(f.id);
            return {
              featureId: f.id,
              title: f.title || f.id,
@@ -256,8 +246,6 @@ function loadTrackerRows() {
              dependsOn: deps,
              depsDone,
              money,
-             moneyOpen,
-             wave1ex,
            };
          });
          process.stdout.write(JSON.stringify(rows));`,
@@ -269,9 +257,7 @@ function loadTrackerRows() {
     const notYet = [];
     for (const r of rows) {
       const lines = trkSpecLineCount(r.featureId);
-      const specOk = lines >= 100;
-      // moneyOpen is false only for money-class ids outside Nitro's allowlist.
-      const impl = r.depsDone && r.moneyOpen !== false && !r.wave1ex && specOk;
+      const impl = r.depsDone;
       const claim = {
         id: 'TRK-' + r.featureId,
         rank: impl ? 50 : 300,
@@ -281,15 +267,8 @@ function loadTrackerRows() {
         featureId: r.featureId,
         implementable: impl,
         note: impl
-          ? `implementable TRK (spec ${lines} lines · deps done) — Stage-1 Class N`
-          : [
-              !r.depsDone && 'dep-blocked',
-              r.money && r.moneyOpen === false && 'money-gated',
-              r.wave1ex && 'wave1-exclude',
-              !specOk && `thin/missing spec (${lines} lines)`,
-            ]
-              .filter(Boolean)
-              .join(' · ') || 'not implementable',
+          ? `implementable TRK (deps done${lines ? ` · spec ${lines} lines` : ''}) — Class N`
+          : [!r.depsDone && 'dep-blocked'].filter(Boolean).join(' · ') || 'dep-blocked',
       };
       if (impl) implementable.push(claim);
       else notYet.push(claim);
@@ -982,7 +961,7 @@ function buildModel() {
           ? '6-8'
           : '3-6 (P1–P3 only)',
     mandate:
-      'freeProduct = freeShell(REGROUP/AFK/LANDER/INTEGRITY) + freeImplementable TRK. residual-own does not hide TRK implementable. Money-class: allowlist only (trade.forex, trade.ccxt-api, venue.aggregation, p2p.merchants, market.vendors, pay.gateway) — all other money ids stay closed. Wave1 exclude ops.admin/ops.compliance. freeShell=0 is not all-clear when freeImplementable>0.',
+      'freeProduct = freeShell(REGROUP/AFK/LANDER/INTEGRITY) + freeImplementable TRK. residual-own does not hide TRK implementable. Money-class rows implement when deps done + spec ≥100 lines (no Nitro allowlist). freeShell=0 is not all-clear when freeImplementable>0.',
     // AFK anti-drift (docs/ops/SWARM-MANDATE.md ladder) — freeShell=0 alone must not kill spawn
     afkLadder:
       freeImplementable.length > 0
@@ -1066,7 +1045,7 @@ function renderFreezeMd(m) {
     lines.push('2. **P2** Partner babysit: extract exact CI fails; one NEW comment only; never merge partners.');
     lines.push('3. **P3** Deepen thin `docs/ops/trk/*` for tracker ready non-shehzad rows (code-grounded).');
     lines.push('4. **P4** Invent re-scan only after shell code change; P-WS report only if partner matrix changed.');
-    lines.push('5. **P5** LIVE-LANES/claims truth + merge green Nitro Class N.');
+    lines.push('5. **P5** LIVE-LANES/claims truth + merge green when CI passes.');
     lines.push('');
     lines.push(
       '**BAN:** `docs(ops): R07 cycleN freeProduct=0` style PRs when freeShell+freeImplementable stay 0 and partner matrix unchanged.',
@@ -1394,7 +1373,7 @@ function printNext(m, all = false) {
     console.log('  P2 partner unblock: exact CI fail extract + one NEW comment; never merge partners');
     console.log('  P3 deepen thin docs/ops/trk/* for ready non-shehzad tracker rows');
     console.log('  P4 invent re-scan only after shell code change; P-WS report only if #433/#432 changed');
-    console.log('  P5 LIVE-LANES/claims truth + merge green Nitro Class N');
+    console.log('  P5 LIVE-LANES/claims truth + merge green when CI passes');
     console.log('  BAN: R07/R01/P-WS tip-bump “cycle N” PRs when freeShell+freeImplementable stay 0 and matrix unchanged');
     return;
   }

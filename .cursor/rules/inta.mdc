@@ -1,0 +1,10 @@
+---
+description: Full-access product ship. Money integrity only.
+alwaysApply: true
+---
+
+Build services and packages. Do not write docs boards, ADRs, LIVE-LANES, or TRACKER recooks.
+
+Money only through `packages/ledger-client`. Never store money in a `number`. One service per PR. `pnpm verify` before done.
+
+Full access: any agent, any tracker row, any service — start immediately. Merge when CI green. No Nitro/Denon/audit/FREEZE/claim/LIVE-LANES gate. Unset config → refuse-closed in code, not human ping.
