@@ -10,18 +10,18 @@
 
 <!-- tracker:start -->
 
-`███████████████░░░░░` **75%** — 119 of 158 features shipped
+`███████████████░░░░░` **76%** — 120 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 12/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** 24/26 · **3** 17/18 · **3P** 13/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
 
-**In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03) · Portfolio suite — users and house, views over ledger and indexer (§25:723) (ZenYoda3)
+**In progress:** Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · Auto-invest — DCA schedules, card round-ups, threshold sweeps (§31) (nitro-bank-roundup) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03) · Portfolio suite — users and house, views over ledger and indexer (§25:723) (ZenYoda3)
 
 **🟢 18 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `web.mobile-apps` — Native mobile apps — iOS and Android, own name, zero attribution (§25:727)
 - `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
-- `protocol.smart-accounts` — Passkey smart accounts, session keys (§17.4)
+- `protocol.amm` — AMM pools from audited templates
 - `academy.spatial` — 2D navigable room canvas, VR-ready scene state
 - `academy.certs` — Certifications → XP → real perks
 - `launch.token-factory` — ERC-20 deploy from audited templates
