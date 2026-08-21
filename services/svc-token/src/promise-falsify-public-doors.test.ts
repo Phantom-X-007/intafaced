@@ -14,7 +14,8 @@
  *   · unstake locked m12 → BAD_REQUEST / token.stake_locked; principal still staked.
  *   · recordBuyback overlapping window → CONFLICT / token.buyback_window_overlap;
  *     burn account does not double (read the burn, not only the exception).
- *   · concurrent same-window recordBuyback → 400 unmoved + 409 overlap;
+ *   · concurrent same-window recordBuyback → each 400 unmoved or 409 overlap
+ *     (not always one of each: winner DELETE-releases pending, so both can 400);
  *     never 500 (GiST deadlock) and never 200 (invented buy).
  *   · tokensBought>0 with no market-buy on the ledger → BAD_REQUEST /
  *     token.buyback_tokens_unmoved; no settle, engine untouched.
@@ -689,6 +690,9 @@ if (!available) {
         ),
       ]);
 
+      // Each is 400 unmoved or 409 overlap — never 200 (invent a buy) or 500
+      // (unmapped GiST deadlock). Do not require the exact 400+409 pair: if the
+      // other INSERT runs after the winner DELETE-releases pending, both are 400.
       const codes = [left.statusCode, right.statusCode];
       expect(
         codes.every((c) => c === 400 || c === 409),
@@ -699,6 +703,15 @@ if (!available) {
       ).toBe(true);
       expect(codes.some((c) => c === 200)).toBe(false);
       expect(codes.some((c) => c === 500)).toBe(false);
+      for (const res of [left, right]) {
+        if (res.statusCode === 400) {
+          expect(res.body.error?.data?.code).toBe('BAD_REQUEST');
+          expect(res.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+        } else {
+          expect(res.body.error?.data?.code).toBe('CONFLICT');
+          expect(res.body.error?.data?.cause?.code).toBe('token.buyback_window_overlap');
+        }
+      }
 
       expect(await token.burnedSupply()).toBe(0n);
       expect((await ledger.balance(rewardsEngine('IFC'))).amount).toBe(engineBefore);
