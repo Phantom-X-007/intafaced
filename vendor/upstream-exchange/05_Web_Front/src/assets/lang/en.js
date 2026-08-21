@@ -111,6 +111,16 @@ module.exports = {
             probeRun: "Re-check",
             probeRoutes: "Routes the edge will forward"
         },
+        waitlist: {
+            title: "Join the waitlist",
+            lead: "Register interest for the next release. This does not create a balance or promise a reward.",
+            email: "Email",
+            referralCode: "Referral code (optional)",
+            lookupCode: "Look up a referral code",
+            enroll: "Enroll",
+            lookup: "Look up position",
+            position: "Position"
+        },
         state: {
             loading: "Reading",
             serviceSaid: "The service said:",
@@ -2417,7 +2427,16 @@ module.exports = {
                room to breathe. Two lengths of one statement, not two claims. */
             announcementsStrip: 'No announcements — nothing behind the front door publishes them.',
             announcementsWhy: 'What is missing',
-            keysNote: 'Message text is not shown. The notification service stores a copy key and its parameters rather than a finished sentence, and the copy catalogue those keys resolve to is not carried by this app. The key is shown as it was stored — writing a plausible sentence from it would be inventing the content of a message the platform sent you.'
+            keysNote: 'Message text is not shown. The notification service stores a copy key and its parameters rather than a finished sentence, and the copy catalogue those keys resolve to is not carried by this app. The key is shown as it was stored — writing a plausible sentence from it would be inventing the content of a message the platform sent you.',
+            markRead: 'Mark read',
+            markAllRead: 'Mark all read',
+            unread: 'Unread',
+            channels: 'Delivery channels',
+            channelAvailable: 'Available',
+            channelNotConfigured: 'Not configured — this channel cannot send yet.',
+            channelsEmpty: 'No channel status was returned.',
+            deliveryLead: 'Attempted means the service tried; accepted does not mean the recipient received it.',
+            attempts: 'Attempts'
         },
         noticeItem: {
             title: 'Announcement',

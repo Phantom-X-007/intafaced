@@ -37,6 +37,7 @@
                 <th>{{ $t('cms.noticePage.severity') }}</th>
                 <th>{{ $t('cms.noticePage.messageKey') }}</th>
                 <th>{{ $t('cms.noticePage.read') }}</th>
+                <th>{{ $t('cms.noticePage.markRead') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -46,6 +47,10 @@
                 <td>{{ n.severity }}</td>
                 <td><code>{{ n.titleKey }}</code></td>
                 <td>{{ n.readAt ? $t('cms.noticePage.yes') : $t('cms.noticePage.no') }}</td>
+                <td>
+                  <Button v-if="!n.readAt" size="small" @click="markRead(n.id)">{{ $t('cms.noticePage.markRead') }}</Button>
+                  <span v-else>{{ $t('cms.noticePage.unread') }}</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -70,6 +75,37 @@
         -->
         <p class="ix-cap-note">{{ $t('cms.noticePage.keysNote') }}</p>
       </IxState>
+      <div class="ix-actions">
+        <span>{{ $t('cms.noticePage.unread') }}: {{ unreadCount }}</span>
+        <Button size="small" @click="markAllRead">{{ $t('cms.noticePage.markAllRead') }}</Button>
+      </div>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('cms.noticePage.channels') }}</h2>
+        <span class="ix-sub">notify.channels</span>
+      </div>
+      <IxState :loading="channels.loading" :reason="channels.reason" :message="channels.message" endpoint="/api/notify/trpc/notify.channels">
+        <div v-if="channelRows.length" class="ix-channel-list">
+          <div v-for="channel in channelRows" :key="channel.channel" class="ix-channel-row">
+            <strong>{{ channel.channel }}</strong>
+            <span>{{ channel.available ? $t('cms.noticePage.channelAvailable') : $t('cms.noticePage.channelNotConfigured') }}</span>
+            <code v-if="channel.requires && channel.requires.length">{{ channel.requires.join(', ') }}</code>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('cms.noticePage.channelsEmpty') }}</div>
+      </IxState>
+      <IxState v-if="items.length" :loading="deliveries.loading" :reason="deliveries.reason" :message="deliveries.message" endpoint="/api/notify/trpc/notify.deliveries">
+        <div v-if="deliveryRows.length" class="ix-channel-list">
+          <p class="ix-lead">{{ $t('cms.noticePage.deliveryLead') }}</p>
+          <div v-for="delivery in deliveryRows" :key="delivery.id" class="ix-channel-row">
+            <strong>{{ delivery.channel }}</strong>
+            <span>{{ delivery.status }}</span>
+            <span>{{ $t('cms.noticePage.attempts') }}: {{ delivery.attempts }}</span>
+          </div>
+        </div>
+      </IxState>
     </div>
   </div>
 </template>
@@ -92,7 +128,7 @@
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import ixModule from '../../components/intafaced/module-mixin.js';
-import { query } from '../../config/intafaced.js';
+import { query, mutate } from '../../config/intafaced.js';
 
 export default {
   name: 'CmsNotice',
@@ -100,18 +136,55 @@ export default {
   mixins: [ixModule],
   data() {
     return {
-      inbox: this.emptySection()
+      inbox: this.emptySection(),
+      unread: this.emptySection(),
+      channels: this.emptySection(),
+      deliveries: this.emptySection(),
+      markReadAction: this.emptyAction(),
+      markAllReadAction: this.emptyAction()
     };
   },
   computed: {
     items() {
       return (this.inbox.data && this.inbox.data.items) || [];
+    },
+    unreadCount() {
+      return this.unread.data && this.unread.data.count !== undefined ? String(this.unread.data.count) : '—';
+    },
+    channelRows() {
+      var data = this.channels.data;
+      return Array.isArray(data) ? data : (data && data.channels) || [];
+    },
+    deliveryRows() {
+      return Array.isArray(this.deliveries.data) ? this.deliveries.data : [];
     }
   },
   created() {
     this.$store.commit('navigate', 'nav-notice');
     this.$store.state.HeaderActiveName = '1-1';
-    this.load('inbox', query('notify', 'notify.list', { limit: 50 }, this.ixToken));
+    this.load('inbox', query('notify', 'notify.list', { limit: 50 }, this.ixToken)).then(() => {
+      if (this.items.length) this.load('deliveries', query('notify', 'notify.deliveries', { notificationId: this.items[0].id }, this.ixToken));
+    });
+    this.load('unread', query('notify', 'notify.unreadCount', undefined, this.ixToken));
+    this.load('channels', query('notify', 'notify.channels', undefined, this.ixToken));
+  },
+  methods: {
+    refreshInbox() {
+      this.load('inbox', query('notify', 'notify.list', { limit: 50 }, this.ixToken)).then(() => {
+        if (this.items.length) this.load('deliveries', query('notify', 'notify.deliveries', { notificationId: this.items[0].id }, this.ixToken));
+      });
+      this.load('unread', query('notify', 'notify.unreadCount', undefined, this.ixToken));
+    },
+    markRead(id) {
+      this.act('markReadAction', mutate('notify', 'notify.markRead', { ids: [id] }, this.ixToken)).then((res) => {
+        if (res.ok) this.refreshInbox();
+      });
+    },
+    markAllRead() {
+      this.act('markAllReadAction', mutate('notify', 'notify.markAllRead', undefined, this.ixToken)).then((res) => {
+        if (res.ok) this.refreshInbox();
+      });
+    }
   }
 };
 </script>
@@ -134,4 +207,8 @@ export default {
   line-height: 1.5;
   color: var(--ix-text-faint, #6b7280);
 }
+.ix-actions { display:flex; gap:12px; align-items:center; margin-top:12px; }
+.ix-channel-list { display:grid; gap:8px; }
+.ix-channel-row { display:flex; gap:12px; align-items:center; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+.ix-channel-row code { color:var(--ix-text-faint, #6b7280); }
 </style>

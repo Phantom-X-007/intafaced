@@ -13,13 +13,45 @@
       <div class="section" id="page1">
         <!-- <div v-if="false"> -->
 
-        <div class="spin-wrap banner-panel">
+      <div class="spin-wrap banner-panel">
           <img style="height: 100%;" src="../../assets/images/bannerbg.png"></img>
           <p style="text-align:center;font-size:40px;color:#fff;position:absolute;top: 70px;width:100%;letter-spacing:5px;text-shadow: 0px 0px 10px #000000;">{{$t("common.slogan")}}</p>
           <p style="text-align:center;font-size:20px;color:#8a8a8a;position:absolute;top: 130px;width:100%;letter-spacing:2px;">{{$t("common.subslogan")}}</p>
           <!-- REMOVED: the promo swiper. Its slides came from `picList`, which was
                only ever filled by loadPicData() against the retired Java `/uc`
                service — see the removal note on that method below. -->
+        </div>
+        <div class="ix-waitlist-card">
+          <h2>{{ $t('intafaced.waitlist.title') }}</h2>
+          <p>{{ $t('intafaced.waitlist.lead') }}</p>
+          <form @submit.prevent="enrollWaitlist">
+            <input v-model.trim="waitlistEmail" type="email" required :placeholder="$t('intafaced.waitlist.email')">
+            <input v-model.trim="waitlistReferralCode" :placeholder="$t('intafaced.waitlist.referralCode')">
+            <button type="submit">{{ $t('intafaced.waitlist.enroll') }}</button>
+          </form>
+          <IxState
+            :loading="waitlistAction.busy"
+            :reason="waitlistAction.ran ? waitlistAction.reason : null"
+            :message="waitlistAction.message"
+            endpoint="/api/identity/trpc/waitlist.enroll"
+          >
+            <p v-if="waitlistResult" class="ix-waitlist-result">
+              {{ $t('intafaced.waitlist.position') }}: <code>{{ waitlistResult.position }}</code> ·
+              {{ $t('intafaced.waitlist.referralCode') }}: <code>{{ waitlistResult.referralCode }}</code>
+            </p>
+          </IxState>
+          <div class="ix-waitlist-position">
+            <input v-model.trim="waitlistLookupCode" :placeholder="$t('intafaced.waitlist.lookupCode')">
+            <button type="button" @click="lookupWaitlistPosition">{{ $t('intafaced.waitlist.lookup') }}</button>
+            <IxState
+              :loading="waitlistPosition.loading"
+              :reason="waitlistPosition.reason"
+              :message="waitlistPosition.message"
+              endpoint="/api/identity/trpc/waitlist.position"
+            >
+              <span v-if="waitlistPosition.data">{{ $t('intafaced.waitlist.position') }}: <code>{{ waitlistPosition.data.position }}</code></span>
+            </IxState>
+          </div>
         </div>
       </div>
       <div id="pagetips" style="background: #1a1a1a;">
@@ -170,10 +202,12 @@
  * separate service and is not wired here. See the note where startWebsock was.
  */
 var moment = require("moment");
-import { rest } from "@/config/intafaced.js";
+import { rest, query, mutate } from "@/config/intafaced.js";
 import ixTrade from "@js/ix-trade.js";
 import $ from "@js/jquery.min.js";
 import IxNoSurface from "../../components/intafaced/IxNoSurface.vue";
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
 
 
 /* A figure the venue did not publish prints an em dash — the same mark the
@@ -248,7 +282,8 @@ function renderChangeCell(h, self, row) {
 }
 
 export default {
-  components: { IxNoSurface },
+  components: { IxNoSurface, IxState },
+  mixins: [ixModule],
   data() {
     let self = this;
     return {
@@ -647,13 +682,21 @@ export default {
       usdtData: [],
       usdtList: [],
       btcList: [],
-      ethList: []
+      ethList: [],
+      waitlistEmail: "",
+      waitlistReferralCode: "",
+      waitlistLookupCode: "",
+      waitlistAction: this.emptyAction(),
+      waitlistPosition: this.emptySection()
     };
   },
   created: function() {
     this.init();
   },
   computed: {
+    waitlistResult: function() {
+      return this.waitlistAction.data;
+    },
     isLogin: function() {
       return this.$store.getters.isLogin;
     },
@@ -701,6 +744,15 @@ export default {
     this.getSymbol();
   },
   methods: {
+    enrollWaitlist() {
+      var input = { email: this.waitlistEmail };
+      if (this.waitlistReferralCode) input.referralCode = this.waitlistReferralCode;
+      this.act("waitlistAction", mutate("identity", "waitlist.enroll", input, this.ixToken));
+    },
+    lookupWaitlistPosition() {
+      if (!this.waitlistLookupCode) return;
+      this.load("waitlistPosition", query("identity", "waitlist.position", { referralCode: this.waitlistLookupCode }, null));
+    },
     seachInputChange(){
       this.searchKey = this.searchKey.toUpperCase();
       var source;
@@ -1712,5 +1764,3 @@ th.ivu-table-cell span{
 }
 /* .app_bottom (sticky "download the app" bar) removed with its markup. */
 </style>
-
-
