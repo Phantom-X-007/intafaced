@@ -1338,7 +1338,18 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             liveAllowedTasks: z.tuple([z.literal('navigator.plan'), z.literal('navigator.tool_select')]),
           }),
         )
-        .query(() => describeNavigatorPolicy()),
+        .query(() => {
+          const policy = describeNavigatorPolicy();
+          return {
+            moneyWriteTools: [...policy.moneyWriteTools],
+            moneyDeny: { ...policy.moneyDeny },
+            moneyDenyStatusLine: policy.moneyDenyStatusLine,
+            moneyDenyExport: policy.moneyDenyExport,
+            moneyDenyBilledAmount: policy.moneyDenyBilledAmount,
+            darkPlaneRefuse: { ...policy.darkPlaneRefuse },
+            liveAllowedTasks: [policy.liveAllowedTasks[0], policy.liveAllowedTasks[1]] as ['navigator.plan', 'navigator.tool_select'],
+          };
+        }),
 
       grounded: scopedProcedure('agents:read', { module: 'agents' })
         .input(z.object({ plane: z.enum(['live', 'dark']) }))
@@ -1907,7 +1918,20 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             escalationFirstClass: z.literal(true),
           }),
         )
-        .query(() => describeSupportPolicy()),
+        .query(() => {
+          const policy = describeSupportPolicy();
+          return {
+            ...policy,
+            moneyTools: [...policy.moneyTools],
+            moneyDeny: { ...policy.moneyDeny },
+            guardrail: { ...policy.guardrail },
+            declaredTools: [...policy.declaredTools],
+            dataTools: [...policy.dataTools],
+            darkPlaneRefuse: { ...policy.darkPlaneRefuse },
+            liveAllowedTasks: [policy.liveAllowedTasks[0], policy.liveAllowedTasks[1]] as ['support.classify', 'support.reply'],
+            tierLawRefuse: { ...policy.tierLawRefuse },
+          };
+        }),
 
       draftComment: scopedProcedure('agents:read', { module: 'agents' })
         .input(
@@ -3647,6 +3671,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         )
         .query(({ ctx, input }) => {
           const outcome = planRebalance({ userId: ctx.principal!.userId, targets: input.targets }, { portfolio: null });
+          if (outcome.result.status === 'planned') {
+            return {
+              result: {
+                ...outcome.result,
+                legs: outcome.result.legs.map((leg) => ({ ...leg })),
+              },
+            };
+          }
           return { result: outcome.result };
         }),
     }),
