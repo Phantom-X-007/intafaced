@@ -109,7 +109,8 @@ const bus = await JetStreamEventBus.connect({
 });
 
 // Metered usage moves value, and value moves through svc-ledger — never
-// through this service's own tables (Doctrine §0.6).
+// through this service's own tables (Doctrine §0.6). LEDGER_URL is required
+// with no localhost default — unset refuses boot rather than guessing a book.
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
 const meter = new UsageMeter(sql, ledger, {

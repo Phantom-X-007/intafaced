@@ -64,6 +64,8 @@ export interface AgentRuntimeOptions {
    * lands on the action audit with token counts so operators can see what the
    * fleet spent while billing was dark. Dual-write of `usage_records` while
    * metering is off is forbidden — see `metering/product-law.ts`.
+   *
+   * Omitted / undefined is fail-closed (must NOT bill). Never `?? true`.
    */
   readonly meteringEnabled?: boolean;
 }
@@ -165,7 +167,7 @@ export class AgentRuntime {
   ) {
     this.audit = new AuditLog(sql);
     this.feeAssetId = options.feeAssetId;
-    this.meteringEnabled = options.meteringEnabled ?? true;
+    this.meteringEnabled = options.meteringEnabled ?? false;
   }
 
   // ── Agent definitions ──────────────────────────────────────────────────────

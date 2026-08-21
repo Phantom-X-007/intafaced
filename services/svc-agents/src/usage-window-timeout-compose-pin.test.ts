@@ -1,21 +1,30 @@
 /**
  * Unit card — compose stack passes usage window + upstream timeout into svc-agents
+ *            + env refuse-closed for metering kill-switch and fee asset
  *
  * 1. Promise: AGENTS_USAGE_WINDOW_MINUTES and AGENTS_UPSTREAM_TIMEOUT_MS from
  *    host `.env` reach the container (env.ts already declares them).
+ *    Unset AGENTS_METERING_ENABLED must NOT bill. Unset AGENTS_FEE_ASSET_ID
+ *    must refuse, never invent IFC.
  * 2. Break: compose booted agents with metering / provider / fee / UPSTREAM
  *    urls but no window or timeout → operator pin of billing window (must
  *    divide 1440) or upstream timeout is a no-op and the process keeps schema
- *    defaults forever.
+ *    defaults forever. env.ts `bool.default(true)` / `.default('IFC')` bills
+ *    and invents an owner asset when the operator never set them.
  * 3. Done bar: docker-compose.apps.yml svc-agents has
  *    AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
  *    AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
- * 4. Class N
- * 5. Paths: docker-compose.apps.yml (svc-agents block only)
+ *    env.ts AGENTS_METERING_ENABLED unset/blank → false (must not bill)
+ *    env.ts AGENTS_FEE_ASSET_ID has no default('IFC')
+ * 4. Class M (kill-switch + owner asset — no silent feeCharge / no invent IFC)
+ * 5. Paths: docker-compose.apps.yml (svc-agents block only) + env.ts
  * 6. RED: pin fails if a unique key drops, defaults drift from 60 / 60000, or
- *    metering / provider / fee / UPSTREAM urls are restamped
+ *    metering / provider / fee / UPSTREAM urls are restamped; env.ts fail-open
+ *    defaults return.
  * 7. Collision: academy-url-compose-pin.test.ts — this pin does not restamp
  *    ACADEMY_URL. Do not invent AGENTS_ROUTING_TABLE JSON.
+ *    Compose `:-true` / `:-IFC` stay this file's restamp guard (compose
+ *    fail-open is out of this env-only PR).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -41,6 +50,15 @@ describe('compose usage window and upstream timeout for svc-agents', () => {
   it('env.ts still declares the flags this pin tracks, matching compose defaults', () => {
     expect(envTs).toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)\.default\(60\)/);
     expect(envTs).toMatch(/AGENTS_UPSTREAM_TIMEOUT_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1_000\)\.max\(600_000\)\.default\(60_000\)/);
+  });
+
+  it('env.ts refuses unset metering (must not bill) and unset fee asset (must not invent IFC)', () => {
+    expect(envTs).not.toMatch(/AGENTS_METERING_ENABLED:\s*bool\.default\(true\)/);
+    expect(envTs).toMatch(/AGENTS_METERING_ENABLED:\s*z\.preprocess\(/);
+    expect(envTs).not.toMatch(/AGENTS_FEE_ASSET_ID:\s*z\.string\(\)\.default\('IFC'\)/);
+    expect(envTs).toMatch(/AGENTS_FEE_ASSET_ID:\s*z\.string\(\)\.min\(1\)/);
+    const feeDecl = envTs.slice(envTs.indexOf('AGENTS_FEE_ASSET_ID:'));
+    expect(feeDecl.slice(0, 120)).not.toMatch(/\.default\(/);
   });
 
   it('compose svc-agents block passes unique keys once; defaults 60 / 60000', () => {

@@ -80,6 +80,12 @@ describe('D26-P1-A6 metering-off product law seal', () => {
     expect(hits).toEqual(['metering/meter.ts']);
   });
 
+  it('runtime omits meteringEnabled as fail-closed (must not bill)', () => {
+    const src = readFileSync(join(SRC_ROOT, 'runtime.ts'), 'utf8');
+    expect(src).toMatch(/this\.meteringEnabled = options\.meteringEnabled \?\? false/);
+    expect(src).not.toMatch(/options\.meteringEnabled \?\? true/);
+  });
+
   it('runtime settleWindow uses product-law stub before meter.settle when off', () => {
     const src = readFileSync(join(SRC_ROOT, 'runtime.ts'), 'utf8');
     expect(src).toMatch(/from '\.\/metering\/product-law\.js'/);
@@ -120,6 +126,7 @@ describe('D26-P1-A6 metering-off product law seal', () => {
     // settleSession inherits the gate — leftover windows must stay unbilled via both APIs.
     expect(testSrc).toContain('metering-off settleSession also refuses feeCharge for leftover windows');
     expect(testSrc).toContain('run.complete same requestId twice through createCaller never invents a charge or request_id_replay');
+    expect(testSrc).toContain('omitted meteringEnabled must not bill');
   });
 
   it('index /ready and runtime share the AGENTS_METERING_ENABLED kill-switch', () => {

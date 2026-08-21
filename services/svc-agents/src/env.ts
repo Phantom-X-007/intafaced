@@ -68,8 +68,12 @@ const schema = serviceEnvSchema
       SERVICE_NAME: z.string().default('svc-agents'),
       HTTP_PORT: z.coerce.number().int().default(4008),
 
-      /** svc-ledger's internal address. Metered usage is billed through it. */
-      LEDGER_URL: z.string().url().default('http://localhost:4001'),
+      /**
+       * svc-ledger's internal address. Metered usage is billed through it.
+       * Required — no localhost default. Unset / blank refuses boot (EnvError)
+       * rather than inventing http://localhost:4001 and posting feeCharge.
+       */
+      LEDGER_URL: z.string().url(),
 
       /**
        * svc-identity base for affiliate accrue + payout after usage feeCharge.
@@ -118,8 +122,11 @@ const schema = serviceEnvSchema
        */
       LIVE_TRADE_COPY_LEADER_IDS: blankAsAbsent(z.string().optional()),
 
-      /** Asset premium agent tiers are billed in (§8.2). */
-      AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
+      /**
+       * Asset premium agent tiers are billed in (§8.2). Owner-published.
+       * Required min(1) — unset / blank refuses boot. Never invent IFC.
+       */
+      AGENTS_FEE_ASSET_ID: z.string().min(1),
 
       /**
        * Billing window length. Must divide 1440 so a window never straddles
@@ -134,8 +141,14 @@ const schema = serviceEnvSchema
        * no feeCharge — including settle of leftover windows. Token counts stay
        * on the action audit only (knowable cost without inventing a deferred
        * bill). Dual-write of usage_records while off is forbidden.
+       *
+       * Unset / blank → false (must NOT bill). Explicit true is owner-on.
+       * Never default true — that was fail-open feeCharge.
        */
-      AGENTS_METERING_ENABLED: bool.default(true),
+      AGENTS_METERING_ENABLED: z.preprocess(
+        (v) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '') ? false : v),
+        bool,
+      ),
 
       /**
        * Which registered provider serves the logical id `primary` in the routing

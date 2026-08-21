@@ -177,7 +177,7 @@ if (!available) {
     provider = new MockModelProvider({ id: 'primary' });
     gateway = new ModelGateway([provider], TABLE);
     meter = new UsageMeter(sql, ledger, { assetId: 'IFC', windowMinutes: 60 });
-    runtime = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC' });
+    runtime = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC', meteringEnabled: true });
 
     await runtime.registerAgent(PROBE);
     await runtime.registerAgent(THRIFTY);
@@ -457,6 +457,27 @@ if (!available) {
       expect(await runtime.settleSession(session.id)).toEqual([]);
       expect(await balanceOf(USER_A)).toBe('1000');
       expect(await houseOf()).toBe('0');
+    });
+
+    it('omitted meteringEnabled must not bill', async () => {
+      // S11-2: `meteringEnabled ?? true` is the same fail-open as env default
+      // true — a constructor that forgets the flag still feeCharges.
+      const omitted = new AgentRuntime(sql, gateway, meter, bus, { feeAssetId: 'IFC' });
+      const session = await omitted.openSession({ userId: USER_A, agentId: 'probe' });
+      const result = await omitted.think({
+        sessionId: session.id,
+        requestId: 'r-omit-flag',
+        task: 'plan',
+        messages: MESSAGES,
+      });
+
+      expect(result.metered).toBe(false);
+      expect(result.windowId).toBeNull();
+      expect(await omitted.settleSession(session.id)).toEqual([]);
+      expect(await balanceOf(USER_A)).toBe('1000');
+      expect(await houseOf()).toBe('0');
+      const usageRows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
+      expect(usageRows).toHaveLength(0);
     });
 
     it('keeps the audit when billing is off, and never writes usage_records or a charge', async () => {
@@ -879,7 +900,10 @@ if (!available) {
     it('bills once when a transient failure is retried under the same request id', async () => {
       const session = await open();
       const flaky = new MockModelProvider({ id: 'primary', failFirst: 1 });
-      const flakyRuntime = new AgentRuntime(sql, new ModelGateway([flaky], TABLE), meter, bus, { feeAssetId: 'IFC' });
+      const flakyRuntime = new AgentRuntime(sql, new ModelGateway([flaky], TABLE), meter, bus, {
+        feeAssetId: 'IFC',
+        meteringEnabled: true,
+      });
 
       await expect(
         flakyRuntime.think({ sessionId: session.id, requestId: 'same-request', task: 'plan', messages: MESSAGES }),
