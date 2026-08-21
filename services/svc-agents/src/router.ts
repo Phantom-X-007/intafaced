@@ -60,6 +60,7 @@ import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write
 import { envCoachGrounding, runCoachSession, type CoachGrounding } from './coach/grounded-session.js';
 import { describeCoachPolicy } from './coach/policy.js';
 import { envGrowthWarehouse, proposeGrowthCampaign } from './growth/campaign-proposal.js';
+import { planRebalance } from './portfolio-agent/plan.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -3514,6 +3515,62 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             inventedBudget: false as const,
             userMessageKey: 'agents.error.capability_unavailable' as const,
           };
+        }),
+    }),
+
+    /**
+     * Portfolio — plan-only rebalance inside guardrails (§8.2). Never places.
+     * Unwired portfolio port refuses dark — never invented holdings.
+     */
+    portfolio: router({
+      plan: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            targets: z
+              .array(
+                z.object({
+                  asset: z.string().min(1).max(32),
+                  plane: z.enum(['custodial', 'sovereign']),
+                  weight: z.string().max(32),
+                }),
+              )
+              .optional(),
+          }),
+        )
+        .output(
+          z.object({
+            result: z.discriminatedUnion('status', [
+              z.object({
+                status: z.literal('planned'),
+                userId: z.string(),
+                legs: z.array(
+                  z.object({
+                    asset: z.string(),
+                    plane: z.enum(['custodial', 'sovereign']),
+                    currentWeight: z.string(),
+                    targetWeight: z.string(),
+                    deltaWeight: z.string(),
+                    intent: z.enum(['increase', 'reduce']),
+                  }),
+                ),
+              }),
+              z.object({
+                status: z.literal('refused'),
+                code: z.enum([
+                  'portfolio.killed',
+                  'portfolio.port_dark',
+                  'portfolio.target_unset',
+                  'portfolio.holding_unread',
+                  'portfolio.cross_plane_blocked',
+                ]),
+                userMessageKey: z.literal('agents.refused.module_not_allowed'),
+              }),
+            ]),
+          }),
+        )
+        .query(({ ctx, input }) => {
+          const outcome = planRebalance({ userId: ctx.principal!.userId, targets: input.targets }, { portfolio: null });
+          return { result: outcome.result };
         }),
     }),
   });
