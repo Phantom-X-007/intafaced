@@ -290,12 +290,7 @@ export const FEATURES = [
     plane: 'F',
     status: 'done',
     owner: 'ZenYoda3',
-    requires: [
-      'packages/config/src/drop-flags-mount-vs-tracker.ts',
-      'packages/config/src/drop-flags-mount-vs-tracker.test.ts',
-      'packages/config/src/flags.ts',
-      'packages/config/src/flag-enforcement.test.ts',
-    ],
+    requires: ['packages/config/src/flags.ts', 'packages/config/src/flag-enforcement.test.ts'],
     dependsOn: ['infra.config'],
     note:
       '**D26-P1-F1 Done 2026-08-21:** §11 drop switch (`drop-flags-mount-vs-tracker.ts`); assertEnabled + FlagDisabledError. ' +
@@ -357,12 +352,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.futures'],
-    requires: [
-      'services/svc-trade/src/spot/options-mount-vs-tracker.ts',
-      'services/svc-trade/src/spot/options-mount-vs-tracker.test.ts',
-      'services/svc-trade/src/spot/options-policy.ts',
-      'services/svc-trade/src/spot/options-listing.test.ts',
-    ],
+    requires: ['services/svc-trade/src/spot/options-policy.ts', 'services/svc-trade/src/spot/options-listing.test.ts'],
     note:
       '**D26-P1-T6 Done 2026-08-21:** settlement law refuse on options.policy (`options-mount-vs-tracker.ts`). ' +
       'SOCKET §13 socket.options-settlement-asset-law; never invent live set / settlement asset / IV. ' +
@@ -410,12 +400,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'pay.rails'],
-    requires: [
-      'services/svc-trade/src/spot/forex-mount-vs-tracker.ts',
-      'services/svc-trade/src/spot/forex-mount-vs-tracker.test.ts',
-      'services/svc-trade/src/spot/forex-settlement.ts',
-      'services/svc-trade/src/spot/forex-settlement-public-doors.test.ts',
-    ],
+    requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'services/svc-trade/src/spot/forex-settlement-public-doors.test.ts'],
     note:
       '**D26-P1-T7 Done 2026-08-21:** refuse-closed settlement posture (`forex-mount-vs-tracker.ts`). ' +
       'forex.settlementStatus + assertProductionListing; six majors listed but unfundable until rails. ' +
@@ -478,8 +463,6 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
-      'packages/venue-adapter/src/aggregation-mount-vs-tracker.ts',
-      'packages/venue-adapter/src/aggregation-mount-vs-tracker.test.ts',
       'packages/venue-adapter/src/fabric/venues/factory.ts',
       'packages/venue-adapter/src/fabric/venues/factory.test.ts',
       'packages/venue-contracts/src/latency.ts',
@@ -549,8 +532,6 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation', 'connect.latency-grading'],
     requires: [
-      'packages/venue-adapter/src/sor-mount-vs-tracker.ts',
-      'packages/venue-adapter/src/sor-mount-vs-tracker.test.ts',
       'packages/venue-adapter/src/sor-policy.ts',
       'packages/venue-adapter/src/cost-model.ts',
       'packages/venue-adapter/src/execution-report.ts',
@@ -604,12 +585,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Nitro',
     dependsOn: ['execution.sor'],
-    requires: [
-      'packages/execution-house-tenant/src/house-mount-vs-tracker.ts',
-      'packages/execution-house-tenant/src/house-mount-vs-tracker.test.ts',
-      'packages/execution-house-tenant/src/house-tenant-policy.ts',
-      'services/svc-execution/src/execution-policy-route.test.ts',
-    ],
+    requires: ['packages/execution-house-tenant/src/house-tenant-policy.ts', 'services/svc-execution/src/execution-policy-route.test.ts'],
     note:
       '**D26-P0-01 Done 2026-08-21:** Stage-1 external-only tenant (`house-mount-vs-tracker.ts`); kill-first adminKill. ' +
       'execution.tenant.describe|kill mounted; internal_venue + matching-book refuse. ' +
@@ -718,8 +694,6 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['pay.psp'],
     requires: [
-      'services/svc-pay/src/payfac-mount-vs-tracker.ts',
-      'services/svc-pay/src/payfac-mount-vs-tracker.test.ts',
       'services/svc-pay/src/payfac-permissions.ts',
       'services/svc-pay/src/public-rest.payfac-permissions.test.ts',
       'services/svc-pay/src/router.payfac-area.test.ts',
@@ -908,8 +882,6 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['p2p.escrow'],
     requires: [
-      'services/svc-p2p/src/instruments-mount-vs-tracker.ts',
-      'services/svc-p2p/src/instruments-mount-vs-tracker.test.ts',
       'services/svc-p2p/src/instrument-service.ts',
       'services/svc-p2p/src/instrument-service.test.ts',
       'services/svc-p2p/src/router.mount.test.ts',
@@ -949,12 +921,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'shehzad002',
     dependsOn: ['identity.accounts'],
-    requires: [
-      'services/svc-protocol/src/smart-accounts-mount-vs-tracker.ts',
-      'services/svc-protocol/src/smart-accounts-mount-vs-tracker.test.ts',
-      'services/svc-protocol/src/router.mount.test.ts',
-      'services/svc-protocol/src/chain/bundler-policy.test.ts',
-    ],
+    requires: ['services/svc-protocol/src/router.mount.test.ts', 'services/svc-protocol/src/chain/bundler-policy.test.ts'],
     note:
       '**D26-P1-S1 Done 2026-08-21:** passkey smart accounts + session keys mounted (`smart-accounts-mount-vs-tracker.ts`). ' +
       'Factory predict/build, session grant/revoke, relay userOp with typed chain refusals. ' +
@@ -1034,12 +1001,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['protocol.smart-accounts'],
-    requires: [
-      'services/svc-indexer/src/readmodels-mount-vs-tracker.ts',
-      'services/svc-indexer/src/readmodels-mount-vs-tracker.test.ts',
-      'services/svc-indexer/src/router.mount.test.ts',
-      'services/svc-indexer/src/d26-p1-i3-done-bar.test.ts',
-    ],
+    requires: ['services/svc-indexer/src/router.mount.test.ts', 'services/svc-indexer/src/d26-p1-i3-done-bar.test.ts'],
     note:
       '**D26-P1-I3 Done 2026-08-21:** chain→Postgres read models mounted (`readmodels-mount-vs-tracker.ts`). ' +
       'Reorg unwind + idempotent projection; permissionless /trpc read API. ' +
@@ -1684,13 +1646,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['identity.kyc'],
-    requires: [
-      'packages/config/src/compliance-mount-vs-tracker.ts',
-      'packages/config/src/compliance-mount-vs-tracker.test.ts',
-      'packages/config/src/screening.ts',
-      'packages/config/src/jurisdiction.ts',
-      'packages/config/src/compliance-queue.ts',
-    ],
+    requires: ['packages/config/src/screening.ts', 'packages/config/src/jurisdiction.ts', 'packages/config/src/compliance-queue.ts'],
     note:
       '**D26-P1-O1 Done-bar sealed 2026-08-12 (#1734):** screening *mechanism* — fail-closed when list unset. ' +
       'D26-P1-O1M mount-vs-tracker seals screening + queue disposition paths. List *content* Class X (counsel). ' +
@@ -1702,12 +1658,7 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
-    requires: [
-      'packages/contracts/src/ops-analytics-mount-vs-tracker.ts',
-      'packages/contracts/src/ops-analytics-mount-vs-tracker.test.ts',
-      'packages/contracts/src/ops-analytics-warehouse.ts',
-      'services/svc-edge/src/compliance-honesty.ts',
-    ],
+    requires: ['packages/contracts/src/ops-analytics-warehouse.ts', 'services/svc-edge/src/compliance-honesty.ts'],
     note:
       '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — ETL watermark honesty. ' +
       'D26-P1-O4M mount-vs-tracker seals replica read-only + lag probe paths. Class X residual: cube job callers (Phase B).',
@@ -1749,8 +1700,6 @@ export const FEATURES = [
     status: 'done',
     dependsOn: ['trade.spot'],
     requires: [
-      'services/svc-notify/src/alerts-mount-vs-tracker.ts',
-      'services/svc-notify/src/alerts-mount-vs-tracker.test.ts',
       'services/svc-notify/src/alerts-policy.ts',
       'services/svc-notify/src/alerts/sweep-mounted-pin.test.ts',
       'services/svc-notify/src/alerts/evaluate.test.ts',
@@ -2062,12 +2011,7 @@ export const FEATURES = [
     plane: 'P',
     status: 'done',
     dependsOn: ['indexer.readmodels'],
-    requires: [
-      'services/svc-dex/src/quote-router-mount-vs-tracker.ts',
-      'services/svc-dex/src/quote-router-mount-vs-tracker.test.ts',
-      'services/svc-dex/src/router.mount.test.ts',
-      'services/svc-dex/src/quote/quote-service.test.ts',
-    ],
+    requires: ['services/svc-dex/src/router.mount.test.ts', 'services/svc-dex/src/quote/quote-service.test.ts'],
     note:
       '**D26-P1-D2 Done 2026-08-21:** cross-venue quote mounted (`quote-router-mount-vs-tracker.ts`); refuses when no venue. ' +
       'Never invent mid; degraded/singleVenue disclosed on wire. ' +
