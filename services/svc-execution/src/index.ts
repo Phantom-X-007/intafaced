@@ -5,6 +5,7 @@ import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
+import { buildExecutionVenueTradeMaps, parseExecutionVenueIds } from './venue-adapters.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -18,22 +19,18 @@ registerProcessHooks(
 /**
  * svc-execution — house tenancy (D26-P0-01) + OMS plan/execute (D26-P1-X3).
  *
- * Health + tRPC `execution.tenant.*` (describe / kill), `execution.oms.plan`
- * (SOR `planRoute`, does not submit), `execution.oms.execute` (same plan,
- * then injected submit; `tradeAdapterSubmit` maps `TradeAdapter.placeOrder`),
- * `execution.oms.cancel` (client order id),
- * `execution.oms.fetch` (client order id), `execution.oms.openOrders`,
- * `execution.oms.balances`, `execution.oms.positions`,
- * `execution.oms.rails` (not a transfer), `execution.oms.funding`
- * (not a settlement), `execution.oms.borrow` (not a loan),
- * `execution.oms.latency` (venue observation — not a routing weight),
- * `execution.oms.markets` (instrument catalog — not a route), and
- * `execution.oms.snapshot` (seed book — not a mark).
- * No live CEX keys. Internal venues refused. No matching-path privilege.
- * In-memory sealed registry.
+ * External spot venues wire from EXECUTION_VENUE_IDS + per-venue EXECUTION_VENUE_{ID}_* credentials.
+ * Internal venues refused. No matching-path privilege. In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
-const appRouter = createExecutionRouter(registry);
+const venueTradeMaps = buildExecutionVenueTradeMaps(parseExecutionVenueIds(env.EXECUTION_VENUE_IDS));
+const appRouter = createExecutionRouter(
+  registry,
+  venueTradeMaps.submitByVenue,
+  venueTradeMaps.cancelByVenue,
+  venueTradeMaps.fetchByVenue,
+  venueTradeMaps.openOrdersByVenue,
+);
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -47,6 +44,7 @@ app.get('/ready', async () => ({
   stage: 'oms-snapshot',
   store: 'memory',
   internalVenue: 'blocked',
+  externalVenueTrade: venueTradeMaps.wiredVenueIds,
 }));
 
 await app.register(fastifyTRPCPlugin, {

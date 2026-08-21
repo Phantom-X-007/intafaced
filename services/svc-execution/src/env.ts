@@ -2,11 +2,15 @@ import { z } from 'zod';
 import { baseEnvSchema, edgeEnvSchema, httpEnvSchema, loadEnv, otelEnvSchema } from '@intafaced/config';
 
 /**
- * svc-execution — Stage-1 house-tenant mechanism only.
+ * svc-execution — house-tenant mechanism + OMS plan/execute (D26-P1-X3).
  *
  * No Postgres: the sealed registry is in-process. No REDIS/NATS/DATABASE_URL —
  * this process holds no balances (Doctrine §0.6). House fills would use
  * `packages/ledger-client` recipes later; this service does not invent accounts.
+ *
+ * External spot trade adapters wire when `EXECUTION_VENUE_IDS` lists a known
+ * public spot id and matching `EXECUTION_VENUE_<ID>_API_KEY` / `_API_SECRET`
+ * (optional `_PASSPHRASE` for okx-spot) are set. Unset → refuse-closed.
  *
  * HTTP_PORT 4019: 4000–4018 are taken by the existing fleet.
  */
@@ -18,6 +22,13 @@ const schema = baseEnvSchema
     z.object({
       SERVICE_NAME: z.string().default('svc-execution'),
       HTTP_PORT: z.coerce.number().int().positive().default(4019),
+      /**
+       * Comma-separated signed spot venue ids for OMS execute/cancel/fetch/openOrders.
+       * Empty (default) = no external trade adapters mounted.
+       * Known ids: `binance-spot`, `bybit-spot`, `okx-spot`.
+       * Unknown id or unset credentials → venue skipped (refuse-closed at call).
+       */
+      EXECUTION_VENUE_IDS: z.string().default(''),
     }),
   );
 
