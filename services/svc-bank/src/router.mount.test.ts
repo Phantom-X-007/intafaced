@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { AUTO_INVEST_KINDS, AUTO_INVEST_RATE_UNSET, describeAutoInvestPolicy } from './auto-invest/auto-invest-policy.js';
 import { createBankRouter } from './router.js';
 import type { BankServices } from './bank-service.js';
 
@@ -368,5 +369,26 @@ describe('svc-bank mount — ops.runAutoInvest kill switch', () => {
       { considered: 0, settled: 0 },
     );
     expect(ran).toBe(true);
+  });
+});
+
+describe('svc-bank mount — autoInvest.policy honesty door', () => {
+  it('is public and mirrors describeAutoInvestPolicy for convert + rule kinds', async () => {
+    const bank = stubBank();
+    const expected = describeAutoInvestPolicy({ enabled: true, convertWired: false });
+    const result = await createBankRouter(bank, { autoInvestEnabled: true, autoInvestConvertWired: false })
+      .createCaller(anonymous())
+      .autoInvest.policy();
+    expect(result).toEqual(expected);
+    expect(result.kinds).toEqual(AUTO_INVEST_KINDS);
+    expect(result.rateUnsetCode).toBe(AUTO_INVEST_RATE_UNSET);
+    expect(result.inventsRates).toBe(false);
+    expect(result.convertWired).toBe(false);
+
+    const wired = await createBankRouter(bank, { autoInvestEnabled: false, autoInvestConvertWired: true })
+      .createCaller(anonymous())
+      .autoInvest.policy();
+    expect(wired.enabled).toBe(false);
+    expect(wired.convertWired).toBe(true);
   });
 });
