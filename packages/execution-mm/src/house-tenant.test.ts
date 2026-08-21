@@ -18,6 +18,23 @@ describe('pinHouseTenantTarget — D26-P0-01 Q1 EXTERNAL-ONLY', () => {
     expect(result).toMatchObject({ ok: false, reason: 'internal_matching_book' });
   });
 
+  it('refuses an empty venueId as invalid_venue (sister house-tenant trim().length===0)', () => {
+    expect(pinHouseTenantTarget({ venueId: '', kind: 'external-cex' }).ok).toBe(false);
+    const result = pinHouseTenantTarget({ venueId: '', kind: 'external-cex' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('invalid_venue');
+    expect(result.kind).toBe('external-cex');
+    expect(result.detail).toMatch(/non-empty/);
+  });
+
+  it('refuses whitespace-only venueId the same way', () => {
+    const result = pinHouseTenantTarget({ venueId: '   ', kind: 'external-dex' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('invalid_venue');
+  });
+
   it('opens the door for an external CEX without inventing preference', () => {
     const result = pinHouseTenantTarget({ venueId: 'binance', kind: 'external-cex' });
     expect(result).toEqual({ ok: true, venueId: 'binance', kind: 'external-cex' });
