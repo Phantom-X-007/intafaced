@@ -2,8 +2,8 @@
  * Live navigator session from svc-identity S2S
  * (`GET /internal/agents/navigator-session/:sessionId`).
  *
- * Unset IDENTITY_URL = honest incomplete_session / no_live_session. 503 body =
- * null — never an invented session row.
+ * Unset / blank IDENTITY_URL = honest `no_live_session`. 503 body = null —
+ * never an invented session row and never a caller fixture as live truth.
  */
 
 import { serviceAuthHeaders } from '@intafaced/contracts';

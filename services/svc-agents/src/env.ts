@@ -94,11 +94,14 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url(),
 
       /**
-       * svc-identity base for affiliate accrue + payout after usage feeCharge.
-       * Blank → noop ports (feeCharge still posts). Never invent rates.
-       * No localhost default — unset is honest noop, not a guessed identity.
+       * svc-identity base for affiliate accrue + payout after usage feeCharge,
+       * and for navigator identity.session.read.
+       * Blank / unset → noop affiliate ports (feeCharge still posts) and no
+       * navigator identity port. Live identity.session.read then refuses
+       * `no_live_session` rather than using a caller fixture as live truth.
+       * Never invent rates. No localhost default.
        */
-      IDENTITY_URL: z.string().url().optional(),
+      IDENTITY_URL: blankAsAbsent(z.string().url().optional()),
 
       /**
        * Academy base URL for coach curriculum grounding

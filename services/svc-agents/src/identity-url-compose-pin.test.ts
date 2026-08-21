@@ -11,7 +11,9 @@
  * 3. Done bar: docker-compose.apps.yml svc-agents has
  *    IDENTITY_URL: http://svc-identity:4002
  *    LEDGER_URL: http://svc-ledger:4001
- *    env.ts IDENTITY_URL is optional URL with no localhost default.
+ *    env.ts IDENTITY_URL is optional URL with no localhost default
+ *    (blank/unset → no navigator identity port). Live identity.session.read
+ *    refuses `no_live_session` rather than using a caller fixture as live truth.
  *    env.ts LEDGER_URL is a required URL with no localhost default.
  * 4. Class M (producer wire + ledger URL — identity owns rates; no invent book)
  * 5. Paths: docker-compose.apps.yml (svc-agents block only) + env.ts + index.ts
@@ -51,7 +53,7 @@ describe('compose IDENTITY_URL for agents affiliate producer', () => {
   const block = agentsServiceBlock(compose);
 
   it('env.ts declares optional IDENTITY_URL with no localhost default', () => {
-    expect(envTs).toMatch(/IDENTITY_URL:\s*z\.string\(\)\.url\(\)\.optional\(\)/);
+    expect(envTs).toMatch(/IDENTITY_URL:\s*blankAsAbsent\(z\.string\(\)\.url\(\)\.optional\(\)\)/);
     expect(envTs).not.toMatch(/IDENTITY_URL:[\s\S]*localhost:4002/);
   });
 
@@ -79,6 +81,27 @@ describe('compose IDENTITY_URL for agents affiliate producer', () => {
     const indexSrc = readFileSync(join(ROOT, 'services/svc-agents/src/index.ts'), 'utf8');
     expect(indexSrc).toMatch(/createLedgerClient\(env\.LEDGER_URL/);
     expect(indexSrc).not.toMatch(/localhost:4001/);
+  });
+
+  it('blank / unset IDENTITY_URL does not invent a navigator identity port', () => {
+    const indexSrc = readFileSync(join(ROOT, 'services/svc-agents/src/index.ts'), 'utf8');
+    expect(indexSrc).toMatch(/const navigatorIdentitySessionPort = env\.IDENTITY_URL\s*\n\s*\? createHttpNavigatorIdentitySessionPort/);
+    expect(indexSrc).not.toMatch(/localhost:4002/);
+    expect(indexSrc).not.toMatch(/createHttpNavigatorIdentitySessionPort\(\{\s*identityUrl:\s*'http/);
+  });
+
+  it('live identity miss discards the caller fixture (session-run + invokeDataTool)', () => {
+    const sessionRun = readFileSync(join(ROOT, 'services/svc-agents/src/navigator/session-run.ts'), 'utf8');
+    const router = readFileSync(join(ROOT, 'services/svc-agents/src/router.ts'), 'utf8');
+    expect(sessionRun).toMatch(/sessionFixture = liveSession\.ok \? liveSession\.session : null/);
+    expect(sessionRun).not.toMatch(/if \(liveSession\.ok\) sessionFixture = liveSession\.session;/);
+    expect(router).toMatch(/const tool = input\.tool\.trim\(\)/);
+    expect(router).toMatch(/plane === 'live' && tool === 'identity\.session\.read'/);
+    expect(router).not.toMatch(/input\.tool === 'identity\.session\.read'/);
+    expect(router).toMatch(/readLiveNavigatorSession\(/);
+    expect(router).toMatch(/session = liveSession\.ok \? liveSession\.session : null/);
+    expect(router).not.toMatch(/if \(liveSession\) session = liveSession;/);
+    expect(router).not.toMatch(/navigatorIdentitySessionPort\.read\([^)]*\)\.catch\(\(\) => null\)/);
   });
 
   it('does not restamp AGENTS_PROVIDER mock, AUTH_HEADER, JWT_*, or key-no-value upstream', () => {

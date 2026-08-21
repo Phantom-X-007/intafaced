@@ -30,7 +30,7 @@ import { navigatorAgentGuardrail } from './navigator/guardrail.js';
 import { invokeNavigatorDataTool } from './navigator/data-tools.js';
 import { effectiveNavigatorTradePlane } from './navigator/trade-plane-env.js';
 import type { NavigatorTradeDataPort } from './navigator/trade-data-port.js';
-import type { NavigatorIdentitySessionPort } from './navigator/identity-session-port.js';
+import { readLiveNavigatorSession, type NavigatorIdentitySessionPort } from './navigator/identity-session-port.js';
 import { navigatorTierGate } from './navigator/tier-gate.js';
 import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
@@ -323,7 +323,8 @@ export interface AgentsRouterDeps {
   readonly navigatorTradeDataPort?: NavigatorTradeDataPort;
   /**
    * Live identity session projection for navigator identity.session.read. Unset
-   * → live runs need caller session fixtures or refuse incomplete_session.
+   * → live identity.session.read refuses `no_live_session` rather than using
+   * caller fixtures as live truth.
    */
   readonly navigatorIdentitySessionPort?: NavigatorIdentitySessionPort;
 }
@@ -1611,6 +1612,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'stale',
                   'empty_markets',
                   'incomplete_session',
+                  'no_live_session',
                   'subject_mismatch',
                 ]),
                 userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
@@ -1629,15 +1631,16 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         )
         .query(async ({ ctx, input }) => {
           const plane = resolveNavigatorPlane(input.plane);
+          const tool = input.tool.trim();
           let quote = input.quote ?? null;
           let markets = input.markets ?? null;
 
           if (plane === 'live' && navigatorTradeDataPort) {
-            if (input.tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
+            if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
               const liveMarkets = await navigatorTradeDataPort.listMarkets().catch(() => null);
               if (liveMarkets && liveMarkets.length > 0) markets = [...liveMarkets];
             }
-            if (input.tool === 'trade.quote') {
+            if (tool === 'trade.quote') {
               const marketId = quote?.marketId?.trim() ?? '';
               if (marketId && (!quote || quote.last === null)) {
                 const liveQuote = await navigatorTradeDataPort.quote(marketId).catch(() => null);
@@ -1647,13 +1650,18 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
 
           let session = input.session ?? null;
-          if (plane === 'live' && navigatorIdentitySessionPort && input.tool === 'identity.session.read' && session?.sessionId?.trim()) {
-            const liveSession = await navigatorIdentitySessionPort.read(session.sessionId).catch(() => null);
-            if (liveSession) session = liveSession;
+          if (plane === 'live' && tool === 'identity.session.read') {
+            const liveSession = await readLiveNavigatorSession(
+              navigatorIdentitySessionPort,
+              session?.sessionId ?? '',
+              ctx.principal.userId,
+            );
+            // Live miss never falls back to a caller fixture.
+            session = liveSession.ok ? liveSession.session : null;
           }
 
           const result = invokeNavigatorDataTool({
-            tool: input.tool,
+            tool,
             plane,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',

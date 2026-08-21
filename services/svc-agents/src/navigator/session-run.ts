@@ -318,9 +318,10 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
         }
       }
 
-      if (input.plane === 'live' && input.identitySessionPort && tool === 'identity.session.read' && sessionFixture?.sessionId?.trim()) {
-        const liveSession = await readLiveNavigatorSession(input.identitySessionPort, sessionFixture.sessionId, input.userId);
-        if (liveSession.ok) sessionFixture = liveSession.session;
+      if (input.plane === 'live' && tool === 'identity.session.read') {
+        const liveSession = await readLiveNavigatorSession(input.identitySessionPort, sessionFixture?.sessionId ?? '', input.userId);
+        // Live miss never falls back to a caller fixture.
+        sessionFixture = liveSession.ok ? liveSession.session : null;
       }
 
       let toolResult: DataToolResult;

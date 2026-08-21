@@ -68,6 +68,7 @@ export type DataToolRefuseReason =
   | 'stale'
   | 'empty_markets'
   | 'incomplete_session'
+  | 'no_live_session'
   | 'subject_mismatch';
 
 export type DataToolRefuse = {
@@ -243,9 +244,18 @@ export function invokeNavigatorDataTool(input: {
     };
   }
 
-  // identity.session.read
+  // identity.session.read — live overlay discards caller fixtures on miss by
+  // passing null. That is `no_live_session`, not an invented open session.
   const session = input.session;
-  if (!session || !session.sessionId.trim() || !session.userId.trim()) {
+  if (!session) {
+    return {
+      status: 'refuse',
+      tool,
+      reason: 'no_live_session',
+      userMessageKey: 'agents.navigator.unavailable',
+    };
+  }
+  if (!session.sessionId.trim() || !session.userId.trim()) {
     return {
       status: 'refuse',
       tool,
