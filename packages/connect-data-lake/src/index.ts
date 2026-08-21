@@ -50,6 +50,7 @@ export {
   type IngestCaptureLakeBatchResult,
   type IngestCaptureLakeBatchSummary,
 } from './ingest-capture-lake-batch.js';
+export { describeDataLakeStage1, type DataLakeStage1Summary } from './data-lake-stage1.js';
 export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
