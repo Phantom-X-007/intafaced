@@ -1,5 +1,6 @@
 import type postgres from 'postgres';
 import type { MerchantWatchMetricsOk } from './merchant-watch-metrics-routes.js';
+import { listProjectedPayMetrics } from './merchant-watch-metrics-project.js';
 
 export type MerchantWatchMetricPoint = MerchantWatchMetricsOk['points'][number];
 
@@ -34,7 +35,8 @@ export function createMerchantWatchMetricsStore(sql: postgres.Sql): MerchantWatc
         FROM pay.merchant_watch_metrics
         ORDER BY rail_id
       `;
-      return rows.map(rowToPoint);
+      if (rows.length > 0) return rows.map(rowToPoint);
+      return listProjectedPayMetrics(sql);
     },
     async publishPoint(point) {
       await sql`
