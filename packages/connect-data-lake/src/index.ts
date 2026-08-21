@@ -39,6 +39,12 @@ export {
   type DataLakeRetentionSummary,
 } from './retention-policy.js';
 export {
+  flushCaptureLogToPersistenceSink,
+  type PersistenceSinkOk,
+  type PersistenceSinkRefuse,
+  type PersistenceSinkResult,
+} from './persistence-sink.js';
+export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
   bookObservationFromLakeRecord,
