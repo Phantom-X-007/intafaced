@@ -945,6 +945,9 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/execution-arb':
+        specifier: workspace:*
+        version: link:../../packages/execution-arb
       '@intafaced/execution-house-tenant':
         specifier: workspace:*
         version: link:../../packages/execution-house-tenant
