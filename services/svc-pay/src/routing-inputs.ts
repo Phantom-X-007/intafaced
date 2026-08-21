@@ -70,7 +70,8 @@ function present(value: string | null | undefined): boolean {
 }
 
 function presentScore(value: string | number | null | undefined): boolean {
-  if (typeof value === 'number') return Number.isFinite(value);
+  // JS `number` scores are banned (NaN, money-shaped floats, guessed ranks).
+  if (typeof value === 'number') return false;
   return present(value);
 }
 
@@ -142,4 +143,50 @@ export function assertNoInventedRoutingScores(decision: Record<string, unknown>)
       throw new Error(`pay.routing forbids invented field ${key}`);
     }
   }
+}
+
+/** Skip reason when a rail has no honest operator-declared success fraction. */
+export const APPROVAL_RATE_UNSET_SKIP = 'approval-rate-unset' as const;
+
+export type ApprovalRateUnsetSkip = typeof APPROVAL_RATE_UNSET_SKIP;
+
+/** Scaled integer for (0, 1] fractions — 1.0 = this value. Not money. */
+export const SUCCESS_RATE_SCALE = 1_000_000_000n;
+
+export type OperatorDeclaredSuccessRate =
+  { readonly ok: true; readonly scaled: bigint; readonly declared: string } | { readonly ok: false; readonly skip: ApprovalRateUnsetSkip };
+
+/**
+ * Read an operator-declared rail success fraction.
+ *
+ * DIRECTION §8 — this never invents a rate. Blank, zero, JS `number`,
+ * NaN, negative, or a fraction above 1 → skip `approval-rate-unset`.
+ * Honest input is a decimal string in (0, 1].
+ */
+export function readOperatorDeclaredSuccessRate(value: unknown): OperatorDeclaredSuccessRate {
+  if (value === undefined || value === null) {
+    return { ok: false, skip: APPROVAL_RATE_UNSET_SKIP };
+  }
+  if (typeof value !== 'string') {
+    return { ok: false, skip: APPROVAL_RATE_UNSET_SKIP };
+  }
+  const declared = value.trim();
+  if (declared.length === 0) {
+    return { ok: false, skip: APPROVAL_RATE_UNSET_SKIP };
+  }
+  if (!/^(0|1)(\.\d{1,9})?$/.test(declared)) {
+    return { ok: false, skip: APPROVAL_RATE_UNSET_SKIP };
+  }
+  const [whole, frac = ''] = declared.split('.');
+  if (whole === '1') {
+    if (/[1-9]/.test(frac)) {
+      return { ok: false, skip: APPROVAL_RATE_UNSET_SKIP };
+    }
+    return { ok: true, scaled: SUCCESS_RATE_SCALE, declared };
+  }
+  const scaled = BigInt(frac.padEnd(9, '0'));
+  if (scaled === 0n) {
+    return { ok: false, skip: APPROVAL_RATE_UNSET_SKIP };
+  }
+  return { ok: true, scaled, declared };
 }

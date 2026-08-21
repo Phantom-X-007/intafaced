@@ -8,7 +8,9 @@ import {
   assertRoutingScoresRefuseBlank,
   FORBIDDEN_ROUTING_SCORE_FIELDS,
   missingRoutingDimensions,
+  readOperatorDeclaredSuccessRate,
   RoutingInputError,
+  SUCCESS_RATE_SCALE,
 } from './routing-inputs.js';
 
 /**
@@ -121,7 +123,17 @@ describe('pay.routing — refuse when geo/method/risk data missing', () => {
     }
 
     expect(() => assertRoutingInputsPresent({ required: [] }, {})).not.toThrow();
-    expect(() => assertRoutingInputsPresent({ required: [] }, { approvalRate: '0.81', geoScore: 12 })).not.toThrow();
+    expect(() => assertRoutingInputsPresent({ required: [] }, { approvalRate: '0.81', geoScore: '12' })).not.toThrow();
+  });
+
+  it('refuses JS number scores — never treats a float as an honest rate', () => {
+    try {
+      assertRoutingScoresRefuseBlank({ approvalRate: 0.81 });
+      expect.unreachable('number approvalRate must refuse');
+    } catch (e) {
+      expect((e as RoutingInputError).code).toBe('pay.routing_input_missing');
+      expect((e as RoutingInputError).missing).toEqual(['approvalRate']);
+    }
   });
 
   it('omitted score keys stay omitted — no default approval-rate sneaks in', () => {
@@ -150,5 +162,35 @@ describe('pay.routing — refuse when geo/method/risk data missing', () => {
     expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('costBps');
     expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('geoScore');
     expect(FORBIDDEN_ROUTING_SCORE_FIELDS).toContain('methodRank');
+  });
+});
+
+describe('readOperatorDeclaredSuccessRate — DIRECTION §8 never invent', () => {
+  it('skips blank, zero, number, NaN, negative, and fractions above 1', () => {
+    const unset = { ok: false as const, skip: 'approval-rate-unset' as const };
+    expect(readOperatorDeclaredSuccessRate(undefined)).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate(null)).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('   ')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('0')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('0.0')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('0.000000000')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate(0.92)).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate(Number.NaN)).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('-0.1')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('1.01')).toEqual(unset);
+    expect(readOperatorDeclaredSuccessRate('2')).toEqual(unset);
+  });
+
+  it('accepts operator-declared decimal strings in (0, 1]', () => {
+    const mid = readOperatorDeclaredSuccessRate('0.81');
+    expect(mid.ok).toBe(true);
+    if (mid.ok) {
+      expect(mid.declared).toBe('0.81');
+      expect(mid.scaled).toBe(810_000_000n);
+    }
+    const full = readOperatorDeclaredSuccessRate('1');
+    expect(full.ok).toBe(true);
+    if (full.ok) expect(full.scaled).toBe(SUCCESS_RATE_SCALE);
   });
 });
