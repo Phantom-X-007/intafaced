@@ -511,8 +511,7 @@ describe('sweepCost', () => {
 
     expect(formatAmount(result.filled)).toBe('2');
     expect(formatAmount(result.cost)).toBe('201');
-    expect(result.averagePrice).not.toBeNull();
-    expect(formatAmount(result.averagePrice!)).toBe('100.5');
+    expect(formatAmount(result.averagePrice)).toBe('100.5');
     expect(result.levelsConsumed).toBe(2);
   });
 
@@ -528,7 +527,7 @@ describe('sweepCost', () => {
     const book = await consolidateBook('BTC/USDT', [deep]);
     const result = sweepCost(book, 'sell', amt('1'));
     expect(formatAmount(result.filled)).toBe('0');
-    expect(result.averagePrice).toBeNull();
+    expect(() => result.averagePrice).toThrow(/no averagePrice/);
   });
 
   it('empty sweep does not invent averagePrice 0 — 0 would read as filled-at-zero', async () => {
@@ -544,10 +543,9 @@ describe('sweepCost', () => {
     const buySweep = sweepCost(book, 'buy', amt('1'));
     const sellSweep = sweepCost(book, 'sell', amt('1'));
     expect(buySweep.filled).toBe(0n);
-    expect(buySweep.averagePrice).toBeNull();
-    expect(buySweep.averagePrice).not.toBe(0n);
+    expect(() => buySweep.averagePrice).toThrow(/filled-at-zero/);
     expect(sellSweep.filled).toBe(0n);
-    expect(sellSweep.averagePrice).toBeNull();
+    expect(() => sellSweep.averagePrice).toThrow(/filled-at-zero/);
   });
 
   it('does not fill a zero-price ask — 0 is not a price', async () => {
@@ -570,11 +568,10 @@ describe('sweepCost', () => {
     expect(book.asks.map((l) => formatAmount(l.price))).toEqual(['100']);
     const result = sweepCost(book, 'buy', amt('1'));
     expect(formatAmount(result.filled)).toBe('1');
-    expect(result.averagePrice).not.toBeNull();
-    expect(formatAmount(result.averagePrice!)).toBe('100');
+    expect(formatAmount(result.averagePrice)).toBe('100');
   });
 
-  it('sweep of only zero-price levels returns averagePrice null, not 0', async () => {
+  it('sweep of only zero-price levels does not invent averagePrice 0', async () => {
     const free = venue({
       id: 'free',
       kind: 'internal',
@@ -586,8 +583,7 @@ describe('sweepCost', () => {
     const book = await consolidateBook('BTC/USDT', [free]);
     const result = sweepCost(book, 'buy', amt('1'));
     expect(result.filled).toBe(0n);
-    expect(result.averagePrice).toBeNull();
-    expect(result.averagePrice).not.toBe(0n);
+    expect(() => result.averagePrice).toThrow(/filled-at-zero/);
   });
 });
 

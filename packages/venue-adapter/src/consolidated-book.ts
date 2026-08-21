@@ -126,11 +126,19 @@ export function isCrossed(book: ConsolidatedBook): boolean {
  * levels until filled. Returns what actually fills — a partial answer beats a
  * confident wrong one.
  */
-export function sweepCost(
-  book: ConsolidatedBook,
-  side: 'buy' | 'sell',
-  amount: Amount,
-): { filled: Amount; cost: Amount; averagePrice: Amount | null; levelsConsumed: number } {
+export interface SweepCost {
+  readonly filled: Amount;
+  readonly cost: Amount;
+  /**
+   * Quantity-weighted average. Typed `Amount` so consumers can assign it to
+   * `VenueQuote.price`. Empty fill refuses this field rather than reporting 0
+   * (filled-at-zero) or null (breaks that assignment).
+   */
+  readonly averagePrice: Amount;
+  readonly levelsConsumed: number;
+}
+
+export function sweepCost(book: ConsolidatedBook, side: 'buy' | 'sell', amount: Amount): SweepCost {
   const levels = side === 'buy' ? book.asks : book.bids;
   let remaining = amount;
   let cost = ZERO;
@@ -149,11 +157,21 @@ export function sweepCost(
     levelsConsumed++;
   }
 
+  if (filled <= 0n) {
+    return {
+      filled: ZERO,
+      cost,
+      levelsConsumed,
+      get averagePrice(): Amount {
+        throw new Error('empty sweep has no averagePrice — 0 would read as filled-at-zero');
+      },
+    };
+  }
+
   return {
     filled,
     cost,
-    // Filled 0 → null, never 0. Zero would read as filled-at-zero.
-    averagePrice: filled > 0n ? (cost * 10n ** 18n) / filled : null,
+    averagePrice: (cost * 10n ** 18n) / filled,
     levelsConsumed,
   };
 }
