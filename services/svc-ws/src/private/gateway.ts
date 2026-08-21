@@ -2,7 +2,7 @@ import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
-import { resolveWsCopy } from '../copy.js';
+import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
 import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
@@ -24,7 +24,32 @@ import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
 
 export const PRIVATE_STREAM_PATH = '/private/stream';
 
+/** Application close: access token `exp` elapsed (HTTP 401 is upgrade-only). */
+export const CLOSE_UNAUTHORIZED = 4003;
+
+/** `setTimeout` delay is a 32-bit signed int; longer waits fire immediately. */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
 const PRIVATE_CHANNELS: readonly PrivateStreamChannel[] = ['orders', 'fills', 'positions'];
+
+/**
+ * Drop `access_token` from a request-target so access logs never store the credential.
+ * Query parse uses a fixed base — the Host header is not involved.
+ */
+export function redactAccessTokenQuery(requestTarget: string): string {
+  const q = requestTarget.indexOf('?');
+  if (q === -1 || !requestTarget.includes('access_token=')) return requestTarget;
+  let parsed: URL;
+  try {
+    parsed = new URL(requestTarget, 'http://gateway.invalid');
+  } catch {
+    return requestTarget.slice(0, q);
+  }
+  if (!parsed.searchParams.has('access_token')) return requestTarget;
+  parsed.searchParams.delete('access_token');
+  const search = parsed.searchParams.toString();
+  return search ? `${parsed.pathname}?${search}` : parsed.pathname;
+}
 
 /**
  * `null` = unknown (caller 400s). `'all'` = omitted/empty query (three frames).
@@ -68,12 +93,30 @@ function closeReason(reason: string): string {
   return copy.length <= 120 ? copy : `${copy.slice(0, 117)}...`;
 }
 
-function sinkFor(socket: WebSocket): DepthSink {
+function closeUnauthorized(socket: WebSocket): void {
+  try {
+    if (socket.readyState === socket.OPEN || socket.readyState === socket.CONNECTING) {
+      socket.close(CLOSE_UNAUTHORIZED, closeReason(WS_COPY.tokenExpired));
+    }
+  } catch {
+    try {
+      socket.terminate();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function sinkFor(socket: WebSocket, seat: { expiresAtMs: number }): DepthSink {
   return {
     get bufferedBytes() {
       return socket.bufferedAmount;
     },
     send(frame: string) {
+      if (Date.now() >= seat.expiresAtMs) {
+        closeUnauthorized(socket);
+        return;
+      }
       socket.send(frame);
     },
     close(code: number, reason: string) {
@@ -142,6 +185,24 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
    * for nobody — TCP will not tell us for minutes, so we terminate.
    */
   const alive = new WeakSet<WebSocket>();
+  /**
+   * Access token + `exp` for each open seat. Upgrade verifies once; a timer
+   * closes at `exp` so a quiet seat cannot stay OPEN until the next heartbeat.
+   * Outbound send and heartbeat re-check as a second gate.
+   */
+  const seats = new WeakMap<WebSocket, { token: string; expiresAtMs: number }>();
+  const expiryTimers = new Set<ReturnType<typeof setTimeout>>();
+
+  function armExpiry(ws: WebSocket, expiresAtMs: number): ReturnType<typeof setTimeout> {
+    const delay = Math.max(0, Math.min(expiresAtMs - Date.now(), MAX_TIMEOUT_MS));
+    const timer = setTimeout(() => {
+      expiryTimers.delete(timer);
+      closeUnauthorized(ws);
+    }, delay);
+    timer.unref?.();
+    expiryTimers.add(timer);
+    return timer;
+  }
 
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer): void => {
     void (async () => {
@@ -165,6 +226,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         return;
       }
       if (url.pathname !== PRIVATE_STREAM_PATH) return;
+      // Strip the credential before any later logger reads `req.url`.
+      req.url = redactAccessTokenQuery(req.url ?? '/');
 
       try {
         if (!enabled()) {
@@ -183,6 +246,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         }
 
         let userId: string;
+        let expiresAtMs: number;
         try {
           const principal = await verifyAccessToken(raw, tokens);
           if (!principal.userId) {
@@ -194,6 +258,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             return;
           }
           userId = principal.userId;
+          expiresAtMs = principal.expiresAt.getTime();
         } catch {
           reject(socket, 401, 'Unauthorized');
           return;
@@ -207,7 +272,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
 
         wss.handleUpgrade(req, socket, head, (ws) => {
           const attachChannel = channelSel === 'all' ? null : channelSel;
-          const sink = sinkFor(ws);
+          const seat = { token: raw, expiresAtMs };
+          const sink = sinkFor(ws, seat);
           const detach = hub.attach(userId, sink, attachChannel, { holdUntilSnapshot: true });
           // Capacity refuse closes the sink inside attach — never announce ready
           // for a subscription the hub did not take (fail-closed, no false start).
@@ -222,13 +288,19 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             return;
           }
 
+          seats.set(ws, seat);
           alive.add(ws);
+          const expiryTimer = armExpiry(ws, expiresAtMs);
           ws.on('pong', () => alive.add(ws));
           // Inbound frames are ignored — private stream is push-only, same as public.
           ws.on('message', () => undefined);
           ws.on('error', () => ws.terminate());
-          // terminate() still emits close — free the hub seat.
-          ws.on('close', detach);
+          // terminate() still emits close — free the hub seat and the exp timer.
+          ws.on('close', () => {
+            clearTimeout(expiryTimer);
+            expiryTimers.delete(expiryTimer);
+            detach();
+          });
 
           try {
             // `bus` is honesty, not a second auth: false means the process has no
@@ -236,7 +308,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             const bus = busAttached();
             const announced = channelSel === 'all' ? PRIVATE_CHANNELS : [channelSel];
             for (const channel of announced) {
-              ws.send(JSON.stringify({ channel, type: 'ready', userId, bus }));
+              sink.send(JSON.stringify({ channel, type: 'ready', userId, bus }));
             }
           } catch {
             /* ignore */
@@ -267,6 +339,20 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
     // Quiet lag: free seats held by slow consumers even when no events publish.
     hub.sweepLag();
     for (const ws of wss.clients) {
+      const seat = seats.get(ws);
+      if (seat && Date.now() >= seat.expiresAtMs) {
+        closeUnauthorized(ws);
+        continue;
+      }
+      if (seat && tokens) {
+        void verifyAccessToken(seat.token, tokens).then(
+          (principal) => {
+            if (ws.readyState !== ws.OPEN) return;
+            seat.expiresAtMs = principal.expiresAt.getTime();
+          },
+          () => closeUnauthorized(ws),
+        );
+      }
       if (!alive.has(ws)) {
         ws.terminate();
         continue;
@@ -287,6 +373,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
     },
     async close(reason: string) {
       clearInterval(heartbeat);
+      for (const timer of expiryTimers) clearTimeout(timer);
+      expiryTimers.clear();
       server.off('upgrade', onUpgrade);
       const copy = resolveWsCopy(reason);
       await hub.close(copy);

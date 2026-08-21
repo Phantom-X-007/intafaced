@@ -12,7 +12,7 @@ import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
 import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
 import { WS_COPY } from './copy.js';
-import { createPrivateWebSocketGateway } from './private/gateway.js';
+import { createPrivateWebSocketGateway, redactAccessTokenQuery } from './private/gateway.js';
 import { HttpPrivateBookPort } from './private/book.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -60,7 +60,22 @@ registerProcessHooks(
 
 const source = new HttpDepthSource({ baseUrl: env.MATCHING_URL });
 
-const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+const app = Fastify({
+  logger: {
+    level: env.LOG_LEVEL,
+    serializers: {
+      req(request) {
+        return {
+          method: request.method,
+          url: redactAccessTokenQuery(request.url ?? ''),
+          host: request.headers.host,
+          remoteAddress: request.socket?.remoteAddress,
+          remotePort: request.socket?.remotePort,
+        };
+      },
+    },
+  },
+});
 
 /**
  * WHAT A CLIENT MAY SUBSCRIBE TO — and why it is not the engine's list.
