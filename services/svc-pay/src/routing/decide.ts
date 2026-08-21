@@ -11,7 +11,9 @@
  * `selectPublicCheckoutRail` when smart dimensions are in play. It always
  * demands geo + method + risk. Blank dims → `pay.routing_input_missing`.
  * Rails without an explicit eligibility profile for a dim → skipped with a
- * named reason (never assumed worldwide / any-method / any-risk).
+ * named reason (never assumed worldwide / any-method / any-risk). A rail
+ * without an operator-declared success fraction cannot win (never 100%,
+ * never cheapest-success).
  *
  * Money does not move here. Callers that charge must still pass the chosen
  * rail through posture value-movement gates and ledger recipes.
@@ -25,11 +27,26 @@ import {
   type RailSkipReason,
   type ValueMovementPolicy,
 } from '../rails/posture.js';
-import { assertNoInventedRoutingScores, assertRoutingInputsPresent, type RoutingInputs } from '../routing-inputs.js';
+import {
+  APPROVAL_RATE_UNSET_SKIP,
+  assertNoInventedRoutingScores,
+  assertRoutingInputsPresent,
+  readOperatorDeclaredSuccessRate,
+  type RoutingInputs,
+} from '../routing-inputs.js';
 
 /** Why a candidate was skipped during smart routing (extends posture taxonomy). */
 export type SmartRoutingSkipReason =
-  RailSkipReason | 'profile-missing' | 'method-mismatch' | 'method-unset' | 'geo-mismatch' | 'geo-unset' | 'risk-mismatch' | 'risk-unset';
+  | RailSkipReason
+  | 'profile-missing'
+  | 'method-mismatch'
+  | 'method-unset'
+  | 'geo-mismatch'
+  | 'geo-unset'
+  | 'risk-mismatch'
+  | 'risk-unset'
+  | 'approval-rate-unset'
+  | 'outranked-success-rate';
 
 export interface SmartRailDecisionEntry {
   readonly railId: string;
@@ -53,6 +70,12 @@ export interface RailRoutingProfile {
   readonly countries?: readonly string[];
   /** Opaque risk-band labels the rail may accept, or `'*'` for any configured band. */
   readonly riskBands?: readonly string[];
+  /**
+   * Operator-declared success fraction as a decimal string in (0, 1].
+   * Omitted / blank / zero / guessed → skip `approval-rate-unset`.
+   * Never inferred; DIRECTION §8 rates are not invented here.
+   */
+  readonly successRate?: string;
 }
 
 export interface SmartRoutingRequest {
@@ -80,7 +103,7 @@ export interface SmartRoutingDecision {
   readonly inputs: PresentRoutingInputs;
 }
 
-export type SmartRoutingErrorCode = 'pay.routing_no_rail' | 'pay.routing_input_missing';
+export type SmartRoutingErrorCode = 'pay.routing_no_rail' | 'pay.routing_input_missing' | 'pay.routing_approval_rate_unset';
 
 /**
  * No candidate accepted after geo/method/risk + posture filters.
@@ -96,6 +119,23 @@ export class SmartRoutingNoRailError extends Error {
   ) {
     super(message);
     this.name = 'SmartRoutingNoRailError';
+  }
+}
+
+/**
+ * Matching rails existed, but none carried an honest operator-declared
+ * success fraction — refuse rather than treat blank as 100% or cheapest-success.
+ */
+export class SmartRoutingApprovalRateUnsetError extends Error {
+  readonly code: SmartRoutingErrorCode = 'pay.routing_approval_rate_unset';
+
+  constructor(
+    message: string,
+    readonly considered: readonly SmartRailDecisionEntry[],
+    readonly inputs: PresentRoutingInputs,
+  ) {
+    super(message);
+    this.name = 'SmartRoutingApprovalRateUnsetError';
   }
 }
 
@@ -157,12 +197,22 @@ export function toRoutingDecisionRecord(decision: SmartRoutingDecision): Record<
   return record;
 }
 
+type EligibleSlot = {
+  readonly tag: 'ok';
+  readonly railId: string;
+  readonly adapter: RailAdapter;
+  readonly scaled: bigint;
+};
+
+type SkipSlot = { readonly tag: 'skip'; readonly entry: SmartRailDecisionEntry };
+
 /**
- * Smart checkout rail selection — geo + method + risk required.
+ * Smart checkout rail selection — geo + method + risk required, then
+ * operator-declared success fraction. Blank/zero/guessed rates cannot win.
  *
  * Walks the preference list. For each entry: profile eligibility → posture
- * capability/health/sandbox gates. First honest accept wins. Full considered
- * log always returned (on success) or attached to `SmartRoutingNoRailError`.
+ * → declared success-rate. Eligible rails rank by that declared fraction
+ * (preference order breaks ties). Full considered log always returned.
  */
 export function selectSmartCheckoutRail(request: SmartRoutingRequest): SmartRoutingDecision {
   // Smart routing always requires all three dims — never preference-only invent.
@@ -176,72 +226,101 @@ export function selectSmartCheckoutRail(request: SmartRoutingRequest): SmartRout
 
   const profiles = profileMap(request.profiles);
   const now = request.now ?? new Date();
-  const considered: SmartRailDecisionEntry[] = [];
+  const slots: Array<EligibleSlot | SkipSlot> = [];
 
   for (const railId of request.preference) {
     const profile = profiles.get(railId);
     if (!profile) {
-      considered.push({ railId, outcome: 'skipped', reason: 'profile-missing' });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: 'profile-missing' } });
       continue;
     }
 
     const methodSkip = methodMatches(profile, present.method);
     if (methodSkip) {
-      considered.push({ railId, outcome: 'skipped', reason: methodSkip });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: methodSkip } });
       continue;
     }
     const geoSkip = geoMatches(profile, present.geoCountry);
     if (geoSkip) {
-      considered.push({ railId, outcome: 'skipped', reason: geoSkip });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: geoSkip } });
       continue;
     }
     const riskSkip = riskMatches(profile, present.riskBand);
     if (riskSkip) {
-      considered.push({ railId, outcome: 'skipped', reason: riskSkip });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: riskSkip } });
       continue;
     }
 
     // Posture walk — same honesty as selectPublicCheckoutRailDetailed.
     if (!request.rails.has(railId)) {
-      considered.push({ railId, outcome: 'skipped', reason: 'not-registered' });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: 'not-registered' } });
       continue;
     }
     const adapter = request.rails.get(railId);
     if (!PUBLIC_CHECKOUT_CAPABILITIES.every((c) => adapter.capabilities.includes(c))) {
-      considered.push({ railId, outcome: 'skipped', reason: 'missing-capability' });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: 'missing-capability' } });
       continue;
     }
     if (adapter.mode === 'absent') {
-      considered.push({ railId, outcome: 'skipped', reason: 'absent' });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: 'absent' } });
       continue;
     }
     if (!isUsable(adapter, now)) {
-      considered.push({ railId, outcome: 'skipped', reason: 'unhealthy' });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: 'unhealthy' } });
       continue;
     }
     try {
       assertRailMayAcceptPublicPayment(adapter, request.policy);
     } catch {
-      considered.push({ railId, outcome: 'skipped', reason: 'sandbox' });
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: 'sandbox' } });
       continue;
     }
 
-    considered.push({ railId, outcome: 'chosen' });
-    const decision: SmartRoutingDecision = {
-      adapter,
-      chosenRailId: railId,
-      considered,
-      inputs: present,
-    };
-    assertNoInventedRoutingScores(toRoutingDecisionRecord(decision));
-    return decision;
+    const parsed = readOperatorDeclaredSuccessRate(profile.successRate);
+    if (!parsed.ok) {
+      slots.push({ tag: 'skip', entry: { railId, outcome: 'skipped', reason: parsed.skip } });
+      continue;
+    }
+    slots.push({ tag: 'ok', railId, adapter, scaled: parsed.scaled });
   }
 
-  throw new SmartRoutingNoRailError(
-    'Smart routing found no rail that honestly accepts this geo/method/risk — refuse rather than invent a fallback',
+  const eligible = slots.filter((s): s is EligibleSlot => s.tag === 'ok');
+  const skipped = slots.filter((s): s is SkipSlot => s.tag === 'skip').map((s) => s.entry);
+
+  if (eligible.length === 0) {
+    if (skipped.some((e) => e.reason === APPROVAL_RATE_UNSET_SKIP)) {
+      throw new SmartRoutingApprovalRateUnsetError(
+        'Smart routing will not choose a rail with an unset, zero, or guessed success-rate — refuse rather than invent',
+        skipped,
+        present,
+      );
+    }
+    throw new SmartRoutingNoRailError(
+      'Smart routing found no rail that honestly accepts this geo/method/risk — refuse rather than invent a fallback',
+      skipped,
+      present,
+    );
+  }
+
+  let winner = eligible[0]!;
+  for (const row of eligible.slice(1)) {
+    if (row.scaled > winner.scaled) winner = row;
+  }
+
+  const considered: SmartRailDecisionEntry[] = slots.map((slot) => {
+    if (slot.tag === 'skip') return slot.entry;
+    if (slot.railId === winner.railId) return { railId: slot.railId, outcome: 'chosen' };
+    return { railId: slot.railId, outcome: 'skipped', reason: 'outranked-success-rate' };
+  });
+
+  const decision: SmartRoutingDecision = {
+    adapter: winner.adapter,
+    chosenRailId: winner.railId,
     considered,
-    present,
-  );
+    inputs: present,
+  };
+  assertNoInventedRoutingScores(toRoutingDecisionRecord(decision));
+  return decision;
 }
 
 /**
