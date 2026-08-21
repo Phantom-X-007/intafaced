@@ -17,7 +17,7 @@
     </div>
 
     <IxState :loading="items.loading" :reason="items.reason" :message="items.message" endpoint="/api/academy/trpc/curriculum">
-      <div v-if="items.data && items.data.length" class="ix-scroll">
+      <div v-if="playbooks.length" class="ix-scroll">
         <table class="ix-table">
           <thead>
             <tr>
@@ -28,13 +28,13 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in items.data" :key="row.slug">
+            <tr v-for="row in playbooks" :key="row.slug">
               <td>{{ row.title }}</td>
               <td>{{ row.kind }}</td>
               <td>{{ row.path }}</td>
               <td>
                 <div class="ix-actions">
-                  <Button size="small" :loading="item.loading && itemSlug === row.slug" @click="openItem(row.slug)">
+                  <Button size="small" :loading="itemDetail.loading && itemSlug === row.slug" @click="openItem(row.slug)">
                     {{ $t('intafaced.academy.open') }}
                   </Button>
                   <Button v-if="canWrite" type="primary" size="small" :loading="completeAction.busy && completeSlug === row.slug" @click="complete(row.slug)">
@@ -50,16 +50,16 @@
       <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.academy.emptyCurriculum') }}</div>
     </IxState>
 
-    <div v-if="item.reason" style="margin-top:14px;">
-      <IxState :loading="item.loading" :reason="item.reason" :message="item.message" endpoint="/api/academy/trpc/curriculumItem">
-        <div v-if="item.data" class="ix-kv">
+    <div v-if="itemSlug" style="margin-top:14px;">
+      <IxState :loading="itemDetail.loading" :reason="itemDetail.reason" :message="itemDetail.message" endpoint="/api/academy/trpc/curriculumItem">
+        <div v-if="itemDetail.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.academy.playbook') }}</span>
-            <span class="v">{{ item.data.title }}</span>
+            <span class="v">{{ itemDetail.data.title }}</span>
           </div>
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.academy.itemSlug') }}</span>
-            <span class="v">{{ item.data.slug }}</span>
+            <span class="v">{{ itemDetail.data.slug }}</span>
           </div>
         </div>
       </IxState>
@@ -72,6 +72,9 @@
       </div>
     </div>
     <div class="ix-actions">
+      <Button size="small" :loading="itemDetail.loading" :disabled="!slugDraft" @click="openItem(slugDraft)">
+        {{ $t('intafaced.academy.lookupSlug') }}
+      </Button>
       <Button v-if="canWrite" size="small" :loading="completeAction.busy" :disabled="!slugDraft" @click="complete(slugDraft)">
         {{ $t('intafaced.academy.completeSlug') }}
       </Button>
@@ -111,13 +114,19 @@ export default {
       completeSlug: '',
       itemSlug: '',
       items: this.emptySection(),
-      item: this.emptySection(),
+      itemDetail: this.emptySection(),
       completeAction: this.emptyAction()
     };
   },
   computed: {
     canWrite() {
       return !!this.ixToken;
+    },
+    playbooks() {
+      var rows = (this.items.data && this.items.data.length) ? this.items.data : [];
+      return rows.filter(function (row) {
+        return row.kind === 'playbook';
+      });
     }
   },
   created() {
@@ -134,7 +143,7 @@ export default {
     openItem(slug) {
       this.itemSlug = slug;
       this.slugDraft = slug;
-      this.load('item', query('academy', 'curriculumItem', { slug: slug }, this.ixToken));
+      this.load('itemDetail', query('academy', 'curriculumItem', { slug: slug }, this.ixToken));
     },
     complete(itemSlug) {
       this.completeSlug = itemSlug;
