@@ -174,6 +174,7 @@ export const appRouter = createBankRouter(bank, {
   loanAccrualEnabled: env.LOAN_ACCRUAL_ENABLED,
   loanRiskSweepEnabled: env.LOAN_RISK_SWEEP_ENABLED,
   autoInvestEnabled: env.AUTO_INVEST_ENABLED,
+  autoInvestConvertWired: usableTradeConvertUrl(env.TRADE_URL),
 });
 export type AppRouter = typeof appRouter;
 
