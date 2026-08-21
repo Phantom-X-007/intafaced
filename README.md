@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`█████████████░░░░░░░` **65%** — 102 of 158 features shipped
+`█████████████░░░░░░░` **65%** — 103 of 158 features shipped
 
-Phases: **0** 11/12 · **1** 12/13 · **2** 16/26 · **3** 12/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 31/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** 12/13 · **2** 16/26 · **3** 13/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 31/59 · **5P** 4/7
 
-**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · House desk sealed private tenant — the Throne Law (§28) (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Smart routing — geo, method, risk, approval rate (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · Knowledge base and workflow automation (§25:720) (nitro-agent)
+**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Perps: isolated margin, funding, partial-liquidation ladder (Phantom-X-007) · House desk sealed private tenant — the Throne Law (§28) (Nitro) · WebSocket fan-out: depth, trades, orders, positions (Phantom-X-007) · Seasonal ladders, IFC prize pools (Phantom-X-007) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · Knowledge base and workflow automation (§25:720) (nitro-agent)
 
 **🟢 20 ready to claim** — nothing blocks these:
 

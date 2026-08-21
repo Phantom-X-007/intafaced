@@ -720,10 +720,20 @@ export const FEATURES = [
   f('pay.routing', 'Smart routing — geo, method, risk, approval rate', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['pay.rails'],
-    note: 'WIP residual — D26-P4-09 2026-08-15: P3 checkout smart-routing LANDED #1793, not current craft. Hosted checkout open walks selectSmartCheckoutRail (geo/method/risk). Blank dims → pay.routing_input_missing; no invented approval/cost. Payer cannot name a rail. STILL NOT done: live acquiring / PSP (Class X). Not tracker done until live connectors.',
+    requires: [
+      'services/svc-pay/src/routing/mount-vs-tracker.ts',
+      'services/svc-pay/src/routing/mount-vs-tracker.test.ts',
+      'services/svc-pay/src/routing/decide.ts',
+      'services/svc-pay/src/routing-policy.ts',
+      'services/svc-pay/src/routing-no-invent.test.ts',
+    ],
+    note:
+      '**D26-P1-P3 Done 2026-08-21:** geo/method/risk smart rail selection (`mount-vs-tracker.ts`); hosted checkout + routing doors. ' +
+      'Blank dims → pay.routing_input_missing; never invent approval rates, cost weights, or payer-named rails. ' +
+      'Class X residual: live acquiring / PSP connectors; operator success-fraction profiles not silent defaults.',
   }),
   f('pay.settlement', 'Dual settlement — bank or crypto', {
     module: 'pay',
