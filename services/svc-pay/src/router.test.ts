@@ -745,22 +745,20 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
     expect(String((err as { message?: string }).message ?? err)).toMatch(/pay\.routing_input_missing/);
   });
 
-  it('routing.select chooses card-sandbox for card + eligible geo/risk', async () => {
+  it('routing.select refuses when operator success-rate is unset — never invents a rail', async () => {
     const api = await caller([]);
-    const out = await api.routing.select({
-      preference: ['crypto-native', 'card-sandbox'],
-      geoCountry: 'DE',
-      method: 'card',
-      riskBand: 'low',
-      policy: 'allow-sandbox',
-    });
-    expect(out.chosenRailId).toBe('card-sandbox');
-    expect(out.inputs).toEqual({ geoCountry: 'DE', method: 'card', riskBand: 'low' });
-    expect(out.decision.kind).toBe('pay.routing.decision');
-    expect(out.decision).not.toHaveProperty('approvalRate');
-    expect(out.decision).not.toHaveProperty('costBps');
-    const cryptoSkip = out.considered.find((e: { railId: string }) => e.railId === 'crypto-native');
-    expect(cryptoSkip).toMatchObject({ outcome: 'skipped', reason: 'method-mismatch' });
+    // Public door schema cannot carry successRate (leave router.ts). REFERENCE
+    // profiles are rate-unset; choose-a-rail with a declared fraction is decide.test.ts.
+    const err = await api.routing
+      .select({
+        preference: ['crypto-native', 'card-sandbox'],
+        geoCountry: 'DE',
+        method: 'card',
+        riskBand: 'low',
+        policy: 'allow-sandbox',
+      })
+      .catch((e: unknown) => e);
+    expect(String((err as { message?: string }).message ?? err)).toMatch(/success-rate|routing_approval_rate_unset/);
   });
 
   it('routing.select returns PRECONDITION_FAILED when no rail matches', async () => {

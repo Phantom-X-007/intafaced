@@ -1697,7 +1697,7 @@ export const FEATURES = [
     phase: '2',
     plane: 'F',
     owner: 'Phantom-X-007',
-    status: 'done',
+    status: 'ready',
     dependsOn: ['trade.spot'],
     requires: [
       'services/svc-notify/src/alerts-policy.ts',

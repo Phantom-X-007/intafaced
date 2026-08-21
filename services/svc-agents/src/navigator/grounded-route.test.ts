@@ -39,6 +39,7 @@ function stubDeps(): AgentsRouterDeps {
     gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
     meter: {} as AgentsRouterDeps['meter'],
     feeAssetId: 'IFC',
+    navigatorTradeUrl: 'http://svc-trade:4004',
   };
 }
 

@@ -182,6 +182,8 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'certPerkIntent',
         'seasons',
         'season',
+        'seasonCalendar',
+        'tournaments.policy',
         'standings',
         'createSeason',
         'setSeasonStatus',
