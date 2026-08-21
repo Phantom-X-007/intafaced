@@ -384,25 +384,19 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
-      'services/svc-trade/src/copy',
-      'services/svc-trade/src/copy/auto-mirror-place.ts',
+      'services/svc-trade/src/copy/mount-vs-tracker.ts',
+      'services/svc-trade/src/copy/mount-vs-tracker.test.ts',
+      'services/svc-trade/src/copy/copy-policy.ts',
       'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
     ],
     note:
-      'D26-P0-02 SEALED 2026-08-13: TRADE_COPY_FEE_SHARE_LAW published (leaderShareBps=1000, cap 1000.00, decay 50/5000) — ' +
-      'adr/2026-08-13-d26-p0-02-owner-launch-seals.md. ' +
-      '2026-08-14: placeMirror wires follower placeOrder (IOC market, clientOrderId copy-mirror:follow:fill); unwired port still refuses; never invents fills. ' +
-      'D26-P0-15 owner-published 2026-08-14: TRADE_COPY_JURISDICTION_LAW in .env.example (49 ISO, not worldwide; blank still refuse). ' +
-      'Mechanism still adr/2026-08-12-copy-jurisdiction-refuse-closed.md. ' +
-      'Prior: deskStatus.sovereign + P0-02 residual cites; kill/unfollow real (#1692). ' +
-      'W13 L10: settle fillId claim + listMyFollows + planMirror. Product is **fee-share** only; P&L profit-share banned (§95). ' +
-      '2026-08-14: listFollowsByFollower (not full table) + unique (follower,leader) race maps to trade.copy_already_following (never raw PG 23505). ' +
-      '2026-08-14: placeMirror clientOrderId hashed to 64 chars when follow+fill overflow (spot retry key). ' +
-      'Still open: session-key caps (protocol).',
+      '**D26-P1-T3 Done 2026-08-21:** sovereign desk + follow/kill/unfollow (`mount-vs-tracker.ts`); fee-share not profit-share. ' +
+      'Blank §8 rates/jurisdiction refuse-closed; never invent leader share or returns-ranked board. ' +
+      'Class X residual: owner fee-share/jurisdiction env pins; auto-mirror place socket.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
