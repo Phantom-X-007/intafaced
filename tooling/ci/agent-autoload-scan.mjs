@@ -39,6 +39,7 @@ mustInclude('AGENTS.md', 'number', 'money must not be a JS number');
 mustInclude('AGENTS.md', 'INTERNET-LEVERAGE-LAW', 'do not rebuild kit / second book');
 mustInclude('AGENTS.md', 'Internet leverage law', 'section name the scan already keys on');
 mustInclude('AGENTS.md', 'pnpm wt', 'worktree law');
+mustInclude('AGENTS.md', 'graphify query', 'query-first map; without this agents grep the universe');
 
 mustInclude('CLAUDE.md', 'AGENTS.md', 'Claude must chain into AGENTS.md');
 mustInclude('CLAUDE.md', 'COORDINATION-TRUTH-LAYERS', 'Claude sees layers');

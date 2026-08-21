@@ -27,3 +27,7 @@ Build the product. Do not spend the session writing `docs/**` boards, ADRs, LIVE
 ## Skills
 
 Repo law beats installed skills. Skills that say `git worktree add` or block ship on CI/verify are wrong here.
+
+## Graphify
+
+First code-location move: `graphify query "<question>" --budget 1500`, then open one file. After `services/` / `packages/` edits: `GRAPHIFY_MAX_WORKERS=1 graphify update .` (official hook skips worktrees). Map is `graphify-out/graph.json` in git.

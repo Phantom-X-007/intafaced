@@ -85,6 +85,53 @@ function baseBranch() {
  *
  * Returns null when the name is legal, or the operator-facing message when not.
  */
+/** True when the committed graph is far enough behind HEAD that a cook would query a stale map. */
+export function shouldRefreshGraph(commitsBehind) {
+  return Number.isFinite(commitsBehind) && commitsBehind > 50;
+}
+
+/**
+ * Official graphify post-commit hook skips linked worktrees. This repo only
+ * cooks in worktrees, so `pnpm wt` refreshes the local map when it is stale.
+ * Fail-open: missing CLI or a failed update must not block creating the tree.
+ * Does not commit graphify-out — product PRs must not swallow a 20MB map.
+ */
+function refreshGraphIfStale(worktreePath) {
+  const graphPath = join(worktreePath, 'graphify-out', 'graph.json');
+  if (!existsSync(graphPath)) return;
+  let built = '';
+  try {
+    built = JSON.parse(readFileSync(graphPath, 'utf8')).built_at_commit || '';
+  } catch {
+    console.error('· graphify-out/graph.json unreadable — skip map refresh');
+    return;
+  }
+  if (!built) return;
+  const behindOut = spawnSync('git', ['rev-list', '--count', `${built}..HEAD`], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+  });
+  const n = Number((behindOut.stdout || '').trim());
+  if (!shouldRefreshGraph(n)) return;
+
+  const env = { ...process.env, PATH: `/Users/Nitro/.local/bin:${process.env.PATH || ''}` };
+  const which = spawnSync('command', ['-v', 'graphify'], { encoding: 'utf8', shell: true, env });
+  if (which.status !== 0) {
+    console.log('· graphify CLI missing — skip map refresh');
+    return;
+  }
+  console.log(`· graphify update (${n} commits behind)`);
+  const upd = spawnSync('graphify', ['update', '.'], {
+    cwd: worktreePath,
+    encoding: 'utf8',
+    env: { ...env, GRAPHIFY_MAX_WORKERS: process.env.GRAPHIFY_MAX_WORKERS || '1' },
+    timeout: 600000,
+  });
+  if (upd.status !== 0) {
+    console.error('⚠ graphify update failed — worktree is usable; run GRAPHIFY_MAX_WORKERS=1 graphify update . in it');
+  }
+}
+
 export function conventionError(branch) {
   if (!branch) return 'Usage: pnpm wt <branch-name>\n  e.g. pnpm wt feat/svc-identity-rank-events';
   if (/^(feat|fix|chore|docs|test|refactor)\//.test(branch)) return null;
@@ -251,6 +298,8 @@ function create(branch) {
     execFileSync(process.execPath, ['-e', `require('fs').copyFileSync(${JSON.stringify(env)}, ${JSON.stringify(join(path, '.env'))})`]);
     console.log('· copied .env');
   }
+
+  refreshGraphIfStale(path);
 
   // REPORT THE BASE. A worktree cut 38 commits stale looks identical to a fresh
   // one, and on 2026-08-09 one was only caught because an agent had been told to
@@ -468,6 +517,9 @@ if (selfTest) {
   check('a bare name is refused', conventionError('worktree-fix') !== null, true);
   check('an unknown prefix is refused', conventionError('wip/thing') !== null, true);
   check('no name at all is refused', conventionError('') !== null, true);
+  check('graph behind 50 does not refresh', shouldRefreshGraph(50), false);
+  check('graph behind 51 does refresh', shouldRefreshGraph(51), true);
+  check('graph behind NaN does not refresh', shouldRefreshGraph(Number.NaN), false);
 
   // ── the wiring, which fixtures cannot see ─────────────────────────────────
   // Everything above tests `planStartPoint` and `worktreeAddArgs` in isolation.

@@ -1,0 +1,6 @@
+---
+description: Query Graphify before grepping this repo.
+alwaysApply: true
+---
+
+If `graphify-out/graph.json` exists, the first code-location move is `graphify query "<question>" --budget 1500`. Then open one file. Do not grep `services/` to find a symbol.
