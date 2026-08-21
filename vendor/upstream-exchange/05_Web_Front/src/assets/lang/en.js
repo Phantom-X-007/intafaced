@@ -1009,6 +1009,7 @@ module.exports = {
             offerType: "Offer type",
             buy: "Buy",
             signInToBuy: "Sign in to buy",
+            subscribe: "Subscribe",
             empty: "No listings are available.",
             mine: "My vendor application",
             apply: "Apply as vendor",

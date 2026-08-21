@@ -23,13 +23,16 @@
       <IxState :loading="listings.loading" :reason="listings.reason" :message="listings.message" endpoint="/api/market/trpc/listings">
         <div v-if="listings.data && listings.data.length" class="ix-scroll">
           <table class="ix-table"><thead><tr><th>{{ $t('intafaced.market.listingTitle') }}</th><th>{{ $t('intafaced.market.assetId') }}</th><th>{{ $t('intafaced.market.price') }}</th><th>{{ $t('intafaced.market.offerType') }}</th><th></th></tr></thead>
-            <tbody><tr v-for="listing in listings.data" :key="listing.id"><td>{{ listing.title }}</td><td>{{ listing.assetId }}</td><td>{{ listing.price }}</td><td>{{ listing.offerType }}</td><td><Button v-if="canBuy" size="small" :loading="purchase.busy" @click="buy(listing)">{{ $t('intafaced.market.buy') }}</Button><router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.market.signInToBuy') }}</router-link></td></tr></tbody>
+            <tbody><tr v-for="listing in listings.data" :key="listing.id"><td>{{ listing.title }}</td><td>{{ listing.assetId }}</td><td>{{ listing.price }}</td><td>{{ listing.offerType }}</td><td><Button v-if="canBuy" size="small" :loading="purchase.busy" @click="buy(listing)">{{ $t('intafaced.market.buy') }}</Button><router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.market.signInToBuy') }}</router-link> <Button size="small" :loading="subscribe.busy" @click="subscribeTo(listing)">{{ $t('intafaced.market.subscribe') }}</Button></td></tr></tbody>
           </table>
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.market.empty') }}</div>
       </IxState>
       <IxState v-if="purchase.ran" :loading="purchase.busy" :reason="purchase.reason" :message="purchase.message" endpoint="/api/market/trpc/purchase">
         <div v-if="purchase.data" class="ix-note ix-note-success">{{ purchase.data.status }} · {{ purchase.data.ledgerTxId || '—' }}</div>
+      </IxState>
+      <IxState v-if="subscribe.ran" :loading="subscribe.busy" :reason="subscribe.reason" :message="subscribe.message" endpoint="/api/market/trpc/subscribe">
+        <div v-if="subscribe.data" class="ix-note ix-note-success">{{ subscribe.data.status || '—' }}</div>
       </IxState>
     </div>
   </div>
@@ -44,9 +47,12 @@ import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxMarket', components: { IxState, IxSubNav }, mixins: [ixModule],
-  data() { return { nav: MARKET_NAV, programme: this.emptySection(), listings: this.emptySection(), purchase: this.emptyAction() }; },
+  data() { return { nav: MARKET_NAV, programme: this.emptySection(), listings: this.emptySection(), purchase: this.emptyAction(), subscribe: this.emptyAction() }; },
   computed: { canBuy() { return !!(this.ixToken && this.programme.data && this.programme.data.commissionConfigured); } },
   created() { this.$store.commit('navigate', 'nav-platform'); this.load('programme', query('market', 'commerceProgramme', undefined, this.ixToken)); this.load('listings', query('market', 'listings', { limit: 50 }, this.ixToken)); },
-  methods: { buy(listing) { var purchaseId = this.draftId('marketPurchase:' + listing.id); if (!purchaseId) return; this.act('purchase', mutate('market', 'purchase', { listingId: listing.id, purchaseId: purchaseId }, this.ixToken)); } }
+  methods: {
+    buy(listing) { var purchaseId = this.draftId('marketPurchase:' + listing.id); if (!purchaseId) return; this.act('purchase', mutate('market', 'purchase', { listingId: listing.id, purchaseId: purchaseId }, this.ixToken)); },
+    subscribeTo(listing) { this.act('subscribe', mutate('market', 'subscribe', { listingId: listing.id }, this.ixToken)); }
+  }
 };
 </script>
