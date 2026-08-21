@@ -1043,7 +1043,15 @@ module.exports = {
             alreadyGranted: "Already granted",
             perks: "Perks",
             yes: "Yes",
-            no: "No"
+            no: "No",
+            canvas: "Spatial canvas",
+            canvasLead: "Host moves the scene. Reload restores from the service. Attendee writes refuse by name. Scene is v1 only — never stored in the browser.",
+            sessionId: "Session id",
+            sessionIdHint: "uuid of a session",
+            loadSession: "Load session",
+            fingerprint: "Fingerprint",
+            canvasHint: "Click the stage to move the host seat.",
+            sceneUpdated: "Scene updated"
         },
         market: {
             nav: { aria: "Market sections", catalogue: "Catalogue", mine: "My market" },

@@ -130,6 +130,7 @@
 
     <IxAcademyCurriculum />
     <IxAcademyCerts />
+    <IxAcademyCanvas :session-id-from-hub="activeSessionId || ''" />
   </div>
 </template>
 
@@ -144,12 +145,13 @@
 import IxState from '../../components/intafaced/IxState.vue';
 import IxAcademyCurriculum from './academy/Curriculum.vue';
 import IxAcademyCerts from './academy/Certs.vue';
+import IxAcademyCanvas from './academy/Canvas.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxAcademy',
-  components: { IxState, IxAcademyCurriculum, IxAcademyCerts },
+  components: { IxState, IxAcademyCurriculum, IxAcademyCerts, IxAcademyCanvas },
   mixins: [ixModule],
   data() {
     return {
