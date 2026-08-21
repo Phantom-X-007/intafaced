@@ -1425,15 +1425,15 @@ export const FEATURES = [
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
-      'services/svc-trade/drizzle/0006_paper_markets.sql',
+      'services/svc-academy/src/paper/mount-vs-tracker.ts',
+      'services/svc-academy/src/paper/mount-vs-tracker.test.ts',
       'services/svc-academy/src/paper/workbook-loop.ts',
       'services/svc-academy/src/paper/ops-gate.ts',
-      'services/svc-academy/src/paper/ledger-isolation.test.ts',
+      'services/svc-trade/drizzle/0006_paper_markets.sql',
     ],
     note:
-      'DONE 2026-08-15: title bar met on tip — paper market flag + placeOrder zero-ledger isolation, workbook drill loop with trade fill-refs only, ' +
-      'ACADEMY_PAPER_TRADING_ENABLED kill-switch (live trade unaffected, #1001). XP/rank from paper is academy.certs (not this row). ' +
-      'Stage-1 2026-08-04: trade.markets.paper + placeOrder isolation. Stage-2 workbook wire. Stage-3 ops gate.',
+      'DONE 2026-08-15: paper market flag + zero-ledger isolation + workbook drill loop. ' +
+      'D26-P1-PT1M mount-vs-tracker seals ops gate + real-money-ban paths. Class X: workbook UI craft.',
   }),
   f('launch.token-factory', 'ERC-20 deploy from audited templates', {
     owner: 'shehzad002',
