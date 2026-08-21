@@ -395,16 +395,19 @@ export const FEATURES = [
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
     phase: '2',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'pay.rails'],
-    requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'packages/contracts/src/instruments.ts'],
+    requires: [
+      'services/svc-trade/src/spot/forex-mount-vs-tracker.ts',
+      'services/svc-trade/src/spot/forex-mount-vs-tracker.test.ts',
+      'services/svc-trade/src/spot/forex-settlement.ts',
+      'services/svc-trade/src/spot/forex-settlement-public-doors.test.ts',
+    ],
     note:
-      'D26-P0-05 SEALED freeze 2026-08-15 (adr/2026-08-13-options-forex-settlement-asset-law.md): live set empty; settlement asset unset; euro-stable ≠ fiat rails. ' +
-      'D26-P1-T7: explicit §13 socket.forex-settlement refuse-closed until P0-05 (now sealed) AND fiat settle rails — ' +
-      'forex.settlementStatus + list/place/setMarketStatus(active) share trade.unsettled_asset_class_listing; never invent settlement asset. ' +
-      'On OPEN_MONEY allowlist 2026-08-08. **Not "unlisted"** — migration `0001_multi_asset_instruments.sql` seeds six majors active ' +
-      '(EUR/USD, GBP/USD, USD/JPY, AUD/USD, USD/CHF, USD/CAD) and the public market list publishes them `active: true`. They are **unfundable** ' +
-      '(no live fiat rail settles; only crypto-native + card-sandbox inbound). #1169/#1220 + T7 socket refuse NEW production listing and place. ' +
-      'What exists: asset_class + schedule; assertMarketOpen; D-S-05/T7 listing+place refuse. Full product blocked on rails, not on "no markets listed."',
+      '**D26-P1-T7 Done 2026-08-21:** refuse-closed settlement posture (`forex-mount-vs-tracker.ts`). ' +
+      'forex.settlementStatus + assertProductionListing; six majors listed but unfundable until rails. ' +
+      'Class X residual: owner P0-05 settlement asset; fiat settle rails — never invent settlement asset.',
   }),
   f('trade.algo', 'TWAP execution', {
     module: 'trade',
