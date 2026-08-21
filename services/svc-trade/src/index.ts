@@ -34,6 +34,7 @@ import { presentInsuranceListingPolicy } from './futures/insurance-listing-gate.
 import { presentFuturesJobsHealth } from './futures/futures-jobs-health.js';
 import { MaintainedBook } from '@intafaced/venue-adapter';
 import { registerInternalFundingRate } from './futures/internal-funding-rate.js';
+import { createCopyLeaderFixturesStore } from './agents/copy-leader-fixtures-store.js';
 import { registerCopyLeaderFixturesRoutes } from './agents/copy-leader-fixtures-routes.js';
 import { resolveFundingMaxAbsRateForBoot } from './futures/funding-rate-bound.js';
 import { parseMmSeedTargets, startMmSeedJobs } from './mm/seed-jobs.js';
@@ -575,8 +576,10 @@ registerInternalFundingRate(app, {
   maxAbsRate: fundingMaxAbsRate,
 });
 
+const copyLeaderFixturesStore = createCopyLeaderFixturesStore(sql);
 registerCopyLeaderFixturesRoutes(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
+  store: copyLeaderFixturesStore,
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
