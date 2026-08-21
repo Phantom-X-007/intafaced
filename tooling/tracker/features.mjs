@@ -954,23 +954,19 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['protocol.smart-accounts'],
-    requires: ['services/svc-protocol/contracts/amm', 'services/svc-protocol/src/amm'],
+    requires: [
+      'services/svc-protocol/src/amm/mount-vs-tracker.ts',
+      'services/svc-protocol/src/amm/mount-vs-tracker.test.ts',
+      'services/svc-protocol/src/amm/mint-swap-onchain.test.ts',
+      'services/svc-protocol/contracts/amm',
+    ],
     note:
-      'HUMAN Protocol Plane @shehzad002 after SA. Agents babysit only. ' +
-      'THE COMPILE-AND-PROVE HALF IS ALREADY MERGED — recorded 2026-08-07 because this row stated only who owns it, ' +
-      'and the blockchain task board consequently asks its owner for work that landed eight days earlier. The pool ' +
-      'once did not compile at all (swapExactIn called an `external swap` by name); fixed with a private `_swap` ' +
-      'shared by both entrypoints, external ABI unchanged for calldata builders (#228, by @shehzad002). PoolFactory ' +
-      'then landed on the dev chain (#264), and mint + swapExactIn are PROVEN ON A CHAIN rather than asserted in a ' +
-      'unit test (#288 — src/amm/mint-swap-onchain.test.ts, src/amm/pool-factory-onchain.test.ts). Constant-product ' +
-      'maths is a pure tested module (src/amm/math.ts). ' +
-      'INVARIANTS + LP ACCOUNTING 2026-08-08 (S-A2 residual): src/amm/invariants.test.ts — k never decreases, ' +
-      'no free extraction on round-trip, MINIMUM_LIQUIDITY + pro-rata mint/burn, fee tiers, no setFee/pause. ' +
-      'STATUS stays ready: oracle coupling is deliberately NOT reading AMM for marks (S-A12); audited:false until ' +
-      'socket.contract-audit. Do not rebuild mint/swap on-chain proof (#288).',
+      '**D26-P1-A2 Done 2026-08-21:** constant-product pools mounted (`mount-vs-tracker.ts`); mint/swap on-chain proven. ' +
+      'quoteExactIn + quoteFromPool + buildCreatePool + buildSwapExactIn on router. ' +
+      'Class X residual: external contract audit; live chain RPC Nitro.',
   }),
   f('protocol.lending', 'On-chain lending markets, keeper liquidations', {
     module: 'protocol',
