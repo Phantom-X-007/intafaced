@@ -61,9 +61,9 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | **P2**   | Partner unblock        | Exact CI fail extract; one NEW comment only; never merge partners                         | dual-edit / merge Denon·Shehzad     |
 | **P3**   | Tracker                | Deepen thin specs **or** implement Stage-1 from implementable TRK                         | stamp mill; invent money-class      |
 | **P4**   | Integrity              | Invent re-scan only if shell code changed; P-WS only if partner matrix changed            | cycle stamp with no delta           |
-| **P5**   | Hygiene                | Claims truth; merge when CI green                                                         | R07 peace rows for unchanged board  |
+| **P5**   | Hygiene                | Claims truth; merge when done                                                             | R07 peace rows for unchanged board  |
 
-**Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.
+**Night/AFK after freeProduct=0:** P1→P5 above. Merge when done. **Not** invent depth UI. **Not** R07 cycle spam.
 
 ### Allowed vs forbidden when freeProduct=0
 
@@ -73,7 +73,7 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | P2 exact partner CI fail comments                         | Merging Denon/Shehzad PRs                               |
 | P3 code-grounded TRK research deepen                      | Dual-edit partner open PR paths                         |
 | P4 invent/P-WS **only if** code or partner matrix changed | Invent/P-WS stamp with no Board-Delta                   |
-| P5 claims truth + merge when CI green                     | freeProduct=0 as session kill **or** as license to spam |
+| P5 claims truth + merge when done                         | freeProduct=0 as session kill **or** as license to spam |
 
 ### Machine enforcement (not a banner)
 

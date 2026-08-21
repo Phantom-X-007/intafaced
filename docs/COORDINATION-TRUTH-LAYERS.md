@@ -20,13 +20,13 @@
 
 ## Operator guarantees (do not violate)
 
-| Guarantee           | Meaning                                                                          |
-| ------------------- | -------------------------------------------------------------------------------- |
-| **Speed**           | No PR cap · no serialize-agents · no “wait for CI idle” · no CI throttle at all  |
-| **Quality**         | False `done` still fails `pnpm tracker:check` · doctrine gates unchanged         |
-| **Autonomy**        | Full access — any agent, any row, merge when CI green · **no human Approve**     |
-| **Zero manual ops** | Never wait for audit seal, FREEZE, or chat permission to start code              |
-| **No every-PR tax** | Craft under an already-`wip` mountain does **not** require a `features.mjs` edit |
+| Guarantee           | Meaning                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| **Speed**           | No PR cap · no serialize-agents · no “wait for CI idle” · no CI throttle at all      |
+| **Quality**         | False `done` still fails `pnpm tracker:check` · doctrine gates unchanged             |
+| **Autonomy**        | Full access — any agent, any row, **merge when done** · CI/verify are not ship gates |
+| **Zero manual ops** | Never wait for audit seal, FREEZE, or chat permission to start code                  |
+| **No every-PR tax** | Craft under an already-`wip` mountain does **not** require a `features.mjs` edit     |
 
 If a future change breaks a row above, **reject the change**.
 

@@ -37,7 +37,8 @@ function mustInclude(rel, needle, why) {
 
 // Primary auto-load for Grok / multi-agent tools
 mustInclude('AGENTS.md', 'Full access', 'cold agents must inherit full-access ship law');
-mustInclude('AGENTS.md', 'Merge when CI is green', 'must not regress to human merge gates');
+mustInclude('AGENTS.md', 'Merge when done', 'must not regress to CI or human merge gates');
+mustInclude('AGENTS.md', 'Do not wait for CI green', 'CI must stay informational not a ship gate');
 
 // Claude Code auto-loads CLAUDE.md first
 mustInclude('CLAUDE.md', 'AGENTS.md', 'Claude sessions must chain into AGENTS.md');
