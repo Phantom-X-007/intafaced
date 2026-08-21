@@ -967,7 +967,18 @@ module.exports = {
             outputPrice: "Output / 1M",
             log: "My action log",
             logLead: "Every action an agent took on your account. Always your own.",
-            noActions: "No agent has acted on this account."
+            noActions: "No agent has acted on this account.",
+            coach: {
+                title: "Coach",
+                lead: "Curriculum-grounded citations. Not advice, and this screen never sends positions.",
+                ask: "Ask",
+                askHint: "What should the coach cite?",
+                run: "Ask coach",
+                refused: "Coach refused",
+                grounded: "Grounded citations",
+                slug: "Playbook",
+                citationTitle: "Title"
+            }
         },
         blueprint: {
             lead: "Your profile, as svc-blueprint holds it.",
