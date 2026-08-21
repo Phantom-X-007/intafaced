@@ -978,6 +978,30 @@ module.exports = {
                 grounded: "Grounded citations",
                 slug: "Playbook",
                 citationTitle: "Title"
+            },
+            growth: {
+                title: "Growth draft",
+                lead: "A campaign proposal only. This screen never publishes and never sends a budget.",
+                headline: "Headline",
+                headlineHint: "Campaign headline",
+                copy: "Copy",
+                copyHint: "Draft copy",
+                run: "Propose",
+                refused: "Growth refused",
+                proposal: "Proposal"
+            },
+            risk: {
+                title: "Screening draft",
+                lead: "A draft only. Empty list is a named refuse. This screen never writes a review and never shows list contents.",
+                subjectId: "Subject",
+                subjectHint: "Subject id",
+                region: "Region",
+                regionHint: "Region code",
+                run: "Draft screening",
+                refused: "Screening refused",
+                draft: "Draft",
+                listHits: "List hit count",
+                businessHits: "Business hit count"
             }
         },
         blueprint: {
