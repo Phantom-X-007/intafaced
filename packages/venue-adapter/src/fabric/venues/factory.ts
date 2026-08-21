@@ -2,12 +2,16 @@ import type { Amount } from '@intafaced/ledger-client/money';
 import {
   midFromSnapshot,
   parseUnifiedSymbol,
+  type AccountAdapter,
   type MarketDataAdapter,
   type VenueBookSnapshot,
   type VenueCredentials,
 } from '@intafaced/venue-contracts';
+import { BinanceSpotAccount, type BinanceSpotAccountOptions } from './binance-spot-account.js';
 import { BinanceSpotMarketData, BinanceSpotTrade } from './binance-spot.js';
+import { BybitSpotAccount, type BybitSpotAccountOptions } from './bybit-spot-account.js';
 import { BybitSpotMarketData, BybitSpotTrade } from './bybit-spot.js';
+import { OkxSpotAccount, type OkxSpotAccountOptions } from './okx-spot-account.js';
 import { OkxSpotMarketData, OkxSpotTrade, type OkxSpotTradeOptions } from './okx-spot.js';
 
 /**
@@ -72,6 +76,28 @@ export function createVenueTradeAdapter(
   if (id === 'binance-spot') return new BinanceSpotTrade(credentials);
   if (id === 'bybit-spot') return new BybitSpotTrade(credentials);
   if (id === 'okx-spot') return new OkxSpotTrade(credentials, options);
+  return null;
+}
+
+export type VenueAccountAdapter = BinanceSpotAccount | BybitSpotAccount | OkxSpotAccount;
+export type VenueAccountAdapterOptions = BinanceSpotAccountOptions & BybitSpotAccountOptions & OkxSpotAccountOptions;
+
+/**
+ * Signed account observation by venue id.
+ *
+ * Unknown / off id → null. Credentials are passed through, never invented.
+ * Withdrawal-capable keys are still refused inside each constructor.
+ */
+export function createVenueAccountAdapter(
+  venueId: string,
+  credentials: VenueCredentials | null = null,
+  options?: VenueAccountAdapterOptions,
+): AccountAdapter | null {
+  const id = venueId.trim().toLowerCase();
+  if (!id || id === 'off' || id === 'none' || id === 'false') return null;
+  if (id === 'binance-spot') return new BinanceSpotAccount(credentials, options);
+  if (id === 'bybit-spot') return new BybitSpotAccount(credentials, options);
+  if (id === 'okx-spot') return new OkxSpotAccount(credentials, options);
   return null;
 }
 
