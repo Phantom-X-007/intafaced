@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { createEdgeContext } from '@intafaced/contracts';
 import { createNotifyRouter } from './router.js';
 import type { NotifyService } from './notify-service.js';
 import {
@@ -15,6 +16,9 @@ import { describeChannelsPolicy } from './channels-policy.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const routerSource = readFileSync(join(here, 'router.ts'), 'utf8');
+
+const edgeContext = createEdgeContext({ secret: 'a-notify-policy-test-edge-secret-long', serviceName: 'svc-notify' });
+const anonymous = () => edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
 
 function stubNotify(): NotifyService {
   return { fanoutEnabled: true } as NotifyService;
@@ -44,7 +48,7 @@ describe('notify.channelsPolicy route (ops.notifications honesty door)', () => {
   });
 
   it('public query mirrors describeChannelsPolicy', async () => {
-    const result = await createNotifyRouter(stubNotify()).createCaller({}).notify.channelsPolicy();
+    const result = await createNotifyRouter(stubNotify()).createCaller(anonymous()).notify.channelsPolicy();
     expect(result).toEqual(describeChannelsPolicy());
   });
 });
