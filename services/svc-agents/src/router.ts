@@ -23,6 +23,7 @@ import { invokeScannerDataTool } from './scanner/data-tools.js';
 import { scannerTierGate } from './scanner/tier-gate.js';
 import { runScannerRankSession } from './scanner/session-run.js';
 import { resolveScannerSignalInputsLaw, SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL } from './scanner/signal-inputs-law.js';
+import { describeScannerPolicy } from './scanner/policy.js';
 import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
@@ -613,6 +614,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * + unsealed D26-P0-11 signal-inputs law refuse-closed. No ledger, no order placement.
      */
     scanner: router({
+      policy: publicProcedure.query(() => describeScannerPolicy()),
+
       rankFixtures: scopedProcedure('agents:read', { module: 'agents' })
         .input(
           z.object({
