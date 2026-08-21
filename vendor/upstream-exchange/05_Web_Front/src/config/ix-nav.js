@@ -55,7 +55,7 @@ export const PAY_NAV = [
 
 export const MARKET_NAV = [
     { to: '/market', labelKey: 'intafaced.market.nav.catalogue', procedures: 'commerceProgramme · listings · purchase' },
-    { to: '/market/mine', labelKey: 'intafaced.market.nav.mine', procedures: 'mine · myListings · myPurchases · applyAsVendor' }
+    { to: '/market/mine', labelKey: 'intafaced.market.nav.mine', procedures: 'mine · myListings · myPurchases · applyAsVendor · createListing' }
 ];
 
 export default { BANK_NAV: BANK_NAV, PAY_NAV: PAY_NAV, MARKET_NAV: MARKET_NAV };
