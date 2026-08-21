@@ -583,7 +583,20 @@ module.exports = {
                 simulatedTitle: "This programme is simulated",
                 simulatedBody: "Cards issued here are not usable at a merchant. Authorisations are decided by svc-bank against your ledger balance so the decline reasons are real, but no value reaches anybody outside this platform.",
                 issueLead: "The per-authorisation limit is the most a single purchase may draw. It is a decimal amount and is enforced by svc-bank, not by this screen.",
-                decisionsLead: "Every decision, approvals and declines alike. The declines are the point — \"why was I declined\" is the question a card generates."
+                decisionsLead: "Every decision, approvals and declines alike. The declines are the point — \"why was I declined\" is the question a card generates.",
+                roundUpList: "Card round-up rules",
+                roundUpTitle: "Create a card round-up",
+                roundUpLead: "Spare change after a capture goes into a same-asset earn pool. Granularity is a decimal string. A different buy asset is refused by name — this screen does not invent a rate.",
+                roundUpGranularity: "Granularity",
+                roundUpPool: "Earn pool id",
+                roundUpPoolHint: "UUID of an open same-asset pool",
+                roundUpBuyAsset: "Buy asset (optional)",
+                roundUpBuyAssetHint: "Leave blank for same-asset. A different asset is refused.",
+                roundUpCreate: "Create round-up",
+                roundUpCreated: "Round-up rule created",
+                roundUpId: "Rule id",
+                roundUpEmpty: "No card round-up rule on this account.",
+                roundUpRateUnset: "A different buy asset needs a convert rate this deployment does not invent. svc-bank refuses bank.auto_invest_rate_unset."
             },
 
             rampsPage: {
