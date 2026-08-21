@@ -1845,8 +1845,18 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'launch.trust-layer'],
-    note: 'Law §8.2:388 ("v2: ... Launch") and §35:836, gap-closed 2026-08-08. One of the five v2 agents with no row (audit §A1.a #12). §35:836 states the job precisely — "Launch Agent flags risk patterns pre-listing" — alongside deployer reputation, so it is blocked on launch.trust-layer, a `socket` owned by the chain owner and the row where on-chain deployer history would live. agents.gateway is `done`. THE HONESTY LINE FOR THIS ONE: a risk flag on a deployer with no history is not a low score, it is NO score — the same rule D-S-18 fixed for latency grading, and the same failure shape as a scan that walks zero files and prints clean. A pre-listing badge reading "no risk patterns found" over an empty history is worse than showing nothing, because it launders absence into assurance and §35 sells that badge as the moat. NOT DECIDED: whether a flag blocks a listing or only annotates it. §35:837 has honest-market badges GATE cross-promotion, which is annotation with consequences rather than refusal, but nothing anywhere says what happens when the agent flags a token a paying customer wants listed. That is an owner call.',
+    requires: [
+      'services/svc-agents/src/launch/mount-vs-tracker.ts',
+      'services/svc-agents/src/launch/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/launch/pre-listing-assess.ts',
+      'services/svc-agents/src/launch/launch-route.test.ts',
+    ],
+    note:
+      'DONE 2026-08-21 D26-P1-LA1: `launch.assess` — pattern flags from DeployerReputation counts only; `history_absent` refused (no clean badge). ' +
+      'Class X residual: live chain reputation port wiring; block-vs-annotate listing policy (owner).',
   }),
   f('agents.risk-compliance', 'Risk & Compliance Agent — screening support and report drafts (§8.2)', {
     module: 'agents',
