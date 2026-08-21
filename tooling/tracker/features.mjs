@@ -1882,12 +1882,16 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'academy.curriculum'],
-    requires: ['services/svc-agents/src/coach/grounded-session.ts', 'services/svc-agents/src/coach/academy-curriculum-source.ts'],
+    requires: [
+      'services/svc-agents/src/coach/mount-vs-tracker.ts',
+      'services/svc-agents/src/coach/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/coach/grounded-session.ts',
+      'services/svc-agents/src/coach/coach-route.test.ts',
+    ],
     note:
       'DONE 2026-08-15 S2S spine citations (GET ACADEMY_URL/internal/curriculum, fail-closed empty). ' +
-      'Licensed dump residual (licensedLibraryImported stays false). No advice, no positions. ' +
-      'Law §8.2:388 ("v2: ... Coach") and §25:708. Fence: requires narrowed to src/coach so path-disjoint ' +
-      'agents.navigator work is not HUMAN-CLAIMED by this row.',
+      'D26-P1-CH1 mount-vs-tracker seals `coach.session` done bar. Licensed dump residual. No advice, no positions. ' +
+      'Class X residual: positions-in-coaching owner ruling; licensed library import.',
   }),
   f('agents.growth', 'Growth Agent — acquisition and campaign proposals (§8.2)', {
     module: 'agents',
