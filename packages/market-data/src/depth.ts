@@ -43,7 +43,11 @@ import { CaptureLog, bookLevelsFromCapture, type CaptureRecord, type VenueConnec
  * and an order book is nothing but sums.
  */
 
-/** One side of a book: price → total quantity resting at that price. */
+/**
+ * One side of a book: canonical price → total quantity resting at that price.
+ * Keys are `formatAmount(parseAmount(wire))`, never the raw wire spelling —
+ * `'100'` and `'100.0'` are one level.
+ */
 export type DepthSide = ReadonlyMap<string, Amount>;
 
 export interface DepthBook {
@@ -85,13 +89,21 @@ export function emptyBook(marketId: string): DepthBook {
   return { marketId, sequence: -1, bids: new Map(), asks: new Map() };
 }
 
+/** Map key for a wire price: the canonical Amount string, not the raw spelling. */
+function priceKey(wirePrice: string): string {
+  return formatAmount(parseAmount(wirePrice));
+}
+
 function sideFromWire(levels: readonly WireLevel[]): Map<string, Amount> {
   const side = new Map<string, Amount>();
   for (const [price, qty] of levels) {
     const amount = parseAmount(qty);
-    // A snapshot carrying a zero level is a server bug, but dropping it here
-    // costs nothing and keeps "present in the map" equivalent to "has depth".
-    if (amount > 0n) side.set(price, amount);
+    const key = priceKey(price);
+    // Last write wins when the same canonical price appears twice. A later
+    // qty 0 at that key must retract the earlier rest — dropping only `> 0`
+    // would leave the first write as phantom liquidity.
+    if (amount > 0n) side.set(key, amount);
+    else side.delete(key);
   }
   return side;
 }
@@ -114,16 +126,23 @@ export type ApplyResult =
    */
   | { readonly ok: false; readonly reason: 'gap'; readonly expected: number; readonly got: number }
   | { readonly ok: false; readonly reason: 'stale'; readonly expected: number; readonly got: number }
-  | { readonly ok: false; readonly reason: 'wrong-market'; readonly expected: string; readonly got: string };
+  | { readonly ok: false; readonly reason: 'wrong-market'; readonly expected: string; readonly got: string }
+  /**
+   * A negative absolute qty is garbage. Zero remains delete.
+   * `expected` is the book seq we kept; `got` is the delta seq we refused.
+   */
+  | { readonly ok: false; readonly reason: 'invalid-qty'; readonly expected: number; readonly got: number };
 
 function applySide(current: DepthSide, levels: readonly WireLevel[]): Map<string, Amount> {
   const next = new Map(current);
   for (const [price, qty] of levels) {
     const amount = parseAmount(qty);
+    const key = priceKey(price);
     // Zero is removal. An ABSENT price is unchanged — the two are different
     // statements and treating them alike leaves phantom liquidity behind.
-    if (amount === 0n) next.delete(price);
-    else next.set(price, amount);
+    // Negative quantity is garbage: it must not rest, and it is not a delete.
+    if (amount === 0n) next.delete(key);
+    else if (amount > 0n) next.set(key, amount);
   }
   return next;
 }
@@ -150,6 +169,10 @@ export function applyDelta(book: DepthBook, delta: DepthDelta): ApplyResult {
     return { ok: false, reason: 'gap', expected: book.sequence, got: delta.fromSequence };
   }
 
+  if (hasNegativeQty(delta.bids) || hasNegativeQty(delta.asks)) {
+    return { ok: false, reason: 'invalid-qty', expected: book.sequence, got: delta.sequence };
+  }
+
   return {
     ok: true,
     book: {
@@ -159,6 +182,13 @@ export function applyDelta(book: DepthBook, delta: DepthDelta): ApplyResult {
       asks: applySide(book.asks, delta.asks),
     },
   };
+}
+
+function hasNegativeQty(levels: readonly WireLevel[]): boolean {
+  for (const [, qty] of levels) {
+    if (parseAmount(qty) < 0n) return true;
+  }
+  return false;
 }
 
 function diffSide(prev: DepthSide, next: DepthSide): WireLevel[] {
