@@ -15,6 +15,20 @@ export type IngestCaptureLakeBatchResult = {
   readonly persistence: PersistenceSinkResult;
 };
 
+export type IngestCaptureLakeBatchSummary = ReturnType<typeof describeIngestCaptureLakeBatch>;
+
+/** Honesty board — batch ingest + persistence gate, no TSDB write in Stage-1. */
+export function describeIngestCaptureLakeBatch(env: NodeJS.ProcessEnv = process.env) {
+  const retention = env.CONNECT_DATA_LAKE_TSDB_URL?.trim() ?? '';
+  const retentionDays = env.CONNECT_DATA_LAKE_RETENTION_DAYS?.trim() ?? '';
+  return {
+    ingestsFabricRecords: true as const,
+    evaluatesPersistenceGate: true as const,
+    writesTsdbInStage1: false as const,
+    persistenceEnvComplete: retention.length > 0 && retentionDays.length > 0,
+  };
+}
+
 /**
  * Ingest fabric capture facts, then evaluate persistence sink wiring on the full log.
  */

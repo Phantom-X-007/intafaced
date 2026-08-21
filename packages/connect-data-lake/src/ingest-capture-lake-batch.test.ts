@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import { CaptureLog } from './capture.js';
 import type { CaptureLakeBookRecord } from './capture-lake-consumer.js';
-import { ingestCaptureLakeBatch } from './ingest-capture-lake-batch.js';
+import { describeIngestCaptureLakeBatch, ingestCaptureLakeBatch } from './ingest-capture-lake-batch.js';
+import { describe, expect, it } from 'vitest';
 
 const bookRecord: CaptureLakeBookRecord = {
   kind: 'book',
@@ -18,6 +18,17 @@ const bookRecord: CaptureLakeBookRecord = {
     observedAt: new Date('2026-01-01T00:00:00.000Z'),
   },
 };
+
+describe('describeIngestCaptureLakeBatch', () => {
+  it('reports Stage-1 honesty without TSDB write', () => {
+    expect(describeIngestCaptureLakeBatch({})).toEqual({
+      ingestsFabricRecords: true,
+      evaluatesPersistenceGate: true,
+      writesTsdbInStage1: false,
+      persistenceEnvComplete: false,
+    });
+  });
+});
 
 describe('ingestCaptureLakeBatch', () => {
   it('refuses persistence when TSDB env unset', () => {
