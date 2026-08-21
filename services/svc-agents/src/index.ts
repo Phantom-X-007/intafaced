@@ -23,6 +23,7 @@ import { createHttpSpotTickersPort } from './scanner/trade-tickers-http-port.js'
 import { createHttpPayMetricsPort } from './merchant/pay-metrics-http-port.js';
 import { createHttpCopyLeaderFixturesPort } from './copy-intel/copy-leader-fixtures-http-port.js';
 import { createHttpNavigatorTradeDataPort } from './navigator/trade-data-http-port.js';
+import { createHttpNavigatorIdentitySessionPort } from './navigator/identity-session-http-port.js';
 import { createAgentsRouter, type AgentsRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -149,6 +150,10 @@ const copyLeaderFixturesPort = env.TRADE_URL
 
 const navigatorTradeDataPort = env.TRADE_URL ? createHttpNavigatorTradeDataPort({ tradeUrl: env.TRADE_URL }) : undefined;
 
+const navigatorIdentitySessionPort = env.IDENTITY_URL
+  ? createHttpNavigatorIdentitySessionPort({ identityUrl: env.IDENTITY_URL, internalSecret: env.INTERNAL_SERVICE_SECRET })
+  : undefined;
+
 const appRouter = createAgentsRouter({
   runtime,
   gateway,
@@ -161,6 +166,7 @@ const appRouter = createAgentsRouter({
   ...(copyLeaderFixturesPort ? { copyLeaderFixturesPort } : {}),
   ...(env.TRADE_URL ? { navigatorTradeUrl: env.TRADE_URL } : {}),
   ...(navigatorTradeDataPort ? { navigatorTradeDataPort } : {}),
+  ...(navigatorIdentitySessionPort ? { navigatorIdentitySessionPort } : {}),
 });
 
 // Built before the listener opens: a service that cannot authenticate the edge
