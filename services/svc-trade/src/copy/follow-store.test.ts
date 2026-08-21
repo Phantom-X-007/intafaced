@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { Sql } from 'postgres';
 import { parseAmount } from '@intafaced/ledger-client';
 import { CopyError } from './errors.js';
-import { MemoryCopyFollowStore, SqlCopyFollowStore, rethrowCopyFollowUnique, type StoredSettledFeeShare } from './follow-store.js';
+import {
+  MemoryCopyFollowStore,
+  SqlCopyFollowStore,
+  isCopyFeeSharePrePostUnclaim,
+  rethrowCopyFollowUnique,
+  type StoredSettledFeeShare,
+} from './follow-store.js';
 import type { CopyFollow } from './follows.js';
 
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
@@ -56,6 +62,27 @@ describe('CopyFollowStore unique (follower, leader)', () => {
       expect(err).toMatchObject({ code: 'trade.copy_already_following' });
       expect((err as { code: string }).code).not.toBe('23505');
     }
+  });
+
+  it('isCopyFeeSharePrePostUnclaim is only expired / pre-follow / not-mirrored', () => {
+    expect(isCopyFeeSharePrePostUnclaim(new CopyError('Copy session envelope has expired', 'trade.copy_key_expired'))).toBe(true);
+    expect(isCopyFeeSharePrePostUnclaim(new CopyError('Fill predates this follow — refuse fee-share', 'trade.copy_settle_refused'))).toBe(
+      true,
+    );
+    expect(
+      isCopyFeeSharePrePostUnclaim(
+        new CopyError('Fill is not a copy-mirrored fill for this follow — refuse fee-share', 'trade.copy_settle_refused'),
+      ),
+    ).toBe(true);
+    expect(isCopyFeeSharePrePostUnclaim(new Error('payout threw after sweep'))).toBe(false);
+    expect(
+      isCopyFeeSharePrePostUnclaim(new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed')),
+    ).toBe(false);
+    expect(
+      isCopyFeeSharePrePostUnclaim(
+        new CopyError('Follower fill not found — refuse rather than invent protocolFee from notional×bps', 'trade.copy_settle_refused'),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -128,6 +155,55 @@ describe('runFeeShareSettleOnce claim-before-post', () => {
     const later = await store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => share(FOLLOW_B, FILL, LEADER_B));
     expect(later.status).toBe('claimed');
     expect(later.record.leaderId).toBe(LEADER_B);
+  });
+
+  it('memory not-mirrored refuse unclaims so a later follow can still settle', async () => {
+    const store = new MemoryCopyFollowStore();
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new CopyError('Fill is not a copy-mirrored fill for this follow — refuse fee-share', 'trade.copy_settle_refused');
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(await store.getSettledFeeShare(FOLLOW_A, FILL)).toBeNull();
+
+    const later = await store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => share(FOLLOW_B, FILL, LEADER_B));
+    expect(later.status).toBe('claimed');
+    expect(later.record.leaderId).toBe(LEADER_B);
+  });
+
+  it('memory expired-inside-run unclaims so a later follow can still settle', async () => {
+    const store = new MemoryCopyFollowStore();
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_key_expired' });
+    expect(await store.getSettledFeeShare(FOLLOW_A, FILL)).toBeNull();
+
+    const later = await store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => share(FOLLOW_B, FILL, LEADER_B));
+    expect(later.status).toBe('claimed');
+    expect(later.record.leaderId).toBe(LEADER_B);
+  });
+
+  it('memory post-then-throw keeps unique fill_id — second leader does not run', async () => {
+    const store = new MemoryCopyFollowStore();
+    await store.saveFollow(follow(FOLLOW_A, LEADER));
+    await store.saveFollow(follow(FOLLOW_B, LEADER_B));
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new Error('payout threw after sweep');
+      }),
+    ).rejects.toThrow(/payout threw after sweep/);
+    expect(await store.getSettledFeeShare(FOLLOW_A, FILL)).not.toBeNull();
+
+    let ran = false;
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ran = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ran).toBe(false);
   });
 });
 
@@ -295,5 +371,28 @@ describe('SqlCopyFollowStore runFeeShareSettleOnce (order, no Postgres)', () => 
     expect(mock.events).toContain('insert');
     expect(mock.events).toContain('delete');
     expect(mock.byFill.get(FILL)).toBeUndefined();
+  });
+
+  it('post-then-throw does not DELETE unique fill_id — second leader does not run', async () => {
+    const mock = mockSettleSql();
+    const store = new SqlCopyFollowStore(mock.sql, FOLLOW_A);
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new Error('payout threw after sweep');
+      }),
+    ).rejects.toThrow(/payout threw after sweep/);
+    expect(mock.events).toContain('insert');
+    expect(mock.events).not.toContain('delete');
+    expect(mock.byFill.get(FILL)?.follow_id).toBe(FOLLOW_A);
+
+    const storeB = new SqlCopyFollowStore(mock.sql, FOLLOW_B);
+    let ran = false;
+    await expect(
+      storeB.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ran = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ran).toBe(false);
   });
 });

@@ -21,6 +21,21 @@ export function rethrowCopyFollowUnique(err: unknown): never {
 }
 
 /**
+ * Pre-post refuses never posted ledger recipes. Unclaim so a later valid
+ * follow can still settle. Any other throw from `run` may have swept or
+ * paid — keep unique fill_id (second leader unique-violates).
+ */
+export function isCopyFeeSharePrePostUnclaim(err: unknown): boolean {
+  if (!(err instanceof CopyError)) return false;
+  if (err.code === 'trade.copy_key_expired') return true;
+  if (err.code !== 'trade.copy_settle_refused') return false;
+  return (
+    err.message === 'Fill predates this follow — refuse fee-share' ||
+    err.message === 'Fill is not a copy-mirrored fill for this follow — refuse fee-share'
+  );
+}
+
+/**
  * Durable copy-follow store (trade.copy residual — same pattern as #1010 TWAP).
  *
  * Process Maps lose follows/exposure on restart. This store keeps the envelope
@@ -40,8 +55,9 @@ export function rethrowCopyFollowUnique(err: unknown): never {
  * `copy-leader-share:${fillId}:${leaderId}` payout). Crash after post cannot
  * pay a second leader: the row is already there, unique-violation refuses.
  * Same-follow redelivery returns the prior row and never re-runs `run`.
- * A failed `run` (pre-follow / not mirrored) deletes the claim so a later
- * valid follow is not poisoned. Ledger keys alone are not enough: payout
+ * Unclaim only pre-post refuses (pre-follow / not-mirrored / expired) so a
+ * later valid follow is not poisoned. Any other throw from `run` may have
+ * posted — keep the unique fill_id. Ledger keys alone are not enough: payout
  * keys include leaderId, so two leaders would both post from one house pot.
  */
 
@@ -190,6 +206,8 @@ export interface CopyFollowStore {
    * Claims the unique fill_id row **before** `run` (ledger sweep + rewardPay).
    * Same follow redelivery returns the prior record without re-running `run`.
    * A different follow on the same fill throws `trade.copy_settle_refused`.
+   * `run` throws: unclaim only pre-post refuses; keep the row if a post may
+   * have committed (second leader unique-violates).
    */
   runFeeShareSettleOnce(followId: string, fillId: string, run: () => Promise<StoredSettledFeeShare>): Promise<RunFeeShareSettleOnceResult>;
   /**
@@ -443,9 +461,11 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         this.settledByFill.set(fillId, record);
         return { status: 'claimed' as const, record };
       } catch (err) {
-        this.settled.delete(settleKey(followId, fillId));
-        const cur = this.settledByFill.get(fillId);
-        if (cur?.followId === followId) this.settledByFill.delete(fillId);
+        if (isCopyFeeSharePrePostUnclaim(err)) {
+          this.settled.delete(settleKey(followId, fillId));
+          const cur = this.settledByFill.get(fillId);
+          if (cur?.followId === followId) this.settledByFill.delete(fillId);
+        }
         throw err;
       }
     });
@@ -947,13 +967,15 @@ export class SqlCopyFollowStore implements CopyFollowStore {
       try {
         record = await run();
       } catch (err) {
-        try {
-          await this.sql`
-            DELETE FROM copy_settled_fee_shares
-             WHERE follow_id = ${followId} AND fill_id = ${fillId}
-          `;
-        } catch {
-          // Leftover claim is fail-closed: second leader still unique-violates.
+        if (isCopyFeeSharePrePostUnclaim(err)) {
+          try {
+            await this.sql`
+              DELETE FROM copy_settled_fee_shares
+               WHERE follow_id = ${followId} AND fill_id = ${fillId}
+            `;
+          } catch {
+            // Leftover claim is fail-closed: second leader still unique-violates.
+          }
         }
         throw err;
       }

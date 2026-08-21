@@ -1577,4 +1577,64 @@ describe('CopyService', () => {
     expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
+
+  it('settleFeeShare post-then-throw keeps the fill claim — second leader does not pay', async () => {
+    class SweepOkPayoutThrowLedger extends MemoryLedger {
+      payoutCalls = 0;
+      override async post(request: Parameters<MemoryLedger['post']>[0]) {
+        if (request.reason === 'trade.copy.fee_share') {
+          this.payoutCalls += 1;
+          throw new Error('payout threw after sweep');
+        }
+        return super.post(request);
+      }
+    }
+    const ledger = new SweepOkPayoutThrowLedger();
+    await seedHouseFees(ledger, 'copy-post-then-throw', '100');
+    await ledger.post(
+      recipes.sweepFeesToRewards({
+        windowId: 'post-then-throw-seed',
+        sourceModule: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('20'),
+      }),
+    );
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    await planOneMirror(svc, followA.followId, 'fill-post-then-throw');
+    await planOneMirror(svc, followB.followId, 'fill-post-then-throw');
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followA.followId,
+        fillId: 'fill-post-then-throw',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toThrow(/payout threw after sweep/);
+    expect(ledger.payoutCalls).toBe(1);
+    expect(await store.getSettledFeeShare(followA.followId, 'fill-post-then-throw')).not.toBeNull();
+
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: followB.followId,
+        fillId: 'fill-post-then-throw',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(ledger.payoutCalls).toBe(1);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
 });

@@ -501,6 +501,8 @@ export class CopyService {
    * Same-fill redelivery on **this** path is closed via runFeeShareSettleOnce —
    * unique fill_id is claimed **before** ledger recipes so a crash after post
    * cannot pay a second leader (`copy-leader-share:${fillId}:${leaderId}`).
+   * A throw after sweep/payout keeps that claim (do not DELETE). Unclaim only
+   * pre-follow / not-mirrored / expired-before-claim.
    * reserveEarnings must not fire twice for one fillId (period poison).
    */
   async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {

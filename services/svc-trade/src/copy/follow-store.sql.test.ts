@@ -151,5 +151,31 @@ if (!available) {
       expect(later.status).toBe('claimed');
       expect(later.record.leaderId).toBe(LEADER_B);
     });
+
+    it('post-then-throw keeps unique fill_id — second leader does not run', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      await store.saveFollow(follow(FOLLOW_B, LEADER_B));
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+          throw new Error('payout threw after sweep');
+        }),
+      ).rejects.toThrow(/payout threw after sweep/);
+
+      const leftover = await db.sql<Array<{ follow_id: string }>>`
+        SELECT follow_id FROM copy_settled_fee_shares WHERE fill_id = ${FILL}
+      `;
+      expect(leftover).toHaveLength(1);
+      expect(leftover[0]?.follow_id).toBe(FOLLOW_A);
+
+      let ran = false;
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+          ran = true;
+          return share(FOLLOW_B, FILL, LEADER_B);
+        }),
+      ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+      expect(ran).toBe(false);
+    });
   });
 }
