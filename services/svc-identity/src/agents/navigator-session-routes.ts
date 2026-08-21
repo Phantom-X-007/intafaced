@@ -11,6 +11,7 @@ import type { NavigatorSessionStore } from './navigator-session-store.js';
 
 export const NAVIGATOR_SESSION_PATH = '/internal/agents/navigator-session' as const;
 export const NAVIGATOR_SESSION_PUBLISH_PATH = '/internal/agents/navigator-session/publish' as const;
+export const NAVIGATOR_SESSION_REFRESH_PATH = '/internal/agents/navigator-session/refresh' as const;
 
 export type NavigatorSessionRefuse = {
   readonly ok: false;
@@ -24,6 +25,16 @@ export type NavigatorSessionPublishRefuse = {
 
 export type NavigatorSessionPublishOk = {
   readonly ok: true;
+};
+
+export type NavigatorSessionRefreshRefuse = {
+  readonly ok: false;
+  readonly reason: 'no_session_store' | 'no_live_session_store';
+};
+
+export type NavigatorSessionRefreshOk = {
+  readonly ok: true;
+  readonly materialized: number;
 };
 
 export type NavigatorSessionOk = {
@@ -91,6 +102,23 @@ export function registerNavigatorSessionRoutes(app: FastifyInstance, deps: Navig
     }
     await deps.store.publishSession(session);
     const body: NavigatorSessionPublishOk = { ok: true };
+    return reply.send(body);
+  });
+
+  app.post(NAVIGATOR_SESSION_REFRESH_PATH, async (req, reply) => {
+    if (!authorised(req.headers)) {
+      return reply.code(401).send({ error: 'identity.unauthenticated', message: 'service credentials required' });
+    }
+    if (!deps.store) {
+      const body: NavigatorSessionRefreshRefuse = { ok: false, reason: 'no_session_store' };
+      return reply.code(503).send(body);
+    }
+    const materialized = await deps.store.refreshFromAuthSessions();
+    if (materialized === 0) {
+      const body: NavigatorSessionRefreshRefuse = { ok: false, reason: 'no_live_session_store' };
+      return reply.code(503).send(body);
+    }
+    const body: NavigatorSessionRefreshOk = { ok: true, materialized };
     return reply.send(body);
   });
 }

@@ -6,6 +6,7 @@ export type NavigatorSessionProjection = NavigatorSessionOk['session'];
 export type NavigatorSessionStore = {
   readSession(sessionId: string): Promise<NavigatorSessionProjection | null>;
   publishSession(session: NavigatorSessionProjection): Promise<void>;
+  refreshFromAuthSessions(): Promise<number>;
 };
 
 type ProjectionRow = {
@@ -73,6 +74,17 @@ export function createNavigatorSessionStore(sql: postgres.Sql): NavigatorSession
           status = EXCLUDED.status,
           published_at = now()
       `;
+    },
+    async refreshFromAuthSessions() {
+      const rows = await sql<AuthSessionRow[]>`
+        SELECT id, user_id, revoked, expires_at
+        FROM identity.sessions
+      `;
+      const now = new Date();
+      for (const row of rows) {
+        await this.publishSession(mapAuthSessionRow(row, now));
+      }
+      return rows.length;
     },
   };
 }
