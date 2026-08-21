@@ -2,7 +2,7 @@
   <div class="ix-card">
     <div class="ix-card-head">
       <h2>{{ $t('intafaced.academy.certs') }}</h2>
-      <span class="ix-sub">myCerts · certProgress · grantCert</span>
+      <span class="ix-sub">myCerts · certProgress · grantCert · enrollCertPath</span>
     </div>
     <p class="ix-lead">{{ $t('intafaced.academy.certsLead') }}</p>
 
@@ -96,6 +96,36 @@
       </div>
       <IxState v-else :loading="grantAction.busy" :reason="grantAction.reason" :message="grantAction.message" endpoint="/api/academy/trpc/grantCert"></IxState>
     </div>
+
+    <div style="margin-top:16px;">
+      <h3 class="ix-subhead">{{ $t("intafaced.academy['certs.enroll']") }}</h3>
+      <p class="ix-lead">{{ $t("intafaced.academy['certs.enrollLead']") }}</p>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button
+          v-for="p in enrollPaths"
+          :key="p"
+          size="small"
+          :type="enrollPath === p ? 'primary' : 'default'"
+          @click="enrollPath = p"
+        >{{ $t('intafaced.academy.paths.' + p) }}</Button>
+      </div>
+      <div class="ix-actions">
+        <Button v-if="canWrite" type="primary" size="small" :loading="enrollAction.busy" @click="enroll(enrollPath)">
+          {{ $t("intafaced.academy['certs.enrollSubmit']") }}
+        </Button>
+        <router-link v-else-if="!ixToken" to="/platform">{{ $t("intafaced.academy['certs.enrollSignIn']") }}</router-link>
+      </div>
+      <div v-if="enrollAction.ran" style="margin-top:14px;">
+        <div v-if="enrollAction.reason === 'ok'" class="ix-done">
+          <strong>{{ $t("intafaced.academy['certs.enrolled']") }}</strong>
+          <div style="margin-top:6px;">{{ enrollAction.data.pathSlug }}</div>
+          <div v-if="enrollAction.data.enrolledAt" style="margin-top:6px;">
+            {{ $t("intafaced.academy['certs.enrolledAt']") }}: {{ enrollAction.data.enrolledAt }}
+          </div>
+        </div>
+        <IxState v-else :loading="enrollAction.busy" :reason="enrollAction.reason" :message="enrollAction.message" endpoint="/api/academy/trpc/enrollCertPath"></IxState>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -105,10 +135,16 @@
  *
  * Grant when the catalog says complete. A second grant returns alreadyGranted.
  * Perk readout is identity SoT or a named refuse.
+ *
+ * Enroll is a bookmark on one of four curriculum paths. Unknown slugs refuse
+ * as academy.cert_invalid. certs is the title string in en.js; enroll copy
+ * lives on dotted sibling keys so grant strings stay put.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../../config/intafaced.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
+
+var ENROLL_PATHS = ['foundations', 'markets', 'builder', 'sovereign'];
 
 export default {
   name: 'IxAcademyCerts',
@@ -117,10 +153,13 @@ export default {
   data() {
     return {
       selectedCertId: null,
+      enrollPaths: ENROLL_PATHS,
+      enrollPath: 'foundations',
       definitions: this.emptySection(),
       mine: this.emptySection(),
       progress: this.emptySection(),
-      grantAction: this.emptyAction()
+      grantAction: this.emptyAction(),
+      enrollAction: this.emptyAction()
     };
   },
   computed: {
@@ -151,6 +190,10 @@ export default {
         self.loadMine();
         self.load('progress', query('academy', 'certProgress', { certId: certId }, self.ixToken));
       });
+    },
+    enroll(pathSlug) {
+      this.enrollPath = pathSlug;
+      this.act('enrollAction', mutate('academy', 'enrollCertPath', { pathSlug: pathSlug }, this.ixToken));
     }
   }
 };
