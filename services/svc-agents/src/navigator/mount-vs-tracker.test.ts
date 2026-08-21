@@ -23,7 +23,7 @@ describe('navigator mount vs tracker honest gaps (D26-P1-A1)', () => {
     const tasks = DEFAULT_ROUTING_TABLE.routes.map((r) => r.task);
     expect(tasks).toContain('navigator.plan');
     expect(tasks).toContain('navigator.tool_select');
-    expect(navigatorDoorsInRouterSource().sort()).toEqual([...NAVIGATOR_MOUNTED_DOORS].sort());
+    expect([navigatorDoorsInRouterSource()].sort()).toEqual([...NAVIGATOR_MOUNTED_DOORS].sort());
     expect(navigatorMountMatrixComplete()).toBe(true);
     expect(navigatorTrackerBackendDoneBarMet()).toBe(true);
     expect(navigatorMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
