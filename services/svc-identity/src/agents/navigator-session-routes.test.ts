@@ -1,7 +1,12 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { serviceAuthHeaders } from '@intafaced/contracts';
-import { NAVIGATOR_SESSION_PATH, NAVIGATOR_SESSION_PUBLISH_PATH, registerNavigatorSessionRoutes } from './navigator-session-routes.js';
+import {
+  NAVIGATOR_SESSION_PATH,
+  NAVIGATOR_SESSION_PUBLISH_PATH,
+  NAVIGATOR_SESSION_REFRESH_PATH,
+  registerNavigatorSessionRoutes,
+} from './navigator-session-routes.js';
 import type { NavigatorSessionStore } from './navigator-session-store.js';
 
 const SECRET = 'a-navigator-session-internal-secret-long-enough-for-hmac';
@@ -10,7 +15,7 @@ function serviceHeaders(): Record<string, string> {
   return serviceAuthHeaders('svc-agents', SECRET);
 }
 
-function memoryStore(): NavigatorSessionStore {
+function memoryStore(authRows: { sessionId: string; userId: string; status: 'open' | 'closed' }[] = []): NavigatorSessionStore {
   const sessions = new Map<string, { sessionId: string; userId: string; status: 'open' | 'closed' }>();
   return {
     async readSession(sessionId) {
@@ -18,6 +23,12 @@ function memoryStore(): NavigatorSessionStore {
     },
     async publishSession(session) {
       sessions.set(session.sessionId, session);
+    },
+    async refreshFromAuthSessions() {
+      for (const row of authRows) {
+        await this.publishSession(row);
+      }
+      return authRows.length;
     },
   };
 }
@@ -87,6 +98,31 @@ describe('navigator session internal route', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, session: { sessionId: 'sess-1', userId: 'user-1', status: 'open' } });
+    await app.close();
+  });
+
+  it('refresh materializes auth sessions then GET succeeds', async () => {
+    const authRows = [{ sessionId: 'sess-2', userId: 'user-2', status: 'open' as const }];
+    const app = Fastify();
+    const store = memoryStore(authRows);
+    registerNavigatorSessionRoutes(app, { internalSecret: SECRET, store });
+    await app.ready();
+
+    const refresh = await app.inject({
+      method: 'POST',
+      url: NAVIGATOR_SESSION_REFRESH_PATH,
+      headers: serviceHeaders(),
+    });
+    expect(refresh.statusCode).toBe(200);
+    expect(refresh.json()).toEqual({ ok: true, materialized: 1 });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${NAVIGATOR_SESSION_PATH}/sess-2`,
+      headers: serviceHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, session: authRows[0] });
     await app.close();
   });
 });
