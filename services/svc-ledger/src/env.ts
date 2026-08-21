@@ -5,6 +5,10 @@ import { authEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } fr
 // authenticate the services calling it. No default: a ledger that cannot tell
 // a caller from a stranger must refuse to boot (#50).
 //
+// INTERNAL_SERVICE_BODY_BIND arrives via internalServiceEnvSchema (default
+// accept-both). The live S2S door ignores that default and hard-requires
+// body-bind in index.ts — a captured v1 HMAC must not post a mutated amount.
+//
 // `authEnvSchema` is merged for the OPERATOR surface only (`operator-http.ts`):
 // the freeze is a human's decision carrying a human's identity, so it is
 // authenticated with the platform's own access tokens rather than the internal

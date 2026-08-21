@@ -1,11 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import {
-  DEFAULT_SERVICE_BODY_BIND_MODE,
-  rawBodyOf,
-  retainRawBody,
-  verifyServiceHeaders,
-  type ServiceBodyBindMode,
-} from '@intafaced/contracts';
+import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import {
   formatAmount,
   parseAmount,
@@ -197,14 +191,16 @@ export async function handleS2sPortfolio(ledger: LedgerService, body: unknown) {
  */
 export interface S2sHttpOptions {
   /**
-   * How strictly to enforce body binding (L2-6). Defaults to `accept-both`, the
-   * setting that cannot 401 a caller that has not been redeployed yet.
+   * How strictly to enforce body binding (L2-6). Defaults to `require`.
+   * `accept-both` remains for explicit tests of the migration window.
+   * packages/config still defaults INTERNAL_SERVICE_BODY_BIND=accept-both;
+   * inheriting that on this door lets a captured v1 HMAC post a mutated amount.
    */
   bodyBind?: ServiceBodyBindMode;
 }
 
 export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, internalSecret: string, options: S2sHttpOptions = {}): void {
-  const mode = options.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+  const mode = options.bodyBind ?? 'require';
 
   /**
    * Keep the exact request bytes, so the signed digest can be checked against
@@ -233,11 +229,9 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
     // THE MIGRATION SIGNAL (L2-6).
     //
     // A v1 accept is an authenticated caller that has NOT bound its body, so its
-    // signature is still replayable against any body on any of these three
-    // routes for 300 seconds. It is tolerated only so the fleet can roll one
-    // service at a time. This warning naming the caller is what makes
-    // `INTERNAL_SERVICE_BODY_BIND=require` a decision an operator can justify:
-    // when it has gone quiet for every caller, flipping is safe.
+    // signature is still replayable against any body on any of these routes for
+    // 300 seconds. The live door defaults to `require`; this warn only fires
+    // when a caller is explicitly mounted with `accept-both`.
     if (scheme === 'v1') {
       app.log.warn(
         { callingService: service, scheme, bodyBind: mode },

@@ -60,7 +60,11 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 registerLedgerStatusHttp(app, ledger, env.SERVICE_NAME);
 
-registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
+// Live /trpc/post is a money instruction. packages/config still defaults
+// INTERNAL_SERVICE_BODY_BIND=accept-both; inheriting that leaves a captured
+// v1 HMAC replayable over a mutated amount for the skew window. This door
+// requires body-bind regardless of that env default.
+registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: 'require' });
 
 /**
  * §14.6 — the operator surface: freeze, unfreeze, and on-demand reconcile.

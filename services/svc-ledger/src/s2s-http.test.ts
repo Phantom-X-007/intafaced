@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   InsufficientFundsError,
@@ -345,6 +346,45 @@ describe('s2s HTTP — service credentials', () => {
   });
 
   // ── L2-6: the replay this closes ───────────────────────────────────────────
+
+  /**
+   * THE LIVE-DOOR HOLE THIS PR CLOSES.
+   *
+   * `registerS2sHttp` used to default to `accept-both` (packages/config), so a
+   * captured v1 HMAC — no body digest — still authenticated `/trpc/post`.
+   * Replay the same headers over a mutated amount and the ledger posted it
+   * for the skew window. Mount with DEFAULT options; v1 + mutated body must
+   * 401 and never reach `ledger.post`.
+   */
+  it('default mount refuses a v1 HMAC replayed over a mutated post amount, and never reaches the ledger', async () => {
+    let posted = false;
+    const app = await mount(
+      stubService({
+        post: async () => {
+          posted = true;
+          return { id: 'tx-forged-v1', hash: 'h', postedAt: new Date() };
+        },
+      }),
+    );
+
+    const honest = wire(validPost);
+    // No digest — the captured v1 caller. Amount is not in the preimage.
+    const headers = serviceAuthHeaders('svc-trade', SECRET);
+    const tampered = honest.replace(/"amount":"10"/g, '"amount":"99999"');
+    expect(tampered).not.toBe(honest);
+
+    const res = await send(app, '/trpc/post', headers, tampered);
+
+    expect(res.statusCode).toBe(401);
+    expect(posted).toBe(false);
+    await app.close();
+  });
+
+  it('live index.ts passes bodyBind require, not env INTERNAL_SERVICE_BODY_BIND', () => {
+    const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/registerS2sHttp\([\s\S]*bodyBind:\s*'require'/);
+    expect(src).not.toMatch(/registerS2sHttp\([\s\S]*env\.INTERNAL_SERVICE_BODY_BIND/);
+  });
 
   /**
    * THE TEST THE CHANGE EXISTS FOR, on the mounted path.
