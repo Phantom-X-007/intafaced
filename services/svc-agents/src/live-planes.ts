@@ -10,6 +10,7 @@ export type AgentsLivePlanesSummary = {
   readonly payUrlConfigured: boolean;
   readonly supportUrlConfigured: boolean;
   readonly identityUrlConfigured: boolean;
+  readonly academyUrlConfigured: boolean;
   /** Fleet URL pin ≠ upstream store wired. Always true in Stage-1. */
   readonly storesMayStillRefuse: true;
 };
@@ -20,6 +21,7 @@ export function describeAgentsLivePlanes(env: NodeJS.ProcessEnv = process.env): 
     payUrlConfigured: (env.PAY_URL?.trim() ?? '').length > 0,
     supportUrlConfigured: (env.SUPPORT_URL?.trim() ?? '').length > 0,
     identityUrlConfigured: (env.IDENTITY_URL?.trim() ?? '').length > 0,
+    academyUrlConfigured: (env.ACADEMY_URL?.trim() ?? '').length > 0,
     storesMayStillRefuse: true,
   };
 }
