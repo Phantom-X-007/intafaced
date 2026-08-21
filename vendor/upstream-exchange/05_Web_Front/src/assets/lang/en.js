@@ -562,7 +562,17 @@ module.exports = {
 
             earnPage: {
                 lead: "The pools svc-bank offers, what you already hold in them, and the term each one commits you to.",
-                depositLead: "The deposit moves value from your primary space into the pool. Interest accrues in svc-bank; nothing here projects a yield."
+                depositLead: "The deposit moves value from your primary space into the pool. Interest accrues in svc-bank; nothing here projects a yield.",
+                dcaList: "DCA schedules",
+                dcaTitle: "Create a DCA auto-invest",
+                dcaLead: "Spend one asset on a cadence to buy another. Amount is a decimal string. If this deployment has no convert counterparty, svc-bank refuses bank.auto_invest_rate_unset — this screen does not invent a rate.",
+                dcaSpend: "Spend asset",
+                dcaBuy: "Buy asset",
+                dcaCreate: "Create DCA",
+                dcaCreated: "DCA schedule created",
+                dcaId: "Rule id",
+                dcaEmpty: "No DCA schedule on this account.",
+                dcaRateUnset: "If this deployment has no convert counterparty, svc-bank refuses bank.auto_invest_rate_unset. This screen does not invent a rate."
             },
 
             loansPage: {
