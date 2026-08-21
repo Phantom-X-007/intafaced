@@ -520,11 +520,20 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['execution.sor'],
-    requires: ['packages/execution-arb'],
-    note: 'Law §28:772, gap-closed 2026-08-08. §30:793 phases it at 2. WHAT IS DECIDED: it rides the ONE ranking rule under `execution.sor` — `packages/venue-adapter`\'s effective-price ranking with the bounded, tested 5 bps internal tie-break the README records as the reason "the router cannot favour us structurally" — and an arbitrage leg does not get a preference of its own. The law supplies its own honesty term too: "inventory-based execution (pre-positioned inventory both sides — no bridge-latency fantasy)", so a DEX-to-CEX opportunity priced on a bridge completing inside the spread is refused, not sized. D26-P0-01 sealed external-only. D26-P1-X4 (2026-08-12): product path `@intafaced/execution-arb` — `scanExternalCrossExchangeArb` uses SOR `scoreSorCost` / all-in effective price; refuses internal legs, missing/unscored cost terms (weight 0), bridge fantasy / missing pre-positioned inventory, and no-edge after costs; never invents spreads/fees/depth. Residual: triangular / basis / funding classes, inventory policy + exposure caps (D-S-14 owner magnitudes), OMS atomic legs + PnL attribution, capital. WHAT IS NOT DECIDED: capital magnitudes. Still dependsOn `execution.sor` (cost model on tip via #1673; OMS residual remains).',
+    requires: [
+      'packages/execution-arb/src/arbitrage.ts',
+      'packages/execution-arb/src/arbitrage.test.ts',
+      'packages/execution-arb/src/mount-vs-tracker.ts',
+      'packages/execution-arb/src/mount-vs-tracker.test.ts',
+      'packages/execution-arb/src/arb-policy.ts',
+    ],
+    note:
+      '**D26-P1-X4 Done 2026-08-21:** external-only cross-exchange scanner on SOR cost model (`mount-vs-tracker.ts`, `@intafaced/execution-arb`). ' +
+      'Refuses internal legs, bridge fantasy, missing inventory, no-edge after costs — never invents spreads/fees. ' +
+      'Class X residual: triangular/basis/funding classes, OMS atomic legs, svc consumer mount, owner capital magnitudes.',
   }),
   f('execution.market-making', 'Market-making engine — internal MM and external-venue MM, one engine (§28)', {
     module: 'trade',
