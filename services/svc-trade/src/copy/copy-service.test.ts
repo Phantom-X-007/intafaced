@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, formatAmount, userAvailable } from '@intafaced/ledger-client';
-import { CopyService } from './copy-service.js';
+import { CopyService, type LookupFollowerFillFeePort } from './copy-service.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 import { UNPUBLISHED_COPY_FEE_SHARE_LAW, type CopyFeeShareLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
 import { CopyError } from './errors.js';
@@ -23,6 +23,15 @@ const publishedJur: CopyJurisdictionLaw = {
 };
 
 const futureExpiry = '2026-12-01T00:00:00.000Z';
+
+function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
+  return async (fillId) => ({
+    fillId,
+    userId: FOLLOWER,
+    feeAsset: 'USDT',
+    feeAmount: parseAmount(feeAmount),
+  });
+}
 
 describe('CopyService', () => {
   it('deskStatus refuse-closed when §8 blanks', () => {
@@ -570,6 +579,7 @@ describe('CopyService', () => {
     const svc = new CopyService(ledger, {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
+      lookupFollowerFillFee: lookupFillFee('1'),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -585,7 +595,6 @@ describe('CopyService', () => {
       assetId: 'USDT',
       followerFillNotional: '1000',
       protocolFeeBps: 10,
-      fillFeeAmount: '1',
     });
     expect(settled.settled).toBe(true);
     expect(settled.cappedLeaderShare).toBe('0.5');
@@ -668,6 +677,126 @@ describe('CopyService', () => {
         protocolFeeBps: 10_000,
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+  });
+
+  it('settleFeeShare refuses client fillFeeAmount when lookup is unset — never invents the pot', async () => {
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+        rail: 'test',
+        railRef: 'copy-invent-pot',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'copy-invent-pot-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('10'),
+      }),
+    );
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: 'fill-invented-pot',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+        fillFeeAmount: '1',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+  });
+
+  it('settleFeeShare UUID trailing space / case aliases share one fill — never double-pay', async () => {
+    const fillId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const pgUuidLookup: LookupFollowerFillFeePort = async (raw) => {
+      const id = raw.trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return null;
+      if (id.toLowerCase() !== fillId) return null;
+      return { fillId, userId: FOLLOWER, feeAsset: 'USDT', feeAmount: parseAmount('1') };
+    };
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+        rail: 'test',
+        railRef: 'copy-uuid-alias',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'copy-uuid-alias-fee',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('10'),
+      }),
+    );
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: pgUuidLookup,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+    const settle = (id: string) =>
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: id,
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      });
+
+    const first = await settle(fillId);
+    expect(first.settled).toBe(true);
+    expect(first.fillId).toBe(fillId);
+    expect(first.cappedLeaderShare).toBe('0.5');
+    const afterFirst = (await ledger.balance(userAvailable(LEADER, 'USDT'))).amount;
+
+    const spaced = await settle(`${fillId} `);
+    const cased = await settle(fillId.toUpperCase());
+    expect(spaced.settled).toBe(true);
+    expect(cased.settled).toBe(true);
+    expect(spaced.fillId).toBe(fillId);
+    expect(cased.fillId).toBe(fillId);
+    expect(spaced.cappedLeaderShare).toBe(first.cappedLeaderShare);
+    expect(cased.cappedLeaderShare).toBe(first.cappedLeaderShare);
+
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(afterFirst);
+    const stats = await store.getPeriodStats(`${LEADER}:${FOLLOWER}`);
+    expect(stats.roundTrips).toBe(1);
+    expect(stats.earningsPaid).toBe(parseAmount('0.5'));
+    expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
   it('forbids ranking and P&L fees explicitly', () => {
@@ -987,6 +1116,7 @@ describe('CopyService', () => {
       feeShareLaw: tightCap,
       jurisdictionLaw: publishedJur,
       store,
+      lookupFollowerFillFee: lookupFillFee('10'),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1006,7 +1136,6 @@ describe('CopyService', () => {
         assetId: 'USDT',
         followerFillNotional: '10000',
         protocolFeeBps: 10,
-        fillFeeAmount: '10',
       });
 
     const results = await Promise.all([settle('fill-race-a'), settle('fill-race-b')]);
@@ -1059,6 +1188,7 @@ describe('CopyService', () => {
       feeShareLaw: tightCap,
       jurisdictionLaw: publishedJur,
       store,
+      lookupFollowerFillFee: lookupFillFee('10'),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1077,7 +1207,6 @@ describe('CopyService', () => {
           assetId: 'USDT',
           followerFillNotional: '10000',
           protocolFeeBps: 10,
-          fillFeeAmount: '10',
         }),
       ),
     );
@@ -1103,6 +1232,7 @@ describe('CopyService', () => {
       feeShareLaw: feeLaw,
       jurisdictionLaw: publishedJur,
       store,
+      lookupFollowerFillFee: lookupFillFee('10'),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1120,7 +1250,6 @@ describe('CopyService', () => {
         assetId: 'USDT',
         followerFillNotional: '10000',
         protocolFeeBps: 10,
-        fillFeeAmount: '10',
       }),
     ).rejects.toBeTruthy();
 
@@ -1214,6 +1343,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupFollowerFillFee: lookupFillFee('1'),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1230,7 +1360,6 @@ describe('CopyService', () => {
       assetId: 'USDT',
       followerFillNotional: '1000',
       protocolFeeBps: 10,
-      fillFeeAmount: '1',
     } as const;
 
     const first = await svc.settleFeeShare(principal, input);

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, userAvailable, formatAmount, houseFees } from '@intafaced/ledger-client';
-import { attributeCopyFeeShare, planCopyFeeShareSettle, postCopyFeeShareSettle, refusePnlLinkedCopyFee } from './fee-share.js';
+import {
+  attributeCopyFeeShare,
+  canonicalizeCopyFillId,
+  planCopyFeeShareSettle,
+  postCopyFeeShareSettle,
+  refusePnlLinkedCopyFee,
+} from './fee-share.js';
 import { UNPUBLISHED_COPY_FEE_SHARE_LAW, type CopyFeeShareLaw } from './fee-share-law.js';
 import { CopyError } from './errors.js';
 
@@ -157,6 +163,31 @@ describe('attributeCopyFeeShare', () => {
 });
 
 describe('planCopyFeeShareSettle + ledger', () => {
+  it('copy-fee / copy-leader-share keys canonicalize UUID case and trailing space', () => {
+    const attr = (fillId: string) =>
+      attributeCopyFeeShare({
+        law: published,
+        fillId,
+        leaderId: LEADER,
+        followerId: FOLLOWER,
+        assetId: 'USDT',
+        followerFillNotional: parseAmount('1000'),
+        protocolFeeBps: 10,
+        fillFeeAmount: parseAmount('1'),
+        roundTripsThisPeriod: 0,
+        earningsPaidThisPeriod: 0n,
+        feeShareKilled: false,
+      });
+    const lower = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const a = planCopyFeeShareSettle(attr(lower));
+    const b = planCopyFeeShareSettle(attr(`${lower.toUpperCase()} `));
+    expect(canonicalizeCopyFillId(`${lower.toUpperCase()} `)).toBe(lower);
+    expect(a.sweep.idempotencyKey).toBe(b.sweep.idempotencyKey);
+    expect(a.payout.idempotencyKey).toBe(b.payout.idempotencyKey);
+    expect(a.sweep.idempotencyKey).toContain(`copy-fee:${lower}`);
+    expect(a.payout.idempotencyKey).toBe(`reward:copy-leader-share:${lower}:${LEADER}`);
+  });
+
   it('posts via ledger-client sweepFeesToRewards + rewardPay only', async () => {
     const ledger = new MemoryLedger();
     // Seed house trade fees (protocol fee already collected).

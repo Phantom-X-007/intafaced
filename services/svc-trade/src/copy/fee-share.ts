@@ -10,6 +10,22 @@ import { formatAmount, mulBps, parseAmount, recipes, type Amount, type LedgerCli
 import { COPY_FEE_SHARE_RESIDUAL, CopyError } from './errors.js';
 import { requirePublishedCopyFeeShareLaw, type CopyFeeShareLaw } from './fee-share-law.js';
 
+const COPY_FILL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Trim, and lowercase UUID-shaped ids. Lookup and PG uuid-match already
+ * collapse aliases; settle keys (`copy-fee:`, `copy-leader-share:`,
+ * `runFeeShareSettleOnce`) must use the same canonical form or one fill
+ * is paid twice.
+ */
+export function canonicalizeCopyFillId(fillId: string): string {
+  const trimmed = fillId.trim();
+  if (!trimmed) {
+    throw new CopyError('fillId is required', 'trade.copy_settle_refused');
+  }
+  return COPY_FILL_UUID_RE.test(trimmed) ? trimmed.toLowerCase() : trimmed;
+}
+
 export interface FeeShareAttributionInput {
   readonly law: CopyFeeShareLaw;
   readonly fillId: string;
@@ -63,6 +79,7 @@ export interface FeeShareSettlePlan {
  */
 export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShareAttribution {
   const law = requirePublishedCopyFeeShareLaw(input.law);
+  const fillId = canonicalizeCopyFillId(input.fillId);
 
   if (input.feeShareKilled) {
     throw new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
@@ -88,7 +105,7 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
 
   if (remaining <= 0n) {
     return {
-      fillId: input.fillId,
+      fillId,
       leaderId: input.leaderId,
       followerId: input.followerId,
       assetId: input.assetId,
@@ -103,7 +120,7 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
   const cappedLeaderShare = grossLeaderShare <= remaining ? grossLeaderShare : remaining;
   if (cappedLeaderShare <= 0n) {
     return {
-      fillId: input.fillId,
+      fillId,
       leaderId: input.leaderId,
       followerId: input.followerId,
       assetId: input.assetId,
@@ -116,7 +133,7 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
   }
 
   return {
-    fillId: input.fillId,
+    fillId,
     leaderId: input.leaderId,
     followerId: input.followerId,
     assetId: input.assetId,
@@ -141,8 +158,9 @@ export function planCopyFeeShareSettle(attribution: FeeShareAttribution): FeeSha
     );
   }
 
-  const windowId = `copy-fee:${attribution.fillId}`;
-  const rewardId = `copy-leader-share:${attribution.fillId}:${attribution.leaderId}`;
+  const fillId = canonicalizeCopyFillId(attribution.fillId);
+  const windowId = `copy-fee:${fillId}`;
+  const rewardId = `copy-leader-share:${fillId}:${attribution.leaderId}`;
 
   return {
     attribution,

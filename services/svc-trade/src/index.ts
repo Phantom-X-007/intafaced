@@ -53,6 +53,7 @@ import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
 import { SqlOtcQuoteStore } from './otc/quote-store.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
+import { canonicalizeCopyFillId } from './copy/fee-share.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
 import { CopyService } from './copy/copy-service.js';
 import { SqlCopyFollowStore } from './copy/follow-store.js';
@@ -197,8 +198,8 @@ const copy = new CopyService(ledger, {
     return market ? { paper: market.paper } : null;
   },
   lookupFollowerFillFee: async (fillId) => {
-    const id = fillId.trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    const id = canonicalizeCopyFillId(fillId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
       return null;
     }
     const [row] = await sql<Array<{ id: string; user_id: string; fee_asset: string; fee_amount: string }>>`

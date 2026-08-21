@@ -41,6 +41,7 @@ import {
 import { assertCopyRegionAllowed, parseCopyEnvelope, presentCopyFollow, type CopyFollow } from './follows.js';
 import {
   attributeCopyFeeShare,
+  canonicalizeCopyFillId,
   planCopyFeeShareSettle,
   postCopyFeeShareSettle,
   presentFeeShareAttribution,
@@ -57,7 +58,7 @@ export type FollowerFillFee = {
   readonly feeAmount: Amount;
 };
 
-/** Production wires `trade.fills`. Absent + omitted fillFeeAmount → refuse-closed. */
+/** Production wires `trade.fills`. Absent or missing fill row → refuse-closed. */
 export type LookupFollowerFillFeePort = (fillId: string) => Promise<FollowerFillFee | null>;
 
 export interface CopyServiceOptions {
@@ -79,8 +80,8 @@ export interface CopyServiceOptions {
   /** Paper vs live honesty — never place live from a paper leader fill. */
   inspectMarket?: InspectCopyMarket;
   /**
-   * Settled follower fill fee (`fills.fee_amount`). When wired, omitted
-   * `fillFeeAmount` takes this row — never notional×bps. Missing fill → refuse.
+   * Settled follower fill fee (`fills.fee_amount`). Required to settle.
+   * Missing lookup or missing fill → refuse. Never a client `fillFeeAmount`.
    */
   lookupFollowerFillFee?: LookupFollowerFillFeePort;
 }
@@ -103,7 +104,7 @@ type SettleFeeShareInput = {
   assetId: string;
   followerFillNotional: string;
   protocolFeeBps: number;
-  /** Caller-supplied settled fee. Ignored when fill lookup is wired. */
+  /** Ignored. Protocol fee is the fill row only — never a caller-invented pot. */
   fillFeeAmount?: string;
 };
 
@@ -451,41 +452,27 @@ export class CopyService {
   }
 
   /**
-   * Protocol fee is the fill's collected fee_amount. Never notional×bps.
-   * Lookup (production) is authoritative; caller fillFeeAmount is only for
-   * tests without a fill row. Missing both → refuse-closed.
+   * Protocol fee is the fill's collected fee_amount. Never notional×bps
+   * and never a caller fillFeeAmount. Missing lookup or missing fill → refuse.
    */
-  private async resolveSettledProtocolFee(follow: CopyFollow, input: SettleFeeShareInput): Promise<Amount> {
-    if (this.lookupFollowerFillFee) {
-      const fill = await this.lookupFollowerFillFee(input.fillId.trim());
-      if (!fill) {
-        throw new CopyError(
-          'Follower fill not found — refuse rather than invent protocolFee from notional×bps',
-          'trade.copy_settle_refused',
-        );
-      }
-      if (fill.userId !== follow.followerId) {
-        throw new CopyError('Fill does not belong to this follower — refuse fee-share', 'trade.copy_settle_refused');
-      }
-      if (fill.feeAsset !== input.assetId.trim()) {
-        throw new CopyError('Fill fee asset does not match settle asset — refuse fee-share', 'trade.copy_settle_refused');
-      }
-      if (fill.feeAmount < 0n) {
-        throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
-      }
-      return fill.feeAmount;
+  private async resolveSettledProtocolFee(follow: CopyFollow, fillId: string, assetId: string): Promise<Amount> {
+    if (!this.lookupFollowerFillFee) {
+      throw new CopyError('Follower fill not found — refuse rather than invent protocolFee from notional×bps', 'trade.copy_settle_refused');
     }
-    if (input.fillFeeAmount !== undefined) {
-      const amount = parseAmount(input.fillFeeAmount);
-      if (amount < 0n) {
-        throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
-      }
-      return amount;
+    const fill = await this.lookupFollowerFillFee(fillId);
+    if (!fill) {
+      throw new CopyError('Follower fill not found — refuse rather than invent protocolFee from notional×bps', 'trade.copy_settle_refused');
     }
-    throw new CopyError(
-      'Settled fill fee is required — refuse rather than invent protocolFee from notional×bps',
-      'trade.copy_settle_refused',
-    );
+    if (fill.userId !== follow.followerId) {
+      throw new CopyError('Fill does not belong to this follower — refuse fee-share', 'trade.copy_settle_refused');
+    }
+    if (fill.feeAsset !== assetId) {
+      throw new CopyError('Fill fee asset does not match settle asset — refuse fee-share', 'trade.copy_settle_refused');
+    }
+    if (fill.feeAmount < 0n) {
+      throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
+    }
+    return fill.feeAmount;
   }
 
   /**
@@ -518,17 +505,19 @@ export class CopyService {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
 
-    const once = await store.runFeeShareSettleOnce(follow.followId, input.fillId, async () => {
+    const fillId = canonicalizeCopyFillId(input.fillId);
+    const assetId = input.assetId.trim();
+    const once = await store.runFeeShareSettleOnce(follow.followId, fillId, async () => {
       const key = `${follow.leaderId}:${follow.followerId}`;
       const period = await store.getPeriodStats(key);
       requirePublishedCopyFeeShareLaw(this.feeShareLaw);
-      const settledFee = await this.resolveSettledProtocolFee(follow, input);
+      const settledFee = await this.resolveSettledProtocolFee(follow, fillId, assetId);
       const attribution = attributeCopyFeeShare({
         law: this.feeShareLaw,
-        fillId: input.fillId,
+        fillId,
         leaderId: follow.leaderId,
         followerId: follow.followerId,
-        assetId: input.assetId.trim(),
+        assetId,
         followerFillNotional: parseAmount(input.followerFillNotional),
         protocolFeeBps: input.protocolFeeBps,
         fillFeeAmount: settledFee,

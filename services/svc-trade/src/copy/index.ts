@@ -44,6 +44,7 @@ export {
 } from './fee-share-law.js';
 export {
   attributeCopyFeeShare,
+  canonicalizeCopyFillId,
   planCopyFeeShareSettle,
   postCopyFeeShareSettle,
   refusePnlLinkedCopyFee,

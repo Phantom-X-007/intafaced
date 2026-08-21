@@ -11,7 +11,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger, parseAmount, recipes, userAvailable } from '@intafaced/ledger-client';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
-import { CopyService } from './copy-service.js';
+import { CopyService, type LookupFollowerFillFeePort } from './copy-service.js';
 import type { CopyFeeShareLaw, CopyJurisdictionLaw } from './fee-share-law.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 
@@ -110,11 +110,27 @@ class BlockingMirrorStore extends MemoryCopyFollowStore {
   }
 }
 
-function makeCopy(opts?: { fee?: CopyFeeShareLaw; jur?: CopyJurisdictionLaw; ledger?: MemoryLedger; store?: MemoryCopyFollowStore }) {
+function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
+  return async (fillId) => ({
+    fillId,
+    userId: FOLLOWER,
+    feeAsset: 'USDT',
+    feeAmount: parseAmount(feeAmount),
+  });
+}
+
+function makeCopy(opts?: {
+  fee?: CopyFeeShareLaw;
+  jur?: CopyJurisdictionLaw;
+  ledger?: MemoryLedger;
+  store?: MemoryCopyFollowStore;
+  lookupFollowerFillFee?: LookupFollowerFillFeePort;
+}) {
   return new CopyService(opts?.ledger ?? new MemoryLedger(), {
     feeShareLaw: opts?.fee ?? { published: false },
     jurisdictionLaw: opts?.jur ?? { published: false },
     ...(opts?.store ? { store: opts.store } : {}),
+    ...(opts?.lookupFollowerFillFee ? { lookupFollowerFillFee: opts.lookupFollowerFillFee } : {}),
   });
 }
 
@@ -200,7 +216,12 @@ describe('trade.copy product mount', () => {
         amount: parseAmount('10'),
       }),
     );
-    const copy = makeCopy({ fee: publishedFee, jur: publishedJur, ledger });
+    const copy = makeCopy({
+      fee: publishedFee,
+      jur: publishedJur,
+      ledger,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
     const caller = createTradeRouter(stubTrade(), undefined, copy).createCaller(signed());
     const follow = await caller.copy.follow({
       leaderId: LEADER,
@@ -218,7 +239,6 @@ describe('trade.copy product mount', () => {
       assetId: 'USDT',
       followerFillNotional: '1000',
       protocolFeeBps: 10,
-      fillFeeAmount: '1',
     });
     await ledger.entered.promise;
 
@@ -242,7 +262,6 @@ describe('trade.copy product mount', () => {
         assetId: 'USDT',
         followerFillNotional: '1000',
         protocolFeeBps: 10,
-        fillFeeAmount: '1',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(balanceAfterKill);
