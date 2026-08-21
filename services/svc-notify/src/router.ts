@@ -13,6 +13,7 @@ import {
   UNPUBLISHED_ALERT_KINDS,
   type PriceAlert,
 } from './alerts/types.js';
+import { describeChannelsPolicy } from './channels-policy.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -263,6 +264,14 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         .mutation(async ({ ctx }) => ({
           marked: await notify.markAllRead(ctx.principal.userId),
         })),
+
+      /**
+       * Fan-out mountain vs §13 socket honesty (D26-P1-O5).
+       *
+       * Static board — integrators read this before wiring UI. Does not reflect
+       * runtime credentials; use `channels` for deploy-specific availability.
+       */
+      channelsPolicy: publicProcedure.query(() => describeChannelsPolicy()),
 
       /**
        * Which channels can reach anyone right now, and what is missing.
