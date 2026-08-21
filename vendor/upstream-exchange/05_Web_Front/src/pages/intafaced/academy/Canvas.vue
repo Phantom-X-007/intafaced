@@ -121,16 +121,7 @@ export default {
       };
       this.act(
         'sceneAction',
-        mutate(
-          'academy',
-          'updateScene',
-          {
-            sessionId: this.sessionId,
-            scene: scene,
-            expectedFingerprint: s.sceneFingerprint
-          },
-          this.ixToken
-        )
+        mutate('academy', 'updateScene', { sessionId: this.sessionId, scene: scene, expectedFingerprint: s.sceneFingerprint }, this.ixToken)
       ).then(function (res) {
         if (res.ok) self.reload();
       });
