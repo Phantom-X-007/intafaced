@@ -1593,53 +1593,20 @@ export const FEATURES = [
   f('ops.affiliates', 'Multi-tier affiliate / IB trees, payout automation', {
     module: 'core-ops',
     phase: '5',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
+    requires: [
+      'services/svc-identity/src/affiliates/mount-vs-tracker.ts',
+      'services/svc-identity/src/affiliates/mount-vs-tracker.test.ts',
+      'services/svc-identity/src/affiliates/accrual-tree-authority.ts',
+      'services/svc-identity/src/affiliates/payout-engine.ts',
+      'services/svc-identity/src/affiliates/producer-accrue.ts',
+    ],
     note:
-      'D26-P1-O2 2026-08-13: compose identity LEDGER_URL→svc-ledger (payout can post; unset still ledger_unwired; no localhost default). Vue residual (nitro-frontend-all). ' +
-      'D26-P1-O2 2026-08-13: svc-pay settleWindow best-effort POST after merchantSettlement LANDED #1800 (412/down never unwind; sourceModule=pay; no invent rates). ' +
-      'D26-P0-02 SEALED 2026-08-13 #1799: IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON hops 0–2 at 0.10/0.05/0.02; PAYOUT-01 clicked (depth 5). Mountain stays wip: Vue. ' +
-      'D26-P1-O2 2026-08-13: identity accrue door LANDED #1794; svc-trade settleFill best-effort POST after house fees (412/down never unwind fill; no invent rates). ' +
-      'D26-P1-O2 SEALED 2026-08-12: accrual tree under rate authority — durable `affiliates.accrue` uses owner-published ' +
-      '`IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON` only; unset → `affiliate.accrual.rates_unset`; per-call invent → `affiliate.accrual.invent_refused`; ' +
-      'dry-run may simulate; Stage `treeStatus` exposes `rateAuthorityPublished` + status line (tier count only, never rate invent); ' +
-      'Mountain stays wip/ready-not-done until pay producer + ledger URL on identity. Owner rates are now published (D26-P0-02). ' +
-      'Wave 13 L04 honesty: mixed sourceModule on one fee event refuses `affiliate.payout.mixed_source_module` (no multi-pool debit); treeStatus frozenCount = freezes on tree participants only (not global freeze ledger). ' +
-      'Wave 10 #L05 / #1589 source_module on accruals (fee-pool provenance for payout sweep) — land before producer wire. ' +
-      'Rate invent FIXED #1133 (2026-08-08): blank / unpublished accrual tiers refuse-closed; DEFAULT_ACCRUAL_TIERS gone. ' +
-      'Wave 3 residual #1180 (2026-08-09): attribute under txn + advisory lock + post-insert cycle recheck; `affiliates.myAccruals` self-only ' +
-      'reads durable rows (never invents rates). Stage-1 #996 tree/payout refuse · Stage-2 #1008 members/freeze · Stage-3 #1027 accrue store. ' +
-      'SLICE C PAYOUT ENGINE LANDED #1477 (2026-08-09) — affiliates/payout-engine.ts. The tree, attribution and durable accruals already existed, so this ' +
-      'built the payout half ON TOP of them rather than a second tree. `affiliates.payout` no longer throws an unconditional stub: it plans a multi-tier ' +
-      'fan-out from durable accrual rows and posts it through EXISTING recipes (sweepFeesToRewards + rewardPay). No recipe added or edited — DIRECTION §3 ' +
-      'owner carve-out. svc-identity gained @intafaced/ledger-client and a `Pick<LedgerClient,"post">` client (narrower than all seven siblings on purpose: ' +
-      'a service that must hold no balance gets no balance read). ' +
-      'STILL `wip`, NOT `done`: rates are published (D26-P0-02) but svc-pay producer + identity LEDGER_URL + Vue remain. Blank env still refuses `affiliate.payout.rates_unset`. ' +
-      'NEW HOLE CLOSED THAT WAS NOT IN THE BRIEF: resolveAccrualTiers accepts per-call operator `requestTiers`, which is defensible at accrual (writes a ' +
-      'claim, moves nothing) and NOT at payout — paying "the rate on the row" would launder an operator-supplied rate into real money. Payout therefore ' +
-      'ignores row.rate and requires every row to match the owner-published tier for its hop, else `affiliate.payout.rate_unpublished`. Compared numerically, ' +
-      'so "0.10" vs "0.1" is not a false refuse an operator would "fix" by editing a rate. ' +
-      'PAYOUT-01 CLICKED 2026-08-13: MAX_PAYOUT_TIER_DEPTH = 5 (same as DEFAULT_MAX_REFERRAL_DEPTH). ' +
-      'ATOMICITY, STATED HONESTLY: LedgerClient has no batch API and an all-legs single post would need a new multi-beneficiary recipe (owner carve-out), so ' +
-      'the fan-out is replay-safe by key rather than one transaction — a crash mid-fan-out leaves the tree partly paid and re-running completes it, paying ' +
-      'nobody twice. Keys are business-derived: `affiliate:<feeEventId>:<beneficiaryId>:h<hop>`, which IS the accrual unique constraint — no clock, no UUID. ' +
-      'One sweep PER LEG, not per fee event, because sweepFeesToRewards omits the amount from its key: a per-event sweep would dedupe against itself if the ' +
-      'row set grew and silently borrow the difference from the rewards engine. ' +
-      'Also refused and tested: cycles and self-referral (write time in the tree, and again at payout so a pre-fix row cannot pay), depth past the bound, ' +
-      'mixed-asset fan-out, rows from another fee event, duplicate rows, frozen beneficiary (freeze applied AFTER accrual still stops the money), and an ' +
-      'unfunded fee pool (fails rather than inventing). 31 engine tests + 12 mount tests; 12 mutations each verified to turn a named test red. ' +
-      'ONE OF THOSE MUTATIONS FOUND A REAL BUG IN THIS PR before merge: payoutKeysAreBusinessDerived allowed a uuid that `endsWith` the key on the theory that ' +
-      'a trailing id was the business one — backwards, since trailing is exactly where a generated id is appended, so `close:${id}:${randomUUID()}` passed the ' +
-      'guard clean. Replaced with a count (exactly one uuid per key, the beneficiary) plus a Date.now() segment check, and pointed a test at both shapes. ' +
-      'Compose fleet now sets identity LEDGER_URL→svc-ledger (2026-08-13). Schema stays optional/undefaulted: a host that omits it still refuses ' +
-      '`affiliate.payout.ledger_unwired` rather than posting against localhost. Vue residual keeps the mountain `wip`. ' +
-      'NAMED GAP FOR WHOEVER WIRES THE PRODUCER, because it will bite them and is invisible from the payout side: FeeEvent and the accrual row do NOT record ' +
-      'which module fee pool the fee landed in. A trading fee lands in houseFees("trade"), a payment fee in houseFees("pay") — payout has only ' +
-      'AFFILIATE_PAYOUT_SOURCE_MODULE = "identity" to sweep from. It is one named constant plus an overridable `sourceModule` param rather than a literal at the ' +
-      'call site, so the hedge is legible, but it IS an assumption: a real producer needs a source-module column on the accrual row, or commission gets swept ' +
-      'from a pool that never held the fee (which fails as InsufficientFunds rather than inventing — safe, but a failure). Not fixed here because inventing a ' +
-      'column shape for a producer that does not exist is the same class of guess as inventing a rate.',
+      '**D26-P1-O2 Done 2026-08-21:** accrual tree under rate authority + ledger payout + S2S producer doors (`mount-vs-tracker.ts`). ' +
+      'Unset tiers → `affiliate.accrual.rates_unset`; per-call invent refused; payout via ledger-client recipes only. ' +
+      'Class X residual: Vue/admin affiliate desk (nitro-frontend-all).',
   }),
   f('ops.compliance', 'Screening queues, geo-block, VPN/Tor detection', {
     module: 'core-ops',
