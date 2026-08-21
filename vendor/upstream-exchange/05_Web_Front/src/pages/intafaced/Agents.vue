@@ -182,6 +182,71 @@
         </div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.agents.copy.title') }}</h2>
+        <span class="ix-sub">copyIntel.runSession</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.agents.copy.lead') }}
+      </p>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-copy-plane">{{ $t('intafaced.agents.copy.plane') }}</label>
+          <select id="ix-copy-plane" v-model="copyPlane">
+            <option value="dark">{{ $t('intafaced.agents.copy.planeDark') }}</option>
+            <option value="live">{{ $t('intafaced.agents.copy.planeLive') }}</option>
+          </select>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="copy.busy" @click="runCopy">{{ $t('intafaced.agents.copy.run') }}</Button>
+        </div>
+      </div>
+      <IxState v-if="copy.ran" :loading="copy.busy" :reason="copy.reason" :message="copy.message" endpoint="/api/agents/trpc/copyIntel.runSession">
+        <div v-if="copy.data && copy.data.status === 'refuse'" class="ix-note">
+          {{ $t('intafaced.agents.copy.refused') }} · {{ copy.data.reason }}
+          <div v-if="copy.data.metering" style="margin-top:6px;">{{ $t('intafaced.agents.copy.billed') }} {{ copy.data.metering.billedAmount }}</div>
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'unavailable'" class="ix-note">
+          {{ $t('intafaced.agents.copy.unavailable') }} · {{ copy.data.reason }}
+          <div v-if="copy.data.metering" style="margin-top:6px;">{{ $t('intafaced.agents.copy.billed') }} {{ copy.data.metering.billedAmount }}</div>
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'empty'" class="ix-note ix-note-quiet">
+          {{ $t('intafaced.agents.copy.empty') }}
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'ok' && copy.data.presentation && copy.data.presentation.rankedByReturns" class="ix-note">
+          {{ $t('intafaced.agents.copy.refused') }}
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'ok'">
+          <div class="ix-note ix-note-quiet" style="margin-bottom:12px;">{{ $t('intafaced.agents.copy.directory') }}</div>
+          <div v-if="copyDirectory.length" class="ix-scroll">
+            <table class="ix-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('intafaced.agents.copy.leaderId') }}</th>
+                  <th>{{ $t('intafaced.agents.copy.realisedPnl') }}</th>
+                  <th>{{ $t('intafaced.agents.copy.closedTrades') }}</th>
+                  <th>{{ $t('intafaced.agents.copy.winRate') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in copyDirectory" :key="row.leaderId">
+                  <td>{{ row.leaderId }}</td>
+                  <td>{{ row.realisedPnl }}</td>
+                  <td>{{ row.closedTrades }}</td>
+                  <td>{{ row.winRate }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.agents.copy.empty') }}</div>
+          <div v-if="copy.data.metering" style="margin-top:8px;color:var(--ix-text-dim);font-size:13px;">
+            {{ $t('intafaced.agents.copy.billed') }} {{ copy.data.metering.billedAmount }}
+          </div>
+        </div>
+      </IxState>
+    </div>
   </div>
 </template>
 
@@ -198,11 +263,17 @@
  * offered here. Coach, growth, and screening drafts are queries — named refuse
  * or a draft. Never publish, never a KYC decision, never list contents.
  *
+ * Copy intel is a user-click mutate of already-on-main `copyIntel.runSession`.
+ * Dark plane is the default and refuses `copy_plane_dark` unbilled. Live with
+ * no sealed leaders refuses `no_live_leaders`. Empty fixtures stay empty.
+ * Ok presentation is a leaderId directory — never a returns-ranked board.
+ * Fixtures are sent empty: this screen does not invent live leaders.
+ *
  * No model vendor is named anywhere here. The routing table speaks in tasks and
  * aliases, and the concrete upstream id never leaves the adapter.
  */
 import IxState from '../../components/intafaced/IxState.vue';
-import { query } from '../../config/intafaced.js';
+import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
@@ -218,8 +289,23 @@ export default {
       risk: { loading: false, reason: null, message: '', data: null },
       ask: '',
       growthForm: { headline: '', copy: '' },
-      riskForm: { subjectId: '', region: '' }
+      riskForm: { subjectId: '', region: '' },
+      copy: this.emptyAction(),
+      copyPlane: 'dark'
     };
+  },
+  computed: {
+    copyDirectory() {
+      var data = this.copy.data;
+      if (!data || data.status !== 'ok' || !data.stats || (data.presentation && data.presentation.rankedByReturns)) {
+        return [];
+      }
+      return data.stats.slice().sort(function(a, b) {
+        if (a.leaderId < b.leaderId) return -1;
+        if (a.leaderId > b.leaderId) return 1;
+        return 0;
+      });
+    }
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
@@ -241,6 +327,12 @@ export default {
       if (this.riskForm.subjectId) input.subjectId = this.riskForm.subjectId;
       if (this.riskForm.region) input.region = this.riskForm.region;
       this.load('risk', query('agents', 'riskCompliance.draftScreening', input, this.ixToken));
+    },
+    runCopy() {
+      this.act(
+        'copy',
+        mutate('agents', 'copyIntel.runSession', { plane: this.copyPlane, fixtures: [] }, this.ixToken)
+      );
     }
   }
 };
