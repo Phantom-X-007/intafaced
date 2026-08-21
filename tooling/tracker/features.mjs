@@ -585,13 +585,19 @@ export const FEATURES = [
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
     requires: [
-      'docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md',
+      'vendor/upstream-exchange/05_Web_Front/src/terminal-mount-vs-tracker.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/terminal-mount-vs-tracker.test.ts',
       'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-depth-feed.js',
     ],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Terminal = vendored Vue desk (ADR retire-apps-web). On tip: depth feedLive only after snapshot (#1221); REST + UC accept float refuse (#1231); book shape messages (#1224); confirm/fill decimals (#1225); dex/protocol custodial:true refuse (#1242); shell-i18n + shell-golden gates (#1230). Residual: brand drain / depth number refuse / snapshot provenance in L11 W5. dependsOn is ws.depth not ws.gateway so the book is not blocked on positions.',
+    note:
+      '**D26-P4-C1 Done 2026-08-21:** vendored Vue desk + live ix-depth-feed wired (`terminal-mount-vs-tracker.ts`). ' +
+      'feedLive only after snapshot; ix-wire refuses float decimals; shell-golden gates on tip. ' +
+      'Class X residual: brand drain / depth number refuse / snapshot provenance L11 W5.',
   }),
   f('web.shell', 'Product shell — the served customer surface', {
     module: 'core-ops',
