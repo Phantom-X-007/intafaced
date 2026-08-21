@@ -34,6 +34,7 @@ import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
 import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
+import { describeMerchantPolicy } from './merchant/policy.js';
 import { describeNavigatorPolicy } from './navigator/policy.js';
 import { describeCopyIntelPolicy } from './copy-intel/policy.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
@@ -2867,6 +2868,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * Money tools denied (guardrail). Spec: docs/ops/trk/agents.merchant.md Stage 1.
      */
     merchant: router({
+      policy: publicProcedure.query(() => describeMerchantPolicy()),
+
       watch: scopedProcedure('agents:read', { module: 'agents' })
         .input(
           z.object({
