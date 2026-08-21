@@ -1852,8 +1852,18 @@ export const FEATURES = [
     module: 'agents',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['agents.gateway', 'ops.compliance'],
-    note: 'Law §8.2:388 ("v2: ... Risk & Compliance (screening + report drafts)") and §25:732, gap-closed 2026-08-08. One of the five v2 agents with no row. Blocked on ops.compliance (`ready`, not `done`), which owns the screening queues and geo-block surfaces this agent would draft against; agents.gateway is `done`. THE BOUNDARY THAT MUST NOT BLUR: §8.2 says screening plus REPORT DRAFTS. A draft is a proposal for a human. A compliance DECISION — granting a tier, filing a report, clearing a flagged account — is not an agent action, and identity.kyc-review already models this correctly: approval is an operator action recorded with `reviewed_by`, and an agent must never be able to write that column. NOT DECIDED, and it sits upstream of this row rather than inside it: the sanctions blocklist ships EMPTY (`packages/config/src/screening.ts`) and no JURISDICTION_MATRIX entry carries `blocked:true`, so an agent drafting against that content today would be drafting against nothing. Prod and staging refuse to boot without the list, which is correct; the list itself is counsel (DIRECTION §8.7), not engineering.',
+    requires: [
+      'services/svc-agents/src/risk-compliance/mount-vs-tracker.ts',
+      'services/svc-agents/src/risk-compliance/mount-vs-tracker.test.ts',
+      'services/svc-agents/src/risk-compliance/screening-draft.ts',
+      'services/svc-agents/src/risk-compliance/draft-route.test.ts',
+    ],
+    note:
+      'DONE 2026-08-21 D26-P1-RC1: `riskCompliance.draftScreening` — screening-support drafts only; refuses empty/unset list and `asDecision`. ' +
+      'Never writes identity.kyc-review `reviewed_by`. Class X residual: sanctions list content (counsel); geo/VPN case UI.',
   }),
   f('agents.coach', 'AI Coach — curriculum-grounded coaching agent (§8.2, §25:708)', {
     module: 'agents',
