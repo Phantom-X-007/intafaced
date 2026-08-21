@@ -1,5 +1,6 @@
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
+import { decimalPriceFromDriver, purchasePriceTermsMatch } from './commerce-price.js';
 import {
   affiliateLegAfterMarketPurchase,
   fireAffiliateAccrue,
@@ -82,7 +83,8 @@ interface ListingRow {
   description: string;
   offer_type: OfferType;
   asset_id: string;
-  price: string;
+  /** Driver may yield a JS number if numeric is not text-mode — refuse, never String(). */
+  price: unknown;
   period_seconds: number | string | null;
   status: ListingStatus;
   created_at: Date;
@@ -96,7 +98,7 @@ interface PurchaseRow {
   vendor_id: string;
   vendor_user_id: string;
   asset_id: string;
-  price: string;
+  price: unknown;
   commission_bps: number;
   status: PurchaseStatus;
   ledger_tx_id: string | null;
@@ -114,8 +116,7 @@ function toListing(row: ListingRow): ListingRecord {
     description: row.description,
     offerType: row.offer_type,
     assetId: row.asset_id,
-    // postgres.js returns numeric as string when configured; coerce safely.
-    price: typeof row.price === 'string' ? row.price : formatAmount(parseAmount(String(row.price))),
+    price: decimalPriceFromDriver(row.price),
     periodSeconds: row.period_seconds == null || row.period_seconds === '' ? null : Number(row.period_seconds),
     status: row.status,
     createdAt: row.created_at.toISOString(),
@@ -131,7 +132,7 @@ function toPurchase(row: PurchaseRow): PurchaseRecord {
     vendorId: row.vendor_id,
     vendorUserId: row.vendor_user_id,
     assetId: row.asset_id,
-    price: typeof row.price === 'string' ? row.price : formatAmount(parseAmount(String(row.price))),
+    price: decimalPriceFromDriver(row.price),
     commissionBps: row.commission_bps,
     status: row.status,
     ledgerTxId: row.ledger_tx_id,
@@ -807,7 +808,7 @@ export class CommerceService {
         row.buyer_id === input.buyerId &&
         row.vendor_id === input.vendorId &&
         row.asset_id === input.assetId &&
-        formatAmount(parseAmount(String(row.price))) === input.price;
+        purchasePriceTermsMatch(row.price, input.price);
       if (!termsMatch) {
         throw new MarketError(`Purchase id ${input.purchaseId} was already used with different terms`, 'market.purchase_conflict');
       }
