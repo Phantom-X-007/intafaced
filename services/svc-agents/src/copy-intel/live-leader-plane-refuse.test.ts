@@ -64,6 +64,16 @@ describe('copy-intel live leader plane pin (Class X / no invent)', () => {
     expect(isLiveLeaderPlaneAllowlisted(undefined)).toBe(false);
   });
 
+  it('opens only when owner env sets plane flag and sealed ids', () => {
+    const env = {
+      LIVE_TRADE_COPY_LEADER_PLANE_OPEN: 'true',
+      LIVE_TRADE_COPY_LEADER_IDS: 'leader-a, leader-b',
+    };
+    expect(isLiveLeaderPlaneAllowlisted(['leader-a'], env)).toBe(true);
+    expect(isLiveLeaderPlaneAllowlisted(['leader-a', 'leader-z'], env)).toBe(false);
+    expect(isLiveLeaderPlaneAllowlisted(['leader-a'], { LIVE_TRADE_COPY_LEADER_PLANE_OPEN: 'false' })).toBe(false);
+  });
+
   it('refuseLiveLeaderPlane is no_live_leaders — never an ok board', () => {
     expect(refuseLiveLeaderPlane()).toEqual({
       status: 'refuse',
