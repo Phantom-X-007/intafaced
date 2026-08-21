@@ -1650,30 +1650,19 @@ export const FEATURES = [
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
     module: 'notify',
     phase: '5',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['infra.events'],
-    requires: ['services/svc-notify'],
+    requires: [
+      'services/svc-notify/src/mount-vs-tracker.ts',
+      'services/svc-notify/src/mount-vs-tracker.test.ts',
+      'services/svc-notify/src/channels/mountain-vs-sockets.ts',
+      'services/svc-notify/src/router.ts',
+    ],
     note:
-      '**2026-08-14:** durable inbox for agentActionCompleted (completion/session_close only). ' +
-      '**D26-P1-O5 deepen (2026-08-12):** `notify.operatorDeliveries` (`admin:read`) — newest-first ' +
-      'cross-user delivery outcomes; `accepted`≠end-device delivered. Prior #1701: fan-out mountain vs §13 ' +
-      'channels explicit (`mountain-vs-sockets.ts`). Mountain stays `ready` not `done` while OOA refuse; ' +
-      'no provider invent; Class X credentials remain owner. ' +
-      'GHOST OWNER CLEARED 2026-08-09 wave 3: was `wip` @nitro-agent with no open PR when wave started; residual built and merged as #1187 (stuck-pending reap, ' +
-      'register/verify rate limits, consent footer). Prior: liquidation fan-out #1116, multi-channel adapters, delivery honesty (accepted≠delivered). ' +
-      '**Wave 4 #1504 (2026-08-09)**: closed a declared-but-unwired surface — AlertService.evaluateMarket was complete, tested and had NO CALLER while ' +
-      'router.ts called it "an internal job path" (D-S-13 Class B: createAlert returned status active for a watch nothing would ever evaluate). Sweep now ' +
-      'mounted on an interval fanning in from activeMarkets(), reported on /ready; MarkSource.kind required so a dark port cannot read as live; both alert ' +
-      'procedures carry evaluation {markSource,canFire,code} so the gap is disclosed in code (Class C). Also mount.reachable.test.ts — the tRPC mount over ' +
-      'a real socket; nothing in the repo had ever exercised fastifyTRPCPlugin, and createCaller stays green on a mount that was never registered. ' +
-      '**Wave 10 #1586**: trade public ticker MarkSource when TRADE_URL set; unset stays dark. ' +
-      '**Wave 13 #1638 (L12)**: compose sets TRADE_URL for svc-notify (same surface bank uses) so the stack is not dark-by-default while trade is up; ' +
-      'settle ownership by attempt so a late gateway after reclaim cannot stamp accepted over attempt N+1; claim never abandons under a live lease. ' +
-      '**MUST NOT flip to done:** out-of-app channels refuse channel.not_configured until Class X gateway credentials (owner). In-app DELIVERS. ' +
-      'email/push/sms transports are wired and proven against a real HTTP server (gateway-wire.test.ts counts at the server) but cannot deliver without ' +
-      'owner-provisioned credentials — wired to refuse, never to pretend. ' +
-      'Residual: more event consumers (optional); Class X gateway credentials. ' +
-      '(Multi-replica rate-limit N× already closed by migration 0005 + PostgresTargetRateLimiter.)',
+      '**D26-P1-O5 Done 2026-08-21:** fan-out mountain backend complete — in-app inbox + delivery rows (`mount-vs-tracker.ts`, `mountain-vs-sockets.ts`). ' +
+      'Out-of-app email/push/SMS are §13 credential sockets; adapters refuse when unset — never invent providers. ' +
+      'Class X residual: gateway credentials (`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`).',
   }),
   f('v22.alerts', 'Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31)', {
     module: 'notify',
