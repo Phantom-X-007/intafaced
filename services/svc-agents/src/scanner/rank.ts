@@ -68,7 +68,7 @@ export type RankUnavailable = {
 export type RankRefuse = {
   readonly status: 'refuse';
   readonly reason: ScannerSignalInputsGateRefuseReason;
-  readonly userMessageKey: 'agents.scanner.tier_closed';
+  readonly userMessageKey: 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed';
   readonly residual: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
 };
 
