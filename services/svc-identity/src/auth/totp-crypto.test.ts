@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
+  assertProdTotpKey,
   decryptTotpSecret,
   encryptTotpSecret,
   isEncryptedTotpSecret,
@@ -58,5 +59,30 @@ describe('TOTP secret encrypt-at-rest', () => {
     expect(isEncryptedTotpSecret(sealed)).toBe(true);
     expect(materializeTotpSecret(key, sealed)).toBe(plain);
     expect(() => materializeTotpSecret(null, sealed)).toThrow(/IDENTITY_TOTP_SECRET_KEY/);
+  });
+});
+
+describe('assertProdTotpKey — prod boot refuses a missing TOTP key', () => {
+  const message = 'IDENTITY_TOTP_SECRET_KEY is required in prod (32-byte AES key as base64 or 64-char hex)';
+
+  it('throws the existing message when APP_ENV=prod and the key is blank, missing, or weak', () => {
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod', IDENTITY_TOTP_SECRET_KEY: '' })).toThrow(message);
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod', IDENTITY_TOTP_SECRET_KEY: '   ' })).toThrow(message);
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod', IDENTITY_TOTP_SECRET_KEY: undefined })).toThrow(message);
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod' })).toThrow(message);
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod', IDENTITY_TOTP_SECRET_KEY: 'short' })).toThrow(message);
+  });
+
+  it('accepts a 32-byte key in prod (base64 or hex)', () => {
+    const raw = randomBytes(32);
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod', IDENTITY_TOTP_SECRET_KEY: raw.toString('base64') })).not.toThrow();
+    expect(() => assertProdTotpKey({ APP_ENV: 'prod', IDENTITY_TOTP_SECRET_KEY: raw.toString('hex') })).not.toThrow();
+  });
+
+  it('does not tighten non-prod — staging/dev/test may boot without the key', () => {
+    for (const APP_ENV of ['dev', 'test', 'staging'] as const) {
+      expect(() => assertProdTotpKey({ APP_ENV, IDENTITY_TOTP_SECRET_KEY: '' })).not.toThrow();
+      expect(() => assertProdTotpKey({ APP_ENV, IDENTITY_TOTP_SECRET_KEY: undefined })).not.toThrow();
+    }
   });
 });

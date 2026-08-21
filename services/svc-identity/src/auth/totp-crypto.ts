@@ -41,6 +41,21 @@ export function parseTotpSecretKey(raw: string | undefined | null): Buffer | nul
   }
 }
 
+/** Thrown when APP_ENV=prod and IDENTITY_TOTP_SECRET_KEY is missing/invalid. */
+export const PROD_TOTP_KEY_REQUIRED = 'IDENTITY_TOTP_SECRET_KEY is required in prod (32-byte AES key as base64 or 64-char hex)';
+
+/**
+ * Prod boot: TOTP secrets must not sit base32-plaintext. Missing/invalid key
+ * refuses. Non-prod (dev/test/staging) may boot without the key — enrol still
+ * refuses. Does not tighten staging.
+ */
+export function assertProdTotpKey(env: { APP_ENV?: string; IDENTITY_TOTP_SECRET_KEY?: string | null }): void {
+  if (env.APP_ENV !== 'prod') return;
+  if (!parseTotpSecretKey(env.IDENTITY_TOTP_SECRET_KEY)) {
+    throw new Error(PROD_TOTP_KEY_REQUIRED);
+  }
+}
+
 export function isEncryptedTotpSecret(stored: string): boolean {
   return stored.startsWith(TOTP_SECRET_ENC_PREFIX);
 }

@@ -30,6 +30,14 @@ describe('production index boots KYC vault from IDENTITY_KYC_DOC_KEY only', () =
   });
 });
 
+describe('prod boot refuses a missing IDENTITY_TOTP_SECRET_KEY', () => {
+  it('calls assertProdTotpKey(env) so the throw is reached without booting Fastify', () => {
+    expect(indexSrc).toMatch(/import\s*\{[^}]*assertProdTotpKey[^}]*\}\s*from\s*['"]\.\/auth\/totp-crypto\.js['"]/);
+    expect(indexSrc).toMatch(/APP_ENV === ['"]prod['"]/);
+    expect(indexSrc).toMatch(/assertProdTotpKey\(\s*env\s*\)/);
+  });
+});
+
 // Host IDENTITY_KYC_DOC_KEY must reach the identity container or the #1806 vault stays dark.
 describe('compose passes IDENTITY_KYC_DOC_KEY through to svc-identity', () => {
   const composeSrc = readFileSync(join(here, '../../../../docker-compose.apps.yml'), 'utf8');
