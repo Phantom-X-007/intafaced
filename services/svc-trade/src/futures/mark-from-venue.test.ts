@@ -189,8 +189,8 @@ describe('createVenueMarketDataAdapter', () => {
   /**
    * THE REGISTRATION, REACHED BY ITS ID.
    *
-   * An adapter that exists in `packages/venue-adapter` and is not in this switch
-   * is a file, not a venue: nothing in production can name it, so no grade, no
+   * An adapter that exists in `packages/venue-adapter` and is not registered in
+   * the fabric factory is a file, not a venue: nothing in production can name it, so no grade, no
    * cross-check and no mark can ever come from it. This assertion is the one that
    * goes red if the `bybit-spot` branch is deleted.
    */
