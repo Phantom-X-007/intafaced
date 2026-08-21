@@ -2,82 +2,54 @@
   <div class="invite">
     <div class="invite_container">
       <h1>{{$t("header.invite")}}</h1>
-      <IxNoSurface socket-key="affiliate.overview" />
+      <p class="invite_lead">{{$t("invite.attributeLead")}}</p>
+      <div class="invite_form">
+        <label class="invite_label">{{$t("invite.referrer")}}</label>
+        <Input v-model="referrerId" :placeholder="$t('invite.referrerId')" @on-enter="attribute"></Input>
+        <Button type="primary" :loading="busy" @click="attribute">{{$t("invite.attribute")}}</Button>
+      </div>
+      <p v-if="ok" class="invite_ok">{{$t("invite.attributeOk")}}</p>
+      <p v-if="error" class="invite_error">{{ error }}</p>
     </div>
   </div>
 </template>
 
 <script>
 /**
- * Referral programme — §13 socket.
+ * Referral programme — attribute a referrer.
  *
- * ── THE PART THAT MATTERS MOST, FIRST ──────────────────────────────────────
+ * Records who referred this account. Does not publish a rate card, income
+ * projection, or payout. Those stay an owner decision, written down once.
  *
- * This page published a **fee-share rate card**: six partner tiers paying a
- * referrer 20%, 30%, 40%, 50% and 60% of a referred account's trading fees for
- * 6, 12 or 24 months or for life, plus a 5-15% "partner dividend" on top.
- *
- * Nobody here set those numbers. They arrived with the vendored tree.
- * DIRECTION-2026-07-31 §8.10 reserves `leader_share_bps` and **every other
- * fee-share rate** to the owner, alongside the jurisdiction list they may be
- * offered in — so an agent restating them, even behind a "coming soon" banner,
- * would be publishing a commercial commitment the platform never made. The
- * table is deleted rather than hidden. When the owner sets rates, they get
- * written down once, in a spec, and this screen reads them.
- *
- * The same pass removed, from this file and from the `invite.*` block in
- * assets/lang/en.js:
- *
- *   · Two worked EARNINGS EXAMPLES quoting a referrer "about 7200 / month" and
- *     "135000 / month" in CNY. Invented income projections attributed to this
- *     platform by name — the exact class of fabrication the landing page was
- *     just fixed for, and on a referral programme it is a regulated-marketing
- *     hazard as well as a false number.
- *   · "Get 30 cards for free (≈2000 CNY)" and "Free promotion grant of 2000
- *     CNY" — a free-money offer with an amount, funded by nothing.
- *   · A gift-card rule promising the card's value is "frozen for 180 days after
- *     collection and released into user account balance automatically" — an
- *     automatic balance credit with no ledger recipe behind it.
- *   · A superlative claim to pay "the highest proportion of online commission
- *     return and the longest time of commission return" in the market.
- *   · `promotion@intafaced.com`, a mailbox nobody owns, offered as the contact
- *     for paid custom card orders.
- *   · Two hardcoded fake leaderboard rows (`dataFanyong` / `dataFanyong1`) with
- *     invented user handles and commission figures. They were unbound in the
- *     template and so invisible — which is precisely why they survived every
- *     previous honesty pass. Dead fabricated data is one careless `:data` bind
- *     away from being live fabricated data.
- *   · Six partner tier names transliterated from the vendor's own imperial-rank
- *     scheme, and a worked example built around one of its personas — both
- *     stragglers from the vendored tree rather than anything chosen here.
- *
- * ── AND WHY IT IS A SOCKET RATHER THAN A DELETE ────────────────────────────
- *
- * `ops.affiliates` — "Multi-tier affiliate / IB trees, payout automation" — is a
- * live row in tooling/tracker/features.mjs. The platform intends to build this.
- * Deleting finished UI for a planned product is how a capability gets rebuilt
- * from nothing six months later, which is the failure the adoption ADR
- * (docs/adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md) exists to
- * stop. The shell stays; the promises do not.
- *
- * ── WHAT IS ACTUALLY MISSING ───────────────────────────────────────────────
- *
- * svc-identity records no referrer on an account, so there is no tree at any
- * level and no query to write. No service consumes trade fees for a split, so
- * no commission has ever been computed. Both gaps are named on the panel.
- *
- * The invite link and its QR code went with the rest. They were built from the
- * venue session's `promotionPrefix + promotionCode` — a code that identifies a
- * referrer to a system that records no referrers. Handing someone a link that
- * credits nothing is a promise, not a convenience.
+ * The write is identity affiliates.attribute with {referrerId}.
  */
-import IxNoSurface from '../../components/intafaced/IxNoSurface.vue';
+import { mutate } from '../../config/intafaced.js';
 
 export default {
   name: 'InvitePage',
-  components: { IxNoSurface },
+  data: function() {
+    return { referrerId: '', busy: false, ok: false, error: '' };
+  },
   created: function() {
     this.$store.commit('navigate', 'nav-invite');
+  },
+  methods: {
+    attribute: function() {
+      var self = this;
+      if (!this.referrerId) return;
+      this.busy = true;
+      this.ok = false;
+      this.error = '';
+      mutate('identity', 'affiliates.attribute', {referrerId: this.referrerId}, this.$store.getters.ixToken)
+        .then(function(res) {
+          self.busy = false;
+          if (res.ok) {
+            self.ok = true;
+          } else {
+            self.error = res.message || self.$t('invite.attributeFailed');
+          }
+        });
+    }
   }
 };
 </script>
@@ -91,8 +63,38 @@ export default {
   padding-bottom: 60px;
   overflow: hidden;
 }
+.invite_lead {
+  color: var(--ix-text-dim, #9aa3b2);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 24px 0;
+  max-width: 40em;
+}
+.invite_form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+}
+.invite_label {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ix-text-faint, #6b7380);
+}
+.invite_ok,
+.invite_error {
+  margin-top: 16px;
+  font-size: 14px;
+}
+.invite_ok {
+  color: var(--ix-ok, #3dcc8a);
+}
+.invite_error {
+  color: var(--ix-danger, #e85d5d);
+}
 .invite_container {
-  padding: 40px 12%;
+  padding: 40px 64px;
   min-height: 600px;
   > h1 {
     font-size: 32px;
@@ -106,7 +108,7 @@ export default {
     padding-top: 45px;
   }
   .invite_container {
-    padding: 24px 4%;
+    padding: 24px 20px;
     > h1 {
       font-size: 20px;
     }

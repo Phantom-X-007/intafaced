@@ -73,6 +73,14 @@ module.exports = {
         subAccountsUnavailable: "List unavailable",
         subAccountsEmpty: "No sub-accounts yet · parent only"
     },
+    invite: {
+        attribute: "Attribute referrer",
+        attributeLead: "Name the account that referred you. This records the referrer only. It does not pay anyone.",
+        attributeOk: "Referrer recorded.",
+        attributeFailed: "Could not record the referrer.",
+        referrer: "Referrer",
+        referrerId: "Referrer id"
+    },
     /**
      * The INTAFACED platform surfaces — every feature area of the Sovereign OS,
      * embedded in this shell rather than served as a second app.
