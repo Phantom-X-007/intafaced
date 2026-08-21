@@ -4,7 +4,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
 import { identityGroundingProof } from './identity-grounding-honesty.js';
 import type { SupportRouter } from './router.js';
-import { TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE, type TicketKbLoopSnapshot } from './ticket-kb-loop-observation.js';
+import { ticketKbLoopObservedInLiveCompose, type TicketKbLoopSnapshot } from './ticket-kb-loop-observation.js';
 
 export type SupportHttpAppDeps = {
   router: SupportRouter;
@@ -51,7 +51,7 @@ export async function createSupportHttpApp(deps: SupportHttpAppDeps): Promise<Fa
       identityGroundingRefuse: grounding.refuse,
       // Live compose observation is Class X. This process reports its own
       // last successful ticket+KB timestamps (zeros until first success).
-      ticketKbLoopObservedInLiveCompose: TICKET_KB_LOOP_OBSERVED_IN_LIVE_COMPOSE,
+      ticketKbLoopObservedInLiveCompose: ticketKbLoopObservedInLiveCompose(),
       lastTicketCreateAtMs: loop.lastTicketCreateAtMs,
       lastKbSearchAtMs: loop.lastKbSearchAtMs,
       lastKbGetAtMs: loop.lastKbGetAtMs,
