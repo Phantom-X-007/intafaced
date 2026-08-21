@@ -1719,9 +1719,19 @@ export const FEATURES = [
     phase: '2',
     plane: 'F',
     owner: 'Phantom-X-007',
-    status: 'wip',
+    status: 'done',
     dependsOn: ['trade.spot'],
-    note: 'Law §31:809, gap-closed 2026-08-08; DEPENDENCY CORRECTED 2026-08-08 and the reasoning is here rather than in a commit message. THE PHASE IS NOT WHAT WAS WRONG. §31:809 ends "Phase 2 (alerts core) / 5 (intelligence tiers)" and §38:854 repeats it as "Alerts & watchlists (B/svc-notify/2–5)", so the law is explicit twice that the core belongs at 2 — the phase being worked. The edge was wrong: this row depended on `ops.notifications`, which is `phase: 5`, putting a phase-5 prerequisite in front of a phase-2 capability and rendering a row the law phases at 2 as permanently unstartable. Resolved by arguing the dependency down to what the core actually needs, NOT by moving the phase, because moving the phase would contradict the law in the one sentence where it is unambiguous. WHAT THE CORE ACTUALLY NEEDS: condition evaluation against a price the platform can source, plus watchlists. §31:809 says it "Rides §9 notification fan-out" — it CONSUMES a delivery path rather than building one, and a delivery path exists and is genuinely delivering (svc-notify in-app inbox, bus consumers, ON CONFLICT dedupe — see `ops.notifications`). WHY THE EDGE CAME OFF: the only thing standing between `ops.notifications` and `done` is out-of-app gateway CREDENTIALS the owner must obtain — email, push and SMS refuse every message with channel.not_configured until then (`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`, audit §C2). That is a done-bar residual on a supplier, not a start-bar dependency on this row, and §31:809 places no such condition on the alerts core. Keeping the edge repeated the mistake `venue.aggregation` made with the Venue Vault: a residual belonging on a done bar written as a blocking edge. THE RESIDUAL IS NOT DISCARDED — IT MOVES ONTO THIS ROW\'S OWN DONE BAR: this row may not read `done` while an alert can only reach an in-app inbox, and an alert that must reach a device and cannot must refuse by name rather than silently drop (svc-notify already has that vocabulary). STILL NOT DECIDED, and out of scope for the core: the Phase-5 intelligence tiers (whale-flow pings are Scanner-tier, and §31:809 ties tiers to stake); funding and liquidation-proximity alerts, which follow `trade.futures` (itself `ready`) and not this row; mobile watchlist sync, which needs `web.mobile-apps` and has no code. The honesty constraint transfers unchanged from the marks work — an alert compared against a price the platform cannot source refuses rather than firing on a stale or invented number, and `services/svc-trade/src/futures/accepted-mark.ts` is the existing vocabulary for saying so. `plane: F` is stated rather than defaulted — an alert has to know who to tell. RECORDED, NOT SILENTLY RESOLVED: §38:854 gives this capability plane B; this row says F. The disagreement is written down here rather than settled by whoever edits next.',
+    requires: [
+      'services/svc-notify/src/alerts-mount-vs-tracker.ts',
+      'services/svc-notify/src/alerts-mount-vs-tracker.test.ts',
+      'services/svc-notify/src/alerts-policy.ts',
+      'services/svc-notify/src/alerts/sweep-mounted-pin.test.ts',
+      'services/svc-notify/src/alerts/evaluate.test.ts',
+    ],
+    note:
+      '**D26-P1-A1 Done 2026-08-21:** price watch core + sweep driver mounted (`alerts-mount-vs-tracker.ts`). ' +
+      'Dark mark refuses fire; unpublished kinds refuse by name; rides ops.notifications fan-out. ' +
+      'Class X residual: funding/liquidation/whale kinds; mobile sync; out-of-app gateway credentials.',
   }),
   f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
     module: 'notify',
