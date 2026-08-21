@@ -10,8 +10,9 @@ async function ignoreProjectionError(run: () => Promise<unknown>): Promise<void>
 }
 
 export async function syncNavigatorSessionOpen(sql: postgres.Sql, sessionId: string, userId: string): Promise<void> {
-  await ignoreProjectionError(() =>
-    sql`
+  await ignoreProjectionError(
+    () =>
+      sql`
       INSERT INTO identity.navigator_session_projections (session_id, user_id, status)
       VALUES (${sessionId}, ${userId}, 'open')
       ON CONFLICT (session_id) DO UPDATE SET
@@ -23,8 +24,9 @@ export async function syncNavigatorSessionOpen(sql: postgres.Sql, sessionId: str
 }
 
 export async function syncNavigatorSessionClosed(sql: postgres.Sql, sessionId: string): Promise<void> {
-  await ignoreProjectionError(() =>
-    sql`
+  await ignoreProjectionError(
+    () =>
+      sql`
       UPDATE identity.navigator_session_projections
       SET status = 'closed', published_at = now()
       WHERE session_id = ${sessionId}
@@ -33,8 +35,9 @@ export async function syncNavigatorSessionClosed(sql: postgres.Sql, sessionId: s
 }
 
 export async function syncNavigatorSessionsClosedForUser(sql: postgres.Sql, userId: string): Promise<void> {
-  await ignoreProjectionError(() =>
-    sql`
+  await ignoreProjectionError(
+    () =>
+      sql`
       UPDATE identity.navigator_session_projections
       SET status = 'closed', published_at = now()
       WHERE user_id = ${userId} AND status = 'open'

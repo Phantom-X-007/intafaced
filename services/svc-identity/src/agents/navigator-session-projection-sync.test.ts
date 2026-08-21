@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { syncNavigatorSessionClosed, syncNavigatorSessionOpen, syncNavigatorSessionsClosedForUser } from './navigator-session-projection-sync.js';
+import {
+  syncNavigatorSessionClosed,
+  syncNavigatorSessionOpen,
+  syncNavigatorSessionsClosedForUser,
+} from './navigator-session-projection-sync.js';
 
 describe('navigator session projection sync', () => {
   it('exports sync helpers without throwing when sql rejects', async () => {
