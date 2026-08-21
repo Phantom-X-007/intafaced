@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { buildExecutionVenueAccountMaps } from './venue-account-adapters.js';
 import { buildExecutionVenueTradeMaps, parseExecutionVenueIds } from './venue-adapters.js';
+import { buildTradeBookSnapshotMap, TRADE_BOOK_SNAPSHOT_VENUE_ID } from './trade-book-snapshot.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -27,6 +28,7 @@ const registry = new SealedHouseTenantRegistry();
 const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
 const venueTradeMaps = buildExecutionVenueTradeMaps(executionVenueIds);
 const venueAccountMaps = buildExecutionVenueAccountMaps(executionVenueIds);
+const snapshotByVenue = buildTradeBookSnapshotMap(env.TRADE_URL);
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
@@ -36,6 +38,11 @@ const appRouter = createExecutionRouter(
   venueAccountMaps.balancesByVenue,
   venueAccountMaps.positionsByVenue,
   venueAccountMaps.railsByVenue,
+  {},
+  {},
+  {},
+  {},
+  snapshotByVenue,
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
@@ -52,6 +59,7 @@ app.get('/ready', async () => ({
   internalVenue: 'blocked',
   externalVenueTrade: venueTradeMaps.wiredVenueIds,
   externalVenueAccount: venueAccountMaps.wiredVenueIds,
+  tradeBookSnapshotVenue: env.TRADE_URL ? TRADE_BOOK_SNAPSHOT_VENUE_ID : null,
 }));
 
 await app.register(fastifyTRPCPlugin, {
