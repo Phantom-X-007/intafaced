@@ -32,6 +32,13 @@ export {
   type CapturePolicySummary,
 } from './capture-policy.js';
 export {
+  describeDataLakeRetention,
+  retentionPersistenceGate,
+  type DataLakeRetentionGate,
+  type DataLakeRetentionRefuseReason,
+  type DataLakeRetentionSummary,
+} from './retention-policy.js';
+export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
   bookObservationFromLakeRecord,
