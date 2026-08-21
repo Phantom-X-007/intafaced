@@ -34,6 +34,7 @@ import { supportAgentGuardrail } from './support-agent/guardrail.js';
 import { buildLeaderStats } from './copy-intel/stats.js';
 import { presentLeaderDirectory, sortDirectoryByLeaderId } from './copy-intel/directory.js';
 import { runCopyIntelStatsSession } from './copy-intel/session-run.js';
+import { describeNavigatorPolicy } from './navigator/policy.js';
 import { describeCopyIntelPolicy } from './copy-intel/policy.js';
 import { watchApprovalFixtures } from './merchant/watch.js';
 import { runMerchantWatchSession } from './merchant/session-run.js';
@@ -1260,6 +1261,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * Spec: docs/ops/trk/agents.navigator.md Stage 2.
      */
     navigator: router({
+      policy: publicProcedure.query(() => describeNavigatorPolicy()),
+
       grounded: scopedProcedure('agents:read', { module: 'agents' })
         .input(z.object({ plane: z.enum(['live', 'dark']) }))
         .output(
