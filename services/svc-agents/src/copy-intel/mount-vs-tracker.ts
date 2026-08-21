@@ -48,9 +48,7 @@ export function isDeclaredHonestGap(id: string): id is HonestGapId {
  * stay refused. Flipping the tracker to `done` while the live plane is still
  * sealed is forbidden (TRK pack + TRACKER row).
  */
-export function trackerDoneForbiddenWhileLiveRefuse(
-  liveLeaderPlaneOpen: boolean = liveTradeCopyLeaderPlaneOpen(),
-): boolean {
+export function trackerDoneForbiddenWhileLiveRefuse(liveLeaderPlaneOpen: boolean = liveTradeCopyLeaderPlaneOpen()): boolean {
   return !liveLeaderPlaneOpen;
 }
 
