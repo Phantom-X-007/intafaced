@@ -73,6 +73,12 @@ export class TokenError extends Error {
       | 'token.buyback_window_invalid'
       | 'token.buyback_run_conflict'
       | 'token.buyback_revenue_invalid'
+      /**
+       * Operator-typed `tokensBought` never moved on the ledger. No existing
+       * recipe books a market-buy into the rewards engine; settling would
+       * write a DB-only buy (and a fee-funded burn is not a buy).
+       */
+      | 'token.buyback_tokens_unmoved'
       | 'token.params_missing'
       | 'token.params_invalid'
       | 'token.proposal_not_found'
@@ -1025,7 +1031,7 @@ export class TokenService {
   // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
 
   /**
-   * Record an operator-asserted burn.
+   * Record an operator-asserted buyback — or refuse when the book cannot.
    *
    * NOTHING IS BOUGHT BACK HERE, and the method name is the §4.3 vocabulary
    * rather than a description of what runs. §13 socket `token.buyback`.
@@ -1034,29 +1040,35 @@ export class TokenService {
    *   this service or any other, so the platform acquires no IFC and creates no
    *   buy pressure. Pricing and execution are svc-trade's job and svc-trade
    *   cannot yet do it.
-   * - The only ledger movement is the burn leg, debited from the rewards
-   *   engine — value that is already ours. `toRewards` is not a second credit;
-   *   it is the remainder, which never moves.
+   * - Existing recipes cannot book that purchase: `burn` only moves `toBurn`
+   *   *out* of the rewards engine (fee-funded value already ours); `mintEmission`
+   *   would print supply; `sweepFeesToRewards` drains module fees already used
+   *   by yield. `toRewards` is the remainder of the split, not a second credit.
+   * - Settling without those legs would write `tokensBought` / `toRewards` as
+   *   DB-only figures while the engine dropped by `toBurn` (or, with a zero
+   *   burn split, moved nothing). A settled row must mean the ledger moved
+   *   `tokensBought` (buy into engine + burn `toBurn`). Until a buyback recipe
+   *   exists, a new or pending run is refused `token.buyback_tokens_unmoved`
+   *   and the claim is released so the window is not held hostage.
    * - There is no caller: no cron, no bus subscriber, no admin form. An
    *   operator with admin:treasury + MFA invokes the mutation or it never runs.
    * - `buybackBudget()` (economics/buyback.ts) is what would size the spend from
    *   revenue. It is called from nowhere but its own tests.
    *
-   * ORDERING (0002, and the reason this method was rewritten): the window is
-   * CLAIMED before the burn posts — the same claim -> post -> activate order
-   * `stake` uses above, for the same reason. Previously the burn posted first
-   * and the row followed `ON CONFLICT (id) DO NOTHING`, while the guard was a
-   * unique index on the WINDOW. A new run id over a spent window therefore
-   * burned for real and then failed on an index its conflict clause did not
-   * name: tokens irreversibly gone, no row, no event, and an opaque 500.
+   * ORDERING (0002): the window is still CLAIMED first so overlap / run-id
+   * conflict refuse by name before anything would post. Previously the burn
+   * posted first and the row followed `ON CONFLICT (id) DO NOTHING`, while the
+   * guard was a unique index on the WINDOW. A new run id over a spent window
+   * therefore burned for real and then failed on an index its conflict clause
+   * did not name: tokens irreversibly gone, no row, no event, and an opaque 500.
    *
    * Windows are half-open `[from, to)` and may not overlap (0002). This method
    * decides no economic number — not a window length, not a cadence, not a
    * rate. Those are the owner's (see the token-economics ADR).
    *
-   * Turning this into the §4.3 flywheel needs a real market-buy against the
-   * internal book plus a schedule — a product decision and an svc-trade
-   * dependency, not a rename.
+   * Turning this into the §4.3 flywheel needs a real market-buy recipe against
+   * the internal book plus a schedule — a product decision and an svc-trade
+   * dependency, not a rename, and not a fee-funded burn wearing the name.
    */
   async recordBuyback(input: {
     runId: string;
@@ -1123,27 +1135,24 @@ export class TokenService {
       return { runId: claimed.id, burned: claimed.burned, toRewards: claimed.toRewards };
     }
 
-    // ── POST ─────────────────────────────────────────────────────────────────
-    // The window is ours from here. A crash between claim and settle leaves a
-    // `pending` row, which is recoverable — the ledger post is idempotent on
-    // `runId`, so the retry re-posts as a no-op and settles.
-    if (toBurn > 0n) {
-      try {
-        await this.ledger.post(
-          recipes.burn({ runId: input.runId, assetId: this.assetId, amount: toBurn, from: rewardsEngine(this.assetId) }),
-        );
-      } catch (err) {
-        // The ledger refused, so no value moved and this run never happened.
-        // Release the claim or the window would be held hostage by a run that
-        // burned nothing — same guarantee `stake` gives its pending row.
-        await this.sql`
-          DELETE FROM token.buyback_runs WHERE id = ${claimed.id} AND status = 'pending'
-        `;
-        throw err;
-      }
+    // ── BOOK OR REFUSE ───────────────────────────────────────────────────────
+    // A settled buyback must move `tokensBought` on the ledger: buy that many
+    // into the rewards engine, then burn `toBurn` from it, so
+    // engineΔ + burnΔ === tokensBought. Today no existing recipe books the
+    // buy-in (`burn` only moves `toBurn` out of fee-funded engine balance;
+    // `mintEmission` would print supply; `sweepFeesToRewards` drains yield's
+    // fees). Do not post a fee-funded burn. Measure, then refuse unless the
+    // book actually moved the operator figure. A future buyback recipe posts
+    // between the two snapshots; this check is what lets that run settle.
+    const engineBefore = (await this.ledger.balance(rewardsEngine(this.assetId))).amount;
+    const burnBefore = (await this.ledger.balance(burnAccount(this.assetId))).amount;
+
+    const engineDelta = (await this.ledger.balance(rewardsEngine(this.assetId))).amount - engineBefore;
+    const burnDelta = (await this.ledger.balance(burnAccount(this.assetId))).amount - burnBefore;
+    if (engineDelta + burnDelta !== input.tokensBought) {
+      return this.refuseUnbookedBuyback(claimed.id, input.runId, input.tokensBought);
     }
 
-    // ── SETTLE ───────────────────────────────────────────────────────────────
     await this.sql`
       UPDATE token.buyback_runs
          SET status = 'settled', executed_at = now()
@@ -1157,13 +1166,30 @@ export class TokenService {
         tokensBought: formatAmount(input.tokensBought),
         tokensBurned: formatAmount(toBurn),
         tokensToRewards: formatAmount(toRewards),
-        // Dates do not survive JSON — the event contract carries ISO strings.
         revenueWindow: { from: iso(input.revenueWindow.from), to: iso(input.revenueWindow.to) },
       },
       { idempotencyKey: `token.buyback:${input.runId}` },
     );
 
     return { runId: input.runId, burned: toBurn, toRewards };
+  }
+
+  /**
+   * Pending claim, no market-buy on the book. Release the window unless an
+   * irreversible burn for this runId already landed (crash between the old
+   * fee-funded post and settle) — deleting that claim would hide the burn.
+   */
+  private async refuseUnbookedBuyback(claimedId: string, runId: string, tokensBought: Amount): Promise<never> {
+    const burnTx = await this.ledger.getTxByKey(`token.burn:${this.assetId}:${runId}`);
+    if (!burnTx) {
+      await this.sql`
+        DELETE FROM token.buyback_runs WHERE id = ${claimedId} AND status = 'pending'
+      `;
+    }
+    throw new TokenError(
+      `Buyback run ${runId} asserted tokensBought=${formatAmount(tokensBought)} ${this.assetId} but that figure did not move on the ledger — no recipe books a market-buy into the rewards engine. Refusing to settle a DB-only buyback. A burn from the engine would spend fee revenue, not purchased tokens`,
+      'token.buyback_tokens_unmoved',
+    );
   }
 
   /**

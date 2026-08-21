@@ -121,6 +121,31 @@ if (!available) {
     const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC').reduce((acc, b) => acc + b.amount, 0n);
     return formatAmount(total);
   };
+  const engineIfC = async () => (await ledger.balance(rewardsEngine('IFC'))).amount;
+  const burnIfC = async () => (await ledger.balance(burnAccount('IFC'))).amount;
+
+  async function seedBuybackRun(input: {
+    runId: string;
+    window: { from: Date; to: Date };
+    tokensBought?: string;
+    toBurn?: string;
+    toRewards?: string;
+    status?: 'pending' | 'settled';
+  }) {
+    const tokensBought = input.tokensBought ?? '1000';
+    const toBurn = input.toBurn ?? '600';
+    const toRewards = input.toRewards ?? '400';
+    await sql`
+      INSERT INTO token.buyback_runs (
+        id, revenue_window_from, revenue_window_to, revenue_total,
+        tokens_bought, tokens_burned, tokens_to_rewards, status, executed_at
+      ) VALUES (
+        ${input.runId}, ${input.window.from}, ${input.window.to}, ${sql.json({ IFC: '1000' } as never)},
+        ${tokensBought}::numeric, ${toBurn}::numeric, ${toRewards}::numeric,
+        ${input.status ?? 'settled'}, now()
+      )
+    `;
+  }
 
   beforeEach(async () => {
     await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts, token.yield_windows RESTART IDENTITY CASCADE`;
@@ -871,30 +896,74 @@ if (!available) {
   // ── Buyback & burn ────────────────────────────────────────────────────────
 
   describe('buyback and burn', () => {
-    it('burns its share and leaves the remainder in the rewards engine', async () => {
+    it('settled recordBuyback(tokensBought=1000) moves that many on the ledger (buy into engine + burn toBurn)', async () => {
       await accrueFees('trade', '1000');
-      await token.distributeRevenue({ windowId: 'w-bb', sources: [{ module: 'trade', amount: amt('1000') }] });
+      await token.distributeRevenue({ windowId: 'w-bb-delta', sources: [{ module: 'trade', amount: amt('1000') }] });
 
-      const result = await token.recordBuyback({
+      const engineBefore = await engineIfC();
+      const burnBefore = await burnIfC();
+      const input = {
         runId: crypto.randomUUID(),
         revenueWindow: { from: new Date('2026-07-01'), to: new Date('2026-07-07') },
         revenueTotal: { IFC: '1000' },
         tokensBought: amt('1000'),
-      });
+      };
 
-      expect(result.burned + result.toRewards).toBe(amt('1000'));
-      expect(formatAmount(await token.burnedSupply())).toBe(formatAmount(result.burned));
-      expect(ledger.totalsByAsset().IFC).toBe('0');
+      let settled: { runId: string; burned: bigint; toRewards: bigint } | undefined;
+      try {
+        settled = await token.recordBuyback(input);
+      } catch (err) {
+        // Refuse-closed is legal: no recipe books the buy-in, so we must not
+        // settle a DB-only tokensBought (today the engine only dropped by toBurn).
+        expect(err).toMatchObject({ name: 'TokenError', code: 'token.buyback_tokens_unmoved' });
+        expect(await engineIfC()).toBe(engineBefore);
+        expect(await burnIfC()).toBe(burnBefore);
+        expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+        expect(bus.emitted('buybackExecuted')).toHaveLength(0);
+        expect(ledger.reconcile()).toEqual({ ok: true });
+        return;
+      }
+
+      const engineDelta = (await engineIfC()) - engineBefore;
+      const burnDelta = (await burnIfC()) - burnBefore;
+      // Buy into engine (+tokensBought) plus burn toBurn (−toBurn engine, +toBurn burn)
+      // nets engineΔ + burnΔ === tokensBought. Today's path only burns toBurn from
+      // the engine, so the sum is 0 and this fails until the book matches the row.
+      expect(engineDelta + burnDelta).toBe(input.tokensBought);
+      expect(settled.burned + settled.toRewards).toBe(input.tokensBought);
     });
 
-    it('records the run and is idempotent on the run id', async () => {
+    it('refuses to settle a positive tokensBought when the burn split is zero — zero posts is not a buy', async () => {
+      const zeroBurn = new TokenService(sql, ledger, bus, {
+        ...options,
+        buyback: { buybackBps: 5_000, burnSplitBps: 0 },
+      });
       await accrueFees('trade', '1000');
-      await token.distributeRevenue({ windowId: 'w-bb2', sources: [{ module: 'trade', amount: amt('1000') }] });
+      await zeroBurn.distributeRevenue({ windowId: 'w-bb-zero-split', sources: [{ module: 'trade', amount: amt('1000') }] });
 
+      const engineBefore = await engineIfC();
+      await expect(
+        zeroBurn.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: { from: new Date('2026-07-01'), to: new Date('2026-07-07') },
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ name: 'TokenError', code: 'token.buyback_tokens_unmoved' });
+
+      expect(await engineIfC()).toBe(engineBefore);
+      expect(await burnIfC()).toBe(0n);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+    });
+
+    it('retries a settled run without re-posting', async () => {
       const runId = crypto.randomUUID();
+      const window = { from: new Date('2026-08-01'), to: new Date('2026-08-07') };
+      await seedBuybackRun({ runId, window, tokensBought: '500', toBurn: '300', toRewards: '200' });
+
       const input = {
         runId,
-        revenueWindow: { from: new Date('2026-08-01'), to: new Date('2026-08-07') },
+        revenueWindow: window,
         revenueTotal: { IFC: '1000' },
         tokensBought: amt('500'),
       };
@@ -905,29 +974,27 @@ if (!available) {
 
       const rows = await sql`SELECT id FROM token.buyback_runs WHERE id = ${runId}`;
       expect(rows).toHaveLength(1);
-      // The burn posted exactly once, so the burn balance did not double.
-      expect(formatAmount(await token.burnedSupply())).toBe(formatAmount(burnedAfterFirst));
-      expect(formatAmount(burnedAfterFirst)).not.toBe('0');
-      // A retry reports what the run actually burned, read back from the row.
+      expect(await token.burnedSupply()).toBe(burnedAfterFirst);
       expect(second).toEqual(first);
+      expect(first).toEqual({ runId, burned: amt('300'), toRewards: amt('200') });
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
-    it('emits buybackExecuted with a split that sums to what was bought', async () => {
+    it('does not emit buybackExecuted when the buy never moved on the ledger', async () => {
       await accrueFees('trade', '777');
       await token.distributeRevenue({ windowId: 'w-bb3', sources: [{ module: 'trade', amount: amt('777') }] });
 
-      await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: { from: new Date('2026-09-01'), to: new Date('2026-09-07') },
-        revenueTotal: { IFC: '777' },
-        tokensBought: amt('777'),
-      });
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: { from: new Date('2026-09-01'), to: new Date('2026-09-07') },
+          revenueTotal: { IFC: '777' },
+          tokensBought: amt('777'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
 
-      const emitted = bus.emitted('buybackExecuted')[0]!;
-      const burned = amt(emitted.payload.tokensBurned);
-      const toRewards = amt(emitted.payload.tokensToRewards);
-      expect(burned + toRewards).toBe(amt('777'));
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
     });
 
     it('refuses tokensBought=0 before claiming the window — zero must not spend the interval', async () => {
@@ -942,21 +1009,23 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'token.buyback_revenue_invalid' });
 
-      // No claim row — a later real burn for the same window must still be free.
+      // No claim row — a later real buy for the same window must still be free.
       const rows = await sql`SELECT id FROM token.buyback_runs`;
       expect(rows).toHaveLength(0);
       expect(await token.burnedSupply()).toBe(0n);
 
       await accrueFees('trade', '500');
       await token.distributeRevenue({ windowId: 'w-bb-zero-then-real', sources: [{ module: 'trade', amount: amt('500') }] });
-      const real = await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: window,
-        revenueTotal: { IFC: '500' },
-        tokensBought: amt('500'),
-      });
-      expect(real.burned + real.toRewards).toBe(amt('500'));
-      expect(await token.burnedSupply()).toBe(real.burned);
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: window,
+          revenueTotal: { IFC: '500' },
+          tokensBought: amt('500'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(await token.burnedSupply()).toBe(0n);
     });
   });
 
@@ -982,17 +1051,9 @@ if (!available) {
 
     it('refuses a NEW run id over an identical window and burns nothing the second time', async () => {
       await fundRewards('4000', 'w-claim-identical');
-
-      const first = await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: JULY,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
-
+      const heldId = crypto.randomUUID();
+      await seedBuybackRun({ runId: heldId, window: JULY });
       const burnedAfterFirst = await token.burnedSupply();
-      expect(burnedAfterFirst).toBe(first.burned);
-      expect(burnedAfterFirst).toBeGreaterThan(0n);
 
       // A DIFFERENT run id over the SAME window. `ON CONFLICT (id)` never saw
       // this, which is precisely how the burn used to get out.
@@ -1006,19 +1067,9 @@ if (!available) {
       ).rejects.toMatchObject({ name: 'TokenError', code: 'token.buyback_window_overlap' });
 
       // THE POINT. Read the BURN ACCOUNT, not the exception.
-      //
-      // Measured against the pre-fix code on this exact schema: the burn account
-      // went 600 -> 1200 while `buyback_runs` kept exactly ONE row and the bus
-      // saw exactly ONE event — tokens irreversibly gone, with no row, no event
-      // and no named error to show for the second run. The figures are not
-      // pinned here because the split rate is an undecided economic parameter;
-      // the DOUBLING is the invariant, and it is what these two assertions say.
       expect(await token.burnedSupply()).toBe(burnedAfterFirst);
-      expect(await token.burnedSupply()).not.toBe(burnedAfterFirst * 2n);
-
-      // The refusal is complete: no orphan row, and no event claiming a burn.
       expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
-      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -1061,13 +1112,8 @@ if (!available) {
     // The raw PostgresError that used to escape here carried code '23505'.
     it('refuses by NAME, never as a raw Postgres error', async () => {
       await fundRewards('4000', 'w-claim-named');
-
-      await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: JULY,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
+      const heldId = crypto.randomUUID();
+      await seedBuybackRun({ runId: heldId, window: JULY });
 
       const err = await token
         .recordBuyback({
@@ -1087,8 +1133,7 @@ if (!available) {
       expect((err as { code: string }).code).not.toBe('23505');
       expect((err as { code: string }).code).not.toBe('23P01');
       // And it names the run that actually holds the window, so an operator can act.
-      const [held] = await sql<Array<{ id: string }>>`SELECT id FROM token.buyback_runs`;
-      expect((err as Error).message).toContain(held!.id);
+      expect((err as Error).message).toContain(heldId);
     });
 
     // The unique index matched only exact equality of BOTH timestamps, so every
@@ -1102,13 +1147,7 @@ if (!available) {
       ['one second past the start', { from: new Date('2026-07-01T00:00:01Z'), to: new Date('2026-08-01T00:00:00Z') }],
     ])('refuses a window %s an already-claimed one, and burns nothing', async (_label, overlapping) => {
       await fundRewards('4000', `w-claim-${_label.replace(/\s+/g, '-')}`);
-
-      await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: JULY,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
+      await seedBuybackRun({ runId: crypto.randomUUID(), window: JULY });
       const burnedAfterFirst = await token.burnedSupply();
 
       await expect(
@@ -1133,29 +1172,25 @@ if (!available) {
     it('allows contiguous half-open windows — [a, b) then [b, c)', async () => {
       await fundRewards('4000', 'w-claim-contiguous');
 
-      const july = await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: { from: new Date('2026-07-01T00:00:00Z'), to: new Date('2026-08-01T00:00:00Z') },
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
-
+      const julyWindow = { from: new Date('2026-07-01T00:00:00Z'), to: new Date('2026-08-01T00:00:00Z') };
+      const augustWindow = { from: new Date('2026-08-01T00:00:00Z'), to: new Date('2026-09-01T00:00:00Z') };
+      await seedBuybackRun({ runId: crypto.randomUUID(), window: julyWindow });
       // Starts at exactly the instant July ended. Not an overlap.
-      const august = await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: { from: new Date('2026-08-01T00:00:00Z'), to: new Date('2026-09-01T00:00:00Z') },
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
+      await seedBuybackRun({ runId: crypto.randomUUID(), window: augustWindow });
 
       expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(2);
-      expect(await token.burnedSupply()).toBe(july.burned + august.burned);
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: augustWindow,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_window_overlap' });
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
-    it('leaves no claim behind when the ledger refuses the burn, so the window stays available', async () => {
-      // Rewards engine is empty — the burn cannot fund, and a house account may
-      // not go negative.
+    it('leaves no claim behind when tokensBought cannot move, so the window stays available', async () => {
       const runId = crypto.randomUUID();
       await expect(
         token.recordBuyback({
@@ -1164,53 +1199,68 @@ if (!available) {
           revenueTotal: { IFC: '1000' },
           tokensBought: amt('1000'),
         }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
 
-      // The claim was released: a run that burned nothing must not hold a
+      // The claim was released: a run that booked nothing must not hold a
       // window hostage forever.
       expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
       expect(formatAmount(await token.burnedSupply())).toBe('0');
 
-      // And the window is genuinely free again.
       await fundRewards('2000', 'w-claim-released');
-      const retry = await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: JULY,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
-      expect(retry.burned).toBeGreaterThan(0n);
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
-    it('recovers a claim that crashed between claim and burn', async () => {
+    it('releases a pending crash that never posted, rather than completing a fee-funded burn', async () => {
       await fundRewards('2000', 'w-claim-crash');
 
       // Exactly the state a crash after CLAIM but before POST leaves behind.
       const runId = crypto.randomUUID();
-      await sql`
-        INSERT INTO token.buyback_runs (
-          id, revenue_window_from, revenue_window_to, revenue_total,
-          tokens_bought, tokens_burned, tokens_to_rewards, status
-        ) VALUES (
-          ${runId}, ${JULY.from}, ${JULY.to}, ${sql.json({ IFC: '1000' } as never)},
-          1000::numeric, 600::numeric, 400::numeric, 'pending'
-        )
-      `;
+      await seedBuybackRun({ runId, window: JULY, status: 'pending' });
       expect(formatAmount(await token.burnedSupply())).toBe('0');
 
-      const result = await token.recordBuyback({
-        runId,
-        revenueWindow: JULY,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
+      await expect(
+        token.recordBuyback({
+          runId,
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
 
-      // The retry posted the burn that never landed, and settled the row.
-      expect(await token.burnedSupply()).toBe(result.burned);
-      expect(result.burned).toBeGreaterThan(0n);
+      expect(await token.burnedSupply()).toBe(0n);
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${runId}`).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('keeps a pending claim if the old fee-funded burn already landed — does not hide it, does not settle', async () => {
+      await fundRewards('2000', 'w-claim-orphan-burn');
+      const runId = crypto.randomUUID();
+      await seedBuybackRun({ runId, window: JULY, status: 'pending' });
+      await ledger.post(recipes.burn({ runId, assetId: 'IFC', amount: amt('600'), from: rewardsEngine('IFC') }));
+      const burnedAfterPost = await token.burnedSupply();
+      expect(burnedAfterPost).toBe(amt('600'));
+
+      await expect(
+        token.recordBuyback({
+          runId,
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
+
+      expect(await token.burnedSupply()).toBe(burnedAfterPost);
       const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.buyback_runs WHERE id = ${runId}`;
-      expect(rows[0]?.status).toBe('settled');
+      expect(rows[0]?.status).toBe('pending');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -1218,7 +1268,7 @@ if (!available) {
       await fundRewards('4000', 'w-claim-mismatch');
 
       const runId = crypto.randomUUID();
-      await token.recordBuyback({ runId, revenueWindow: JULY, revenueTotal: { IFC: '1000' }, tokensBought: amt('1000') });
+      await seedBuybackRun({ runId, window: JULY });
       const burnedAfterFirst = await token.burnedSupply();
 
       // Same run id, different window. Never post the caller's figures against
@@ -1293,11 +1343,13 @@ if (!available) {
       expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
     });
 
-    it('stores one canonical spelling of each amount', async () => {
-      await attempt({ IFC: '1000.000', USDT: '0.50', BTC: '0' });
-
-      const rows = await sql<Array<{ revenue_total: Record<string, string> }>>`SELECT revenue_total FROM token.buyback_runs`;
-      expect(rows[0]?.revenue_total).toEqual({ IFC: '1000', USDT: '0.5', BTC: '0' });
+    it('accepts one canonical spelling of each amount far enough to refuse unmoved, not revenue_invalid', async () => {
+      await expect(attempt({ IFC: '1000.000', USDT: '0.50', BTC: '0' })).rejects.toMatchObject({
+        name: 'TokenError',
+        code: 'token.buyback_tokens_unmoved',
+      });
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(formatAmount(await token.burnedSupply())).toBe('0');
     });
   });
 
@@ -1372,12 +1424,14 @@ if (!available) {
     it('traces recordBuyback as a money path, like every other money method', async () => {
       await accrueFees('trade', '2000');
       await token.distributeRevenue({ windowId: 'w-trace', sources: [{ module: 'trade', amount: amt('2000') }] });
-      await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: { from: new Date('2026-07-01T00:00:00Z'), to: new Date('2026-08-01T00:00:00Z') },
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
+      await expect(
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: { from: new Date('2026-07-01T00:00:00Z'), to: new Date('2026-08-01T00:00:00Z') },
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ).rejects.toMatchObject({ code: 'token.buyback_tokens_unmoved' });
 
       const buyback = spans.find((s) => s.name === 'token.recordBuyback');
       expect(buyback, `no token.recordBuyback span — saw ${spans.map((s) => s.name).join(', ')}`).toBeDefined();
@@ -1385,6 +1439,7 @@ if (!available) {
       expect(buyback!.attributes['intafaced.operation']).toBe('buyback');
       // Amounts go on spans as decimal STRINGS, never numbers (tracing.ts).
       expect(typeof buyback!.attributes['intafaced.amount']).toBe('string');
+      expect(buyback!.attributes['intafaced.error_code']).toBe('token.buyback_tokens_unmoved');
     });
 
     it('keeps the refusal on the span rather than losing it', async () => {
@@ -1392,12 +1447,7 @@ if (!available) {
 
       await accrueFees('trade', '4000');
       await token.distributeRevenue({ windowId: 'w-trace-2', sources: [{ module: 'trade', amount: amt('4000') }] });
-      await token.recordBuyback({
-        runId: crypto.randomUUID(),
-        revenueWindow: window,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: amt('1000'),
-      });
+      await seedBuybackRun({ runId: crypto.randomUUID(), window });
 
       await expect(
         token.recordBuyback({
@@ -1408,8 +1458,8 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'token.buyback_window_overlap' });
 
-      // Two attempts, two spans — the refused one is not invisible.
-      expect(spans.filter((s) => s.name === 'token.recordBuyback')).toHaveLength(2);
+      expect(spans.filter((s) => s.name === 'token.recordBuyback')).toHaveLength(1);
+      expect(spans[0]!.attributes['intafaced.error_code']).toBe('token.buyback_window_overlap');
     });
   });
 

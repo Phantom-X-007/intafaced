@@ -65,10 +65,11 @@ function assertBps(bps: number, label: string): void {
  * NOT CALLED BY ANYTHING. The only references in the repo are this definition and
  * `economics.test.ts` — it is tested dead code, and the tests passing says nothing about
  * the platform. Nothing sizes a buyback from revenue because nothing executes a buyback:
- * `recordBuyback` takes an operator-typed `tokensBought` instead. Kept rather than deleted
- * because it is the correct rounding for the spend when the market-buy is built, and
- * deleting it would quietly drop the one piece of that path that is already right.
- * §13 socket `token.buyback`.
+ * `recordBuyback` takes an operator-typed `tokensBought` instead, and refuses to settle
+ * that figure until a market-buy recipe books it (`token.buyback_tokens_unmoved`).
+ * Kept rather than deleted because it is the correct rounding for the spend when the
+ * market-buy is built, and deleting it would quietly drop the one piece of that path
+ * that is already right. §13 socket `token.buyback`.
  */
 export function buybackBudget(revenue: Amount, params: BuybackParams = DEFAULT_BUYBACK_PARAMS): Amount {
   assertBps(params.buybackBps, 'buybackBps');
