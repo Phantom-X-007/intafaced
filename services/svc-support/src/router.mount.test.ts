@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createSupportRouter } from './router.js';
+import { IDENTITY_GROUNDING_UNWIRED } from './identity-grounding-honesty.js';
+import { QUEUE_TIMING_KIND } from './sla-honesty.js';
 import { SupportError, type SupportService } from './support-service.js';
 import { userCopy } from './user-copy.js';
 
@@ -148,6 +150,21 @@ describe('svc-support mount', () => {
     });
     expect(ticket.subject).toBe('S');
     expect(support.createTicket).toHaveBeenCalled();
+  });
+
+  it('deskPolicy is public and reports split, queue honesty, and identity grounding', async () => {
+    const support = stubSupport();
+    const wired = await createSupportRouter(support, undefined, 'an-internal-service-secret-long-enough')
+      .createCaller(anonymous())
+      .deskPolicy();
+    expect(wired.split.deskMountain).toBe('ops.support');
+    expect(wired.split.agentAssist).toBe('agents.support');
+    expect(wired.queue.timingKind).toBe(QUEUE_TIMING_KIND);
+    expect(wired.queue.sla).toBe(false);
+    expect(wired.identityGrounding.wired).toBe(true);
+
+    const unwired = await createSupportRouter(support).createCaller(anonymous()).deskPolicy();
+    expect(unwired.identityGrounding).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
   });
 
   it('listKb is public and returns Stage-2 spine from service', async () => {

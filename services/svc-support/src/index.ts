@@ -51,7 +51,7 @@ const store = new PostgresSupportStore(sql);
 const accounts = createAccountStateClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const support = new SupportService(store, accounts);
 const loop = createTicketKbLoopObserver();
-const appRouter = createSupportRouter(support, loop);
+const appRouter = createSupportRouter(support, loop, env.INTERNAL_SERVICE_SECRET);
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,

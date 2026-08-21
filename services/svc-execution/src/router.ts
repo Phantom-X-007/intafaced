@@ -15,6 +15,7 @@ import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
+import { describeExecutionSpine } from './oms-spine.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
@@ -508,6 +509,8 @@ export function createExecutionRouter(
             });
           }),
       }),
+
+      spine: scopedProcedure('admin:read', { module: 'execution' }).query(() => describeExecutionSpine()),
 
       arb: router({
         scan: scopedProcedure('admin:write', { module: 'execution' })
