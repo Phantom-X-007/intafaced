@@ -122,6 +122,28 @@ describe('event catalog', () => {
     expect(() => validatePayload('bankMarginCalled', { ...base, sequence: 0 })).toThrow(EventValidationError);
   });
 
+  it('refuses an unexplained freeze — frozen with a null reason is unactionable', () => {
+    expect(() =>
+      validatePayload('ledgerFreezeUpdated', {
+        frozen: true,
+        reason: null,
+        actor: 'reconciliation',
+        changedAt: new Date().toISOString(),
+      }),
+    ).toThrow(EventValidationError);
+  });
+
+  it('accepts a thaw with a null reason', () => {
+    expect(() =>
+      validatePayload('ledgerFreezeUpdated', {
+        frozen: false,
+        reason: null,
+        actor: 'reconciliation',
+        changedAt: new Date().toISOString(),
+      }),
+    ).not.toThrow();
+  });
+
   it('accepts 18-decimal precision', () => {
     const payload = validatePayload('stakeCreated', {
       stakeId: crypto.randomUUID(),

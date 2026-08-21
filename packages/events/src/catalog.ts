@@ -163,19 +163,24 @@ export const ledgerFreezeUpdated = defineEvent(
   'freeze',
   'updated',
   1,
-  z.object({
-    frozen: z.boolean(),
-    /** Null only when `frozen` is false — an unexplained freeze is unactionable. */
-    reason: z.string().min(1).nullable(),
-    /**
-     * WHO. An operator's principal id, `reconciliation` for the automatic
-     * self-freeze, or `env:LEDGER_POSTING_ENABLED` for a boot-time freeze.
-     * Never anonymous: the most consequential switch in the OS must always
-     * name the thing that threw it.
-     */
-    actor: z.string().min(1),
-    changedAt: z.string().datetime({ offset: true }),
-  }),
+  z
+    .object({
+      frozen: z.boolean(),
+      /** Null only when `frozen` is false — an unexplained freeze is unactionable. */
+      reason: z.string().min(1).nullable(),
+      /**
+       * WHO. An operator's principal id, `reconciliation` for the automatic
+       * self-freeze, or `env:LEDGER_POSTING_ENABLED` for a boot-time freeze.
+       * Never anonymous: the most consequential switch in the OS must always
+       * name the thing that threw it.
+       */
+      actor: z.string().min(1),
+      changedAt: z.string().datetime({ offset: true }),
+    })
+    .refine((p) => !p.frozen || p.reason !== null, {
+      message: 'unexplained freeze is unactionable',
+      path: ['reason'],
+    }),
   'Ledger posting was frozen or thawed. Durable state, not a process signal — every replica reads the same row (§4.2).',
 );
 
