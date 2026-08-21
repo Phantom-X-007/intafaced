@@ -65,6 +65,7 @@ import {
 } from './certs/perk-plane.js';
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 import { seasonWindowAt } from './tournaments/season-calendar.js';
+import { describeTournamentPolicy } from './tournaments/tournament-policy.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -1405,6 +1406,8 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
           return seasonWindowAt(season, input.at ?? new Date());
         }),
       ),
+
+    tournamentPolicy: publicProcedure.query(() => describeTournamentPolicy()),
 
     standings: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid() }))
