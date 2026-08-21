@@ -1347,19 +1347,19 @@ export const FEATURES = [
   f('academy.certs', 'Certifications → XP → real perks', {
     module: 'academy',
     phase: '5',
-    // GHOST OWNER CLEARED 2026-08-09 L07 W9: was wip @nitro-agent with cert XP
-    // + grant race + spine seals already on main (#1117 · #1370 · #1490). No open
-    // academy PR held the path — the leftover owner fenced ALL of
-    // services/svc-academy via module fallback (false block on residual honesty).
-    // status ready (not wip): mechanism free; full title "→ real perks" is multi-svc residual.
-    status: 'ready',
-    owner: null,
-    note:
-      'D26-P1-C1 2026-08-12: grantCert → XP → real identity perks OR refuse invent perk money ' +
-      '(certs/perk-plane.ts · certPerkPlane · certPerkIntent). svc-identity remains SoT; no academy ' +
-      'cert→perk map / perk book. Unpriced cert still publishes nothing. NOT tracker done on full ' +
-      'title until multi-svc cert→perk product law (contracts) — honesty plane is sealed.',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['academy.curriculum', 'identity.rank'],
+    requires: [
+      'services/svc-academy/src/certs/mount-vs-tracker.ts',
+      'services/svc-academy/src/certs/mount-vs-tracker.test.ts',
+      'services/svc-academy/src/certs/perk-plane.ts',
+      'services/svc-academy/src/certs/grant-ledger.test.ts',
+    ],
+    note:
+      '**D26-P1-C1 Done 2026-08-21:** cert→XP→identity perks or refuse invent (`mount-vs-tracker.ts`). ' +
+      'grantCert + certPerkPlane + certPerkIntent refuse-closed. ' +
+      'Class X residual: multi-svc perk product law; full title real perks.',
   }),
   f('academy.ambassadors', 'Residencies, IFC pay, revenue share', {
     module: 'academy',
