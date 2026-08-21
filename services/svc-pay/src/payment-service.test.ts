@@ -91,6 +91,19 @@ const SECRET = 'svc-pay-test-secret-at-least-32-characters';
 const MERCHANT_USER = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER = '22222222-2222-4222-8222-222222222222';
 
+/** Test-only operator-declared fractions — never baked into REFERENCE profiles. */
+function withDeclaredRates(profiles: readonly RailRoutingProfile[], rates: Readonly<Record<string, string>>): RailRoutingProfile[] {
+  return profiles.map((p) => {
+    const successRate = rates[p.railId];
+    return successRate === undefined ? { ...p } : { ...p, successRate };
+  });
+}
+
+const TEST_CHECKOUT_PROFILES = withDeclaredRates(REFERENCE_RAIL_ROUTING_PROFILES, {
+  'crypto-native': '0.90',
+  'card-sandbox': '0.88',
+});
+
 // Shared journalled probe — not a private catch-false that CI counts as pass.
 // #346 long since merged; the private-probe debt lifts with this one line.
 const available = await postgresAvailable(URL);
@@ -899,6 +912,7 @@ if (!available) {
       const racing = new PayService(sql, ledger, rails, {
         checkoutRiskBand: 'low',
         payoutDestinations: dests,
+        routingProfiles: TEST_CHECKOUT_PROFILES,
         afterSettlementMerchantLock: async () => {
           announceMerchantLock();
           await mayContinue;
@@ -2273,7 +2287,11 @@ if (!available) {
      */
     it('REFUSES to open a checkout on a sandbox rail under live-only, and writes nothing', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
-      const strict = new PayService(sql, ledger, rails, { valueMovement: 'live-only', checkoutRiskBand: 'low' });
+      const strict = new PayService(sql, ledger, rails, {
+        valueMovement: 'live-only',
+        checkoutRiskBand: 'low',
+        routingProfiles: TEST_CHECKOUT_PROFILES,
+      });
 
       await expect(strict.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_rail_not_live',
@@ -2287,7 +2305,11 @@ if (!available) {
 
     it('REFUSES hosted checkout when rails are unset — typed code, no ledger post', async () => {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
-      const unset = new PayService(sql, ledger, rails, { checkoutRails: [], checkoutRiskBand: 'low' });
+      const unset = new PayService(sql, ledger, rails, {
+        checkoutRails: [],
+        checkoutRiskBand: 'low',
+        routingProfiles: TEST_CHECKOUT_PROFILES,
+      });
 
       await expect(unset.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_rails_unset',
@@ -2302,7 +2324,7 @@ if (!available) {
       const { link } = await linked({ amount: '10', currency: 'USDT' });
       const noPsp = new PayService(sql, ledger, rails, {
         checkoutRails: [{ railId: 'card-acquirer', method: 'card' }],
-        routingProfiles: [{ railId: 'card-acquirer', methods: ['card'], countries: ['*'], riskBands: ['low'] }],
+        routingProfiles: [{ railId: 'card-acquirer', methods: ['card'], countries: ['*'], riskBands: ['low'], successRate: '0.80' }],
         checkoutRiskBand: 'low',
       });
 
