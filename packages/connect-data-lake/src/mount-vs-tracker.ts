@@ -22,6 +22,8 @@ export const DATA_LAKE_PACKAGE_EXPORTS = [
 export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'data-lake-stage1.test.ts',
   'capture-policy.test.ts',
+  'capture-lake-consumer.test.ts',
+  'persistence-sink.test.ts',
   'package-export-mount.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
@@ -48,6 +50,18 @@ export function dataLakeStage1Honest(): boolean {
   );
 }
 
+export function dataLakeCaptureConsumerHonestInSource(): boolean {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, 'capture-lake-consumer.ts'), 'utf8');
+  return /venue_not_connected/.test(src) && /never a synthetic book/i.test(src) && /isCaptureLakeHole/.test(src);
+}
+
+export function dataLakePersistenceSinkHonestInSource(): boolean {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, 'persistence-sink.ts'), 'utf8');
+  return /no TSDB write/i.test(src) && /refuses flush claims/i.test(src) && /flushCaptureLogToPersistenceSink/.test(src);
+}
+
 export function dataLakeCapturePolicyHonest(): boolean {
   const policy = describeCapturePolicy();
   return policy.unconnectedVenueIsAbsent === true && policy.holeNotSyntheticEmptyBook === true && policy.inventsQuietMarket === false;
@@ -63,6 +77,8 @@ export function connectDataLakeTrackerBackendDoneBarMet(): boolean {
     dataLakeExportsInIndexSource().length === DATA_LAKE_PACKAGE_EXPORTS.length &&
     dataLakeStage1Honest() &&
     dataLakeCapturePolicyHonest() &&
+    dataLakeCaptureConsumerHonestInSource() &&
+    dataLakePersistenceSinkHonestInSource() &&
     dataLakeDoneBarTestsPresent()
   );
 }
