@@ -33,7 +33,7 @@ import {
 
 import { AffiliatePayoutRefuseError, AFFILIATE_PAYOUT_RESIDUAL } from './admin-tree-read.js';
 import type { AccrualTierLaw } from './commission-rate-law.js';
-import { AFFILIATE_FEE_SOURCE_MODULE_RE, DEFAULT_AFFILIATE_FEE_SOURCE_MODULE, type CommissionRow } from './commission.js';
+import { AFFILIATE_FEE_SOURCE_MODULE_RE, DEFAULT_AFFILIATE_FEE_SOURCE_MODULE, decimalMul, type CommissionRow } from './commission.js';
 import { DEFAULT_MAX_REFERRAL_DEPTH } from './referral-tree.js';
 
 /**
@@ -124,6 +124,26 @@ export function publishedTierRateForHop(law: AccrualTierLaw, hop: number): Amoun
  * So payout does not trust `row.rate`. Every row must match the owner-published
  * tier for its hop, or the whole plan refuses.
  */
+/**
+ * ACCRUAL ROW ARITHMETIC — rate provenance alone is not enough.
+ *
+ * A durable row can carry the owner-published rate while `commission_amount`
+ * was edited after accrual (SQL restore, manual fix, bug). Paying "the amount on
+ * the row" would move value the tree never earned at that rate. Recompute
+ * fee×rate with the same decimalMul accrual uses; refuse on mismatch.
+ */
+export function assertAccrualRowCommissionMath(
+  row: Pick<CommissionRow, 'beneficiaryId' | 'hop' | 'feeAmount' | 'rate' | 'commissionAmount'>,
+): void {
+  const expected = decimalMul(row.feeAmount, row.rate);
+  if (parseAmount(row.commissionAmount) !== parseAmount(expected)) {
+    refuse(
+      `Accrual row for ${row.beneficiaryId} at hop ${row.hop} claims commission ${row.commissionAmount} but fee×rate is ${expected} — refusing to pay a tampered amount`,
+      'affiliate.payout.commission_mismatch',
+    );
+  }
+}
+
 export function assertPayoutRateProvenance(rows: readonly CommissionRow[], law: AccrualTierLaw): void {
   if (!law.published) {
     refuse(
@@ -223,6 +243,8 @@ export function planAffiliatePayout(input: {
   let total: Amount = 0n;
   /** First resolved fee pool for this fee event — mixed pools refuse (mirrors mixed asset). */
   let feeEventSourceModule: string | null = null;
+  /** One fee event → one fee notional. Mixed feeAmount is corruption, not a feature. */
+  let feeEventFeeAmount: string | null = null;
 
   for (const row of input.rows) {
     if (row.feeEventId !== feeEventId) {
@@ -239,6 +261,15 @@ export function planAffiliatePayout(input: {
         'affiliate.payout.mixed_asset',
       );
     }
+    if (feeEventFeeAmount === null) {
+      feeEventFeeAmount = row.feeAmount;
+    } else if (parseAmount(row.feeAmount) !== parseAmount(feeEventFeeAmount)) {
+      refuse(
+        `Fee event ${feeEventId} has accrual rows with fee ${feeEventFeeAmount} and ${row.feeAmount} — refusing a mixed-fee fan-out`,
+        'affiliate.payout.fee_mismatch',
+      );
+    }
+    assertAccrualRowCommissionMath(row);
     // The bound is enforced where the money moves, not only where the edge was
     // written: rows accrued under a looser cap must not pay past this one.
     if (row.hop >= maxTierDepth) {
@@ -338,6 +369,14 @@ export function planAffiliatePayout(input: {
  * see is this engine reporting a total that does not match what it is about to
  * post — which is how a fan-out under-pays a tree while the receipt looks right.
  */
+function creditAmountOf(post: PostRequest): Amount {
+  let credit = 0n;
+  for (const entry of post.entries) {
+    if (entry.direction === 'credit') credit += entry.amount;
+  }
+  return credit;
+}
+
 export function assertPayoutPlanBalanced(plan: AffiliatePayoutPlan): void {
   let summed: Amount = 0n;
   for (const leg of plan.legs) {
@@ -345,6 +384,14 @@ export function assertPayoutPlanBalanced(plan: AffiliatePayoutPlan): void {
     summed += amount;
     if (leg.asset !== plan.asset) {
       refuse(`Leg for ${leg.beneficiaryId} is in ${leg.asset}, plan is in ${plan.asset}`, 'affiliate.payout.mixed_asset');
+    }
+    const sweepAmount = creditAmountOf(leg.sweep);
+    const payoutAmount = creditAmountOf(leg.payout);
+    if (sweepAmount !== amount || payoutAmount !== amount) {
+      refuse(
+        `Payout leg for ${leg.beneficiaryId} at hop ${leg.hop} wires sweep=${formatAmount(sweepAmount)} payout=${formatAmount(payoutAmount)} but the leg claims ${leg.commissionAmount} — refusing an unbalanced fan-out`,
+        'affiliate.payout.plan_unbalanced',
+      );
     }
   }
   if (summed !== parseAmount(plan.totalCommission)) {

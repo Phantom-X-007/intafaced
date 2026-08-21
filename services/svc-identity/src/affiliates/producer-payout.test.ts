@@ -179,6 +179,27 @@ describe('S2S producer payout — accrued commission through ledger-client', () 
     await f.close();
   });
 
+  it('412 tampered commissionAmount — nothing posted', async () => {
+    const store = new MemoryAccrualStore();
+    await store.saveRows([row({ commissionAmount: '99' })]);
+    const ledger = await fundedLedger();
+    const f = Fastify({ logger: false });
+    registerAffiliateProducerPayout(f, {
+      internalSecret: SECRET,
+      freeze: { frozenIds: async () => new Set<string>() },
+      accruals: store,
+      accrualTierLaw: PUBLISHED,
+      ledger,
+    });
+    await f.ready();
+    const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
+    const res = await f.inject(post({ feeEventId: FEE }));
+    expect(res.statusCode).toBe(412);
+    expect(res.json()).toMatchObject({ code: 'affiliate.payout.commission_mismatch' });
+    expect(ledger.journal().map((tx) => tx.idempotencyKey)).toEqual(journalBefore);
+    await f.close();
+  });
+
   it('412 nothing accrued — refuse rather than a paid zero', async () => {
     const { f, ledger } = await app({ law: PUBLISHED, seed: false });
     const journalBefore = ledger!.journal().map((tx) => tx.idempotencyKey);
