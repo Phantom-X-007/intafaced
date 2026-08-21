@@ -990,12 +990,26 @@ module.exports = {
         },
         academy: {
             rooms: "Lobbies",
-            roomsLead: "Rooms the academy service will list for a scoped session. Join and host are write paths and are not offered here.",
+            roomsLead: "Rooms the academy service lists for a scoped session. Open a room to join or leave. Empty stays empty.",
             name: "Name",
             kind: "Kind",
             access: "Access",
             capacity: "Capacity",
-            minStake: "Min stake"
+            minStake: "Min stake",
+            open: "Open",
+            sessions: "Sessions",
+            sessionsLead: "Join takes a seat and shows the role. Leave releases it. Stream credentials refuse when no SFU is configured — no fake A/V.",
+            sessionTitle: "Title",
+            status: "Status",
+            join: "Join",
+            leave: "Leave",
+            stream: "Stream credential",
+            signInToJoin: "Sign in to join",
+            noSessions: "No sessions in this room.",
+            joined: "Joined",
+            left: "Left",
+            role: "Role",
+            streamIssued: "Stream credential issued"
         },
         market: {
             nav: { aria: "Market sections", catalogue: "Catalogue", mine: "My market" },
