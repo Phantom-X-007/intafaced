@@ -93,6 +93,12 @@ describe('crossCheckMids — a venue disagreeing with every other is a signal, n
     expect(report.verdict).toBe('inconclusive');
     expect(report.consensusMid).toBeNull();
   });
+
+  it('is inconclusive on an empty book even when minVenues is 0 — 0 is not a mid', () => {
+    const report = crossCheckMids('BTC/USDT', [], { minVenues: 0 });
+    expect(report.verdict).toBe('inconclusive');
+    expect(report.consensusMid).toBeNull();
+  });
 });
 
 describe('median', () => {
@@ -106,8 +112,8 @@ describe('median', () => {
     expect(formatAmount(median(withOutlier))).toBe('30001.5');
   });
 
-  it('returns zero on an empty list rather than NaN', () => {
-    expect(median([])).toBe(0n);
+  it('refuses an empty list rather than printing 0 as a mid', () => {
+    expect(() => median([])).toThrow(/not a price/);
   });
 });
 

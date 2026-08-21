@@ -109,6 +109,8 @@ const DEFAULTS = { toleranceBps: 50, minVenues: 3, maxAgeMs: 5_000 } as const;
 export function crossCheckMids(symbol: string, observations: readonly VenueMid[], options: CrossCheckOptions = {}): CrossCheckReport {
   const opts = { ...DEFAULTS, ...options };
   const now = opts.now ?? new Date();
+  // minVenues 0 skips `fresh.length < minVenues`; median([]) is 0 — 0 is a price.
+  const minVenues = opts.minVenues > 0 ? opts.minVenues : DEFAULTS.minVenues;
 
   const excluded: { venueId: string; reason: 'stale' | 'clock_skew' | 'no_mid' }[] = [];
   const fresh: VenueMid[] = [];
@@ -133,7 +135,7 @@ export function crossCheckMids(symbol: string, observations: readonly VenueMid[]
     fresh.push(observation);
   }
 
-  if (fresh.length < opts.minVenues) {
+  if (fresh.length === 0 || fresh.length < minVenues) {
     return {
       symbol,
       verdict: 'inconclusive',
@@ -141,8 +143,7 @@ export function crossCheckMids(symbol: string, observations: readonly VenueMid[]
       agreeing: [],
       diverged: [],
       excluded,
-      detail:
-        `${fresh.length} fresh venue(s) for ${symbol}, ${opts.minVenues} needed — ` + 'no consensus to check against; this is not a pass',
+      detail: `${fresh.length} fresh venue(s) for ${symbol}, ${minVenues} needed — ` + 'no consensus to check against; this is not a pass',
     };
   }
 
@@ -186,7 +187,9 @@ export function crossCheckMids(symbol: string, observations: readonly VenueMid[]
  * nothing in this module hands it to a router as a price.
  */
 export function median(values: readonly Amount[]): Amount {
-  if (values.length === 0) return ZERO;
+  if (values.length === 0) {
+    throw new Error('median of an empty list is not a price — refuse rather than return 0');
+  }
   const sorted = [...values].sort((a, b) => (a === b ? 0 : a < b ? -1 : 1));
   const middle = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) return sorted[middle] as Amount;

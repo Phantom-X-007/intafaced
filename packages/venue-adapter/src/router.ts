@@ -223,7 +223,9 @@ export async function planRoute(
     }
 
     const quote = 'quote' in value ? value.quote : null;
-    if (!quote || quote.amount <= 0n) {
+    // amount<=0 already refused; price 0/negative is the same hole — a free-looking
+    // mid would rank first on a buy.
+    if (!quote || quote.amount <= 0n || quote.price <= 0n) {
       rejected.push({ venueId: source.id, reason: 'no_quote' });
       continue;
     }

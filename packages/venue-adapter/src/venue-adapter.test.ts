@@ -320,6 +320,28 @@ describe('venue exclusion — the failures that cost money', () => {
     expect(plan.rejected.find((r) => r.venueId === 'broken')?.reason).toBe('no_quote');
   });
 
+  it('refuses a zero-price quote as no_quote — 0 is not a fillable price', async () => {
+    const plan = await planRoute(buy('1'), [venue({ id: 'free', kind: 'external-cex', price: '0', amount: '1', feeBps: 0 })]);
+    expect(plan.legs).toHaveLength(0);
+    expect(plan.rejected.find((r) => r.venueId === 'free')?.reason).toBe('no_quote');
+  });
+
+  it('refuses a negative-price quote as no_quote', async () => {
+    const plan = await planRoute(buy('1'), [venue({ id: 'neg', kind: 'external-cex', price: '-1', amount: '1', feeBps: 0 })]);
+    expect(plan.legs).toHaveLength(0);
+    expect(plan.rejected.find((r) => r.venueId === 'neg')?.reason).toBe('no_quote');
+  });
+
+  it('does not rank a free-looking zero price ahead of a real book', async () => {
+    const plan = await planRoute(buy('1'), [
+      venue({ id: 'free', kind: 'external-cex', price: '0', amount: '1', feeBps: 0 }),
+      venue({ id: 'real', kind: 'internal', price: '90000', amount: '10', feeBps: 0 }),
+    ]);
+    expect(plan.legs).toHaveLength(1);
+    expect(plan.legs[0]?.venueId).toBe('real');
+    expect(plan.rejected.find((r) => r.venueId === 'free')?.reason).toBe('no_quote');
+  });
+
   it('drops legs beyond the slippage tolerance rather than filling at any price', async () => {
     const plan = await planRoute(
       buy('10'),
