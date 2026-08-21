@@ -19,6 +19,7 @@ import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
 import { WaitlistService } from './waitlist/waitlist-service.js';
 import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
 import { registerAffiliateProducerPayout } from './affiliates/producer-payout.js';
+import { createNavigatorSessionStore } from './agents/navigator-session-store.js';
 import { registerNavigatorSessionRoutes } from './agents/navigator-session-routes.js';
 import { subscribeBlueprintProfileEvents, subscribeXpEvents } from './events.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -188,7 +189,8 @@ registerAffiliateProducerPayout(app, {
   installRawBody: false,
 });
 
-registerNavigatorSessionRoutes(app, { internalSecret: env.INTERNAL_SERVICE_SECRET });
+const navigatorSessionStore = createNavigatorSessionStore(sql);
+registerNavigatorSessionRoutes(app, { internalSecret: env.INTERNAL_SERVICE_SECRET, store: navigatorSessionStore });
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).
