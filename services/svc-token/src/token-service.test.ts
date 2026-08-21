@@ -1191,6 +1191,32 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('concurrent same-window claims: one unmoved, the other overlap, never a raw PG crash', async () => {
+      const results = await Promise.allSettled([
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+        token.recordBuyback({
+          runId: crypto.randomUUID(),
+          revenueWindow: JULY,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: amt('1000'),
+        }),
+      ]);
+
+      expect(results.every((r) => r.status === 'rejected')).toBe(true);
+      const codes = results.map((r) => (r.status === 'rejected' ? (r.reason as TokenError).code : 'ok')).sort();
+      expect(codes).toEqual(['token.buyback_tokens_unmoved', 'token.buyback_window_overlap']);
+      expect(results.every((r) => r.status === 'rejected' && r.reason instanceof TokenError)).toBe(true);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(formatAmount(await token.burnedSupply())).toBe('0');
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('leaves no claim behind when tokensBought cannot move, so the window stays available', async () => {
       const runId = crypto.randomUUID();
       await expect(

@@ -14,6 +14,8 @@
  *   · unstake locked m12 → BAD_REQUEST / token.stake_locked; principal still staked.
  *   · recordBuyback overlapping window → CONFLICT / token.buyback_window_overlap;
  *     burn account does not double (read the burn, not only the exception).
+ *   · concurrent same-window recordBuyback → 400 unmoved + 409 overlap;
+ *     never 500 (GiST deadlock) and never 200 (invented buy).
  *   · tokensBought>0 with no market-buy on the ledger → BAD_REQUEST /
  *     token.buyback_tokens_unmoved; no settle, engine untouched.
  *   · tokensBought=0 / invalid revenueTotal refuse before claim — window free later.
