@@ -14,6 +14,8 @@ describe('describeArbitragePolicy', () => {
     expect(p.noHouseArbPreference).toBe(HOUSE_ARB_PREFERENCE_BPS === null);
     expect(p.bridgeFantasyRefuseReason).toBe(ARB_BRIDGE_FANTASY_REFUSE_REASON);
     expect(p.bridgeFantasyRefused).toBe(true);
+    expect(p.missingQuoteRefused).toBe(true);
+    expect(p.nonPositiveMidRefused).toBe(true);
     expect(p.inventsMids).toBe(false);
     expect(p.inventsSpreads).toBe(false);
     expect(p.noSecondMoneyBook).toBe(true);

@@ -13,8 +13,8 @@ import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCos
  *     refused as bridge fantasy — never sized on transfer latency hope.
  *   · Never invents fees, spreads, impact, mids, or transfer. Missing cost
  *     terms → refuse (weight 0 / incomplete_cost). Unscored latency → weight 0.
- *   · Missing or stale quotes are skipped — a spread is never synthesised from
- *     one live leg plus a guessed mid, default bps, or a house book.
+ *   · Missing, non-positive, or stale quotes are skipped — a spread is never
+ *     synthesised from one live leg plus a guessed mid, default bps, or a house book.
  *
  * Leverage: `@intafaced/venue-adapter` cost-model (D26-P1-X3 / #1673). This
  * package is a thin scanner path — not a second money book or SOR.
@@ -30,8 +30,8 @@ import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCos
 export const CROSS_EXCHANGE_DEFAULT_SPREAD_BPS: null = null;
 
 /**
- * Pin: there is no default mid. A missing quote is refused, not filled from
- * the other venue or from averaging two sides of a book.
+ * Pin: there is no default mid. A missing or non-positive quote is refused,
+ * not filled from the other venue or from averaging two sides of a book.
  */
 export const CROSS_EXCHANGE_DEFAULT_MID: null = null;
 
@@ -65,6 +65,7 @@ export interface ArbVenueQuote {
   /**
    * Average fill price for `amount` on this venue (walked book or firm quote).
    * `null` = missing — refuse; never substitute `CROSS_EXCHANGE_DEFAULT_MID`.
+   * Non-positive (0n / negative) is the same refuse — a zero mid is not a live quote.
    */
   readonly price: Amount | null;
   /** Size available at `price`. */
@@ -208,6 +209,13 @@ function quoteUsable(
       detail: 'quote price missing — mid/spread not invented',
     };
   }
+  if (quote.price <= 0n) {
+    return {
+      ok: false,
+      reason: 'missing_quote',
+      detail: 'quote price non-positive — mid not invented',
+    };
+  }
   if (quote.asOfMs === null || !Number.isFinite(quote.asOfMs)) {
     return {
       ok: false,
@@ -251,8 +259,8 @@ function quoteUsable(
  *
  * Pure: quotes, cost terms, and inventory are caller-supplied. Returns every
  * pair evaluation (opportunity or refuse) so the terminal / OMS can show why
- * a pair was not sized. House books and missing/stale quotes are skipped
- * before pairing so they cannot invent a spread.
+ * a pair was not sized. House books and missing/stale/non-positive quotes
+ * are skipped before pairing so they cannot invent a spread.
  */
 export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanExternalArbResult {
   const opportunities: ArbOpportunity[] = [];
@@ -353,13 +361,13 @@ export function scanExternalCrossExchangeArb(input: ScanExternalArbInput): ScanE
 
       const buyPrice = buyQ.price;
       const sellPrice = sellQ.price;
-      if (buyPrice === null || sellPrice === null) {
+      if (buyPrice === null || sellPrice === null || buyPrice <= 0n || sellPrice <= 0n) {
         refused.push({
           ok: false,
           buyVenueId: buyQ.venueId,
           sellVenueId: sellQ.venueId,
           reason: 'missing_quote',
-          detail: 'pair reached scoring with a null price — mid not invented',
+          detail: 'pair reached scoring with a null or non-positive price — mid not invented',
         });
         continue;
       }

@@ -347,6 +347,38 @@ describe('scanExternalCrossExchangeArb — D26-P1-X4', () => {
     expect(result.refused.some((r) => r.reason === 'missing_quote' && r.detail.includes('mid/spread not invented'))).toBe(true);
   });
 
+  it('non-positive mid is not pairable — buy amt(0) vs sell amt(102) emits 0 opportunities', () => {
+    const result = scanArb({
+      symbol: 'BTC/USDT',
+      amount: amt('1'),
+      quotes: [q({ venueId: 'a', kind: 'external-cex', price: '0' }), q({ venueId: 'b', kind: 'external-cex', price: '102' })],
+      costTermsByVenue: {
+        a: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+        b: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+      },
+      inventory: { prePositionedByVenue: { a: true, b: true } },
+    });
+
+    expect(result.opportunities).toHaveLength(0);
+    expect(result.refused.some((r) => r.reason === 'missing_quote' && r.detail.includes('non-positive'))).toBe(true);
+  });
+
+  it('negative mid is not pairable — refuse rather than invent a live price', () => {
+    const result = scanArb({
+      symbol: 'BTC/USDT',
+      amount: amt('1'),
+      quotes: [q({ venueId: 'a', kind: 'external-cex', price: '-1' }), q({ venueId: 'b', kind: 'external-cex', price: '102' })],
+      costTermsByVenue: {
+        a: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+        b: completeTerms({ feeBps: 0, expectedImpactBps: 0, transferCostBps: 0 }),
+      },
+      inventory: { prePositionedByVenue: { a: true, b: true } },
+    });
+
+    expect(result.opportunities).toHaveLength(0);
+    expect(result.refused.some((r) => r.reason === 'missing_quote' && r.detail.includes('non-positive'))).toBe(true);
+  });
+
   it('missing asOf does not invent a live quote', () => {
     const result = scanArb({
       symbol: 'BTC/USDT',
