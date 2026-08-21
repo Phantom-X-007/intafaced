@@ -714,6 +714,12 @@
             :aria-pressed="deskMode === 'convert' ? 'true' : 'false'"
             @click="deskMode = 'convert'"
           >{{ $t('exchange.convert.title') }}</button>
+          <button
+            type="button"
+            :class="{ 'is-active': deskMode === 'copy' }"
+            :aria-pressed="deskMode === 'copy' ? 'true' : 'false'"
+            @click="deskMode = 'copy'"
+          >{{ $t('intafaced.exchange.copy.title') }}</button>
         </div>
 
         <div v-if="deskMode === 'convert'" class="ix-order-body">
@@ -744,6 +750,67 @@
           </button>
           <p v-if="convertResult" class="ix-order-note">{{ convertResult.status }} · {{ $t('exchange.convert.orderId') }}: {{ convertResult.orderId }}</p>
           <p v-else-if="!isLogin" class="ix-order-note"><router-link to="/platform">{{ $t('exchange.convert.signIn') }}</router-link></p>
+        </div>
+
+        <div v-else-if="deskMode === 'copy'" class="ix-order-body">
+          <p class="ix-order-note">{{ $t('intafaced.exchange.copy.lead') }}</p>
+          <div class="ix-field">
+            <label for="ix-copy-leader">{{ $t('intafaced.exchange.copy.leaderId') }}</label>
+            <div class="ix-input">
+              <input id="ix-copy-leader" type="text" spellcheck="false" autocomplete="off" v-model="copyLeaderId" @input="copyError = ''" />
+            </div>
+          </div>
+          <div class="ix-field">
+            <label for="ix-copy-region">{{ $t('intafaced.exchange.copy.region') }}</label>
+            <div class="ix-input">
+              <input id="ix-copy-region" type="text" spellcheck="false" autocomplete="off" v-model="copyRegion" @input="copyError = ''" />
+            </div>
+          </div>
+          <p class="ix-order-note">{{ $t('intafaced.exchange.copy.regionHint') }}</p>
+          <div class="ix-field">
+            <label for="ix-copy-markets">{{ $t('intafaced.exchange.copy.markets') }}</label>
+            <div class="ix-input">
+              <input id="ix-copy-markets" type="text" spellcheck="false" autocomplete="off" v-model="copyPermittedMarkets" @input="copyError = ''" />
+            </div>
+          </div>
+          <p class="ix-order-note">{{ $t('intafaced.exchange.copy.marketsHint') }}</p>
+          <div class="ix-field">
+            <label for="ix-copy-max-notional">{{ $t('intafaced.exchange.copy.maxNotional') }}</label>
+            <div class="ix-input">
+              <input id="ix-copy-max-notional" type="text" inputmode="decimal" spellcheck="false" v-model="copyMaxNotionalPerOrder" @input="copyError = ''" />
+            </div>
+          </div>
+          <div class="ix-field">
+            <label for="ix-copy-max-exposure">{{ $t('intafaced.exchange.copy.maxExposure') }}</label>
+            <div class="ix-input">
+              <input id="ix-copy-max-exposure" type="text" inputmode="decimal" spellcheck="false" v-model="copyMaxAggregateExposure" @input="copyError = ''" />
+            </div>
+          </div>
+          <div class="ix-field">
+            <label for="ix-copy-expires">{{ $t('intafaced.exchange.copy.expires') }}</label>
+            <div class="ix-input">
+              <input id="ix-copy-expires" type="text" spellcheck="false" autocomplete="off" v-model="copyExpiresAt" @input="copyError = ''" />
+            </div>
+          </div>
+          <p class="ix-order-note">{{ $t('intafaced.exchange.copy.expiresHint') }}</p>
+          <button type="button" class="ix-submit is-buy" :disabled="!isLogin || copyFollowing" @click="submitCopyFollow">
+            {{ copyFollowing ? $t('intafaced.exchange.copy.following') : $t('intafaced.exchange.copy.follow') }}
+          </button>
+          <p v-if="copyError" class="ix-order-note ix-order-error">{{ copyError }}</p>
+          <p v-else-if="!isLogin" class="ix-order-note"><router-link to="/platform">{{ $t('intafaced.exchange.copy.signIn') }}</router-link></p>
+          <p class="ix-order-note">{{ $t('intafaced.exchange.copy.list') }}</p>
+          <p v-if="copyFollowsLoading" class="ix-order-note">{{ $t('intafaced.exchange.copy.loading') }}</p>
+          <p v-else-if="copyFollowsReachable && copyFollows.length === 0" class="ix-order-note">{{ $t('intafaced.exchange.copy.empty') }}</p>
+          <div v-else-if="copyFollowsReachable" class="ix-meta" v-for="row in copyFollows" :key="row.followId">
+            <div><dt>{{ $t('intafaced.exchange.copy.leaderId') }}</dt><dd>{{ row.leaderId }}</dd></div>
+            <div><dt>{{ $t('intafaced.exchange.copy.region') }}</dt><dd>{{ row.region }}</dd></div>
+            <div><dt>{{ $t('intafaced.exchange.copy.maxNotional') }}</dt><dd>{{ row.maxNotionalPerOrder }}</dd></div>
+            <div><dt>{{ $t('intafaced.exchange.copy.maxExposure') }}</dt><dd>{{ row.maxAggregateExposure }}</dd></div>
+            <div><dt>{{ $t('intafaced.exchange.copy.expires') }}</dt><dd>{{ row.expiresAt }}</dd></div>
+            <button type="button" class="ix-submit" :disabled="copyUnfollowingId === row.followId" @click="unfollowCopy(row.followId)">
+              {{ $t('intafaced.exchange.copy.unfollow') }}
+            </button>
+          </div>
         </div>
 
         <template v-else>
@@ -1057,6 +1124,18 @@ export default {
       convertError: '',
       convertLoading: false,
       convertExecuting: false,
+      copyLeaderId: '',
+      copyRegion: '',
+      copyPermittedMarkets: '',
+      copyMaxNotionalPerOrder: '',
+      copyMaxAggregateExposure: '',
+      copyExpiresAt: '',
+      copyFollows: [],
+      copyFollowsLoading: false,
+      copyFollowsReachable: false,
+      copyFollowing: false,
+      copyUnfollowingId: '',
+      copyError: '',
       mainTabs: [
         { id: 'chart', label: 'Chart' },
         { id: 'depth', label: 'Depth' },
@@ -1447,6 +1526,7 @@ export default {
     isLogin(value) {
       if (value) {
         this.loadAccount();
+        if (this.deskMode === 'copy') this.loadCopyFollows();
       } else {
         this.openOrders = [];
         this.historyOrders = [];
@@ -1455,7 +1535,12 @@ export default {
         this.accountLoading = false;
         this.walletReachable = false;
         this.ordersReachable = false;
+        this.copyFollows = [];
+        this.copyFollowsReachable = false;
       }
+    },
+    deskMode(mode) {
+      if (mode === 'copy') this.loadCopyFollows();
     },
     'currentCoin.close': function (value) {
       const next = this.num(value);
@@ -2422,6 +2507,111 @@ export default {
     convertClientId() {
       var suffix = Math.random().toString(36).slice(2) + Date.now().toString(36);
       return 'convert:' + suffix.slice(0, 40);
+    },
+
+    copyPermittedMarketList() {
+      return String(this.copyPermittedMarkets == null ? '' : this.copyPermittedMarkets)
+        .split(/[,\s]+/)
+        .map(function (item) { return String(item).trim(); })
+        .filter(Boolean);
+    },
+
+    copyIsoDatetime(value) {
+      return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(String(value || ''));
+    },
+
+    copyRefuseLabel(res) {
+      var msg = res && res.message ? String(res.message) : '';
+      var named = '';
+      if (/copy_jurisdiction_blank|DIRECTION §8|served-jurisdiction/i.test(msg)) {
+        named = 'trade.copy_jurisdiction_blank';
+      } else if (/copy_place_disabled|placeMirror is refuse-closed/i.test(msg)) {
+        named = 'trade.copy_place_disabled';
+      } else if (/envelope|invalid|required|permitted|datetime/i.test(msg)) {
+        named = 'trade.copy_envelope_invalid';
+      }
+      if (named && msg.indexOf(named) === -1) {
+        return named + ' — ' + (msg || this.$t('intafaced.exchange.copy.refused'));
+      }
+      if (msg) return msg;
+      return this.$t('intafaced.exchange.copy.refused');
+    },
+
+    loadCopyFollows() {
+      if (!this.ixToken) {
+        this.copyFollows = [];
+        this.copyFollowsReachable = false;
+        return;
+      }
+      this.copyFollowsLoading = true;
+      query('trade', 'copy.listMyFollows', undefined, this.ixToken).then(res => {
+        this.copyFollowsLoading = false;
+        if (!res || !res.ok) {
+          this.copyFollowsReachable = false;
+          this.copyFollows = [];
+          this.copyError = this.copyRefuseLabel(res);
+          return;
+        }
+        this.copyFollowsReachable = true;
+        this.copyFollows = Array.isArray(res.data) ? res.data : [];
+      });
+    },
+
+    submitCopyFollow() {
+      if (!this.ixToken) {
+        this.copyError = this.$t('intafaced.exchange.copy.signIn');
+        return;
+      }
+      if (this.copyFollowing) return;
+      var leaderId = String(this.copyLeaderId == null ? '' : this.copyLeaderId).trim();
+      var region = String(this.copyRegion == null ? '' : this.copyRegion).trim();
+      var permittedMarkets = this.copyPermittedMarketList();
+      var copyMaxNotionalPerOrder = String(this.copyMaxNotionalPerOrder == null ? '' : this.copyMaxNotionalPerOrder).trim();
+      var copyMaxAggregateExposure = String(this.copyMaxAggregateExposure == null ? '' : this.copyMaxAggregateExposure).trim();
+      var expiresAt = String(this.copyExpiresAt == null ? '' : this.copyExpiresAt).trim();
+      if (
+        !leaderId ||
+        !region ||
+        permittedMarkets.length === 0 ||
+        !ixMoney.isPositive(copyMaxNotionalPerOrder) ||
+        !ixMoney.isPositive(copyMaxAggregateExposure) ||
+        !this.copyIsoDatetime(expiresAt)
+      ) {
+        this.copyError = this.$t('intafaced.exchange.copy.invalid');
+        return;
+      }
+      this.copyFollowing = true;
+      this.copyError = '';
+      mutate('trade', 'copy.follow', {
+        leaderId: leaderId,
+        region: region,
+        permittedMarkets: permittedMarkets,
+        maxNotionalPerOrder: copyMaxNotionalPerOrder,
+        maxAggregateExposure: copyMaxAggregateExposure,
+        expiresAt: expiresAt
+      }, this.ixToken).then(res => {
+        this.copyFollowing = false;
+        if (!res || !res.ok) {
+          this.copyError = this.copyRefuseLabel(res);
+          return;
+        }
+        this.loadCopyFollows();
+      });
+    },
+
+    unfollowCopy(followId) {
+      var id = String(followId || '').trim();
+      if (!this.ixToken || !id || this.copyUnfollowingId) return;
+      this.copyUnfollowingId = id;
+      this.copyError = '';
+      mutate('trade', 'copy.unfollow', { followId: id }, this.ixToken).then(res => {
+        this.copyUnfollowingId = '';
+        if (!res || !res.ok) {
+          this.copyError = this.copyRefuseLabel(res);
+          return;
+        }
+        this.loadCopyFollows();
+      });
     },
 
     openPair(row) {
