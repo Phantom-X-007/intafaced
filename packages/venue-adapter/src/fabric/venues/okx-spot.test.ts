@@ -435,7 +435,7 @@ describe('okx-spot — public market data (third venue)', () => {
     expect('balances' in md).toBe(false);
   });
 
-  it('OkxSpotAccount throws not_ready with keys; missing trade keys stay VenueCredentialsMissingError', async () => {
+  it('OkxSpotAccount with keys but no passphrase refuses before HTTP; missing trade keys stay VenueCredentialsMissingError', async () => {
     const keys = { venueId: 'okx-spot', apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
     const order = {
       symbol: 'BTC/USDT',
@@ -459,7 +459,7 @@ describe('okx-spot — public market data (third venue)', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
       expect((error as VenueUnavailableError).reason).toBe('not_ready');
-      expect((error as VenueUnavailableError).venueId).toBe('okx-spot');
+      expect((error as VenueUnavailableError).message).toMatch(/passphrase required/);
     }
   });
 });
@@ -623,5 +623,42 @@ describe('okx-spot — signed trade (FakeHttp, no live network)', () => {
       reason: 'not_ready',
       message: expect.stringMatching(/POST/),
     });
+  });
+});
+
+describe('okx-spot — signed account observation (FakeHttp, no live network)', () => {
+  it('balances GETs /api/v5/account/balance with OK-ACCESS-SIGN and maps details', async () => {
+    const http = new FakeHttp(() =>
+      json(200, {
+        code: '0',
+        msg: '',
+        data: [
+          {
+            details: [
+              { ccy: 'USDT', availBal: '90', frozenBal: '10', eq: '100' },
+              { ccy: 'BTC', availBal: '1', frozenBal: '0', eq: '1' },
+            ],
+          },
+        ],
+      }),
+    );
+    const account = new OkxSpotAccount(KEYS, { http, clock: CLOCK });
+    const rows = await account.balances();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.asset).toBe('USDT');
+    expect(formatAmount(rows[0]!.free)).toBe('90');
+    expect(formatAmount(rows[0]!.used)).toBe('10');
+    expect(formatAmount(rows[0]!.total)).toBe('100');
+    expect(http.calls[0]!.method).toBe('GET');
+    expect(http.calls[0]!.url).toBe('https://www.okx.com/api/v5/account/balance');
+    expect(http.calls[0]!.init?.headers?.['OK-ACCESS-SIGN']).toBeTruthy();
+  });
+
+  it('spot positions is [] — honest empty, not not_ready', async () => {
+    expect(await new OkxSpotAccount(KEYS, { http: new FakeHttp(() => json(200, {})) }).positions()).toEqual([]);
+  });
+
+  it('transferRails stays not_ready — wallet permission refused', async () => {
+    await expect(new OkxSpotAccount(KEYS).transferRails()).rejects.toMatchObject({ reason: 'not_ready' });
   });
 });
