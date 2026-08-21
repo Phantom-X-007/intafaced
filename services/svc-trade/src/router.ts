@@ -14,6 +14,7 @@ import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/a
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import type { CopyService } from './copy/copy-service.js';
 import { describeFuturesPolicy } from './futures/futures-policy.js';
+import { describeOptionsPolicy } from './spot/options-policy.js';
 
 /**
  * svc-trade's API (§5.2).
@@ -675,6 +676,14 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      */
     futures: router({
       policy: publicProcedure.query(() => describeFuturesPolicy({})),
+    }),
+
+    /**
+     * Options product policy (trade.options / SOCKET §13).
+     * Settlement asset law stamp required before listing — no invented live set.
+     */
+    options: router({
+      policy: publicProcedure.query(() => describeOptionsPolicy()),
     }),
 
     /**
