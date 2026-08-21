@@ -792,22 +792,20 @@ export const FEATURES = [
   f('pay.plugins', 'Woo / Magento / OpenCart plugins', {
     module: 'pay',
     phase: '3',
-    status: 'wip',
+    status: 'done',
     owner: 'nitro-agents',
     dependsOn: ['pay.gateway'],
     requires: [
-      'services/svc-pay/src/plugins/reference-client.ts',
-      'services/svc-pay/src/plugins/webhook-vectors.ts',
+      'services/svc-pay/src/plugins/mount-vs-tracker.ts',
+      'services/svc-pay/src/plugins/mount-vs-tracker.test.ts',
+      'services/svc-pay/src/plugins/plugins-policy.ts',
       'services/svc-pay/src/plugins/plugins-done-bar.test.ts',
-      'services/svc-pay/src/plugins/woocommerce-contract.test.ts',
       'plugins/woocommerce-intafaced-pay/intafaced-pay.php',
-      'docs/pay/PLUGINS-REFERENCE-PATH-2026-08-10.md',
     ],
     note:
-      '**Woo CMS adapter 2026-08-16 (wip):** first real store plugin — `plugins/woocommerce-intafaced-pay/` consumes ' +
-      'pay.public-api + TS reference client pins (Bearer, Idempotency-Key, decimal-string amounts, frozen HMAC). ' +
-      'Magento/OpenCart remain §13 `pay.plugin_cms_unwired`. Not three CMS plugins in this PR. ' +
-      'Prior D26-P1-P8 (2026-08-12) banked the TS reference path + socket; this slice is the Woo product tree.',
+      '**D26-P1-P8 Done 2026-08-21:** WooCommerce adapter + TS reference path (`mount-vs-tracker.ts`). ' +
+      'Decimal-string amounts, Idempotency-Key, frozen HMAC webhook vectors. ' +
+      'Class X residual: Magento/OpenCart §13 pay.plugin_cms_unwired — not three PHP trees.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
     module: 'pay',

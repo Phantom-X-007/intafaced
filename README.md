@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`██████████████░░░░░░` **71%** — 112 of 158 features shipped
+`██████████████░░░░░░` **72%** — 113 of 158 features shipped
 
-Phases: **0** 11/12 · **1** 12/13 · **2** 20/26 · **3** 16/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** 12/13 · **2** 20/26 · **3** 17/18 · **3P** 11/15 · **4** ✅ · **4P** 0/3 · **5** 33/59 · **5P** 4/7
 
-**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · House desk sealed private tenant — the Throne Law (§28) (Nitro) · Woo / Magento / OpenCart plugins (nitro-agents) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
+**In progress:** Drop phases 0–V as feature flags — waitlist, referral queue, founding badges, season engine (§11) (ZenYoda3) · Unified data lake — normalised ticks, books and fills to a time-series store (§27) (Phantom-X-007) · House desk sealed private tenant — the Throne Law (§28) (Nitro) · Alerts & watchlists — price, funding, liquidation proximity, whale flow, portfolio (§31) (Phantom-X-007) · svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
 
 **🟢 18 ready to claim** — nothing blocks these:
 
