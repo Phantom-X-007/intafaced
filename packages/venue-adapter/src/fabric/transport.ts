@@ -37,6 +37,8 @@ export interface HttpResponse {
 export interface HttpRequestInit {
   readonly headers?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
+  /** JSON-encoded POST body. Omitted on GET. Signatures hash `JSON.stringify` of this value. */
+  readonly jsonBody?: unknown;
 }
 
 export interface HttpPort {
@@ -153,21 +155,23 @@ export function fetchHttpPort(): HttpPort {
     // A non-2xx is DATA here, not an exception. 429 and 418 carry the venue's
     // own instruction about when to come back, and an adapter that let them
     // throw would lose it — then keep asking, and get banned.
-    const response = await fetch(url, {
-      method,
-      headers: init?.headers ? { ...init.headers } : undefined,
-      signal: init?.signal,
-    });
-    let body: unknown = null;
+    const headers: Record<string, string> = init?.headers ? { ...init.headers } : {};
+    let body: string | undefined;
+    if (init?.jsonBody !== undefined) {
+      headers['Content-Type'] = headers['Content-Type'] ?? 'application/json';
+      body = JSON.stringify(init.jsonBody);
+    }
+    const response = await fetch(url, { method, headers, body, signal: init?.signal });
+    let parsed: unknown = null;
     try {
-      body = await response.json();
+      parsed = await response.json();
     } catch {
-      body = null;
+      parsed = null;
     }
     return {
       status: response.status,
-      body,
-      header: (name: string) => response.headers.get(name),
+      body: parsed,
+      header: (name) => response.headers.get(name),
     };
   }
 

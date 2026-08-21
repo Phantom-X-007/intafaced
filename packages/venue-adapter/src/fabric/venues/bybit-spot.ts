@@ -11,14 +11,11 @@ import {
   type AccountAdapter,
   type BookSubscription,
   type MarketDataAdapter,
-  type PlaceOrderRequest,
-  type TradeAdapter,
   type VenueBookDelta,
   type VenueBookSnapshot,
   type VenueCredentials,
   type VenueDescriptor,
   type VenueMarket,
-  type VenueOrder,
   type VenueTrade,
 } from '@intafaced/venue-contracts';
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
@@ -107,11 +104,9 @@ import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
  * TRADING / ACCOUNT — EXIST, AND REFUSE
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * `BybitSpotTrade` and `BybitSpotAccount` exist so a caller that asks for the
- * trading half cannot read "no class" or an empty list as "flat / rejected".
- * Every method throws typed `not_ready` (after `requireCredentials`) — the same
- * honesty as `binance-spot.ts`. The signed REST path is not built. No live key
- * is invented, held, or named. Public market data still needs none.
+ * `BybitSpotAccount` still throws typed `not_ready` after `requireCredentials`.
+ * Signed place/cancel/fetch lives in `bybit-spot-trade.ts`. No live key is
+ * invented. Public market data still needs none.
  *
  * The fee schedule is Bybit's published non-VIP spot default and is marked
  * `indicative: true` for the reason `market.ts` gives: the rate an ACCOUNT pays
@@ -671,40 +666,10 @@ export class BybitSpotMarketData implements MarketDataAdapter {
 // TRADING AND ACCOUNT — credentialed, and honest about not being built
 // ════════════════════════════════════════════════════════════════════════════
 
-const NOT_BUILT =
-  'the signed REST path for this venue is NOT BUILT. Public market data is live; ' +
-  'order placement, cancellation and account state are not. This call is refused rather than ' +
-  'simulated — a fabricated order status is worse than an outage (§27).';
+export { BybitSpotTrade, mapBybitSpotOrder, signBybitV5 } from './bybit-spot-trade.js';
 
-export class BybitSpotTrade implements TradeAdapter {
-  readonly venue = VENUE;
-  readonly #credentials: VenueCredentials | null;
-
-  constructor(credentials: VenueCredentials | null = null) {
-    if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
-    this.#credentials = credentials;
-  }
-
-  async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `placeOrder(${request.clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async cancelOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'cancelOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `cancelOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async fetchOrder(symbol: string, clientOrderId: string): Promise<VenueOrder> {
-    requireCredentials(VENUE.id, 'fetchOrder', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `fetchOrder(${symbol}, ${clientOrderId}): ${NOT_BUILT}`);
-  }
-
-  async openOrders(): Promise<VenueOrder[]> {
-    requireCredentials(VENUE.id, 'openOrders', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `openOrders: ${NOT_BUILT}`);
-  }
-}
+const ACCOUNT_NOT_BUILT =
+  'account/listen-key REST for this venue is NOT BUILT. Signed spot place/cancel/fetch is live on an injected HTTP port; balances are not. Refused rather than simulated.';
 
 export class BybitSpotAccount implements AccountAdapter {
   readonly venue = VENUE;
@@ -717,17 +682,17 @@ export class BybitSpotAccount implements AccountAdapter {
 
   async balances(): Promise<never> {
     requireCredentials(VENUE.id, 'balances', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${NOT_BUILT}`);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `balances: ${ACCOUNT_NOT_BUILT}`);
   }
 
   async positions(): Promise<never> {
     requireCredentials(VENUE.id, 'positions', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${NOT_BUILT}`);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `positions: ${ACCOUNT_NOT_BUILT}`);
   }
 
   async transferRails(): Promise<never> {
     requireCredentials(VENUE.id, 'transferRails', this.#credentials);
-    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${NOT_BUILT}`);
+    throw new VenueUnavailableError(VENUE.id, 'not_ready', `transferRails: ${ACCOUNT_NOT_BUILT}`);
   }
 }
 
