@@ -53,6 +53,7 @@ import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/acti
 import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
 import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
 import { envCoachGrounding, runCoachSession, type CoachGrounding } from './coach/grounded-session.js';
+import { describeCoachPolicy } from './coach/policy.js';
 import { envGrowthWarehouse, proposeGrowthCampaign } from './growth/campaign-proposal.js';
 
 /**
@@ -3279,6 +3280,8 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * grounding is owner-undecided → refuse. Not a fleet runSession.
      */
     coach: router({
+      policy: publicProcedure.query(() => describeCoachPolicy()),
+
       session: scopedProcedure('agents:read', { module: 'agents' })
         .input(
           z.object({
