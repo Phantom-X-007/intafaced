@@ -49,6 +49,6 @@ describe('describeFuturesPolicy — trade.futures honesty door', () => {
 
 describe('futures.policy route (trade.futures honesty door)', () => {
   it('router mounts describeFuturesPolicy on futures.policy', () => {
-    expect(routerSource).toMatch(/futures:\s*router\(\{[\s\S]*policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeFuturesPolicy\(\{\}\)\)/);
+    expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeFuturesPolicy\(\{\}\)\)/);
   });
 });

@@ -17,11 +17,7 @@
  * invents no numbers.
  */
 import type { Sql } from 'postgres';
-import {
-  ADL_DISCLOSURE_COPY,
-  ADL_DISCLOSURE_REQUIRED,
-  ADL_DISCLOSURE_VERSION,
-} from './futures-policy.js';
+import { ADL_DISCLOSURE_COPY, ADL_DISCLOSURE_REQUIRED, ADL_DISCLOSURE_VERSION } from './futures-policy.js';
 
 export { ADL_DISCLOSURE_COPY, ADL_DISCLOSURE_REQUIRED, ADL_DISCLOSURE_VERSION } from './futures-policy.js';
 

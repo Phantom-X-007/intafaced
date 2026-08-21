@@ -674,7 +674,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      * Jobs capability + insurance listing + ADL disclosure constants — no invented D3/D5 numbers.
      */
     futures: router({
-      policy: publicProcedure.query(() => describeFuturesPolicy()),
+      policy: publicProcedure.query(() => describeFuturesPolicy({})),
     }),
 
     /**
