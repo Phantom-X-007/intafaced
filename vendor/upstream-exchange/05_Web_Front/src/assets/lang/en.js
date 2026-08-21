@@ -923,6 +923,8 @@ module.exports = {
                 stepUpBtnDone: "Session stepped up",
                 stepUpTotp: "Authenticator code",
                 stepUpTotpHint: "Six digits, or a recovery code",
+                stepUpPasskey: "Step up with passkey",
+                stepUpPasskeyUnavailable: "This browser has no passkey ceremony",
                 noRailToUse: "svc-pay has no rail registered, so there is nothing to withdraw over."
             },
 
