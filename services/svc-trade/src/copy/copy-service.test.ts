@@ -150,6 +150,8 @@ describe('CopyService', () => {
     expect(listed).toHaveLength(1);
     expect(listed[0]?.followId).toBe(mine.followId);
     expect(listed[0]?.leaderId).toBe(LEADER);
+    expect(listed[0]?.currentExposure).toBe('0');
+    expect(listed[0]?.remainingExposure).toBe('1000');
     expect(store.listFollowsCalls).toBe(0);
     await expect(
       svc.follow(principal, {
@@ -162,6 +164,39 @@ describe('CopyService', () => {
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_already_following' });
     expect(store.listFollowsCalls).toBe(0);
+  });
+
+  it('listMyFollows surfaces durable session budget usage after mirrors', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '500',
+      expiresAt: futureExpiry,
+    });
+    expect(follow.currentExposure).toBe('0');
+    expect(follow.remainingExposure).toBe('500');
+
+    await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'fill-desk-exposure',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '80',
+    });
+
+    const listed = await svc.listMyFollows(principal);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.currentExposure).toBe('80');
+    expect(listed[0]?.remainingExposure).toBe('420');
   });
 
   it('concurrent follow race maps unique (follower,leader) to already_following, not a raw 23505', async () => {

@@ -242,7 +242,12 @@ export class CopyService {
    */
   async listMyFollows(principal: Principal) {
     const mine = await this.store.listFollowsByFollower(principal.userId);
-    return mine.map(presentCopyFollow);
+    return Promise.all(
+      mine.map(async (follow) => {
+        const currentExposure = await this.store.getExposure(follow.followId);
+        return presentCopyFollow(follow, currentExposure);
+      }),
+    );
   }
 
   /**
@@ -341,7 +346,8 @@ export class CopyService {
       }
       const next: CopyFollow = { ...follow, feeShareKilled: true };
       await store.saveFollow(next);
-      return presentCopyFollow(next);
+      const currentExposure = await store.getExposure(follow.followId);
+      return presentCopyFollow(next, currentExposure);
     });
   }
 
