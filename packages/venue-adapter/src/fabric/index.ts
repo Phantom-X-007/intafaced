@@ -42,6 +42,7 @@ export * from './latency.js';
 export * from './cross-check.js';
 export * from './payout-grade.js';
 export * from './capture-lake.js';
+export * from './capture-lake-bridge.js';
 export * from './transport.js';
 export * from './venues/binance-spot.js';
 export * from './venues/bybit-spot.js';

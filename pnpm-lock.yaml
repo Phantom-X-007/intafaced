@@ -526,6 +526,9 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../config
+      '@intafaced/connect-data-lake':
+        specifier: workspace:*
+        version: link:../connect-data-lake
       '@intafaced/exchange-contract':
         specifier: workspace:*
         version: link:../exchange-contract
