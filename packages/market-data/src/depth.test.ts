@@ -115,7 +115,7 @@ describe('negative quantity must not rest', () => {
       asks: [],
     });
 
-    expect(result).toEqual({ ok: false, reason: 'invalid-qty' });
+    expect(result).toEqual({ ok: false, reason: 'invalid-qty', expected: 1, got: 2 });
     expect(result).not.toHaveProperty('book');
     expect(start.sequence).toBe(1);
     expect(sideOf(start, 'bids')).toEqual({ '100': '1' });
@@ -138,6 +138,8 @@ describe('negative quantity must not rest', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('invalid-qty');
+    expect(result.expected).toBe(1);
+    expect(result.got).toBe(2);
     expect(result).not.toHaveProperty('book');
     expect(start.sequence).toBe(1);
     expect(sideOf(start, 'bids')).toEqual({ '100': '5' });

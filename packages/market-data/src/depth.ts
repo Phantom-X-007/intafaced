@@ -127,8 +127,11 @@ export type ApplyResult =
   | { readonly ok: false; readonly reason: 'gap'; readonly expected: number; readonly got: number }
   | { readonly ok: false; readonly reason: 'stale'; readonly expected: number; readonly got: number }
   | { readonly ok: false; readonly reason: 'wrong-market'; readonly expected: string; readonly got: string }
-  /** A negative absolute qty is garbage. Zero remains delete. */
-  | { readonly ok: false; readonly reason: 'invalid-qty' };
+  /**
+   * A negative absolute qty is garbage. Zero remains delete.
+   * `expected` is the book seq we kept; `got` is the delta seq we refused.
+   */
+  | { readonly ok: false; readonly reason: 'invalid-qty'; readonly expected: number; readonly got: number };
 
 function applySide(current: DepthSide, levels: readonly WireLevel[]): Map<string, Amount> {
   const next = new Map(current);
@@ -167,7 +170,7 @@ export function applyDelta(book: DepthBook, delta: DepthDelta): ApplyResult {
   }
 
   if (hasNegativeQty(delta.bids) || hasNegativeQty(delta.asks)) {
-    return { ok: false, reason: 'invalid-qty' };
+    return { ok: false, reason: 'invalid-qty', expected: book.sequence, got: delta.sequence };
   }
 
   return {
