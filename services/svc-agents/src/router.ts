@@ -55,6 +55,7 @@ import { invokeSupportDataTool, supportAnswerOrEscalate } from './support-agent/
 import type { SupportDeskPort } from './support-agent/desk-port.js';
 import { runSupportReplySession } from './support-agent/session-run.js';
 import { auditSupportDataTool, emptySupportAuditLog } from './support-agent/action-audit.js';
+import { assessPreListingRisk } from './launch/pre-listing-assess.js';
 import { draftScreeningSupport } from './risk-compliance/screening-draft.js';
 import { refuseIdentityKycReviewWrite } from './risk-compliance/kyc-review-write.js';
 import { envCoachGrounding, runCoachSession, type CoachGrounding } from './coach/grounded-session.js';
@@ -3232,6 +3233,82 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             };
           }),
         ),
+    }),
+
+    /**
+     * Launch Agent — pre-listing pattern flags (§8.2, §35).
+     * Empty deployer history is refused — never a clean badge. Live chain
+     * reputation port is Class X; production door fail-closes unread.
+     */
+    launch: router({
+      assess: scopedProcedure('agents:read', { module: 'agents' })
+        .input(
+          z.object({
+            deployer: z.string().min(1).max(128).optional(),
+            asBadge: z.boolean().optional(),
+            asBlockDecision: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.discriminatedUnion('status', [
+            z.object({
+              status: z.literal('refuse'),
+              reason: z.enum(['deployer_missing', 'reputation_unread', 'history_absent', 'badge_forbidden', 'block_decision_forbidden']),
+              kind: z.literal('not_a_badge'),
+              isBadge: z.literal(false),
+              isBlockDecision: z.literal(false),
+              inventedCleanBadge: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+            z.object({
+              status: z.literal('annotation'),
+              kind: z.literal('pattern_flags'),
+              isBadge: z.literal(false),
+              isBlockDecision: z.literal(false),
+              deployer: z.string(),
+              lpLocks: z.number().int(),
+              vestings: z.number().int(),
+              patternFlags: z.array(
+                z.object({
+                  code: z.enum(['no_lp_locks', 'no_vestings', 'sparse_lp_locks', 'sparse_vestings']),
+                  source: z.literal('deployer_reputation'),
+                }),
+              ),
+              inventedCleanBadge: z.literal(false),
+              userMessageKey: z.literal('agents.error.capability_unavailable'),
+            }),
+          ]),
+        )
+        .query(({ input }) => {
+          const result = assessPreListingRisk({
+            ...(input.deployer === undefined ? {} : { deployer: input.deployer }),
+            ...(input.asBadge === undefined ? {} : { asBadge: input.asBadge }),
+            ...(input.asBlockDecision === undefined ? {} : { asBlockDecision: input.asBlockDecision }),
+          });
+          if (result.status === 'refuse') {
+            return {
+              status: 'refuse' as const,
+              reason: result.reason,
+              kind: 'not_a_badge' as const,
+              isBadge: false as const,
+              isBlockDecision: false as const,
+              inventedCleanBadge: false as const,
+              userMessageKey: 'agents.error.capability_unavailable' as const,
+            };
+          }
+          return {
+            status: 'annotation' as const,
+            kind: 'pattern_flags' as const,
+            isBadge: false as const,
+            isBlockDecision: false as const,
+            deployer: result.deployer,
+            lpLocks: result.lpLocks,
+            vestings: result.vestings,
+            patternFlags: result.patternFlags.map((flag) => ({ ...flag })),
+            inventedCleanBadge: false as const,
+            userMessageKey: 'agents.error.capability_unavailable' as const,
+          };
+        }),
     }),
 
     /**
