@@ -7,6 +7,7 @@ import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
 import type { BankServices } from './bank-service.js';
 import { userFacingBankMessage } from './user-copy.js';
 import { describeAutoInvestPolicy } from './auto-invest/auto-invest-policy.js';
+import { describeBusinessPolicy } from './business/business-policy.js';
 
 /**
  * svc-bank's API.
@@ -2311,6 +2312,8 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   });
 
   const business = router({
+    policy: publicProcedure.query(() => describeBusinessPolicy()),
+
     list: scopedProcedure('bank:read', { module: 'bank' })
       .output(z.array(businessAccountOutput))
       .query(async ({ ctx }) =>
