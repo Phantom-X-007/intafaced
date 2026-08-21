@@ -1631,15 +1631,16 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         )
         .query(async ({ ctx, input }) => {
           const plane = resolveNavigatorPlane(input.plane);
+          const tool = input.tool.trim();
           let quote = input.quote ?? null;
           let markets = input.markets ?? null;
 
           if (plane === 'live' && navigatorTradeDataPort) {
-            if (input.tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
+            if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
               const liveMarkets = await navigatorTradeDataPort.listMarkets().catch(() => null);
               if (liveMarkets && liveMarkets.length > 0) markets = [...liveMarkets];
             }
-            if (input.tool === 'trade.quote') {
+            if (tool === 'trade.quote') {
               const marketId = quote?.marketId?.trim() ?? '';
               if (marketId && (!quote || quote.last === null)) {
                 const liveQuote = await navigatorTradeDataPort.quote(marketId).catch(() => null);
@@ -1649,7 +1650,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
 
           let session = input.session ?? null;
-          if (plane === 'live' && input.tool === 'identity.session.read') {
+          if (plane === 'live' && tool === 'identity.session.read') {
             const liveSession = await readLiveNavigatorSession(
               navigatorIdentitySessionPort,
               session?.sessionId ?? '',
@@ -1660,7 +1661,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
 
           const result = invokeNavigatorDataTool({
-            tool: input.tool,
+            tool,
             plane,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',

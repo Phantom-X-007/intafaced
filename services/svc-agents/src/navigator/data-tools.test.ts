@@ -341,4 +341,47 @@ describe('invokeDataTool live identity miss (S11-6)', () => {
       session: { sessionId: 'sess-1', userId: USER, status: 'closed' },
     });
   });
+
+  it('padded identity.session.read in live still overlays — caller fixture is not live truth', async () => {
+    const result = await createAgentsRouter(stubDeps()).createCaller(signed()).navigator.invokeDataTool({
+      tool: ' identity.session.read ',
+      plane: 'live',
+      userTier: 'free',
+      law: publishedAll,
+      session: fatSession,
+      occurredAt: '2026-08-07T12:00:01.000Z',
+    });
+    expect(result.result).toEqual({
+      status: 'refuse',
+      tool: 'identity.session.read',
+      reason: 'no_live_session',
+      userMessageKey: 'agents.navigator.unavailable',
+    });
+    expect(result.result).not.toMatchObject({ status: 'ok', session: fatSession });
+  });
+
+  it('padded identity.session.read live uses the port session, not the caller fixture', async () => {
+    const result = await createAgentsRouter(
+      stubDeps({
+        navigatorIdentitySessionPort: {
+          read: async () => ({ sessionId: 'sess-1', userId: USER, status: 'closed' as const }),
+        },
+      }),
+    )
+      .createCaller(signed())
+      .navigator.invokeDataTool({
+        tool: ' identity.session.read ',
+        plane: 'live',
+        userTier: 'free',
+        law: publishedAll,
+        session: fatSession,
+        occurredAt: '2026-08-07T12:00:01.000Z',
+      });
+    expect(result.result).toEqual({
+      status: 'ok',
+      tool: 'identity.session.read',
+      session: { sessionId: 'sess-1', userId: USER, status: 'closed' },
+    });
+    expect(result.result).not.toMatchObject({ status: 'ok', session: fatSession });
+  });
 });

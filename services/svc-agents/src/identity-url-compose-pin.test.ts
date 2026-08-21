@@ -95,6 +95,9 @@ describe('compose IDENTITY_URL for agents affiliate producer', () => {
     const router = readFileSync(join(ROOT, 'services/svc-agents/src/router.ts'), 'utf8');
     expect(sessionRun).toMatch(/sessionFixture = liveSession\.ok \? liveSession\.session : null/);
     expect(sessionRun).not.toMatch(/if \(liveSession\.ok\) sessionFixture = liveSession\.session;/);
+    expect(router).toMatch(/const tool = input\.tool\.trim\(\)/);
+    expect(router).toMatch(/plane === 'live' && tool === 'identity\.session\.read'/);
+    expect(router).not.toMatch(/input\.tool === 'identity\.session\.read'/);
     expect(router).toMatch(/readLiveNavigatorSession\(/);
     expect(router).toMatch(/session = liveSession\.ok \? liveSession\.session : null/);
     expect(router).not.toMatch(/if \(liveSession\) session = liveSession;/);
