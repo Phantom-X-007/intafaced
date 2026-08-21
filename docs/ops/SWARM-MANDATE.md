@@ -28,30 +28,20 @@ this file, the coordinator does not know it.
 
 **Shell product craft** (REGROUP / AFK residual / LANDER / INTEGRITY) **plus non-money implementable tracker rows** is the swarm free-product board.
 
-| Signal              | Meaning                                                                                                         |
-| ------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `freeShell`         | REGROUP/AFK/LANDER/INTEGRITY only — shell craft                                                                 |
-| `freeImplementable` | Tracker rows that pass the implementable gate                                                                   |
-| `freeProduct`       | `freeShell` **+** `freeImplementable` (spawn total)                                                             |
-| `freeShell=0`       | No shell craft — **not** all-clear if `freeImplementable>0` or path-clear P1 remains                            |
-| `freeProduct=0`     | Both shell and implementable empty — **not** “platform done”; run P1–P5                                         |
-| `freeTracker`       | Ready/unowned tracker rows that are **not** implementable (money-gated, dep-blocked, thin spec, wave-1 exclude) |
+| Signal              | Meaning                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `freeShell`         | REGROUP/AFK/LANDER/INTEGRITY only — shell craft                                      |
+| `freeImplementable` | Tracker rows that pass the implementable gate                                        |
+| `freeProduct`       | `freeShell` **+** `freeImplementable` (spawn total)                                  |
+| `freeShell=0`       | No shell craft — **not** all-clear if `freeImplementable>0` or path-clear P1 remains |
+| `freeProduct=0`     | Both shell and implementable empty — **not** “platform done”; run P1–P5              |
+| `freeTracker`       | Ready/unowned tracker rows that are **not** implementable (dep-blocked, thin spec)   |
 
-### Tracker implementable gate (Nitro approved — money wave allowlist)
+### Tracker implementable gate
 
-A tracker row is **IMPLEMENTABLE** when **all** hold:
+A tracker row is **IMPLEMENTABLE** when `status` is `ready`, `owner` is none, and every `dependsOn` is `done`. Spec depth is optional — thin specs are a research hint, not a start blocker.
 
-1. `status` is `ready`, `owner` is none, every `dependsOn` is `done`
-2. Spec at `docs/ops/trk/<id>.md`, **≥100 lines**, code-grounded
-3. If `id` matches `/^(trade|pay|bank|venue|p2p|market)\./`, it is on the **OPEN_MONEY allowlist** in `tooling/scripts/swarm.mjs` (not every money id)
-
-Implementable rows enter **freeProduct** under normal Class N: path-disjoint, isolated worktrees, and claim files. Any width shown below is a capacity heuristic, never a cap or readiness gate.
-
-**`residual-own` on a TRK claim** means “spec done, awaiting implement.” It **MUST NOT** hide implementable rows from the free board. Only **`claimed` | `pr-open` | `done`/`merged`/`retired` | money-gated | dep-blocked** hide them.
-
-**Money-class (wave open 2026-08-08 — allowlist only):** prefix still classifies a row as money; **implementable** only for exact ids in `OPEN_MONEY`: `trade.forex`, `trade.ccxt-api`, `venue.aggregation`, `p2p.merchants`, `market.vendors`, `pay.gateway`. All other money ids stay closed until Nitro adds them to the allowlist. (`trade.forex` remains **model/hours only** — D-S-05 / instrument ADR: do not list production pairs until fiat settlement rails exist.)
-
-**Wave-1 exclude from auto-spawn** even if non-money: `ops.admin`, `ops.compliance`.
+Implementable rows enter **freeProduct**: path-disjoint, worktrees, claim files optional.
 
 Machine: `pnpm swarm:status` lane line is always:
 
@@ -62,7 +52,7 @@ Machine: `pnpm swarm:status` lane line is always:
 ## AFK priority ladder (anti-drift — mandatory)
 
 When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P-WS “cycle N” with identical board).  
-**Re-freeze only on board delta** (new free product, implementable TRK, partner PR state change, invent findings >0, new open Nitro Class N).
+**Re-freeze only on board delta** (new free product, implementable TRK, partner PR state change, invent findings >0).
 
 | Priority | Lane                   | What counts as real work                                                                  | Ban                                 |
 | -------- | ---------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------- |
@@ -71,9 +61,9 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | **P2**   | Partner unblock        | Exact CI fail extract; one NEW comment only; never merge partners                         | dual-edit / merge Denon·Shehzad     |
 | **P3**   | Tracker                | Deepen thin specs **or** implement Stage-1 from implementable TRK                         | stamp mill; invent money-class      |
 | **P4**   | Integrity              | Invent re-scan only if shell code changed; P-WS only if partner matrix changed            | cycle stamp with no delta           |
-| **P5**   | Hygiene                | Claims truth; Class N merge green Nitro                                                   | R07 peace rows for unchanged board  |
+| **P5**   | Hygiene                | Claims truth; merge when done                                                             | R07 peace rows for unchanged board  |
 
-**Night/AFK after freeProduct=0:** P1→P5 above. Class N merge when green. **Not** invent depth UI. **Not** R07 cycle spam.
+**Night/AFK after freeProduct=0:** P1→P5 above. Merge when done. **Not** invent depth UI. **Not** R07 cycle spam.
 
 ### Allowed vs forbidden when freeProduct=0
 
@@ -83,22 +73,22 @@ When `freeProduct=0`, **do not** burn the night on tip-bump stamp PRs (R07/R01/P
 | P2 exact partner CI fail comments                         | Merging Denon/Shehzad PRs                               |
 | P3 code-grounded TRK research deepen                      | Dual-edit partner open PR paths                         |
 | P4 invent/P-WS **only if** code or partner matrix changed | Invent/P-WS stamp with no Board-Delta                   |
-| P5 claims truth + merge green Nitro Class N               | freeProduct=0 as session kill **or** as license to spam |
+| P5 claims truth + merge when done                         | freeProduct=0 as session kill **or** as license to spam |
 
 ### Machine enforcement (not a banner)
 
-| Mechanism                                      | What it does when context degrades                                                                                                                                                                                                                                                              |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`tooling/ci/value-gate.mjs` on Docs format** | **Exits 1** (strict) on docs-only + ≥0.80 subject similarity to last 10 ancestors + no `Board-Delta:` trailer. Git-only. **This is stamp enforcement.**                                                                                                                                         |
-| **`tooling/ci/value-gate.mjs` on CI `gates`**  | Same gate, **code half** (2026-08-06 · #832–#876). **Exits 1** on ≥0.80 **series** similarity **and** zero new symbols reached from a non-test file outside them **and** no `Serial-Work:` trailer **and** consecutive run ≥3. Run 1–2 **WARN, exit 0** — the first offence is loud, not fatal. |
-| **Zero-walk guard (both wirings)**             | No subject / no diff / no ancestors / broken symbol walk ⇒ **exit 1, advisory included**. Both checkouts pin `fetch-depth: 0`; under the `actions/checkout` default of 1 this gate printed `OK` having compared nothing to nothing.                                                             |
-| **`.githooks/pre-push`**                       | `format:check` + refuse direct push to `main`. **Nothing counts runs.** Delivery is never blocked by a volume number.                                                                                                                                                                           |
-| **CI triggers**                                | `push: main` **and** `pull_request` (push:main restored 2026-08-07 — only a push check proves the trunk is green). Docs-format is PR-only and skips FREEZE/claims/R00–R02/DASHBOARD-only. Manual: `workflow_dispatch`.                                                                          |
-| **Main CI no-cancel**                          | `ci.yml`: `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`. Every merge to main is allowed to finish CI (public Actions free). PR branches still cancel superseding runs. **Not a merge throttle** — unlimited parallel ship stays.                                                 |
-| **Red tip = one heal lane**                    | Claim `main-heal` / `blocked-main`; one fix PR; no competing heal PRs; no product merges onto red tip. Path-disjoint craft may continue in worktrees. Full text: `CONTRIBUTING.md` §1.                                                                                                          |
-| **Coordination PR ban**                        | No PR whose sole job is R07/peace/cycle/FREEZE tip-bump/claims meter/status. Those stay files; ship only with a real product/law delta.                                                                                                                                                         |
-| `pnpm swarm:status` ops-churn / Actions 24h    | Informational counts only — the repo is public, so Actions are free and unlimited                                                                                                                                                                                                               |
-| `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                                                                                                                                                                     |
+| Mechanism                                      | What it does when context degrades                                                                                                                                                                                                              |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`tooling/ci/value-gate.mjs` on Docs format** | **Retired 2026-08-21** — was stamp-mill enforcement; removed for ship speed.                                                                                                                                                                    |
+| **`tooling/ci/value-gate.mjs` on CI `gates`**  | **Retired 2026-08-21** — same. Local optional: `pnpm value-gate:self-test`.                                                                                                                                                                     |
+| **Zero-walk guard (both wirings)**             | No subject / no diff / no ancestors / broken symbol walk ⇒ **exit 1, advisory included**. Both checkouts pin `fetch-depth: 0`; under the `actions/checkout` default of 1 this gate printed `OK` having compared nothing to nothing.             |
+| **`.githooks/pre-push`**                       | `format:check` + refuse direct push to `main`. **Nothing counts runs.** Delivery is never blocked by a volume number.                                                                                                                           |
+| **CI triggers**                                | `push: main` **and** `pull_request` (push:main restored 2026-08-07 — only a push check proves the trunk is green). Docs-format is PR-only and skips FREEZE/claims/R00–R02/DASHBOARD-only. Manual: `workflow_dispatch`.                          |
+| **Main CI no-cancel**                          | `ci.yml`: `cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}`. Every merge to main is allowed to finish CI (public Actions free). PR branches still cancel superseding runs. **Not a merge throttle** — unlimited parallel ship stays. |
+| **Red tip = one heal lane**                    | Claim `main-heal` / `blocked-main`; one fix PR; no competing heal PRs; no product merges onto red tip. Path-disjoint craft may continue in worktrees. Full text: `CONTRIBUTING.md` §1.                                                          |
+| **Coordination PR ban**                        | No PR whose sole job is R07/peace/cycle/FREEZE tip-bump/claims meter/status. Those stay files; ship only with a real product/law delta.                                                                                                         |
+| `pnpm swarm:status` ops-churn / Actions 24h    | Informational counts only — the repo is public, so Actions are free and unlimited                                                                                                                                                               |
+| `pnpm swarm:lanes`                             | **Discoverability only** — enumerates P0–P3                                                                                                                                                                                                     |
 
 Self-test (fixtures, no network): `pnpm value-gate:self-test`.
 
@@ -141,4 +131,4 @@ GitHub is the **merge seal**, not the chat log.
 
 **Cold resume (no third file):** regenerate + read [`FREEZE-LIVE.md`](./FREEZE-LIVE.md) · [`../COORDINATION-TRUTH-LAYERS.md`](../COORDINATION-TRUTH-LAYERS.md) § Agent cold-start · human inbox [`../BOARD-CLEAR-HUMAN-BLOCKERS.md`](../BOARD-CLEAR-HUMAN-BLOCKERS.md).
 
-Forbidden unchanged: Shehzad protocol/INTACHAIN implement · Denon open-PR dual-edit · invent money/depth · main-checkout · fake visual under NO-FLEET.
+Integrity only: invent fake money/depth · main-checkout · fake visual under NO-FLEET. Path-intersect before dual-edit — not an ownership ban.
