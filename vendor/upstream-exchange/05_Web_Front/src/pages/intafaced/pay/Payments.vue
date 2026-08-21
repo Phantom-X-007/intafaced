@@ -205,9 +205,11 @@
             </div>
             <div class="ix-field">
               <label>{{ $t('intafaced.pay.railAdapter') }}</label>
-              <Select v-model="form.railAdapter" :placeholder="$t('intafaced.pay.chooseRail')">
-                <Option v-for="rail in railIds" :key="rail" :value="rail" :label="rail"></Option>
-              </Select>
+              <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+                <Select v-model="form.railAdapter" :placeholder="$t('intafaced.pay.chooseRail')">
+                  <Option v-for="rail in railIds" :key="rail" :value="rail" :label="rail"></Option>
+                </Select>
+              </IxState>
             </div>
             <div class="ix-field">
               <label for="ix-np-customer">{{ $t('intafaced.pay.customerRefOptional') }}</label>
@@ -299,6 +301,8 @@ export default {
       return (this.merchant.data && this.merchant.data.id) || '';
     },
     railIds() {
+      // Refused/unloaded health is not "zero rails" — IxState names the reason.
+      if (this.health.reason !== 'ok') return [];
       return (this.health.data && this.health.data.rails) || [];
     },
     canCreate() {
