@@ -947,6 +947,15 @@ module.exports = {
                 status: "Status",
                 fiatAmount: "Fiat",
                 noMethodRegistry: "The operator has not registered any payment method. Empty registry is a named refuse, not a missing button."
+            },
+            trades: {
+                title: "Held trades",
+                lead: "Mark sent, confirm received, or cancel a held trade. Confirm releases; cancel refunds. This screen never holds the amount.",
+                markSent: "Mark sent",
+                confirm: "Confirm received",
+                cancel: "Cancel",
+                empty: "No held trades",
+                updated: "Updated"
             }
         },
         token: {
