@@ -48,9 +48,27 @@ const jsonRecord = (label: string) =>
       }
     });
 
-const bool = z
-  .union([z.boolean(), z.string()])
-  .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
+const METERING_TRUE = new Set(['1', 'true', 'yes', 'on']);
+const METERING_FALSE = new Set(['0', 'false', 'no', 'off']);
+
+/**
+ * Kill-switch tokens. Unset / blank / false-tokens → false (must NOT bill).
+ * Garbage and untrimmed-unknown refuse boot — the denylist
+ * `!['0','false','off','no']` treated `false ` and `garbage` as true.
+ */
+const meteringFlag = z.union([
+  z.boolean(),
+  z.string().transform((raw, ctx) => {
+    const token = raw.trim().toLowerCase();
+    if (METERING_TRUE.has(token)) return true;
+    if (METERING_FALSE.has(token)) return false;
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'must be true/false/1/0/on/off/yes/no (garbage must not bill)',
+    });
+    return z.NEVER;
+  }),
+]);
 
 /** Compose interpolates unset optional URLs to "". Blank is absent, not an invalid URL. */
 const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
@@ -68,8 +86,12 @@ const schema = serviceEnvSchema
       SERVICE_NAME: z.string().default('svc-agents'),
       HTTP_PORT: z.coerce.number().int().default(4008),
 
-      /** svc-ledger's internal address. Metered usage is billed through it. */
-      LEDGER_URL: z.string().url().default('http://localhost:4001'),
+      /**
+       * svc-ledger's internal address. Metered usage is billed through it.
+       * Required — no localhost default. Unset / blank refuses boot (EnvError)
+       * rather than inventing http://localhost:4001 and posting feeCharge.
+       */
+      LEDGER_URL: z.string().url(),
 
       /**
        * svc-identity base for affiliate accrue + payout after usage feeCharge.
@@ -118,8 +140,11 @@ const schema = serviceEnvSchema
        */
       LIVE_TRADE_COPY_LEADER_IDS: blankAsAbsent(z.string().optional()),
 
-      /** Asset premium agent tiers are billed in (§8.2). */
-      AGENTS_FEE_ASSET_ID: z.string().default('IFC'),
+      /**
+       * Asset premium agent tiers are billed in (§8.2). Owner-published.
+       * Required min(1) — unset / blank refuses boot. Never invent IFC.
+       */
+      AGENTS_FEE_ASSET_ID: z.string().min(1),
 
       /**
        * Billing window length. Must divide 1440 so a window never straddles
@@ -134,8 +159,19 @@ const schema = serviceEnvSchema
        * no feeCharge — including settle of leftover windows. Token counts stay
        * on the action audit only (knowable cost without inventing a deferred
        * bill). Dual-write of usage_records while off is forbidden.
+       *
+       * Unset / blank → false (must NOT bill). Explicit true is owner-on.
+       * Trimmed false tokens stay off. Garbage strings refuse boot.
+       * Never default true — that was fail-open feeCharge.
        */
-      AGENTS_METERING_ENABLED: bool.default(true),
+      AGENTS_METERING_ENABLED: z.preprocess((v) => {
+        if (v === undefined || v === null) return false;
+        if (typeof v === 'string') {
+          const trimmed = v.trim();
+          return trimmed === '' ? false : trimmed;
+        }
+        return v;
+      }, meteringFlag),
 
       /**
        * Which registered provider serves the logical id `primary` in the routing

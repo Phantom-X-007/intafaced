@@ -1,16 +1,22 @@
 /**
  * Unit card — compose stack sets IDENTITY_URL for svc-agents affiliate producer
+ *            + LEDGER_URL refuse-closed (no silent localhost feeCharge)
  *
  * 1. Promise: after usage feeCharge, accrue + payout can reach identity S2S.
+ *    Metering posts only to an owner-set ledger — unset LEDGER_URL must refuse
+ *    boot rather than invent http://localhost:4001.
  * 2. Break: compose boots agents without IDENTITY_URL → noop forever even
- *    though identity is on the same network.
+ *    though identity is on the same network. env.ts LEDGER_URL default
+ *    localhost → createLedgerClient + feeCharge against a guessed book.
  * 3. Done bar: docker-compose.apps.yml svc-agents has
  *    IDENTITY_URL: http://svc-identity:4002
+ *    LEDGER_URL: http://svc-ledger:4001
  *    env.ts IDENTITY_URL is optional URL with no localhost default.
- * 4. Class M (producer wire only — identity owns rates)
- * 5. Paths: docker-compose.apps.yml (svc-agents block only) + env.ts
- * 6. RED: pin fails if IDENTITY_URL drops, env defaults localhost, or
- *    AGENTS_PROVIDER mock / AUTH_HEADER / JWT_* / key-no-value upstream
+ *    env.ts LEDGER_URL is a required URL with no localhost default.
+ * 4. Class M (producer wire + ledger URL — identity owns rates; no invent book)
+ * 5. Paths: docker-compose.apps.yml (svc-agents block only) + env.ts + index.ts
+ * 6. RED: pin fails if IDENTITY_URL / LEDGER_URL drops, env defaults localhost,
+ *    or AGENTS_PROVIDER mock / AUTH_HEADER / JWT_* / key-no-value upstream
  *    lines are restamped. Do not default AGENTS_PROVIDER to upstream.
  */
 import { readFileSync } from 'node:fs';
@@ -32,6 +38,7 @@ function countAssignments(source: string, name: string): number {
 }
 
 const IDENTITY = /^\s+IDENTITY_URL:\s*http:\/\/svc-identity:4002\s*$/gm;
+const LEDGER = /^\s+LEDGER_URL:\s*http:\/\/svc-ledger:4001\s*$/gm;
 const HEADER = /^\s+AGENTS_UPSTREAM_AUTH_HEADER:\s*\$\{AGENTS_UPSTREAM_AUTH_HEADER:-x-api-key\}\s*$/gm;
 const PREFIX = /^\s+AGENTS_UPSTREAM_AUTH_PREFIX:\s*\$\{AGENTS_UPSTREAM_AUTH_PREFIX:-\}\s*$/gm;
 const JWT_TTL = /^\s+JWT_ACCESS_TTL_SECONDS:\s*\$\{JWT_ACCESS_TTL_SECONDS:-900\}\s*$/gm;
@@ -48,10 +55,30 @@ describe('compose IDENTITY_URL for agents affiliate producer', () => {
     expect(envTs).not.toMatch(/IDENTITY_URL:[\s\S]*localhost:4002/);
   });
 
+  it('env.ts declares required LEDGER_URL with no localhost default', () => {
+    const ledgerDecl = envTs.slice(envTs.indexOf('LEDGER_URL:'));
+    expect(ledgerDecl).toMatch(/LEDGER_URL:\s*z\.string\(\)\.url\(\)/);
+    expect(ledgerDecl.slice(0, 160)).not.toMatch(/\.default\(/);
+    expect(ledgerDecl.slice(0, 200)).not.toMatch(/localhost:4001/);
+    expect(envTs).not.toMatch(/LEDGER_URL:\s*z\.string\(\)\.url\(\)\.default\('http:\/\/localhost:4001'\)/);
+  });
+
   it('compose svc-agents block pins IDENTITY_URL to svc-identity once', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-agents/);
     expect(block.match(IDENTITY)).toHaveLength(1);
     expect(countAssignments(block, 'IDENTITY_URL')).toBe(1);
+  });
+
+  it('compose svc-agents block pins LEDGER_URL to svc-ledger once (no localhost)', () => {
+    expect(block.match(LEDGER)).toHaveLength(1);
+    expect(countAssignments(block, 'LEDGER_URL')).toBe(1);
+    expect(block).not.toMatch(/localhost:4001/);
+  });
+
+  it('index constructs the ledger client from env.LEDGER_URL only', () => {
+    const indexSrc = readFileSync(join(ROOT, 'services/svc-agents/src/index.ts'), 'utf8');
+    expect(indexSrc).toMatch(/createLedgerClient\(env\.LEDGER_URL/);
+    expect(indexSrc).not.toMatch(/localhost:4001/);
   });
 
   it('does not restamp AGENTS_PROVIDER mock, AUTH_HEADER, JWT_*, or key-no-value upstream', () => {
