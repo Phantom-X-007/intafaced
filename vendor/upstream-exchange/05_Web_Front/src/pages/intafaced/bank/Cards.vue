@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.cardsPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.cardsPage.lead') }}</p>
-      <div class="ix-source">svc-bank · cards.programme · cards.list · cards.issue · cards.setStatus · cards.authorizations</div>
+      <div class="ix-source">svc-bank · cards.programme · cards.list · cards.issue · cards.setStatus · cards.authorizations · autoInvest.list · autoInvest.createRoundUp</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -128,6 +128,80 @@
       </div>
     </div>
 
+    <!-- ── card round-up rules ─────────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.cardsPage.roundUpList') }}</h2>
+        <span class="ix-sub">autoInvest.list</span>
+      </div>
+      <IxState :loading="roundUps.loading" :reason="roundUps.reason" :message="roundUps.message" endpoint="/api/bank/trpc/autoInvest.list">
+        <div v-if="roundUpRules.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('intafaced.bank.cardsPage.roundUpId') }}</th>
+                <th>{{ $t('intafaced.pay.asset') }}</th>
+                <th>{{ $t('intafaced.bank.cardsPage.roundUpGranularity') }}</th>
+                <th>{{ $t('intafaced.bank.poolName') }}</th>
+                <th>{{ $t('intafaced.bank.status') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in roundUpRules" :key="r.id">
+                <td>{{ r.id }}</td>
+                <td>{{ r.assetId }}</td>
+                <td>{{ r.amount }}</td>
+                <td>{{ r.targetPoolId }}</td>
+                <td>{{ r.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.cardsPage.roundUpEmpty') }}</div>
+      </IxState>
+    </div>
+
+    <!-- ── create a card round-up ─────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.cardsPage.roundUpTitle') }}</h2>
+        <span class="ix-sub">autoInvest.createRoundUp</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.cardsPage.roundUpLead') }}</p>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-roundup-asset">{{ $t('intafaced.pay.asset') }}</label>
+          <Input element-id="ix-roundup-asset" v-model="roundUpForm.assetId" :placeholder="$t('intafaced.bank.assetHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-roundup-granularity">{{ $t('intafaced.bank.cardsPage.roundUpGranularity') }}</label>
+          <Input element-id="ix-roundup-granularity" v-model="roundUpForm.granularity" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-roundup-pool">{{ $t('intafaced.bank.cardsPage.roundUpPool') }}</label>
+          <Input element-id="ix-roundup-pool" v-model="roundUpForm.targetPoolId" :placeholder="$t('intafaced.bank.cardsPage.roundUpPoolHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-roundup-buy">{{ $t('intafaced.bank.cardsPage.roundUpBuyAsset') }}</label>
+          <Input element-id="ix-roundup-buy" v-model="roundUpForm.buyAssetId" :placeholder="$t('intafaced.bank.cardsPage.roundUpBuyAssetHint')"></Input>
+        </div>
+      </div>
+      <div v-if="roundUpCrossAsset" class="ix-note" style="margin-bottom:14px;">
+        {{ $t('intafaced.bank.cardsPage.roundUpRateUnset') }}
+      </div>
+      <div class="ix-actions">
+        <Button type="primary" :loading="roundUpCreated.busy" :disabled="!canCreateRoundUp" @click="submitRoundUp">{{ $t('intafaced.bank.cardsPage.roundUpCreate') }}</Button>
+      </div>
+
+      <div v-if="roundUpCreated.ran" style="margin-top:14px;">
+        <div v-if="roundUpCreated.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.cardsPage.roundUpCreated') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.bank.cardsPage.roundUpId') }}: {{ roundUpCreated.data.id }}</div>
+        </div>
+        <IxState v-else :loading="roundUpCreated.busy" :reason="roundUpCreated.reason" :message="roundUpCreated.message" endpoint="/api/bank/trpc/autoInvest.createRoundUp"></IxState>
+      </div>
+    </div>
+
     <!-- ── every decision on one card ─────────────────────────────────── -->
     <div v-if="openCardId" class="ix-card">
       <div class="ix-card-head">
@@ -190,6 +264,11 @@
  *
  * `cardId` is client-supplied so a retried issue is the same card, not a second
  * one drawing on the same balance (§5).
+ *
+ * Card round-up is the user-facing auto-invest door on this page. Granularity
+ * is a decimal string. `buyAssetId` is omitted unless it matches `assetId`; a
+ * different buy asset surfaces `bank.auto_invest_rate_unset` and is not sent —
+ * this screen does not invent a convert rate.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -206,22 +285,40 @@ export default {
       nav: BANK_NAV,
       openCardId: '',
       issueForm: { assetId: '', perAuthorizationLimit: '' },
+      roundUpForm: { assetId: '', granularity: '', targetPoolId: '', buyAssetId: '' },
       programme: this.emptySection(),
       cards: this.emptySection(),
       authorizations: this.emptySection(),
+      roundUps: this.emptySection(),
       issued: this.emptyAction(),
-      statusSet: this.emptyAction()
+      statusSet: this.emptyAction(),
+      roundUpCreated: this.emptyAction()
     };
   },
   computed: {
     canIssue() {
       return Boolean(this.issueForm.assetId && this.issueForm.perAuthorizationLimit && this.draftId('card'));
+    },
+    canCreateRoundUp() {
+      return Boolean(this.roundUpForm.assetId && this.roundUpForm.granularity && this.roundUpForm.targetPoolId);
+    },
+    roundUpCrossAsset() {
+      var buy = this.roundUpForm.buyAssetId;
+      return Boolean(buy && buy !== this.roundUpForm.assetId);
+    },
+    roundUpRules() {
+      var rows = this.roundUps.data;
+      if (!rows || !rows.length) return [];
+      return rows.filter(function(r) {
+        return r.kind === 'card_roundup';
+      });
     }
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.load('programme', query('bank', 'cards.programme', undefined, this.ixToken));
     this.reloadCards();
+    this.reloadRoundUps();
   },
   methods: {
     bps(value) {
@@ -261,6 +358,39 @@ export default {
     showAuthorizations(card) {
       this.openCardId = card.id;
       this.load('authorizations', query('bank', 'cards.authorizations', { cardId: card.id }, this.ixToken));
+    },
+    reloadRoundUps() {
+      this.load('roundUps', query('bank', 'autoInvest.list', undefined, this.ixToken));
+    },
+    submitRoundUp() {
+      var self = this;
+      if (!this.canCreateRoundUp) return;
+      var buy = this.roundUpForm.buyAssetId;
+      var assetId = this.roundUpForm.assetId;
+      if (buy && buy !== assetId) {
+        this.roundUpCreated = {
+          busy: false,
+          ran: true,
+          reason: 'error',
+          message: 'bank.auto_invest_rate_unset',
+          data: null
+        };
+        return;
+      }
+      var input = {
+        assetId: assetId,
+        granularity: this.roundUpForm.granularity,
+        targetPoolId: this.roundUpForm.targetPoolId
+      };
+      if (buy) input.buyAssetId = buy;
+      this.act(
+        'roundUpCreated',
+        mutate('bank', 'autoInvest.createRoundUp', input, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.roundUpForm = { assetId: '', granularity: '', targetPoolId: '', buyAssetId: '' };
+        self.reloadRoundUps();
+      });
     }
   }
 };
