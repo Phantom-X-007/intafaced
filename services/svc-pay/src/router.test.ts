@@ -753,6 +753,18 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
       method: 'card',
       riskBand: 'low',
       policy: 'allow-sandbox',
+      // Operator-declared test fixture — same fraction as decide.test.ts. REFERENCE
+      // profiles stay rate-unset; omitting this refuses pay.routing_approval_rate_unset.
+      profiles: [
+        { railId: 'crypto-native', methods: ['crypto'], countries: ['*'], riskBands: ['low', 'external:ok'] },
+        {
+          railId: 'card-sandbox',
+          methods: ['card'],
+          countries: ['*'],
+          riskBands: ['low', 'medium'],
+          successRate: '0.88',
+        },
+      ],
     });
     expect(out.chosenRailId).toBe('card-sandbox');
     expect(out.inputs).toEqual({ geoCountry: 'DE', method: 'card', riskBand: 'low' });
