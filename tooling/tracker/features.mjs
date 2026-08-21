@@ -1679,14 +1679,15 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
-    requires: ['packages/contracts/src/ops-analytics-warehouse.ts', 'services/svc-edge/src/compliance-honesty.ts'],
+    requires: [
+      'packages/contracts/src/ops-analytics-mount-vs-tracker.ts',
+      'packages/contracts/src/ops-analytics-mount-vs-tracker.test.ts',
+      'packages/contracts/src/ops-analytics-warehouse.ts',
+      'services/svc-edge/src/compliance-honesty.ts',
+    ],
     note:
-      '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — `ANALYTICS_ETL_WATERMARK_AT` + ' +
-      '`resolveEtlWatermark` absent/present honesty; stamp never paints live cubes alone; writer URLs refuse. ' +
-      '**2026-08-15:** production SQL lag probe — `createSqlWarehouseLagProbe` runs ANALYTICS_REPLICA_LAG_SQL; ' +
-      'svc-edge `/admin/analytics/warehouse` is the caller (one-shot postgres.js, ANALYTICS_REPLICA_PROBE=off kill). ' +
-      'URL absent / connect fail / not-a-standby → unknown, never invented live. ' +
-      'Residual (not invent): cube job callers (Phase B late — no warehouse process). Never second balances.',
+      '**D26-P1-O4 Done-bar sealed 2026-08-12 (#1759):** warehouse door usable-or-§13 — ETL watermark honesty. ' +
+      'D26-P1-O4M mount-vs-tracker seals replica read-only + lag probe paths. Class X residual: cube job callers (Phase B).',
   }),
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
