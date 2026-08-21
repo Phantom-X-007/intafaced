@@ -21,6 +21,18 @@ export function rethrowCopyFollowUnique(err: unknown): never {
 }
 
 /**
+ * Unique fill_id on fee-share claim. A 23505 with no re-read row must not
+ * 500 the door — map to the same refuse as a second leader. Not a ledger
+ * throw: wrapping those as CopyError would unclaim after a sweep.
+ */
+export function rethrowCopyFeeShareUnique(err: unknown): never {
+  if (isPgUniqueViolation(err)) {
+    throw new CopyError('Fill already settled for another leader — refuse fee-share', 'trade.copy_settle_refused');
+  }
+  throw err;
+}
+
+/**
  * Typed product refuses fire before ledger recipes. Unclaim a CopyError
  * only when **this call INSERTed** the pending row (pre-post). Fill-not-found /
  * wrong owner / killed / not-mirrored / pre-follow / blank / expired must not
@@ -204,8 +216,15 @@ export interface CopyFollowStore {
    */
   reserveEarnings(pairKey: string, amount: Amount, cap: Amount): Promise<ReserveEarningsResult>;
   /**
-   * Roll back a prior reserve after ledger post failure. Does not undo
-   * round-trips — the attempt still counted for decay.
+   * Stamp the reserved amount on a pending unique fill_id **before** ledger
+   * post. Leftover retry skip-reserves and re-posts this amount — never
+   * `grossLeaderShare`, never a live cap/zero skip over a paid fill.
+   */
+  savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void>;
+  /**
+   * Roll back a prior reserve. Settle does not call this when unique fill_id
+   * is kept (post-throw) — releasing would let a later fill occupy the same
+   * cap while leftover retry skip-reserves and pays again.
    */
   releaseEarnings(pairKey: string, amount: Amount): Promise<void>;
   /** Drop a pair's churn counters — used when the follow itself goes away. */
@@ -418,6 +437,16 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
       this.period.set(pairKey, { earningsPaid: newPaid, roundTrips });
       return { reserved, newPaid, roundTrips };
     });
+  }
+
+  async savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void> {
+    if (reserved <= 0n) return;
+    const key = settleKey(followId, fillId);
+    const cur = this.settled.get(key);
+    if (!cur || !isPendingFeeShareClaim(cur)) return;
+    const next = { ...cur, cappedLeaderShare: reserved };
+    this.settled.set(key, next);
+    this.settledByFill.set(fillId, next);
   }
 
   async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
@@ -823,6 +852,17 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     });
   }
 
+  async savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void> {
+    if (reserved <= 0n) return;
+    await this.sql`
+      UPDATE copy_settled_fee_shares
+         SET capped_leader_share = ${formatAmount(reserved)}
+       WHERE follow_id = ${followId} AND fill_id = ${fillId}
+         AND settled = false
+         AND skipped_reason IS NULL
+    `;
+  }
+
   async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
     if (amount <= 0n) return;
     const amountStr = formatAmount(amount);
@@ -994,7 +1034,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         } catch (err) {
           if (isPgUniqueViolation(err)) {
             const saved = await this.getSettledFeeShareByFillId(fillId);
-            if (!saved) throw err;
+            if (!saved) rethrowCopyFeeShareUnique(err);
             const resolved = resolveExistingFeeShareClaim(followId, saved);
             if (resolved.action === 'duplicate') {
               return { status: 'duplicate' as const, record: resolved.record };

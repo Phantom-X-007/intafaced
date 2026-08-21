@@ -48,7 +48,7 @@ import {
   refusePnlLinkedCopyFee,
 } from './fee-share.js';
 import { parseLeaderFillObservation, planMirror, presentMirrorPlan, refuseCopyLeaderRanking, type MirrorSide } from './mirror.js';
-import { MemoryCopyFollowStore, rethrowCopyFollowUnique, type CopyFollowStore } from './follow-store.js';
+import { MemoryCopyFollowStore, isPendingFeeShareClaim, rethrowCopyFollowUnique, type CopyFollowStore } from './follow-store.js';
 
 /** Settled follower fill fee — `fills.fee_amount`, never a notional×bps invent. */
 export type FollowerFillFee = {
@@ -505,8 +505,11 @@ export class CopyService {
    * pending retries `run` (keys `copy-fee:${fillId}` /
    * `copy-leader-share:${fillId}:${leaderId}` are idempotent). Unclaim CopyError
    * only when this call INSERTed — leftover pending retry keeps the row.
-   * Pending retry must not re-reserve (crash after post / before UPDATE would
-   * persist cap_reached over a paid fill and burn cap twice).
+   * Pending retry must not re-reserve when this fill already occupied cap
+   * (crash after post / before UPDATE would persist cap_reached over a paid
+   * fill and burn cap twice). Post-throw does **not** releaseEarnings while
+   * unique fill_id is kept — a burned cap slot is better than over-pay.
+   * Leftover retry re-posts the persisted reserved amount, never gross.
    */
   async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {
     return this.store.runFollowExclusive(input.followId, (store) => this.settleFeeShareExclusive(store, principal, input));
@@ -562,20 +565,34 @@ export class CopyService {
       const cap = parseAmount(law.earningsCapPerFollower);
 
       // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
-      // First INSERT reserves. Leftover pending retry must not — the period
-      // may already hold this fill's reserve (crash after post / before UPDATE).
-      // Ledger keys copy-fee:${fillId} / copy-leader-share:${fillId}:${leaderId}
-      // are idempotent. Ignore live cap_reached on retry so we do not stamp
-      // skip over a fill the ledger already paid.
+      // First INSERT reserves and stamps the amount on the pending row before
+      // post. Leftover retry uses that stamp (ledger keys copy-fee:${fillId} /
+      // copy-leader-share:${fillId}:${leaderId} are idempotent). Never post
+      // grossLeaderShare. Never stamp cap_reached / zero_share over a fill
+      // whose reserve already landed — persist is before post, so a zero stamp
+      // means this call never reached the ledger.
       const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
       let reservedAmount: Amount;
       if (ctx.insertedThisCall) {
         const reserved = await store.reserveEarnings(key, intend, cap);
         reservedAmount = reserved.reserved;
-      } else if (attribution.skippedReason === 'zero_share') {
-        reservedAmount = 0n;
+        if (reservedAmount > 0n) {
+          await store.savePendingFeeShareReserve(follow.followId, fillId, reservedAmount);
+        }
       } else {
-        reservedAmount = intend > 0n ? intend : attribution.grossLeaderShare;
+        const pending = await store.getSettledFeeShare(follow.followId, fillId);
+        const alreadyReserved = pending && isPendingFeeShareClaim(pending) ? pending.cappedLeaderShare : 0n;
+        if (alreadyReserved > 0n) {
+          reservedAmount = alreadyReserved;
+        } else if (intend > 0n) {
+          const reserved = await store.reserveEarnings(key, intend, cap);
+          reservedAmount = reserved.reserved;
+          if (reservedAmount > 0n) {
+            await store.savePendingFeeShareReserve(follow.followId, fillId, reservedAmount);
+          }
+        } else {
+          reservedAmount = 0n;
+        }
       }
 
       if (reservedAmount <= 0n) {
@@ -608,14 +625,7 @@ export class CopyService {
         skippedReason: null as null,
       };
       const plan = planCopyFeeShareSettle(finalAttribution);
-      try {
-        await postCopyFeeShareSettle(this.ledger, plan);
-      } catch (err) {
-        if (ctx.insertedThisCall) {
-          await store.releaseEarnings(key, reservedAmount);
-        }
-        throw err;
-      }
+      await postCopyFeeShareSettle(this.ledger, plan);
       return {
         fillId: finalAttribution.fillId,
         followId: follow.followId,

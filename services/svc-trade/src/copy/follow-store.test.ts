@@ -8,6 +8,7 @@ import {
   isCopyFeeSharePrePostUnclaim,
   isPendingFeeShareClaim,
   rethrowCopyFollowUnique,
+  rethrowCopyFeeShareUnique,
   resolveExistingFeeShareClaim,
   shouldUnclaimCopyFeeShareClaim,
   type StoredSettledFeeShare,
@@ -63,6 +64,17 @@ describe('CopyFollowStore unique (follower, leader)', () => {
       rethrowCopyFollowUnique(Object.assign(new Error('dup'), { code: '23505' }));
     } catch (err) {
       expect(err).toMatchObject({ code: 'trade.copy_already_following' });
+      expect((err as { code: string }).code).not.toBe('23505');
+    }
+  });
+
+  it('rethrowCopyFeeShareUnique maps 23505 to settle_refused, not a raw unique_violation', () => {
+    expect(() => rethrowCopyFeeShareUnique(Object.assign(new Error('dup'), { code: '23505' }))).toThrow(CopyError);
+    expect(() => rethrowCopyFeeShareUnique(Object.assign(new Error('fk'), { code: '23503' }))).toThrow(/fk/);
+    try {
+      rethrowCopyFeeShareUnique(Object.assign(new Error('dup'), { code: '23505' }));
+    } catch (err) {
+      expect(err).toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
       expect((err as { code: string }).code).not.toBe('23505');
     }
   });
@@ -394,7 +406,7 @@ type SettledRow = {
 };
 
 /** Tagged-template stand-in — records INSERT vs run() order without Postgres. */
-function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string } }) {
+function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string }; uniqueMissingRow?: boolean }) {
   const events: string[] = [];
   const byFill = new Map<string, SettledRow>();
   const uniqueOther = opts?.uniqueOther;
@@ -434,6 +446,15 @@ function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string
       return Promise.resolve([]);
     }
     if (text.includes('update copy_settled_fee_shares')) {
+      if (text.includes('skipped_reason is null')) {
+        events.push('persist-reserve');
+        const fillId = String(values[2]);
+        const prev = byFill.get(fillId);
+        if (prev && prev.follow_id === String(values[1]) && prev.settled === false) {
+          byFill.set(fillId, { ...prev, capped_leader_share: String(values[0]) });
+        }
+        return Promise.resolve([]);
+      }
       events.push('update');
       const fillId = String(values[10]);
       const prev = byFill.get(fillId);
@@ -472,6 +493,9 @@ function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string
       }
       events.push('select-by-fill');
       const fillId = String(values[0]);
+      if (opts?.uniqueMissingRow && uniqueOther && fillId === uniqueOther.fillId) {
+        return Promise.resolve([]);
+      }
       if (uniqueOther && fillId === uniqueOther.fillId && events.includes('insert')) {
         return Promise.resolve([
           {
@@ -515,6 +539,20 @@ describe('SqlCopyFollowStore runFeeShareSettleOnce (order, no Postgres)', () => 
     expect(mock.events.indexOf('insert')).toBeLessThan(mock.events.indexOf('update'));
     expect(mock.byFill.get(FILL)?.settled).toBe(true);
     expect(mock.byFill.get(FILL)?.leader_id).toBe(LEADER);
+  });
+
+  it('unique-violation with no re-read row maps to trade.copy_settle_refused, not raw 23505', async () => {
+    const mock = mockSettleSql({ uniqueOther: { followId: FOLLOW_A, fillId: FILL }, uniqueMissingRow: true });
+    const store = new SqlCopyFollowStore(mock.sql, FOLLOW_B);
+    let ran = false;
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ran = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ran).toBe(false);
+    expect(mock.events).toContain('insert');
   });
 
   it('unique-violation on claim refuses the second leader without run()', async () => {
