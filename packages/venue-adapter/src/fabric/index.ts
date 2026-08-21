@@ -38,6 +38,8 @@
  *     two is their midpoint). Three make the median a check.
  *   · `venues/factory.ts` — `createVenueMarketDataAdapter`. An adapter written
  *     and unregistered is a file, not a venue.
+ *   · `venues/factory-policy.ts` — venue.aggregation honesty door. Public
+ *     market-data ids from the factory; unknown ids refuse; no invented list.
  */
 export * from './sequenced-book.js';
 export * from './book-feed.js';
@@ -62,3 +64,4 @@ export {
   type OkxSpotTradeOptions,
 } from './venues/okx-spot.js';
 export * from './venues/factory.js';
+export * from './venues/factory-policy.js';
