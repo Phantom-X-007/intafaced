@@ -14,6 +14,10 @@ import { baseEnvSchema, edgeEnvSchema, httpEnvSchema, loadEnv, otelEnvSchema } f
  *
  * HTTP_PORT 4019: 4000–4018 are taken by the existing fleet.
  */
+/** Compose interpolates unset optional URLs to "". Blank is absent, not an invalid URL. */
+const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), inner);
+
 const schema = baseEnvSchema
   .merge(otelEnvSchema)
   .merge(httpEnvSchema)
@@ -29,6 +33,11 @@ const schema = baseEnvSchema
        * Unknown id or unset credentials → venue skipped (refuse-closed at call).
        */
       EXECUTION_VENUE_IDS: z.string().default(''),
+      /**
+       * svc-trade base for OMS book snapshot on venue `intafaced-spot`
+       * (`GET /api/v1/orderbook/:symbol`). Unset / blank → snapshot map empty.
+       */
+      TRADE_URL: blankAsAbsent(z.string().url().optional()),
     }),
   );
 
