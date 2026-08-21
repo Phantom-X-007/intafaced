@@ -31,6 +31,7 @@ export function describeArbitragePolicy() {
     inventoryPrePositionRequired: true as const,
     internalVenueRefused: true as const,
     missingQuoteRefused: true as const,
+    nonPositiveMidRefused: true as const,
     staleQuoteRefused: true as const,
     inventsSpreads: false as const,
     inventsFees: false as const,
