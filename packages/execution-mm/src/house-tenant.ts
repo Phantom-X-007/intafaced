@@ -15,7 +15,7 @@ import { isExternalVenueKind } from './market-making.js';
  * matching-book refuse cannot be bypassed by a "tenant" wrapper.
  */
 
-export type HouseTenantRefuseReason = 'internal_matching_book';
+export type HouseTenantRefuseReason = 'internal_matching_book' | 'invalid_venue';
 
 export interface HouseTenantTarget {
   readonly venueId: string;
@@ -41,9 +41,13 @@ export type HouseTenantPinResult = HouseTenantExternalOk | HouseTenantRefusal;
 const INTERNAL_BOOK_DETAIL =
   'D26-P0-01 Q1 EXTERNAL-ONLY — house tenant may not point at our matching book; internal-venue half stays blocked until a later owner ruling';
 
+const INVALID_VENUE_DETAIL = 'external venue id must be a non-empty opaque string — no venue list is invented';
+
 /**
  * Pin a house-tenant venue target. Internal matching book always refuses.
- * External kinds pass the door only — no extra preference vs other venues.
+ * Empty / whitespace venueId refuses `invalid_venue` (same door as
+ * `@intafaced/execution-house-tenant` `trim().length===0`).
+ * External kinds with a real id pass the door only — no extra preference.
  */
 export function pinHouseTenantTarget(target: HouseTenantTarget): HouseTenantPinResult {
   if (!isExternalVenueKind(target.kind)) {
@@ -55,7 +59,17 @@ export function pinHouseTenantTarget(target: HouseTenantTarget): HouseTenantPinR
       detail: INTERNAL_BOOK_DETAIL,
     };
   }
-  return { ok: true, venueId: target.venueId, kind: target.kind };
+  const venueId = target.venueId.trim();
+  if (venueId.length === 0) {
+    return {
+      ok: false,
+      reason: 'invalid_venue',
+      venueId: target.venueId,
+      kind: target.kind,
+      detail: INVALID_VENUE_DETAIL,
+    };
+  }
+  return { ok: true, venueId, kind: target.kind };
 }
 
 /** Explicit refuse for the internal-venue half. No success branch. */
