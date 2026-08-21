@@ -46,8 +46,11 @@ export interface RoutePlan {
   /** Requested minus routed — non-zero when the market could not fill it all. */
   readonly unfilledAmount: Amount;
   readonly legs: readonly RouteLeg[];
-  /** Quantity-weighted average effective price across every leg. */
-  readonly averageEffectivePrice: Amount;
+  /**
+   * Quantity-weighted average effective price across every leg.
+   * `null` when nothing routed — 0 would read as filled-at-zero.
+   */
+  readonly averageEffectivePrice: Amount | null;
   /** Total quote-asset value of the routed portion, fees included. */
   readonly totalCost: Amount;
   /**
@@ -336,7 +339,7 @@ export async function planRoute(
   const routedAmount = sub(request.amount, remaining);
   // Report fee-only total to the user (venue cash); ranking already used all-in.
   const totalCost = legs.reduce((sum, leg) => add(sum, mul(leg.effectivePrice, leg.amount)), ZERO);
-  const averageEffectivePrice = routedAmount > 0n ? div(totalCost, routedAmount) : ZERO;
+  const averageEffectivePrice = routedAmount > 0n ? div(totalCost, routedAmount) : null;
   const averageAllIn =
     routedAmount > 0n
       ? div(
@@ -390,7 +393,7 @@ function emptyPlan(request: QuoteRequest, rejected: readonly RejectedVenue[]): R
     routedAmount: ZERO,
     unfilledAmount: request.amount,
     legs: [],
-    averageEffectivePrice: ZERO,
+    averageEffectivePrice: null,
     totalCost: ZERO,
     improvementBps: 0,
     rejected,
@@ -418,6 +421,6 @@ export function explainRoute(plan: RoutePlan): string {
   return (
     `${plan.side} ${formatAmount(plan.routedAmount)} ${plan.symbol} across ${plan.legs.length} venue(s)\n` +
     lines.join('\n') +
-    `\n  average ${formatAmount(plan.averageEffectivePrice)}`
+    (plan.averageEffectivePrice === null ? '' : `\n  average ${formatAmount(plan.averageEffectivePrice)}`)
   );
 }

@@ -42,7 +42,9 @@ function mergeSide(books: ReadonlyArray<{ venueId: string; book: OrderBook }>, s
     for (const [priceStr, amountStr] of book[side]) {
       const price = parseAmount(priceStr);
       const amount = parseAmount(amountStr);
-      if (amount <= 0n) continue;
+      // amount<=0 was already dropped; price 0/negative sorts first on a buy
+      // and sweepCost would fill at cost 0 — 0 reads as filled-at-zero.
+      if (amount <= 0n || price <= 0n) continue;
 
       const key = formatAmount(price);
       const entry = byPrice.get(key) ?? { price, contributions: [] };
@@ -128,7 +130,7 @@ export function sweepCost(
   book: ConsolidatedBook,
   side: 'buy' | 'sell',
   amount: Amount,
-): { filled: Amount; cost: Amount; averagePrice: Amount; levelsConsumed: number } {
+): { filled: Amount; cost: Amount; averagePrice: Amount | null; levelsConsumed: number } {
   const levels = side === 'buy' ? book.asks : book.bids;
   let remaining = amount;
   let cost = ZERO;
@@ -137,6 +139,9 @@ export function sweepCost(
 
   for (const level of levels) {
     if (remaining <= 0n) break;
+    // Books built outside mergeSide (svc-dex asConsolidatedBook) can still
+    // carry a 0-price level. Walking it would fill at cost 0.
+    if (level.price <= 0n || level.amount <= 0n) continue;
     const take = remaining < level.amount ? remaining : level.amount;
     cost = add(cost, mul(level.price, take));
     filled = add(filled, take);
@@ -147,7 +152,8 @@ export function sweepCost(
   return {
     filled,
     cost,
-    averagePrice: filled > 0n ? (cost * 10n ** 18n) / filled : ZERO,
+    // Filled 0 → null, never 0. Zero would read as filled-at-zero.
+    averagePrice: filled > 0n ? (cost * 10n ** 18n) / filled : null,
     levelsConsumed,
   };
 }

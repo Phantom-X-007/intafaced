@@ -82,4 +82,19 @@ describe('buildExecutionReport — §28 shortfall + venue attribution', () => {
     expect(report.venues.map((v) => v.venueId)).toEqual(['live']);
     expect(report.rejected).toEqual(expect.arrayContaining([expect.objectContaining({ venueId: 'dead', reason: 'unhealthy' })]));
   });
+
+  it('no-route plan does not report averageEffectivePrice 0 — 0 would read as filled-at-zero', async () => {
+    const plan = await planRoute(
+      { symbol: 'BTC/USDT', side: 'buy', amount: parseAmount('1') },
+      [venue({ id: 'free', price: '0', amount: '1', feeBps: 0 })],
+      { now: new Date('2026-08-12T00:00:00.000Z') },
+    );
+    expect(plan.legs).toHaveLength(0);
+    expect(plan.routedAmount).toBe(0n);
+    expect(plan.averageEffectivePrice).toBeNull();
+    const report = buildExecutionReport(plan);
+    expect(report.routedAmount).toBe('0');
+    expect(report.averageEffectivePrice).toBeNull();
+    expect(report.averageEffectivePrice).not.toBe('0');
+  });
 });
