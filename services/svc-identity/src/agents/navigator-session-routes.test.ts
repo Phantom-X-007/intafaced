@@ -1,11 +1,7 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import { serviceAuthHeaders } from '@intafaced/contracts';
-import {
-  NAVIGATOR_SESSION_PATH,
-  NAVIGATOR_SESSION_PUBLISH_PATH,
-  registerNavigatorSessionRoutes,
-} from './navigator-session-routes.js';
+import { NAVIGATOR_SESSION_PATH, NAVIGATOR_SESSION_PUBLISH_PATH, registerNavigatorSessionRoutes } from './navigator-session-routes.js';
 import type { NavigatorSessionStore } from './navigator-session-store.js';
 
 const SECRET = 'a-navigator-session-internal-secret-long-enough-for-hmac';
