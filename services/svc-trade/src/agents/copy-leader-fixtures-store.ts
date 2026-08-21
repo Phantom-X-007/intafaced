@@ -1,4 +1,5 @@
 import type postgres from 'postgres';
+import { listProjectedCopyLeaderFixtures } from './copy-leader-fixtures-project.js';
 
 export type CopyLeaderFixture = {
   readonly leaderId: string;
@@ -45,7 +46,8 @@ export function createCopyLeaderFixturesStore(sql: postgres.Sql): CopyLeaderFixt
         FROM trade.copy_leader_fixtures
         ORDER BY leader_id
       `;
-      return rows.map(rowToFixture);
+      if (rows.length > 0) return rows.map(rowToFixture);
+      return listProjectedCopyLeaderFixtures(sql);
     },
     async publishFixture(fixture) {
       await sql`
