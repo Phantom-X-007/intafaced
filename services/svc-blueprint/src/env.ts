@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { assertProdEngine } from './prod-engine.js';
 
 /**
  * An optional URL where the EMPTY STRING means "not set".
@@ -30,6 +31,9 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      * The Neural Engine's HTTP contract (§7.1). The engine is an external
      * deployment; this service owns the `NeuralEngineClient` interface in front
      * of it and nothing behind it.
+     *
+     * The localhost default is for local/dev. `assertProdEngine` refuses it
+     * (and an unset var, which lands on the same default) when APP_ENV=prod.
      */
     BLUEPRINT_ENGINE_URL: z.string().url().default('http://localhost:4108'),
 
@@ -50,7 +54,7 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      * and for environments where the external deployment is not reachable. It
      * is not a fallback: the mode is chosen explicitly, so a misconfigured
      * production URL fails loudly instead of quietly serving stub profiles to
-     * real people.
+     * real people. `assertProdEngine` refuses `mock` when APP_ENV=prod.
      */
     BLUEPRINT_ENGINE_MODE: z.enum(['http', 'mock']).default('http'),
 
@@ -89,4 +93,5 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
 );
 
 export const env = loadEnv(schema);
+assertProdEngine(env);
 export type Env = typeof env;
