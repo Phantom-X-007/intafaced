@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import {
   autoMirrorPlaceStatus,
@@ -49,6 +49,17 @@ import {
 import { parseLeaderFillObservation, planMirror, presentMirrorPlan, refuseCopyLeaderRanking, type MirrorSide } from './mirror.js';
 import { MemoryCopyFollowStore, rethrowCopyFollowUnique, type CopyFollowStore } from './follow-store.js';
 
+/** Settled follower fill fee — `fills.fee_amount`, never a notional×bps invent. */
+export type FollowerFillFee = {
+  readonly fillId: string;
+  readonly userId: string;
+  readonly feeAsset: string;
+  readonly feeAmount: Amount;
+};
+
+/** Production wires `trade.fills`. Absent + omitted fillFeeAmount → refuse-closed. */
+export type LookupFollowerFillFeePort = (fillId: string) => Promise<FollowerFillFee | null>;
+
 export interface CopyServiceOptions {
   feeShareLaw?: CopyFeeShareLaw;
   jurisdictionLaw?: CopyJurisdictionLaw;
@@ -67,6 +78,11 @@ export interface CopyServiceOptions {
   placeMirrorEnabled?: boolean;
   /** Paper vs live honesty — never place live from a paper leader fill. */
   inspectMarket?: InspectCopyMarket;
+  /**
+   * Settled follower fill fee (`fills.fee_amount`). When wired, omitted
+   * `fillFeeAmount` takes this row — never notional×bps. Missing fill → refuse.
+   */
+  lookupFollowerFillFee?: LookupFollowerFillFeePort;
 }
 
 type FollowRef = { followId: string };
@@ -87,7 +103,7 @@ type SettleFeeShareInput = {
   assetId: string;
   followerFillNotional: string;
   protocolFeeBps: number;
-  /** Settled fill fee when known — preferred over notional×bps invent. */
+  /** Caller-supplied settled fee. Ignored when fill lookup is wired. */
   fillFeeAmount?: string;
 };
 
@@ -99,6 +115,7 @@ export class CopyService {
   private readonly placeFollowerOrder: PlaceFollowerOrderPort | null;
   private readonly placeMirrorEnabled: boolean;
   private readonly inspectMarket: InspectCopyMarket | null;
+  private readonly lookupFollowerFillFee: LookupFollowerFillFeePort | null;
 
   constructor(
     private readonly ledger: LedgerClient,
@@ -111,6 +128,7 @@ export class CopyService {
     this.placeFollowerOrder = options.placeFollowerOrder ?? null;
     this.placeMirrorEnabled = options.placeMirrorEnabled ?? parseCopyPlaceMirrorFlag(process.env.TRADE_COPY_PLACE_MIRROR);
     this.inspectMarket = options.inspectMarket ?? null;
+    this.lookupFollowerFillFee = options.lookupFollowerFillFee ?? null;
   }
 
   /**
@@ -433,6 +451,44 @@ export class CopyService {
   }
 
   /**
+   * Protocol fee is the fill's collected fee_amount. Never notional×bps.
+   * Lookup (production) is authoritative; caller fillFeeAmount is only for
+   * tests without a fill row. Missing both → refuse-closed.
+   */
+  private async resolveSettledProtocolFee(follow: CopyFollow, input: SettleFeeShareInput): Promise<Amount> {
+    if (this.lookupFollowerFillFee) {
+      const fill = await this.lookupFollowerFillFee(input.fillId.trim());
+      if (!fill) {
+        throw new CopyError(
+          'Follower fill not found — refuse rather than invent protocolFee from notional×bps',
+          'trade.copy_settle_refused',
+        );
+      }
+      if (fill.userId !== follow.followerId) {
+        throw new CopyError('Fill does not belong to this follower — refuse fee-share', 'trade.copy_settle_refused');
+      }
+      if (fill.feeAsset !== input.assetId.trim()) {
+        throw new CopyError('Fill fee asset does not match settle asset — refuse fee-share', 'trade.copy_settle_refused');
+      }
+      if (fill.feeAmount < 0n) {
+        throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
+      }
+      return fill.feeAmount;
+    }
+    if (input.fillFeeAmount !== undefined) {
+      const amount = parseAmount(input.fillFeeAmount);
+      if (amount < 0n) {
+        throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
+      }
+      return amount;
+    }
+    throw new CopyError(
+      'Settled fill fee is required — refuse rather than invent protocolFee from notional×bps',
+      'trade.copy_settle_refused',
+    );
+  }
+
+  /**
    * Attribute + settle leader fee-share for a follower fill via ledger-client.
    * Blank §8 rates → refuse. Cap / kill → typed skip or refuse.
    *
@@ -465,6 +521,8 @@ export class CopyService {
     const once = await store.runFeeShareSettleOnce(follow.followId, input.fillId, async () => {
       const key = `${follow.leaderId}:${follow.followerId}`;
       const period = await store.getPeriodStats(key);
+      requirePublishedCopyFeeShareLaw(this.feeShareLaw);
+      const settledFee = await this.resolveSettledProtocolFee(follow, input);
       const attribution = attributeCopyFeeShare({
         law: this.feeShareLaw,
         fillId: input.fillId,
@@ -473,7 +531,7 @@ export class CopyService {
         assetId: input.assetId.trim(),
         followerFillNotional: parseAmount(input.followerFillNotional),
         protocolFeeBps: input.protocolFeeBps,
-        ...(input.fillFeeAmount !== undefined ? { fillFeeAmount: parseAmount(input.fillFeeAmount) } : {}),
+        fillFeeAmount: settledFee,
         roundTripsThisPeriod: period.roundTrips,
         earningsPaidThisPeriod: period.earningsPaid,
         feeShareKilled: follow.feeShareKilled,

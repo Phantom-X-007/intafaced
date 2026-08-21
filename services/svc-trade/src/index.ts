@@ -196,6 +196,22 @@ const copy = new CopyService(ledger, {
     const market = await trade.marketBySymbol(symbol);
     return market ? { paper: market.paper } : null;
   },
+  lookupFollowerFillFee: async (fillId) => {
+    const id = fillId.trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return null;
+    }
+    const [row] = await sql<Array<{ id: string; user_id: string; fee_asset: string; fee_amount: string }>>`
+      SELECT id, user_id, fee_asset, fee_amount FROM trade.fills WHERE id = ${id} LIMIT 1
+    `;
+    if (!row) return null;
+    return {
+      fillId: row.id,
+      userId: row.user_id,
+      feeAsset: row.fee_asset,
+      feeAmount: parseAmount(row.fee_amount),
+    };
+  },
 });
 
 export const appRouter = createTradeRouter(trade, otc, copy);

@@ -218,6 +218,7 @@ describe('trade.copy product mount', () => {
       assetId: 'USDT',
       followerFillNotional: '1000',
       protocolFeeBps: 10,
+      fillFeeAmount: '1',
     });
     await ledger.entered.promise;
 
@@ -241,6 +242,7 @@ describe('trade.copy product mount', () => {
         assetId: 'USDT',
         followerFillNotional: '1000',
         protocolFeeBps: 10,
+        fillFeeAmount: '1',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(balanceAfterKill);

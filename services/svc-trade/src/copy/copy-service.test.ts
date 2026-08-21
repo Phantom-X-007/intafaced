@@ -585,11 +585,89 @@ describe('CopyService', () => {
       assetId: 'USDT',
       followerFillNotional: '1000',
       protocolFeeBps: 10,
+      fillFeeAmount: '1',
     });
     expect(settled.settled).toBe(true);
     expect(settled.cappedLeaderShare).toBe('0.5');
     expect(formatAmount((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount)).toBe('0.5');
     expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare omitted fillFeeAmount uses fills.fee_amount — never notional×bps', async () => {
+    // 10000 bps of notional 1000 would invent protocolFee=1000 (share 500, cap 100).
+    // Fill charged 0.7 — payout must be share of 0.7.
+    const ledger = new MemoryLedger();
+    await ledger.post(
+      recipes.deposit({
+        userId: FOLLOWER,
+        assetId: 'USDT',
+        amount: parseAmount('100'),
+        rail: 'test',
+        railRef: 'copy-fill-fee',
+      }),
+    );
+    await ledger.post(
+      recipes.feeCharge({
+        mode: 'asset',
+        chargeId: 'copy-fill-fee-seed',
+        userId: FOLLOWER,
+        module: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('10'),
+      }),
+    );
+
+    const fillId = 'fill-actual-fee';
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      lookupFollowerFillFee: async (id) =>
+        id === fillId ? { fillId, userId: FOLLOWER, feeAsset: 'USDT', feeAmount: parseAmount('0.7') } : null,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+    const settled = await svc.settleFeeShare(principal, {
+      followId: follow.followId,
+      fillId,
+      assetId: 'USDT',
+      followerFillNotional: '1000',
+      protocolFeeBps: 10_000,
+    });
+    expect(settled.settled).toBe(true);
+    expect(settled.protocolFee).toBe('0.7');
+    expect(settled.cappedLeaderShare).toBe('0.35');
+    expect(formatAmount((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount)).toBe('0.35');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('settleFeeShare omitted fillFeeAmount without a fill row refuses — never invents', async () => {
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '1000',
+      maxAggregateExposure: '10000',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId: 'fill-no-row',
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
   });
 
   it('forbids ranking and P&L fees explicitly', () => {
@@ -928,6 +1006,7 @@ describe('CopyService', () => {
         assetId: 'USDT',
         followerFillNotional: '10000',
         protocolFeeBps: 10,
+        fillFeeAmount: '10',
       });
 
     const results = await Promise.all([settle('fill-race-a'), settle('fill-race-b')]);
@@ -998,6 +1077,7 @@ describe('CopyService', () => {
           assetId: 'USDT',
           followerFillNotional: '10000',
           protocolFeeBps: 10,
+          fillFeeAmount: '10',
         }),
       ),
     );
@@ -1040,6 +1120,7 @@ describe('CopyService', () => {
         assetId: 'USDT',
         followerFillNotional: '10000',
         protocolFeeBps: 10,
+        fillFeeAmount: '10',
       }),
     ).rejects.toBeTruthy();
 
@@ -1149,6 +1230,7 @@ describe('CopyService', () => {
       assetId: 'USDT',
       followerFillNotional: '1000',
       protocolFeeBps: 10,
+      fillFeeAmount: '1',
     } as const;
 
     const first = await svc.settleFeeShare(principal, input);

@@ -832,6 +832,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
       /**
        * Attribute + settle leader fee-share for a follower fill.
        * Blank §8 → PRECONDITION_FAILED. Never invents rates.
+       * protocolFee is the fill's fee_amount (lookup or fillFeeAmount) —
+       * never notional×bps. Omitted fillFeeAmount without a fill row refuses.
        */
       settleFeeShare: scopedProcedure('trade:write', { module: 'trade' })
         .input(

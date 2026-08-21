@@ -38,7 +38,7 @@ describe('attributeCopyFeeShare', () => {
   });
 
   it('shares protocol fee only — no P&L in the formula', () => {
-    // notional 1000, fee 10 bps → protocol fee 1; share 5000 bps → 0.5
+    // settled fill fee 1; share 5000 bps → 0.5. Notional×bps is not the pot.
     const a = attributeCopyFeeShare({
       law: published,
       fillId: 'f2',
@@ -47,6 +47,7 @@ describe('attributeCopyFeeShare', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('1000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('1'),
       roundTripsThisPeriod: 0,
       earningsPaidThisPeriod: 0n,
       feeShareKilled: false,
@@ -76,6 +77,28 @@ describe('attributeCopyFeeShare', () => {
     expect(formatAmount(a.cappedLeaderShare)).toBe('0.35');
   });
 
+  it('refuses omitted fillFeeAmount — never invents protocolFee from notional×bps', () => {
+    // 10000 bps of notional 1000 would invent protocolFee=1000; fill charged 0.7.
+    try {
+      attributeCopyFeeShare({
+        law: published,
+        fillId: 'f2-omit-fill-fee',
+        leaderId: LEADER,
+        followerId: FOLLOWER,
+        assetId: 'USDT',
+        followerFillNotional: parseAmount('1000'),
+        protocolFeeBps: 10_000,
+        roundTripsThisPeriod: 0,
+        earningsPaidThisPeriod: 0n,
+        feeShareKilled: false,
+      });
+      expect.unreachable('should refuse rather than invent protocolFee from notional');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CopyError);
+      expect((err as CopyError).code).toBe('trade.copy_settle_refused');
+    }
+  });
+
   it('applies earnings cap per follower', () => {
     const a = attributeCopyFeeShare({
       law: published,
@@ -85,6 +108,7 @@ describe('attributeCopyFeeShare', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('100000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('100'),
       roundTripsThisPeriod: 0,
       earningsPaidThisPeriod: parseAmount('9.8'),
       feeShareKilled: false,
@@ -102,6 +126,7 @@ describe('attributeCopyFeeShare', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('1000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('1'),
       roundTripsThisPeriod: 2,
       earningsPaidThisPeriod: 0n,
       feeShareKilled: false,
@@ -163,6 +188,7 @@ describe('planCopyFeeShareSettle + ledger', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('1000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('1'),
       roundTripsThisPeriod: 0,
       earningsPaidThisPeriod: 0n,
       feeShareKilled: false,
