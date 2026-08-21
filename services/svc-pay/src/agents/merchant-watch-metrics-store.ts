@@ -7,6 +7,7 @@ export type MerchantWatchMetricPoint = MerchantWatchMetricsOk['points'][number];
 export type MerchantWatchMetricsStore = {
   listPoints(): Promise<readonly MerchantWatchMetricPoint[]>;
   publishPoint(point: MerchantWatchMetricPoint): Promise<void>;
+  materializeProjectedMetrics(): Promise<number>;
 };
 
 type MetricsRow = {
@@ -28,7 +29,7 @@ function rowToPoint(row: MetricsRow): MerchantWatchMetricPoint {
 }
 
 export function createMerchantWatchMetricsStore(sql: postgres.Sql): MerchantWatchMetricsStore {
-  return {
+  const store: MerchantWatchMetricsStore = {
     async listPoints() {
       const rows = await sql<MetricsRow[]>`
         SELECT rail_id, approval_rate, attempts, as_of, max_age_ms
@@ -56,5 +57,13 @@ export function createMerchantWatchMetricsStore(sql: postgres.Sql): MerchantWatc
           published_at = now()
       `;
     },
+    async materializeProjectedMetrics() {
+      const projected = await listProjectedPayMetrics(sql);
+      for (const point of projected) {
+        await store.publishPoint(point);
+      }
+      return projected.length;
+    },
   };
+  return store;
 }

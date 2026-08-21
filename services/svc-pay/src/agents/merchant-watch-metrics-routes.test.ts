@@ -4,6 +4,7 @@ import { serviceAuthHeaders } from '@intafaced/contracts';
 import {
   MERCHANT_WATCH_METRICS_PATH,
   MERCHANT_WATCH_METRICS_PUBLISH_PATH,
+  MERCHANT_WATCH_METRICS_REFRESH_PATH,
   registerMerchantWatchMetricsRoutes,
 } from './merchant-watch-metrics-routes.js';
 import type { MerchantWatchMetricPoint, MerchantWatchMetricsStore } from './merchant-watch-metrics-store.js';
@@ -14,7 +15,7 @@ function serviceHeaders(): Record<string, string> {
   return serviceAuthHeaders('svc-agents', SECRET);
 }
 
-function memoryStore(): MerchantWatchMetricsStore {
+function memoryStore(projected: MerchantWatchMetricPoint[] = []): MerchantWatchMetricsStore {
   const points: MerchantWatchMetricPoint[] = [];
   return {
     async listPoints() {
@@ -24,6 +25,12 @@ function memoryStore(): MerchantWatchMetricsStore {
       const idx = points.findIndex((p) => p.railId === point.railId);
       if (idx >= 0) points[idx] = point;
       else points.push(point);
+    },
+    async materializeProjectedMetrics() {
+      for (const point of projected) {
+        await this.publishPoint(point);
+      }
+      return projected.length;
     },
   };
 }
@@ -113,6 +120,33 @@ describe('merchant watch metrics internal route', () => {
       ok: true,
       points: [{ railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 }],
     });
+    await app.close();
+  });
+
+  it('refresh materializes projected metrics then GET succeeds', async () => {
+    const projected = [
+      { railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 },
+    ];
+    const app = Fastify();
+    const store = memoryStore(projected);
+    registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET, store });
+    await app.ready();
+
+    const refresh = await app.inject({
+      method: 'POST',
+      url: MERCHANT_WATCH_METRICS_REFRESH_PATH,
+      headers: serviceHeaders(),
+    });
+    expect(refresh.statusCode).toBe(200);
+    expect(refresh.json()).toEqual({ ok: true, materialized: 1 });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: MERCHANT_WATCH_METRICS_PATH,
+      headers: serviceHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, points: projected });
     await app.close();
   });
 });
