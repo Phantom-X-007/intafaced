@@ -14,5 +14,12 @@ describe('describeNavigatorPolicy — agents.navigator honesty door', () => {
 
   it('money deny billed amount is pinned zero string', () => {
     expect(describeNavigatorPolicy().moneyDenyBilledAmount).toBe('0');
+    expect(typeof describeNavigatorPolicy().moneyDenyBilledAmount).toBe('string');
+  });
+
+  it('dark-plane refuse matches grounded gate', () => {
+    const policy = describeNavigatorPolicy();
+    expect(policy.darkPlaneRefuse.userMessageKey).toBe('agents.navigator.unavailable');
+    expect(policy.moneyDenyExport).toContain('ledger_post');
   });
 });
