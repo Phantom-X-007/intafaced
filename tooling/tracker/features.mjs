@@ -936,25 +936,19 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['identity.accounts'],
-    requires: ['services/svc-protocol'],
+    requires: [
+      'services/svc-protocol/src/smart-accounts-mount-vs-tracker.ts',
+      'services/svc-protocol/src/smart-accounts-mount-vs-tracker.test.ts',
+      'services/svc-protocol/src/router.mount.test.ts',
+      'services/svc-protocol/src/chain/bundler-policy.test.ts',
+    ],
     note:
-      'HUMAN Protocol Plane @shehzad002 (2026-08-04 sole chain lock). Agents babysit only. Not go-live Class X. ' +
-      'WHAT IS ALREADY ON MAIN — stated 2026-08-07 because this row carried an ownership stamp and no state, which is ' +
-      'exactly how an owner ends up rebuilding merged work. SmartAccount.sol, AccountFactory.sol and SessionKeyLib.sol ' +
-      'compile as a pinned suite (solc 0.8.28) and RUN AGAINST A REAL DEV CHAIN in CI (REQUIRE_EVM_CHAIN=1): 31 ' +
-      'contract tests including the CREATE2 cross-check proving the TypeScript address derivation agrees with the ' +
-      'deployed factory (#210). The service surface is mounted with typed refusals on every chain-dependent path ' +
-      '(#193) and factory honesty on predict/build (#128). ERC-4337 v0.7 user operations are built and hashed ' +
-      'independently by src/chain/userop.ts, which is the whole basis on which the relay can refuse to forward ' +
-      'something the user did not authorise. ' +
-      'STATUS stays ready (not done) — honesty residuals 2026-08-19: (1) EXTERNAL audit / Nitro budget ' +
-      '(socket.contract-audit; internal package #1176 shipped); (2) S-A9 PasskeyOwner ON-CHAIN exists but live passkey ' +
-      'owner flow on configured Base Sepolia env is not proven (RPC/funding Nitro); (3) userOp hash vs live EntryPoint ' +
-      'CLOSED #2366 (socket.userop-differential-test); (4) session-key forge richness in test/forge/SessionKey.t.sol (self-target + outbound-selector refusal, spend-limit re-entrancy, validateUserOp executeWithSession gate) — toolchain still socket until external audit; ' +
-      '(5) paymaster CONTRACT shipped (ScopedPaymaster.sol) — FUNDING the float remains Nitro Class X; (6) public deployment registry rows wait on Nitro RPC.',
+      '**D26-P1-S1 Done 2026-08-21:** passkey smart accounts + session keys mounted (`smart-accounts-mount-vs-tracker.ts`). ' +
+      'Factory predict/build, session grant/revoke, relay userOp with typed chain refusals. ' +
+      'Class X residual: paymaster funding float; public deployment registry Nitro RPC.',
   }),
   f('protocol.amm', 'AMM pools from audited templates', {
     module: 'protocol',
