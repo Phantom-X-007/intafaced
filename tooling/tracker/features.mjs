@@ -548,11 +548,19 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['execution.sor', 'trade.mm-bot'],
-    requires: ['packages/execution-mm'],
-    note: 'Law §28:773, gap-closed 2026-08-08. §30:793 phases it at 2. `trade.mm-bot` is the internal half and covers book seeding only; §28:773 wants ONE engine that "seeds our books and works the street". OWNER RULING SEALED 2026-08-12 (D26-P0-01) in `docs/adr/2026-08-08-house-desk-and-market-making-fairness.md`: Q1 house desk v1 EXTERNAL-ONLY; Q3 HARD EXCLUSION — internal quotes never counted in mark derivation (no percentage cap invent; ties DEFAULT_MIN_BEST_LEVEL / dust refuse path). D26-P1-X5 (2026-08-12): EXTERNAL half product path `@intafaced/execution-mm` — `quoteExternalMm` + `planExternalMmHedge` + `evaluateMmKillSwitches` on SOR cost model; refuses internal venue MM with honest reason; never invents mids/depth/fees; owner spread/skew/bands (D-S-14). INTERNAL half remains BLOCKED until a later explicit owner ruling. Q2 existence-disclosure deferred. Residual: wire into OMS/svc-execution, live venue books, owner magnitude schedules. Still dependsOn `execution.sor` and `trade.mm-bot` (`ready` with residual ops, not done).',
+    requires: [
+      'packages/execution-mm/src/mount-vs-tracker.ts',
+      'packages/execution-mm/src/mount-vs-tracker.test.ts',
+      'packages/execution-mm/src/market-making.ts',
+      'packages/execution-mm/src/mm-policy.ts',
+    ],
+    note:
+      '**D26-P1-X5 Done 2026-08-21:** external-only MM half on SOR cost model (`mount-vs-tracker.ts`, `@intafaced/execution-mm`). ' +
+      'Refuses internal venue MM; kill switches + hedge plan; never invents mids/fees. ' +
+      'Class X residual: internal MM blocked (D26-P0-01), OMS wire, owner spread/skew bands.',
   }),
   f('execution.house-tenant', 'House desk sealed private tenant — the Throne Law (§28)', {
     module: 'trade',
