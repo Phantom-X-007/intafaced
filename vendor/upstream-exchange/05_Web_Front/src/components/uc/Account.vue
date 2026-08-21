@@ -53,6 +53,7 @@
                                         <th>{{ $t('uc.account.subAccountsPurpose') }}</th>
                                         <th>{{ $t('uc.account.subAccountsStatus') }}</th>
                                         <th>{{ $t('uc.account.subAccountsCreated') }}</th>
+                                        <th></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -62,12 +63,20 @@
                                         <td>{{ row.purpose ? row.purpose : '—' }}</td>
                                         <td>{{ row.revoked ? $t('uc.account.subAccountsRevoked') : $t('uc.account.subAccountsActive') }}</td>
                                         <td>{{ row.createdAt }}</td>
+                                        <td>
+                                            <Button v-if="!row.revoked" size="small" :loading="revokingId === row.id" :disabled="!!revokingId" @click="revokeSubAccount(row)">
+                                                {{ $t('uc.account.subAccountsRevoke') }}
+                                            </Button>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
                         <div v-else class="ix-note ix-note-quiet">{{ $t('uc.account.subAccountsEmpty') }}</div>
                     </IxState>
+                    <div v-if="revokedSub.ran && revokedSub.reason !== 'ok'" style="margin-top:14px;">
+                        <IxState :loading="revokedSub.busy" :reason="revokedSub.reason" :message="revokedSub.message" endpoint="/api/identity/trpc/subAccounts.revoke"></IxState>
+                    </div>
                 </div>
                 <section class="accountContent">
                     <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
@@ -278,6 +287,8 @@ export default {
         return {
             subs: this.emptySection(),
             createdSub: this.emptyAction(),
+            revokedSub: this.emptyAction(),
+            revokingId: '',
             createLabel: '',
             createPurpose: '',
             uploadHeaders:{'x-auth-token':localStorage.getItem('TOKEN')},
@@ -484,6 +495,15 @@ export default {
                     self.createPurpose = '';
                     self.loadSubs();
                 }
+            });
+        },
+        revokeSubAccount(row) {
+            var self = this;
+            if (!row || !row.id || row.revoked || this.revokingId) return;
+            this.revokingId = row.id;
+            this.act('revokedSub', mutate('identity', 'subAccounts.revoke', { subAccountId: row.id }, this.ixToken)).then(function (res) {
+                self.revokingId = '';
+                if (res && res.ok) self.loadSubs();
             });
         },
         aliHandleSuccess (res, file,fileList) {

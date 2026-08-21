@@ -2763,6 +2763,7 @@ module.exports = {
             subAccountsRevoked: 'Revoked',
             subAccountsCreated: 'Created',
             subAccountsCreatedOk: 'Created',
+            subAccountsRevoke: 'Revoke',
         },
         otcorder: {
             unpaid: 'Awaiting payment',
