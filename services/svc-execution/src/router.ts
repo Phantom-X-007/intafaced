@@ -15,6 +15,7 @@ import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
+import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
 
@@ -104,6 +105,53 @@ const omsArbScanInput = z.object({
   }),
   nowMs: z.number().int(),
   maxQuoteAgeMs: z.number().int().nonnegative().nullable(),
+});
+
+const omsMmKillInput = z.object({
+  adminKill: z.boolean(),
+  inventory: z.object({
+    position: decimalString,
+    minPosition: decimalString,
+    maxPosition: decimalString,
+  }),
+  volatility: z.object({
+    realizedVolBps: z.number().int().nullable(),
+    maxVolBps: z.number().int(),
+  }),
+});
+
+const omsMmQuoteInput = z.object({
+  symbol: z.string().min(1).max(64),
+  venueId: z.string().min(1).max(128),
+  kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']),
+  midKind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+  mid: decimalString.nullable(),
+  book: z
+    .object({
+      bidSize: decimalString,
+      askSize: decimalString,
+    })
+    .nullable(),
+  quoteSize: decimalString,
+  halfSpreadBps: z.number().int().nonnegative(),
+  inventorySkewBps: z.number().int(),
+  costTerms: sorCostTermsInput,
+  kill: omsMmKillInput,
+});
+
+const omsMmHedgeInput = z.object({
+  symbol: z.string().min(1).max(64),
+  quoteVenueId: z.string().min(1).max(128),
+  inventory: omsMmKillInput.shape.inventory,
+  kill: omsMmKillInput,
+  hedge: z.object({
+    venueId: z.string().min(1).max(128),
+    kind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']),
+    midKind: z.enum(['internal', 'external-cex', 'external-dex', 'amm', 'otc']).optional(),
+    mid: decimalString.nullable(),
+    costTerms: sorCostTermsInput,
+    availableSize: decimalString,
+  }),
 });
 
 export type ExecutionSubmitMap = Readonly<Record<string, OmsSubmitFn>>;
@@ -463,6 +511,20 @@ export function createExecutionRouter(
           .input(omsArbScanInput)
           .mutation(async ({ input }) => {
             return withExecutionSpan('execution.arb.scan', input.symbol, async () => scanOmsExternalArb(input));
+          }),
+      }),
+
+      mm: router({
+        quote: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsMmQuoteInput)
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.mm.quote', input.venueId, async () => quoteOmsExternalMm(input));
+          }),
+
+        hedge: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsMmHedgeInput)
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.mm.hedge', input.quoteVenueId, async () => planOmsExternalMmHedge(input));
           }),
       }),
     }),
