@@ -28,6 +28,8 @@ import { navigatorGrounded } from './navigator/grounded.js';
 import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
 import { invokeNavigatorDataTool } from './navigator/data-tools.js';
+import { effectiveNavigatorTradePlane } from './navigator/trade-plane-env.js';
+import type { NavigatorTradeDataPort } from './navigator/trade-data-port.js';
 import { navigatorTierGate } from './navigator/tier-gate.js';
 import { runNavigatorAnswerSession } from './navigator/session-run.js';
 import { auditNavigatorDataTool, emptyNavigatorAuditLog } from './navigator/action-audit.js';
@@ -306,6 +308,16 @@ export interface AgentsRouterDeps {
    * copyIntel.runSession then refuses `no_live_leaders` rather than invent PnL.
    */
   readonly copyLeaderFixturesPort?: CopyLeaderFixturesPort;
+  /**
+   * Trade base URL for navigator plane coercion. Unset → caller `live` becomes
+   * effective `dark` (`trade_plane_dark`).
+   */
+  readonly navigatorTradeUrl?: string;
+  /**
+   * Live trade public REST for navigator data tools. Unset → live runs need
+   * caller fixtures or refuse missing_fixture / empty_markets.
+   */
+  readonly navigatorTradeDataPort?: NavigatorTradeDataPort;
 }
 
 export function createAgentsRouter(deps: AgentsRouterDeps) {
@@ -320,7 +332,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     payMetricsPort,
     spotTickersPort,
     copyLeaderFixturesPort,
+    navigatorTradeUrl,
+    navigatorTradeDataPort,
   } = deps;
+
+  const resolveNavigatorPlane = (requested: 'live' | 'dark') => effectiveNavigatorTradePlane(requested, navigatorTradeUrl);
 
   /** A session belongs to exactly one user, and only that user may touch it. */
   async function ownedSession(sessionId: string, userId: string) {
@@ -1333,7 +1349,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           ]),
         )
         .query(({ input }) => {
-          const result = navigatorGrounded(input.plane);
+          const result = navigatorGrounded(resolveNavigatorPlane(input.plane));
           if (result.status === 'ok') {
             return {
               status: 'ok' as const,
@@ -1417,7 +1433,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         )
         .query(({ input }) => {
           const result = selectNavigatorTools({
-            plane: input.plane,
+            plane: resolveNavigatorPlane(input.plane),
             guardrail: navigatorAgentGuardrail(),
             candidates: input.candidates,
           });
@@ -1591,16 +1607,34 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           }),
         )
-        .query(({ ctx, input }) => {
+        .query(async ({ ctx, input }) => {
+          const plane = resolveNavigatorPlane(input.plane);
+          let quote = input.quote ?? null;
+          let markets = input.markets ?? null;
+
+          if (plane === 'live' && navigatorTradeDataPort) {
+            if (input.tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
+              const liveMarkets = await navigatorTradeDataPort.listMarkets().catch(() => null);
+              if (liveMarkets && liveMarkets.length > 0) markets = [...liveMarkets];
+            }
+            if (input.tool === 'trade.quote') {
+              const marketId = quote?.marketId?.trim() ?? '';
+              if (marketId && (!quote || quote.last === null)) {
+                const liveQuote = await navigatorTradeDataPort.quote(marketId).catch(() => null);
+                if (liveQuote) quote = liveQuote;
+              }
+            }
+          }
+
           const result = invokeNavigatorDataTool({
             tool: input.tool,
-            plane: input.plane,
+            plane,
             tierLaw: input.law ?? null,
             userTier: input.userTier ?? '',
             requesterUserId: ctx.principal.userId,
             ...(input.now === undefined ? {} : { now: new Date(input.now) }),
-            quote: input.quote ?? null,
-            markets: input.markets ?? null,
+            quote,
+            markets,
             session: input.session ?? null,
           });
           const occurredAt = input.occurredAt ?? new Date().toISOString();
@@ -1742,7 +1776,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               runtime,
               userId: ctx.principal.userId,
               feeAssetId,
-              plane: input.plane,
+              plane: resolveNavigatorPlane(input.plane),
               tierLaw: input.law ?? null,
               userTier: input.userTier,
               asks: input.asks.map((ask) => ({
@@ -1751,6 +1785,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 markets: ask.markets ?? null,
                 session: ask.session ?? null,
               })),
+              ...(navigatorTradeDataPort ? { tradeDataPort: navigatorTradeDataPort } : {}),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });
 

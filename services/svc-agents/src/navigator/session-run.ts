@@ -71,6 +71,7 @@ import {
 import type { TradeDataPlane } from './grounded.js';
 import { navigatorDeclaredTools } from './guardrail.js';
 import { navigatorTierGate, type NavigatorTierLaw } from './tier-gate.js';
+import { readLiveNavigatorMarkets, readLiveNavigatorQuote, type NavigatorTradeDataPort } from './trade-data-port.js';
 
 /** The agent id the navigator guardrail is registered under. */
 export const NAVIGATOR_AGENT_ID = 'navigator';
@@ -204,6 +205,8 @@ export type NavigatorRunInput = {
   readonly tierLaw?: NavigatorTierLaw | null;
   readonly userTier: string;
   readonly asks: readonly NavigatorAsk[];
+  /** Live trade REST samples when plane is live and caller fixtures are absent. */
+  readonly tradeDataPort?: NavigatorTradeDataPort;
   readonly now?: Date;
 };
 
@@ -295,6 +298,23 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
 
     for (const ask of input.asks) {
       const tool = ask.tool.trim();
+      let quote = ask.quote ?? null;
+      let markets = ask.markets ?? null;
+
+      if (input.plane === 'live' && input.tradeDataPort) {
+        if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
+          const liveMarkets = await readLiveNavigatorMarkets(input.tradeDataPort);
+          if (liveMarkets.ok) markets = liveMarkets.markets;
+        }
+        if (tool === 'trade.quote') {
+          const marketId = quote?.marketId?.trim() ?? '';
+          if (marketId && (!quote || quote.last === null)) {
+            const liveQuote = await readLiveNavigatorQuote(input.tradeDataPort, marketId);
+            if (liveQuote.ok) quote = liveQuote.quote;
+          }
+        }
+      }
+
       let toolResult: DataToolResult;
 
       try {
@@ -311,8 +331,8 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
               userTier: input.userTier,
               requesterUserId: input.userId,
               now,
-              quote: ask.quote ?? null,
-              markets: ask.markets ?? null,
+              quote,
+              markets,
               session: ask.session ?? null,
             }),
         });
