@@ -9,6 +9,7 @@
  */
 export * from './source.js';
 export * from './router.js';
+export * from './sor-policy.js';
 export * from './cost-model.js';
 export * from './execution-report.js';
 export * from './consolidated-book.js';
