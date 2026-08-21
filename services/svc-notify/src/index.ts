@@ -14,6 +14,7 @@ import { NotifyService } from './notify-service.js';
 import { createNotifyRouter, type NotifyRouter } from './router.js';
 import { subscribeNotificationEvents } from './events.js';
 import { ALERT_SWEEP_INTERVAL_MS, AlertService, type AlertSweepReport } from './alerts/service.js';
+import { runAlertSweepPass } from './alerts/sweep-driver.js';
 import { PostgresAlertStore } from './alerts/store.js';
 import { createTradeHttpMarkSource } from './alerts/trade-http-mark.js';
 import { ALERT_KIND_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type MarkSource } from './alerts/types.js';
@@ -250,19 +251,25 @@ reaper.unref();
  * FAIL-SAFE, like the reaper. A sweep that cannot run must not take the inbox
  * down with it, so it logs and waits for the next tick.
  */
+const alertSweepRecorder = {
+  onComplete(report: AlertSweepReport) {
+    lastAlertSweep = report;
+    lastAlertSweepAt = new Date().toISOString();
+    if (report.fired > 0) {
+      app.log.info({ ...report }, 'svc-notify alert sweep fired price watches into the notification fan-out');
+    }
+  },
+  onError(err: unknown) {
+    app.log.error({ err }, 'svc-notify alert sweep failed — active price watches were not evaluated on this tick');
+  },
+};
+
+// Boot pass — an interval-only driver made `/ready` read "never ran" and left
+// watches blind until the first tick.
+void runAlertSweepPass(alerts, alertSweepRecorder);
+
 const alertSweep = setInterval(() => {
-  void alerts
-    .evaluateDueAlerts()
-    .then((report) => {
-      lastAlertSweep = report;
-      lastAlertSweepAt = new Date().toISOString();
-      if (report.fired > 0) {
-        app.log.info({ ...report }, 'svc-notify alert sweep fired price watches into the notification fan-out');
-      }
-    })
-    .catch((err) => {
-      app.log.error({ err }, 'svc-notify alert sweep failed — active price watches were not evaluated on this tick');
-    });
+  void runAlertSweepPass(alerts, alertSweepRecorder);
 }, ALERT_SWEEP_INTERVAL_MS);
 alertSweep.unref();
 

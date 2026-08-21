@@ -545,7 +545,13 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * refuses `alert.price_unavailable` and never returns fired as live.
        */
       evaluateAlert: scopedProcedure('notify:write', { module: 'notify' })
-        .input(z.union([z.object({ id: z.string().uuid() }), z.object({ kind: z.enum(UNPUBLISHED_ALERT_KINDS) })]))
+        .input(
+          z.union([
+            z.object({ id: z.string().uuid() }),
+            z.object({ kind: z.enum(UNPUBLISHED_ALERT_KINDS) }),
+            z.object({ kind: z.literal('portfolio') }),
+          ]),
+        )
         .output(
           z.object({
             alert: priceAlertOutput.nullable(),
@@ -579,6 +585,13 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
                 detail: 'mark source missing',
               },
               evaluation: NO_ALERT_SERVICE,
+            };
+          }
+          if ('kind' in input && input.kind === 'portfolio') {
+            return {
+              alert: null,
+              outcome: alerts.evaluatePortfolio(),
+              evaluation: alerts.evaluationStatus(),
             };
           }
           if ('kind' in input && isUnpublishedAlertKind(input.kind)) {
