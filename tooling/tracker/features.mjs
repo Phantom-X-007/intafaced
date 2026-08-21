@@ -867,10 +867,20 @@ export const FEATURES = [
   f('p2p.payment-instruments', 'Payment instruments — where the buyer actually pays', {
     module: 'p2p',
     phase: '3',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['p2p.escrow'],
-    requires: ['services/svc-p2p/src/instrument-service.ts'],
-    note: "GHOST OWNER CLEARED 2026-08-09 L03 W4 (mechanism on main #428). Residual is operator content + Class X KMS, not craft. A row exists because the capability did not, and nobody could see that: escrow locked, released, refunded and went to a moderator while a trade could never actually complete — at the moment the buyer had to pay, there was no account to pay to. MECHANISM DONE on feat/p2p-payment-instruments: operator-registered method schemas per (method, country); one active destination per (owner, method, currency); an immutable per-trade snapshot so removal cannot break an in-flight trade and a seller cannot swap the account mid-payment; disclosure only while the escrow is HELD; every read and every refusal written to an append-only access log by the same SQL statement that reads the details. STILL wip, not done: the method registry ships EMPTY and no seller can register anything until an operator calls instruments.methods.register for their market. What a market's rails require is researched jurisdictional content (owner-gated, DIRECTION §8), not engineering — seeding a guess would produce destinations that validate and cannot be paid. Also open: no encryption at rest (§13 socket, needs a KMS decision).",
+    requires: [
+      'services/svc-p2p/src/instruments-mount-vs-tracker.ts',
+      'services/svc-p2p/src/instruments-mount-vs-tracker.test.ts',
+      'services/svc-p2p/src/instrument-service.ts',
+      'services/svc-p2p/src/instrument-service.test.ts',
+      'services/svc-p2p/src/router.mount.test.ts',
+    ],
+    note:
+      '**D26-P1-P4 Done 2026-08-21:** method schemas + instrument lifecycle (`instruments-mount-vs-tracker.ts`). ' +
+      'Escrow-bound reveal + immutable snapshot; access log same SQL as read. Registry ships empty until operator registers. ' +
+      'Class X residual: jurisdictional method content; encryption at rest (KMS socket).',
   }),
   f('p2p.merchants', 'P2P merchant programme — badges, limits, API', {
     module: 'p2p',
