@@ -2848,7 +2848,31 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
      * Money tools denied (guardrail). Spec: docs/ops/trk/agents.merchant.md Stage 1.
      */
     merchant: router({
-      policy: publicProcedure.query(() => describeMerchantPolicy()),
+      policy: publicProcedure
+        .output(
+          z.object({
+            moneyWriteTools: z.array(z.string()),
+            moneyDeny: z.object({
+              tools: z.number().int(),
+              hasLedgerPost: z.number().int(),
+              hasPayRouteChange: z.number().int(),
+            }),
+            moneyDenyStatusLine: z.string(),
+            moneyDenyExport: z.string(),
+            watchRefuseReasons: z.array(z.string()),
+            watchRefuse: z.object({
+              codes: z.number().int(),
+              hasNoMetrics: z.number().int(),
+              hasPayPlaneDark: z.number().int(),
+              hasStale: z.number().int(),
+            }),
+            liveMetricsRefuseReason: z.literal('no_live_metrics'),
+            darkPayPlaneRefuseReason: z.literal('pay_plane_dark'),
+            inventsApprovalRate: z.literal(false),
+            allowedTask: z.literal('merchant.watch'),
+          }),
+        )
+        .query(() => describeMerchantPolicy()),
 
       watch: scopedProcedure('agents:read', { module: 'agents' })
         .input(
