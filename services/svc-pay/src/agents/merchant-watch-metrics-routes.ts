@@ -11,6 +11,7 @@ import type { MerchantWatchMetricsStore } from './merchant-watch-metrics-store.j
 
 export const MERCHANT_WATCH_METRICS_PATH = '/internal/agents/merchant-watch-metrics' as const;
 export const MERCHANT_WATCH_METRICS_PUBLISH_PATH = '/internal/agents/merchant-watch-metrics/publish' as const;
+export const MERCHANT_WATCH_METRICS_REFRESH_PATH = '/internal/agents/merchant-watch-metrics/refresh' as const;
 
 export type MerchantWatchMetricsRefuse = {
   readonly ok: false;
@@ -20,6 +21,16 @@ export type MerchantWatchMetricsRefuse = {
 export type MerchantWatchMetricsPublishRefuse = {
   readonly ok: false;
   readonly reason: 'no_metrics_store' | 'invalid_publish_body';
+};
+
+export type MerchantWatchMetricsRefreshRefuse = {
+  readonly ok: false;
+  readonly reason: 'no_metrics_store' | 'no_live_metrics';
+};
+
+export type MerchantWatchMetricsRefreshOk = {
+  readonly ok: true;
+  readonly materialized: number;
 };
 
 export type MerchantWatchMetricsPublishOk = {
@@ -97,6 +108,23 @@ export function registerMerchantWatchMetricsRoutes(app: FastifyInstance, deps: M
     }
     await deps.store.publishPoint(point);
     const body: MerchantWatchMetricsPublishOk = { ok: true };
+    return reply.send(body);
+  });
+
+  app.post(MERCHANT_WATCH_METRICS_REFRESH_PATH, async (req, reply) => {
+    if (!authorised(req.headers)) {
+      return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
+    }
+    if (!deps.store) {
+      const body: MerchantWatchMetricsRefreshRefuse = { ok: false, reason: 'no_metrics_store' };
+      return reply.code(503).send(body);
+    }
+    const materialized = await deps.store.materializeProjectedMetrics();
+    if (materialized === 0) {
+      const body: MerchantWatchMetricsRefreshRefuse = { ok: false, reason: 'no_live_metrics' };
+      return reply.code(503).send(body);
+    }
+    const body: MerchantWatchMetricsRefreshOk = { ok: true, materialized };
     return reply.send(body);
   });
 }
