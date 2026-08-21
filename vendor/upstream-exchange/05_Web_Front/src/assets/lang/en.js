@@ -1286,6 +1286,8 @@ module.exports = {
             cardTitle: "Share card",
             cardLead: "Vector composition from your profile. Raster URL stays unavailable until a PNG rail is configured — never a fabricated og:image.",
             cardSize: "Size",
+            cardPortrait: "Portrait",
+            cardLandscape: "Landscape",
             raster: "Raster",
             svgBytes: "SVG length",
             mentorsTitle: "Mentor shortlist",
