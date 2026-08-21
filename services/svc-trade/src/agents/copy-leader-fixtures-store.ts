@@ -14,6 +14,7 @@ export type CopyLeaderFixture = {
 export type CopyLeaderFixturesStore = {
   listFixtures(): Promise<readonly CopyLeaderFixture[]>;
   publishFixture(fixture: CopyLeaderFixture): Promise<void>;
+  materializeProjectedFixtures(): Promise<number>;
 };
 
 type FixtureRow = {
@@ -39,7 +40,7 @@ function rowToFixture(row: FixtureRow): CopyLeaderFixture {
 }
 
 export function createCopyLeaderFixturesStore(sql: postgres.Sql): CopyLeaderFixturesStore {
-  return {
+  const store: CopyLeaderFixturesStore = {
     async listFixtures() {
       const rows = await sql<FixtureRow[]>`
         SELECT leader_id, realised_pnl, closed_trades, winning_trades, window_start, window_end, source
@@ -73,5 +74,13 @@ export function createCopyLeaderFixturesStore(sql: postgres.Sql): CopyLeaderFixt
           published_at = now()
       `;
     },
+    async materializeProjectedFixtures() {
+      const projected = await listProjectedCopyLeaderFixtures(sql);
+      for (const fixture of projected) {
+        await store.publishFixture(fixture);
+      }
+      return projected.length;
+    },
   };
+  return store;
 }

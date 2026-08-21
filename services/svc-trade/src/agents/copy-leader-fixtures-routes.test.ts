@@ -4,6 +4,7 @@ import { serviceAuthHeaders } from '@intafaced/contracts';
 import {
   COPY_LEADER_FIXTURES_PATH,
   COPY_LEADER_FIXTURES_PUBLISH_PATH,
+  COPY_LEADER_FIXTURES_REFRESH_PATH,
   registerCopyLeaderFixturesRoutes,
 } from './copy-leader-fixtures-routes.js';
 import type { CopyLeaderFixture, CopyLeaderFixturesStore } from './copy-leader-fixtures-store.js';
@@ -14,7 +15,7 @@ function serviceHeaders(): Record<string, string> {
   return serviceAuthHeaders('svc-agents', SECRET);
 }
 
-function memoryStore(): CopyLeaderFixturesStore {
+function memoryStore(projected: CopyLeaderFixture[] = []): CopyLeaderFixturesStore {
   const fixtures: CopyLeaderFixture[] = [];
   return {
     async listFixtures() {
@@ -24,6 +25,12 @@ function memoryStore(): CopyLeaderFixturesStore {
       const idx = fixtures.findIndex((f) => f.leaderId === fixture.leaderId);
       if (idx >= 0) fixtures[idx] = fixture;
       else fixtures.push(fixture);
+    },
+    async materializeProjectedFixtures() {
+      for (const fixture of projected) {
+        await this.publishFixture(fixture);
+      }
+      return projected.length;
     },
   };
 }
@@ -103,6 +110,41 @@ describe('copy leader fixtures internal route', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, fixtures: [fixture] });
+    await app.close();
+  });
+
+  it('refresh materializes projected fixtures then GET succeeds', async () => {
+    const projected = [
+      {
+        leaderId: 'leader-2',
+        realisedPnl: null,
+        closedTrades: 2,
+        winningTrades: null,
+        windowStart: '2026-01-01T00:00:00.000Z',
+        windowEnd: '2026-01-31T23:59:59.000Z',
+        source: 'trade.copy.mirrored_fills',
+      },
+    ];
+    const app = Fastify();
+    const store = memoryStore(projected);
+    registerCopyLeaderFixturesRoutes(app, { internalSecret: SECRET, store });
+    await app.ready();
+
+    const refresh = await app.inject({
+      method: 'POST',
+      url: COPY_LEADER_FIXTURES_REFRESH_PATH,
+      headers: serviceHeaders(),
+    });
+    expect(refresh.statusCode).toBe(200);
+    expect(refresh.json()).toEqual({ ok: true, materialized: 1 });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: COPY_LEADER_FIXTURES_PATH,
+      headers: serviceHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, fixtures: projected });
     await app.close();
   });
 });

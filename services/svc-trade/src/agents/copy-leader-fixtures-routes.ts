@@ -11,6 +11,7 @@ import type { CopyLeaderFixture, CopyLeaderFixturesStore } from './copy-leader-f
 
 export const COPY_LEADER_FIXTURES_PATH = '/internal/agents/copy-leader-fixtures' as const;
 export const COPY_LEADER_FIXTURES_PUBLISH_PATH = '/internal/agents/copy-leader-fixtures/publish' as const;
+export const COPY_LEADER_FIXTURES_REFRESH_PATH = '/internal/agents/copy-leader-fixtures/refresh' as const;
 
 export type CopyLeaderFixturesRefuse = {
   readonly ok: false;
@@ -20,6 +21,16 @@ export type CopyLeaderFixturesRefuse = {
 export type CopyLeaderFixturesPublishRefuse = {
   readonly ok: false;
   readonly reason: 'no_fixtures_store' | 'invalid_publish_body';
+};
+
+export type CopyLeaderFixturesRefreshRefuse = {
+  readonly ok: false;
+  readonly reason: 'no_fixtures_store' | 'no_live_leaders';
+};
+
+export type CopyLeaderFixturesRefreshOk = {
+  readonly ok: true;
+  readonly materialized: number;
 };
 
 export type CopyLeaderFixturesPublishOk = {
@@ -93,6 +104,23 @@ export function registerCopyLeaderFixturesRoutes(app: FastifyInstance, deps: Cop
     }
     await deps.store.publishFixture(fixture);
     const body: CopyLeaderFixturesPublishOk = { ok: true };
+    return reply.send(body);
+  });
+
+  app.post(COPY_LEADER_FIXTURES_REFRESH_PATH, async (req, reply) => {
+    if (!authorised(req.headers)) {
+      return reply.code(401).send({ error: 'trade.unauthenticated', message: 'service credentials required' });
+    }
+    if (!deps.store) {
+      const body: CopyLeaderFixturesRefreshRefuse = { ok: false, reason: 'no_fixtures_store' };
+      return reply.code(503).send(body);
+    }
+    const materialized = await deps.store.materializeProjectedFixtures();
+    if (materialized === 0) {
+      const body: CopyLeaderFixturesRefreshRefuse = { ok: false, reason: 'no_live_leaders' };
+      return reply.code(503).send(body);
+    }
+    const body: CopyLeaderFixturesRefreshOk = { ok: true, materialized };
     return reply.send(body);
   });
 }
