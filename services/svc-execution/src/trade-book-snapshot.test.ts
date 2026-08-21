@@ -1,3 +1,4 @@
+import { parseAmount } from '@intafaced/ledger-client';
 import { describe, expect, it } from 'vitest';
 import { createTradeBookSnapshotFn, TRADE_BOOK_SNAPSHOT_VENUE_ID } from './trade-book-snapshot.js';
 
@@ -23,8 +24,8 @@ describe('createTradeBookSnapshotFn', () => {
 
     expect(snapshot.venueId).toBe(TRADE_BOOK_SNAPSHOT_VENUE_ID);
     expect(snapshot.symbol).toBe('BTC/USDT');
-    expect(snapshot.bids).toEqual([['42000', '1.5']]);
-    expect(snapshot.asks).toEqual([['42001', '2']]);
+    expect(snapshot.bids).toEqual([[parseAmount('42000'), parseAmount('1.5')]]);
+    expect(snapshot.asks).toEqual([[parseAmount('42001'), parseAmount('2')]]);
     expect(snapshot.sequence).toBe(42);
     expect(snapshot.sequenced).toBe(true);
     expect(snapshot.observedAt).toBeInstanceOf(Date);
