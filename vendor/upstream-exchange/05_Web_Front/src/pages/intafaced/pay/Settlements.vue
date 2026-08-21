@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.settlementsPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.settlementsPage.lead') }}</p>
-      <div class="ix-source">svc-pay · settlement.run · settlement.get · settlement.payout</div>
+      <div class="ix-source">svc-pay · settlement.run · settlement.get · settlement.payout · settlement.release</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -83,6 +83,42 @@
             :message="settlement.message"
             endpoint="/api/pay/trpc/settlement.get"
           ></IxState>
+        </div>
+
+        <!-- ── release a pending freeze (posts no ledger value) ────────── -->
+        <div class="ix-card">
+          <div class="ix-card-head">
+            <h2>{{ $t('intafaced.pay.settlements.release') }}</h2>
+            <span class="ix-sub">settlement.release</span>
+          </div>
+          <p class="ix-lead">{{ $t('intafaced.pay.settlements.releaseLead') }}</p>
+
+          <div class="ix-field-grid">
+            <div class="ix-field">
+              <label for="ix-rel-id">{{ $t('intafaced.pay.settlementId') }}</label>
+              <Input element-id="ix-rel-id" v-model="releaseForm.settlementId" :placeholder="$t('intafaced.pay.settlementIdHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-rel-reason">{{ $t('intafaced.pay.settlements.releaseReason') }}</label>
+              <Input element-id="ix-rel-reason" v-model="releaseForm.reason" :placeholder="$t('intafaced.pay.settlements.releaseReasonHint')"></Input>
+            </div>
+          </div>
+
+          <div class="ix-actions">
+            <Button type="primary" :loading="released.busy" :disabled="!canRelease" @click="releaseFreeze">
+              {{ $t('intafaced.pay.settlements.release') }}
+            </Button>
+          </div>
+
+          <div v-if="released.ran" style="margin-top:14px;">
+            <div v-if="released.reason === 'ok'" class="ix-done">
+              <strong>{{ $t('intafaced.pay.settlements.releaseDone') }}</strong>
+              <div style="margin-top:6px;">
+                {{ $t('intafaced.bank.status') }}: {{ released.data.status }}
+              </div>
+            </div>
+            <IxState v-else :loading="released.busy" :reason="released.reason" :message="released.message" endpoint="/api/pay/trpc/settlement.release"></IxState>
+          </div>
         </div>
 
         <!-- ── the settlement in hand, and paying it out ───────────────── -->
@@ -167,14 +203,19 @@
 
 <script>
 /**
- * SETTLEMENTS — svc-pay's `settlement` router, all three procedures.
+ * SETTLEMENTS — svc-pay's `settlement` router: run, get, payout, release.
  *
  * ── THERE IS NO LIST, AND THE SCREEN SAYS SO RATHER THAN FAKING ONE ───────
- * svc-pay exposes `run`, `get` and `payout` and nothing that enumerates a
- * merchant's settlements. A table is therefore impossible without inventing
- * either the rows or a procedure, so this screen closes a window, looks one up
- * by id, and states the absence at the top. That note is the honest version of
- * a feature request; a fabricated list would be the dishonest version of one.
+ * svc-pay exposes `run`, `get`, `payout` and `release` and nothing this screen
+ * uses to enumerate a merchant's settlements. A table is therefore impossible
+ * without inventing either the rows or a procedure, so this screen closes a
+ * window, looks one up by id, releases a pending freeze, and states the
+ * absence at the top. That note is the honest version of a feature request; a
+ * fabricated list would be the dishonest version of one.
+ *
+ * ── RELEASE MOVES NO LEDGER VALUE ─────────────────────────────────────────
+ * `settlement.release` unsticks a pending freeze so later payments can enter a
+ * window. Named refuse stays named. Amounts are not parsed here.
  *
  * ── PAYOUT CARRIES ITS OWN SCOPE BECAUSE VALUE LEAVES THE BOOK ────────────
  * `pay:payout`, separate from `pay:write` — "value leaves the book here". A
@@ -207,13 +248,15 @@ export default {
       nav: PAY_NAV,
       runForm: { window: '', assetId: 'USDT' },
       lookupId: '',
+      releaseForm: { settlementId: '', reason: '' },
       payoutForm: { railId: '', kind: '', ref: '' },
       current: null,
       merchant: this.emptySection(),
       health: this.emptySection(),
       settlement: { loading: false, reason: null, message: '', data: null },
       ran: this.emptyAction(),
-      paid: this.emptyAction()
+      paid: this.emptyAction(),
+      released: this.emptyAction()
     };
   },
   computed: {
@@ -235,6 +278,9 @@ export default {
           this.payoutForm.kind &&
           this.payoutForm.ref
       );
+    },
+    canRelease() {
+      return Boolean(this.releaseForm.settlementId && this.releaseForm.reason.trim());
     }
   },
   created() {
@@ -258,7 +304,9 @@ export default {
         if (!res.ok) return;
         self.current = res.data;
         self.lookupId = res.data.id;
+        self.releaseForm.settlementId = res.data.id;
         self.paid = self.emptyAction();
+        self.released = self.emptyAction();
       });
     },
     lookup() {
@@ -267,6 +315,22 @@ export default {
       this.load('settlement', query('pay', 'settlement.get', { settlementId: this.lookupId }, this.ixToken)).then(function(res) {
         self.current = res.ok ? res.data : null;
         self.paid = self.emptyAction();
+        self.released = self.emptyAction();
+        if (res.ok) self.releaseForm.settlementId = self.lookupId;
+      });
+    },
+    releaseFreeze() {
+      var self = this;
+      if (!this.canRelease) return;
+      this.act(
+        'released',
+        mutate('pay', 'settlement.release', {
+          settlementId: this.releaseForm.settlementId,
+          reason: this.releaseForm.reason.trim()
+        }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        if (self.current && self.current.id === res.data.id) self.current = res.data;
       });
     },
     payout() {

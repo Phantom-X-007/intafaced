@@ -910,6 +910,14 @@ module.exports = {
                 payoutLead: "Value leaves the book here, so this carries its own scope. A session that could close the window may still be refused the payout."
             },
 
+            settlements: {
+                release: "Release freeze",
+                releaseLead: "Unstick a pending freeze so later payments can enter a window. This posts no ledger value. A named refuse stays named.",
+                releaseReason: "Reason",
+                releaseReasonHint: "Required — silent cancels are refused",
+                releaseDone: "Freeze released"
+            },
+
             checkoutPage: {
                 title: "Hosted checkout",
                 lead: "The payer's own path, exercised the way a payer will exercise it.",
