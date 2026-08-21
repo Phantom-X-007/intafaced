@@ -1169,10 +1169,13 @@ export class TokenService {
   /**
    * Take ownership of a revenue window, or refuse by name.
    *
-   * Deliberately NOT wrapped in an explicit transaction. The overlap guard
-   * raises 23P01, and inside a transaction that error would poison the session
-   * before we could ask WHICH run already holds the window — so the refusal
-   * would lose the only detail that makes it actionable.
+   * Concurrent GiST inserts on `buyback_runs_window_no_overlap_ex` can raise
+   * 40P01 deadlock instead of 23P01. An unmapped deadlock used to escape the
+   * public door as 500 after the winner had already claimed — same unnamed
+   * refuse the 0002 rewrite removed for the serial path. Serialize THIS claim
+   * with an xact advisory lock (yield/mint shape), name overlap before INSERT,
+   * and map leftover 23P01/23505/40P01/40001 AFTER the tx rolls back so the
+   * holder query does not run on an aborted session.
    *
    * Mirrors `claimStakePending`: insert, or on an id conflict re-read and refuse
    * a row whose identity does not match what the caller is asking to post.
@@ -1194,74 +1197,92 @@ export class TokenService {
       tokens_to_rewards: string;
       status: BuybackRunStatus;
     };
+    type Held = { id: string; revenue_window_from: Date; revenue_window_to: Date; status: BuybackRunStatus };
 
-    let inserted: Row[];
+    const mapRow = (row: Row) => ({
+      id: row.id,
+      status: row.status,
+      burned: parseAmount(row.tokens_burned),
+      toRewards: parseAmount(row.tokens_to_rewards),
+    });
+
     try {
-      inserted = await this.sql<Row[]>`
-        INSERT INTO token.buyback_runs (
-          id, revenue_window_from, revenue_window_to, revenue_total,
-          tokens_bought, tokens_burned, tokens_to_rewards, status, executed_at
-        )
-        VALUES (
-          ${input.runId}, ${input.window.from}, ${input.window.to},
-          ${this.sql.json(input.revenueTotal as never)},
-          ${formatAmount(input.tokensBought)}::numeric, ${formatAmount(input.toBurn)}::numeric,
-          ${formatAmount(input.toRewards)}::numeric, 'pending', now()
-        )
-        ON CONFLICT (id) DO NOTHING
-        RETURNING id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
-      `;
+      return await transaction(
+        this.sql,
+        async (tx) => {
+          // Global on purpose: nested/partial overlaps do not share from/to, so
+          // a per-window lock would still race the exclusion constraint.
+          await tx`SELECT pg_advisory_xact_lock(hashtext(${'token.buyback'})::bigint)`;
+
+          const overlapping = await tx<Held[]>`
+            SELECT id, revenue_window_from, revenue_window_to, status
+              FROM token.buyback_runs
+             WHERE tstzrange(revenue_window_from, revenue_window_to, '[)')
+                && tstzrange(${input.window.from}, ${input.window.to}, '[)')
+               AND id <> ${input.runId}
+             ORDER BY revenue_window_from
+             LIMIT 5
+          `;
+          if (overlapping[0]) {
+            throw this.overlapError(input.runId, input.window, overlapping);
+          }
+
+          const inserted = await tx<Row[]>`
+            INSERT INTO token.buyback_runs (
+              id, revenue_window_from, revenue_window_to, revenue_total,
+              tokens_bought, tokens_burned, tokens_to_rewards, status, executed_at
+            )
+            VALUES (
+              ${input.runId}, ${input.window.from}, ${input.window.to},
+              ${this.sql.json(input.revenueTotal as never)},
+              ${formatAmount(input.tokensBought)}::numeric, ${formatAmount(input.toBurn)}::numeric,
+              ${formatAmount(input.toRewards)}::numeric, 'pending', now()
+            )
+            ON CONFLICT (id) DO NOTHING
+            RETURNING id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
+          `;
+
+          const row = inserted[0];
+          if (row) return mapRow(row);
+
+          const rows = await tx<Row[]>`
+            SELECT id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
+              FROM token.buyback_runs WHERE id = ${input.runId} FOR UPDATE
+          `;
+          const existing = rows[0];
+          if (!existing) {
+            throw new TokenError(`Buyback run ${input.runId} disappeared after conflict`, 'token.buyback_run_conflict');
+          }
+
+          const mismatch =
+            existing.revenue_window_from.getTime() !== input.window.from.getTime() ||
+            existing.revenue_window_to.getTime() !== input.window.to.getTime() ||
+            parseAmount(existing.tokens_bought) !== input.tokensBought;
+
+          if (mismatch) {
+            throw new TokenError(
+              `Buyback run ${input.runId} was already claimed for [${iso(existing.revenue_window_from)}, ` +
+                `${iso(existing.revenue_window_to)}) buying ${formatAmount(parseAmount(existing.tokens_bought))} — ` +
+                `refusing to post [${iso(input.window.from)}, ${iso(input.window.to)}) buying ${formatAmount(input.tokensBought)} against it`,
+              'token.buyback_run_conflict',
+            );
+          }
+
+          return mapRow(existing);
+        },
+        { isolation: 'read committed' },
+      );
     } catch (err) {
-      // 23P01 from the non-overlap exclusion constraint — the window, or part of
-      // it, is already spent. This is THE refusal the old code reached only
-      // after burning. Nothing has moved at this point.
-      if (isExclusionViolation(err) || isUniqueViolation(err)) {
+      const named = asTokenError(err);
+      if (named) throw named;
+      // 23P01 exclusion / 23505 unique / 40P01 deadlock / 40001 serialization —
+      // the window is contested. Query the holder on a live session (the tx
+      // above has rolled back). Nothing has burned yet.
+      if (isExclusionViolation(err) || isUniqueViolation(err) || isContention(err)) {
         throw await this.windowAlreadyClaimed(input.runId, input.window);
       }
       throw err;
     }
-
-    const row = inserted[0];
-    if (row) {
-      return {
-        id: row.id,
-        status: row.status,
-        burned: parseAmount(row.tokens_burned),
-        toRewards: parseAmount(row.tokens_to_rewards),
-      };
-    }
-
-    // The id already exists. Re-read it and refuse to post the caller's figures
-    // against another run's identity (same class as `token.stake_conflict`).
-    const rows = await this.sql<Row[]>`
-      SELECT id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
-        FROM token.buyback_runs WHERE id = ${input.runId} FOR UPDATE
-    `;
-    const existing = rows[0];
-    if (!existing) {
-      throw new TokenError(`Buyback run ${input.runId} disappeared after conflict`, 'token.buyback_run_conflict');
-    }
-
-    const mismatch =
-      existing.revenue_window_from.getTime() !== input.window.from.getTime() ||
-      existing.revenue_window_to.getTime() !== input.window.to.getTime() ||
-      parseAmount(existing.tokens_bought) !== input.tokensBought;
-
-    if (mismatch) {
-      throw new TokenError(
-        `Buyback run ${input.runId} was already claimed for [${iso(existing.revenue_window_from)}, ` +
-          `${iso(existing.revenue_window_to)}) buying ${formatAmount(parseAmount(existing.tokens_bought))} — ` +
-          `refusing to post [${iso(input.window.from)}, ${iso(input.window.to)}) buying ${formatAmount(input.tokensBought)} against it`,
-        'token.buyback_run_conflict',
-      );
-    }
-
-    return {
-      id: existing.id,
-      status: existing.status,
-      burned: parseAmount(existing.tokens_burned),
-      toRewards: parseAmount(existing.tokens_to_rewards),
-    };
   }
 
   /** Name the run that already holds the window. A refusal a human can act on. */
@@ -1274,8 +1295,15 @@ export class TokenService {
        ORDER BY revenue_window_from
        LIMIT 5
     `;
-    const held = rows.map((r) => `${r.id} [${iso(r.revenue_window_from)}, ${iso(r.revenue_window_to)}) ${r.status}`).join(', ');
+    return this.overlapError(runId, window, rows);
+  }
 
+  private overlapError(
+    runId: string,
+    window: { from: Date; to: Date },
+    rows: Array<{ id: string; revenue_window_from: Date; revenue_window_to: Date; status: BuybackRunStatus }>,
+  ): TokenError {
+    const held = rows.map((r) => `${r.id} [${iso(r.revenue_window_from)}, ${iso(r.revenue_window_to)}) ${r.status}`).join(', ');
     return new TokenError(
       `Revenue window [${iso(window.from)}, ${iso(window.to)}) overlaps an already-claimed buyback run, so run ${runId} was refused ` +
         `and NOTHING was burned. Windows are half-open [from, to) and may not overlap. Already claimed: ${held || '(unknown)'}`,
@@ -1780,11 +1808,28 @@ export function foldTally(rows: Array<{ choice: VoteChoice; weight: string; n: s
   return { forWeight, againstWeight, abstainWeight, voterCount };
 }
 
-/** postgres.js surfaces PG error codes on `err.code` (string). */
+function asTokenError(err: unknown): TokenError | undefined {
+  let current: unknown = err;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (current instanceof TokenError) return current;
+    if (typeof current !== 'object' || current === null || !('cause' in current)) return undefined;
+    current = (current as { cause: unknown }).cause;
+  }
+  return undefined;
+}
+
+/** postgres.js surfaces PG error codes on `err.code` (string); walk `cause`. */
 function pgCode(err: unknown): string | undefined {
-  if (typeof err !== 'object' || err === null || !('code' in err)) return undefined;
-  const code = (err as { code: unknown }).code;
-  return typeof code === 'string' ? code : undefined;
+  let current: unknown = err;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== 'object' || current === null) return undefined;
+    if ('code' in current) {
+      const code = (current as { code: unknown }).code;
+      if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    }
+    current = 'cause' in current ? (current as { cause: unknown }).cause : undefined;
+  }
+  return undefined;
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -1799,6 +1844,12 @@ function isUniqueViolation(err: unknown): boolean {
  */
 function isExclusionViolation(err: unknown): boolean {
   return pgCode(err) === '23P01';
+}
+
+/** Concurrent GiST overlap can deadlock (40P01) or serialize-fail (40001). */
+function isContention(err: unknown): boolean {
+  const code = pgCode(err);
+  return code === '40P01' || code === '40001';
 }
 
 /** Dates are half-open window bounds here; always render them unambiguously. */
