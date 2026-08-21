@@ -12,6 +12,57 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.academy.createRoom') }}</h2>
+        <span class="ix-sub">createRoom</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.academy.createRoomLead') }}</p>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-academy-create-slug">{{ $t('intafaced.academy.createRoomSlug') }}</label>
+          <Input element-id="ix-academy-create-slug" v-model="createForm.slug" :placeholder="$t('intafaced.academy.createRoomSlugHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-academy-create-name">{{ $t('intafaced.academy.name') }}</label>
+          <Input element-id="ix-academy-create-name" v-model="createForm.name"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-academy-create-kind">{{ $t('intafaced.academy.kind') }}</label>
+          <select id="ix-academy-create-kind" v-model="createForm.kind">
+            <option v-for="k in roomKinds" :key="k" :value="k">{{ k }}</option>
+          </select>
+        </div>
+        <div class="ix-field">
+          <label for="ix-academy-create-access">{{ $t('intafaced.academy.access') }}</label>
+          <select id="ix-academy-create-access" v-model="createForm.access">
+            <option v-for="a in roomAccesses" :key="a" :value="a">{{ a }}</option>
+          </select>
+        </div>
+        <div class="ix-field">
+          <label for="ix-academy-create-capacity">{{ $t('intafaced.academy.capacity') }}</label>
+          <Input element-id="ix-academy-create-capacity" v-model="createForm.capacity"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-academy-create-min-stake">{{ $t('intafaced.academy.minStake') }}</label>
+          <Input element-id="ix-academy-create-min-stake" v-model="createForm.minStake"></Input>
+        </div>
+      </div>
+      <div class="ix-actions" style="margin-top:16px;">
+        <Button v-if="canWrite" type="primary" size="small" :loading="createAction.busy" :disabled="!canSubmitCreate" @click="createRoom">
+          {{ $t('intafaced.academy.createRoomSubmit') }}
+        </Button>
+        <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.academy.createRoomSignIn') }}</router-link>
+      </div>
+      <div v-if="createAction.ran" style="margin-top:14px;">
+        <div v-if="createAction.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.academy.createRoomCreated') }}</strong>
+          <div style="margin-top:6px;">{{ createAction.data && createAction.data.name }}</div>
+        </div>
+        <IxState v-else :loading="createAction.busy" :reason="createAction.reason" :message="createAction.message" endpoint="/api/academy/trpc/createRoom"></IxState>
+      </div>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.academy.rooms') }}</h2>
         <span class="ix-sub">rooms</span>
       </div>
@@ -138,9 +189,10 @@
 /**
  * svc-academy (§8.3) — lobbies on /academy.
  *
- * Rooms stay empty when the service lists none. Join/leave are writes; stream
- * credentials refuse `academy.stream_unavailable` when no SFU is configured
- * rather than minting a fake A/V token.
+ * Rooms stay empty when the service lists none. Create/join/leave are writes;
+ * createRoom omits blank minStake rather than sending ''. Stream credentials
+ * refuse `academy.stream_unavailable` when no SFU is configured rather than
+ * minting a fake A/V token. Named refuse stays named.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import IxAcademyCurriculum from './academy/Curriculum.vue';
@@ -157,11 +209,15 @@ export default {
     return {
       rooms: this.emptySection(),
       roomDetail: this.emptySection(),
+      createAction: this.emptyAction(),
       joinAction: this.emptyAction(),
       leaveAction: this.emptyAction(),
       streamAction: this.emptyAction(),
       selectedRoomId: null,
-      activeSessionId: null
+      activeSessionId: null,
+      roomKinds: ['general', 'futures', 'options', 'meme_war_room', 'forex', 'defi_lab', 'merchant_clinic'],
+      roomAccesses: ['free', 'staked', 'invite'],
+      createForm: { slug: '', name: '', kind: 'general', access: 'free', capacity: '', minStake: '' }
     };
   },
   computed: {
@@ -170,6 +226,11 @@ export default {
     },
     sessions() {
       return (this.roomDetail.data && this.roomDetail.data.sessions) || [];
+    },
+    canSubmitCreate() {
+      var slug = (this.createForm.slug || '').trim();
+      var name = (this.createForm.name || '').trim();
+      return !!slug && !!name && /^\d+$/.test(String(this.createForm.capacity).trim()) && parseInt(this.createForm.capacity, 10) >= 1;
     }
   },
   created() {
@@ -177,6 +238,25 @@ export default {
     this.load('rooms', query('academy', 'rooms', undefined, this.ixToken));
   },
   methods: {
+    createRoom() {
+      var self = this;
+      var slug = (this.createForm.slug || '').trim().toLowerCase();
+      var name = (this.createForm.name || '').trim();
+      var capacity = parseInt(this.createForm.capacity, 10);
+      if (!slug || !name || capacity !== capacity || capacity < 1) return;
+      var input = {
+        slug: slug,
+        name: name,
+        kind: this.createForm.kind,
+        access: this.createForm.access,
+        capacity: capacity
+      };
+      var minStake = (this.createForm.minStake || '').trim();
+      if (minStake) input.minStake = minStake;
+      this.act('createAction', mutate('academy', 'createRoom', input, this.ixToken)).then(function (res) {
+        if (res.ok) self.load('rooms', query('academy', 'rooms', undefined, self.ixToken));
+      });
+    },
     openRoom(room) {
       this.selectedRoomId = room.id;
       this.load('roomDetail', query('academy', 'room', { roomId: room.id }, this.ixToken));
