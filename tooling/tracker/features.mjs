@@ -533,11 +533,13 @@ export const FEATURES = [
       'packages/connect-data-lake/src/mount-vs-tracker.test.ts',
       'packages/connect-data-lake/src/data-lake-stage1.ts',
       'packages/connect-data-lake/src/capture-policy.ts',
+      'packages/connect-data-lake/src/capture-lake-consumer.ts',
+      'packages/connect-data-lake/src/persistence-sink.ts',
       'packages/venue-adapter/src/fabric/capture-lake.ts',
     ],
     note:
-      'WIP Stage-1 D26-P2-DL1: `@intafaced/connect-data-lake` mount-vs-tracker — capture log only; `describeDataLakeStage1` refuses TSDB/persist. ' +
-      'Unconnected venue = absent hole, never synthetic empty book. Class X residual: TSDB/compose unchosen; tick/fill normalisation pipeline; retention owner.',
+      'WIP Stage-1 D26-P2-DL2: mount-vs-tracker deepened — fabric consumer + persistence sink refuse (no TSDB write). ' +
+      'Unconnected venue = absent hole. Class X residual: TSDB/compose; tick/fill normalisation; retention owner.',
   }),
   f('execution.sor', 'svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports (§28)', {
     module: 'trade',
