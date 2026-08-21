@@ -142,6 +142,8 @@ describe('D26-P2-05 bus completeness inventory (ADR D-S-13)', () => {
     for (const event of ['userCreated', 'ledgerTxPosted', 'orderAccepted', 'ledgerFreezeUpdated'] as const) {
       expect(socketKeys(inventory)).toContain(`${event}::subscriber`);
     }
+    expect(socketKeys(inventory)).toContain('buybackExecuted::publisher');
+    expect(socketKeys(inventory)).toContain('buybackExecuted::subscriber');
   });
 
   it('no longer inventories the two closed findings as sockets or broken promises', () => {
