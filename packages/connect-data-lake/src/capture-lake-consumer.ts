@@ -12,7 +12,7 @@
  *   · connected empty snapshot → measured `occupancy: 'empty'`.
  */
 
-import { formatAmount } from '@intafaced/ledger-client/money';
+import { formatAmount } from '@intafaced/ledger-client';
 import {
   CaptureLog,
   bookLevelsFromCapture,
