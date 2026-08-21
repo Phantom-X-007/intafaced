@@ -19,6 +19,7 @@
     "@intafaced/contracts": "workspace:*",
     "@intafaced/execution-arb": "workspace:*",
     "@intafaced/execution-house-tenant": "workspace:*",
+    "@intafaced/execution-mm": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
     "@intafaced/venue-adapter": "workspace:*",
