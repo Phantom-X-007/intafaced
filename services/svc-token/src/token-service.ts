@@ -1048,6 +1048,11 @@ export class TokenService {
    *   equals `tokensBought`. No such recipe exists in `packages/ledger-client`,
    *   so a new or pending run is refused `token.buyback_tokens_unmoved`.
    *   Coincidental global balance movement is not a settle (paper-settle).
+   * - Do not publish `buybackExecuted` until this run posted a ledger tx.
+   *   Emitting it on refuse (or on a fee-funded `burn`) would lie that tokens
+   *   were bought. The catalog still declares the event; event-wiring stays
+   *   red. `WIRING_SOCKETS` lives in `packages/events` — exclusive this
+   *   service cannot declare a missing-publisher socket (second PR).
    * - There is no caller: no cron, no bus subscriber, no admin form. An
    *   operator with admin:treasury + MFA invokes the mutation or it never runs.
    * - `buybackBudget()` (economics/buyback.ts) is what would size the spend from
@@ -1140,6 +1145,15 @@ export class TokenService {
     // operator figure (paper-settle — a concurrent yield/mint/burn can mint a
     // `buybackExecuted` this run never posted). A future buyback recipe posts
     // here, then settles only against *this run's* posted keys.
+    //
+    // Do not restore `this.bus.publish('buybackExecuted', …)` here. Nothing
+    // posted — the burn leg does not run — so the event would lie. Doctrine
+    // event-wiring is red for that missing publisher on purpose. The repo
+    // pattern is a WIRING_SOCKETS missing-publisher row in
+    // packages/events/src/catalog.ts ("publisher waits on a buyback recipe").
+    // Exclusive this service cannot add it (one service per PR; that file is
+    // a second package). Clear the gate in a packages/events PR, or restore
+    // the publisher here only after a recipe actually posts.
     return this.refuseUnbookedBuyback(claimed.id, input.runId, input.tokensBought, { fresh: claimed.fresh });
   }
 

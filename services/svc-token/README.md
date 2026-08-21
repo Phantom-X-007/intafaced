@@ -15,7 +15,7 @@ Staking, access tiers and emissions are live end to end. The other three §4.3 e
 | §4.3 says                                                                       | What actually runs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Socket             |
 | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
 | "weekly job aggregates house fee accounts per asset → distributes"              | `distributeRevenue`, invoked by hand. **No caller exists** outside tests — no cron, no bus subscriber, no admin form. Operator-typed `sources[].amount` is still required (no aggregation job). On **first claim** each module is bound to the live `houseFees` pot — over-claim refuses as `token.yield_source_underfunded` before the window header (T-03 residual of #1353). Under-claim (leaving fees in the pot) stays allowed. The weekly job that _builds_ `sources` from balances is still the socket. | `token.yield`      |
-| "market-buy on internal book → split to burn + rewards. Structural, scheduled." | `recordBuyback`, invoked by hand. **Nothing is bought** — `tokensBought` is typed by the operator (must be positive; zero would still claim the revenue window). `revenueTotal` is validated as assetId → unsigned decimal strings before claim. The only ledger movement is the burn leg out of the rewards engine. `buybackBudget()` has no caller but its own tests.                                                                                                                                        | `token.buyback`    |
+| "market-buy on internal book → split to burn + rewards. Structural, scheduled." | `recordBuyback`, invoked by hand. **Nothing is bought** — `tokensBought` is typed by the operator (must be positive; zero would still claim the revenue window). `revenueTotal` is validated as assetId → unsigned decimal strings before claim. No ledger post: a fee-funded burn is not a buy, so the run refuses `token.buyback_tokens_unmoved` rather than settling. `buybackBudget()` has no caller but its own tests.                                                                                    | `token.buyback`    |
 | "IFC-weighted voting" with `proposals.status`                                   | Ballots are recorded and weighted correctly. **No proposal can change status.** `passed` / `rejected` / `executed` / `cancelled` are declared on the enum and written by no code in this repo; there is no quorum, threshold, tally job, close job or executor. `draft` is terminal too — a future `opensAt` can never open.                                                                                                                                                                                   | `token.governance` |
 
 None of the three is a rename away from working. Yield has a service-side **window header** (`token.yield_windows`, 0004) plus **plan claim** (`token.yield_payouts`, 0003) so a re-run cannot pay late joiners — including after an empty first run — but still needs the aggregation job that reads house fee balances (T-03) and a real caller. Buyback has claim-before-burn (0002) and validated `revenueTotal`, but still needs svc-trade to execute a real purchase. Governance needs an owner to set quorum and threshold (numbers an agent must not invent) and a decision on how each proposal kind executes — three cross a service boundary and `grant` moves value, which makes it a ledger recipe and a DIRECTION §3 carve-out.
@@ -28,20 +28,20 @@ Worth stating here because the word "token" invites the wrong inference. No `.so
 
 ## API
 
-| Route / method                         | Scope / auth            | Purpose                                                                                                                   |
-| -------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET /internal/stake/:userId`          | service headers         | **The hot path.** §4.3: other services call this to gate launchpad allocations, OTC access, premium lobbies, vendor slots |
-| `POST /internal/emissions/mint-next`   | service headers         | Cron-friendly mint of the next sequential epoch (refuses when `EMISSIONS_ENABLED=false`)                                  |
-| tRPC `stake`                           | `token:stake`           | Opens a stake for the signed principal — claim `pending` → ledger fund → `active`                                         |
-| tRPC `unstake`                         | `token:stake`           | Returns principal; enforces lock + ownership                                                                              |
-| tRPC `listStakes`                      | `token:read`            | Stakes owned by the signed principal                                                                                      |
-| tRPC `stakeOf` / `accessOf`            | `token:read`            | Total active stake / access tier + fee discount                                                                           |
-| tRPC `mintEpoch` / `nextEmissionEpoch` | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                           |
-| tRPC `distributeRevenue`               | `admin:treasury` + MFA  | **Operator action, no caller.** Sweeps the fee sources the operator names → pro-rata staker payouts. Not a scheduled job  |
-| tRPC `recordBuyback`                   | `admin:treasury` + MFA  | **Operator action, no caller.** Records an asserted `tokensBought` and burns the split from rewards. Buys nothing         |
-| tRPC `burnedSupply`                    | `token:read`            | Balance of the `house/burn` ledger account                                                                                |
-| tRPC `createProposal` / `castVote`     | `token:stake` / admin   | Records a ballot, weight = `stakeOf` snapshot taken inside the vote transaction                                           |
-| tRPC `listProposals` / `getProposal`   | `token:read`            | Reads proposals; `getProposal` recomputes a tally that **nothing acts on**                                                |
+| Route / method                         | Scope / auth            | Purpose                                                                                                                                              |
+| -------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /internal/stake/:userId`          | service headers         | **The hot path.** §4.3: other services call this to gate launchpad allocations, OTC access, premium lobbies, vendor slots                            |
+| `POST /internal/emissions/mint-next`   | service headers         | Cron-friendly mint of the next sequential epoch (refuses when `EMISSIONS_ENABLED=false`)                                                             |
+| tRPC `stake`                           | `token:stake`           | Opens a stake for the signed principal — claim `pending` → ledger fund → `active`                                                                    |
+| tRPC `unstake`                         | `token:stake`           | Returns principal; enforces lock + ownership                                                                                                         |
+| tRPC `listStakes`                      | `token:read`            | Stakes owned by the signed principal                                                                                                                 |
+| tRPC `stakeOf` / `accessOf`            | `token:read`            | Total active stake / access tier + fee discount                                                                                                      |
+| tRPC `mintEpoch` / `nextEmissionEpoch` | `admin:treasury` / read | Operator mint (optional `epoch`) and next index                                                                                                      |
+| tRPC `distributeRevenue`               | `admin:treasury` + MFA  | **Operator action, no caller.** Sweeps the fee sources the operator names → pro-rata staker payouts. Not a scheduled job                             |
+| tRPC `recordBuyback`                   | `admin:treasury` + MFA  | **Operator action, no caller.** Refuses `token.buyback_tokens_unmoved` unless a recipe booked the buy. Buys nothing; does not emit `buybackExecuted` |
+| tRPC `burnedSupply`                    | `token:read`            | Balance of the `house/burn` ledger account                                                                                                           |
+| tRPC `createProposal` / `castVote`     | `token:stake` / admin   | Records a ballot, weight = `stakeOf` snapshot taken inside the vote transaction                                                                      |
+| tRPC `listProposals` / `getProposal`   | `token:read`            | Reads proposals; `getProposal` recomputes a tally that **nothing acts on**                                                                           |
 
 Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED=true`) to mint the next sequential epoch every `EMISSIONS_TICK_MS` (default 1 day). Prefer external cron → `/internal/emissions/mint-next` or tRPC `mintEpoch` so the job is pauseable.
 
@@ -51,10 +51,11 @@ Optional auto-tick: set `EMISSIONS_AUTO_TICK=true` (and leave `EMISSIONS_ENABLED
 
 **Publishes**
 
-| Subject                             | When                                    |
-| ----------------------------------- | --------------------------------------- |
-| `intafaced.token.stake.created`     | a stake opens — gates unlock downstream |
-| `intafaced.token.buyback.completed` | a burn record is written (no purchase)  |
+| Subject                         | When                                    |
+| ------------------------------- | --------------------------------------- |
+| `intafaced.token.stake.created` | a stake opens — gates unlock downstream |
+
+`intafaced.token.buyback.completed` (`buybackExecuted`) is **declared and not published**. `recordBuyback` posts nothing, so emitting it would lie that tokens moved. `WIRING_SOCKETS` is in `packages/events` — a second PR must record the missing publisher (or a buyback recipe must post, then this service publishes). Exclusive `svc-token` cannot clear event-wiring.
 
 **Consumes — nothing, and that is the gap, not a phase.** §4.3's yield job and buyback schedule would both be consumers; neither exists. Today every revenue figure this service acts on is supplied by an operator on the wire, and no subscriber anywhere turns a trade fill into one.
 

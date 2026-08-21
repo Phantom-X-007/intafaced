@@ -23,7 +23,10 @@ import { userCopy } from './user-copy.js';
  *   token.buyback    `recordBuyback` refuses to settle an operator-typed
  *                    `tokensBought` that did not move on the ledger. No
  *                    market-buy recipe exists; burning fee-funded engine
- *                    balance is not a buy.
+ *                    balance is not a buy. Does not emit `buybackExecuted`
+ *                    (that would lie). Missing-publisher socket is a
+ *                    packages/events PR — exclusive this service cannot
+ *                    declare WIRING_SOCKETS.
  *   token.governance ballots are recorded and weighted correctly; no code can
  *                    move a proposal to passed/rejected/executed/cancelled.
  *
