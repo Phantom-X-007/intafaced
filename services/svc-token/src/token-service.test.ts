@@ -1550,8 +1550,9 @@ if (!available) {
         }),
       ).rejects.toMatchObject({ code: 'token.buyback_window_overlap' });
 
+      const buyback = spans.find((s) => s.name === 'token.recordBuyback');
       expect(spans.filter((s) => s.name === 'token.recordBuyback')).toHaveLength(1);
-      expect(spans[0]!.attributes['intafaced.error_code']).toBe('token.buyback_window_overlap');
+      expect(buyback!.attributes['intafaced.error_code']).toBe('token.buyback_window_overlap');
     });
   });
 
