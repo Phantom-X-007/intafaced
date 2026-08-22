@@ -14,7 +14,7 @@ import { otcSettleIdsFor } from '../spot/ids.js';
 import { otcDeskLawStatusLine, requirePublishedOtcDeskLaw, type OtcDeskLaw, UNPUBLISHED_OTC_DESK_LAW } from './desk-law.js';
 import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './maker-routing.js';
-import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './mid-feed.js';
+import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL, type OtcMidFeedWiringStatus } from './mid-feed.js';
 import { NO_OTC_MIDS, normalizeOtcAsset, otcPairKey, type OtcMidSource } from './mid-source.js';
 import {
   acceptOtcQuote,
@@ -39,6 +39,8 @@ export interface OtcDeskServiceOptions {
   midSource?: OtcMidSource;
   /** True when production installed the venue observation source (not the boot map). */
   liveObservationFeed?: boolean;
+  /** Boot wiring honesty — separates flag-off from flag-on-but-unwired. */
+  midFeedWiring?: OtcMidFeedWiringStatus;
   /** Durable quote table. Tests inject MemoryOtcQuoteStore; boot uses SQL. */
   store?: OtcQuoteStore;
   now?: () => Date;
@@ -50,6 +52,7 @@ export class OtcDeskService {
   private readonly platformCounterpartyId: string;
   private readonly midSource: OtcMidSource;
   private readonly liveObservationFeed: boolean;
+  private readonly midFeedWiring: OtcMidFeedWiringStatus | null;
   private readonly now: () => Date;
 
   constructor(
@@ -61,6 +64,7 @@ export class OtcDeskService {
     this.platformCounterpartyId = options.platformCounterpartyId ?? 'platform:otc-desk';
     this.midSource = options.midSource ?? NO_OTC_MIDS;
     this.liveObservationFeed = options.liveObservationFeed === true;
+    this.midFeedWiring = options.midFeedWiring ?? null;
     this.store = options.store ?? new MemoryOtcQuoteStore();
     this.now = options.now ?? (() => new Date());
   }
@@ -73,11 +77,11 @@ export class OtcDeskService {
       /** SOCKET §13 — platform settle real; maker route refuse-closed. */
       makerRouting: otcMakerRoutingStatus(),
       /** SOCKET §13 — boot map age-gates unless venue observation source is installed. */
-      midFeed: otcMidFeedStatus(this.liveObservationFeed),
+      midFeed: this.midFeedWiring ?? otcMidFeedStatus(this.liveObservationFeed),
       residuals: {
         deskLaw: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
         makerRouting: OTC_MAKER_ROUTING_RESIDUAL,
-        midFeed: this.liveObservationFeed ? null : OTC_MID_FEED_RESIDUAL,
+        midFeed: this.midFeedWiring?.residual ?? (this.liveObservationFeed ? null : OTC_MID_FEED_RESIDUAL),
       },
     };
   }
