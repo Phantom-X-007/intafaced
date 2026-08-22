@@ -177,6 +177,12 @@ const schema = serviceEnvSchema
       TRADE_FUTURES_LIQ_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
 
       /**
+       * Owner-published D3 ladder policy JSON (`FuturesLadderPolicy`).
+       * Empty = refuse — never invent `DEFAULT_FUTURES_LADDER_POLICY`.
+       */
+      TRADE_FUTURES_LADDER_POLICY: z.string().default(''),
+
+      /**
        * Funding tick interval per market when jobs enabled.
        * EMPTY = do not schedule funding ticks. D2: there is no product 8h default.
        * A set value must be an integer 60000–86400000.

@@ -8,6 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { futuresOwnerComposeGapsClosed } from './futures-compose-wiring.js';
 
 export const FUTURES_TRACKER_ID = 'trade.futures' as const;
 
@@ -19,9 +20,17 @@ export const FUTURES_DONE_BAR_TEST_FILES = [
   'adl-disclosure.test.ts',
   'funding-settlement.test.ts',
   'futures-leverage-p0-07-default.test.ts',
+  'futures-ladder-owner-gate.test.ts',
+  'futures-owner-env-gates.test.ts',
+  'futures-compose-wiring.test.ts',
 ] as const;
 
-export const FUTURES_HONEST_GAPS = ['gap.owner_ladder_numbers_d3', 'gap.owner_funding_rates_ceilings', 'gap.live_releverage_501'] as const;
+/** Owner ladder/funding/leverage env + compose wired; live re-leverage socket remains Class X. */
+export const FUTURES_HONEST_GAPS = ['gap.live_releverage_501'] as const;
+
+export function futuresOwnerEnvComposeGapsClosed(): boolean {
+  return futuresOwnerComposeGapsClosed();
+}
 
 export function futuresDoorsInRouterSource(): readonly (typeof FUTURES_MOUNTED_DOORS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
