@@ -1091,15 +1091,23 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
-    /** The cheapest way out of a margin call, and the one everyone wants taken. */
+    /**
+     * `eventId` is the client retry key when the caller has one (§5). Optional:
+     * leftover Loans.vue posts `{loanId, amount}` and must not 400. Night owns
+     * Bank.vue. Same eventId + amount is one lock, including overlapping retries.
+     */
     addCollateral: scopedProcedure('bank:write', { module: 'bank' })
-      .input(z.object({ loanId: z.string().uuid(), amount: amountString }))
+      .input(z.object({ loanId: z.string().uuid(), eventId: z.string().uuid().optional(), amount: amountString }))
       .output(z.object({ ledgerTxId: z.string(), sequence: z.number().int() }))
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
           const loan = await bank.loans.loan(input.loanId);
           assertSelf(ctx.principal.userId, loan.userId);
-          return bank.loans.addCollateral({ loanId: input.loanId, amount: parseAmount(input.amount) });
+          return bank.loans.addCollateral({
+            loanId: input.loanId,
+            eventId: input.eventId,
+            amount: parseAmount(input.amount),
+          });
         }),
       ),
 

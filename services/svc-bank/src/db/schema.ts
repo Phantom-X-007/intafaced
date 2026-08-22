@@ -462,6 +462,10 @@ export const loans = bank.table(
  * `unique(loan_id, sequence)` rather than keying on the loan alone: a borrower
  * curing a margin call by ADDING collateral is the best outcome available to
  * everyone involved, so it has to be expressible more than once per loan.
+ *
+ * `id` is the client retry key when the caller supplies it (same shape as
+ * `loans.open`'s loanId). A timed-out or overlapping retry reuses `id` so
+ * MAX+1 cannot mint a second lock. Omitted id is a new top-up.
  */
 export const loanCollateralEvents = bank.table(
   'loan_collateral_events',
