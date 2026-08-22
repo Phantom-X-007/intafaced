@@ -1811,8 +1811,18 @@ export const FEATURES = [
     module: 'quant',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['connect.data-lake'],
-    note: 'Law §29:783, gap-closed 2026-08-08. PHASE FROM THE LAW: §30:793 says "Quant Studio lands **Phase 5**" and §30:795 records B/svc-quant/5. WHAT IS DECIDED — `docs/adr/2026-08-04-predict-quant-connect-law.md` (D-S-18, Accepted) rules on §29 directly: "Blocked on §27\'s data lake, which is blocked on §27\'s adapters." That is the edge on this row, not an inference. §29:783 also makes the risk blocks MANDATORY — position caps, stop policy, drawdown halt — so a strategy a user can assemble without them is a bug and not a permissive default. WHAT IS NOT DECIDED, and D-S-18 lists it in writing under what still needs the owner: WHETHER QUANT SHIPS TO USERS AT ALL, given the framing risk that ADR describes at length. This row is boarded so the capability stops being invisible; it does not assert the product is going ahead, and no `services/svc-quant` should be scaffolded off the back of it. D-S-18 also draws the line that bounds any work here: "In a room with no code, an agent may build the contract and the refusal. It may not build the claim."',
+    requires: [
+      'packages/quant-honesty/src/quant-honesty.ts',
+      'packages/quant-honesty/src/quant-studio-mount-vs-tracker.ts',
+      'packages/quant-honesty/src/quant-studio-mount-vs-tracker.test.ts',
+      'packages/quant-honesty/src/quant-studio-tracker-status-pin.test.ts',
+    ],
+    note:
+      '**Done 2026-08-22:** §29 contract/refusal boundary in @intafaced/quant-honesty (D-S-18 — no svc-quant scaffold). ' +
+      'connect.data-lake dep met. Residuals: no-code visual builder + sandbox-escape test suite — not invented here.',
   }),
   f('quant.backtest', 'Backtest engine — event-level, walk-forward, Monte Carlo, out-of-sample enforced (§29)', {
     module: 'quant',
