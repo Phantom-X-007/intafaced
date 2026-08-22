@@ -348,3 +348,21 @@ describe('quant honesty door status — denon board complete (D87)', () => {
     ]);
   });
 });
+
+describe('quant honesty door status — denon board complete (D89)', () => {
+  it('full quant honesty mount board: statusLine, doors, packages, flags, data-lake alignment', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.statusLine).toMatch(/backtest/i);
+    expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(status.doors).toHaveLength(5);
+    const byPath = Object.fromEntries(status.doors.map((door) => [door.path, door]));
+    expect(byPath[QUANT_HONESTY_ASSESS_PATH]).toMatchObject({ method: 'POST', package: '@intafaced/quant-honesty' });
+    expect(byPath[EDGE_QUANT_SURFACE_RENDER_DOOR]).toMatchObject({ method: 'POST', package: '@intafaced/connect-data-lake' });
+    expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toMatchObject({ method: 'POST', package: 'composite' });
+  });
+});
