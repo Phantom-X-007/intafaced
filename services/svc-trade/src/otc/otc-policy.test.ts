@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { OTC_DESK_LAW_RESIDUAL } from './errors.js';
 import { OTC_MAKER_ROUTING_RESIDUAL } from './maker-routing.js';
-import { OTC_MID_FEED_FLAG_ON_SYMBOL_MAP_EMPTY, OTC_MID_FEED_FLAG_ON_VENUE_UNWIRED, OTC_MID_FEED_RESIDUAL } from './mid-feed.js';
+import {
+  OTC_MID_FEED_FLAG_ON_SYMBOL_MAP_EMPTY,
+  OTC_MID_FEED_FLAG_ON_VENUE_UNWIRED,
+  OTC_MID_FEED_RESIDUAL,
+  describeOtcMidFeedWiring,
+} from './mid-feed.js';
 import { describeOtcPolicy } from './otc-policy.js';
 
 describe('describeOtcPolicy', () => {
@@ -19,5 +24,17 @@ describe('describeOtcPolicy', () => {
     expect(p.inventsSpreadBps).toBe(false);
     expect(p.inventsMakerBook).toBe(false);
     expect(p.moneyViaLedgerClientOnly).toBe(true);
+  });
+
+  it('bootMidFeedWiring matches describeOtcMidFeedWiring default boot posture (D42)', () => {
+    const p = describeOtcPolicy();
+    expect(p.bootMidFeedWiring).toEqual(
+      describeOtcMidFeedWiring({
+        midFromVenue: false,
+        venueAdapterInstalled: false,
+        venueSymbolsConfigured: false,
+        liveObservationFeed: false,
+      }),
+    );
   });
 });

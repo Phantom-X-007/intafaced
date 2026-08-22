@@ -10,12 +10,13 @@ import {
   OTC_MID_FEED_SOCKET,
   otcMidFeedStatus,
 } from './mid-feed.js';
+import { describeOtcPolicy } from './otc-policy.js';
 
 describe('socket.otc-mid-feed Done bar', () => {
   it('deskStatus names the mid-feed socket refuse-closed when venue observation is not installed', () => {
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('0')));
     const status = svc.deskStatus();
-    expect(status.midFeed).toEqual(otcMidFeedStatus());
+    expect(status.midFeed).toEqual(describeOtcPolicy().bootMidFeedWiring);
     expect(status.midFeed.published).toBe(false);
     expect(status.midFeed.socket).toBe(OTC_MID_FEED_SOCKET);
     expect(status.midFeed.liveObservationFeed).toBe(false);
