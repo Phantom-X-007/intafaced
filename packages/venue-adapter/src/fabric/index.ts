@@ -69,3 +69,4 @@ export * from './venues/factory.js';
 export * from './venues/factory-policy.js';
 export * from './venues/trading-half-policy.js';
 export * from './venues/venue-operator-credentials.js';
+export * from './venues/operator-venue-trade-maps.js';
