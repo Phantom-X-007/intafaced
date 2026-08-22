@@ -103,7 +103,7 @@
     <div v-if="selectedRoomId" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.academy.sessions') }}</h2>
-        <span class="ix-sub">room · scheduleSession · startSession · endSession · join · leave · streamCredential</span>
+        <span class="ix-sub">room · invite · scheduleSession · startSession · endSession · join · leave · streamCredential</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.academy.sessionsLead') }}</p>
       <IxState :loading="roomDetail.loading" :reason="roomDetail.reason" :message="roomDetail.message" endpoint="/api/academy/trpc/room">
@@ -120,6 +120,29 @@
             <span class="k">{{ $t('intafaced.academy.access') }}</span>
             <span class="v">{{ roomDetail.data.room.access }}</span>
           </div>
+        </div>
+        <p class="ix-lead">{{ $t('intafaced.academy.inviteLead') }}</p>
+        <div class="ix-field-grid">
+          <div class="ix-field">
+            <label for="ix-academy-invite-user">{{ $t('intafaced.academy.inviteUserId') }}</label>
+            <Input element-id="ix-academy-invite-user" v-model="inviteForm.userId" :placeholder="$t('intafaced.academy.inviteUserIdHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label for="ix-academy-invite-expires">{{ $t('intafaced.academy.inviteExpiresAt') }}</label>
+            <Input element-id="ix-academy-invite-expires" v-model="inviteForm.expiresAt" :placeholder="$t('intafaced.academy.inviteExpiresAtHint')"></Input>
+          </div>
+        </div>
+        <div class="ix-actions" style="margin-top:16px;">
+          <Button v-if="canWrite" type="primary" size="small" :loading="inviteAction.busy" :disabled="!canSubmitInvite" @click="inviteUser">
+            {{ $t('intafaced.academy.inviteSubmit') }}
+          </Button>
+          <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.academy.inviteSignIn') }}</router-link>
+        </div>
+        <div v-if="inviteAction.ran" style="margin-top:14px;">
+          <div v-if="inviteAction.reason === 'ok'" class="ix-done">
+            <strong>{{ $t('intafaced.academy.inviteInvited') }}</strong>
+          </div>
+          <IxState v-else :loading="inviteAction.busy" :reason="inviteAction.reason" :message="inviteAction.message" endpoint="/api/academy/trpc/invite"></IxState>
         </div>
         <p class="ix-lead">{{ $t('intafaced.academy.scheduleLead') }}</p>
         <div class="ix-field-grid">
@@ -233,9 +256,9 @@
 /**
  * svc-academy (§8.3) — lobbies on /academy.
  *
- * Rooms stay empty when the service lists none. Create/join/leave/schedule
+ * Rooms stay empty when the service lists none. Create/join/leave/schedule/invite
  * are writes; createRoom omits blank minStake rather than sending ''.
- * scheduleSession sends startsAt as an ISO string the service coerces.
+ * invite omits blank expiresAt. scheduleSession sends startsAt as an ISO string the service coerces.
  * Stream credentials refuse `academy.stream_unavailable` when no SFU is
  * configured rather than minting a fake A/V token. Named refuse stays named.
  */
@@ -261,12 +284,14 @@ export default {
       scheduleAction: this.emptyAction(),
       startAction: this.emptyAction(),
       endAction: this.emptyAction(),
+      inviteAction: this.emptyAction(),
       selectedRoomId: null,
       activeSessionId: null,
       roomKinds: ['general', 'futures', 'options', 'meme_war_room', 'forex', 'defi_lab', 'merchant_clinic'],
       roomAccesses: ['free', 'staked', 'invite'],
       createForm: { slug: '', name: '', kind: 'general', access: 'free', capacity: '', minStake: '' },
-      scheduleForm: { title: '', startsAt: '' }
+      scheduleForm: { title: '', startsAt: '' },
+      inviteForm: { userId: '', expiresAt: '' }
     };
   },
   computed: {
@@ -285,6 +310,10 @@ export default {
       var title = (this.scheduleForm.title || '').trim();
       var startsAt = (this.scheduleForm.startsAt || '').trim();
       return title.length >= 1 && title.length <= 160 && !!startsAt;
+    },
+    canSubmitInvite() {
+      var userId = (this.inviteForm.userId || '').trim();
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     }
   },
   created() {
@@ -347,6 +376,17 @@ export default {
         title: title,
         startsAt: startsAt
       }, this.ixToken)).then(function (res) {
+        if (res.ok) self.reloadRoom();
+      });
+    },
+    inviteUser() {
+      var self = this;
+      var userId = (this.inviteForm.userId || '').trim();
+      if (!this.selectedRoomId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) return;
+      var input = { roomId: this.selectedRoomId, userId: userId };
+      var expiresAt = (this.inviteForm.expiresAt || '').trim();
+      if (expiresAt) input.expiresAt = expiresAt;
+      this.act('inviteAction', mutate('academy', 'invite', input, this.ixToken)).then(function (res) {
         if (res.ok) self.reloadRoom();
       });
     },
