@@ -111,7 +111,8 @@ export function captureRecordFromTickFillWire(record: CaptureLakeTickFillWireRec
 
   if (record.kind === 'tick') {
     const observation = tickObservationFromWireRecord(record, options);
-    if (observation.connection !== 'connected' || observation.tick === null) {
+    const tick = observation.tick ?? null;
+    if (observation.connection !== 'connected' || tick === null) {
       return {
         status: 'absent',
         reason: observation.connection === 'not_connected' ? 'venue_not_connected' : 'observation_missing',
@@ -127,14 +128,15 @@ export function captureRecordFromTickFillWire(record: CaptureLakeTickFillWireRec
       venueId: observation.venueId,
       marketId: observation.marketId,
       capturedAt,
-      price: observation.tick.price,
-      quantity: observation.tick.quantity,
-      ts: observation.tick.ts,
+      price: tick.price,
+      quantity: tick.quantity,
+      ts: tick.ts,
     };
   }
 
   const observation = fillObservationFromWireRecord(record, options);
-  if (observation.connection !== 'connected' || observation.fill === null) {
+  const fill = observation.fill ?? null;
+  if (observation.connection !== 'connected' || fill === null) {
     return {
       status: 'absent',
       reason: observation.connection === 'not_connected' ? 'venue_not_connected' : 'observation_missing',
@@ -150,10 +152,10 @@ export function captureRecordFromTickFillWire(record: CaptureLakeTickFillWireRec
     venueId: observation.venueId,
     marketId: observation.marketId,
     capturedAt,
-    price: observation.fill.price,
-    quantity: observation.fill.quantity,
-    ts: observation.fill.ts,
-    sequence: observation.fill.sequence,
+    price: fill.price,
+    quantity: fill.quantity,
+    ts: fill.ts,
+    sequence: fill.sequence,
   };
 }
 
