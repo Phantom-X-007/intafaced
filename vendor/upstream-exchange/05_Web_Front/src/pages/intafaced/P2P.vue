@@ -12,6 +12,80 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.p2p.merchantApply') }}</h2>
+        <span class="ix-sub">merchants.me · merchants.apiAccess · merchants.submitApplication · merchants.withdraw</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.p2p.merchantApplyLead') }}</p>
+      <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/p2p/trpc/merchants.me">
+        <div v-if="merchant.data" class="ix-kv" style="margin-bottom:16px;">
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyUser') }}</span><span class="v">{{ merchant.data.userId }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ merchant.data.status }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyTrades') }}</span><span class="v">{{ merchant.data.appliedTradesTotal }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyCompletion') }}</span><span class="v">{{ merchant.data.appliedCompletionRate }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyAppliedAt') }}</span><span class="v">{{ merchant.data.appliedAt }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyDecidedAt') }}</span><span class="v">{{ merchant.data.decidedAt === null ? '—' : merchant.data.decidedAt }}</span></div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet" style="margin-bottom:16px;">{{ $t('intafaced.p2p.merchantApplyNever') }}</div>
+      </IxState>
+      <IxState :loading="apiAccess.loading" :reason="apiAccess.reason" :message="apiAccess.message" endpoint="/api/p2p/trpc/merchants.apiAccess">
+        <div v-if="apiAccess.data" class="ix-kv" style="margin-bottom:16px;">
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyEligible') }}</span><span class="v">{{ apiAccess.data.eligible }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyCredential') }}</span><span class="v">{{ apiAccess.data.credential }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyApiStatus') }}</span><span class="v">{{ apiAccess.data.merchantStatus === null ? '—' : apiAccess.data.merchantStatus }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyKeyPlane') }}</span><span class="v">{{ apiAccess.data.keyPlane }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyRateLimit') }}</span><span class="v">{{ apiAccess.data.rateLimitPlane }}</span></div>
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyDispute') }}</span><span class="v">{{ apiAccess.data.disputeResolution }}</span></div>
+        </div>
+      </IxState>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button
+          v-if="ixToken && !hasLiveMerchantStanding"
+          size="small"
+          :loading="merchantApply.busy"
+          :disabled="!canApply"
+          @click="submitMerchantApplication"
+        >{{ $t('intafaced.p2p.merchants.submit') }}</Button>
+        <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.p2p.merchantApplySignIn') }}</router-link>
+      </div>
+      <IxState v-if="merchantApply.ran" :loading="merchantApply.busy" :reason="merchantApply.reason" :message="merchantApply.message" endpoint="/api/p2p/trpc/merchants.submitApplication">
+        <div v-if="merchantApply.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.merchants.submitDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyUser') }}</span><span class="v">{{ merchantApply.data.userId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ merchantApply.data.status }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyAppliedAt') }}</span><span class="v">{{ merchantApply.data.appliedAt }}</span></div>
+          </div>
+        </div>
+      </IxState>
+      <div v-if="ixToken && hasLiveMerchantStanding">
+        <div class="ix-form-row" style="margin-bottom:16px;">
+          <div class="ix-field">
+            <label for="ix-p2p-merchant-reason">{{ $t('intafaced.p2p.merchants.withdrawReason') }}</label>
+            <Input element-id="ix-p2p-merchant-reason" v-model="withdrawReason" :placeholder="$t('intafaced.p2p.merchants.withdrawReasonHint')" />
+          </div>
+        </div>
+        <div class="ix-actions" style="margin-bottom:16px;">
+          <Button
+            size="small"
+            :loading="merchantWithdraw.busy"
+            :disabled="!canWithdraw"
+            @click="withdrawMerchant"
+          >{{ $t('intafaced.p2p.merchants.withdraw') }}</Button>
+        </div>
+      </div>
+      <IxState v-if="merchantWithdraw.ran" :loading="merchantWithdraw.busy" :reason="merchantWithdraw.reason" :message="merchantWithdraw.message" endpoint="/api/p2p/trpc/merchants.withdraw">
+        <div v-if="merchantWithdraw.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.merchants.withdrawDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyUser') }}</span><span class="v">{{ merchantWithdraw.data.userId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ merchantWithdraw.data.status }}</span></div>
+          </div>
+        </div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.createOffer') }}</h2>
         <span class="ix-sub">offers.create</span>
       </div>
@@ -409,6 +483,10 @@
  * optional label. details keys come only from the selected method schema.
  * The list is headers only. Remove posts {instrumentId} on an own row.
  * Empty registry is a named refuse, not a seeded rail.
+ *
+ * Merchant apply posts no body besides the session — never a userId.
+ * Withdraw posts {reason} with min length 1. Never applied is me=null,
+ * not "rejected". Named refuse stays named. No offer ceilings.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
@@ -431,6 +509,11 @@ export default {
       instrumentRemove: this.emptyAction(),
       trades: this.emptySection(),
       lifecycle: this.emptyAction(),
+      merchant: this.emptySection(),
+      apiAccess: this.emptySection(),
+      merchantApply: this.emptyAction(),
+      merchantWithdraw: this.emptyAction(),
+      withdrawReason: '',
       takeAmount: '',
       takeMethod: '',
       takingId: '',
@@ -550,6 +633,22 @@ export default {
       return this.pauseEndpoint.indexOf('offers.resume') !== -1
         ? this.$t('intafaced.p2p.resumeDone')
         : this.$t('intafaced.p2p.pauseDone');
+    },
+    hasLiveMerchantStanding() {
+      var d = this.merchant.data;
+      if (!d || !d.status) return false;
+      return d.status === 'applied' || d.status === 'approved' || d.status === 'suspended';
+    },
+    canApply() {
+      return !!(this.ixToken && !this.merchantApply.busy && !this.hasLiveMerchantStanding);
+    },
+    canWithdraw() {
+      return !!(
+        this.ixToken &&
+        this.hasLiveMerchantStanding &&
+        (this.withdrawReason || '').trim() &&
+        !this.merchantWithdraw.busy
+      );
     }
   },
   watch: {
@@ -572,6 +671,7 @@ export default {
     this.load('fiat', query('p2p', 'fiat.list', undefined, this.ixToken));
     this.load('methods', query('p2p', 'instruments.methods.list', undefined, this.ixToken));
     this.load('instruments', query('p2p', 'instruments.list', undefined, this.ixToken));
+    this.loadMerchantStanding();
     this.loadTrades();
   },
   methods: {
@@ -711,6 +811,28 @@ export default {
     },
     loadTrades() {
       this.load('trades', query('p2p', 'trades.list', { limit: 50 }, this.ixToken));
+    },
+    loadMerchantStanding() {
+      this.load('merchant', query('p2p', 'merchants.me', undefined, this.ixToken));
+      this.load('apiAccess', query('p2p', 'merchants.apiAccess', undefined, this.ixToken));
+    },
+    submitMerchantApplication() {
+      var self = this;
+      if (!this.canApply) return;
+      this.act('merchantApply', mutate('p2p', 'merchants.submitApplication', undefined, this.ixToken)).then(function (res) {
+        if (res.ok) self.loadMerchantStanding();
+      });
+    },
+    withdrawMerchant() {
+      var self = this;
+      var reason = (this.withdrawReason || '').trim();
+      if (!reason || !this.canWithdraw) return;
+      this.act('merchantWithdraw', mutate('p2p', 'merchants.withdraw', { reason: reason }, this.ixToken)).then(function (res) {
+        if (res.ok) {
+          self.withdrawReason = '';
+          self.loadMerchantStanding();
+        }
+      });
     },
     canMarkSent(trade) {
       return !!(trade && this.myId && trade.status === 'escrowed' && trade.buyerId === this.myId);
