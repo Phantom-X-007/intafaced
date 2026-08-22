@@ -112,3 +112,13 @@ export {
   type CaptureLakeRecord,
   type IngestCaptureLakeOptions,
 } from './capture-lake-consumer.js';
+export {
+  captureRecordFromTickFillWire,
+  describeTickFillNormalisationPipeline,
+  ingestTickFillWireRecord,
+  ingestTickFillWireRecords,
+  type CaptureLakeFillWireRecord,
+  type CaptureLakeTickFillWireRecord,
+  type CaptureLakeTickWireRecord,
+  type IngestTickFillOptions,
+} from './tick-fill-normalisation-pipeline.js';

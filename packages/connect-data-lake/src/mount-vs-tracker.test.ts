@@ -31,7 +31,7 @@ describe('connect.data-lake mount vs tracker gaps board (D53)', () => {
     expect(card.backendDoneBarMet).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeStage1Honest()).toBe(true);
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -59,6 +59,7 @@ describe('connect.data-lake done bar test files (D56)', () => {
       'quant-surface-refuse.test.ts',
       'quant-surface-render-consumer.test.ts',
       'package-export-mount.test.ts',
+      'tick-fill-normalisation-pipeline.test.ts',
       'mount-vs-tracker.test.ts',
     ]);
     expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
@@ -125,7 +126,7 @@ describe('connect.data-lake mount vs tracker board complete (D66)', () => {
     expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
     expect(card.gaps).toBe(DATA_LAKE_HONEST_GAPS.length);
     expect(card.backendDoneBarMet).toBe(true);
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeStage1Honest()).toBe(true);
     expect(dataLakeCapturePolicyHonest()).toBe(true);
@@ -171,7 +172,7 @@ describe('connect.data-lake package exports complete (D69)', () => {
 describe('connect.data-lake done bar files complete (D71)', () => {
   it('dataLakeDoneBarTestsPresent locks every DATA_LAKE_DONE_BAR_TEST_FILE on disk', () => {
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
-    expect(DATA_LAKE_DONE_BAR_TEST_FILES).toHaveLength(11);
+    expect(DATA_LAKE_DONE_BAR_TEST_FILES).toHaveLength(12);
     expect(DATA_LAKE_DONE_BAR_TEST_FILES).toContain('mount-vs-tracker.test.ts');
     expect(DATA_LAKE_DONE_BAR_TEST_FILES).toContain('quant-honesty-mount.test.ts');
     expect(DATA_LAKE_DONE_BAR_TEST_FILES).toContain('capture-policy.test.ts');
@@ -184,13 +185,13 @@ describe('connect.data-lake done bar files complete (D71)', () => {
 
 describe('connect.data-lake mount vs tracker — D73 denon audit complete', () => {
   it('backend done bar met; honest gaps remain owner-residual across denon WIP lanes', () => {
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
     expect(dataLakeStage1Honest()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
     expect(connectDataLakeMountVsTrackerBoardCard()).toMatchObject({
       tracker: 'connect.data-lake',
-      gaps: 1,
+      gaps: 0,
       backendDoneBarMet: true,
     });
   });
@@ -213,7 +214,7 @@ describe('connect.data-lake mount vs tracker — D74 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -223,7 +224,7 @@ describe('connect.data-lake mount vs tracker — D76 denon complete', () => {
     expect(card.tracker).toBe('connect.data-lake');
     expect(card.backendDoneBarMet).toBe(true);
     expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
-    expect(card.gaps).toBe(1);
+    expect(card.gaps).toBe(0);
     expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
     expect(dataLakeStage1Honest()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
@@ -232,7 +233,7 @@ describe('connect.data-lake mount vs tracker — D76 denon complete', () => {
     expect(board.quantSurface.inventsFraming).toBe(false);
     expect(board.batch.captureLogOnly).toBe(true);
     expect(board.retention.captureLogOnly).toBe(true);
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -253,7 +254,7 @@ describe('connect.data-lake mount vs tracker — D78 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -271,7 +272,7 @@ describe('connect.data-lake mount vs tracker — D80 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -293,7 +294,7 @@ describe('connect.data-lake mount vs tracker — D82 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -311,7 +312,7 @@ describe('connect.data-lake mount vs tracker — D84 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -333,7 +334,7 @@ describe('connect.data-lake mount vs tracker — D86 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -351,7 +352,7 @@ describe('connect.data-lake mount vs tracker — D88 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.tick_fill_normalisation_pipeline']);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -373,7 +374,7 @@ describe('connect.data-lake mount vs tracker — D90 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -395,7 +396,7 @@ describe('connect.data-lake mount vs tracker — D92 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -417,7 +418,7 @@ describe('connect.data-lake mount vs tracker — D94 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -439,7 +440,7 @@ describe('connect.data-lake mount vs tracker — D96 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -461,7 +462,7 @@ describe('connect.data-lake mount vs tracker — D98 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -483,7 +484,7 @@ describe('connect.data-lake mount vs tracker — D100 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -505,7 +506,7 @@ describe('connect.data-lake mount vs tracker — D102 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -527,7 +528,7 @@ describe('connect.data-lake mount vs tracker — D104 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -549,7 +550,7 @@ describe('connect.data-lake mount vs tracker — D106 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -571,7 +572,7 @@ describe('connect.data-lake mount vs tracker — D108 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -593,7 +594,7 @@ describe('connect.data-lake mount vs tracker — D110 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -615,7 +616,7 @@ describe('connect.data-lake mount vs tracker — D112 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -637,7 +638,7 @@ describe('connect.data-lake mount vs tracker — D114 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -659,7 +660,7 @@ describe('connect.data-lake mount vs tracker — D116 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -681,7 +682,7 @@ describe('connect.data-lake mount vs tracker — D118 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -703,6 +704,6 @@ describe('connect.data-lake mount vs tracker — D120 denon complete', () => {
     expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
-    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(1);
+    expect(DATA_LAKE_HONEST_GAPS).toHaveLength(0);
   });
 });
