@@ -73,6 +73,12 @@ export class TokenError extends Error {
       | 'token.buyback_window_invalid'
       | 'token.buyback_run_conflict'
       | 'token.buyback_revenue_invalid'
+      /**
+       * Operator-typed `tokensBought` never moved on the ledger. No existing
+       * recipe books a market-buy into the rewards engine; settling would
+       * write a DB-only buy (and a fee-funded burn is not a buy).
+       */
+      | 'token.buyback_tokens_unmoved'
       | 'token.params_missing'
       | 'token.params_invalid'
       | 'token.proposal_not_found'
@@ -1025,7 +1031,7 @@ export class TokenService {
   // ── Operator burn record (§4.3 calls this buyback & burn) ──────────────────
 
   /**
-   * Record an operator-asserted burn.
+   * Record an operator-asserted buyback — or refuse when the book cannot.
    *
    * NOTHING IS BOUGHT BACK HERE, and the method name is the §4.3 vocabulary
    * rather than a description of what runs. §13 socket `token.buyback`.
@@ -1034,29 +1040,38 @@ export class TokenService {
    *   this service or any other, so the platform acquires no IFC and creates no
    *   buy pressure. Pricing and execution are svc-trade's job and svc-trade
    *   cannot yet do it.
-   * - The only ledger movement is the burn leg, debited from the rewards
-   *   engine — value that is already ours. `toRewards` is not a second credit;
-   *   it is the remainder, which never moves.
+   * - Existing recipes cannot book that purchase: `burn` only moves `toBurn`
+   *   *out* of the rewards engine (fee-funded value already ours); `mintEmission`
+   *   would print supply; `sweepFeesToRewards` drains module fees already used
+   *   by yield. `toRewards` is the remainder of the split, not a second credit.
+   * - A settled row must mean this run posted recipes whose engineΔ + burnΔ
+   *   equals `tokensBought`. No such recipe exists in `packages/ledger-client`,
+   *   so a new or pending run is refused `token.buyback_tokens_unmoved`.
+   *   Coincidental global balance movement is not a settle (paper-settle).
+   * - Do not publish `buybackExecuted` until this run posted a ledger tx.
+   *   Emitting it on refuse (or on a fee-funded `burn`) would lie that tokens
+   *   were bought. The catalog still declares the event; event-wiring stays
+   *   red. `WIRING_SOCKETS` lives in `packages/events` — exclusive this
+   *   service cannot declare a missing-publisher socket (second PR).
    * - There is no caller: no cron, no bus subscriber, no admin form. An
    *   operator with admin:treasury + MFA invokes the mutation or it never runs.
    * - `buybackBudget()` (economics/buyback.ts) is what would size the spend from
    *   revenue. It is called from nowhere but its own tests.
    *
-   * ORDERING (0002, and the reason this method was rewritten): the window is
-   * CLAIMED before the burn posts — the same claim -> post -> activate order
-   * `stake` uses above, for the same reason. Previously the burn posted first
-   * and the row followed `ON CONFLICT (id) DO NOTHING`, while the guard was a
-   * unique index on the WINDOW. A new run id over a spent window therefore
-   * burned for real and then failed on an index its conflict clause did not
-   * name: tokens irreversibly gone, no row, no event, and an opaque 500.
+   * ORDERING (0002): the window is still CLAIMED first so overlap / run-id
+   * conflict refuse by name before anything would post. Previously the burn
+   * posted first and the row followed `ON CONFLICT (id) DO NOTHING`, while the
+   * guard was a unique index on the WINDOW. A new run id over a spent window
+   * therefore burned for real and then failed on an index its conflict clause
+   * did not name: tokens irreversibly gone, no row, no event, and an opaque 500.
    *
    * Windows are half-open `[from, to)` and may not overlap (0002). This method
    * decides no economic number — not a window length, not a cadence, not a
    * rate. Those are the owner's (see the token-economics ADR).
    *
-   * Turning this into the §4.3 flywheel needs a real market-buy against the
-   * internal book plus a schedule — a product decision and an svc-trade
-   * dependency, not a rename.
+   * Turning this into the §4.3 flywheel needs a real market-buy recipe against
+   * the internal book plus a schedule — a product decision and an svc-trade
+   * dependency, not a rename, and not a fee-funded burn wearing the name.
    */
   async recordBuyback(input: {
     runId: string;
@@ -1123,47 +1138,53 @@ export class TokenService {
       return { runId: claimed.id, burned: claimed.burned, toRewards: claimed.toRewards };
     }
 
-    // ── POST ─────────────────────────────────────────────────────────────────
-    // The window is ours from here. A crash between claim and settle leaves a
-    // `pending` row, which is recoverable — the ledger post is idempotent on
-    // `runId`, so the retry re-posts as a no-op and settles.
-    if (toBurn > 0n) {
+    // ── REFUSE ───────────────────────────────────────────────────────────────
+    // No existing recipe books tokensBought onto the ledger. Do not post
+    // `burn(toBurn)` from the fee-funded engine (that is not a buy). Do not
+    // settle because two consecutive `balance` reads happened to sum to the
+    // operator figure (paper-settle — a concurrent yield/mint/burn can mint a
+    // `buybackExecuted` this run never posted). A future buyback recipe posts
+    // here, then settles only against *this run's* posted keys.
+    //
+    // Do not restore `this.bus.publish('buybackExecuted', …)` here. Nothing
+    // posted — the burn leg does not run — so the event would lie. Doctrine
+    // event-wiring is red for that missing publisher on purpose. The repo
+    // pattern is a WIRING_SOCKETS missing-publisher row in
+    // packages/events/src/catalog.ts ("publisher waits on a buyback recipe").
+    // Exclusive this service cannot add it (one service per PR; that file is
+    // a second package). Clear the gate in a packages/events PR, or restore
+    // the publisher here only after a recipe actually posts.
+    return this.refuseUnbookedBuyback(claimed.id, input.runId, input.tokensBought, { fresh: claimed.fresh });
+  }
+
+  /**
+   * Pending claim, no market-buy on the book.
+   *
+   * A fresh insert from this call posted nothing — release so the window is
+   * not held hostage. A retry of an older pending row may sit on top of a
+   * landed `token.burn:` from the pre-refuse path; deleting that claim would
+   * hide the burn. Live HTTP `getTxByKey` throws (S2S has no such door) — that
+   * must stay `token.buyback_tokens_unmoved`, never a 500, and unknown ≠ absent.
+   */
+  private async refuseUnbookedBuyback(claimedId: string, runId: string, tokensBought: Amount, opts: { fresh: boolean }): Promise<never> {
+    let burnKnownAbsent = opts.fresh;
+    if (!burnKnownAbsent) {
       try {
-        await this.ledger.post(
-          recipes.burn({ runId: input.runId, assetId: this.assetId, amount: toBurn, from: rewardsEngine(this.assetId) }),
-        );
-      } catch (err) {
-        // The ledger refused, so no value moved and this run never happened.
-        // Release the claim or the window would be held hostage by a run that
-        // burned nothing — same guarantee `stake` gives its pending row.
-        await this.sql`
-          DELETE FROM token.buyback_runs WHERE id = ${claimed.id} AND status = 'pending'
-        `;
-        throw err;
+        const burnTx = await this.ledger.getTxByKey(`token.burn:${this.assetId}:${runId}`);
+        burnKnownAbsent = burnTx === null;
+      } catch {
+        burnKnownAbsent = false;
       }
     }
-
-    // ── SETTLE ───────────────────────────────────────────────────────────────
-    await this.sql`
-      UPDATE token.buyback_runs
-         SET status = 'settled', executed_at = now()
-       WHERE id = ${claimed.id} AND status = 'pending'
-    `;
-
-    await this.bus.publish(
-      'buybackExecuted',
-      {
-        runId: input.runId,
-        tokensBought: formatAmount(input.tokensBought),
-        tokensBurned: formatAmount(toBurn),
-        tokensToRewards: formatAmount(toRewards),
-        // Dates do not survive JSON — the event contract carries ISO strings.
-        revenueWindow: { from: iso(input.revenueWindow.from), to: iso(input.revenueWindow.to) },
-      },
-      { idempotencyKey: `token.buyback:${input.runId}` },
+    if (burnKnownAbsent) {
+      await this.sql`
+        DELETE FROM token.buyback_runs WHERE id = ${claimedId} AND status = 'pending'
+      `;
+    }
+    throw new TokenError(
+      `Buyback run ${runId} asserted tokensBought=${formatAmount(tokensBought)} ${this.assetId} but that figure did not move on the ledger — no recipe books a market-buy into the rewards engine. Refusing to settle a DB-only buyback. A burn from the engine would spend fee revenue, not purchased tokens`,
+      'token.buyback_tokens_unmoved',
     );
-
-    return { runId: input.runId, burned: toBurn, toRewards };
   }
 
   /**
@@ -1187,7 +1208,7 @@ export class TokenService {
     tokensBought: Amount;
     toBurn: Amount;
     toRewards: Amount;
-  }): Promise<{ id: string; status: BuybackRunStatus; burned: Amount; toRewards: Amount }> {
+  }): Promise<{ id: string; status: BuybackRunStatus; burned: Amount; toRewards: Amount; fresh: boolean }> {
     type Row = {
       id: string;
       revenue_window_from: Date;
@@ -1199,11 +1220,12 @@ export class TokenService {
     };
     type Held = { id: string; revenue_window_from: Date; revenue_window_to: Date; status: BuybackRunStatus };
 
-    const mapRow = (row: Row) => ({
+    const mapRow = (row: Row, fresh: boolean) => ({
       id: row.id,
       status: row.status,
       burned: parseAmount(row.tokens_burned),
       toRewards: parseAmount(row.tokens_to_rewards),
+      fresh,
     });
 
     try {
@@ -1243,7 +1265,7 @@ export class TokenService {
           `;
 
           const row = inserted[0];
-          if (row) return mapRow(row);
+          if (row) return mapRow(row, true);
 
           const rows = await tx<Row[]>`
             SELECT id, revenue_window_from, revenue_window_to, tokens_bought, tokens_burned, tokens_to_rewards, status
@@ -1268,7 +1290,7 @@ export class TokenService {
             );
           }
 
-          return mapRow(existing);
+          return mapRow(existing, false);
         },
         { isolation: 'read committed' },
       );

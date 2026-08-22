@@ -98,7 +98,12 @@ export const RECIPE_MATRIX = {
   stake: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
   unstake: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
   mintEmission: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
-  burn: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
+  burn: {
+    kind: 'socket',
+    socket: '§13',
+    reason:
+      '§13 — recordBuyback refuses token.buyback_tokens_unmoved until a market-buy recipe books tokensBought; fee-funded recipes.burn from the rewards engine is not a buy. No production caller until that recipe exists.',
+  },
   feeCharge: { kind: 'live', module: 'token', proof: 'services/svc-agents/src/metering/meter.ts' },
   sweepFeesToRewards: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },
   rewardPay: { kind: 'live', module: 'token', proof: 'services/svc-token/src/token-service.ts' },

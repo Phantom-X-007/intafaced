@@ -14,6 +14,11 @@
  *   · unstake locked m12 → BAD_REQUEST / token.stake_locked; principal still staked.
  *   · recordBuyback overlapping window → CONFLICT / token.buyback_window_overlap;
  *     burn account does not double (read the burn, not only the exception).
+ *   · concurrent same-window recordBuyback → each 400 unmoved or 409 overlap
+ *     (not always one of each: winner DELETE-releases pending, so both can 400);
+ *     never 500 (GiST deadlock) and never 200 (invented buy).
+ *   · tokensBought>0 with no market-buy on the ledger → BAD_REQUEST /
+ *     token.buyback_tokens_unmoved; no settle, engine untouched.
  *   · tokensBought=0 / invalid revenueTotal refuse before claim — window free later.
  *   · mintEpoch + POST /internal/emissions/mint-next refuse when emissions off.
  *   · distributeRevenue over houseFees → BAD_REQUEST / token.yield_source_underfunded.
@@ -33,7 +38,16 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
-import { MemoryLedger, formatAmount, houseFees, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
+import {
+  MemoryLedger,
+  formatAmount,
+  houseFees,
+  parseAmount as amt,
+  recipes,
+  rewardsEngine,
+  userAvailable,
+  type LedgerClient,
+} from '@intafaced/ledger-client';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { registerInternalEmissions } from './internal-emissions.js';
@@ -248,6 +262,19 @@ if (!available) {
     await token.distributeRevenue({ windowId, sources: [{ module: 'trade', amount: amt(amount) }] });
   }
 
+  async function seedBuybackRun(input: { runId: string; window: { from: Date; to: Date }; status?: 'pending' | 'settled' }) {
+    await sql`
+      INSERT INTO token.buyback_runs (
+        id, revenue_window_from, revenue_window_to, revenue_total,
+        tokens_bought, tokens_burned, tokens_to_rewards, status, executed_at
+      ) VALUES (
+        ${input.runId}, ${input.window.from}, ${input.window.to}, ${sql.json({ IFC: '1000' } as never)},
+        1000::numeric, 600::numeric, 400::numeric,
+        ${input.status ?? 'settled'}, now()
+      )
+    `;
+  }
+
   const balanceOf = async (userId: string) => formatAmount((await ledger.balance(userAvailable(userId, 'IFC'))).amount);
   const stakedOf = async (userId: string) => {
     const all = await ledger.balances('user', userId);
@@ -323,16 +350,8 @@ if (!available) {
       const ops = adminCaller();
       const window = uniqueWindow('identical');
       const firstId = randomUUID();
-
-      const first = await ops.recordBuyback({
-        runId: firstId,
-        revenueWindow: window,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: '1000',
-      });
+      await seedBuybackRun({ runId: firstId, window: { from: new Date(window.from), to: new Date(window.to) } });
       const burnedAfterFirst = amt((await ops.burnedSupply()).burned);
-      expect(burnedAfterFirst).toBe(amt(first.burned));
-      expect(burnedAfterFirst).toBeGreaterThan(0n);
 
       await expect(
         ops.recordBuyback({
@@ -348,9 +367,8 @@ if (!available) {
 
       // THE POINT — read the burn account, not only the exception name.
       expect(amt((await ops.burnedSupply()).burned)).toBe(burnedAfterFirst);
-      expect(amt((await ops.burnedSupply()).burned)).not.toBe(burnedAfterFirst * 2n);
       expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${firstId}`).toHaveLength(1);
-      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -364,13 +382,7 @@ if (!available) {
         to: new Date(outerFrom.getTime() + 4 * 86_400_000).toISOString(),
       };
       const firstId = randomUUID();
-
-      await ops.recordBuyback({
-        runId: firstId,
-        revenueWindow: outer,
-        revenueTotal: { IFC: '1000' },
-        tokensBought: '1000',
-      });
+      await seedBuybackRun({ runId: firstId, window: { from: new Date(outer.from), to: new Date(outer.to) } });
       const burnedAfterFirst = amt((await ops.burnedSupply()).burned);
 
       await expect(
@@ -387,6 +399,29 @@ if (!available) {
 
       expect(amt((await ops.burnedSupply()).burned)).toBe(burnedAfterFirst);
       expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${firstId}`).toHaveLength(1);
+    });
+
+    it('recordBuyback refuses tokensBought that did not move on the ledger — no settle, engine untouched', async () => {
+      await fundRewards('4000', 'w-door-unmoved');
+      const ops = adminCaller();
+      const window = uniqueWindow('unmoved');
+      const engineBefore = (await ledger.balance(rewardsEngine('IFC'))).amount;
+
+      await expect(
+        ops.recordBuyback({
+          runId: randomUUID(),
+          revenueWindow: window,
+          revenueTotal: { IFC: '1000' },
+          tokensBought: '1000',
+        }),
+      ).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        cause: { code: 'token.buyback_tokens_unmoved' },
+      });
+
+      expect(amt((await ops.burnedSupply()).burned)).toBe(0n);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect((await ledger.balance(rewardsEngine('IFC'))).amount).toBe(engineBefore);
     });
 
     it('recordBuyback refuses tokensBought=0 before claiming the window — later real burn stays free', async () => {
@@ -416,15 +451,19 @@ if (!available) {
 
       await fundRewards('500', 'w-door-zero-then-real');
       const realId = randomUUID();
-      const real = await ops.recordBuyback({
-        runId: realId,
-        revenueWindow: window,
-        revenueTotal: { IFC: '500' },
-        tokensBought: '500',
+      await expect(
+        ops.recordBuyback({
+          runId: realId,
+          revenueWindow: window,
+          revenueTotal: { IFC: '500' },
+          tokensBought: '500',
+        }),
+      ).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        cause: { code: 'token.buyback_tokens_unmoved' },
       });
-      expect(amt(real.burned) + amt(real.toRewards)).toBe(amt('500'));
-      expect(amt((await ops.burnedSupply()).burned)).toBe(amt(real.burned));
-      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${realId}`).toHaveLength(1);
+      expect(amt((await ops.burnedSupply()).burned)).toBe(0n);
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${realId}`).toHaveLength(0);
     });
 
     it('recordBuyback refuses a non-ordered window at the door — service never claims', async () => {
@@ -604,18 +643,8 @@ if (!available) {
       const app = await mountDoors();
       const window = uniqueWindow('mounted-identical');
       const firstId = randomUUID();
-
-      const first = await trpcMutate(
-        app,
-        'recordBuyback',
-        { runId: firstId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
-        adminHeaders(),
-      );
-      expect(first.statusCode).toBe(200);
-      const firstWire = wireJson(first.body) as { burned: string };
-      const burnedAfterFirst = amt(firstWire.burned);
-      expect(burnedAfterFirst).toBeGreaterThan(0n);
-      expect(await token.burnedSupply()).toBe(burnedAfterFirst);
+      await seedBuybackRun({ runId: firstId, window: { from: new Date(window.from), to: new Date(window.to) } });
+      const burnedAfterFirst = await token.burnedSupply();
 
       const second = await trpcMutate(
         app,
@@ -632,19 +661,19 @@ if (!available) {
       expect(second.body.error?.data?.code).toBe('CONFLICT');
 
       expect(await token.burnedSupply()).toBe(burnedAfterFirst);
-      expect(await token.burnedSupply()).not.toBe(burnedAfterFirst * 2n);
       expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${firstId}`).toHaveLength(1);
-      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
       await app.close();
     });
 
-    it('POST /trpc/recordBuyback concurrent same-window crash burns once', async () => {
+    it('POST /trpc/recordBuyback concurrent same-window crash does not invent a buy', async () => {
       await fundRewards('4000', 'w-mounted-concurrent');
       const app = await mountDoors();
       const window = uniqueWindow('mounted-concurrent');
       const a = randomUUID();
       const b = randomUUID();
+      const engineBefore = (await ledger.balance(rewardsEngine('IFC'))).amount;
 
       const [left, right] = await Promise.all([
         trpcMutate(
@@ -661,21 +690,33 @@ if (!available) {
         ),
       ]);
 
-      const codes = [left.statusCode, right.statusCode].sort((x, y) => x - y);
+      // Each is 400 unmoved or 409 overlap — never 200 (invent a buy) or 500
+      // (unmapped GiST deadlock). Do not require the exact 400+409 pair: if the
+      // other INSERT runs after the winner DELETE-releases pending, both are 400.
+      const codes = [left.statusCode, right.statusCode];
       expect(
-        codes,
+        codes.every((c) => c === 400 || c === 409),
         `recordBuyback concurrent same-window: ${JSON.stringify({
           left: { status: left.statusCode, error: left.body.error },
           right: { status: right.statusCode, error: right.body.error },
         })}`,
-      ).toEqual([200, 409]);
-      const winner = left.statusCode === 200 ? left : right;
-      const burnedOnce = amt((wireJson(winner.body) as { burned: string }).burned);
-      expect(burnedOnce).toBeGreaterThan(0n);
+      ).toBe(true);
+      expect(codes.some((c) => c === 200)).toBe(false);
+      expect(codes.some((c) => c === 500)).toBe(false);
+      for (const res of [left, right]) {
+        if (res.statusCode === 400) {
+          expect(res.body.error?.data?.code).toBe('BAD_REQUEST');
+          expect(res.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+        } else {
+          expect(res.body.error?.data?.code).toBe('CONFLICT');
+          expect(res.body.error?.data?.cause?.code).toBe('token.buyback_window_overlap');
+        }
+      }
 
-      expect(await token.burnedSupply()).toBe(burnedOnce);
-      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(1);
-      expect(bus.emitted('buybackExecuted')).toHaveLength(1);
+      expect(await token.burnedSupply()).toBe(0n);
+      expect((await ledger.balance(rewardsEngine('IFC'))).amount).toBe(engineBefore);
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
       await app.close();
     });
@@ -690,15 +731,8 @@ if (!available) {
         to: new Date(outerFrom.getTime() + 10 * 86_400_000).toISOString(),
       };
       const firstId = randomUUID();
-
-      const first = await trpcMutate(
-        app,
-        'recordBuyback',
-        { runId: firstId, revenueWindow: outer, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
-        adminHeaders(),
-      );
-      expect(first.statusCode).toBe(200);
-      const burnedAfterFirst = amt((wireJson(first.body) as { burned: string }).burned);
+      await seedBuybackRun({ runId: firstId, window: { from: new Date(outer.from), to: new Date(outer.to) } });
+      const burnedAfterFirst = await token.burnedSupply();
 
       const second = await trpcMutate(
         app,
@@ -718,15 +752,8 @@ if (!available) {
       const app = await mountDoors();
       const firstWindow = uniqueWindow('mounted-runid');
       const runId = randomUUID();
-
-      const first = await trpcMutate(
-        app,
-        'recordBuyback',
-        { runId, revenueWindow: firstWindow, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
-        adminHeaders(),
-      );
-      expect(first.statusCode).toBe(200);
-      const burnedAfterFirst = amt((wireJson(first.body) as { burned: string }).burned);
+      await seedBuybackRun({ runId, window: { from: new Date(firstWindow.from), to: new Date(firstWindow.to) } });
+      const burnedAfterFirst = await token.burnedSupply();
 
       const other = uniqueWindow('mounted-runid-other');
       const second = await trpcMutate(
@@ -743,21 +770,17 @@ if (!available) {
       await app.close();
     });
 
-    it('POST /trpc/recordBuyback recovers a pending crash without double-burning', async () => {
+    it('POST /trpc/recordBuyback releases a pending crash rather than completing a fee-funded burn', async () => {
       await fundRewards('2000', 'w-mounted-pending');
       const app = await mountDoors();
       const window = uniqueWindow('mounted-pending');
       const runId = randomUUID();
 
-      await sql`
-        INSERT INTO token.buyback_runs (
-          id, revenue_window_from, revenue_window_to, revenue_total,
-          tokens_bought, tokens_burned, tokens_to_rewards, status
-        ) VALUES (
-          ${runId}, ${new Date(window.from)}, ${new Date(window.to)}, ${sql.json({ IFC: '1000' } as never)},
-          1000::numeric, 0::numeric, 0::numeric, 'pending'
-        )
-      `;
+      await seedBuybackRun({
+        runId,
+        window: { from: new Date(window.from), to: new Date(window.to) },
+        status: 'pending',
+      });
 
       const retry = await trpcMutate(
         app,
@@ -765,10 +788,10 @@ if (!available) {
         { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
         adminHeaders(),
       );
-      expect(retry.statusCode).toBe(200);
-      const burnedOnce = amt((wireJson(retry.body) as { burned: string }).burned);
-      expect(burnedOnce).toBeGreaterThan(0n);
-      expect(await token.burnedSupply()).toBe(burnedOnce);
+      expect(retry.statusCode).toBe(400);
+      expect(retry.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+      expect(await token.burnedSupply()).toBe(0n);
+      expect(await sql`SELECT id FROM token.buyback_runs WHERE id = ${runId}`).toHaveLength(0);
 
       const again = await trpcMutate(
         app,
@@ -776,8 +799,57 @@ if (!available) {
         { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
         adminHeaders(),
       );
-      expect(again.statusCode).toBe(409);
-      expect(await token.burnedSupply()).toBe(burnedOnce);
+      expect(again.statusCode).toBe(400);
+      expect(await token.burnedSupply()).toBe(0n);
+      await app.close();
+    });
+
+    it('POST /trpc/recordBuyback live getTxByKey throw is 400 unmoved, never 500', async () => {
+      const inner = ledger;
+      const s2s: LedgerClient = {
+        post: inner.post.bind(inner),
+        balance: inner.balance.bind(inner),
+        balances: inner.balances.bind(inner),
+        getTx: async () => {
+          throw new Error('getTx is not exposed over the internal ledger API — query svc-ledger directly');
+        },
+        getTxByKey: async () => {
+          throw new Error('getTxByKey is not exposed over the internal ledger API — query svc-ledger directly');
+        },
+      };
+      token = new TokenService(sql, s2s, bus, options);
+      const app = await mountDoors();
+      const window = uniqueWindow('mounted-gettx-live');
+
+      const fresh = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(fresh.statusCode).toBe(400);
+      expect(fresh.body.error?.data?.code).toBe('BAD_REQUEST');
+      expect(fresh.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+      expect(await sql`SELECT id FROM token.buyback_runs`).toHaveLength(0);
+
+      const runId = randomUUID();
+      await seedBuybackRun({
+        runId,
+        window: { from: new Date(window.from), to: new Date(window.to) },
+        status: 'pending',
+      });
+      const retry = await trpcMutate(
+        app,
+        'recordBuyback',
+        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        adminHeaders(),
+      );
+      expect(retry.statusCode).toBe(400);
+      expect(retry.body.error?.data?.cause?.code).toBe('token.buyback_tokens_unmoved');
+      expect(retry.body.error?.message ?? '').not.toMatch(/getTxByKey/);
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.buyback_runs WHERE id = ${runId}`;
+      expect(rows[0]?.status).toBe('pending');
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
       await app.close();
     });
 

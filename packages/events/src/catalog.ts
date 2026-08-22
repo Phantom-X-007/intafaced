@@ -867,12 +867,27 @@ export interface WiringSocket {
 export const WIRING_SOCKETS = [
   // ── no publisher ───────────────────────────────────────────────────────────
   //
-  // Empty. `bankMarginCalled` was here, and was the reason this section existed:
-  // a complete event with a complete svc-notify consumer that parked on a stream
+  // `bankMarginCalled` was here, and was the reason this section existed: a
+  // complete event with a complete svc-notify consumer that parked on a stream
   // no service had ever created. svc-bank now owns `INTAFACED_BANK` and publishes
-  // the call — see services/svc-bank/src/loans/margin-call-publisher.ts. The
-  // entry is deleted rather than reworded, because a socket kept after the gap
-  // closed is a written claim that something is missing when it is not.
+  // the call — see services/svc-bank/src/loans/margin-call-publisher.ts. That
+  // entry left by being wired, not by being reworded.
+  //
+  // `buybackExecuted` is the current occupant. The catalog event stays; emitting
+  // it from svc-token would claim a buy the ledger never posted.
+  {
+    event: 'buybackExecuted',
+    missing: 'publisher',
+    /**
+     * CLASS A. Nothing observes a buy that did not happen. svc-token
+     * refuse-closes recordBuyback rather than emit; a buyback ledger-client
+     * recipe PR owns the publisher. No user or operator surface is premised
+     * on this subject firing.
+     */
+    class: 'A',
+    reason:
+      'Publisher waits on a buyback ledger recipe. svc-token refuse-closes recordBuyback with token.buyback_tokens_unmoved rather than emit buybackExecuted for a buy that did not happen — no existing ledger-client recipe books tokensBought (burn spends fee-funded engine; mintEmission prints supply). Nothing observes a buy that did not happen; the recipe PR owns the publisher.',
+  },
 
   // ── no subscriber ──────────────────────────────────────────────────────────
   //
@@ -934,12 +949,13 @@ export const WIRING_SOCKETS = [
     event: 'buybackExecuted',
     missing: 'subscriber',
     /**
-     * CLASS A. Settled through the ledger before publication, so no consumer is
+     * CLASS A. Nothing is waiting on the announcement. The publisher itself
+     * is a socket (no buyback recipe in ledger-client); no consumer is
      * load-bearing.
      */
     class: 'A',
     reason:
-      "svc-token publishes each structural buyback-and-burn run. The flywheel it describes is settled by svc-token through the ledger before the event is published, so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
+      "No service consumes buybackExecuted. The flywheel it would describe is not a live buy — svc-token refuse-closes until a buyback ledger recipe exists — so no consumer is load-bearing; the subject exists so the public burn record (§17.3) can be built from the stream rather than from a query against another service's tables.",
   },
   {
     event: 'crewMemberCreated',

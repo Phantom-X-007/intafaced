@@ -162,13 +162,14 @@ export const emissionEpochs = token.table('emission_epochs', {
  * is not built. `tokens_bought` is a figure an operator types into
  * `recordBuyback`; `revenue_total` is operator-supplied but **validated** as
  * assetId → unsigned decimal strings before claim (not a free jsonb blob).
- * The only ledger movement the write causes is the burn leg debited out of the
- * rewards engine. Nothing is purchased, so a row here is an operator assertion
- * with a burn attached, not evidence of buy pressure. Window claim happens
- * before the burn (0002). §13 socket `token.buyback`.
- *
- * The columns still reconcile against the postings the burn caused (§4.4 exit
- * criteria) — that part holds. What they do not evidence is a buyback.
+ * A settled row must mean this run posted recipes whose engineΔ + burnΔ
+ * equals `tokens_bought`. No existing recipe books that buy, so a new run is
+ * refused `token.buyback_tokens_unmoved` rather than settling a DB-only figure
+ * (or burning fee-funded engine balance as if it were purchased, or settling
+ * because two balance reads lined up). Fresh pending claims are released.
+ * A retry whose `token.burn:` lookup is unknown or already landed keeps the
+ * row so the burn is not hidden. Window claim still happens first (0002).
+ * §13 socket `token.buyback`.
  */
 export const buybackRuns = token.table(
   'buyback_runs',

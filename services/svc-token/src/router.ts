@@ -20,8 +20,13 @@ import { userCopy } from './user-copy.js';
  *   token.yield      `distributeRevenue` is a hand-invoked operator mutation.
  *                    No cron, no bus subscriber, no caller anywhere outside
  *                    tests. `sources` amounts are trusted input.
- *   token.buyback    `recordBuyback` records a burn. No market-buy exists, so
- *                    nothing is bought back.
+ *   token.buyback    `recordBuyback` refuses to settle an operator-typed
+ *                    `tokensBought` that did not move on the ledger. No
+ *                    market-buy recipe exists; burning fee-funded engine
+ *                    balance is not a buy. Does not emit `buybackExecuted`
+ *                    (that would lie). Missing-publisher socket is a
+ *                    packages/events PR — exclusive this service cannot
+ *                    declare WIRING_SOCKETS.
  *   token.governance ballots are recorded and weighted correctly; no code can
  *                    move a proposal to passed/rejected/executed/cancelled.
  *
@@ -96,6 +101,7 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'CONFLICT', message, cause: err });
       case 'token.buyback_window_invalid':
       case 'token.buyback_revenue_invalid':
+      case 'token.buyback_tokens_unmoved':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
@@ -306,8 +312,11 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     //  - `sources[].amount` is still operator-typed (aggregation job is the
     //    socket), but first-claim amounts are bound to live houseFees — over-
     //    claim refuses `token.yield_source_underfunded` (#1353). `tokensBought`
-    //    is asserted, not executed — no market-buy exists. `revenueTotal` is
-    //    validated as assetId → unsigned decimals before the buyback claim.
+    //    is asserted, not executed — no market-buy exists, so a new run
+    //    refuses `token.buyback_tokens_unmoved` rather than settling a
+    //    DB-only buy (or burning fee-funded engine balance as if it were
+    //    purchased). `revenueTotal` is validated as assetId → unsigned
+    //    decimals before the buyback claim.
     //
     // The maths and the ledger recipes underneath are real and tested; the
     // missing half is automation / real purchase, not pot bind or burn order.
