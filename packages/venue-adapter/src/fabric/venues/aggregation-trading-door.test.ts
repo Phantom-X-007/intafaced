@@ -18,6 +18,7 @@ import {
   createVenueMarketDataAdapter,
   createVenueTradeAdapter,
   describeTradingHalfPolicy,
+  loadVenueOperatorCredentials,
 } from '../../index.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
@@ -50,6 +51,7 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(typeof createVenueTradeAdapter).toBe('function');
     expect(typeof createVenueAccountAdapter).toBe('function');
     expect(typeof describeTradingHalfPolicy).toBe('function');
+    expect(typeof loadVenueOperatorCredentials).toBe('function');
     expect(PUBLIC_MARKET_DATA_VENUE_IDS).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
   });
 
