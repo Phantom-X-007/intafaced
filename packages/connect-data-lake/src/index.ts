@@ -66,6 +66,18 @@ export {
 } from './ingest-capture-lake-batch.js';
 export { describeDataLakeStage1, type DataLakeStage1Summary } from './data-lake-stage1.js';
 export {
+  describeQuantHonestyPolicy,
+  gateBacktestRender,
+  gateLiveVsBacktestCompare,
+  gateReturnsLeaderboard,
+  type BacktestCostModel,
+  type BacktestRenderGate,
+  type BacktestRenderInput,
+  type OutOfSampleVerdict,
+  type QuantHonestyRefuseReason,
+  type ReturnsLeaderboardInput,
+} from './quant-honesty-policy.js';
+export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
   bookObservationFromLakeRecord,
