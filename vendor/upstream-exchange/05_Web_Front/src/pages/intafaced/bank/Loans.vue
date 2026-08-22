@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.loansPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.loansPage.lead') }}</p>
-      <div class="ix-source">svc-bank · loans.products · loans.list · loans.health · loans.open · loans.addCollateral · loans.repay · loans.close</div>
+      <div class="ix-source">svc-bank · loans.products · loans.list · loans.health · loans.open · loans.addCollateral · loans.releaseExcess · loans.repay · loans.close</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -85,7 +85,7 @@
     <div v-if="managed" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.bank.manageLoan') }}</h2>
-        <span class="ix-sub">loans.addCollateral · loans.repay · loans.close</span>
+        <span class="ix-sub">loans.addCollateral · loans.releaseExcess · loans.repay · loans.close</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.loansPage.manageLead') }}</p>
 
@@ -110,6 +110,10 @@
           <Input element-id="ix-loan-collateral" v-model="collateralAmount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
         </div>
         <div class="ix-field">
+          <label for="ix-loan-release-excess">{{ $t('intafaced.bank.releaseExcessAmount') }}</label>
+          <Input element-id="ix-loan-release-excess" v-model="releaseExcessAmount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+        </div>
+        <div class="ix-field">
           <label for="ix-loan-repay">{{ $t('intafaced.bank.repayAmount') }}</label>
           <Input element-id="ix-loan-repay" v-model="repayAmount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
         </div>
@@ -118,6 +122,9 @@
       <div class="ix-actions">
         <Button :loading="collateralAdded.busy" :disabled="!collateralAmount" @click="submitCollateral">
           {{ $t('intafaced.bank.addCollateral') }}
+        </Button>
+        <Button :loading="excessReleased.busy" :disabled="!releaseExcessAmount" @click="submitReleaseExcess">
+          {{ $t('intafaced.bank.releaseExcess') }}
         </Button>
         <Button type="primary" :loading="repaid.busy" :disabled="!repayAmount" @click="submitRepay">
           {{ $t('intafaced.bank.repay') }}
@@ -131,6 +138,14 @@
           <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ collateralAdded.data.ledgerTxId }}</div>
         </div>
         <IxState v-else :loading="collateralAdded.busy" :reason="collateralAdded.reason" :message="collateralAdded.message" endpoint="/api/bank/trpc/loans.addCollateral"></IxState>
+      </div>
+
+      <div v-if="excessReleased.ran" style="margin-top:14px;">
+        <div v-if="excessReleased.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.releaseExcessDone') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ excessReleased.data.ledgerTxId }}</div>
+        </div>
+        <IxState v-else :loading="excessReleased.busy" :reason="excessReleased.reason" :message="excessReleased.message" endpoint="/api/bank/trpc/loans.releaseExcess"></IxState>
       </div>
 
       <div v-if="repaid.ran" style="margin-top:14px;">
@@ -279,6 +294,7 @@ export default {
       managed: null,
       chosenProduct: null,
       collateralAmount: '',
+      releaseExcessAmount: '',
       repayAmount: '',
       openForm: { collateralAmount: '', principal: '' },
       products: this.emptySection(),
@@ -286,6 +302,7 @@ export default {
       health: this.emptySection(),
       opened: this.emptyAction(),
       collateralAdded: this.emptyAction(),
+      excessReleased: this.emptyAction(),
       repaid: this.emptyAction(),
       closed: this.emptyAction()
     };
@@ -318,6 +335,7 @@ export default {
     manage(loan) {
       this.managed = loan;
       this.collateralAdded = this.emptyAction();
+      this.excessReleased = this.emptyAction();
       this.repaid = this.emptyAction();
       this.closed = this.emptyAction();
     },
@@ -357,6 +375,18 @@ export default {
       ).then(function(res) {
         if (!res.ok) return;
         self.collateralAmount = '';
+        self.reloadLoans();
+      });
+    },
+    submitReleaseExcess() {
+      var self = this;
+      if (!this.managed || !this.releaseExcessAmount) return;
+      this.act(
+        'excessReleased',
+        mutate('bank', 'loans.releaseExcess', { loanId: this.managed.id, amount: this.releaseExcessAmount }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.releaseExcessAmount = '';
         self.reloadLoans();
       });
     },
