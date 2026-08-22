@@ -72,3 +72,14 @@ describe('quant honesty door status — returns honesty (D52)', () => {
     expect(status.doors).toHaveLength(5);
   });
 });
+
+describe('quant honesty door status — status line (D54)', () => {
+  it('statusLine names backtest, surface render, composite assess, and svc-quant refusal', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.statusLine).toMatch(/backtest/i);
+    expect(status.statusLine).toMatch(/surface render/i);
+    expect(status.statusLine).toMatch(/composite assess/i);
+    expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+  });
+});
