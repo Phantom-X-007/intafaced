@@ -20,36 +20,52 @@ const bookRecord: CaptureLakeBookRecord = {
 };
 
 describe('describeIngestCaptureLakeBatch', () => {
-  it('reports Stage-1 honesty without TSDB write', () => {
+  it('reports capture-log-only when owner env unset', () => {
     expect(describeIngestCaptureLakeBatch({})).toEqual({
       ingestsFabricRecords: true,
       evaluatesPersistenceGate: true,
-      writesTsdbInStage1: false,
+      writesTsdbWhenOwnerWired: true,
       persistenceEnvComplete: false,
+      captureLogOnly: true,
     });
   });
 });
 
 describe('ingestCaptureLakeBatch', () => {
-  it('refuses persistence when TSDB env unset', () => {
+  it('refuses persistence when TSDB env unset', async () => {
     const log = new CaptureLog();
-    const result = ingestCaptureLakeBatch(log, [bookRecord], {});
+    const result = await ingestCaptureLakeBatch(log, [bookRecord], {});
     expect(result.ingested).toHaveLength(1);
     expect(result.persistence).toEqual({ ok: false, reason: 'no_tsdb' });
   });
 
-  it('accepts flush claim when owner env complete', () => {
+  it('writes measured rows when owner env complete', async () => {
     const log = new CaptureLog();
-    const result = ingestCaptureLakeBatch(log, [bookRecord], {
-      CONNECT_DATA_LAKE_TSDB_URL: 'postgres://lake',
-      CONNECT_DATA_LAKE_RETENTION_DAYS: '30',
-    });
+    const queries: Array<{ query: string; params?: readonly unknown[] }> = [];
+    const result = await ingestCaptureLakeBatch(
+      log,
+      [bookRecord],
+      {
+        CONNECT_DATA_LAKE_TSDB_URL: 'postgres://lake',
+        CONNECT_DATA_LAKE_RETENTION_DAYS: '30',
+      },
+      {},
+      {
+        sql: {
+          async unsafe(query, params) {
+            queries.push({ query, params });
+          },
+        },
+      },
+    );
     expect(result.ingested).toHaveLength(1);
     expect(result.persistence).toEqual({
       ok: true,
       recordCount: 1,
+      writtenCount: 1,
       tsdbUrl: 'postgres://lake',
       retentionDays: 30,
     });
+    expect(queries).toHaveLength(1);
   });
 });

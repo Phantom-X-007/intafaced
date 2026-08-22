@@ -15,7 +15,8 @@ export type DataLakeRetentionSummary = {
   readonly tsdbConfigured: boolean;
   readonly retentionConfigured: boolean;
   readonly canPersist: boolean;
-  readonly captureLogOnly: true;
+  /** True when owner env is incomplete — capture stays in-process only. */
+  readonly captureLogOnly: boolean;
 };
 
 /** Honesty board for operator wiring — does not claim a store exists. */
@@ -26,7 +27,7 @@ export function describeDataLakeRetention(env: NodeJS.ProcessEnv = process.env):
     tsdbConfigured: tsdbUrl.length > 0,
     retentionConfigured: retentionRaw.length > 0,
     canPersist: tsdbUrl.length > 0 && retentionRaw.length > 0,
-    captureLogOnly: true,
+    captureLogOnly: tsdbUrl.length === 0 || retentionRaw.length === 0,
   };
 }
 

@@ -1,7 +1,7 @@
 /**
  * connect.data-lake capture policy — absent vs empty honesty (D-S-18 / §27:762).
  *
- * Capture only. No TSDB, retention, or compose database in this package.
+ * Capture honesty + owner-wired TSDB handoff. No compose database in package.
  *
  * Decided: unconnected venues are absent; measured empty is only when connected.
  * Not decided: time-series store, retention, compose — refuse if asked.
@@ -20,8 +20,8 @@ export function describeCapturePolicy() {
     unconnectedVenueIsAbsent: true as const,
     emptyBookIsMeasuredNotAbsent: true as const,
     holeNotSyntheticEmptyBook: true as const,
-    noTsdbInPackage: true as const,
-    noRetentionPolicyInPackage: true as const,
+    tsdbWriteWhenOwnerWired: true as const,
+    retentionOwnerEnvRequired: true as const,
     inventsQuietMarket: false as const,
   };
 }
@@ -39,8 +39,11 @@ export function wouldInventQuietMarket(connection: VenueConnection, snapshotPres
   return connection !== 'connected' && snapshotPresent;
 }
 
-/** Stage-1 capture refuses persistence claims — store choice is owner/D-S-18 open. */
-export function allowsPersistenceClaim(claim: 'tsdb' | 'retention' | 'compose'): false {
-  void claim;
-  return false;
+/** Persistence claims require owner TSDB URL + retention days — never invented. */
+export function allowsPersistenceClaim(claim: 'tsdb' | 'retention' | 'compose', env: NodeJS.ProcessEnv = process.env): boolean {
+  if (claim === 'compose') return false;
+  const tsdbUrl = env.CONNECT_DATA_LAKE_TSDB_URL?.trim() ?? '';
+  const retentionDays = env.CONNECT_DATA_LAKE_RETENTION_DAYS?.trim() ?? '';
+  if (claim === 'tsdb') return tsdbUrl.length > 0;
+  return tsdbUrl.length > 0 && retentionDays.length > 0;
 }

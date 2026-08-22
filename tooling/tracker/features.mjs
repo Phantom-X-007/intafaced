@@ -522,8 +522,8 @@ export const FEATURES = [
       'packages/venue-adapter/src/fabric/capture-lake.ts',
     ],
     note:
-      'WIP Stage-1 D26-P2-DL2: mount-vs-tracker deepened — fabric consumer + persistence sink refuse (no TSDB write). ' +
-      'Unconnected venue = absent hole. Class X residual: TSDB/compose; tick/fill normalisation; retention owner.',
+      'WIP D27-P4: TSDB write path in packages/connect-data-lake — measured rows INSERT to connect_lake.lake_ticks when CONNECT_DATA_LAKE_TSDB_URL + CONNECT_DATA_LAKE_RETENTION_DAYS owner-set; blank env refuse-closed. ' +
+      'Unconnected venue = absent hole. Class X residual: compose TSDB provisioning; tick/fill normalisation pipeline; retention enforcement job.',
   }),
   f('execution.sor', 'svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports (§28)', {
     module: 'trade',

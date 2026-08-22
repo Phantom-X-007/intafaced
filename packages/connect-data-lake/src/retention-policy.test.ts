@@ -21,7 +21,7 @@ describe('describeDataLakeRetention', () => {
       tsdbConfigured: true,
       retentionConfigured: true,
       canPersist: true,
-      captureLogOnly: true,
+      captureLogOnly: false,
     });
   });
 });

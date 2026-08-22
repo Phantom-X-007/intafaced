@@ -28,11 +28,7 @@ export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'mount-vs-tracker.test.ts',
 ] as const;
 
-export const DATA_LAKE_HONEST_GAPS = [
-  'gap.no_tsdb_compose',
-  'gap.tick_fill_normalisation_pipeline',
-  'gap.retention_owner_unchosen',
-] as const;
+export const DATA_LAKE_HONEST_GAPS = ['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env'] as const;
 
 export function dataLakeExportsInIndexSource(): readonly (typeof DATA_LAKE_PACKAGE_EXPORTS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -43,8 +39,10 @@ export function dataLakeExportsInIndexSource(): readonly (typeof DATA_LAKE_PACKA
 export function dataLakeStage1Honest(): boolean {
   const board = describeDataLakeStage1({});
   return (
-    board.capture.noTsdbInPackage === true &&
-    board.batch.writesTsdbInStage1 === false &&
+    board.capture.tsdbWriteWhenOwnerWired === true &&
+    board.capture.retentionOwnerEnvRequired === true &&
+    board.batch.writesTsdbWhenOwnerWired === true &&
+    board.batch.captureLogOnly === true &&
     board.retention.canPersist === false &&
     board.retention.captureLogOnly === true
   );
@@ -59,7 +57,9 @@ export function dataLakeCaptureConsumerHonestInSource(): boolean {
 export function dataLakePersistenceSinkHonestInSource(): boolean {
   const here = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(join(here, 'persistence-sink.ts'), 'utf8');
-  return /no TSDB write/i.test(src) && /refuses flush claims/i.test(src) && /flushCaptureLogToPersistenceSink/.test(src);
+  return (
+    /Refuse-closed when env blank/i.test(src) && /persistCaptureRecordsToPostgres/.test(src) && /flushCaptureLogToPersistenceSink/.test(src)
+  );
 }
 
 export function dataLakeCapturePolicyHonest(): boolean {
