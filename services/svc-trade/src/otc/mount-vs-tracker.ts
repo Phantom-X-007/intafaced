@@ -48,6 +48,8 @@ export function otcPolicyHonest(): boolean {
     p.inventsStakeGate === false &&
     p.inventsMakerBook === false &&
     p.inventsMidPrice === false &&
+    p.midFeedWiringHonest === true &&
+    p.midFeedWiringStates.length === 4 &&
     p.moneyViaLedgerClientOnly === true
   );
 }
