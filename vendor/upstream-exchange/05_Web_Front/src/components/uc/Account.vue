@@ -9,6 +9,66 @@
                     <span class="tips-word">{{$t('uc.account.pagetitle')}}</span>
                     <span class="tips-g">{{$t('uc.account.pagetip')}}</span>
                 </section>
+                <div class="ix-card ix-account-subs">
+                    <div class="ix-card-head">
+                        <h2>{{ $t('uc.account.subAccountsCreate') }}</h2>
+                        <span class="ix-sub">subAccounts.create</span>
+                    </div>
+                    <p class="ix-lead">{{ $t('uc.account.subAccountsLead') }}</p>
+                    <div class="ix-field-grid">
+                        <div class="ix-field">
+                            <label for="ix-sa-label">{{ $t('uc.account.subAccountsLabel') }}</label>
+                            <Input element-id="ix-sa-label" v-model="createLabel" :placeholder="$t('uc.account.subAccountsLabelHint')" :maxlength="64"></Input>
+                        </div>
+                        <div class="ix-field">
+                            <label for="ix-sa-purpose">{{ $t('uc.account.subAccountsPurpose') }}</label>
+                            <Input element-id="ix-sa-purpose" v-model="createPurpose" :placeholder="$t('uc.account.subAccountsPurposeHint')" :maxlength="200"></Input>
+                        </div>
+                    </div>
+                    <div class="ix-actions">
+                        <Button type="primary" :loading="createdSub.busy" :disabled="!canCreateSub" @click="createSubAccount">
+                            {{ $t('uc.account.subAccountsCreate') }}
+                        </Button>
+                    </div>
+                    <div v-if="createdSub.ran" style="margin-top:14px;">
+                        <div v-if="createdSub.reason === 'ok' && createdSub.data" class="ix-done">
+                            <strong>{{ $t('uc.account.subAccountsCreatedOk') }}</strong>
+                            <div style="margin-top:6px;">{{ createdSub.data.id }}</div>
+                        </div>
+                        <IxState v-else :loading="createdSub.busy" :reason="createdSub.reason" :message="createdSub.message" endpoint="/api/identity/trpc/subAccounts.create"></IxState>
+                    </div>
+                </div>
+                <div class="ix-card ix-account-subs">
+                    <div class="ix-card-head">
+                        <h2>{{ $t('uc.account.subAccountsTitle') }}</h2>
+                        <span class="ix-sub">subAccounts.list</span>
+                    </div>
+                    <IxState :loading="subs.loading" :reason="subs.reason" :message="subs.message" endpoint="/api/identity/trpc/subAccounts.list">
+                        <div v-if="listRows.length" class="ix-scroll">
+                            <table class="ix-table">
+                                <thead>
+                                    <tr>
+                                        <th>{{ $t('uc.account.subAccountsId') }}</th>
+                                        <th>{{ $t('uc.account.subAccountsLabel') }}</th>
+                                        <th>{{ $t('uc.account.subAccountsPurpose') }}</th>
+                                        <th>{{ $t('uc.account.subAccountsStatus') }}</th>
+                                        <th>{{ $t('uc.account.subAccountsCreated') }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="row in listRows" :key="row.id">
+                                        <td>{{ row.id }}</td>
+                                        <td>{{ row.label }}</td>
+                                        <td>{{ row.purpose ? row.purpose : '—' }}</td>
+                                        <td>{{ row.revoked ? $t('uc.account.subAccountsRevoked') : $t('uc.account.subAccountsActive') }}</td>
+                                        <td>{{ row.createdAt }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-else class="ix-note ix-note-quiet">{{ $t('uc.account.subAccountsEmpty') }}</div>
+                    </IxState>
+                </div>
                 <section class="accountContent">
                     <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
                     <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
@@ -182,10 +242,15 @@
 <script>
 
 import IxHonestState from './IxHonestState.vue';
+import IxState from '../intafaced/IxState.vue';
+import { query, mutate } from '../../config/intafaced.js';
+import ixModule from '../intafaced/module-mixin.js';
 
 export default {
+    mixins: [ixModule],
     components: {
-      IxHonestState
+      IxHonestState,
+      IxState
     },
     data() {
         const validatePass = (rule, value, callback) => {
@@ -211,6 +276,10 @@ export default {
             }
         };
         return {
+            subs: this.emptySection(),
+            createdSub: this.emptyAction(),
+            createLabel: '',
+            createPurpose: '',
             uploadHeaders:{'x-auth-token':localStorage.getItem('TOKEN')},
             uploadUrl:this.host+'/uc/upload/oss/image',
             aliImg:'',
@@ -399,6 +468,24 @@ export default {
         }
     },
     methods: {
+        loadSubs() {
+            this.load('subs', query('identity', 'subAccounts.list', undefined, this.ixToken));
+        },
+        createSubAccount() {
+            var self = this;
+            var label = (this.createLabel || '').trim();
+            if (!label || this.createdSub.busy) return;
+            var body = { label: label };
+            var purpose = (this.createPurpose || '').trim();
+            if (purpose) body.purpose = purpose;
+            this.act('createdSub', mutate('identity', 'subAccounts.create', body, this.ixToken)).then(function (res) {
+                if (res && res.ok) {
+                    self.createLabel = '';
+                    self.createPurpose = '';
+                    self.loadSubs();
+                }
+            });
+        },
         aliHandleSuccess (res, file,fileList) {
             // console.log(res);
           this.$refs.upload1.fileList=[fileList[fileList.length-1]];
@@ -538,9 +625,23 @@ export default {
 
     },
     created() {
-        this.getAccount()
+        this.getAccount();
+        this.loadSubs();
+    },
+    watch: {
+        ixToken() {
+            this.loadSubs();
+        }
     },
     computed: {
+        listRows() {
+            var d = this.subs && this.subs.data;
+            if (!Array.isArray(d)) return [];
+            return d.filter(function (row) { return row && row.id; });
+        },
+        canCreateSub() {
+            return !!(this.ixToken && !this.createdSub.busy && (this.createLabel || '').trim());
+        }
     }
 }
 </script>
@@ -979,5 +1080,8 @@ p.describe {
 .ix-dualbook strong {
   color: #ff6b00;
   font-weight: 600;
+}
+.ix-account-subs {
+  margin: 0 0 16px;
 }
 </style>
