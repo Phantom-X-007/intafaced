@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EnvError, loadEnv, redactEnv, serviceEnvSchema, authEnvSchema } from './env.js';
+import { EnvError, loadEnv, redactEnv, serviceEnvSchema, authEnvSchema, edgeEnvSchema, internalServiceEnvSchema } from './env.js';
 
 const validServiceEnv = {
   SERVICE_NAME: 'svc-ledger',
@@ -36,6 +36,32 @@ describe('loadEnv', () => {
   it('refuses a weak JWT signing key', () => {
     expect(() => loadEnv(authEnvSchema, { JWT_ACCESS_SECRET: 'short' })).toThrow(EnvError);
     expect(() => loadEnv(authEnvSchema, { JWT_ACCESS_SECRET: 'a'.repeat(32) })).not.toThrow();
+  });
+
+  it('refuses a missing or short EDGE_PRINCIPAL_SECRET', () => {
+    for (const source of [{}, { EDGE_PRINCIPAL_SECRET: 'short' }]) {
+      try {
+        loadEnv(edgeEnvSchema, source);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(EnvError);
+        expect((e as EnvError).issues.some((i) => i.startsWith('EDGE_PRINCIPAL_SECRET'))).toBe(true);
+      }
+    }
+    expect(() => loadEnv(edgeEnvSchema, { EDGE_PRINCIPAL_SECRET: 'a'.repeat(32) })).not.toThrow();
+  });
+
+  it('refuses a missing or short INTERNAL_SERVICE_SECRET', () => {
+    for (const source of [{}, { INTERNAL_SERVICE_SECRET: 'short' }]) {
+      try {
+        loadEnv(internalServiceEnvSchema, source);
+        expect.unreachable('should have thrown');
+      } catch (e) {
+        expect(e).toBeInstanceOf(EnvError);
+        expect((e as EnvError).issues.some((i) => i.startsWith('INTERNAL_SERVICE_SECRET'))).toBe(true);
+      }
+    }
+    expect(() => loadEnv(internalServiceEnvSchema, { INTERNAL_SERVICE_SECRET: 'a'.repeat(32) })).not.toThrow();
   });
 });
 
