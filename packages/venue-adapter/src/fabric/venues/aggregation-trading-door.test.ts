@@ -26,7 +26,6 @@ import {
   buildOperatorVenueTradeMaps,
   buildOperatorVenueAccountAdapters,
   buildOperatorVenueTradeAdapters,
-  describeOperatorVenueAccountMaps,
   describeOperatorVenueTradeMaps,
   describeVenueOperatorCredentials,
   venueOperatorCredentialEnvPrefix,
