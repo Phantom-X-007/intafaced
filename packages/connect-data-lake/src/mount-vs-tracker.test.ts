@@ -132,3 +132,22 @@ describe('connect.data-lake mount vs tracker board complete (D66)', () => {
     expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
   });
 });
+
+describe('connect.data-lake stage1 and capture honesty complete (D68)', () => {
+  it('dataLakeStage1Honest and capture policy honesty lock full stage1 board', () => {
+    const board = describeDataLakeStage1({});
+    expect(board.capture.tsdbWriteWhenOwnerWired).toBe(true);
+    expect(board.capture.retentionOwnerEnvRequired).toBe(true);
+    expect(board.batch.captureLogOnly).toBe(true);
+    expect(board.retention.captureLogOnly).toBe(true);
+    expect(board.quantSurface.compositeGateWired).toBe(true);
+    expect(board.quantSurface.inventsFraming).toBe(false);
+    expect(board.quantSurface.edgeDoorNotProxiedToSvcQuant).toBe(true);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(dataLakeCapturePolicyHonest()).toBe(true);
+    expect(dataLakeCaptureConsumerHonestInSource()).toBe(true);
+    expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+  });
+});
