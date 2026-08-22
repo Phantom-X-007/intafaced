@@ -1163,6 +1163,8 @@ services:
       VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: ${VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE:-}
       # execution.sor letter→bps owner schedule — JSON map A/B/C/D/F; blank = refuse-closed (no invented defaults).
       EXECUTION_SOR_LETTER_BPS_SCHEDULE: ${EXECUTION_SOR_LETTER_BPS_SCHEDULE:-}
+      # execution.market-making spread/skew owner bands — JSON bounds; blank = refuse-closed.
+      EXECUTION_MM_SPREAD_SKEW_BANDS: ${EXECUTION_MM_SPREAD_SKEW_BANDS:-}
     expose: ['4019']
     volumes:
       - execution-ems-journal:/data/execution

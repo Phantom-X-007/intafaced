@@ -575,7 +575,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['execution.sor', 'trade.mm-bot'],
     requires: [
@@ -583,11 +583,14 @@ export const FEATURES = [
       'packages/execution-mm/src/mount-vs-tracker.test.ts',
       'packages/execution-mm/src/market-making.ts',
       'packages/execution-mm/src/mm-policy.ts',
+      'packages/execution-mm/src/mm-spread-skew-bands.ts',
+      'packages/execution-mm/src/mm-spread-skew-bands.test.ts',
+      'packages/execution-mm/src/mm-compose-wiring.ts',
+      'packages/execution-mm/src/mm-tracker-status-pin.test.ts',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Stage-1 external-only MM half on SOR cost model on tip; refuses internal venue MM; kill switches + hedge plan. ' +
-      'Product still needs: internal MM + house-on-own-venue (owner unfreeze or never); OMS wire; owner spread/skew bands.',
+      '**Done 2026-08-22:** External-only MM half on SOR cost model; OMS mm.quote/mm.hedge wired; owner spread/skew bands env refuse-closed. ' +
+      'Internal venue MM remains ADR-blocked until explicit owner ruling — not a missing engineering path.',
   }),
   f('execution.house-tenant', 'House desk sealed private tenant — the Throne Law (§28)', {
     module: 'trade',
