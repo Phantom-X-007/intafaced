@@ -296,3 +296,21 @@ describe('connect.data-lake mount vs tracker — D82 denon complete', () => {
     expect(DATA_LAKE_HONEST_GAPS).toHaveLength(3);
   });
 });
+
+describe('connect.data-lake mount vs tracker — D84 denon complete', () => {
+  it('full mount board: stage1, capture, persistence, exports, done-bar tests, honest gaps', () => {
+    const card = connectDataLakeMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('connect.data-lake');
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
+    expect(card.gaps).toBe(DATA_LAKE_HONEST_GAPS.length);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(dataLakeCapturePolicyHonest()).toBe(true);
+    expect(dataLakeCaptureConsumerHonestInSource()).toBe(true);
+    expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
+    expect(dataLakeDoneBarTestsPresent()).toBe(true);
+    expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env']);
+  });
+});
