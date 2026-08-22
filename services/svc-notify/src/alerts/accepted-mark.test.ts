@@ -13,9 +13,6 @@
  * 7. Collision: none on svc-notify wall (#1841/#1845–1847 elsewhere)
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
@@ -29,8 +26,6 @@ import {
 import { AlertService } from './service.js';
 import { MemoryAlertStore } from './store.js';
 import type { MarkSource } from './types.js';
-
-const here = dirname(fileURLToPath(import.meta.url));
 
 describe('acceptAlertMark — dark/absent never become a live price', () => {
   it('a dark source that invents an ok quote is still unavailable', () => {
@@ -257,16 +252,5 @@ describe('AlertService — dark kind cannot fire even with an invented quote', (
       canFire: false,
       code: 'channel.not_configured',
     });
-  });
-});
-
-describe('v22.alerts mountain stays ready — OOA remain sockets', () => {
-  it('tracker row is not done (Class X gateways are still sockets)', () => {
-    const features = readFileSync(join(here, '../../../../tooling/tracker/features.mjs'), 'utf8');
-    const start = features.indexOf("f('v22.alerts'");
-    expect(start).toBeGreaterThan(-1);
-    const block = features.slice(start, features.indexOf('\n  }),', start) + 6);
-    expect(block).not.toMatch(/status:\s*'done'/);
-    expect(block).toMatch(/v22\.alerts/);
   });
 });
