@@ -128,6 +128,16 @@ describe('execution /ready boot ems and trade url (D50)', () => {
   });
 });
 
+describe('execution /ready boot venue map builders (D51)', () => {
+  it('index wires parseExecutionVenueIds and supplement map builders on boot', () => {
+    const src = indexSrc();
+    expect(src).toContain('parseExecutionVenueIds(env.EXECUTION_VENUE_IDS)');
+    expect(src).toContain('buildExecutionVenueTradeMapsWithOperatorSupplement(executionVenueIds)');
+    expect(src).toContain('buildExecutionVenueAccountMapsWithOperatorSupplement(executionVenueIds)');
+    expect(src).toContain('buildExecutionVenueMarketMapsWithPublicMdSupplement(executionVenueIds)');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
