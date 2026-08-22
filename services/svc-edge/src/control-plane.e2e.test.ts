@@ -235,12 +235,16 @@ describe('/admin/status — control-plane summary', () => {
       quantHonesty: {
         compositeHonestyWired: boolean;
         inventsReturns: boolean;
+        edgeDoorPathsAlignedWithDataLake: boolean;
         doors: { path: string }[];
       };
     };
     expect(body.quantHonesty.compositeHonestyWired).toBe(true);
     expect(body.quantHonesty.inventsReturns).toBe(false);
-    expect(body.quantHonesty.doors.map((door) => door.path)).toContain('/quant/honesty/assess-composite');
+    expect(body.quantHonesty.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    const doorPaths = body.quantHonesty.doors.map((door) => door.path);
+    expect(doorPaths).toContain('/quant/honesty/assess-composite');
+    expect(doorPaths).toContain('/quant/honesty/assess-surface-render');
   });
 
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
