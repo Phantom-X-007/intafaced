@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { describeExecutionSpine, EXECUTION_SPINE_DOORS } from './oms-spine.js';
+import { executionSorMountVsTrackerBoardCard, executionSorTrackerBackendDoneBarMet } from './mount-vs-tracker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const routerSource = readFileSync(join(here, 'router.ts'), 'utf8');
@@ -26,5 +27,22 @@ describe('describeExecutionSpine — execution.sor spine catalog', () => {
 describe('execution.policy route (execution spine honesty door)', () => {
   it('router mounts describeExecutionSpine on execution.policy', () => {
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
+  });
+});
+
+describe('execution.sor spine — D76 denon complete', () => {
+  it('spine catalog honesty and mount-vs-tracker cert both green on tip', () => {
+    const spine = describeExecutionSpine();
+    expect(spine.externalOnly).toBe(true);
+    expect(spine.houseInternalRefuse).toBe(true);
+    expect(spine.sorUsesVenueAdapterPlanRoute).toBe(true);
+    expect(spine.doors.filter((d) => d.module === 'execution.sor').every((d) => d.inventsQuotes === false)).toBe(true);
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'execution.sor',
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(routerSource).toMatch(/describeExecutionSpine/);
   });
 });
