@@ -9,8 +9,10 @@ import {
 } from '@intafaced/venue-contracts';
 import { BinanceSpotAccount, type BinanceSpotAccountOptions } from './binance-spot-account.js';
 import { BinanceSpotMarketData, BinanceSpotTrade } from './binance-spot.js';
+import type { BinanceSpotTradeOptions } from './binance-spot-trade.js';
 import { BybitSpotAccount, type BybitSpotAccountOptions } from './bybit-spot-account.js';
 import { BybitSpotMarketData, BybitSpotTrade } from './bybit-spot.js';
+import type { BybitSpotTradeOptions } from './bybit-spot-trade.js';
 import { OkxSpotAccount, type OkxSpotAccountOptions } from './okx-spot-account.js';
 import { OkxSpotMarketData, OkxSpotTrade, type OkxSpotTradeOptions } from './okx-spot.js';
 
