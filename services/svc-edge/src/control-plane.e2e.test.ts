@@ -374,6 +374,38 @@ describe('/admin/status — control-plane summary', () => {
     expect(quantHonesty.doors.map((door) => door.path).sort()).toEqual(status.doors.map((door) => door.path).sort());
   });
 
+  it('quant honesty HTTP admin status full board complete (D77)', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const { quantHonesty } = res.json() as {
+      quantHonesty: {
+        statusLine: string;
+        mountedOnControlPlane: boolean;
+        notProxiedToSvcQuant: boolean;
+        inventsReturns: boolean;
+        compositeHonestyWired: boolean;
+        edgeDoorPathsAlignedWithDataLake: boolean;
+        doors: { path: string; package: string; method: string }[];
+      };
+    };
+    const status = describeQuantHonestyDoorStatus();
+    expect(quantHonesty.statusLine).toBe(status.statusLine);
+    expect(quantHonesty.mountedOnControlPlane).toBe(true);
+    expect(quantHonesty.notProxiedToSvcQuant).toBe(true);
+    expect(quantHonesty.inventsReturns).toBe(false);
+    expect(quantHonesty.compositeHonestyWired).toBe(true);
+    expect(quantHonesty.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(quantHonesty.doors).toHaveLength(5);
+    for (const door of status.doors) {
+      expect(quantHonesty.doors).toContainEqual(door);
+    }
+  });
+
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
     const h = await edge();
     // Seed via admin API method through status surface — open is not HTTP yet
