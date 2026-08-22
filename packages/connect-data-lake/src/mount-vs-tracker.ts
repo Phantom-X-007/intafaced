@@ -1,8 +1,7 @@
 /**
  * D26-P2-DL1 — connect.data-lake mount vs tracker honest gaps.
  *
- * Stage-1 capture log with fleet TSDB schema + owner retention env wired in compose.
- * Tick/fill normalisation pipeline remains Class X residual.
+ * Stage-1 capture log with fleet TSDB + tick/fill normalisation pipeline on tip.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -16,6 +15,10 @@ export const DATA_LAKE_TRACKER_ID = 'connect.data-lake' as const;
 export const DATA_LAKE_PACKAGE_EXPORTS = [
   'describeDataLakeStage1',
   'describeCapturePolicy',
+  'describeTickFillNormalisationPipeline',
+  'ingestTickFillWireRecord',
+  'ingestTickFillWireRecords',
+  'captureRecordFromTickFillWire',
   'ingestCaptureLakeBatch',
   'retentionPersistenceGate',
   'purgeExpiredLakeTicks',
@@ -39,10 +42,11 @@ export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'quant-surface-refuse.test.ts',
   'quant-surface-render-consumer.test.ts',
   'package-export-mount.test.ts',
+  'tick-fill-normalisation-pipeline.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
 
-export const DATA_LAKE_HONEST_GAPS = ['gap.tick_fill_normalisation_pipeline'] as const;
+export const DATA_LAKE_HONEST_GAPS = [] as const;
 
 export function dataLakeExportsInIndexSource(): readonly (typeof DATA_LAKE_PACKAGE_EXPORTS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
