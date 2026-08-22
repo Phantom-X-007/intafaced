@@ -106,6 +106,25 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     }
   });
 
+  it('buildOperatorVenueTradeMaps wires place cancel fetch openOrders for operator env (D61)', () => {
+    const env = {
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+    };
+    const maps = buildOperatorVenueTradeMaps(env);
+    expect(maps.wiredVenueIds).toEqual(['okx-spot']);
+    expect(Object.keys(maps.placeByVenue)).toEqual(['okx-spot']);
+    expect(Object.keys(maps.cancelByVenue)).toEqual(['okx-spot']);
+    expect(Object.keys(maps.fetchByVenue)).toEqual(['okx-spot']);
+    expect(Object.keys(maps.openOrdersByVenue)).toEqual(['okx-spot']);
+    const accountMaps = buildOperatorVenueAccountMaps(env);
+    expect(accountMaps.wiredVenueIds).toEqual(['okx-spot']);
+    expect(Object.keys(accountMaps.balancesByVenue)).toEqual(['okx-spot']);
+    expect(Object.keys(accountMaps.positionsByVenue)).toEqual(['okx-spot']);
+    expect(Object.keys(accountMaps.transferRailsByVenue)).toEqual(['okx-spot']);
+  });
+
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
     expect(describeOperatorVenueTradeMaps({})).toMatchObject({
       wiredVenueIds: [],
