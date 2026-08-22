@@ -63,3 +63,12 @@ describe('quant honesty door status — HTTP methods (D50)', () => {
     expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toBe('POST');
   });
 });
+
+describe('quant honesty door status — returns honesty (D52)', () => {
+  it('describeQuantHonestyDoorStatus lists five doors and refuses invented returns', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.doors).toHaveLength(5);
+  });
+});

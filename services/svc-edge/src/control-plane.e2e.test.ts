@@ -259,6 +259,7 @@ describe('/admin/status — control-plane summary', () => {
     expect(methodsByPath['/quant/honesty/performance-labels']).toBe('GET');
     expect(methodsByPath['/quant/honesty/assess-backtest']).toBe('POST');
     expect(methodsByPath['/quant/honesty/assess-surface-render']).toBe('POST');
+    expect(body.quantHonesty.doors).toHaveLength(5);
   });
 
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
