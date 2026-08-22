@@ -219,3 +219,27 @@ describe('trade.otc tracker backend done bar complete (D71)', () => {
     });
   });
 });
+
+describe('trade.otc mount vs tracker — D75 denon complete', () => {
+  it('mount matrix, policy honesty, done-bar tests, and honest gaps board all green', () => {
+    const card = otcMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'trade.otc',
+      doors: OTC_MOUNTED_DOORS.length,
+      doorsMounted: OTC_MOUNTED_DOORS.length,
+      gaps: OTC_HONEST_GAPS.length,
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(otcPolicyHonest()).toBe(true);
+    const policy = describeOtcPolicy();
+    expect(policy.moneyViaLedgerClientOnly).toBe(true);
+    expect(policy.inventsSpreadBps).toBe(false);
+    expect(policy.inventsMakerBook).toBe(false);
+    expect(OTC_HONEST_GAPS).toHaveLength(3);
+  });
+});
