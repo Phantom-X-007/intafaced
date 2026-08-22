@@ -323,6 +323,21 @@ describe('execution boot trpc mount complete (D70)', () => {
   });
 });
 
+describe('execution boot ready and health complete (D72)', () => {
+  it('index wires health, ready, credential board union, and ems store path on boot', () => {
+    const src = indexSrc();
+    expect(src).toContain("app.get('/health'");
+    expect(src).toContain("app.get('/ready'");
+    expect(src).toContain('buildExecutionReadyResponse({');
+    expect(src).toContain('unionExecutionVenueIds(executionVenueIds');
+    expect(src).toContain('describeExecutionVenueCredentialBoard(');
+    expect(src).toContain('emsStorePath');
+    expect(src).toContain('EXECUTION_EMS_STORE_PATH');
+    expect(src).toContain('emsAckCount: emsStore.list().length');
+    expect(src).toContain('tradeUrl: env.TRADE_URL');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
