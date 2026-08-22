@@ -33,3 +33,22 @@ describe('venue.aggregation mount vs tracker honest gaps (D73-P1)', () => {
     expect(venueAggregationMountVsTrackerBoardCard().gaps).toBe(3);
   });
 });
+
+describe('venue.aggregation mount vs tracker — D74 denon complete', () => {
+  it('mount cert board, exports, policy, factory, and done-bar tests all green', () => {
+    const card = venueAggregationMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'venue.aggregation',
+      exports: VENUE_AGGREGATION_PACKAGE_EXPORTS.length,
+      exportsPresent: VENUE_AGGREGATION_PACKAGE_EXPORTS.length,
+      gaps: VENUE_AGGREGATION_HONEST_GAPS.length,
+      backendDoneBarMet: true,
+    });
+    expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
+    expect(venueAggregationPolicyHonest()).toBe(true);
+    expect(venueAggregationTradeFactoryComplete()).toBe(true);
+    expect(venueAggregationDoneBarTestsPresent()).toBe(true);
+    expect(VENUE_AGGREGATION_DONE_BAR_TEST_FILES).toContain('aggregation-mount-vs-tracker.test.ts');
+    expect(VENUE_AGGREGATION_DONE_BAR_TEST_FILES).toContain('fabric/venues/aggregation-trading-door.test.ts');
+  });
+});

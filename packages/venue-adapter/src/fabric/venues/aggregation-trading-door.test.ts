@@ -31,6 +31,7 @@ import {
   describeVenueOperatorCredentials,
   venueOperatorCredentialEnvPrefix,
 } from '../../index.js';
+import { venueAggregationMountVsTrackerBoardCard, venueAggregationTrackerBackendDoneBarMet } from '../../aggregation-mount-vs-tracker.js';
 import { describeVenueAggregationPolicy } from './factory-policy.js';
 import { tradeAdapterRegisteredForAllPublicVenues, shouldRefuseTradeAdapterConstruction } from './trading-half-policy.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
@@ -429,5 +430,23 @@ describe('aggregation trading door — factory integration', () => {
     expect(account).not.toBeNull();
     await expect(trade!.placeOrder(LIMIT_ORDER)).rejects.toThrow(VenueCredentialsMissingError);
     await expect(account!.balances()).rejects.toThrow(VenueCredentialsMissingError);
+  });
+});
+
+describe('aggregation trading door — D74 mount cert complete', () => {
+  it('aggregation-mount-vs-tracker cert green and trading door aligns with public MD ids', () => {
+    expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
+    expect(venueAggregationMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'venue.aggregation',
+      backendDoneBarMet: true,
+      gaps: 3,
+    });
+    expect(describeTradingHalfPolicy().tradingVenueIds).toEqual([...PUBLIC_MARKET_DATA_VENUE_IDS]);
+    expect(describeTradingHalfPolicy().inventsCredentials).toBe(false);
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      expect(createVenueMarketDataAdapter(id)).not.toBeNull();
+      expect(createVenueTradeAdapter(id, null)).not.toBeNull();
+      expect(createVenueAccountAdapter(id, null)).not.toBeNull();
+    }
   });
 });
