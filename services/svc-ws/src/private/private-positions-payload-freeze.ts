@@ -32,14 +32,31 @@ const PRIVATE_POSITION_WIRE_KEY_SET = new Set<string>(PRIVATE_POSITION_WIRE_KEYS
 export type PrivatePositionWirePayload = PrivatePositionUpdate & { readonly channel: 'positions' };
 
 export function freezePrivatePositionUpdate(update: PrivatePositionUpdate): PrivatePositionWirePayload {
-  const payload: Record<string, unknown> = { channel: 'positions' };
-  for (const key of PRIVATE_POSITION_WIRE_KEYS) {
-    const value = update[key];
-    if (value !== undefined) {
-      payload[key] = value;
-    }
+  const payload: PrivatePositionWirePayload = {
+    channel: 'positions',
+    positionId: update.positionId,
+    userId: update.userId,
+    marketId: update.marketId,
+    symbol: update.symbol,
+    status: update.status,
+    side: update.side,
+    contracts: update.contracts,
+    entryPrice: update.entryPrice,
+    markPrice: update.markPrice,
+    notional: update.notional,
+    leverage: update.leverage,
+    collateral: update.collateral,
+    unrealizedPnl: update.unrealizedPnl,
+    realizedPnl: update.realizedPnl,
+    liquidationPrice: update.liquidationPrice,
+    marginMode: update.marginMode,
+    fundingPaid: update.fundingPaid,
+    ts: update.ts,
+  };
+  if (update.closingReason !== undefined) {
+    return { ...payload, closingReason: update.closingReason };
   }
-  return payload as PrivatePositionWirePayload;
+  return payload;
 }
 
 export function encodePrivatePositionFrame(update: PrivatePositionUpdate): string {

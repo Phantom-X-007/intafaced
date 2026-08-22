@@ -327,6 +327,10 @@ export class PrivateOrderHub {
   }
 
   publishPosition(update: PrivatePositionUpdate): void {
+    // Freeze strips unknown keys (including a fabricated `positions: []`).
+    // Refuse the live-zero blotter on the update, before encode, or honesty
+    // tests and tip Tests(full) see a real-looking position frame.
+    if (isLiveZeroBlotterPayload(update)) return;
     this.#fanout(update.userId, 'positions', encodePrivatePositionFrame(update));
   }
 
