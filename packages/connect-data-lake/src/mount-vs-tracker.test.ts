@@ -167,3 +167,17 @@ describe('connect.data-lake package exports complete (D69)', () => {
     });
   });
 });
+
+describe('connect.data-lake done bar files complete (D71)', () => {
+  it('dataLakeDoneBarTestsPresent locks every DATA_LAKE_DONE_BAR_TEST_FILE on disk', () => {
+    expect(dataLakeDoneBarTestsPresent()).toBe(true);
+    expect(DATA_LAKE_DONE_BAR_TEST_FILES).toHaveLength(11);
+    expect(DATA_LAKE_DONE_BAR_TEST_FILES).toContain('mount-vs-tracker.test.ts');
+    expect(DATA_LAKE_DONE_BAR_TEST_FILES).toContain('quant-honesty-mount.test.ts');
+    expect(DATA_LAKE_DONE_BAR_TEST_FILES).toContain('capture-policy.test.ts');
+    expect(dataLakeCapturePolicyHonest()).toBe(true);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+  });
+});
