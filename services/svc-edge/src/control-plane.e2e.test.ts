@@ -236,12 +236,18 @@ describe('/admin/status — control-plane summary', () => {
         compositeHonestyWired: boolean;
         inventsReturns: boolean;
         edgeDoorPathsAlignedWithDataLake: boolean;
+        mountedOnControlPlane: boolean;
+        notProxiedToSvcQuant: boolean;
+        statusLine: string;
         doors: { path: string; package: string }[];
       };
     };
     expect(body.quantHonesty.compositeHonestyWired).toBe(true);
     expect(body.quantHonesty.inventsReturns).toBe(false);
     expect(body.quantHonesty.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(body.quantHonesty.mountedOnControlPlane).toBe(true);
+    expect(body.quantHonesty.notProxiedToSvcQuant).toBe(true);
+    expect(body.quantHonesty.statusLine).toMatch(/not proxied to svc-quant/i);
     const doorPaths = body.quantHonesty.doors.map((door) => door.path);
     expect(doorPaths).toContain('/quant/honesty/assess-composite');
     expect(doorPaths).toContain('/quant/honesty/assess-surface-render');
