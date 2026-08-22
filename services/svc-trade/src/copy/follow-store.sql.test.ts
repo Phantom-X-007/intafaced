@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTestDb, postgresAvailable, rewriteSchemaSql } from '@intafaced/db';
 import { parseAmount } from '@intafaced/ledger-client';
 import { CopyError } from './errors.js';
-import { SqlCopyFollowStore, type StoredSettledFeeShare } from './follow-store.js';
+import { SqlCopyFollowStore, type StoredPlacedMirror, type StoredSettledFeeShare } from './follow-store.js';
 import type { CopyFollow } from './follows.js';
 
 /**
@@ -16,9 +16,12 @@ import type { CopyFollow } from './follows.js';
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
-const COPY_MIGRATIONS = ['0011_copy_follows.sql', '0022_copy_settled_fee_shares.sql', '0031_copy_settled_fee_shares_fill_unique.sql'].map(
-  (f) => readFileSync(join(drizzleDir, f), 'utf8'),
-);
+const COPY_MIGRATIONS = [
+  '0011_copy_follows.sql',
+  '0022_copy_settled_fee_shares.sql',
+  '0031_copy_settled_fee_shares_fill_unique.sql',
+  '0032_copy_placed_mirrors.sql',
+].map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
 
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
 const LEADER = '00000000-0000-4000-8000-000000000002';
@@ -26,6 +29,7 @@ const LEADER_B = '00000000-0000-4000-8000-000000000003';
 const FOLLOW_A = 'aaaa1111-1111-4111-8111-111111111111';
 const FOLLOW_B = 'bbbb2222-2222-4222-8222-222222222222';
 const FILL = 'fill-sql-claim-before-post';
+const PLACE_FILL = 'fill-sql-place-mirror-once';
 
 function follow(followId: string, leaderId: string): CopyFollow {
   return {
@@ -57,6 +61,16 @@ function share(followId: string, fillId: string, leaderId: string): StoredSettle
     cappedLeaderShare: parseAmount('0.5'),
     skippedReason: null,
     settled: true,
+  };
+}
+
+function placedMirror(followId: string, fillId: string): StoredPlacedMirror {
+  return {
+    followId,
+    fillId,
+    orderId: 'order-sql-place-1',
+    clientOrderId: 'client-order-sql-1',
+    price: parseAmount('5000'),
   };
 }
 
@@ -366,6 +380,42 @@ if (!available) {
       expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
       expect((await store.getPeriodStats(key)).roundTrips).toBe(1);
       expect((await store.getSettledFeeShare(FOLLOW_A, FILL))?.cappedLeaderShare).toBe(parseAmount('0.5'));
+    });
+  });
+
+  describe('SqlCopyFollowStore place-mirror once-key', () => {
+    it('runPlaceMirrorOnce persists (follow, fill) and returns duplicate without re-running', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      let runs = 0;
+      const first = await store.runPlaceMirrorOnce(FOLLOW_A, PLACE_FILL, async () => {
+        runs += 1;
+        return placedMirror(FOLLOW_A, PLACE_FILL);
+      });
+      expect(first.status).toBe('claimed');
+      expect(runs).toBe(1);
+
+      const second = await store.runPlaceMirrorOnce(FOLLOW_A, PLACE_FILL, async () => {
+        runs += 1;
+        return placedMirror(FOLLOW_A, PLACE_FILL);
+      });
+      expect(second.status).toBe('duplicate');
+      expect(second.record.orderId).toBe('order-sql-place-1');
+      expect(runs).toBe(1);
+
+      const saved = await store.getPlacedMirror(FOLLOW_A, PLACE_FILL);
+      expect(saved?.clientOrderId).toBe('client-order-sql-1');
+    });
+
+    it('INSERT after run() leaves durable row for redelivery', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      await store.runPlaceMirrorOnce(FOLLOW_A, PLACE_FILL, async () => placedMirror(FOLLOW_A, PLACE_FILL));
+      const rows = await db.sql<Array<{ order_id: string }>>`
+        SELECT order_id FROM copy_placed_mirrors WHERE follow_id = ${FOLLOW_A} AND fill_id = ${PLACE_FILL}
+      `;
+      expect(rows[0]?.order_id).toBe('order-sql-place-1');
+      expect((await store.getPlacedMirror(FOLLOW_A, PLACE_FILL))?.price).toBe(parseAmount('5000'));
     });
   });
 }
