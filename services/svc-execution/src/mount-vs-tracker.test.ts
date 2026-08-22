@@ -54,3 +54,22 @@ describe('execution.sor mount vs tracker — D74 denon complete', () => {
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
   });
 });
+
+describe('execution.sor mount vs tracker — D75 denon complete', () => {
+  it('mount cert, OMS router mount, and EMS journal path all green on tip', () => {
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'execution.sor',
+      backendDoneBarMet: true,
+      mountComplete: true,
+      gaps: EXECUTION_SOR_HONEST_GAPS.length,
+    });
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([
+      'gap.durable_ems_store',
+      'gap.letter_to_bps_owner_schedule',
+      'gap.live_venue_cred_operator_wiring',
+    ]);
+    expect(sorOmsDoorsInRouterSource()).toEqual(['plan', 'execute', 'cancel', 'fetch']);
+    expect(executionSorDoneBarTestsPresent()).toBe(true);
+  });
+});
