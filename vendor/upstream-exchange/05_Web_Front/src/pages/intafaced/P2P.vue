@@ -94,6 +94,118 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.p2p.instrument') }}</h2>
+        <span class="ix-sub">instruments.create · instruments.list · instruments.remove</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.p2p.instrumentLead') }}</p>
+      <IxState :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
+        <div v-if="registryEmpty" class="ix-note" style="margin-bottom:16px;">{{ $t('intafaced.p2p.take.noMethodRegistry') }}</div>
+      </IxState>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-p2p-inst-method">{{ $t('intafaced.p2p.instrumentMethod') }}</label>
+          <select v-if="methods.data && methods.data.length" id="ix-p2p-inst-method" v-model="instrumentMethodChoice">
+            <option value="">{{ $t('intafaced.p2p.instrumentMethodHint') }}</option>
+            <option v-for="m in methods.data" :key="m.methodId + '-' + m.country" :value="m.methodId + '|' + m.country">{{ m.label }} · {{ m.methodId }} · {{ m.country }}</option>
+          </select>
+          <Input v-else element-id="ix-p2p-inst-method" v-model="instrumentForm.methodId" :placeholder="$t('intafaced.p2p.instrumentMethodHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-inst-country">{{ $t('intafaced.p2p.instrumentCountry') }}</label>
+          <Input element-id="ix-p2p-inst-country" v-model="instrumentForm.country" :placeholder="$t('intafaced.p2p.instrumentCountryHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-inst-fiat">{{ $t('intafaced.p2p.instrumentFiat') }}</label>
+          <Input element-id="ix-p2p-inst-fiat" v-model="instrumentForm.fiatCurrency" :placeholder="$t('intafaced.p2p.instrumentFiatHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-inst-label">{{ $t('intafaced.p2p.instrumentLabel') }}</label>
+          <Input element-id="ix-p2p-inst-label" v-model="instrumentForm.label" :placeholder="$t('intafaced.p2p.instrumentLabelHint')" />
+        </div>
+      </div>
+      <div v-if="instrumentDetailFields.length" class="ix-form-row" style="margin-bottom:16px;">
+        <div v-for="field in instrumentDetailFields" :key="field.key" class="ix-field">
+          <label :for="'ix-p2p-inst-d-' + field.key">{{ field.label }}</label>
+          <Input
+            :element-id="'ix-p2p-inst-d-' + field.key"
+            v-model="instrumentForm.details[field.key]"
+            :type="field.sensitive ? 'password' : 'text'"
+            :placeholder="field.help || ''"
+          />
+        </div>
+      </div>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button
+          v-if="ixToken"
+          size="small"
+          :loading="instrumentSave.busy"
+          :disabled="!canSaveInstrument"
+          @click="saveInstrument"
+        >{{ $t('intafaced.p2p.instruments.create') }}</Button>
+        <router-link v-else to="/platform">{{ $t('intafaced.p2p.instrumentSignIn') }}</router-link>
+      </div>
+      <IxState v-if="instrumentSave.ran" :loading="instrumentSave.busy" :reason="instrumentSave.reason" :message="instrumentSave.message" endpoint="/api/p2p/trpc/instruments.create">
+        <div v-if="instrumentSave.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.instrumentDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.instrumentId') }}</span><span class="v">{{ instrumentSave.data.id }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.instrumentMethod') }}</span><span class="v">{{ instrumentSave.data.methodId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.instrumentCountry') }}</span><span class="v">{{ instrumentSave.data.country }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.instrumentFiat') }}</span><span class="v">{{ instrumentSave.data.fiatCurrency }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.instrumentLabel') }}</span><span class="v">{{ instrumentSave.data.label }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ instrumentSave.data.status }}</span></div>
+          </div>
+        </div>
+      </IxState>
+      <IxState :loading="instruments.loading" :reason="instruments.reason" :message="instruments.message" endpoint="/api/p2p/trpc/instruments.list">
+        <div v-if="instruments.data && instruments.data.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('intafaced.p2p.instrumentMethod') }}</th>
+                <th>{{ $t('intafaced.p2p.instrumentCountry') }}</th>
+                <th>{{ $t('intafaced.p2p.instrumentFiat') }}</th>
+                <th>{{ $t('intafaced.p2p.instrumentLabel') }}</th>
+                <th>{{ $t('intafaced.bank.status') }}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in instruments.data" :key="row.id">
+                <td>{{ row.methodId }}</td>
+                <td>{{ row.country }}</td>
+                <td>{{ row.fiatCurrency }}</td>
+                <td>{{ row.label }}</td>
+                <td>{{ row.status }}</td>
+                <td>
+                  <div class="ix-actions">
+                    <Button
+                      v-if="ixToken && canRemoveInstrument(row)"
+                      size="small"
+                      :loading="instrumentRemove.busy && removeInstrumentId === row.id"
+                      @click="removeInstrument(row)"
+                    >{{ $t('intafaced.p2p.instruments.remove') }}</Button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.p2p.instrumentEmpty') }}</div>
+      </IxState>
+      <IxState v-if="instrumentRemove.ran" :loading="instrumentRemove.busy" :reason="instrumentRemove.reason" :message="instrumentRemove.message" endpoint="/api/p2p/trpc/instruments.remove">
+        <div v-if="instrumentRemove.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.instruments.removeDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.instrumentId') }}</span><span class="v">{{ instrumentRemove.data.id }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ instrumentRemove.data.status }}</span></div>
+          </div>
+        </div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.offers') }}</h2>
         <span class="ix-sub">offers.list · trades.take · offers.pause · offers.resume</span>
       </div>
@@ -292,6 +404,11 @@
  *
  * Pause and resume post {offerId} on the caller's own row. They do not move
  * escrow. Named refuse stays named.
+ *
+ * Instrument save posts {methodId, country, fiatCurrency, details} and an
+ * optional label. details keys come only from the selected method schema.
+ * The list is headers only. Remove posts {instrumentId} on an own row.
+ * Empty registry is a named refuse, not a seeded rail.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
@@ -309,6 +426,9 @@ export default {
       take: this.emptyAction(),
       create: this.emptyAction(),
       pause: this.emptyAction(),
+      instruments: this.emptySection(),
+      instrumentSave: this.emptyAction(),
+      instrumentRemove: this.emptyAction(),
       trades: this.emptySection(),
       lifecycle: this.emptyAction(),
       takeAmount: '',
@@ -316,8 +436,16 @@ export default {
       takingId: '',
       pauseId: '',
       pauseEndpoint: '/api/p2p/trpc/offers.pause',
+      removeInstrumentId: '',
       lifeId: '',
       lifeEndpoint: '/api/p2p/trpc/trades.list',
+      instrumentForm: {
+        methodId: '',
+        country: '',
+        fiatCurrency: '',
+        label: '',
+        details: {}
+      },
       createForm: {
         side: 'sell',
         asset: '',
@@ -359,6 +487,62 @@ export default {
         !this.create.busy
       );
     },
+    instrumentMethodChoice: {
+      get() {
+        var f = this.instrumentForm;
+        var id = (f.methodId || '').trim();
+        var rows = this.methods.data;
+        if (!id || !rows || !rows.length) return '';
+        var country = (f.country || '').trim().toUpperCase();
+        var wildcard = '';
+        for (var i = 0; i < rows.length; i++) {
+          var s = rows[i];
+          if (s.methodId !== id) continue;
+          if (s.country === country) return s.methodId + '|' + s.country;
+          if (s.country === '*') wildcard = s.methodId + '|*';
+        }
+        return wildcard;
+      },
+      set(v) {
+        if (!v) {
+          this.instrumentForm.methodId = '';
+          return;
+        }
+        var bar = v.indexOf('|');
+        this.instrumentForm.methodId = bar === -1 ? v : v.slice(0, bar);
+        var country = bar === -1 ? '' : v.slice(bar + 1);
+        if (country && country !== '*') this.instrumentForm.country = country;
+      }
+    },
+    instrumentDetailFields() {
+      var rows = this.methods.data;
+      if (!rows || !rows.length) return [];
+      var methodId = (this.instrumentForm.methodId || '').trim();
+      var country = (this.instrumentForm.country || '').trim().toUpperCase();
+      if (!methodId) return [];
+      var match = null;
+      for (var i = 0; i < rows.length; i++) {
+        var s = rows[i];
+        if (s.methodId !== methodId) continue;
+        if (s.country === country) {
+          match = s;
+          break;
+        }
+        if (s.country === '*' && !match) match = s;
+      }
+      return (match && match.fields) ? match.fields : [];
+    },
+    canSaveInstrument() {
+      var f = this.instrumentForm;
+      var country = (f.country || '').trim();
+      var fiat = (f.fiatCurrency || '').trim();
+      return !!(
+        (f.methodId || '').trim() &&
+        country.length === 2 &&
+        fiat.length === 3 &&
+        !this.instrumentSave.busy
+      );
+    },
     myId() {
       return subjectOf(this.ixToken);
     },
@@ -368,11 +552,26 @@ export default {
         : this.$t('intafaced.p2p.pauseDone');
     }
   },
+  watch: {
+    instrumentDetailFields: {
+      immediate: true,
+      handler(fields) {
+        var next = {};
+        var prev = this.instrumentForm.details || {};
+        for (var i = 0; i < fields.length; i++) {
+          var key = fields[i].key;
+          next[key] = typeof prev[key] === 'string' ? prev[key] : '';
+        }
+        this.instrumentForm.details = next;
+      }
+    }
+  },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.load('offers', query('p2p', 'offers.list', undefined, this.ixToken));
     this.load('fiat', query('p2p', 'fiat.list', undefined, this.ixToken));
     this.load('methods', query('p2p', 'instruments.methods.list', undefined, this.ixToken));
+    this.load('instruments', query('p2p', 'instruments.list', undefined, this.ixToken));
     this.loadTrades();
   },
   methods: {
@@ -443,6 +642,45 @@ export default {
       ).then(function () {
         self.takingId = '';
         self.loadTrades();
+      });
+    },
+    instrumentDetailsPayload() {
+      var details = {};
+      var fields = this.instrumentDetailFields;
+      var src = this.instrumentForm.details || {};
+      for (var i = 0; i < fields.length; i++) {
+        var key = fields[i].key;
+        var val = (src[key] || '').trim();
+        if (val) details[key] = val;
+      }
+      return details;
+    },
+    canRemoveInstrument(row) {
+      return !!(row && row.id && row.status === 'active');
+    },
+    saveInstrument() {
+      var self = this;
+      if (!this.canSaveInstrument) return;
+      var f = this.instrumentForm;
+      var input = {
+        methodId: (f.methodId || '').trim(),
+        country: (f.country || '').trim().toUpperCase(),
+        fiatCurrency: (f.fiatCurrency || '').trim().toUpperCase(),
+        details: this.instrumentDetailsPayload()
+      };
+      var label = (f.label || '').trim();
+      if (label) input.label = label;
+      this.act('instrumentSave', mutate('p2p', 'instruments.create', input, this.ixToken)).then(function (res) {
+        if (res.ok) self.load('instruments', query('p2p', 'instruments.list', undefined, self.ixToken));
+      });
+    },
+    removeInstrument(row) {
+      var self = this;
+      if (!this.canRemoveInstrument(row) || this.instrumentRemove.busy) return;
+      this.removeInstrumentId = row.id;
+      this.act('instrumentRemove', mutate('p2p', 'instruments.remove', { instrumentId: row.id }, this.ixToken)).then(function (res) {
+        self.removeInstrumentId = '';
+        if (res.ok) self.load('instruments', query('p2p', 'instruments.list', undefined, self.ixToken));
       });
     },
     createOffer() {

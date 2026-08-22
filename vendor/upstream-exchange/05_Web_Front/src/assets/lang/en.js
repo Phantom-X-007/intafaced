@@ -995,7 +995,26 @@ module.exports = {
             pause: "Pause",
             pauseDone: "Paused",
             resume: "Resume",
-            resumeDone: "On the book"
+            resumeDone: "On the book",
+            instrument: "Payment instruments",
+            instrumentLead: "Name a method, country, fiat and the fields that method asks for, then save. The list is headers only — this screen never prints account details.",
+            instrumentMethod: "Method",
+            instrumentMethodHint: "Operator-registered method id",
+            instrumentCountry: "Country",
+            instrumentCountryHint: "ISO alpha-2",
+            instrumentFiat: "Fiat",
+            instrumentFiatHint: "3-letter code",
+            instrumentLabel: "Label",
+            instrumentLabelHint: "Optional",
+            instrumentSignIn: "Sign in to save",
+            instrumentDone: "Saved",
+            instrumentId: "Instrument",
+            instrumentEmpty: "No saved instruments",
+            instruments: {
+                create: "Save instrument",
+                remove: "Remove",
+                removeDone: "Removed"
+            }
         },
         token: {
             lead: "Figures for the account holding this platform session.",
