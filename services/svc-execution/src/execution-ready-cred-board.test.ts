@@ -378,6 +378,25 @@ describe('execution boot and sor mount — D75 denon complete', () => {
   });
 });
 
+describe('execution boot and sor mount — D77 denon complete', () => {
+  it('boot source wiring and execution.sor mount cert full board green', () => {
+    const src = indexSrc();
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'execution.sor',
+      doors: 4,
+      doorsMounted: 4,
+      gaps: 3,
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(src).toContain('createExecutionRouter(');
+    expect(src).toContain('describeExecutionVenueCredentialBoard(');
+    expect(src).toContain('unionExecutionVenueIds');
+    expect(src).toContain('emsStore');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
