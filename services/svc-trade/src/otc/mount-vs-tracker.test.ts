@@ -63,7 +63,7 @@ describe('trade.otc mount vs tracker gaps board (D52)', () => {
     const card = otcMountVsTrackerBoardCard();
     expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
     expect(card.backendDoneBarMet).toBe(true);
-    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
   });
 });
 
@@ -160,7 +160,7 @@ describe('trade.otc mount vs tracker board complete (D66)', () => {
     expect(card.doorsMounted).toBe(OTC_MOUNTED_DOORS.length);
     expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
     expect(card.backendDoneBarMet).toBe(true);
-    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
     expect(otcMountMatrixComplete()).toBe(true);
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(otcPolicyHonest()).toBe(true);
@@ -240,7 +240,7 @@ describe('trade.otc mount vs tracker — D75 denon complete', () => {
     expect(policy.moneyViaLedgerClientOnly).toBe(true);
     expect(policy.inventsSpreadBps).toBe(false);
     expect(policy.inventsMakerBook).toBe(false);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -262,7 +262,7 @@ describe('trade.otc mount vs tracker — D77 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
     const policy = describeOtcPolicy();
     expect(policy.inventsMidPrice).toBe(false);
     expect(policy.moneyViaLedgerClientOnly).toBe(true);
@@ -288,7 +288,7 @@ describe('trade.otc mount vs tracker — D79 denon complete', () => {
       'otc-mid-feed-donebar.test.ts',
     ]);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -308,7 +308,7 @@ describe('trade.otc mount vs tracker — D81 denon complete', () => {
     expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
   });
 });
 
@@ -326,7 +326,7 @@ describe('trade.otc mount vs tracker — D83 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -346,7 +346,7 @@ describe('trade.otc mount vs tracker — D85 denon complete', () => {
     expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
   });
 });
 
@@ -364,7 +364,7 @@ describe('trade.otc mount vs tracker — D87 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -384,7 +384,7 @@ describe('trade.otc mount vs tracker — D89 denon complete', () => {
     expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
   });
 });
 
@@ -402,7 +402,7 @@ describe('trade.otc mount vs tracker — D91 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -420,7 +420,7 @@ describe('trade.otc mount vs tracker — D93 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -438,7 +438,7 @@ describe('trade.otc mount vs tracker — D95 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -456,7 +456,7 @@ describe('trade.otc mount vs tracker — D97 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -474,7 +474,7 @@ describe('trade.otc mount vs tracker — D99 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -492,7 +492,7 @@ describe('trade.otc mount vs tracker — D101 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -510,7 +510,7 @@ describe('trade.otc mount vs tracker — D103 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -528,7 +528,7 @@ describe('trade.otc mount vs tracker — D105 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -546,7 +546,7 @@ describe('trade.otc mount vs tracker — D107 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -564,7 +564,7 @@ describe('trade.otc mount vs tracker — D109 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -582,7 +582,7 @@ describe('trade.otc mount vs tracker — D111 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -600,7 +600,7 @@ describe('trade.otc mount vs tracker — D113 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -618,7 +618,7 @@ describe('trade.otc mount vs tracker — D115 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -636,7 +636,7 @@ describe('trade.otc mount vs tracker — D117 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });
 
@@ -654,6 +654,6 @@ describe('trade.otc mount vs tracker — D119 denon complete', () => {
     expect(otcDoneBarTestsPresent()).toBe(true);
     expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
     expect(otcPolicyHonest()).toBe(true);
-    expect(OTC_HONEST_GAPS).toHaveLength(3);
+    expect(OTC_HONEST_GAPS).toHaveLength(2);
   });
 });

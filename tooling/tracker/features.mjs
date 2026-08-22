@@ -362,7 +362,7 @@ export const FEATURES = [
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'token.staking'],
     requires: [
@@ -371,11 +371,14 @@ export const FEATURES = [
       'services/svc-trade/src/otc/otc-rfq-settle-donebar.test.ts',
       'services/svc-trade/src/otc/otc-mount.reachable.test.ts',
       'services/svc-trade/src/otc/otc-policy.ts',
+      'services/svc-trade/src/otc/desk-law.ts',
+      'services/svc-trade/src/otc/otc-compose-wiring.ts',
+      'services/svc-trade/src/otc/otc-compose-wiring.test.ts',
+      'services/svc-trade/src/otc/otc-tracker-status-pin.test.ts',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Stage-1 RFQ→stake→fail-closed quote→ledger settle on tip; accept binds quoted price; caller mid refused; ledger-client only. ' +
-      'Product still needs: owner §8 desk-law numbers; socket.otc-maker-routing; connect.venue-vault custody.',
+      '**Done 2026-08-22:** RFQ→stake→fail-closed quote→ledger settle; TRADE_OTC_DESK_LAW owner env pass-through (blank = refuse). ' +
+      'Residual sockets: maker routing recipe + venue-vault custody — not invented here.',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
     module: 'trade',

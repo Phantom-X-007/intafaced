@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describeOtcPolicy } from './otc-policy.js';
+import { otcDeskLawComposeWired } from './otc-compose-wiring.js';
 
 export const OTC_TRACKER_ID = 'trade.otc' as const;
 
@@ -21,9 +22,14 @@ export const OTC_DONE_BAR_TEST_FILES = [
   'otc-mount.reachable.test.ts',
   'otc-maker-routing-donebar.test.ts',
   'otc-mid-feed-donebar.test.ts',
+  'otc-compose-wiring.test.ts',
 ] as const;
 
-export const OTC_HONEST_GAPS = ['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody'] as const;
+export const OTC_HONEST_GAPS = ['gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody'] as const;
+
+export function otcDeskLawComposeGapsClosed(): boolean {
+  return otcDeskLawComposeWired();
+}
 
 export function otcDoorsInRouterSource(): readonly OtcMountedDoor[] {
   const here = dirname(fileURLToPath(import.meta.url));
