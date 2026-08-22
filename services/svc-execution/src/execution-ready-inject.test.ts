@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
+import { buildExecutionVenueMarketMapsWithPublicMdSupplement } from './venue-market-adapters.js';
 import { buildExecutionReadyResponse } from './ready-response.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
   describeExecutionVenueCredentialBoard,
   unionExecutionVenueIds,
 } from './venue-adapters.js';
+import type { MarketDataAdapter } from '@intafaced/venue-contracts';
 
 const apps: FastifyInstance[] = [];
 
@@ -140,5 +142,56 @@ describe('execution /ready trade supplement inject (D40)', () => {
     });
     expect(tradeMaps.operatorSupplementVenueIds).toEqual(['binance-spot']);
     expect(Object.keys(tradeMaps.submitByVenue)).toContain('binance-spot');
+  });
+});
+
+function fakeMd(id: string): MarketDataAdapter {
+  return {
+    venue: { id, displayName: id, kind: 'external-cex', sequencedDepth: true },
+    markets: async () => [],
+    snapshotBook: async (symbol) => ({
+      venueId: id,
+      symbol,
+      bids: [],
+      asks: [],
+      sequenced: false,
+      sequence: -1,
+      observedAt: new Date('2026-08-22T00:00:00.000Z'),
+    }),
+  };
+}
+
+describe('execution /ready public MD supplement inject (D41)', () => {
+  it('GET /ready wires public MD supplement venues over HTTP', async () => {
+    const marketMaps = buildExecutionVenueMarketMapsWithPublicMdSupplement([], {
+      createAdapter: (id) => (id === 'binance-spot' || id === 'bybit-spot' ? fakeMd(id) : null),
+    });
+    const emsStore = new InMemoryEmsOrderStore();
+    const payload = buildExecutionReadyResponse({
+      emsStorePath: '',
+      tradeUrl: '',
+      venueTradeWiredVenueIds: [],
+      operatorSupplementVenueIds: [],
+      operatorAccountSupplementVenueIds: [],
+      publicMdSupplementVenueIds: marketMaps.publicMdSupplementVenueIds,
+      venueCredentialBoard: describeExecutionVenueCredentialBoard([]),
+      venueAccountWiredVenueIds: [],
+      venueMarketWiredVenueIds: marketMaps.wiredVenueIds,
+      emsAckCount: emsStore.list().length,
+    });
+
+    const app = Fastify({ logger: false });
+    app.get('/ready', async () => payload);
+    await app.ready();
+    apps.push(app);
+
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
+      externalVenueMarketData: ['binance-spot', 'bybit-spot'],
+    });
+    expect(marketMaps.publicMdSupplementVenueIds).toEqual(['binance-spot', 'bybit-spot']);
+    expect(marketMaps.snapshotByVenue['binance-spot']).toEqual(expect.any(Function));
   });
 });
