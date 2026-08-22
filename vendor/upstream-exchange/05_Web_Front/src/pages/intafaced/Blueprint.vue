@@ -224,7 +224,11 @@ export default {
   methods: {
     loadCard(size) {
       this.cardSize = size === 'landscape' ? 'landscape' : 'portrait';
-      this.load('card', query('blueprint', 'card', { size: this.cardSize }, this.ixToken));
+      if (this.cardSize === 'landscape') {
+        this.load('card', query('blueprint', 'card', { size: 'landscape' }, this.ixToken));
+        return;
+      }
+      this.load('card', query('blueprint', 'card', { size: 'portrait' }, this.ixToken));
     },
     reload() {
       this.load('me', query('blueprint', 'me', undefined, this.ixToken));
