@@ -1,0 +1,131 @@
+/**
+ * Unit card (D32):
+ * Promise: OMS execute + EMS journal refuse invent through mounted Fastify+tRPC
+ *   public doors (edge-signed createEdgeContext) — not createCaller-only guards.
+ * Break: execute could pretend success without venue submit; ems.get/list could
+ *   return empty acks when the journal store is unwired.
+ * Done bar:
+ *   · execution.oms.execute with no submit map → ok:false / submit_failed.
+ *   · execution.oms.ems.get + list without EMS store → PRECONDITION_FAILED.
+ * Class: N (honesty). Leverage: createExecutionRouter + Fastify TRPC mount.
+ */
+import { describe, expect, it } from 'vitest';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
+import { latencyGradeWire } from './oms-plan.js';
+import { createExecutionRouter } from './router.js';
+
+const EDGE_SECRET = 'execution-promise-falsify-public-doors-edge-secret-32';
+const OP = '33333333-3333-4333-8333-333333333333';
+
+const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-execution' });
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+function signedHeaders(p: Principal = principal()): Record<string, string> {
+  const raw = encodePrincipal(p);
+  return {
+    'x-intafaced-principal': raw,
+    'x-intafaced-principal-sig': signPrincipalHeader(raw, EDGE_SECRET, 'DE'),
+    'x-intafaced-region': 'DE',
+  };
+}
+
+const venueBody = {
+  id: 'street',
+  kind: 'external-cex' as const,
+  price: '100',
+  amount: '10',
+  feeBps: 10,
+  costTerms: {
+    feeBps: 10,
+    expectedImpactBps: 5,
+    transferCostBps: 2,
+    latencyGrade: latencyGradeWire('street'),
+  },
+};
+
+async function mountRouter(router = createExecutionRouter(new SealedHouseTenantRegistry())): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false, maxParamLength: 5_000 });
+  await app.register(fastifyTRPCPlugin, {
+    prefix: '/trpc',
+    trpcOptions: {
+      router,
+      createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    } as FastifyTRPCPluginOptions<typeof router>,
+  });
+  await app.ready();
+  return app;
+}
+
+type TrpcBody = {
+  result?: { data?: unknown };
+  error?: { message?: string; data?: { code?: string; httpStatus?: number } };
+};
+
+async function trpcQuery(app: FastifyInstance, path: string, input: unknown, headers = signedHeaders()) {
+  const url = `/trpc/${path}?input=${encodeURIComponent(JSON.stringify(input))}`;
+  const res = await app.inject({ method: 'GET', url, headers });
+  return { status: res.statusCode, body: JSON.parse(res.payload) as TrpcBody };
+}
+
+async function trpcMutation(app: FastifyInstance, path: string, input: unknown, headers = signedHeaders()) {
+  const res = await app.inject({
+    method: 'POST',
+    url: `/trpc/${path}`,
+    headers: { 'content-type': 'application/json', ...headers },
+    payload: JSON.stringify(input),
+  });
+  return { status: res.statusCode, body: JSON.parse(res.payload) as TrpcBody };
+}
+
+describe('execution promise-falsify public doors (D32)', () => {
+  it('oms.execute refuses submit_failed when venue submit is not wired', async () => {
+    const app = await mountRouter();
+    const out = await trpcMutation(app, 'execution.oms.execute', {
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [venueBody],
+    });
+    expect(out.body.result?.data).toMatchObject({ ok: false, reason: 'submit_failed' });
+    await app.close();
+  });
+
+  it('oms.ems.get refuses PRECONDITION_FAILED when EMS store is unwired', async () => {
+    const app = await mountRouter();
+    const out = await trpcQuery(app, 'execution.oms.ems.get', { clientOrderId: 'missing' });
+    expect(out.body.error?.data?.code).toBe('PRECONDITION_FAILED');
+    expect(out.body.error?.message).toMatch(/EMS store is not wired/i);
+    await app.close();
+  });
+
+  it('oms.ems.list refuses PRECONDITION_FAILED when EMS store is unwired', async () => {
+    const app = await mountRouter();
+    const out = await trpcQuery(app, 'execution.oms.ems.list', { venueId: 'street' });
+    expect(out.body.error?.data?.code).toBe('PRECONDITION_FAILED');
+    expect(out.body.error?.message).toMatch(/EMS store is not wired/i);
+    await app.close();
+  });
+
+  it('anonymous ems.get is UNAUTHORIZED before EMS precondition is evaluated', async () => {
+    const app = await mountRouter();
+    const out = await trpcQuery(app, 'execution.oms.ems.get', { clientOrderId: 'x' }, { 'x-intafaced-region': 'DE' });
+    expect(out.body.error?.data?.code).toBe('UNAUTHORIZED');
+    await app.close();
+  });
+});
