@@ -19,14 +19,14 @@ describe('venue.aggregation mount vs tracker honest gaps (D73-P1)', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_DONE_BAR_TEST_FILES).toHaveLength(5);
+    expect(VENUE_AGGREGATION_DONE_BAR_TEST_FILES).toHaveLength(6);
     expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
     expect(venueAggregationMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 
   it('D73 — honest gaps remain owner-residual; mount cert does not stamp product done', () => {
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual(['gap.live_network_ci']);
-    expect(venueAggregationMountVsTrackerBoardCard().gaps).toBe(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual([]);
+    expect(venueAggregationMountVsTrackerBoardCard().gaps).toBe(0);
   });
 });
 
@@ -57,7 +57,7 @@ describe('venue.aggregation mount vs tracker — D76 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 1,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(venueAggregationExportsInIndexSource()).toEqual([...VENUE_AGGREGATION_PACKAGE_EXPORTS]);
@@ -65,7 +65,7 @@ describe('venue.aggregation mount vs tracker — D76 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual(['gap.live_network_ci']);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -80,8 +80,8 @@ describe('venue.aggregation mount vs tracker — D78 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_DONE_BAR_TEST_FILES).toHaveLength(5);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_DONE_BAR_TEST_FILES).toHaveLength(6);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -101,7 +101,7 @@ describe('venue.aggregation mount vs tracker — D80 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual(['gap.live_network_ci']);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -117,7 +117,7 @@ describe('venue.aggregation mount vs tracker — D82 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -136,7 +136,7 @@ describe('venue.aggregation mount vs tracker — D84 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual(['gap.live_network_ci']);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -152,7 +152,7 @@ describe('venue.aggregation mount vs tracker — D86 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -171,7 +171,7 @@ describe('venue.aggregation mount vs tracker — D88 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual(['gap.live_network_ci']);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -187,7 +187,7 @@ describe('venue.aggregation mount vs tracker — D90 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -203,7 +203,7 @@ describe('venue.aggregation mount vs tracker — D92 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -219,7 +219,7 @@ describe('venue.aggregation mount vs tracker — D94 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -235,7 +235,7 @@ describe('venue.aggregation mount vs tracker — D96 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -251,7 +251,7 @@ describe('venue.aggregation mount vs tracker — D98 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -267,7 +267,7 @@ describe('venue.aggregation mount vs tracker — D100 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -283,7 +283,7 @@ describe('venue.aggregation mount vs tracker — D102 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -299,7 +299,7 @@ describe('venue.aggregation mount vs tracker — D104 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -315,7 +315,7 @@ describe('venue.aggregation mount vs tracker — D106 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -331,7 +331,7 @@ describe('venue.aggregation mount vs tracker — D108 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -347,7 +347,7 @@ describe('venue.aggregation mount vs tracker — D110 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -363,7 +363,7 @@ describe('venue.aggregation mount vs tracker — D112 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -379,7 +379,7 @@ describe('venue.aggregation mount vs tracker — D114 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -395,7 +395,7 @@ describe('venue.aggregation mount vs tracker — D116 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -411,7 +411,7 @@ describe('venue.aggregation mount vs tracker — D118 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -427,6 +427,6 @@ describe('venue.aggregation mount vs tracker — D120 denon complete', () => {
     expect(venueAggregationPolicyHonest()).toBe(true);
     expect(venueAggregationTradeFactoryComplete()).toBe(true);
     expect(venueAggregationDoneBarTestsPresent()).toBe(true);
-    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(1);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(0);
   });
 });

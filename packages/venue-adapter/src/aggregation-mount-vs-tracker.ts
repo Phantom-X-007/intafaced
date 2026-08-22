@@ -1,13 +1,13 @@
 /**
  * D73-P1 — venue.aggregation mount vs tracker honest gaps.
  *
- * Trading-half + MD factory alignment on tip; operator credentials and live
- * network CI remain Class X / owner residuals.
+ * Trading-half + MD factory + live-network CI on tip.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { venueAggregationLiveNetworkCiWired } from './aggregation-live-network-ci.js';
 import { describeVenueAggregationPolicy } from './fabric/venues/factory-policy.js';
 import { describeTradingHalfPolicy, tradeAdapterRegisteredForAllPublicVenues } from './fabric/venues/trading-half-policy.js';
 
@@ -30,10 +30,11 @@ export const VENUE_AGGREGATION_DONE_BAR_TEST_FILES = [
   'fabric/venues/factory-policy.test.ts',
   'fabric/venues/trading-half-policy.test.ts',
   'fabric/venues/aggregation-trading-door.test.ts',
+  'aggregation-live-network-ci.test.ts',
   'aggregation-mount-vs-tracker.test.ts',
 ] as const;
 
-export const VENUE_AGGREGATION_HONEST_GAPS = ['gap.live_network_ci'] as const;
+export const VENUE_AGGREGATION_HONEST_GAPS = [] as const;
 
 export function venueAggregationExportsInIndexSource(): readonly (typeof VENUE_AGGREGATION_PACKAGE_EXPORTS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -73,12 +74,17 @@ export function venueAggregationDoneBarTestsPresent(): boolean {
   return VENUE_AGGREGATION_DONE_BAR_TEST_FILES.every((file) => existsSync(join(here, file)));
 }
 
+export function venueAggregationLiveNetworkCiHonest(): boolean {
+  return venueAggregationLiveNetworkCiWired();
+}
+
 export function venueAggregationTrackerBackendDoneBarMet(): boolean {
   return (
     venueAggregationExportsInIndexSource().length === VENUE_AGGREGATION_PACKAGE_EXPORTS.length &&
     venueAggregationPolicyHonest() &&
     venueAggregationTradeFactoryComplete() &&
-    venueAggregationDoneBarTestsPresent()
+    venueAggregationDoneBarTestsPresent() &&
+    venueAggregationLiveNetworkCiHonest()
   );
 }
 
