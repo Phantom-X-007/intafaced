@@ -159,6 +159,17 @@ describe('execution boot ems store wiring (D53)', () => {
   });
 });
 
+describe('execution boot sealed registry wiring (D54)', () => {
+  it('index wires SealedHouseTenantRegistry and public MD supplement into boot', () => {
+    const src = indexSrc();
+    expect(src).toContain('new SealedHouseTenantRegistry()');
+    expect(src).toContain('createExecutionRouter(');
+    expect(src).toContain('registry,');
+    expect(src).toContain('buildExecutionVenueMarketMapsWithPublicMdSupplement(executionVenueIds)');
+    expect(src).toContain('publicMdSupplementVenueIds: venueMarketMaps.publicMdSupplementVenueIds');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
