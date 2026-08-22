@@ -450,3 +450,24 @@ describe('aggregation trading door — D74 mount cert complete', () => {
     }
   });
 });
+
+describe('aggregation trading door — D76 denon complete', () => {
+  it('mount cert, aggregation policy, trade factory, and operator credential board all green', () => {
+    expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
+    expect(venueAggregationMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+    const md = describeVenueAggregationPolicy();
+    const trade = describeTradingHalfPolicy();
+    expect(md.publicMarketDataOnly).toBe(true);
+    expect(md.inventsCredentials).toBe(false);
+    expect(trade.tradeFactoryCoversAllPublicMarketDataVenues).toBe(true);
+    expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
+    expect(describeVenueOperatorCredentials({})).toMatchObject({
+      venueIds: [...PUBLIC_MARKET_DATA_VENUE_IDS],
+      inventsCredentials: false,
+      liveCredentialsOperatorIssued: true,
+    });
+    for (const bad of ['', 'off', 'kraken-spot']) {
+      expect(shouldRefuseTradeAdapterConstruction(bad)).toBe(true);
+    }
+  });
+});
