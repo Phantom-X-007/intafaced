@@ -30,3 +30,15 @@ describe('quant honesty door status — data-lake path alignment (D39)', () => {
     expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
   });
 });
+
+describe('quant honesty door status — package labels (D46)', () => {
+  it('doors label quant-honesty, connect-data-lake, and composite packages', () => {
+    const status = describeQuantHonestyDoorStatus();
+    const byPath = Object.fromEntries(status.doors.map((door) => [door.path, door.package]));
+    expect(byPath[QUANT_HONESTY_ASSESS_PATH]).toBe('@intafaced/quant-honesty');
+    expect(byPath['/quant/honesty/assess-comparison-order']).toBe('@intafaced/quant-honesty');
+    expect(byPath['/quant/honesty/performance-labels']).toBe('@intafaced/quant-honesty');
+    expect(byPath[EDGE_QUANT_SURFACE_RENDER_DOOR]).toBe('@intafaced/connect-data-lake');
+    expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toBe('composite');
+  });
+});

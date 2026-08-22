@@ -236,7 +236,7 @@ describe('/admin/status — control-plane summary', () => {
         compositeHonestyWired: boolean;
         inventsReturns: boolean;
         edgeDoorPathsAlignedWithDataLake: boolean;
-        doors: { path: string }[];
+        doors: { path: string; package: string }[];
       };
     };
     expect(body.quantHonesty.compositeHonestyWired).toBe(true);
@@ -245,6 +245,10 @@ describe('/admin/status — control-plane summary', () => {
     const doorPaths = body.quantHonesty.doors.map((door) => door.path);
     expect(doorPaths).toContain('/quant/honesty/assess-composite');
     expect(doorPaths).toContain('/quant/honesty/assess-surface-render');
+    const byPath = Object.fromEntries(body.quantHonesty.doors.map((door) => [door.path, door.package]));
+    expect(byPath['/quant/honesty/assess-surface-render']).toBe('@intafaced/connect-data-lake');
+    expect(byPath['/quant/honesty/assess-composite']).toBe('composite');
+    expect(byPath['/quant/honesty/assess-backtest']).toBe('@intafaced/quant-honesty');
   });
 
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
