@@ -1083,6 +1083,13 @@ module.exports = {
             left: "Left",
             role: "Role",
             streamIssued: "Stream credential issued",
+            createRoom: "Create room",
+            createRoomLead: "A signed-in host opens a lobby. minStake is an optional decimal string — leave it blank to omit it. Named refuse stays named.",
+            createRoomSlug: "Slug",
+            createRoomSlugHint: "lowercase letters, digits, hyphens · 3–64",
+            createRoomSubmit: "Create room",
+            createRoomSignIn: "Sign in to create a room",
+            createRoomCreated: "Room created",
             curriculum: "Curriculum",
             curriculumLead: "Playbooks on one of four paths. Complete one. An unknown slug is refused by name.",
             paths: {
