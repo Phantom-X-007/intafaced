@@ -130,6 +130,7 @@ interface PayStubs {
   getSettlement?: ReturnType<typeof vi.fn>;
   getMerchant?: ReturnType<typeof vi.fn>;
   getMerchantByUserId?: ReturnType<typeof vi.fn>;
+  openCheckoutSession?: ReturnType<typeof vi.fn>;
 }
 
 interface SubStubs {
@@ -168,12 +169,21 @@ async function mountDoors(opts: { pay?: PayStubs; subs?: SubStubs; trees?: SubMe
     });
   const getMerchantByUserId =
     opts.pay?.getMerchantByUserId ?? vi.fn(async (userId: string) => (userId === USER ? ({ id: MERCHANT } as never) : null));
+  const openCheckoutSession =
+    opts.pay?.openCheckoutSession ??
+    vi.fn(async () => {
+      throw new PayError('checkout not exercised in this test', 'pay.checkout_session_not_found');
+    });
 
   const pay = {
     settleWindow,
     getSettlement,
     getMerchant,
     getMerchantByUserId,
+    openCheckoutSession,
+    getCheckoutSession: async () => {
+      throw new PayError('checkout not exercised in this test', 'pay.checkout_session_not_found');
+    },
     listSettlements: async () => [],
     releasePendingSettlement: async () => {
       throw new PayError('not pending', 'pay.settlement_not_pending');
@@ -673,6 +683,33 @@ describe('D26-P2-01b public doors — grant refuse invent authority', () => {
 
     expect(statusCode).toBe(401);
     expect(grantPermission).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
+describe('D28 public doors — live-only KYB money gate on checkout.open', () => {
+  it('checkout.open refuses pay.kyb_required over the wire (no invent hosted session)', async () => {
+    const openCheckoutSession = vi.fn(async () => {
+      throw new PayError(`Merchant ${MERCHANT} KYB is none; live acquiring requires approved KYB`, 'pay.kyb_required');
+    });
+    const { app } = await mountDoors({ pay: { openCheckoutSession } });
+
+    const { statusCode, body } = await post(
+      app,
+      'checkout.open',
+      { token: 'link-token-abc12345', geoCountry: 'DE' },
+      { 'x-intafaced-region': 'DE' },
+    );
+
+    expect(statusCode).toBe(403);
+    expect(body.error!.message).toMatch(/pay\.kyb_required/);
+    expect(openCheckoutSession).toHaveBeenCalledWith({
+      linkToken: 'link-token-abc12345',
+      amount: undefined,
+      assetId: undefined,
+      geoCountry: 'DE',
+      method: undefined,
+    });
     await app.close();
   });
 });
