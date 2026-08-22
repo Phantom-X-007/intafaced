@@ -356,6 +356,28 @@ describe('execution boot ready and mount cert complete (D74)', () => {
   });
 });
 
+describe('execution boot and sor mount — D75 denon complete', () => {
+  it('health/ready boot, credential board, EMS store, and mount cert board all green', () => {
+    const src = indexSrc();
+    const card = executionSorMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'execution.sor',
+      doors: 4,
+      doorsMounted: 4,
+      backendDoneBarMet: true,
+      mountComplete: true,
+      gaps: 3,
+    });
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(src).toContain("app.get('/health'");
+    expect(src).toContain("app.get('/ready'");
+    expect(src).toContain('buildExecutionReadyResponse({');
+    expect(src).toContain('FileEmsOrderStore');
+    expect(src).toContain('InMemoryEmsOrderStore');
+    expect(describeExecutionVenueCredentialBoard(['okx-spot'], {}).inventsCredentials).toBe(false);
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
