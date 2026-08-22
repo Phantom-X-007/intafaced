@@ -10,6 +10,7 @@ import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
   describeExecutionVenueCredentialBoard,
   parseExecutionVenueIds,
+  unionExecutionVenueIds,
 } from './venue-adapters.js';
 import { buildExecutionVenueMarketMapsWithPublicMdSupplement } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap } from './trade-book-snapshot.js';
@@ -34,10 +35,12 @@ registerProcessHooks(
  */
 const registry = new SealedHouseTenantRegistry();
 const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
-const venueCredentialBoard = describeExecutionVenueCredentialBoard(executionVenueIds);
 const venueTradeMaps = buildExecutionVenueTradeMapsWithOperatorSupplement(executionVenueIds);
 const venueAccountMaps = buildExecutionVenueAccountMapsWithOperatorSupplement(executionVenueIds);
 const venueMarketMaps = buildExecutionVenueMarketMapsWithPublicMdSupplement(executionVenueIds);
+const venueCredentialBoard = describeExecutionVenueCredentialBoard(
+  unionExecutionVenueIds(executionVenueIds, venueTradeMaps.operatorSupplementVenueIds, venueAccountMaps.operatorSupplementVenueIds),
+);
 const emsStorePath = env.EXECUTION_EMS_STORE_PATH.trim();
 const emsStore = emsStorePath ? new FileEmsOrderStore(emsStorePath) : new InMemoryEmsOrderStore();
 const tradeBookSnapshot = buildTradeBookSnapshotMap(env.TRADE_URL);

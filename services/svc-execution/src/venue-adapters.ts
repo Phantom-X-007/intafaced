@@ -130,6 +130,21 @@ export function describeExecutionVenueCredentialSources(
 
 export type ExecutionVenueCredentialBoardEntry = ReturnType<typeof describeExecutionVenueCredentialSources>;
 
+/** Dedupe venue ids for credential board union (execution list + operator supplements). */
+export function unionExecutionVenueIds(...lists: readonly (readonly string[])[]): readonly string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const list of lists) {
+    for (const rawId of list) {
+      const venueId = rawId.trim().toLowerCase();
+      if (!venueId || seen.has(venueId)) continue;
+      seen.add(venueId);
+      out.push(venueId);
+    }
+  }
+  return out;
+}
+
 /** Operator board for EXECUTION_VENUE_IDS — per-venue credential source honesty. */
 export function describeExecutionVenueCredentialBoard(
   venueIds: readonly string[],
