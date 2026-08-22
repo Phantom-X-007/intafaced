@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeOtcPolicy } from './otc-policy.js';
 import {
+  OTC_HONEST_GAPS,
   OTC_MOUNTED_DOORS,
   OTC_TRACKER_ID,
   otcDoneBarTestsPresent,
@@ -53,5 +54,14 @@ describe('trade.otc mount matrix (D50)', () => {
       doorsMounted: OTC_MOUNTED_DOORS.length,
       mountComplete: true,
     });
+  });
+});
+
+describe('trade.otc mount vs tracker gaps board (D52)', () => {
+  it('otcMountVsTrackerBoardCard names honest gaps without flipping backend done bar', () => {
+    const card = otcMountVsTrackerBoardCard();
+    expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
   });
 });
