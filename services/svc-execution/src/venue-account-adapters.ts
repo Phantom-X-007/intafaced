@@ -4,7 +4,7 @@
  * Same EXECUTION_VENUE_IDS + EXECUTION_VENUE_{ID}_* credential env as trade.
  * Blank credentials → refuse-closed (venue skipped). Unknown ids skipped.
  */
-import { createVenueAccountAdapter, loadVenueOperatorCredentials, PUBLIC_MARKET_DATA_VENUE_IDS } from '@intafaced/venue-adapter';
+import { buildOperatorVenueAccountMaps, createVenueAccountAdapter } from '@intafaced/venue-adapter';
 import type { AccountAdapter, VenueCredentials } from '@intafaced/venue-contracts';
 import { accountAdapterBalances, type OmsBalancesFn } from './oms-account-balances.js';
 import { accountAdapterPositions, type OmsPositionsFn } from './oms-account-positions.js';
@@ -118,23 +118,14 @@ export function buildExecutionVenueAccountMapsWithOperatorSupplement(
   const wiredVenueIds = [...primary.wiredVenueIds];
   const operatorSupplementVenueIds: string[] = [];
 
-  for (const venueId of PUBLIC_MARKET_DATA_VENUE_IDS) {
+  const operatorMaps = buildOperatorVenueAccountMaps(env);
+  for (const venueId of operatorMaps.wiredVenueIds) {
     if (balancesByVenue[venueId]) continue;
-    const credentials = loadVenueOperatorCredentials(venueId, env);
-    if (!credentials) continue;
-    try {
-      const wire = wireExecutionVenueAccountAdapter(venueId, credentials, options);
-      balancesByVenue[venueId] = wire.balances;
-      positionsByVenue[venueId] = wire.positions;
-      railsByVenue[venueId] = wire.rails;
-      wiredVenueIds.push(venueId);
-      operatorSupplementVenueIds.push(venueId);
-    } catch (err) {
-      if (err instanceof ExecutionVenueUnknownError || err instanceof ExecutionVenueCredentialsUnsetError) {
-        continue;
-      }
-      throw err;
-    }
+    balancesByVenue[venueId] = operatorMaps.balancesByVenue[venueId];
+    positionsByVenue[venueId] = operatorMaps.positionsByVenue[venueId];
+    railsByVenue[venueId] = operatorMaps.transferRailsByVenue[venueId];
+    wiredVenueIds.push(venueId);
+    operatorSupplementVenueIds.push(venueId);
   }
 
   return { balancesByVenue, positionsByVenue, railsByVenue, wiredVenueIds, operatorSupplementVenueIds };

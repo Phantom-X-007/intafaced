@@ -98,11 +98,7 @@ describe('buildExecutionVenueAccountMaps', () => {
       VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
       VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
     };
-    const maps = buildExecutionVenueAccountMapsWithOperatorSupplement([], {
-      env,
-      credentialsFor: (id) => loadExecutionVenueCredentials(id, env),
-      createAdapter: ((id) => (id === 'okx-spot' ? fakeAccount() : null)) as typeof createVenueAccountAdapter,
-    });
+    const maps = buildExecutionVenueAccountMapsWithOperatorSupplement([], { env });
     expect(maps.wiredVenueIds).toEqual(['okx-spot']);
     expect(maps.operatorSupplementVenueIds).toEqual(['okx-spot']);
     expect(maps.balancesByVenue['okx-spot']).toBeTypeOf('function');
