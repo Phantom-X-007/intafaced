@@ -188,6 +188,21 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(creds.unsetVenueIds).toEqual(['bybit-spot']);
   });
 
+  it('buildOperatorVenueTradeAdapters and buildOperatorVenueAccountAdapters expose matching adapter keys (D55)', () => {
+    const env = {
+      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
+    };
+    const trade = buildOperatorVenueTradeAdapters(env);
+    const account = buildOperatorVenueAccountAdapters(env);
+    expect(Object.keys(trade.adapters).sort()).toEqual([...trade.wiredVenueIds].sort());
+    expect(Object.keys(account.adapters).sort()).toEqual([...account.wiredVenueIds].sort());
+    expect(trade.wiredVenueIds).toEqual(['bybit-spot']);
+    expect(account.wiredVenueIds).toEqual(['bybit-spot']);
+    expect(trade.adapters['bybit-spot']?.venue.id).toBe('bybit-spot');
+    expect(account.adapters['bybit-spot']?.venue.id).toBe('bybit-spot');
+  });
+
   it('buildOperatorVenueTradeAdapters and buildOperatorVenueAccountAdapters wire when operator env is complete (D47)', () => {
     const env = {
       VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
