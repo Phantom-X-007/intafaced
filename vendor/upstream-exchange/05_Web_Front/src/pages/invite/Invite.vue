@@ -118,6 +118,67 @@
         </div>
       </IxState>
     </div>
+
+    <!-- ── durable accruals + ancestor ids; empty when unpublished ──────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('invite.accruals.title') }}</h2>
+        <span class="ix-sub">affiliates.myAccruals</span>
+      </div>
+      <p class="ix-lead">{{ $t('invite.accruals.lead') }}</p>
+
+      <IxState
+        :loading="ancestors.loading"
+        :reason="ancestors.reason"
+        :message="ancestors.message"
+        endpoint="/api/identity/trpc/affiliates.myAncestors"
+      >
+        <div v-if="ancestorIds.length" class="ix-kv" style="margin-bottom:16px;">
+          <div v-for="id in ancestorIds" :key="id" class="ix-kv-item">
+            <span class="k">{{ $t('invite.accruals.ancestorId') }}</span>
+            <span class="v">{{ id }}</span>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet" style="margin-bottom:16px;">{{ $t('invite.accruals.ancestorsEmpty') }}</div>
+      </IxState>
+
+      <IxState
+        :loading="accruals.loading"
+        :reason="accruals.reason"
+        :message="accruals.message"
+        endpoint="/api/identity/trpc/affiliates.myAccruals"
+      >
+        <div v-if="accrualRows.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('invite.accruals.feeEventId') }}</th>
+                <th>{{ $t('invite.accruals.payerId') }}</th>
+                <th>{{ $t('invite.accruals.hop') }}</th>
+                <th>{{ $t('invite.accruals.feeAmount') }}</th>
+                <th>{{ $t('invite.accruals.commissionAmount') }}</th>
+                <th>{{ $t('invite.accruals.asset') }}</th>
+                <th>{{ $t('invite.accruals.accruedAt') }}</th>
+                <th>{{ $t('invite.accruals.sourceModule') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in accrualRows" :key="row.feeEventId">
+                <td>{{ row.feeEventId }}</td>
+                <td>{{ row.payerId }}</td>
+                <td>{{ row.hop }}</td>
+                <td>{{ row.feeAmount }}</td>
+                <td>{{ row.commissionAmount }}</td>
+                <td>{{ row.asset }}</td>
+                <td>{{ row.accruedAt }}</td>
+                <td>{{ row.sourceModule }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('invite.accruals.empty') }}</div>
+      </IxState>
+    </div>
   </div>
 </template>
 
@@ -131,7 +192,8 @@
  * screen never prints a rate or an earnings figure.
  *
  * `affiliates.policy` is the honesty board (structure, not rates). Empty
- * referrer stays empty copy, never a zero.
+ * referrer stays empty copy, never a zero. Accruals list durable rows or
+ * empty copy — never invented commissions.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
@@ -146,18 +208,28 @@ export default {
       referrerId: '',
       referrer: this.emptySection(),
       policy: this.emptySection(),
+      accruals: this.emptySection(),
+      ancestors: this.emptySection(),
       attributed: this.emptyAction()
     };
   },
   computed: {
     canAttribute() {
       return Boolean((this.referrerId || '').trim());
+    },
+    accrualRows() {
+      return (this.accruals.data && this.accruals.data.rows) || [];
+    },
+    ancestorIds() {
+      return Array.isArray(this.ancestors.data) ? this.ancestors.data : [];
     }
   },
   created() {
     this.$store.commit('navigate', 'nav-invite');
     this.reloadReferrer();
     this.load('policy', query('identity', 'affiliates.policy', undefined, this.ixToken));
+    this.load('accruals', query('identity', 'affiliates.myAccruals', { limit: 50 }, this.ixToken));
+    this.load('ancestors', query('identity', 'affiliates.myAncestors', undefined, this.ixToken));
   },
   methods: {
     reloadReferrer() {

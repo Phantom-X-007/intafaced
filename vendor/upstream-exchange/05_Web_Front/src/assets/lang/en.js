@@ -99,6 +99,21 @@ module.exports = {
             id: "Referrer id",
             attributedAt: "Attributed at",
             userId: "Your id"
+        },
+        accruals: {
+            title: "Your accruals",
+            lead: "Commission rows this account actually accrued. Empty when none exist or rates are unpublished — not a fabricated figure.",
+            empty: "No accruals on this account",
+            ancestorId: "Ancestor id",
+            ancestorsEmpty: "No ancestor ids on this account",
+            feeEventId: "Fee event",
+            payerId: "Payer id",
+            hop: "Hop",
+            feeAmount: "Fee amount",
+            commissionAmount: "Commission amount",
+            asset: "Asset",
+            accruedAt: "Accrued at",
+            sourceModule: "Source"
         }
     },
     /**
