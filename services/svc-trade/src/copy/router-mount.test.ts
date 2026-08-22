@@ -11,7 +11,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger, parseAmount, recipes, userAvailable } from '@intafaced/ledger-client';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
-import { CopyService } from './copy-service.js';
+import { CopyService, type LookupFollowerFillFeePort } from './copy-service.js';
 import type { CopyFeeShareLaw, CopyJurisdictionLaw } from './fee-share-law.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 
@@ -110,11 +110,28 @@ class BlockingMirrorStore extends MemoryCopyFollowStore {
   }
 }
 
-function makeCopy(opts?: { fee?: CopyFeeShareLaw; jur?: CopyJurisdictionLaw; ledger?: MemoryLedger; store?: MemoryCopyFollowStore }) {
+function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
+  return async (fillId) => ({
+    fillId,
+    userId: FOLLOWER,
+    feeAsset: 'USDT',
+    feeAmount: parseAmount(feeAmount),
+    createdAt: new Date(Date.now() + 60_000),
+  });
+}
+
+function makeCopy(opts?: {
+  fee?: CopyFeeShareLaw;
+  jur?: CopyJurisdictionLaw;
+  ledger?: MemoryLedger;
+  store?: MemoryCopyFollowStore;
+  lookupFollowerFillFee?: LookupFollowerFillFeePort;
+}) {
   return new CopyService(opts?.ledger ?? new MemoryLedger(), {
     feeShareLaw: opts?.fee ?? { published: false },
     jurisdictionLaw: opts?.jur ?? { published: false },
     ...(opts?.store ? { store: opts.store } : {}),
+    ...(opts?.lookupFollowerFillFee ? { lookupFollowerFillFee: opts.lookupFollowerFillFee } : {}),
   });
 }
 
@@ -200,7 +217,12 @@ describe('trade.copy product mount', () => {
         amount: parseAmount('10'),
       }),
     );
-    const copy = makeCopy({ fee: publishedFee, jur: publishedJur, ledger });
+    const copy = makeCopy({
+      fee: publishedFee,
+      jur: publishedJur,
+      ledger,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
     const caller = createTradeRouter(stubTrade(), undefined, copy).createCaller(signed());
     const follow = await caller.copy.follow({
       leaderId: LEADER,
@@ -209,6 +231,22 @@ describe('trade.copy product mount', () => {
       maxNotionalPerOrder: '1000',
       maxAggregateExposure: '10000',
       expiresAt: futureExpiry,
+    });
+    await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'fill-before-kill',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.001',
+      notional: '10',
+    });
+    await caller.copy.planMirror({
+      followId: follow.followId,
+      fillId: 'fill-after-kill',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.001',
+      notional: '10',
     });
 
     ledger.arm();

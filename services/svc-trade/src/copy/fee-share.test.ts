@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, userAvailable, formatAmount, houseFees } from '@intafaced/ledger-client';
-import { attributeCopyFeeShare, planCopyFeeShareSettle, postCopyFeeShareSettle, refusePnlLinkedCopyFee } from './fee-share.js';
+import {
+  attributeCopyFeeShare,
+  canonicalizeCopyFillId,
+  planCopyFeeShareSettle,
+  postCopyFeeShareSettle,
+  refusePnlLinkedCopyFee,
+} from './fee-share.js';
 import { UNPUBLISHED_COPY_FEE_SHARE_LAW, type CopyFeeShareLaw } from './fee-share-law.js';
 import { CopyError } from './errors.js';
 
@@ -38,7 +44,7 @@ describe('attributeCopyFeeShare', () => {
   });
 
   it('shares protocol fee only — no P&L in the formula', () => {
-    // notional 1000, fee 10 bps → protocol fee 1; share 5000 bps → 0.5
+    // settled fill fee 1; share 5000 bps → 0.5. Notional×bps is not the pot.
     const a = attributeCopyFeeShare({
       law: published,
       fillId: 'f2',
@@ -47,6 +53,7 @@ describe('attributeCopyFeeShare', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('1000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('1'),
       roundTripsThisPeriod: 0,
       earningsPaidThisPeriod: 0n,
       feeShareKilled: false,
@@ -76,6 +83,28 @@ describe('attributeCopyFeeShare', () => {
     expect(formatAmount(a.cappedLeaderShare)).toBe('0.35');
   });
 
+  it('refuses omitted fillFeeAmount — never invents protocolFee from notional×bps', () => {
+    // 10000 bps of notional 1000 would invent protocolFee=1000; fill charged 0.7.
+    try {
+      attributeCopyFeeShare({
+        law: published,
+        fillId: 'f2-omit-fill-fee',
+        leaderId: LEADER,
+        followerId: FOLLOWER,
+        assetId: 'USDT',
+        followerFillNotional: parseAmount('1000'),
+        protocolFeeBps: 10_000,
+        roundTripsThisPeriod: 0,
+        earningsPaidThisPeriod: 0n,
+        feeShareKilled: false,
+      });
+      expect.unreachable('should refuse rather than invent protocolFee from notional');
+    } catch (err) {
+      expect(err).toBeInstanceOf(CopyError);
+      expect((err as CopyError).code).toBe('trade.copy_settle_refused');
+    }
+  });
+
   it('applies earnings cap per follower', () => {
     const a = attributeCopyFeeShare({
       law: published,
@@ -85,6 +114,7 @@ describe('attributeCopyFeeShare', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('100000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('100'),
       roundTripsThisPeriod: 0,
       earningsPaidThisPeriod: parseAmount('9.8'),
       feeShareKilled: false,
@@ -102,6 +132,7 @@ describe('attributeCopyFeeShare', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('1000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('1'),
       roundTripsThisPeriod: 2,
       earningsPaidThisPeriod: 0n,
       feeShareKilled: false,
@@ -132,6 +163,31 @@ describe('attributeCopyFeeShare', () => {
 });
 
 describe('planCopyFeeShareSettle + ledger', () => {
+  it('copy-fee / copy-leader-share keys canonicalize UUID case and trailing space', () => {
+    const attr = (fillId: string) =>
+      attributeCopyFeeShare({
+        law: published,
+        fillId,
+        leaderId: LEADER,
+        followerId: FOLLOWER,
+        assetId: 'USDT',
+        followerFillNotional: parseAmount('1000'),
+        protocolFeeBps: 10,
+        fillFeeAmount: parseAmount('1'),
+        roundTripsThisPeriod: 0,
+        earningsPaidThisPeriod: 0n,
+        feeShareKilled: false,
+      });
+    const lower = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const a = planCopyFeeShareSettle(attr(lower));
+    const b = planCopyFeeShareSettle(attr(`${lower.toUpperCase()} `));
+    expect(canonicalizeCopyFillId(`${lower.toUpperCase()} `)).toBe(lower);
+    expect(a.sweep.idempotencyKey).toBe(b.sweep.idempotencyKey);
+    expect(a.payout.idempotencyKey).toBe(b.payout.idempotencyKey);
+    expect(a.sweep.idempotencyKey).toContain(`copy-fee:${lower}`);
+    expect(a.payout.idempotencyKey).toBe(`reward:copy-leader-share:${lower}:${LEADER}`);
+  });
+
   it('posts via ledger-client sweepFeesToRewards + rewardPay only', async () => {
     const ledger = new MemoryLedger();
     // Seed house trade fees (protocol fee already collected).
@@ -163,6 +219,7 @@ describe('planCopyFeeShareSettle + ledger', () => {
       assetId: 'USDT',
       followerFillNotional: parseAmount('1000'),
       protocolFeeBps: 10,
+      fillFeeAmount: parseAmount('1'),
       roundTripsThisPeriod: 0,
       earningsPaidThisPeriod: 0n,
       feeShareKilled: false,

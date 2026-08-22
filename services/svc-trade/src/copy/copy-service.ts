@@ -13,7 +13,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { formatAmount, parseAmount, type LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import {
   autoMirrorPlaceStatus,
@@ -41,13 +41,33 @@ import {
 import { assertCopyRegionAllowed, parseCopyEnvelope, presentCopyFollow, type CopyFollow } from './follows.js';
 import {
   attributeCopyFeeShare,
+  canonicalizeCopyFillId,
   planCopyFeeShareSettle,
   postCopyFeeShareSettle,
   presentFeeShareAttribution,
   refusePnlLinkedCopyFee,
 } from './fee-share.js';
 import { parseLeaderFillObservation, planMirror, presentMirrorPlan, refuseCopyLeaderRanking, type MirrorSide } from './mirror.js';
-import { MemoryCopyFollowStore, rethrowCopyFollowUnique, type CopyFollowStore } from './follow-store.js';
+import {
+  MemoryCopyFollowStore,
+  isPendingFeeShareClaim,
+  rethrowCopyFollowUnique,
+  stampedPendingFeeShareReserve,
+  type CopyFollowStore,
+} from './follow-store.js';
+
+/** Settled follower fill fee — `fills.fee_amount`, never a notional×bps invent. */
+export type FollowerFillFee = {
+  readonly fillId: string;
+  readonly userId: string;
+  readonly feeAsset: string;
+  readonly feeAmount: Amount;
+  /** Fill timestamp — refuse when before follow.createdAt (pre-follow volume). */
+  readonly createdAt?: Date;
+};
+
+/** Production wires `trade.fills`. Absent or missing fill row → refuse-closed. */
+export type LookupFollowerFillFeePort = (fillId: string) => Promise<FollowerFillFee | null>;
 
 export interface CopyServiceOptions {
   feeShareLaw?: CopyFeeShareLaw;
@@ -67,6 +87,11 @@ export interface CopyServiceOptions {
   placeMirrorEnabled?: boolean;
   /** Paper vs live honesty — never place live from a paper leader fill. */
   inspectMarket?: InspectCopyMarket;
+  /**
+   * Settled follower fill fee (`fills.fee_amount`). Required to settle.
+   * Missing lookup or missing fill → refuse. Never a client `fillFeeAmount`.
+   */
+  lookupFollowerFillFee?: LookupFollowerFillFeePort;
 }
 
 type FollowRef = { followId: string };
@@ -87,7 +112,7 @@ type SettleFeeShareInput = {
   assetId: string;
   followerFillNotional: string;
   protocolFeeBps: number;
-  /** Settled fill fee when known — preferred over notional×bps invent. */
+  /** Ignored. Protocol fee is the fill row only — never a caller-invented pot. */
   fillFeeAmount?: string;
 };
 
@@ -99,6 +124,7 @@ export class CopyService {
   private readonly placeFollowerOrder: PlaceFollowerOrderPort | null;
   private readonly placeMirrorEnabled: boolean;
   private readonly inspectMarket: InspectCopyMarket | null;
+  private readonly lookupFollowerFillFee: LookupFollowerFillFeePort | null;
 
   constructor(
     private readonly ledger: LedgerClient,
@@ -111,6 +137,7 @@ export class CopyService {
     this.placeFollowerOrder = options.placeFollowerOrder ?? null;
     this.placeMirrorEnabled = options.placeMirrorEnabled ?? parseCopyPlaceMirrorFlag(process.env.TRADE_COPY_PLACE_MIRROR);
     this.inspectMarket = options.inspectMarket ?? null;
+    this.lookupFollowerFillFee = options.lookupFollowerFillFee ?? null;
   }
 
   /**
@@ -170,7 +197,7 @@ export class CopyService {
       if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
         throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
       }
-      const prior = await store.getMirroredFill(follow.followId, input.fillId.trim());
+      const prior = await store.getMirroredFill(follow.followId, canonicalizeCopyFillId(input.fillId));
       if (!prior) {
         throw new CopyError(
           'No durable mirror plan for this fillId — planMirror first',
@@ -433,6 +460,34 @@ export class CopyService {
   }
 
   /**
+   * Protocol fee is the fill's collected fee_amount. Never notional×bps
+   * and never a caller fillFeeAmount. Missing lookup or missing fill → refuse.
+   */
+  private async resolveSettledProtocolFee(follow: CopyFollow, fillId: string, assetId: string): Promise<Amount> {
+    if (!this.lookupFollowerFillFee) {
+      throw new CopyError('Follower fill not found — refuse rather than invent protocolFee from notional×bps', 'trade.copy_settle_refused');
+    }
+    const fill = await this.lookupFollowerFillFee(fillId);
+    if (!fill) {
+      throw new CopyError('Follower fill not found — refuse rather than invent protocolFee from notional×bps', 'trade.copy_settle_refused');
+    }
+    if (fill.userId !== follow.followerId) {
+      throw new CopyError('Fill does not belong to this follower — refuse fee-share', 'trade.copy_settle_refused');
+    }
+    if (fill.feeAsset !== assetId) {
+      throw new CopyError('Fill fee asset does not match settle asset — refuse fee-share', 'trade.copy_settle_refused');
+    }
+    if (fill.feeAmount < 0n) {
+      throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
+    }
+    const filledAt = fill.createdAt?.getTime();
+    if (filledAt === undefined || Number.isNaN(filledAt) || filledAt < follow.createdAt.getTime()) {
+      throw new CopyError('Fill predates this follow — refuse fee-share', 'trade.copy_settle_refused');
+    }
+    return fill.feeAmount;
+  }
+
+  /**
    * Attribute + settle leader fee-share for a follower fill via ledger-client.
    * Blank §8 rates → refuse. Cap / kill → typed skip or refuse.
    *
@@ -445,9 +500,26 @@ export class CopyService {
    *
    * Ledger keys stay on fillId. Period boundary (D11) is not invented here —
    * pair-lifetime counters remain as today.
+   * Expired envelope refuses (same as placeMirror). One fillId pays one
+   * leader (global settle once-key). Fill must be copy-mirrored under this
+   * follow and not predate follow.createdAt.
    * Same-fill redelivery on the mirror path is closed via claimMirrorFill.
    * Same-fill redelivery on **this** path is closed via runFeeShareSettleOnce —
-   * reserveEarnings must not fire twice for one fillId (period poison).
+   * unique fill_id is claimed **before** ledger recipes so a crash after post
+   * cannot pay a second leader (`copy-leader-share:${fillId}:${leaderId}`).
+   * A throw after sweep/payout keeps that claim (do not DELETE). Same-follow
+   * pending retries `run` (keys `copy-fee:${fillId}` /
+   * `copy-leader-share:${fillId}:${leaderId}` are idempotent). Unclaim CopyError
+   * only when this call INSERTed **and reserve has not run** — leftover
+   * pending retry and post-reserve CopyError (stamp 0-row) keep the row.
+   * Pending retry must not re-reserve when this fill already occupied cap
+   * (stamped `cappedLeaderShare` on the pending row). Reserve+stamp is one
+   * step so leftover stamp-0 cannot mean both never-reserved and reserved-
+   * stamp-lost. Crash after post / before UPDATE would persist cap_reached
+   * over a paid fill and burn cap twice. Post-throw does **not**
+   * releaseEarnings while unique fill_id is kept — a burned cap slot is
+   * better than over-pay. Leftover retry re-posts the persisted reserved
+   * amount, never gross.
    */
   async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {
     return this.store.runFollowExclusive(input.followId, (store) => this.settleFeeShareExclusive(store, principal, input));
@@ -461,19 +533,30 @@ export class CopyService {
     if (follow.followerId !== principal.userId) {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
+    if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
+      throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
+    }
 
-    const once = await store.runFeeShareSettleOnce(follow.followId, input.fillId, async () => {
+    const fillId = canonicalizeCopyFillId(input.fillId);
+    const assetId = input.assetId.trim();
+    const once = await store.runFeeShareSettleOnce(follow.followId, fillId, async (ctx) => {
       const key = `${follow.leaderId}:${follow.followerId}`;
       const period = await store.getPeriodStats(key);
+      requirePublishedCopyFeeShareLaw(this.feeShareLaw);
+      const mirrored = await store.getMirroredFill(follow.followId, fillId);
+      if (!mirrored) {
+        throw new CopyError('Fill is not a copy-mirrored fill for this follow — refuse fee-share', 'trade.copy_settle_refused');
+      }
+      const settledFee = await this.resolveSettledProtocolFee(follow, fillId, assetId);
       const attribution = attributeCopyFeeShare({
         law: this.feeShareLaw,
-        fillId: input.fillId,
+        fillId,
         leaderId: follow.leaderId,
         followerId: follow.followerId,
-        assetId: input.assetId.trim(),
+        assetId,
         followerFillNotional: parseAmount(input.followerFillNotional),
         protocolFeeBps: input.protocolFeeBps,
-        ...(input.fillFeeAmount !== undefined ? { fillFeeAmount: parseAmount(input.fillFeeAmount) } : {}),
+        fillFeeAmount: settledFee,
         roundTripsThisPeriod: period.roundTrips,
         earningsPaidThisPeriod: period.earningsPaid,
         feeShareKilled: follow.feeShareKilled,
@@ -492,11 +575,43 @@ export class CopyService {
       const cap = parseAmount(law.earningsCapPerFollower);
 
       // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
-      // reserveEarnings always +1 round-trip so decay still advances on skips.
+      // First INSERT reserves and stamps in one step before post. Leftover
+      // retry uses that stamp (ledger keys copy-fee:${fillId} /
+      // copy-leader-share:${fillId}:${leaderId} are idempotent). Never post
+      // grossLeaderShare. Stamp 0-row throws (do not post unstamped) and rolls
+      // the reserve back — leftover stamp-0 means never reserved and may
+      // reserve once. A committed reserve is distinguishable on the pending
+      // row (cappedLeaderShare > 0); leftover must not re-reserve.
       const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
-      const reserved = await store.reserveEarnings(key, intend, cap);
+      let reservedAmount: Amount;
+      if (ctx.insertedThisCall) {
+        ctx.reservedThisCall = true;
+        const reserved = await store.reserveAndStampPendingFeeShare(key, intend, cap, follow.followId, fillId);
+        reservedAmount = reserved.reserved;
+      } else {
+        const pending = await store.getSettledFeeShare(follow.followId, fillId);
+        const alreadyReserved = stampedPendingFeeShareReserve(pending);
+        if (alreadyReserved > 0n) {
+          reservedAmount = alreadyReserved;
+        } else if (intend > 0n) {
+          ctx.reservedThisCall = true;
+          const reserved = await store.reserveAndStampPendingFeeShare(key, intend, cap, follow.followId, fillId);
+          reservedAmount = reserved.reserved;
+        } else {
+          reservedAmount = 0n;
+        }
+      }
 
-      if (reserved.reserved <= 0n) {
+      if (reservedAmount <= 0n) {
+        if (!ctx.insertedThisCall) {
+          const pending = await store.getSettledFeeShare(follow.followId, fillId);
+          if (pending && isPendingFeeShareClaim(pending)) {
+            throw new CopyError(
+              'Pending fee-share has no stamped reserve — refuse rather than stamp skip over a reserved fill',
+              'trade.copy_settle_refused',
+            );
+          }
+        }
         const skipped =
           attribution.skippedReason !== null
             ? attribution
@@ -522,16 +637,11 @@ export class CopyService {
 
       const finalAttribution = {
         ...attribution,
-        cappedLeaderShare: reserved.reserved,
+        cappedLeaderShare: reservedAmount,
         skippedReason: null as null,
       };
       const plan = planCopyFeeShareSettle(finalAttribution);
-      try {
-        await postCopyFeeShareSettle(this.ledger, plan);
-      } catch (err) {
-        await store.releaseEarnings(key, reserved.reserved);
-        throw err;
-      }
+      await postCopyFeeShareSettle(this.ledger, plan);
       return {
         fillId: finalAttribution.fillId,
         followId: follow.followId,

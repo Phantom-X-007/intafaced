@@ -10,24 +10,39 @@ import { formatAmount, mulBps, parseAmount, recipes, type Amount, type LedgerCli
 import { COPY_FEE_SHARE_RESIDUAL, CopyError } from './errors.js';
 import { requirePublishedCopyFeeShareLaw, type CopyFeeShareLaw } from './fee-share-law.js';
 
+const COPY_FILL_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Trim, and lowercase UUID-shaped ids. Lookup and PG uuid-match already
+ * collapse aliases; settle keys (`copy-fee:`, `copy-leader-share:`,
+ * `runFeeShareSettleOnce`) must use the same canonical form or one fill
+ * is paid twice.
+ */
+export function canonicalizeCopyFillId(fillId: string): string {
+  const trimmed = fillId.trim();
+  if (!trimmed) {
+    throw new CopyError('fillId is required', 'trade.copy_settle_refused');
+  }
+  return COPY_FILL_UUID_RE.test(trimmed) ? trimmed.toLowerCase() : trimmed;
+}
+
 export interface FeeShareAttributionInput {
   readonly law: CopyFeeShareLaw;
   readonly fillId: string;
   readonly leaderId: string;
   readonly followerId: string;
   readonly assetId: string;
-  /** Follower fill notional (quote asset). Used only when `fillFeeAmount` is omitted. */
+  /** Follower fill notional (quote asset). Not a fee — never used as the share pot. */
   readonly followerFillNotional: Amount;
   /**
-   * Protocol maker/taker fee bps. Used only when `fillFeeAmount` is omitted —
-   * the fallback re-derives fee from notional and can disagree with the fill
-   * row (ceil vs floor, base vs quote). Prefer the settled fee.
+   * Protocol maker/taker fee bps. Informational on this path — never multiplied
+   * against notional to invent `protocolFee` (that over-claims the house pot).
    */
   readonly protocolFeeBps: number;
   /**
    * THE FEE ACTUALLY COLLECTED on the follower fill (`fills.fee_amount` / fee
-   * asset). When present, share is of THIS amount — never a re-invented
-   * notional×bps that can over-claim the house fee pot (audit R3).
+   * asset). Required. Share is of THIS amount — never a re-invented
+   * notional×bps that can over-claim the house fee pot.
    */
   readonly fillFeeAmount?: Amount;
   /** Round-trips already attributed this period for churn decay. */
@@ -64,32 +79,23 @@ export interface FeeShareSettlePlan {
  */
 export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShareAttribution {
   const law = requirePublishedCopyFeeShareLaw(input.law);
+  const fillId = canonicalizeCopyFillId(input.fillId);
 
   if (input.feeShareKilled) {
     throw new CopyError('Fee-share killed for this leader/follow — refuse payout', 'trade.copy_fee_share_killed');
   }
 
-  if (input.fillFeeAmount !== undefined) {
-    if (input.fillFeeAmount < 0n) {
-      throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
-    }
-  } else {
-    if (!Number.isInteger(input.protocolFeeBps) || input.protocolFeeBps < 0 || input.protocolFeeBps > 10_000) {
-      throw new CopyError('protocolFeeBps must be an integer 0..10000', 'trade.copy_settle_refused', COPY_FEE_SHARE_RESIDUAL);
-    }
-    if (input.followerFillNotional <= 0n) {
-      throw new CopyError('Follower fill notional must be strictly positive', 'trade.copy_settle_refused');
-    }
+  if (input.fillFeeAmount === undefined) {
+    throw new CopyError(
+      'Settled fill fee is required — refuse rather than invent protocolFee from notional×bps',
+      'trade.copy_settle_refused',
+    );
+  }
+  if (input.fillFeeAmount < 0n) {
+    throw new CopyError('fillFeeAmount must not be negative', 'trade.copy_settle_refused');
   }
 
-  /**
-   * Prefer the fee the fill actually collected. Re-deriving from notional×bps
-   * can disagree with tradeFill (ceil, receivable asset) and over-claim the
-   * shared house fee pot. Legacy callers without fillFeeAmount keep the
-   * notional path so existing tests and dormant mount code still typecheck.
-   */
-  const protocolFee =
-    input.fillFeeAmount !== undefined ? input.fillFeeAmount : mulBps(input.followerFillNotional, input.protocolFeeBps, 'floor');
+  const protocolFee = input.fillFeeAmount;
   const appliedShareBps =
     law.decayRoundTrips > 0 && input.roundTripsThisPeriod >= law.decayRoundTrips ? law.decayShareBps : law.leaderShareBps;
 
@@ -99,7 +105,7 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
 
   if (remaining <= 0n) {
     return {
-      fillId: input.fillId,
+      fillId,
       leaderId: input.leaderId,
       followerId: input.followerId,
       assetId: input.assetId,
@@ -114,7 +120,7 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
   const cappedLeaderShare = grossLeaderShare <= remaining ? grossLeaderShare : remaining;
   if (cappedLeaderShare <= 0n) {
     return {
-      fillId: input.fillId,
+      fillId,
       leaderId: input.leaderId,
       followerId: input.followerId,
       assetId: input.assetId,
@@ -127,7 +133,7 @@ export function attributeCopyFeeShare(input: FeeShareAttributionInput): FeeShare
   }
 
   return {
-    fillId: input.fillId,
+    fillId,
     leaderId: input.leaderId,
     followerId: input.followerId,
     assetId: input.assetId,
@@ -152,8 +158,9 @@ export function planCopyFeeShareSettle(attribution: FeeShareAttribution): FeeSha
     );
   }
 
-  const windowId = `copy-fee:${attribution.fillId}`;
-  const rewardId = `copy-leader-share:${attribution.fillId}:${attribution.leaderId}`;
+  const fillId = canonicalizeCopyFillId(attribution.fillId);
+  const windowId = `copy-fee:${fillId}`;
+  const rewardId = `copy-leader-share:${fillId}:${attribution.leaderId}`;
 
   return {
     attribution,

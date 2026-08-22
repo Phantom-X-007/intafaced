@@ -53,6 +53,7 @@ import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
 import { OtcDeskService } from './otc/otc-service.js';
 import { SqlOtcQuoteStore } from './otc/quote-store.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
+import { canonicalizeCopyFillId } from './copy/fee-share.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
 import { CopyService } from './copy/copy-service.js';
 import { SqlCopyFollowStore } from './copy/follow-store.js';
@@ -195,6 +196,24 @@ const copy = new CopyService(ledger, {
   inspectMarket: async (symbol) => {
     const market = await trade.marketBySymbol(symbol);
     return market ? { paper: market.paper } : null;
+  },
+  lookupFollowerFillFee: async (fillId) => {
+    const id = canonicalizeCopyFillId(fillId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      return null;
+    }
+    const [row] = await sql<Array<{ id: string; user_id: string; fee_asset: string; fee_amount: string; created_at: Date }>>`
+      SELECT id, user_id, fee_asset, fee_amount, created_at FROM trade.fills WHERE id = ${id} LIMIT 1
+    `;
+    if (!row) return null;
+    const createdAt = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
+    return {
+      fillId: row.id,
+      userId: row.user_id,
+      feeAsset: row.fee_asset,
+      feeAmount: parseAmount(row.fee_amount),
+      createdAt,
+    };
   },
 });
 
