@@ -588,6 +588,15 @@ module.exports = {
                 createLead: "A new space is created empty. Value reaches it by transfer — creating one never moves anything."
             },
 
+            transfers: {
+                toUser: "Send to a user",
+                toUserLead: "Move value from one of your spaces to another user's primary space for that asset. svc-bank resolves the destination; this screen never holds a balance.",
+                toUserId: "To user id",
+                toUserIdHint: "The destination user's id",
+                toUserSend: "Send to user",
+                toUserPosted: "Transfer to user posted"
+            },
+
             transfersPage: {
                 title: "Transfers",
                 lead: "Move value between spaces once, or on a repeating standing order, and read every occurrence that actually ran.",

@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.transfersPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.transfersPage.lead') }}</p>
-      <div class="ix-source">svc-bank · transfers.create · transfers.schedule · transfers.listSchedules · transfers.executions · transfers.pause · transfers.resume · transfers.cancel</div>
+      <div class="ix-source">svc-bank · transfers.create · transfers.toUser · transfers.schedule · transfers.listSchedules · transfers.executions · transfers.pause · transfers.resume · transfers.cancel</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -52,6 +52,53 @@
           <div style="margin-top:6px;">{{ $t('intafaced.pay.amount') }}: {{ created.data.amount }} · {{ $t('intafaced.bank.ledgerTx') }}: {{ created.data.ledgerTxId }}</div>
         </div>
         <IxState v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/transfers.create"></IxState>
+      </div>
+    </div>
+
+    <!-- ── send to a user ─────────────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.transfers.toUser') }}</h2>
+        <span class="ix-sub">transfers.toUser</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.transfers.toUserLead') }}</p>
+
+      <IxState :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+        <div v-if="spaces.data && spaces.data.length">
+          <div class="ix-field-grid">
+            <div class="ix-field">
+              <label>{{ $t('intafaced.bank.fromSpace') }}</label>
+              <Select v-model="toUser.fromSpaceId" :placeholder="$t('intafaced.bank.chooseSpace')">
+                <Option v-for="s in spaces.data" :key="s.id" :value="s.id" :label="s.name + ' · ' + s.assetId + ' · ' + s.balance"></Option>
+              </Select>
+            </div>
+            <div class="ix-field">
+              <label for="ix-to-user">{{ $t('intafaced.bank.transfers.toUserId') }}</label>
+              <Input element-id="ix-to-user" v-model="toUser.toUserId" :placeholder="$t('intafaced.bank.transfers.toUserIdHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-to-user-amount">{{ $t('intafaced.pay.amount') }}</label>
+              <Input element-id="ix-to-user-amount" v-model="toUser.amount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+            </div>
+          </div>
+          <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">
+            {{ $t('intafaced.bank.transfersPage.idempotency') }} <code>{{ draftId('toUser') }}</code>
+          </div>
+          <div class="ix-actions">
+            <Button type="primary" :loading="sentToUser.busy" :disabled="!canToUser" @click="submitToUser">
+              {{ $t('intafaced.bank.transfers.toUserSend') }}
+            </Button>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.transfersPage.needSpace') }}</div>
+      </IxState>
+
+      <div v-if="sentToUser.ran" style="margin-top:14px;">
+        <div v-if="sentToUser.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.transfers.toUserPosted') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.pay.amount') }}: {{ sentToUser.data.amount }} · {{ $t('intafaced.bank.ledgerTx') }}: {{ sentToUser.data.ledgerTxId }}</div>
+        </div>
+        <IxState v-else :loading="sentToUser.busy" :reason="sentToUser.reason" :message="sentToUser.message" endpoint="/api/bank/trpc/transfers.toUser"></IxState>
       </div>
     </div>
 
@@ -237,7 +284,7 @@
 
 <script>
 /**
- * TRANSFERS — svc-bank's `transfers` router, all five procedures.
+ * TRANSFERS — svc-bank's `transfers` router.
  *
  * ── WHY `transferId` IS ON THE SCREEN ──────────────────────────────────────
  * The router takes the transfer's id from the CLIENT, deliberately: "a retried
@@ -248,12 +295,14 @@
  * nobody can check, and because pressing Send twice on a slow connection is
  * the exact case it exists for.
  *
- * ── WHY `toSpaceId` IS TYPED AND NOT PICKED ────────────────────────────────
+ * ── WHY `toSpaceId` / `toUserId` ARE TYPED AND NOT PICKED ──────────────────
  * Paying somebody else is the product — `bank-service.test.ts` pins that a
  * transfer "moves value between two different users spaces" — and this session
  * can only enumerate its OWN spaces. A destination picker limited to your own
  * spaces would quietly delete the feature; a picker over everyone's would be a
  * directory of strangers' accounts. So the destination is an id you were given.
+ * `transfers.toUser` is the same idea with a user id: svc-bank resolves that
+ * user's primary space for the from-space's asset. The shell holds no balance.
  *
  * Amounts are decimal strings end to end. Nothing on this screen parses one.
  */
@@ -271,6 +320,7 @@ export default {
     return {
       nav: BANK_NAV,
       transfer: { fromSpaceId: '', toSpaceId: '', amount: '' },
+      toUser: { fromSpaceId: '', toUserId: '', amount: '' },
       standing: { fromSpaceId: '', toSpaceId: '', amount: '', cadence: 'monthly', startsAt: '', endsAt: '' },
       cancellingId: '',
       actingId: '',
@@ -279,6 +329,7 @@ export default {
       schedules: this.emptySection(),
       executions: this.emptySection(),
       created: this.emptyAction(),
+      sentToUser: this.emptyAction(),
       scheduled: this.emptyAction(),
       paused: this.emptyAction(),
       resumed: this.emptyAction(),
@@ -288,6 +339,9 @@ export default {
   computed: {
     canTransfer() {
       return Boolean(this.transfer.fromSpaceId && this.transfer.toSpaceId && this.transfer.amount && this.draftId('transfer'));
+    },
+    canToUser() {
+      return Boolean(this.toUser.fromSpaceId && this.toUser.toUserId && this.toUser.amount && this.draftId('toUser'));
     },
     canSchedule() {
       return Boolean(this.standing.fromSpaceId && this.standing.toSpaceId && this.standing.amount && this.standing.startsAt);
@@ -324,6 +378,24 @@ export default {
         // same draft retried is still the same transfer.
         self.clearDraftId('transfer');
         self.transfer = { fromSpaceId: '', toSpaceId: '', amount: '' };
+        self.load('spaces', query('bank', 'spaces.list', {}, self.ixToken));
+      });
+    },
+    submitToUser() {
+      var self = this;
+      if (!this.canToUser) return;
+      this.act(
+        'sentToUser',
+        mutate('bank', 'transfers.toUser', {
+            transferId: this.draftId('toUser'),
+            fromSpaceId: this.toUser.fromSpaceId,
+            toUserId: this.toUser.toUserId,
+            amount: this.toUser.amount
+          }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.clearDraftId('toUser');
+        self.toUser = { fromSpaceId: '', toUserId: '', amount: '' };
         self.load('spaces', query('bank', 'spaces.list', {}, self.ixToken));
       });
     },
