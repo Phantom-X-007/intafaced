@@ -1252,6 +1252,23 @@ module.exports = {
                 draft: "Draft",
                 listHits: "List hit count",
                 businessHits: "Business hit count"
+            },
+            copy: {
+                title: "Copy intel",
+                lead: "Leader directory from copy-intel. Dark plane refuses by name. Live without sealed leaders refuses. Empty fixtures stay empty. Never a returns board.",
+                plane: "Plane",
+                planeDark: "Dark",
+                planeLive: "Live",
+                run: "Run",
+                refused: "Copy intel refused",
+                empty: "No leader fixtures.",
+                unavailable: "Copy intel unavailable",
+                directory: "Leader directory",
+                leaderId: "Leader",
+                realisedPnl: "Realised PnL",
+                closedTrades: "Closed trades",
+                winRate: "Win rate",
+                billed: "Billed"
             }
         },
         blueprint: {
