@@ -103,6 +103,15 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     });
   });
 
+  it('buildOperatorVenueTradeMaps and buildOperatorVenueAccountMaps wire when operator env is complete (D43)', () => {
+    const env = {
+      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
+    };
+    expect(buildOperatorVenueTradeMaps(env).wiredVenueIds).toEqual(['bybit-spot']);
+    expect(buildOperatorVenueAccountMaps(env).wiredVenueIds).toEqual(['bybit-spot']);
+  });
+
   it('package index re-exports trading-half policy through fabric', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const pkgIndex = readFileSync(join(here, '..', '..', 'index.ts'), 'utf8');
