@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 import { drizzleConfig, MIGRATION_CONVENTION } from './migrate.js';
 import { isSerializationFailure } from './connection.js';
-import { createTestDatabase, postgresAvailable, rewriteSchemaSql, sweepStaleTestSchemas } from './testing.js';
+import { assertTestDatabase, createTestDatabase, postgresAvailable, rewriteSchemaSql, sweepStaleTestSchemas } from './testing.js';
 
 describe('drizzleConfig', () => {
   it('confines a service to its own Postgres schema', () => {
@@ -130,6 +130,25 @@ describe('createTestDatabase', () => {
       await admin.unsafe(`DROP SCHEMA IF EXISTS "${unstamped}" CASCADE`).catch(() => undefined);
       await admin.end({ timeout: 5 });
     }
+  });
+});
+
+/**
+ * The refuse path is the load-bearing one. Live suites only ever hit the
+ * `_test` success branch; a regression that stopped throwing against
+ * `intafaced` would be invisible until someone truncated the shared book.
+ */
+function sqlReturning(db: string, usr = 'intafaced_ops'): postgres.Sql {
+  return (async () => [{ db, usr }]) as unknown as postgres.Sql;
+}
+
+describe('assertTestDatabase', () => {
+  it('refuses a non-_test current_database', async () => {
+    await expect(assertTestDatabase(sqlReturning('intafaced'), 'unit')).rejects.toThrow(/REFUSING TO RUN/);
+  });
+
+  it('returns when current_database ends in _test', async () => {
+    await expect(assertTestDatabase(sqlReturning('intafaced_test'), 'unit')).resolves.toBeUndefined();
   });
 });
 
