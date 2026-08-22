@@ -353,14 +353,22 @@ export const FEATURES = [
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.futures'],
-    requires: ['services/svc-trade/src/spot/options-policy.ts', 'services/svc-trade/src/spot/options-listing.test.ts'],
+    requires: [
+      'services/svc-trade/src/spot/options-policy.ts',
+      'services/svc-trade/src/spot/options-listing.test.ts',
+      'services/svc-trade/src/spot/options-mount-vs-tracker.ts',
+      'services/svc-trade/src/spot/options-mount-vs-tracker.test.ts',
+      'services/svc-trade/src/spot/options-compose-wiring.ts',
+      'services/svc-trade/src/spot/options-compose-wiring.test.ts',
+      'services/svc-trade/src/spot/options-settlement-owner-gate.ts',
+      'services/svc-trade/src/spot/options-tracker-status-pin.test.ts',
+    ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Settlement law refuse on options.policy on tip; SOCKET §13 socket.options-settlement-asset-law — never invent live set / settlement asset / IV. ' +
-      'Product still needs: owner P0-05 settlement asset stamp; D7 fixing; complete European terms + engine.',
+      '**Done 2026-08-22:** SOCKET §13 settlement law + D7 fixing owner env pass-through (blank = refuse); European policy door mounted. ' +
+      'Residual: European options trading engine — orders still refuse until engine ships.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
