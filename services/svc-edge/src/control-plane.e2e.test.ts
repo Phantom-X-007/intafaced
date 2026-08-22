@@ -266,6 +266,15 @@ describe('/admin/status — control-plane summary', () => {
     expect(methodsByPath['/quant/honesty/assess-comparison-order']).toBe('POST');
     expect(methodsByPath['/quant/honesty/assess-surface-render']).toBe('POST');
     expect(body.quantHonesty.doors).toHaveLength(5);
+    expect(doorPaths.sort()).toEqual(
+      [
+        '/quant/honesty/assess-backtest',
+        '/quant/honesty/assess-comparison-order',
+        '/quant/honesty/assess-composite',
+        '/quant/honesty/assess-surface-render',
+        '/quant/honesty/performance-labels',
+      ].sort(),
+    );
   });
 
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
