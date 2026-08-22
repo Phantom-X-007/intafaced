@@ -202,3 +202,20 @@ describe('trade.otc mounted doors in router complete (D70)', () => {
     });
   });
 });
+
+describe('trade.otc tracker backend done bar complete (D71)', () => {
+  it('otcTrackerBackendDoneBarMet requires mount matrix, done bar tests, and policy honesty', () => {
+    expect(OTC_TRACKER_ID).toBe('trade.otc');
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'trade.otc',
+      backendDoneBarMet: true,
+      gaps: OTC_HONEST_GAPS.length,
+    });
+  });
+});
