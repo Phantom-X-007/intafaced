@@ -341,7 +341,7 @@ export const FEATURES = [
       'services/svc-trade/src/futures/mark-gap-series-honesty.test.ts',
       'services/svc-trade/src/futures/adl-disclosure.test.ts',
       'services/svc-trade/src/futures/futures-ladder-owner-gate.ts',
-      'services/svc-trade/src/futures/futures-owner-env-gates.ts',
+
       'services/svc-trade/src/futures/futures-compose-wiring.ts',
       'services/svc-trade/src/futures/futures-compose-wiring.test.ts',
       'services/svc-trade/src/futures/futures-tracker-status-pin.test.ts',
@@ -363,7 +363,7 @@ export const FEATURES = [
       'services/svc-trade/src/spot/options-mount-vs-tracker.test.ts',
       'services/svc-trade/src/spot/options-compose-wiring.ts',
       'services/svc-trade/src/spot/options-compose-wiring.test.ts',
-      'services/svc-trade/src/spot/options-settlement-owner-gate.ts',
+
       'services/svc-trade/src/spot/options-tracker-status-pin.test.ts',
     ],
     note:
