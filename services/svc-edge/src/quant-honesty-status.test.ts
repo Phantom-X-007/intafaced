@@ -192,3 +192,22 @@ describe('quant honesty door status — mount honesty complete (D69)', () => {
     expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
   });
 });
+
+describe('quant honesty door status — full honesty board complete (D72)', () => {
+  it('describeQuantHonestyDoorStatus locks mount honesty, statusLine, and door alignment', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(status.statusLine).toMatch(/comparison/i);
+    expect(status.statusLine).toMatch(/surface render/i);
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(new Set(status.doors.map((door) => door.path)).size).toBe(5);
+    const byPath = Object.fromEntries(status.doors.map((door) => [door.path, door.package]));
+    expect(byPath[EDGE_QUANT_SURFACE_RENDER_DOOR]).toBe('@intafaced/connect-data-lake');
+    expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toBe('composite');
+    expect(byPath[QUANT_HONESTY_ASSESS_PATH]).toBe('@intafaced/quant-honesty');
+  });
+});
