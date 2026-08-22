@@ -215,6 +215,26 @@ describe('CopyFollowStore unique (follower, leader)', () => {
     expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
   });
 
+  it('leftover after committed reserveAndStamp does not bump earningsPaid again', async () => {
+    const store = new MemoryCopyFollowStore();
+    const key = `${LEADER}:${FOLLOWER}`;
+    const cap = parseAmount('100');
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new Error('crash after INSERT');
+      }),
+    ).rejects.toThrow(/crash after INSERT/);
+    const reserved = await store.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), cap, FOLLOW_A, FILL);
+    expect(reserved.reserved).toBe(parseAmount('0.5'));
+    expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
+    expect((await store.getPeriodStats(key)).roundTrips).toBe(1);
+
+    const again = await store.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), cap, FOLLOW_A, FILL);
+    expect(again.reserved).toBe(parseAmount('0.5'));
+    expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
+    expect((await store.getPeriodStats(key)).roundTrips).toBe(1);
+  });
+
   it('memory getMirroredFill / claimMirrorFill canonicalize UUID fill ids', async () => {
     const store = new MemoryCopyFollowStore();
     await store.saveFollow(follow(FOLLOW_A));
@@ -889,5 +909,199 @@ describe('SqlCopyFollowStore runFeeShareSettleOnce (order, no Postgres)', () => 
       }),
     ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
     expect(ranB).toBe(false);
+  });
+});
+
+type PeriodRow = { earningsPaid: string; roundTrips: number };
+
+/** postgres `reserve()` — tagged sql + `.release`, no `.begin` (postgres@3.4.9). */
+function mockReservedSql() {
+  const period = new Map<string, PeriodRow>();
+  const byFill = new Map<string, SettledRow>();
+  const events: string[] = [];
+  let snapPeriod: Map<string, PeriodRow> | null = null;
+  let snapFill: Map<string, SettledRow> | null = null;
+
+  function snapshot() {
+    snapPeriod = new Map(period);
+    snapFill = new Map(byFill);
+  }
+  function restore() {
+    if (!snapPeriod || !snapFill) return;
+    period.clear();
+    for (const [k, v] of snapPeriod) period.set(k, v);
+    byFill.clear();
+    for (const [k, v] of snapFill) byFill.set(k, v);
+  }
+
+  function run(text: string, values: unknown[]): unknown[] {
+    const q = text.replace(/\s+/g, ' ').trim().toLowerCase();
+    if (q === 'begin' || q.startsWith('begin ')) {
+      events.push('begin-sql');
+      snapshot();
+      return [];
+    }
+    if (q === 'commit') {
+      events.push('commit-sql');
+      snapPeriod = null;
+      snapFill = null;
+      return [];
+    }
+    if (q === 'rollback') {
+      events.push('rollback-sql');
+      restore();
+      snapPeriod = null;
+      snapFill = null;
+      return [];
+    }
+    if (q.includes('pg_advisory_lock')) {
+      events.push('lock');
+      return [];
+    }
+    if (q.includes('pg_advisory_unlock')) {
+      events.push('unlock');
+      return [];
+    }
+    if (q.includes('insert into copy_period_stats')) {
+      const pairKey = String(values[0]);
+      if (!period.has(pairKey)) period.set(pairKey, { earningsPaid: '0', roundTrips: 0 });
+      return [];
+    }
+    if (q.includes('from copy_period_stats')) {
+      const pairKey = String(values[0]);
+      const row = period.get(pairKey) ?? { earningsPaid: '0', roundTrips: 0 };
+      return [{ earnings_paid: row.earningsPaid, round_trips: row.roundTrips }];
+    }
+    if (q.includes('update copy_period_stats')) {
+      const pairKey = String(values[values.length - 1]);
+      period.set(pairKey, { earningsPaid: String(values[0]), roundTrips: Number(values[1]) });
+      return [];
+    }
+    if (q.includes('update copy_settled_fee_shares') && q.includes('skipped_reason is null')) {
+      const reserved = String(values[0]);
+      const followId = String(values[1]);
+      const fillId = String(values[2]);
+      const prev = byFill.get(fillId);
+      if (prev && prev.follow_id === followId && prev.settled === false && prev.skipped_reason == null) {
+        byFill.set(fillId, { ...prev, capped_leader_share: reserved });
+        return [{ fill_id: fillId }];
+      }
+      return [];
+    }
+    if (q.includes('from copy_settled_fee_shares') && q.includes('where follow_id')) {
+      const followId = String(values[0]);
+      const fillId = String(values[1]);
+      const row = byFill.get(fillId);
+      return row && row.follow_id === followId ? [row] : [];
+    }
+    if (q.includes('from copy_settled_fee_shares')) {
+      const fillId = String(values[0]);
+      const row = byFill.get(fillId);
+      return row ? [row] : [];
+    }
+    events.push(`unknown:${q.slice(0, 80)}`);
+    return [];
+  }
+
+  function attach(kind: 'pool' | 'reserved') {
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) =>
+      Promise.resolve(run(strings.join('?'), values))) as unknown as Sql & {
+      unsafe: (s: string, args?: unknown[]) => Promise<unknown[]>;
+      release?: () => void;
+      reserve?: () => Promise<Sql>;
+      begin?: Sql['begin'];
+    };
+    sql.unsafe = (s: string, args: unknown[] = []) => Promise.resolve(run(s, args));
+    if (kind === 'reserved') {
+      sql.release = () => {
+        events.push('release');
+      };
+    } else {
+      sql.reserve = async () => {
+        events.push('reserve');
+        return attach('reserved');
+      };
+      sql.begin = (async (fn: (tx: Sql) => Promise<unknown>) => {
+        events.push('pool-begin');
+        snapshot();
+        try {
+          return await fn(sql);
+        } catch (err) {
+          restore();
+          throw err;
+        } finally {
+          snapPeriod = null;
+          snapFill = null;
+        }
+      }) as Sql['begin'];
+    }
+    return sql;
+  }
+
+  return { sql: attach('pool'), events, period, byFill };
+}
+
+describe('SqlCopyFollowStore reserved client (no .begin)', () => {
+  it('runFollowExclusive + reserveAndStampPendingFeeShare stamps pending and bumps earningsPaid', async () => {
+    const mock = mockReservedSql();
+    mock.byFill.set(FILL, {
+      follow_id: FOLLOW_A,
+      fill_id: FILL,
+      leader_id: LEADER,
+      follower_id: FOLLOWER,
+      asset_id: '',
+      protocol_fee: '0',
+      applied_share_bps: 0,
+      gross_leader_share: '0',
+      capped_leader_share: '0',
+      skipped_reason: null,
+      settled: false,
+    });
+    const store = new SqlCopyFollowStore(mock.sql);
+    const key = `${LEADER}:${FOLLOWER}`;
+
+    expect(typeof (await mock.sql.reserve()).begin).not.toBe('function');
+
+    await store.runFollowExclusive(FOLLOW_A, async (locked) => {
+      const reserved = await locked.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+      expect(reserved.reserved).toBe(parseAmount('0.5'));
+    });
+
+    expect(mock.events).toContain('reserve');
+    expect(mock.events).not.toContain('pool-begin');
+    expect(mock.byFill.get(FILL)?.capped_leader_share).toBe('0.5');
+    expect(mock.period.get(key)?.earningsPaid).toBe('0.5');
+    expect(mock.period.get(key)?.roundTrips).toBe(1);
+  });
+
+  it('exclusive leftover after committed reserve does not bump earningsPaid again', async () => {
+    const mock = mockReservedSql();
+    mock.byFill.set(FILL, {
+      follow_id: FOLLOW_A,
+      fill_id: FILL,
+      leader_id: LEADER,
+      follower_id: FOLLOWER,
+      asset_id: '',
+      protocol_fee: '0',
+      applied_share_bps: 0,
+      gross_leader_share: '0',
+      capped_leader_share: '0',
+      skipped_reason: null,
+      settled: false,
+    });
+    const store = new SqlCopyFollowStore(mock.sql);
+    const key = `${LEADER}:${FOLLOWER}`;
+
+    await store.runFollowExclusive(FOLLOW_A, async (locked) => {
+      await locked.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+    });
+    await store.runFollowExclusive(FOLLOW_A, async (locked) => {
+      const again = await locked.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+      expect(again.reserved).toBe(parseAmount('0.5'));
+    });
+
+    expect(mock.period.get(key)?.earningsPaid).toBe('0.5');
+    expect(mock.period.get(key)?.roundTrips).toBe(1);
+    expect(mock.byFill.get(FILL)?.capped_leader_share).toBe('0.5');
   });
 });

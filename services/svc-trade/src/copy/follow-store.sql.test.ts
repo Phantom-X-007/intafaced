@@ -319,5 +319,53 @@ if (!available) {
       expect(stamped?.cappedLeaderShare).toBe(parseAmount('0.5'));
       expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
     });
+
+    it('runFollowExclusive + reserveAndStampPendingFeeShare stamps pending and bumps earningsPaid', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      const key = `${LEADER}:${FOLLOWER}`;
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+          throw new Error('crash after INSERT');
+        }),
+      ).rejects.toThrow(/crash after INSERT/);
+
+      await store.runFollowExclusive(FOLLOW_A, async (locked) => {
+        const reserved = await locked.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+        expect(reserved.reserved).toBe(parseAmount('0.5'));
+      });
+
+      const stamped = await store.getSettledFeeShare(FOLLOW_A, FILL);
+      expect(stamped?.cappedLeaderShare).toBe(parseAmount('0.5'));
+      expect(stamped?.settled).toBe(false);
+      expect(stamped?.skippedReason).toBeNull();
+      expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
+    });
+
+    it('exclusive leftover stamp-0 after committed reserve does not bump earningsPaid again', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      const key = `${LEADER}:${FOLLOWER}`;
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+          throw new Error('crash after INSERT');
+        }),
+      ).rejects.toThrow(/crash after INSERT/);
+
+      await store.runFollowExclusive(FOLLOW_A, async (locked) => {
+        const reserved = await locked.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+        expect(reserved.reserved).toBe(parseAmount('0.5'));
+      });
+      expect((await store.getSettledFeeShare(FOLLOW_A, FILL))?.cappedLeaderShare).toBe(parseAmount('0.5'));
+      expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
+
+      await store.runFollowExclusive(FOLLOW_A, async (locked) => {
+        const again = await locked.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+        expect(again.reserved).toBe(parseAmount('0.5'));
+      });
+      expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
+      expect((await store.getPeriodStats(key)).roundTrips).toBe(1);
+      expect((await store.getSettledFeeShare(FOLLOW_A, FILL))?.cappedLeaderShare).toBe(parseAmount('0.5'));
+    });
   });
 }

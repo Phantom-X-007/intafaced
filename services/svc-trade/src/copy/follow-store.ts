@@ -496,6 +496,12 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     followId: string,
     fillId: string,
   ): Promise<ReserveEarningsResult> {
+    const id = canonicalizeCopyFillId(fillId);
+    const cur = this.settled.get(settleKey(followId, id));
+    if (cur && isPendingFeeShareClaim(cur) && cur.cappedLeaderShare > 0n) {
+      const stats = this.period.get(pairKey) ?? { earningsPaid: 0n, roundTrips: 0 };
+      return { reserved: cur.cappedLeaderShare, newPaid: stats.earningsPaid, roundTrips: stats.roundTrips };
+    }
     const reserved = await this.reserveEarnings(pairKey, amount, cap);
     try {
       if (reserved.reserved > 0n) {
@@ -692,6 +698,32 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     private readonly lockedFollowId?: string,
   ) {}
 
+  /**
+   * Pool sql has `.begin`. postgres `reserve()` returns tagged sql + `.release`
+   * only — calling `.begin` on a reserved client throws after unique INSERT.
+   * Exclusive already holds the session (advisory lock); issue BEGIN/COMMIT
+   * as SQL on that connection.
+   */
+  private async withSessionTxn<T>(run: (sql: Sql) => Promise<T>): Promise<T> {
+    const begin = (this.sql as { begin?: Sql['begin'] }).begin;
+    if (typeof begin === 'function') {
+      return (await begin(async (tx) => run(tx as unknown as Sql))) as T;
+    }
+    try {
+      await this.sql.unsafe('BEGIN');
+      const result = await run(this.sql);
+      await this.sql.unsafe('COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await this.sql.unsafe('ROLLBACK');
+      } catch {
+        // runFollowExclusive still releases the reserved session
+      }
+      throw err;
+    }
+  }
+
   private async withAdvisoryLock<T>(key: string, run: () => Promise<T>): Promise<T> {
     // Session locks must be acquired and released on the SAME physical
     // connection. `sql.reserve()` pins one; issuing lock/unlock through the pool
@@ -885,7 +917,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   async reserveEarnings(pairKey: string, amount: Amount, cap: Amount): Promise<ReserveEarningsResult> {
     // Transaction: row lock + claim headroom + bump round-trips. Concurrent
     // settlers serialise here so paid + reserved never exceeds cap.
-    return await this.sql.begin(async (tx) => {
+    return await this.withSessionTxn(async (tx) => {
       await tx`
         INSERT INTO copy_period_stats (pair_key, earnings_paid, round_trips, updated_at)
         VALUES (${pairKey}, 0, 0, now())
@@ -942,7 +974,34 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     fillId: string,
   ): Promise<ReserveEarningsResult> {
     const id = canonicalizeCopyFillId(fillId);
-    return await this.sql.begin(async (tx) => {
+    return await this.withSessionTxn(async (tx) => {
+      const pendingRows = await tx<Array<{ capped_leader_share: string }>>`
+        SELECT capped_leader_share::text
+          FROM copy_settled_fee_shares
+         WHERE follow_id = ${followId} AND fill_id = ${id}
+           AND settled = false
+           AND skipped_reason IS NULL
+         FOR UPDATE
+      `;
+      const pending = pendingRows[0];
+      if (pending) {
+        const already = parseAmount(String(pending.capped_leader_share));
+        if (already > 0n) {
+          const statsRows = await tx<Array<{ earnings_paid: string; round_trips: number }>>`
+            SELECT earnings_paid::text, round_trips
+              FROM copy_period_stats
+             WHERE pair_key = ${pairKey}
+             LIMIT 1
+          `;
+          const stats = statsRows[0];
+          return {
+            reserved: already,
+            newPaid: stats ? parseAmount(String(stats.earnings_paid)) : already,
+            roundTrips: stats?.round_trips ?? 0,
+          };
+        }
+      }
+
       await tx`
         INSERT INTO copy_period_stats (pair_key, earnings_paid, round_trips, updated_at)
         VALUES (${pairKey}, 0, 0, now())
@@ -1031,7 +1090,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
 
     // Transaction: lock follow row → check fill claim → bump exposure under
     // cap → insert mirrored plan. Concurrent same fillId serialises here.
-    return await this.sql.begin(async (tx) => {
+    return await this.withSessionTxn(async (tx) => {
       const followRows = await tx<Array<{ exposure: string }>>`
         SELECT exposure::text
           FROM copy_follows
