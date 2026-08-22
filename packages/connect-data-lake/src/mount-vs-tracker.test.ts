@@ -5,8 +5,11 @@ import {
   DATA_LAKE_HONEST_GAPS,
   DATA_LAKE_PACKAGE_EXPORTS,
   DATA_LAKE_TRACKER_ID,
+  dataLakeCaptureConsumerHonestInSource,
+  dataLakeCapturePolicyHonest,
   dataLakeDoneBarTestsPresent,
   dataLakeExportsInIndexSource,
+  dataLakePersistenceSinkHonestInSource,
   dataLakeStage1Honest,
 } from './mount-vs-tracker.js';
 
@@ -27,5 +30,15 @@ describe('connect.data-lake mount vs tracker gaps board (D53)', () => {
     expect(dataLakeDoneBarTestsPresent()).toBe(true);
     expect(dataLakeStage1Honest()).toBe(true);
     expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env']);
+  });
+});
+
+describe('connect.data-lake capture honesty mount (D55)', () => {
+  it('capture policy, consumer, and persistence sink honesty without flipping backend done bar', () => {
+    expect(dataLakeCapturePolicyHonest()).toBe(true);
+    expect(dataLakeCaptureConsumerHonestInSource()).toBe(true);
+    expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
