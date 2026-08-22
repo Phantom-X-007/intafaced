@@ -450,3 +450,24 @@ describe('quant honesty door status — denon board complete (D97)', () => {
     ]);
   });
 });
+
+describe('quant honesty door status — denon board complete (D99)', () => {
+  it('full quant honesty mount board: doors, packages, flags, data-lake alignment', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(status.doors).toHaveLength(5);
+    expect(QUANT_SURFACE_RENDER_PATH).toBe(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+    expect(status.doors.map((door) => door.package)).toEqual([
+      '@intafaced/quant-honesty',
+      '@intafaced/quant-honesty',
+      '@intafaced/quant-honesty',
+      '@intafaced/connect-data-lake',
+      'composite',
+    ]);
+  });
+});
