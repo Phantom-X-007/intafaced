@@ -349,3 +349,21 @@ describe('trade.otc mount vs tracker — D85 denon complete', () => {
     expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
   });
 });
+
+describe('trade.otc mount vs tracker — D87 denon complete', () => {
+  it('full mount board: tracker, doors, policy, done-bar files, honest gaps', () => {
+    const card = otcMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('trade.otc');
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(card.mountComplete).toBe(true);
+    expect(card.doorsMounted).toBe(OTC_MOUNTED_DOORS.length);
+    expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(OTC_HONEST_GAPS).toHaveLength(3);
+  });
+});
