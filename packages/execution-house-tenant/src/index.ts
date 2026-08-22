@@ -39,3 +39,9 @@ export {
   type HouseTenantPolicyGate,
   type HouseTenantPolicySummary,
 } from './house-tenant-policy.js';
+export {
+  HOUSE_TENANT_HONEST_GAPS,
+  HOUSE_TENANT_TRACKER_ID,
+  houseTenantMountVsTrackerBoardCard,
+  houseTenantTrackerBackendDoneBarMet,
+} from './mount-vs-tracker.js';

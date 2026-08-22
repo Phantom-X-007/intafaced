@@ -619,14 +619,19 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'F',
-    status: 'ready',
+    status: 'done',
     owner: 'Nitro',
     dependsOn: ['execution.sor'],
-    requires: ['packages/execution-house-tenant/src/house-tenant-policy.ts', 'services/svc-execution/src/execution-policy-route.test.ts'],
+    requires: [
+      'packages/execution-house-tenant/src/house-tenant-policy.ts',
+      'packages/execution-house-tenant/src/mount-vs-tracker.ts',
+      'packages/execution-house-tenant/src/mount-vs-tracker.test.ts',
+      'packages/execution-house-tenant/src/house-tenant-tracker-status-pin.test.ts',
+      'services/svc-execution/src/execution-policy-route.test.ts',
+    ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Stage-1 external-only tenant on tip; kill-first adminKill; internal_venue + matching-book refuse. ' +
-      'Product still needs: internal-venue half (owner ruling unfreeze or never); existence disclosure deferred.',
+      '**Done 2026-08-22:** Stage-1 external-only sealed tenant on svc-execution; kill-first adminKill; internal_venue + matching-book refuse. ' +
+      'Residuals: internal-venue half (owner ruling); existence disclosure deferred.',
   }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
