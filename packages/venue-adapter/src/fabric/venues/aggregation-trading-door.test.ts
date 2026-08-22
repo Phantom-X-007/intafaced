@@ -540,3 +540,20 @@ describe('aggregation trading door — D82 denon complete', () => {
     }
   });
 });
+
+describe('aggregation trading door — D84 denon complete', () => {
+  it('mount cert + factory policy + trading-half policy + operator credential board green', () => {
+    expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
+    expect(venueAggregationMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+    expect(describeVenueAggregationPolicy().publicMarketDataOnly).toBe(true);
+    expect(describeVenueAggregationPolicy().inventsCredentials).toBe(false);
+    expect(describeTradingHalfPolicy().liveCredentialsOperatorIssued).toBe(true);
+    expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
+    expect(describeVenueOperatorCredentials({}).venueIds).toEqual([...PUBLIC_MARKET_DATA_VENUE_IDS]);
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      expect(createVenueMarketDataAdapter(id)).not.toBeNull();
+      expect(createVenueTradeAdapter(id, null)).not.toBeNull();
+      expect(createVenueAccountAdapter(id, null)).not.toBeNull();
+    }
+  });
+});
