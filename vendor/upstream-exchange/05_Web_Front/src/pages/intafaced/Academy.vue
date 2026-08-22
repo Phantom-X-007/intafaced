@@ -103,7 +103,7 @@
     <div v-if="selectedRoomId" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.academy.sessions') }}</h2>
-        <span class="ix-sub">room · join · leave · streamCredential</span>
+        <span class="ix-sub">room · scheduleSession · startSession · endSession · join · leave · streamCredential</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.academy.sessionsLead') }}</p>
       <IxState :loading="roomDetail.loading" :reason="roomDetail.reason" :message="roomDetail.message" endpoint="/api/academy/trpc/room">
@@ -121,7 +121,31 @@
             <span class="v">{{ roomDetail.data.room.access }}</span>
           </div>
         </div>
-        <div v-if="sessions.length" class="ix-scroll">
+        <p class="ix-lead">{{ $t('intafaced.academy.scheduleLead') }}</p>
+        <div class="ix-field-grid">
+          <div class="ix-field">
+            <label for="ix-academy-schedule-title">{{ $t('intafaced.academy.scheduleTitle') }}</label>
+            <Input element-id="ix-academy-schedule-title" v-model="scheduleForm.title" :placeholder="$t('intafaced.academy.scheduleTitleHint')"></Input>
+          </div>
+          <div class="ix-field">
+            <label for="ix-academy-schedule-starts">{{ $t('intafaced.academy.scheduleStartsAt') }}</label>
+            <Input element-id="ix-academy-schedule-starts" v-model="scheduleForm.startsAt" :placeholder="$t('intafaced.academy.scheduleStartsAtHint')"></Input>
+          </div>
+        </div>
+        <div class="ix-actions" style="margin-top:16px;">
+          <Button v-if="canWrite" type="primary" size="small" :loading="scheduleAction.busy" :disabled="!canSubmitSchedule" @click="scheduleSession">
+            {{ $t('intafaced.academy.scheduleSubmit') }}
+          </Button>
+          <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.academy.scheduleSignIn') }}</router-link>
+        </div>
+        <div v-if="scheduleAction.ran" style="margin-top:14px;">
+          <div v-if="scheduleAction.reason === 'ok'" class="ix-done">
+            <strong>{{ $t('intafaced.academy.scheduleScheduled') }}</strong>
+            <div style="margin-top:6px;">{{ scheduleAction.data && scheduleAction.data.title }}</div>
+          </div>
+          <IxState v-else :loading="scheduleAction.busy" :reason="scheduleAction.reason" :message="scheduleAction.message" endpoint="/api/academy/trpc/scheduleSession"></IxState>
+        </div>
+        <div v-if="sessions.length" class="ix-scroll" style="margin-top:16px;">
           <table class="ix-table">
             <thead>
               <tr>
@@ -136,6 +160,12 @@
                 <td>{{ s.status }}</td>
                 <td>
                   <div class="ix-actions">
+                    <Button v-if="canWrite && s.status === 'scheduled'" size="small" :loading="startAction.busy && activeSessionId === s.id" @click="startSession(s)">
+                      {{ $t('intafaced.academy.startSession') }}
+                    </Button>
+                    <Button v-if="canWrite && (s.status === 'scheduled' || s.status === 'live')" size="small" :loading="endAction.busy && activeSessionId === s.id" @click="endSession(s)">
+                      {{ $t('intafaced.academy.endSession') }}
+                    </Button>
                     <Button v-if="canWrite" type="primary" size="small" :loading="joinAction.busy && activeSessionId === s.id" @click="joinSession(s)">
                       {{ $t('intafaced.academy.join') }}
                     </Button>
@@ -177,6 +207,20 @@
         </div>
         <IxState v-else :loading="streamAction.busy" :reason="streamAction.reason" :message="streamAction.message" endpoint="/api/academy/trpc/streamCredential"></IxState>
       </div>
+
+      <div v-if="startAction.ran" style="margin-top:14px;">
+        <div v-if="startAction.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.academy.startSessionStarted') }}</strong>
+        </div>
+        <IxState v-else :loading="startAction.busy" :reason="startAction.reason" :message="startAction.message" endpoint="/api/academy/trpc/startSession"></IxState>
+      </div>
+
+      <div v-if="endAction.ran" style="margin-top:14px;">
+        <div v-if="endAction.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.academy.endSessionEnded') }}</strong>
+        </div>
+        <IxState v-else :loading="endAction.busy" :reason="endAction.reason" :message="endAction.message" endpoint="/api/academy/trpc/endSession"></IxState>
+      </div>
     </div>
 
     <IxAcademyCurriculum />
@@ -189,10 +233,11 @@
 /**
  * svc-academy (§8.3) — lobbies on /academy.
  *
- * Rooms stay empty when the service lists none. Create/join/leave are writes;
- * createRoom omits blank minStake rather than sending ''. Stream credentials
- * refuse `academy.stream_unavailable` when no SFU is configured rather than
- * minting a fake A/V token. Named refuse stays named.
+ * Rooms stay empty when the service lists none. Create/join/leave/schedule
+ * are writes; createRoom omits blank minStake rather than sending ''.
+ * scheduleSession sends startsAt as an ISO string the service coerces.
+ * Stream credentials refuse `academy.stream_unavailable` when no SFU is
+ * configured rather than minting a fake A/V token. Named refuse stays named.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import IxAcademyCurriculum from './academy/Curriculum.vue';
@@ -213,11 +258,15 @@ export default {
       joinAction: this.emptyAction(),
       leaveAction: this.emptyAction(),
       streamAction: this.emptyAction(),
+      scheduleAction: this.emptyAction(),
+      startAction: this.emptyAction(),
+      endAction: this.emptyAction(),
       selectedRoomId: null,
       activeSessionId: null,
       roomKinds: ['general', 'futures', 'options', 'meme_war_room', 'forex', 'defi_lab', 'merchant_clinic'],
       roomAccesses: ['free', 'staked', 'invite'],
-      createForm: { slug: '', name: '', kind: 'general', access: 'free', capacity: '', minStake: '' }
+      createForm: { slug: '', name: '', kind: 'general', access: 'free', capacity: '', minStake: '' },
+      scheduleForm: { title: '', startsAt: '' }
     };
   },
   computed: {
@@ -231,6 +280,11 @@ export default {
       var slug = (this.createForm.slug || '').trim();
       var name = (this.createForm.name || '').trim();
       return !!slug && !!name && /^\d+$/.test(String(this.createForm.capacity).trim()) && parseInt(this.createForm.capacity, 10) >= 1;
+    },
+    canSubmitSchedule() {
+      var title = (this.scheduleForm.title || '').trim();
+      var startsAt = (this.scheduleForm.startsAt || '').trim();
+      return title.length >= 1 && title.length <= 160 && !!startsAt;
     }
   },
   created() {
@@ -282,6 +336,33 @@ export default {
     streamCredential(session) {
       this.activeSessionId = session.id;
       this.act('streamAction', mutate('academy', 'streamCredential', { sessionId: session.id }, this.ixToken));
+    },
+    scheduleSession() {
+      var self = this;
+      var title = (this.scheduleForm.title || '').trim();
+      var startsAt = (this.scheduleForm.startsAt || '').trim();
+      if (!this.selectedRoomId || title.length < 1 || title.length > 160 || !startsAt) return;
+      this.act('scheduleAction', mutate('academy', 'scheduleSession', {
+        roomId: this.selectedRoomId,
+        title: title,
+        startsAt: startsAt
+      }, this.ixToken)).then(function (res) {
+        if (res.ok) self.reloadRoom();
+      });
+    },
+    startSession(session) {
+      var self = this;
+      this.activeSessionId = session.id;
+      this.act('startAction', mutate('academy', 'startSession', { sessionId: session.id }, this.ixToken)).then(function (res) {
+        if (res.ok) self.reloadRoom();
+      });
+    },
+    endSession(session) {
+      var self = this;
+      this.activeSessionId = session.id;
+      this.act('endAction', mutate('academy', 'endSession', { sessionId: session.id }, this.ixToken)).then(function (res) {
+        if (res.ok) self.reloadRoom();
+      });
     }
   }
 };
