@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.cardsPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.cardsPage.lead') }}</p>
-      <div class="ix-source">svc-bank · cards.programme · cards.list · cards.issue · cards.setStatus · cards.authorizations · autoInvest.list · autoInvest.createRoundUp</div>
+      <div class="ix-source">svc-bank · cards.programme · cards.list · cards.issue · cards.setStatus · cards.authorizations · autoInvest.list · autoInvest.createRoundUp · autoInvest.pause · autoInvest.resume · autoInvest.cancel</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -144,6 +144,7 @@
                 <th>{{ $t('intafaced.bank.cardsPage.roundUpGranularity') }}</th>
                 <th>{{ $t('intafaced.bank.poolName') }}</th>
                 <th>{{ $t('intafaced.bank.status') }}</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -153,12 +154,27 @@
                 <td>{{ r.amount }}</td>
                 <td>{{ r.targetPoolId }}</td>
                 <td>{{ r.status }}</td>
+                <td>
+                  <div class="ix-actions">
+                    <Button v-if="r.status === 'active'" size="small" :loading="ruleAct.busy && actingRuleId === r.id" @click="pauseRoundUp(r)">{{ $t('intafaced.bank.autoInvest.pause') }}</Button>
+                    <Button v-if="r.status === 'paused'" size="small" :loading="ruleAct.busy && actingRuleId === r.id" @click="resumeRoundUp(r)">{{ $t('intafaced.bank.autoInvest.resume') }}</Button>
+                    <Button v-if="r.status !== 'cancelled'" size="small" :loading="ruleAct.busy && actingRuleId === r.id" @click="cancelRoundUp(r)">{{ $t('intafaced.bank.autoInvest.cancel') }}</Button>
+                  </div>
+                </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.cardsPage.roundUpEmpty') }}</div>
       </IxState>
+
+      <div v-if="ruleAct.ran" style="margin-top:14px;">
+        <div v-if="ruleAct.reason === 'ok'" class="ix-done">
+          <strong>{{ ruleActDoneLabel }}</strong>
+          <div v-if="ruleAct.data && ruleAct.data.status" style="margin-top:6px;">{{ $t('intafaced.bank.status') }}: {{ ruleAct.data.status }}</div>
+        </div>
+        <IxState v-else :loading="ruleAct.busy" :reason="ruleAct.reason" :message="ruleAct.message" :endpoint="ruleActEndpoint"></IxState>
+      </div>
     </div>
 
     <!-- ── create a card round-up ─────────────────────────────────────── -->
@@ -269,6 +285,10 @@
  * is a decimal string. `buyAssetId` is omitted unless it matches `assetId`; a
  * different buy asset surfaces `bank.auto_invest_rate_unset` and is not sent —
  * this screen does not invent a convert rate.
+ *
+ * Pause / resume / cancel send {ruleId} to autoInvest.pause / resume / cancel.
+ * Pause does not invent missed windows. Cancel does not reverse past runs.
+ * `bank.not_owner` stays named via IxState.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -292,7 +312,11 @@ export default {
       roundUps: this.emptySection(),
       issued: this.emptyAction(),
       statusSet: this.emptyAction(),
-      roundUpCreated: this.emptyAction()
+      roundUpCreated: this.emptyAction(),
+      ruleAct: this.emptyAction(),
+      actingRuleId: '',
+      ruleActKind: 'pause',
+      ruleActEndpoint: '/api/bank/trpc/autoInvest.pause'
     };
   },
   computed: {
@@ -312,6 +336,11 @@ export default {
       return rows.filter(function(r) {
         return r.kind === 'card_roundup';
       });
+    },
+    ruleActDoneLabel() {
+      if (this.ruleActKind === 'resume') return this.$t('intafaced.bank.autoInvest.resumeDone');
+      if (this.ruleActKind === 'cancel') return this.$t('intafaced.bank.autoInvest.cancelDone');
+      return this.$t('intafaced.bank.autoInvest.pauseDone');
     }
   },
   created() {
@@ -361,6 +390,39 @@ export default {
     },
     reloadRoundUps() {
       this.load('roundUps', query('bank', 'autoInvest.list', undefined, this.ixToken));
+    },
+    pauseRoundUp(rule) {
+      var self = this;
+      if (!rule || this.ruleAct.busy) return;
+      this.actingRuleId = rule.id;
+      this.ruleActKind = 'pause';
+      this.ruleActEndpoint = '/api/bank/trpc/autoInvest.pause';
+      this.act('ruleAct', mutate('bank', 'autoInvest.pause', { ruleId: rule.id }, this.ixToken)).then(function(res) {
+        self.actingRuleId = '';
+        if (res.ok) self.reloadRoundUps();
+      });
+    },
+    resumeRoundUp(rule) {
+      var self = this;
+      if (!rule || this.ruleAct.busy) return;
+      this.actingRuleId = rule.id;
+      this.ruleActKind = 'resume';
+      this.ruleActEndpoint = '/api/bank/trpc/autoInvest.resume';
+      this.act('ruleAct', mutate('bank', 'autoInvest.resume', { ruleId: rule.id }, this.ixToken)).then(function(res) {
+        self.actingRuleId = '';
+        if (res.ok) self.reloadRoundUps();
+      });
+    },
+    cancelRoundUp(rule) {
+      var self = this;
+      if (!rule || this.ruleAct.busy) return;
+      this.actingRuleId = rule.id;
+      this.ruleActKind = 'cancel';
+      this.ruleActEndpoint = '/api/bank/trpc/autoInvest.cancel';
+      this.act('ruleAct', mutate('bank', 'autoInvest.cancel', { ruleId: rule.id }, this.ixToken)).then(function(res) {
+        self.actingRuleId = '';
+        if (res.ok) self.reloadRoundUps();
+      });
     },
     submitRoundUp() {
       var self = this;

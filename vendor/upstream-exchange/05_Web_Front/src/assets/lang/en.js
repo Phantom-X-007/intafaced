@@ -535,6 +535,15 @@ module.exports = {
             category: "Category",
             outflow: "Out",
 
+            autoInvest: {
+                pause: "Pause",
+                pauseDone: "Round-up paused",
+                resume: "Resume",
+                resumeDone: "Round-up resumed",
+                cancel: "Cancel",
+                cancelDone: "Round-up cancelled"
+            },
+
             overview: {
                 scopeTitle: "What this section can do for you today",
                 scopeBody: "Every svc-bank procedure demands bank:read or bank:write, and the jurisdiction matrix demands a verification tier on top. Where your session is short of either, the screen names which one rather than showing an empty table.",
