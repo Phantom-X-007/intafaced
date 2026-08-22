@@ -17,6 +17,7 @@ export const WS_COPY = {
   privateAtCapacity: 'ws.close.private_at_capacity',
   privateUserLimit: 'ws.close.private_user_limit',
   shuttingDown: 'ws.close.shutting_down',
+  tokenExpired: 'ws.close.token_expired',
 } as const;
 
 export function resolveWsCopy(key: string, params: Readonly<Record<string, ParamValue>> = {}): string {

@@ -3,13 +3,41 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { PrivateOrderHub } from './hub.js';
-import { createPrivateWebSocketGateway, PRIVATE_STREAM_PATH, type PrivateWebSocketGateway } from './gateway.js';
+import {
+  CLOSE_UNAUTHORIZED,
+  createPrivateWebSocketGateway,
+  PRIVATE_STREAM_PATH,
+  redactAccessTokenQuery,
+  type PrivateWebSocketGateway,
+} from './gateway.js';
 import type { PrivateBookPort } from './book.js';
+import type { HubLogger } from '../depth/hub.js';
 
 const SECRET = 'test-access-secret-at-least-32-chars!!';
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OTHER = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 const SESSION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+const POSITION = {
+  positionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  userId: USER,
+  marketId: 'btc-usdt-perp',
+  symbol: 'BTC/USDT:USDT',
+  status: 'open' as const,
+  side: 'long' as const,
+  contracts: '1',
+  entryPrice: '100',
+  markPrice: '101',
+  notional: '101',
+  leverage: '2',
+  collateral: '50.5',
+  unrealizedPnl: '1',
+  realizedPnl: '0',
+  liquidationPrice: '80',
+  marginMode: 'cross' as const,
+  fundingPaid: '0',
+  ts: '2026-07-31T00:00:00.000Z',
+};
 
 const tokens: TokenConfig = {
   secret: SECRET,
@@ -95,6 +123,7 @@ describe('private WebSocket gateway', () => {
       heartbeatMs?: number;
       busAttached?: () => boolean;
       book?: PrivateBookPort;
+      log?: HubLogger;
     } = { tokens },
   ): Promise<void> {
     hub = new PrivateOrderHub({
@@ -117,7 +146,7 @@ describe('private WebSocket gateway', () => {
       server,
       hub,
       heartbeatMs: opts.heartbeatMs ?? 30_000,
-      log: { info: () => undefined, warn: () => undefined },
+      log: opts.log ?? { info: () => undefined, warn: () => undefined },
       enabled: () => enabled,
       tokens: opts.tokens,
       busAttached: opts.busAttached,
@@ -182,6 +211,61 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:read'], shortLived);
     await new Promise((r) => setTimeout(r, 1_100));
     expect(await upgradeStatus(`${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
+  });
+
+  it('closes /private/stream after access token expiry and never sends a position', async () => {
+    // Heartbeat is far longer than TTL so close cannot be the ping sweeper.
+    const shortLived: TokenConfig = { ...tokens, accessTtlSeconds: 2 };
+    await boot({ tokens: shortLived, heartbeatMs: 60_000 });
+    const issued = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'] }, shortLived);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${issued.token}`);
+    await client.untilSnapshot('positions');
+    expect(client.closed).toBeNull();
+
+    hub.publishPosition(POSITION);
+    await client.frameCount(client.frames.length + 1);
+    expect(client.parsed().some((f) => f.channel === 'positions' && f.type !== 'ready' && f.type !== 'snapshot')).toBe(true);
+
+    const waitMs = Math.max(50, issued.expiresAt.getTime() - Date.now()) + 1_000;
+    if (!client.closed) {
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          client.socket.once('close', () => resolve());
+        }),
+        new Promise<void>((r) => setTimeout(r, waitMs)),
+      ]);
+    }
+
+    expect(client.closed).not.toBeNull();
+    expect(client.closed!.code).toBe(CLOSE_UNAUTHORIZED);
+    hub.publishPosition({ ...POSITION, contracts: '9', ts: '2026-07-31T00:00:01.000Z' });
+    await new Promise((r) => setTimeout(r, 80));
+    const live = client.parsed().filter((f) => f.channel === 'positions' && f.type !== 'ready' && f.type !== 'snapshot');
+    expect(live).toHaveLength(1);
+    expect(live[0]!.contracts).toBe('1');
+  }, 15_000);
+
+  it('strips access_token from the request-target so access logs cannot store it', () => {
+    expect(redactAccessTokenQuery('/private/stream?access_token=SECRET&channel=orders')).toBe('/private/stream?channel=orders');
+    expect(redactAccessTokenQuery('/private/stream?channel=orders&access_token=SECRET')).toBe('/private/stream?channel=orders');
+    expect(redactAccessTokenQuery('/private/stream?access_token=SECRET')).toBe('/private/stream');
+    expect(redactAccessTokenQuery('/private/stream?channel=orders')).toBe('/private/stream?channel=orders');
+    expect(redactAccessTokenQuery('/private/stream')).toBe('/private/stream');
+  });
+
+  it('does not write the access_token query value to the hub logger', async () => {
+    const lines: string[] = [];
+    const log: HubLogger = {
+      info: (obj, msg) => lines.push(`${JSON.stringify(obj)} ${msg}`),
+      warn: (obj, msg) => lines.push(`${JSON.stringify(obj)} ${msg}`),
+    };
+    await boot({ tokens, log });
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=positions`);
+    await client.untilSnapshot('positions');
+    expect(lines.join('\n')).not.toContain(token);
+    expect(lines.join('\n')).not.toContain('access_token=');
+    client.socket.close();
   });
 
   it('rejects token signed with the wrong secret with HTTP 401', async () => {
