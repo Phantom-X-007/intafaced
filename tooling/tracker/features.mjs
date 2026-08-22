@@ -1739,17 +1739,19 @@ export const FEATURES = [
     phase: '2',
     plane: 'F',
     owner: 'Phantom-X-007',
-    status: 'ready',
+    status: 'done',
     dependsOn: ['trade.spot'],
     requires: [
       'services/svc-notify/src/alerts-policy.ts',
+      'services/svc-notify/src/alerts-mount-vs-tracker.ts',
+      'services/svc-notify/src/alerts-mount-vs-tracker.test.ts',
+      'services/svc-notify/src/alerts-tracker-status-pin.test.ts',
       'services/svc-notify/src/alerts/sweep-mounted-pin.test.ts',
       'services/svc-notify/src/alerts/evaluate.test.ts',
     ],
     note:
-      '**D26-P1-A1 Done 2026-08-21:** price watch core + sweep driver mounted (`alerts-mount-vs-tracker.ts`). ' +
-      'Dark mark refuses fire; unpublished kinds refuse by name; rides ops.notifications fan-out. ' +
-      'Class X residual: funding/liquidation/whale kinds; mobile sync; out-of-app gateway credentials.',
+      '**Done 2026-08-22:** price watch core + sweep driver mounted; dark mark refuses; unpublished kinds refuse by name; rides ops.notifications fan-out. ' +
+      'Residuals: funding/liquidation/whale kinds; mobile sync; out-of-app gateway credentials.',
   }),
   f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
     module: 'notify',
