@@ -24,6 +24,8 @@ import {
   loadVenueOperatorCredentials,
   buildOperatorVenueAccountMaps,
   buildOperatorVenueTradeMaps,
+  describeOperatorVenueAccountMaps,
+  describeOperatorVenueTradeMaps,
 } from '../../index.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
@@ -62,7 +64,26 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(typeof buildOperatorVenueTradeMaps).toBe('function');
     expect(typeof buildOperatorVenueAccountMaps).toBe('function');
     expect(typeof describeOperatorVenueAccountMaps).toBe('function');
+    expect(typeof describeOperatorVenueTradeMaps).toBe('function');
     expect(PUBLIC_MARKET_DATA_VENUE_IDS).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
+  });
+
+  it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
+    expect(describeOperatorVenueTradeMaps({})).toMatchObject({
+      wiredVenueIds: [],
+      inventsAdapters: false,
+      operatorCredentialsRequired: true,
+    });
+    expect(
+      describeOperatorVenueTradeMaps({
+        VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
+        VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
+        VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+      }),
+    ).toMatchObject({
+      wiredVenueIds: ['okx-spot'],
+      inventsAdapters: false,
+    });
   });
 
   it('package index re-exports trading-half policy through fabric', () => {
