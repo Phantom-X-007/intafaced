@@ -1,11 +1,12 @@
 /**
- * Persistence sink gate — connect.data-lake Stage-1 → TSDB handoff (D-S-18).
+ * Persistence sink gate — connect.data-lake capture log → TSDB (D-S-18 / D27-P4).
  *
- * Capture log stays in-process until owner wires TSDB + retention. This gate
- * refuses flush claims when env is incomplete — never a silent no-op persist.
+ * Refuses flush when owner env is incomplete. When TSDB URL and retention days
+ * are both set, measured rows INSERT into connect_lake.lake_ticks.
  */
 
 import type { CaptureRecord } from './capture.js';
+import { persistCaptureRecordsToPostgres, type PersistenceSqlClient } from './postgres-persistence-sink.js';
 import { retentionPersistenceGate, type DataLakeRetentionRefuseReason } from './retention-policy.js';
 
 export type PersistenceSinkRefuse = {
@@ -16,28 +17,53 @@ export type PersistenceSinkRefuse = {
 export type PersistenceSinkOk = {
   readonly ok: true;
   readonly recordCount: number;
+  readonly writtenCount: number;
   readonly tsdbUrl: string;
   readonly retentionDays: number;
 };
 
 export type PersistenceSinkResult = PersistenceSinkRefuse | PersistenceSinkOk;
 
+export type PersistenceSinkDeps = {
+  /** Injectable postgres client for tests — omit to connect from tsdbUrl. */
+  readonly sql?: PersistenceSqlClient;
+  /** Factory when sql is omitted. Defaults to postgres npm client. */
+  readonly connect?: (url: string) => Promise<PersistenceSqlClient>;
+};
+
+async function defaultConnect(url: string): Promise<PersistenceSqlClient> {
+  const { default: postgres } = await import('postgres');
+  return postgres(url, { max: 1, onnotice: () => undefined });
+}
+
 /**
- * Attempt to hand capture rows to persistence. Stage-1 performs no TSDB write —
- * it only validates owner wiring and reports how many rows would flush.
+ * Hand capture rows to persistence. Refuse-closed when env blank; otherwise
+ * INSERT measured rows. Absent rows are never written.
  */
-export function flushCaptureLogToPersistenceSink(
+export async function flushCaptureLogToPersistenceSink(
   records: readonly CaptureRecord[],
   env: NodeJS.ProcessEnv = process.env,
-): PersistenceSinkResult {
+  deps: PersistenceSinkDeps = {},
+): Promise<PersistenceSinkResult> {
   const gate = retentionPersistenceGate(env);
   if (!gate.ok) {
     return { ok: false, reason: gate.reason };
   }
-  return {
-    ok: true,
-    recordCount: records.length,
-    tsdbUrl: gate.tsdbUrl,
-    retentionDays: gate.retentionDays,
-  };
+
+  const ownedClient = deps.sql === undefined;
+  const client = deps.sql ?? (await (deps.connect ?? defaultConnect)(gate.tsdbUrl));
+  try {
+    const writtenCount = await persistCaptureRecordsToPostgres(records, client);
+    return {
+      ok: true,
+      recordCount: records.length,
+      writtenCount,
+      tsdbUrl: gate.tsdbUrl,
+      retentionDays: gate.retentionDays,
+    };
+  } finally {
+    if (ownedClient) {
+      await client.end?.({ timeout: 1 });
+    }
+  }
 }

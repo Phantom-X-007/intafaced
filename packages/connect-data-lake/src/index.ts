@@ -40,10 +40,17 @@ export {
 } from './retention-policy.js';
 export {
   flushCaptureLogToPersistenceSink,
+  type PersistenceSinkDeps,
   type PersistenceSinkOk,
   type PersistenceSinkRefuse,
   type PersistenceSinkResult,
 } from './persistence-sink.js';
+export {
+  lakeTickRowsFromCaptureRecords,
+  persistCaptureRecordsToPostgres,
+  type LakeTickInsertRow,
+  type PersistenceSqlClient,
+} from './postgres-persistence-sink.js';
 export {
   describeIngestCaptureLakeBatch,
   ingestCaptureLakeBatch,

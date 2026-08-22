@@ -12,7 +12,7 @@ export type DataLakeStage1Summary = {
   readonly retention: ReturnType<typeof describeDataLakeRetention>;
 };
 
-/** Single honesty board for connect.data-lake Stage-1 (no TSDB write). */
+/** Single honesty board for connect.data-lake Stage-1 capture + persistence gate. */
 export function describeDataLakeStage1(env: NodeJS.ProcessEnv = process.env): DataLakeStage1Summary {
   return {
     capture: describeCapturePolicy(),

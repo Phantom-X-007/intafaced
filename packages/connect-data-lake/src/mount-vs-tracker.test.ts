@@ -8,7 +8,7 @@ import {
 } from './mount-vs-tracker.js';
 
 describe('connect.data-lake mount vs tracker honest gaps (D26-P2-DL1)', () => {
-  it('Stage-1 backend done bar met on tip — capture only, no TSDB', () => {
+  it('Stage-1 backend done bar met on tip — owner-wired TSDB, refuse when blank', () => {
     expect(DATA_LAKE_TRACKER_ID).toBe('connect.data-lake');
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
     expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);

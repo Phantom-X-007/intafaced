@@ -8,12 +8,13 @@ import {
 } from './capture-policy.js';
 
 describe('describeCapturePolicy', () => {
-  it('states capture honesty without promising a time-series store', () => {
+  it('states capture honesty and owner-wired TSDB handoff', () => {
     const p = describeCapturePolicy();
     expect(p.captureKinds).toEqual(CAPTURE_KINDS);
     expect(p.unconnectedVenueIsAbsent).toBe(true);
     expect(p.holeNotSyntheticEmptyBook).toBe(true);
-    expect(p.noTsdbInPackage).toBe(true);
+    expect(p.tsdbWriteWhenOwnerWired).toBe(true);
+    expect(p.retentionOwnerEnvRequired).toBe(true);
     expect(p.inventsQuietMarket).toBe(false);
   });
 });
@@ -32,9 +33,20 @@ describe('capture policy enforcement', () => {
     expect(wouldInventQuietMarket('not_connected', false)).toBe(false);
   });
 
-  it('refuses persistence claims in stage-1 capture', () => {
-    expect(allowsPersistenceClaim('tsdb')).toBe(false);
-    expect(allowsPersistenceClaim('retention')).toBe(false);
-    expect(allowsPersistenceClaim('compose')).toBe(false);
+  it('allows persistence claims only when owner env is wired', () => {
+    expect(allowsPersistenceClaim('tsdb', {})).toBe(false);
+    expect(allowsPersistenceClaim('retention', {})).toBe(false);
+    expect(allowsPersistenceClaim('compose', {})).toBe(false);
+    expect(
+      allowsPersistenceClaim('tsdb', {
+        CONNECT_DATA_LAKE_TSDB_URL: 'postgres://lake',
+      }),
+    ).toBe(true);
+    expect(
+      allowsPersistenceClaim('retention', {
+        CONNECT_DATA_LAKE_TSDB_URL: 'postgres://lake',
+        CONNECT_DATA_LAKE_RETENTION_DAYS: '30',
+      }),
+    ).toBe(true);
   });
 });

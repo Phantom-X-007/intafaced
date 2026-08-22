@@ -2,8 +2,8 @@
  * Fabric capture batch ingest + persistence handoff (D-S-18 / §27:762).
  *
  * Ingests CaptureLake rows into the stage-1 log, then attempts persistence
- * flush through the owner-wired gate. No TSDB write in Stage-1 — refuse when
- * env is incomplete rather than silently dropping rows.
+ * flush through the owner-wired gate. Refuse when env is incomplete; INSERT
+ * measured rows when TSDB URL and retention days are both owner-set.
  */
 
 import { CaptureLog, type CaptureRecord } from './capture.js';
@@ -17,28 +17,31 @@ export type IngestCaptureLakeBatchResult = {
 
 export type IngestCaptureLakeBatchSummary = ReturnType<typeof describeIngestCaptureLakeBatch>;
 
-/** Honesty board — batch ingest + persistence gate, no TSDB write in Stage-1. */
+/** Honesty board — batch ingest + persistence gate. */
 export function describeIngestCaptureLakeBatch(env: NodeJS.ProcessEnv = process.env) {
-  const retention = env.CONNECT_DATA_LAKE_TSDB_URL?.trim() ?? '';
+  const tsdbUrl = env.CONNECT_DATA_LAKE_TSDB_URL?.trim() ?? '';
   const retentionDays = env.CONNECT_DATA_LAKE_RETENTION_DAYS?.trim() ?? '';
+  const persistenceEnvComplete = tsdbUrl.length > 0 && retentionDays.length > 0;
   return {
     ingestsFabricRecords: true as const,
     evaluatesPersistenceGate: true as const,
-    writesTsdbInStage1: false as const,
-    persistenceEnvComplete: retention.length > 0 && retentionDays.length > 0,
+    writesTsdbWhenOwnerWired: true as const,
+    persistenceEnvComplete,
+    captureLogOnly: !persistenceEnvComplete,
   };
 }
 
 /**
  * Ingest fabric capture facts, then evaluate persistence sink wiring on the full log.
  */
-export function ingestCaptureLakeBatch(
+export async function ingestCaptureLakeBatch(
   log: CaptureLog,
   records: readonly CaptureLakeRecord[],
   env: NodeJS.ProcessEnv = process.env,
   options: IngestCaptureLakeOptions = {},
-): IngestCaptureLakeBatchResult {
+  deps: Parameters<typeof flushCaptureLogToPersistenceSink>[2] = {},
+): Promise<IngestCaptureLakeBatchResult> {
   const ingested = ingestCaptureLakeRecords(log, records, options);
-  const persistence = flushCaptureLogToPersistenceSink(log.records(), env);
+  const persistence = await flushCaptureLogToPersistenceSink(log.records(), env, deps);
   return { ingested, persistence };
 }
