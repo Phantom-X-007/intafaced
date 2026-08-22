@@ -1014,6 +1014,29 @@ module.exports = {
                 create: "Save instrument",
                 remove: "Remove",
                 removeDone: "Removed"
+            },
+            merchantApply: "Merchant programme",
+            merchantApplyLead: "Apply on this session. The account comes from the session, never typed. Never applied is empty, not rejected. Withdraw needs a reason.",
+            merchantApplySignIn: "Sign in to apply",
+            merchantApplyNever: "Never applied — not rejected.",
+            merchantApplyUser: "Account",
+            merchantApplyAppliedAt: "Applied",
+            merchantApplyDecidedAt: "Decided",
+            merchantApplyTrades: "Trades at apply",
+            merchantApplyCompletion: "Completion at apply",
+            merchantApplyEligible: "API eligible",
+            merchantApplyCredential: "Credential",
+            merchantApplyKeyPlane: "Keys",
+            merchantApplyRateLimit: "Rate limit",
+            merchantApplyDispute: "Disputes",
+            merchantApplyApiStatus: "API standing",
+            merchants: {
+                submit: "Apply",
+                submitDone: "Applied",
+                withdraw: "Withdraw",
+                withdrawReason: "Reason",
+                withdrawReasonHint: "Required",
+                withdrawDone: "Withdrawn"
             }
         },
         token: {
