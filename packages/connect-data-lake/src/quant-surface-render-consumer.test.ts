@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { refuseQuantSurfaceRender } from './quant-surface-refuse.js';
 import { describeQuantSurfaceRenderConsumer, evaluateQuantSurfaceRender } from './quant-surface-render-consumer.js';
 
 const honestInput = {
@@ -36,5 +37,16 @@ describe('quant surface render consumer (D33)', () => {
         leaderboard: { rankedByHistoricalReturn: true, surface: 'copy' },
       }),
     ).toMatchObject({ ok: false, reason: 'returns_leaderboard' });
+  });
+});
+
+describe('quant surface render consumer refuse alignment (D47)', () => {
+  it('evaluateQuantSurfaceRender matches refuseQuantSurfaceRender for honest and refused inputs', () => {
+    expect(evaluateQuantSurfaceRender(honestInput)).toEqual(refuseQuantSurfaceRender(honestInput));
+    const refused = {
+      ...honestInput,
+      leaderboard: { rankedByHistoricalReturn: true, surface: 'copy' as const },
+    };
+    expect(evaluateQuantSurfaceRender(refused)).toEqual(refuseQuantSurfaceRender(refused));
   });
 });
