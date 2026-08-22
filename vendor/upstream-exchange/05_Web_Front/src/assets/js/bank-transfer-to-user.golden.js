@@ -31,4 +31,17 @@ if (page.indexOf("draftId('toUser')") === -1) {
   throw new Error('transferId must come from existing draftId');
 }
 
+if (page.indexOf("mutate('bank', 'transfers.scheduleToUser'") === -1) {
+  throw new Error("fail-first: Transfers.vue must contain mutate('bank', 'transfers.scheduleToUser'");
+}
+if (page.indexOf("query('bank', 'transfers.listSchedules'") === -1) {
+  throw new Error('schedules list must stay transfers.listSchedules');
+}
+if (page.indexOf('amount: this.standingToUser.amount') === -1) {
+  throw new Error('schedule amount must be the form string (this.standingToUser.amount)');
+}
+if (/Number\s*\(\s*(this\.)?standingToUser\.amount/.test(page) || /parseFloat\s*\(\s*(this\.)?standingToUser\.amount/.test(page)) {
+  throw new Error('schedule amount must stay a decimal string — no Number/parseFloat');
+}
+
 console.log('bank-transfer-to-user.golden: ok');
