@@ -109,3 +109,20 @@ describe('quant honesty door status — performance labels path (D59)', () => {
     });
   });
 });
+
+describe('quant honesty door status — surface render and composite paths (D61)', () => {
+  it('describeQuantHonestyDoorStatus wires connect-data-lake surface render and composite assess doors', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.doors.find((door) => door.path === EDGE_QUANT_SURFACE_RENDER_DOOR)).toMatchObject({
+      method: 'POST',
+      package: '@intafaced/connect-data-lake',
+    });
+    expect(status.doors.find((door) => door.path === EDGE_QUANT_COMPOSITE_HONESTY_DOOR)).toMatchObject({
+      method: 'POST',
+      package: 'composite',
+    });
+    expect(QUANT_SURFACE_RENDER_PATH).toBe(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+  });
+});
