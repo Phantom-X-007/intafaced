@@ -1509,13 +1509,20 @@ export const FEATURES = [
     module: 'launch',
     phase: '5',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     dependsOn: ['launch.token-factory'],
-    requires: ['services/svc-protocol/contracts/rwa/RwaRegistry.sol'],
+    requires: [
+      'services/svc-protocol/contracts/rwa/RwaRegistry.sol',
+      'services/svc-protocol/src/rwa/rwa-registry-honesty.test.ts',
+      'services/svc-protocol/src/rwa/rwa-mount-vs-tracker.ts',
+      'services/svc-protocol/src/rwa/rwa-mount-vs-tracker.test.ts',
+      'services/svc-protocol/src/rwa/rwa-tracker-status-pin.test.ts',
+      'services/svc-protocol/test/forge/RwaRegistry.t.sol',
+    ],
     note:
-      'S-G4 contract half 2026-08-19: RwaRegistry — licenceHash immutable, register/unlist revert LicenceUnset ' +
-      'while hash is bytes32(0). Issuer is msg.sender; platform cannot unlist. STATUS ready (not done): licence ' +
-      '*content* is Class X (Nitro human / counsel) — no contract makes that go away. Unaudited.',
+      'S-G4 CLOSED engineering bar 2026-08-22: RwaRegistry — licenceHash immutable, register/unlist revert LicenceUnset ' +
+      'while hash is bytes32(0). Issuer is msg.sender; platform cannot unlist. On-chain honesty + forge proof. ' +
+      'Residual: licence *content* is Class X (counsel); contract unaudited.',
   }),
   f('launch.trust-layer', 'Launch trust — enforced LP locks, vesting proofs, deployer reputation (§35)', {
     module: 'launch',
