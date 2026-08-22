@@ -268,3 +268,26 @@ describe('trade.otc mount vs tracker — D77 denon complete', () => {
     expect(policy.moneyViaLedgerClientOnly).toBe(true);
   });
 });
+
+describe('trade.otc mount vs tracker — D79 denon complete', () => {
+  it('full mount board: tracker, doors, policy, done-bar files, honest gaps', () => {
+    const card = otcMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('trade.otc');
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(card.mountComplete).toBe(true);
+    expect(card.doorsMounted).toBe(OTC_MOUNTED_DOORS.length);
+    expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(OTC_DONE_BAR_TEST_FILES).toEqual([
+      'otc-rfq-settle-donebar.test.ts',
+      'otc-mount.reachable.test.ts',
+      'otc-maker-routing-donebar.test.ts',
+      'otc-mid-feed-donebar.test.ts',
+    ]);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(OTC_HONEST_GAPS).toHaveLength(3);
+  });
+});
