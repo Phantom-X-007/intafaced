@@ -5,8 +5,10 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { SubmitRequest, VenueExecution } from '@intafaced/venue-adapter';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
+import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, planOmsRoute, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
+import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 
 const SECRET = 'a-execution-oms-execute-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -120,6 +122,21 @@ describe('executeOmsRoute', () => {
     expect(result.executions[0]?.status).toBe('filled');
   });
 
+  it('records EMS acks when emsStore is wired', async () => {
+    const cheap = new FakeSource('cheap');
+    const store = new InMemoryEmsOrderStore();
+    const result = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [completeVenue({ id: 'cheap', price: '100' })],
+      submitByVenue: { cheap: cheap.submit },
+      emsStore: store,
+    });
+    expect(result.ok).toBe(true);
+    expect(store.get('oms-cheap')?.execution.venueOrderId).toBe('v-cheap');
+  });
+
   it('refuses internal venues and does not submit', async () => {
     const book = new FakeSource('book');
     const result = await executeOmsRoute({
@@ -151,6 +168,22 @@ describe('executeOmsRoute', () => {
     );
     expect(result).toMatchObject({ ok: false, reason: 'kill_switch' });
     expect(street.calls).toHaveLength(0);
+  });
+
+  it('records venue acks in EMS store on successful execute', async () => {
+    const emsStore = new InMemoryEmsOrderStore();
+    const street = new FakeSource('street');
+    const result = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [completeVenue({ id: 'street', price: '100' })],
+      submitByVenue: { street: street.submit },
+      emsStore,
+    });
+    expect(result.ok).toBe(true);
+    const ack = emsStore.get('oms-street');
+    expect(ack?.execution.venueOrderId).toBe('v-street');
   });
 
   it('surfaces submit throw as submit_failed, never a filled report', async () => {

@@ -9,6 +9,7 @@
 import { parseAmount } from '@intafaced/ledger-client';
 import type { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { ExecutionReport, LiquiditySource, VenueExecution } from '@intafaced/venue-adapter';
+import type { EmsOrderStore } from './oms-ems-store.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue } from './oms-plan.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
@@ -20,6 +21,7 @@ export type OmsExecuteVenue = OmsPlanVenue & {
 export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly venues: readonly OmsExecuteVenue[];
   readonly submitByVenue?: Readonly<Record<string, OmsSubmitFn>>;
+  readonly emsStore?: EmsOrderStore;
 };
 
 export type OmsExecuteOk = {
@@ -52,18 +54,19 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       return {
         ok: false,
         reason: 'submit_failed',
-        detail: `no submit injected for venue ${leg.venueId}`,
+        detail: `venue ${leg.venueId} is not wired for submit`,
       };
     }
 
     let execution: VenueExecution;
+    const clientOrderId = `oms-${leg.venueId}`;
     try {
       execution = await submit({
         symbol: planned.report.symbol,
         side: planned.report.side,
         amount: parseAmount(leg.amount),
         limitPrice: parseAmount(leg.price),
-        clientOrderId: `oms-${leg.venueId}`,
+        clientOrderId,
       });
     } catch (err) {
       return { ok: false, reason: 'submit_failed', detail: submitErrorMessage(err) };
@@ -76,6 +79,14 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
         detail: `venue ${leg.venueId} rejected ${execution.venueOrderId}`,
       };
     }
+
+    input.emsStore?.record({
+      clientOrderId,
+      venueId: leg.venueId,
+      symbol: planned.report.symbol,
+      side: planned.report.side,
+      execution,
+    });
 
     executions.push(execution);
   }

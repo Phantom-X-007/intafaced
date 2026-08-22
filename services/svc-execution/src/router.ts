@@ -19,6 +19,7 @@ import { describeExecutionSpine } from './oms-spine.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
 import { withExecutionSpan } from './tracing.js';
+import type { EmsOrderStore } from './oms-ems-store.js';
 
 const tenantIdInput = z.object({ tenantId: z.string().min(1).max(128) });
 
@@ -185,6 +186,7 @@ export function createExecutionRouter(
   latencyByVenue: ExecutionLatencyMap = {},
   marketsByVenue: ExecutionMarketsMap = {},
   snapshotByVenue: ExecutionSnapshotMap = {},
+  emsStore?: EmsOrderStore,
 ) {
   return router({
     execution: router({
@@ -252,6 +254,7 @@ export function createExecutionRouter(
                   tenantId: input.tenantId,
                   actor: ctx.principal!.userId,
                   submitByVenue,
+                  emsStore,
                 },
                 registry,
               );
@@ -508,6 +511,39 @@ export function createExecutionRouter(
               });
             });
           }),
+
+        ems: router({
+          list: scopedProcedure('admin:read', { module: 'execution' })
+            .input(
+              z.object({
+                venueId: z.string().min(1).max(128).optional(),
+                symbol: z.string().min(1).max(64).optional(),
+              }),
+            )
+            .query(async ({ input }) => {
+              if (!emsStore) {
+                throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
+              }
+              return withExecutionSpan('execution.oms.ems.list', input.venueId ?? 'all', async () =>
+                emsStore.list({ venueId: input.venueId, symbol: input.symbol }),
+              );
+            }),
+
+          get: scopedProcedure('admin:read', { module: 'execution' })
+            .input(z.object({ clientOrderId: z.string().min(1).max(128) }))
+            .query(async ({ input }) => {
+              if (!emsStore) {
+                throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
+              }
+              return withExecutionSpan('execution.oms.ems.get', input.clientOrderId, async () => {
+                const row = emsStore.get(input.clientOrderId);
+                if (!row) {
+                  throw new TRPCError({ code: 'NOT_FOUND', message: `EMS ack not found for ${input.clientOrderId}` });
+                }
+                return row;
+              });
+            }),
+        }),
       }),
 
       policy: publicProcedure.query(() => describeExecutionSpine()),
