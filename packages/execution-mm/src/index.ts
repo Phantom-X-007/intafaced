@@ -38,3 +38,11 @@ export {
   type QuoteExternalMmResult,
 } from './market-making.js';
 export { describeMarketMakingPolicy, type MarketMakingPolicySummary } from './mm-policy.js';
+export {
+  EXECUTION_MM_SPREAD_SKEW_BANDS_ENV,
+  mmSpreadSkewBandsGate,
+  validateMmOwnerSpreadSkew,
+  type MmSpreadSkewBands,
+  type MmSpreadSkewBandsGate,
+  type MmSpreadSkewBandsRefuseReason,
+} from './mm-spread-skew-bands.js';

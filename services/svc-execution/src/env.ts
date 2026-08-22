@@ -47,6 +47,11 @@ const schema = baseEnvSchema
        * Blank (default) → letter→bps gate refuses; never invent DEFAULT_THRESHOLDS.
        */
       EXECUTION_SOR_LETTER_BPS_SCHEDULE: z.string().default(''),
+      /**
+       * Owner JSON inclusive bounds for MM half-spread and inventory skew bps.
+       * Blank (default) → spread/skew gate refuses; never invent band magnitudes.
+       */
+      EXECUTION_MM_SPREAD_SKEW_BANDS: z.string().default(''),
     }),
   );
 
