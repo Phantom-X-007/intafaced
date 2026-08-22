@@ -162,6 +162,15 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     });
   });
 
+  it('describeVenueOperatorCredentials exposes full public MD venue board (D51)', () => {
+    const board = describeVenueOperatorCredentials({});
+    expect(board.venueIds).toEqual(PUBLIC_MARKET_DATA_VENUE_IDS);
+    expect(board.wiredVenueIds).toEqual([]);
+    expect(board.unsetVenueIds).toEqual([...PUBLIC_MARKET_DATA_VENUE_IDS]);
+    expect(board.liveCredentialsOperatorIssued).toBe(true);
+    expect(board.inventsCredentials).toBe(false);
+  });
+
   it('buildOperatorVenueTradeAdapters and buildOperatorVenueAccountAdapters wire when operator env is complete (D47)', () => {
     const env = {
       VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
