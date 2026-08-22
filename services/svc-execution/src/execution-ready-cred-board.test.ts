@@ -208,6 +208,17 @@ describe('execution boot health and credential union (D59)', () => {
   });
 });
 
+describe('execution boot open orders and rails wiring (D61)', () => {
+  it('index passes openOrdersByVenue and railsByVenue into createExecutionRouter', () => {
+    const src = indexSrc();
+    expect(src).toContain('venueTradeMaps.openOrdersByVenue');
+    expect(src).toContain('venueAccountMaps.railsByVenue');
+    expect(src).toContain('venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds');
+    expect(src).toContain('venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds');
+    expect(src).toContain('operatorSupplementVenueIds: venueTradeMaps.operatorSupplementVenueIds');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
