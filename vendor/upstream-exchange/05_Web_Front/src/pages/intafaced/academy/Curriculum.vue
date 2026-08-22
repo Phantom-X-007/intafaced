@@ -1,4 +1,5 @@
 <template>
+  <div>
   <div class="ix-card">
     <div class="ix-card-head">
       <h2>{{ $t('intafaced.academy.curriculum') }}</h2>
@@ -88,6 +89,80 @@
       <IxState v-else :loading="completeAction.busy" :reason="completeAction.reason" :message="completeAction.message" endpoint="/api/academy/trpc/markCurriculumComplete"></IxState>
     </div>
   </div>
+
+  <div class="ix-card">
+    <div class="ix-card-head">
+      <h2>{{ $t('intafaced.academy.residency') }}</h2>
+      <span class="ix-sub">myResidencies · applyResidency · withdrawResidency</span>
+    </div>
+    <p class="ix-lead">{{ $t('intafaced.academy.residencyLead') }}</p>
+
+    <h3 class="ix-subhead">{{ $t('intafaced.academy.residencyMine') }}</h3>
+    <IxState :loading="mine.loading" :reason="mine.reason" :message="mine.message" endpoint="/api/academy/trpc/myResidencies">
+      <div v-if="mine.data && mine.data.length" class="ix-scroll">
+        <table class="ix-table">
+          <thead>
+            <tr>
+              <th>{{ $t('intafaced.academy.residencyCohort') }}</th>
+              <th>{{ $t('intafaced.academy.residencyStatus') }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in mine.data" :key="row.id">
+              <td>{{ row.cohortSlug }}</td>
+              <td>{{ row.status }}</td>
+              <td>
+                <div class="ix-actions">
+                  <Button
+                    v-if="canWrite && row.status === 'applied'"
+                    size="small"
+                    :loading="withdrawAction.busy && withdrawId === row.id"
+                    @click="withdrawResidency(row.id)"
+                  >{{ $t('intafaced.academy.residencyWithdraw') }}</Button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.academy.residencyEmpty') }}</div>
+    </IxState>
+
+    <div class="ix-field-grid" style="margin-top:16px;">
+      <div class="ix-field">
+        <label for="ix-academy-residency-cohort">{{ $t('intafaced.academy.residencyCohort') }}</label>
+        <Input element-id="ix-academy-residency-cohort" v-model="cohortSlug" :placeholder="$t('intafaced.academy.residencyCohortHint')"></Input>
+      </div>
+      <div class="ix-field">
+        <label for="ix-academy-residency-statement">{{ $t('intafaced.academy.residencyStatement') }}</label>
+        <Input type="textarea" :rows="4" element-id="ix-academy-residency-statement" v-model="statement" :placeholder="$t('intafaced.academy.residencyStatementHint')"></Input>
+      </div>
+    </div>
+    <div class="ix-actions">
+      <Button v-if="canWrite" type="primary" size="small" :loading="applyAction.busy" :disabled="!cohortSlug || !statement" @click="applyResidency">
+        {{ $t('intafaced.academy.residencyApply') }}
+      </Button>
+      <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.academy.residencySignIn') }}</router-link>
+    </div>
+
+    <div v-if="applyAction.ran" style="margin-top:14px;">
+      <div v-if="applyAction.reason === 'ok'" class="ix-done">
+        <strong>{{ $t('intafaced.academy.residencyApplied') }}</strong>
+        <div style="margin-top:6px;">{{ applyAction.data.id }} · {{ applyAction.data.cohortSlug }}</div>
+      </div>
+      <IxState v-else :loading="applyAction.busy" :reason="applyAction.reason" :message="applyAction.message" endpoint="/api/academy/trpc/applyResidency"></IxState>
+    </div>
+
+    <div v-if="withdrawAction.ran" style="margin-top:14px;">
+      <div v-if="withdrawAction.reason === 'ok'" class="ix-done">
+        <strong>{{ $t('intafaced.academy.residencyWithdrawn') }}</strong>
+        <div style="margin-top:6px;">{{ withdrawAction.data.id }} · {{ withdrawAction.data.status }}</div>
+      </div>
+      <IxState v-else :loading="withdrawAction.busy" :reason="withdrawAction.reason" :message="withdrawAction.message" endpoint="/api/academy/trpc/withdrawResidency"></IxState>
+    </div>
+  </div>
+  </div>
 </template>
 
 <script>
@@ -115,7 +190,13 @@ export default {
       itemSlug: '',
       items: this.emptySection(),
       itemDetail: this.emptySection(),
-      completeAction: this.emptyAction()
+      completeAction: this.emptyAction(),
+      cohortSlug: '',
+      statement: '',
+      withdrawId: '',
+      mine: this.emptySection(),
+      applyAction: this.emptyAction(),
+      withdrawAction: this.emptyAction()
     };
   },
   computed: {
@@ -131,10 +212,14 @@ export default {
   },
   created() {
     this.loadPath();
+    this.loadMine();
   },
   methods: {
     loadPath() {
       this.load('items', query('academy', 'curriculum', { path: this.path }, this.ixToken));
+    },
+    loadMine() {
+      this.load('mine', query('academy', 'myResidencies', undefined, this.ixToken));
     },
     setPath(path) {
       this.path = path;
@@ -148,6 +233,19 @@ export default {
     complete(itemSlug) {
       this.completeSlug = itemSlug;
       this.act('completeAction', mutate('academy', 'markCurriculumComplete', { itemSlug: itemSlug }, this.ixToken));
+    },
+    applyResidency() {
+      var self = this;
+      this.act('applyAction', mutate('academy', 'applyResidency', { cohortSlug: this.cohortSlug, statement: this.statement }, this.ixToken)).then(function (res) {
+        if (res && res.ok) self.loadMine();
+      });
+    },
+    withdrawResidency(id) {
+      var self = this;
+      this.withdrawId = id;
+      this.act('withdrawAction', mutate('academy', 'withdrawResidency', { id: id }, this.ixToken)).then(function (res) {
+        if (res && res.ok) self.loadMine();
+      });
     }
   }
 };
