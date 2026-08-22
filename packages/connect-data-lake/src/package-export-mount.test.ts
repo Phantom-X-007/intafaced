@@ -17,5 +17,7 @@ describe('connect-data-lake package exports mount', () => {
     expect(src).toContain('runConnectDataLakeRetentionMaintenance');
     expect(src).toContain('gateBacktestRender');
     expect(src).toContain('describeQuantHonestyPolicy');
+    expect(src).toContain('gateQuantSurfaceRender');
+    expect(src).toContain('describeQuantHonestyMount');
   });
 });
