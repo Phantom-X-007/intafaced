@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EDGE_QUANT_COMPOSITE_HONESTY_DOOR, EDGE_QUANT_SURFACE_RENDER_DOOR } from '@intafaced/connect-data-lake';
 import { QUANT_COMPOSITE_HONESTY_PATH } from './quant-composite-honesty-door.js';
-import { QUANT_HONESTY_ASSESS_PATH } from './quant-honesty-door.js';
+import { QUANT_HONESTY_ASSESS_PATH, QUANT_HONESTY_COMPARISON_PATH } from './quant-honesty-door.js';
 import { describeQuantHonestyDoorStatus } from './quant-honesty-status.js';
 import { QUANT_SURFACE_RENDER_PATH } from './quant-surface-render-door.js';
 
@@ -81,5 +81,16 @@ describe('quant honesty door status — status line (D54)', () => {
     expect(status.statusLine).toMatch(/composite assess/i);
     expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
     expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+  });
+});
+
+describe('quant honesty door status — comparison path (D57)', () => {
+  it('describeQuantHonestyDoorStatus includes comparison-order assess door', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.doors.map((door) => door.path)).toContain(QUANT_HONESTY_COMPARISON_PATH);
+    expect(status.doors.find((door) => door.path === QUANT_HONESTY_COMPARISON_PATH)).toMatchObject({
+      method: 'POST',
+      package: '@intafaced/quant-honesty',
+    });
   });
 });
