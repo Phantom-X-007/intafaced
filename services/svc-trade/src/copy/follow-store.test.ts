@@ -147,6 +147,73 @@ describe('CopyFollowStore unique (follower, leader)', () => {
     expect(resolveExistingFeeShareClaim(FOLLOW_A, paid)).toEqual({ action: 'duplicate', record: paid });
     expect(() => resolveExistingFeeShareClaim(FOLLOW_B, pending)).toThrow(CopyError);
   });
+
+  it('savePendingFeeShareReserve throws on 0-row UPDATE, not no-op', async () => {
+    const store = new MemoryCopyFollowStore();
+    await expect(store.savePendingFeeShareReserve(FOLLOW_A, FILL, parseAmount('0.5'))).rejects.toMatchObject({
+      name: 'CopyError',
+      code: 'trade.copy_settle_refused',
+    });
+
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new Error('crash after INSERT');
+      }),
+    ).rejects.toThrow(/crash after INSERT/);
+    await store.savePendingFeeShareReserve(FOLLOW_A, FILL, parseAmount('0.5'));
+    const stamped = await store.getSettledFeeShare(FOLLOW_A, FILL);
+    expect(stamped?.cappedLeaderShare).toBe(parseAmount('0.5'));
+    expect(stamped?.skippedReason).toBeNull();
+    expect(stamped?.settled).toBe(false);
+
+    const skip: StoredSettledFeeShare = {
+      ...share(FOLLOW_A, FILL, LEADER),
+      cappedLeaderShare: 0n,
+      skippedReason: 'cap_reached',
+      settled: false,
+    };
+    await store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => skip);
+    await expect(store.savePendingFeeShareReserve(FOLLOW_A, FILL, parseAmount('0.5'))).rejects.toMatchObject({
+      name: 'CopyError',
+      code: 'trade.copy_settle_refused',
+    });
+  });
+
+  it('memory getMirroredFill / claimMirrorFill canonicalize UUID fill ids', async () => {
+    const store = new MemoryCopyFollowStore();
+    await store.saveFollow(follow(FOLLOW_A));
+    const upper = 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA';
+    const lower = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const plan = {
+      fillId: upper,
+      followId: FOLLOW_A,
+      followerId: FOLLOWER,
+      leaderId: LEADER,
+      marketId: 'BTC-USDT',
+      side: 'buy' as const,
+      qty: parseAmount('0.001'),
+      notional: parseAmount('10'),
+    };
+    const claimed = await store.claimMirrorFill({
+      followId: FOLLOW_A,
+      fillId: upper,
+      maxAggregate: parseAmount('1000'),
+      plan,
+    });
+    expect(claimed.status).toBe('claimed');
+    if (claimed.status === 'claimed') {
+      expect(claimed.plan.fillId).toBe(lower);
+    }
+    expect(await store.getMirroredFill(FOLLOW_A, lower)).not.toBeNull();
+    expect(await store.getMirroredFill(FOLLOW_A, upper)).not.toBeNull();
+    const dup = await store.claimMirrorFill({
+      followId: FOLLOW_A,
+      fillId: lower,
+      maxAggregate: parseAmount('1000'),
+      plan: { ...plan, fillId: lower },
+    });
+    expect(dup.status).toBe('duplicate');
+  });
 });
 
 function share(followId: string, fillId: string, leaderId: string): StoredSettledFeeShare {
@@ -450,8 +517,9 @@ function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string
         events.push('persist-reserve');
         const fillId = String(values[2]);
         const prev = byFill.get(fillId);
-        if (prev && prev.follow_id === String(values[1]) && prev.settled === false) {
+        if (prev && prev.follow_id === String(values[1]) && prev.settled === false && prev.skipped_reason == null) {
           byFill.set(fillId, { ...prev, capped_leader_share: String(values[0]) });
+          return Promise.resolve([{ fill_id: fillId }]);
         }
         return Promise.resolve([]);
       }

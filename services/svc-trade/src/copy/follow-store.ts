@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { CopyError } from './errors.js';
+import { canonicalizeCopyFillId } from './fee-share.js';
 import type { CopyFollow } from './follows.js';
 
 /** postgres.js surfaces PG SQLSTATE on `err.code`. */
@@ -219,6 +220,7 @@ export interface CopyFollowStore {
    * Stamp the reserved amount on a pending unique fill_id **before** ledger
    * post. Leftover retry skip-reserves and re-posts this amount — never
    * `grossLeaderShare`, never a live cap/zero skip over a paid fill.
+   * 0-row UPDATE throws — CopyService must not post an unstamped reserve.
    */
   savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void>;
   /**
@@ -441,12 +443,18 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
 
   async savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void> {
     if (reserved <= 0n) return;
-    const key = settleKey(followId, fillId);
+    const id = canonicalizeCopyFillId(fillId);
+    const key = settleKey(followId, id);
     const cur = this.settled.get(key);
-    if (!cur || !isPendingFeeShareClaim(cur)) return;
+    if (!cur || !isPendingFeeShareClaim(cur)) {
+      throw new CopyError(
+        'Pending fee-share reserve stamp matched 0 rows — refuse rather than post unstamped',
+        'trade.copy_settle_refused',
+      );
+    }
     const next = { ...cur, cappedLeaderShare: reserved };
     this.settled.set(key, next);
-    this.settledByFill.set(fillId, next);
+    this.settledByFill.set(id, next);
   }
 
   async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
@@ -463,7 +471,7 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   }
 
   async getMirroredFill(followId: string, fillId: string): Promise<StoredMirrorPlan | null> {
-    return this.mirrored.get(mirrorKey(followId, fillId)) ?? null;
+    return this.mirrored.get(mirrorKey(followId, canonicalizeCopyFillId(fillId))) ?? null;
   }
 
   async claimMirrorFill(input: {
@@ -473,8 +481,9 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     plan: Omit<StoredMirrorPlan, 'nextExposure'>;
   }): Promise<ClaimMirrorFillResult> {
     // Same exclusive domain as addExposureIfUnderCap (`exp:${followId}`).
+    const fillId = canonicalizeCopyFillId(input.fillId);
     return this.exclusive(`exp:${input.followId}`, () => {
-      const key = mirrorKey(input.followId, input.fillId);
+      const key = mirrorKey(input.followId, fillId);
       const existing = this.mirrored.get(key);
       if (existing) {
         return { status: 'duplicate' as const, plan: existing };
@@ -489,7 +498,7 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         return { status: 'cap_exceeded' as const, current };
       }
 
-      const plan: StoredMirrorPlan = { ...input.plan, nextExposure };
+      const plan: StoredMirrorPlan = { ...input.plan, fillId, nextExposure };
       this.exposure.set(input.followId, nextExposure);
       this.mirrored.set(key, plan);
       return { status: 'claimed' as const, plan };
@@ -497,7 +506,7 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   }
 
   async getSettledFeeShare(followId: string, fillId: string): Promise<StoredSettledFeeShare | null> {
-    return this.settled.get(settleKey(followId, fillId)) ?? null;
+    return this.settled.get(settleKey(followId, canonicalizeCopyFillId(fillId))) ?? null;
   }
 
   async runFeeShareSettleOnce(
@@ -509,9 +518,10 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     // and both reserve / pay two leaders from one house fee. Claim the
     // fill *before* `run` so a second follow sees the once-key even while
     // ledger recipes are in flight (SQL unique fill_id is the durable form).
-    return this.exclusive(`settle-fill:${fillId}`, async () => {
+    const id = canonicalizeCopyFillId(fillId);
+    return this.exclusive(`settle-fill:${id}`, async () => {
       let insertedThisCall = false;
-      const existing = this.settledByFill.get(fillId);
+      const existing = this.settledByFill.get(id);
       if (existing) {
         const resolved = resolveExistingFeeShareClaim(followId, existing);
         if (resolved.action === 'duplicate') {
@@ -519,21 +529,21 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         }
       } else {
         const follow = this.follows.get(followId);
-        const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
-        this.settled.set(settleKey(followId, fillId), claim);
-        this.settledByFill.set(fillId, claim);
+        const claim = pendingFeeShareClaim(followId, id, follow?.leaderId ?? '', follow?.followerId ?? '');
+        this.settled.set(settleKey(followId, id), claim);
+        this.settledByFill.set(id, claim);
         insertedThisCall = true;
       }
       try {
         const record = await run({ insertedThisCall });
-        this.settled.set(settleKey(followId, fillId), record);
-        this.settledByFill.set(fillId, record);
+        this.settled.set(settleKey(followId, id), record);
+        this.settledByFill.set(id, record);
         return { status: 'claimed' as const, record };
       } catch (err) {
         if (shouldUnclaimCopyFeeShareClaim(insertedThisCall, err)) {
-          this.settled.delete(settleKey(followId, fillId));
-          const cur = this.settledByFill.get(fillId);
-          if (cur?.followId === followId) this.settledByFill.delete(fillId);
+          this.settled.delete(settleKey(followId, id));
+          const cur = this.settledByFill.get(id);
+          if (cur?.followId === followId) this.settledByFill.delete(id);
         }
         throw err;
       }
@@ -541,8 +551,9 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   }
 
   async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
-    return this.exclusive(`place:${mirrorKey(followId, fillId)}`, async () => {
-      const key = mirrorKey(followId, fillId);
+    const id = canonicalizeCopyFillId(fillId);
+    return this.exclusive(`place:${mirrorKey(followId, id)}`, async () => {
+      const key = mirrorKey(followId, id);
       const existing = this.placed.get(key);
       if (existing) {
         return { status: 'duplicate' as const, record: existing };
@@ -854,13 +865,21 @@ export class SqlCopyFollowStore implements CopyFollowStore {
 
   async savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void> {
     if (reserved <= 0n) return;
-    await this.sql`
+    const id = canonicalizeCopyFillId(fillId);
+    const rows = await this.sql<Array<{ fill_id: string }>>`
       UPDATE copy_settled_fee_shares
          SET capped_leader_share = ${formatAmount(reserved)}
-       WHERE follow_id = ${followId} AND fill_id = ${fillId}
+       WHERE follow_id = ${followId} AND fill_id = ${id}
          AND settled = false
          AND skipped_reason IS NULL
+      RETURNING fill_id
     `;
+    if (rows.length === 0) {
+      throw new CopyError(
+        'Pending fee-share reserve stamp matched 0 rows — refuse rather than post unstamped',
+        'trade.copy_settle_refused',
+      );
+    }
   }
 
   async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
@@ -879,11 +898,12 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   }
 
   async getMirroredFill(followId: string, fillId: string): Promise<StoredMirrorPlan | null> {
+    const id = canonicalizeCopyFillId(fillId);
     const rows = await this.sql<MirroredFillRow[]>`
       SELECT fill_id, follow_id, follower_id, leader_id, market_id, side,
              qty::text, notional::text, next_exposure::text
         FROM copy_mirrored_fills
-       WHERE follow_id = ${followId} AND fill_id = ${fillId}
+       WHERE follow_id = ${followId} AND fill_id = ${id}
        LIMIT 1
     `;
     const row = rows[0];
@@ -899,6 +919,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     if (input.plan.notional < 0n) {
       return { status: 'cap_exceeded', current: await this.getExposure(input.followId) };
     }
+    const fillId = canonicalizeCopyFillId(input.fillId);
     const notionalStr = formatAmount(input.plan.notional);
     const maxStr = formatAmount(input.maxAggregate);
 
@@ -921,7 +942,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         SELECT fill_id, follow_id, follower_id, leader_id, market_id, side,
                qty::text, notional::text, next_exposure::text
           FROM copy_mirrored_fills
-         WHERE follow_id = ${input.followId} AND fill_id = ${input.fillId}
+         WHERE follow_id = ${input.followId} AND fill_id = ${fillId}
          LIMIT 1
       `;
       const existing = existingRows[0];
@@ -942,7 +963,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
            AND exposure + ${notionalStr}::numeric <= ${maxStr}::numeric
       `;
 
-      const plan: StoredMirrorPlan = { ...input.plan, nextExposure };
+      const plan: StoredMirrorPlan = { ...input.plan, fillId, nextExposure };
       await tx`
         INSERT INTO copy_mirrored_fills (
           follow_id, fill_id, follower_id, leader_id, market_id, side,
@@ -965,12 +986,13 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   }
 
   async getSettledFeeShare(followId: string, fillId: string): Promise<StoredSettledFeeShare | null> {
+    const id = canonicalizeCopyFillId(fillId);
     const rows = await this.sql<SettledFeeShareRow[]>`
       SELECT fill_id, follow_id, leader_id, follower_id, asset_id,
              protocol_fee::text, applied_share_bps, gross_leader_share::text,
              capped_leader_share::text, skipped_reason, settled
         FROM copy_settled_fee_shares
-       WHERE follow_id = ${followId} AND fill_id = ${fillId}
+       WHERE follow_id = ${followId} AND fill_id = ${id}
        LIMIT 1
     `;
     const row = rows[0];
@@ -978,12 +1000,13 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   }
 
   private async getSettledFeeShareByFillId(fillId: string): Promise<StoredSettledFeeShare | null> {
+    const id = canonicalizeCopyFillId(fillId);
     const rows = await this.sql<SettledFeeShareRow[]>`
       SELECT fill_id, follow_id, leader_id, follower_id, asset_id,
              protocol_fee::text, applied_share_bps, gross_leader_share::text,
              capped_leader_share::text, skipped_reason, settled
         FROM copy_settled_fee_shares
-       WHERE fill_id = ${fillId}
+       WHERE fill_id = ${id}
        LIMIT 1
     `;
     const row = rows[0];
@@ -995,9 +1018,10 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     fillId: string,
     run: (ctx: FeeShareSettleOnceContext) => Promise<StoredSettledFeeShare>,
   ): Promise<RunFeeShareSettleOnceResult> {
+    const id = canonicalizeCopyFillId(fillId);
     const settleOnce = async () => {
       let insertedThisCall = false;
-      const existing = await this.getSettledFeeShareByFillId(fillId);
+      const existing = await this.getSettledFeeShareByFillId(id);
       if (existing) {
         const resolved = resolveExistingFeeShareClaim(followId, existing);
         if (resolved.action === 'duplicate') {
@@ -1008,7 +1032,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         // leaderId (`copy-leader-share:${fillId}:${leaderId}`); a crash after
         // post used to leave no row, so a second follow paid a second leader.
         const follow = await this.getFollow(followId);
-        const claim = pendingFeeShareClaim(followId, fillId, follow?.leaderId ?? '', follow?.followerId ?? '');
+        const claim = pendingFeeShareClaim(followId, id, follow?.leaderId ?? '', follow?.followerId ?? '');
         try {
           await this.sql`
             INSERT INTO copy_settled_fee_shares (
@@ -1033,7 +1057,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
           insertedThisCall = true;
         } catch (err) {
           if (isPgUniqueViolation(err)) {
-            const saved = await this.getSettledFeeShareByFillId(fillId);
+            const saved = await this.getSettledFeeShareByFillId(id);
             if (!saved) rethrowCopyFeeShareUnique(err);
             const resolved = resolveExistingFeeShareClaim(followId, saved);
             if (resolved.action === 'duplicate') {
@@ -1053,7 +1077,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
           try {
             await this.sql`
               DELETE FROM copy_settled_fee_shares
-               WHERE follow_id = ${followId} AND fill_id = ${fillId}
+               WHERE follow_id = ${followId} AND fill_id = ${id}
             `;
           } catch {
             // Leftover claim is fail-closed: second leader still unique-violates.
@@ -1073,12 +1097,12 @@ export class SqlCopyFollowStore implements CopyFollowStore {
                capped_leader_share = ${formatAmount(record.cappedLeaderShare)},
                skipped_reason = ${record.skippedReason},
                settled = ${record.settled}
-         WHERE follow_id = ${followId} AND fill_id = ${fillId}
+         WHERE follow_id = ${followId} AND fill_id = ${id}
       `;
-      const saved = (await this.getSettledFeeShare(followId, fillId)) ?? record;
+      const saved = (await this.getSettledFeeShare(followId, id)) ?? record;
       return { status: 'claimed' as const, record: saved };
     };
-    const fillLockKey = `copy-settle-fill:${fillId}`;
+    const fillLockKey = `copy-settle-fill:${id}`;
     // CopyService holds the per-follow lock on this pinned connection.
     // Take the fill lock on the SAME session so two follows cannot both
     // pass the empty lookup. Unique INSERT is the crash-safe once-key.
@@ -1094,7 +1118,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
   }
 
   async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
-    const key = mirrorKey(followId, fillId);
+    const key = mirrorKey(followId, canonicalizeCopyFillId(fillId));
     const existing = sqlPlacedMirrors.get(key);
     if (existing) {
       return { status: 'duplicate' as const, record: existing };

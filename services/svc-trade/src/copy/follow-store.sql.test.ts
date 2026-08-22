@@ -275,5 +275,25 @@ if (!available) {
       ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
       expect(ranB).toBe(false);
     });
+
+    it('savePendingFeeShareReserve throws on 0-row UPDATE, not no-op', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      await expect(store.savePendingFeeShareReserve(FOLLOW_A, FILL, parseAmount('0.5'))).rejects.toMatchObject({
+        name: 'CopyError',
+        code: 'trade.copy_settle_refused',
+      });
+
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+          throw new Error('crash after INSERT');
+        }),
+      ).rejects.toThrow(/crash after INSERT/);
+      await store.savePendingFeeShareReserve(FOLLOW_A, FILL, parseAmount('0.5'));
+      const stamped = await store.getSettledFeeShare(FOLLOW_A, FILL);
+      expect(stamped?.cappedLeaderShare).toBe(parseAmount('0.5'));
+      expect(stamped?.skippedReason).toBeNull();
+      expect(stamped?.settled).toBe(false);
+    });
   });
 }

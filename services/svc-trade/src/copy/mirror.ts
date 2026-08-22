@@ -8,6 +8,7 @@
 
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { CopyError } from './errors.js';
+import { canonicalizeCopyFillId } from './fee-share.js';
 import type { CopyFollow } from './follows.js';
 
 export type MirrorSide = 'buy' | 'sell';
@@ -164,13 +165,14 @@ export function parseLeaderFillObservation(input: {
   if (input.side !== 'buy' && input.side !== 'sell') {
     throw new CopyError('Mirror side must be buy|sell', 'trade.copy_envelope_invalid');
   }
-  const fillId = input.fillId.trim();
-  if (!fillId) {
+  const trimmed = input.fillId.trim();
+  if (!trimmed) {
     throw new CopyError('Leader fill id required — without it a redelivered fill would mirror twice', 'trade.copy_envelope_invalid');
   }
-  if (fillId.length > 128) {
+  if (trimmed.length > 128) {
     throw new CopyError('Leader fill id exceeds 128 chars', 'trade.copy_envelope_invalid');
   }
+  const fillId = canonicalizeCopyFillId(trimmed);
   const marketId = input.marketId.trim();
   if (!marketId) {
     throw new CopyError('Market id required', 'trade.copy_envelope_invalid');

@@ -191,7 +191,7 @@ export class CopyService {
       if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
         throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
       }
-      const prior = await store.getMirroredFill(follow.followId, input.fillId.trim());
+      const prior = await store.getMirroredFill(follow.followId, canonicalizeCopyFillId(input.fillId));
       if (!prior) {
         throw new CopyError(
           'No durable mirror plan for this fillId — planMirror first',
@@ -568,9 +568,10 @@ export class CopyService {
       // First INSERT reserves and stamps the amount on the pending row before
       // post. Leftover retry uses that stamp (ledger keys copy-fee:${fillId} /
       // copy-leader-share:${fillId}:${leaderId} are idempotent). Never post
-      // grossLeaderShare. Never stamp cap_reached / zero_share over a fill
-      // whose reserve already landed — persist is before post, so a zero stamp
-      // means this call never reached the ledger.
+      // grossLeaderShare. Stamp 0-row throws (do not post unstamped). Crash
+      // after reserve before stamp leaves pending skip=null with stamp 0 —
+      // leftover retry must not persist cap_reached / zero_share over that
+      // reserved fill (burned slot > over-pay).
       const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
       let reservedAmount: Amount;
       if (ctx.insertedThisCall) {
@@ -596,6 +597,15 @@ export class CopyService {
       }
 
       if (reservedAmount <= 0n) {
+        if (!ctx.insertedThisCall) {
+          const pending = await store.getSettledFeeShare(follow.followId, fillId);
+          if (pending && isPendingFeeShareClaim(pending)) {
+            throw new CopyError(
+              'Pending fee-share has no stamped reserve — refuse rather than stamp skip over a reserved fill',
+              'trade.copy_settle_refused',
+            );
+          }
+        }
         const skipped =
           attribution.skippedReason !== null
             ? attribution
