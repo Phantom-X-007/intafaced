@@ -171,6 +171,23 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(board.inventsCredentials).toBe(false);
   });
 
+  it('operator trade and account boards align with credential board wired venues (D53)', () => {
+    const env = {
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 's',
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k2',
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's2',
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+    };
+    const creds = describeVenueOperatorCredentials(env);
+    expect(describeOperatorVenueTradeMaps(env).wiredVenueIds).toEqual(creds.wiredVenueIds);
+    expect(describeOperatorVenueAccountMaps(env).wiredVenueIds).toEqual(creds.wiredVenueIds);
+    expect(buildOperatorVenueTradeMaps(env).wiredVenueIds).toEqual(creds.wiredVenueIds);
+    expect(buildOperatorVenueAccountMaps(env).wiredVenueIds).toEqual(creds.wiredVenueIds);
+    expect(creds.wiredVenueIds).toEqual(['binance-spot', 'okx-spot']);
+    expect(creds.unsetVenueIds).toEqual(['bybit-spot']);
+  });
+
   it('buildOperatorVenueTradeAdapters and buildOperatorVenueAccountAdapters wire when operator env is complete (D47)', () => {
     const env = {
       VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
