@@ -138,3 +138,19 @@ describe('quant honesty door status — complete door set (D63)', () => {
     expect(status.compositeHonestyWired).toBe(true);
   });
 });
+
+describe('quant honesty door status — package and method matrix (D64)', () => {
+  it('describeQuantHonestyDoorStatus wires expected package and method per door', () => {
+    const status = describeQuantHonestyDoorStatus();
+    const byPath = Object.fromEntries(status.doors.map((door) => [door.path, door]));
+    expect(byPath[QUANT_HONESTY_ASSESS_PATH]).toMatchObject({ method: 'POST', package: '@intafaced/quant-honesty' });
+    expect(byPath[QUANT_HONESTY_COMPARISON_PATH]).toMatchObject({ method: 'POST', package: '@intafaced/quant-honesty' });
+    expect(byPath[QUANT_HONESTY_LABELS_PATH]).toMatchObject({ method: 'GET', package: '@intafaced/quant-honesty' });
+    expect(byPath[EDGE_QUANT_SURFACE_RENDER_DOOR]).toMatchObject({ method: 'POST', package: '@intafaced/connect-data-lake' });
+    expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toMatchObject({ method: 'POST', package: 'composite' });
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(status.statusLine).toMatch(/comparison/i);
+    expect(QUANT_SURFACE_RENDER_PATH).toBe(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+  });
+});
