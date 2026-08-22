@@ -172,3 +172,23 @@ describe('quant honesty door status — status line complete (D66)', () => {
     expect(status.doors).toHaveLength(5);
   });
 });
+
+describe('quant honesty door status — mount honesty complete (D69)', () => {
+  it('describeQuantHonestyDoorStatus reports full mount honesty board with five aligned doors', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    const paths = status.doors.map((door) => door.path);
+    expect(new Set(paths).size).toBe(5);
+    expect(paths).toContain(QUANT_HONESTY_ASSESS_PATH);
+    expect(paths).toContain(QUANT_HONESTY_COMPARISON_PATH);
+    expect(paths).toContain(QUANT_HONESTY_LABELS_PATH);
+    expect(paths).toContain(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(paths).toContain(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+    expect(QUANT_SURFACE_RENDER_PATH).toBe(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+  });
+});
