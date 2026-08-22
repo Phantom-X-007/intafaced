@@ -84,6 +84,14 @@ describe('execution /ready boot supplement fields (D43)', () => {
   });
 });
 
+describe('execution /ready boot trade supplement fields (D45)', () => {
+  it('index wires trade supplement venue ids on /ready', () => {
+    const src = indexSrc();
+    expect(src).toContain('buildExecutionVenueTradeMapsWithOperatorSupplement');
+    expect(src).toContain('operatorSupplementVenueIds: venueTradeMaps.operatorSupplementVenueIds');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
