@@ -1708,14 +1708,20 @@ export const FEATURES = [
   f('ops.admin', 'apps/admin — listings, fee params, treasury, kill-switches', {
     module: 'core-ops',
     phase: '5',
-    status: 'ready',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['infra.ui-tokens'],
-    requires: ['apps/admin'],
+    requires: [
+      'apps/admin/src/lib/admin-mount-vs-tracker.ts',
+      'apps/admin/src/lib/admin-mount-vs-tracker.test.ts',
+      'apps/admin/src/lib/admin-tracker-status-pin.test.ts',
+      'apps/admin/src/lib/admin-compose-wiring.ts',
+      'apps/admin/src/lib/operator-tools-catalog.ts',
+      'apps/admin/src/lib/admin-bff-gate.ts',
+    ],
     note:
-      'Console is NOT a facade (kill/freeze live via BFF → edge). **Wave 3 #1188 (2026-08-09)**: `/tools` Operator tools page + BFF proxies already-mounted ' +
-      'edge tRPC (KYC, freeze identity, bank.ops, merchantState, token mint/distribute, academy ops) — missing EDGE/token → not-wired, never fake success. ' +
-      'Reconcile stays simulated (honest marker) until full 3-service mount. Still NOT done: fee/listing write paths absent platform-wide; Class X SSO/ACL ' +
-      'on :3100; no invent fee schedules.',
+      '**Done 2026-08-22:** kill/freeze + operator-tools BFF proxies to edge tRPC; honest unconfigured states; optional ADMIN_BFF_SHARED_SECRET gate. ' +
+      'Residuals: fee/listing write paths platform-wide; Class X SSO/ACL on :3100.',
   }),
   f('ops.notifications', 'Event-driven fan-out: in-app, push, email, SMS', {
     module: 'notify',
