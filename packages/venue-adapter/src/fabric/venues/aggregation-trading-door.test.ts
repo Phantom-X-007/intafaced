@@ -782,3 +782,29 @@ describe('aggregation trading door — D102 denon complete', () => {
     }
   });
 });
+
+describe('aggregation trading door — D104 denon complete', () => {
+  it('mount cert, factory trio, operator maps, and honest gaps board all green', () => {
+    expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
+    expect(venueAggregationMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'venue.aggregation',
+      exports: 9,
+      exportsPresent: 9,
+      gaps: 3,
+      backendDoneBarMet: true,
+    });
+    expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
+    expect(describeTradingHalfPolicy().sameIdsAsPublicMarketData).toBe(true);
+    expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      const prefix = venueOperatorCredentialEnvPrefix(id);
+      const env = {
+        [`${prefix}_API_KEY`]: 'k',
+        [`${prefix}_API_SECRET`]: 's',
+        ...(id === 'okx-spot' ? { [`${prefix}_PASSPHRASE`]: 'p' } : {}),
+      };
+      expect(buildOperatorVenueTradeMaps(env).wiredVenueIds).toEqual([id]);
+      expect(buildOperatorVenueAccountMaps(env).wiredVenueIds).toEqual([id]);
+    }
+  });
+});
