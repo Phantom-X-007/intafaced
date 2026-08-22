@@ -151,3 +151,19 @@ describe('trade.otc mounted doors and done bar files complete (D64)', () => {
     });
   });
 });
+
+describe('trade.otc mount vs tracker board complete (D66)', () => {
+  it('otcMountVsTrackerBoardCard reports mount complete with honest gaps and backend done bar', () => {
+    const card = otcMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('trade.otc');
+    expect(card.mountComplete).toBe(true);
+    expect(card.doorsMounted).toBe(OTC_MOUNTED_DOORS.length);
+    expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+  });
+});
