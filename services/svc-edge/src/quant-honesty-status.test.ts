@@ -211,3 +211,23 @@ describe('quant honesty door status — full honesty board complete (D72)', () =
     expect(byPath[QUANT_HONESTY_ASSESS_PATH]).toBe('@intafaced/quant-honesty');
   });
 });
+
+describe('quant honesty door status — denon cross-lane complete (D75)', () => {
+  it('describeQuantHonestyDoorStatus full board green with data-lake path alignment', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(status.doors).toHaveLength(5);
+    expect(QUANT_SURFACE_RENDER_PATH).toBe(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+    const paths = status.doors.map((door) => door.path);
+    expect(paths).toContain(QUANT_HONESTY_ASSESS_PATH);
+    expect(paths).toContain(QUANT_HONESTY_COMPARISON_PATH);
+    expect(paths).toContain(QUANT_HONESTY_LABELS_PATH);
+    expect(paths).toContain(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(paths).toContain(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
+  });
+});
