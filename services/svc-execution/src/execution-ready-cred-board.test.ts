@@ -148,6 +148,17 @@ describe('execution boot trade book snapshot wiring (D52)', () => {
   });
 });
 
+describe('execution boot ems store wiring (D53)', () => {
+  it('index wires FileEmsOrderStore or InMemoryEmsOrderStore into createExecutionRouter', () => {
+    const src = indexSrc();
+    expect(src).toContain('EXECUTION_EMS_STORE_PATH');
+    expect(src).toContain('new FileEmsOrderStore(emsStorePath)');
+    expect(src).toContain('new InMemoryEmsOrderStore()');
+    expect(src).toContain('emsStore,');
+    expect(src).toContain('emsAckCount: emsStore.list().length');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
