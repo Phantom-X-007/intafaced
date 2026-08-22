@@ -248,6 +248,9 @@ describe('/admin/status — control-plane summary', () => {
     expect(body.quantHonesty.mountedOnControlPlane).toBe(true);
     expect(body.quantHonesty.notProxiedToSvcQuant).toBe(true);
     expect(body.quantHonesty.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(body.quantHonesty.statusLine).toMatch(/backtest/i);
+    expect(body.quantHonesty.statusLine).toMatch(/surface render/i);
+    expect(body.quantHonesty.statusLine).toMatch(/composite assess/i);
     const doorPaths = body.quantHonesty.doors.map((door) => door.path);
     expect(doorPaths).toContain('/quant/honesty/assess-composite');
     expect(doorPaths).toContain('/quant/honesty/assess-surface-render');
