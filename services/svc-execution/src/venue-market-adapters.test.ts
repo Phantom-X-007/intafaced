@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
-import { buildExecutionVenueMarketMaps, wireExecutionVenueMarketAdapter } from './venue-market-adapters.js';
+import {
+  buildExecutionVenueMarketMaps,
+  buildExecutionVenueMarketMapsWithPublicMdSupplement,
+  wireExecutionVenueMarketAdapter,
+} from './venue-market-adapters.js';
 
 function fakeMd(id: string): MarketDataAdapter {
   return {
@@ -42,5 +46,14 @@ describe('venue-market-adapters', () => {
     });
     expect(wire.snapshot).toEqual(expect.any(Function));
     expect(wire.markets).toEqual(expect.any(Function));
+  });
+
+  it('buildExecutionVenueMarketMapsWithPublicMdSupplement wires public MD venues not in EXECUTION_VENUE_IDS', () => {
+    const maps = buildExecutionVenueMarketMapsWithPublicMdSupplement([], {
+      createAdapter: (id) => (id === 'binance-spot' ? fakeMd(id) : null),
+    });
+    expect(maps.wiredVenueIds).toContain('binance-spot');
+    expect(maps.publicMdSupplementVenueIds).toContain('binance-spot');
+    expect(maps.snapshotByVenue['binance-spot']).toEqual(expect.any(Function));
   });
 });

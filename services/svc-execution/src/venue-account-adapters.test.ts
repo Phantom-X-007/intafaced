@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { AccountAdapter, VenueBalance, VenueCredentials } from '@intafaced/venue-contracts';
 import { createVenueAccountAdapter } from '@intafaced/venue-adapter';
-import { buildExecutionVenueAccountMaps, wireAccountAdapter, wireExecutionVenueAccountAdapter } from './venue-account-adapters.js';
-import { ExecutionVenueCredentialsUnsetError, ExecutionVenueUnknownError } from './venue-adapters.js';
+import {
+  buildExecutionVenueAccountMaps,
+  buildExecutionVenueAccountMapsWithOperatorSupplement,
+  wireAccountAdapter,
+  wireExecutionVenueAccountAdapter,
+} from './venue-account-adapters.js';
+import { ExecutionVenueCredentialsUnsetError, ExecutionVenueUnknownError, loadExecutionVenueCredentials } from './venue-adapters.js';
 
 const CREDS: VenueCredentials = {
   venueId: 'binance-spot',
@@ -85,5 +90,21 @@ describe('buildExecutionVenueAccountMaps', () => {
     ];
     const wire = wireAccountAdapter(fakeAccount(balances));
     await expect(wire.balances()).resolves.toEqual(balances);
+  });
+
+  it('buildExecutionVenueAccountMapsWithOperatorSupplement wires operator-only venues', () => {
+    const env = {
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+    };
+    const maps = buildExecutionVenueAccountMapsWithOperatorSupplement([], {
+      env,
+      credentialsFor: (id) => loadExecutionVenueCredentials(id, env),
+      createAdapter: ((id) => (id === 'okx-spot' ? fakeAccount() : null)) as typeof createVenueAccountAdapter,
+    });
+    expect(maps.wiredVenueIds).toEqual(['okx-spot']);
+    expect(maps.operatorSupplementVenueIds).toEqual(['okx-spot']);
+    expect(maps.balancesByVenue['okx-spot']).toBeTypeOf('function');
   });
 });

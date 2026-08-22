@@ -4,7 +4,7 @@
  * Same EXECUTION_VENUE_IDS + EXECUTION_VENUE_{ID}_* credential env as trade.
  * Blank credentials → refuse-closed (venue skipped). Unknown ids skipped.
  */
-import { createVenueAccountAdapter } from '@intafaced/venue-adapter';
+import { createVenueAccountAdapter, loadVenueOperatorCredentials, PUBLIC_MARKET_DATA_VENUE_IDS } from '@intafaced/venue-adapter';
 import type { AccountAdapter, VenueCredentials } from '@intafaced/venue-contracts';
 import { accountAdapterBalances, type OmsBalancesFn } from './oms-account-balances.js';
 import { accountAdapterPositions, type OmsPositionsFn } from './oms-account-positions.js';
@@ -28,9 +28,11 @@ export type ExecutionVenueAccountMaps = {
   readonly positionsByVenue: ExecutionPositionsMap;
   readonly railsByVenue: ExecutionRailsMap;
   readonly wiredVenueIds: readonly string[];
+  readonly operatorSupplementVenueIds: readonly string[];
 };
 
 export type BuildExecutionVenueAccountMapsOptions = {
+  readonly env?: NodeJS.ProcessEnv;
   readonly credentialsFor?: (venueId: string) => VenueCredentials | null;
   readonly createAdapter?: typeof createVenueAccountAdapter;
 };
@@ -96,7 +98,46 @@ export function buildExecutionVenueAccountMaps(
     }
   }
 
-  return { balancesByVenue, positionsByVenue, railsByVenue, wiredVenueIds };
+  return { balancesByVenue, positionsByVenue, railsByVenue, wiredVenueIds, operatorSupplementVenueIds: [] };
+}
+
+/** EXECUTION_VENUE_IDS first; supplements public MD venues with VENUE_AGGREGATION_* operator creds. */
+export function buildExecutionVenueAccountMapsWithOperatorSupplement(
+  venueIds: readonly string[],
+  options: BuildExecutionVenueAccountMapsOptions = {},
+): ExecutionVenueAccountMaps {
+  const env = options.env ?? process.env;
+  const primary = buildExecutionVenueAccountMaps(venueIds, {
+    ...options,
+    credentialsFor: options.credentialsFor ?? ((id) => loadExecutionVenueCredentials(id, env)),
+  });
+
+  const balancesByVenue = { ...primary.balancesByVenue };
+  const positionsByVenue = { ...primary.positionsByVenue };
+  const railsByVenue = { ...primary.railsByVenue };
+  const wiredVenueIds = [...primary.wiredVenueIds];
+  const operatorSupplementVenueIds: string[] = [];
+
+  for (const venueId of PUBLIC_MARKET_DATA_VENUE_IDS) {
+    if (balancesByVenue[venueId]) continue;
+    const credentials = loadVenueOperatorCredentials(venueId, env);
+    if (!credentials) continue;
+    try {
+      const wire = wireExecutionVenueAccountAdapter(venueId, credentials, options);
+      balancesByVenue[venueId] = wire.balances;
+      positionsByVenue[venueId] = wire.positions;
+      railsByVenue[venueId] = wire.rails;
+      wiredVenueIds.push(venueId);
+      operatorSupplementVenueIds.push(venueId);
+    } catch (err) {
+      if (err instanceof ExecutionVenueUnknownError || err instanceof ExecutionVenueCredentialsUnsetError) {
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  return { balancesByVenue, positionsByVenue, railsByVenue, wiredVenueIds, operatorSupplementVenueIds };
 }
 
 export { parseExecutionVenueIds };
