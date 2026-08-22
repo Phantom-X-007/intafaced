@@ -1974,6 +1974,55 @@ describe('CopyService', () => {
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
+  it('0-row stamp after reserve keeps unique fill_id; follow B unique-refuses', async () => {
+    class ZeroRowStampStore extends MemoryCopyFollowStore {
+      override async savePendingFeeShareReserve(
+        _followId: Parameters<MemoryCopyFollowStore['savePendingFeeShareReserve']>[0],
+        fillId: Parameters<MemoryCopyFollowStore['savePendingFeeShareReserve']>[1],
+        reserved: Parameters<MemoryCopyFollowStore['savePendingFeeShareReserve']>[2],
+      ) {
+        return super.savePendingFeeShareReserve('no-such-follow', fillId, reserved);
+      }
+    }
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-stamp-zero-row-keep', '100');
+    await ledger.post(
+      recipes.sweepFeesToRewards({
+        windowId: 'stamp-zero-row-keep-seed',
+        sourceModule: 'trade',
+        assetId: 'USDT',
+        amount: parseAmount('20'),
+      }),
+    );
+    const store = new ZeroRowStampStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    const FILL = 'fill-stamp-zero-row-keep';
+    await planOneMirror(svc, followA.followId, FILL);
+    await planOneMirror(svc, followB.followId, FILL);
+    const settle = (follow: { followId: string }, fillId: string) =>
+      svc.settleFeeShare(principal, {
+        followId: follow.followId,
+        fillId,
+        assetId: 'USDT',
+        followerFillNotional: '1000',
+        protocolFeeBps: 10,
+      });
+
+    await expect(settle(followA, FILL)).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(await store.getSettledFeeShare(followA.followId, FILL)).not.toBeNull();
+    await expect(settle(followB, FILL)).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
   it('leftover pending after payout-throw+release does not pay over earningsCapPerFollower', async () => {
     const tightCap = { ...publishedFee, earningsCapPerFollower: '0.5' };
     class PayoutThrowOnce extends MemoryLedger {

@@ -35,23 +35,26 @@ export function rethrowCopyFeeShareUnique(err: unknown): never {
 
 /**
  * Typed product refuses fire before ledger recipes. Unclaim a CopyError
- * only when **this call INSERTed** the pending row (pre-post). Fill-not-found /
- * wrong owner / killed / not-mirrored / pre-follow / blank / expired must not
- * burn the once-key on first insert. Retry of leftover pending that then
- * CopyErrors must **keep** unique fill_id — DELETE would let follow B pay.
- * A ledger or crash throw may have swept or paid — keep unique fill_id.
+ * only when **this call INSERTed** the pending row (pre-post) **and
+ * reserveEarnings has not run**. Fill-not-found / wrong owner / killed /
+ * not-mirrored / pre-follow / blank / expired must not burn the once-key
+ * on first insert. After reserve, never DELETE unique fill_id — even if
+ * stamp 0-row throws CopyError (cap is already consumed). Retry of leftover
+ * pending that then CopyErrors must **keep** unique fill_id — DELETE would
+ * let follow B pay. A ledger or crash throw may have swept or paid — keep
+ * unique fill_id.
  */
 export function isCopyFeeSharePrePostUnclaim(err: unknown): boolean {
   return err instanceof CopyError;
 }
 
-/** DELETE unique fill_id only on CopyError from this call's INSERT. */
-export function shouldUnclaimCopyFeeShareClaim(insertedThisCall: boolean, err: unknown): boolean {
-  return insertedThisCall && isCopyFeeSharePrePostUnclaim(err);
+/** DELETE unique fill_id only on pre-reserve CopyError from this call's INSERT. */
+export function shouldUnclaimCopyFeeShareClaim(insertedThisCall: boolean, err: unknown, reservedThisCall = false): boolean {
+  return insertedThisCall && !reservedThisCall && isCopyFeeSharePrePostUnclaim(err);
 }
 
-/** `runFeeShareSettleOnce` body — skip reserve / unclaim when this is a leftover retry. */
-export type FeeShareSettleOnceContext = { readonly insertedThisCall: boolean };
+/** `runFeeShareSettleOnce` body — skip reserve / unclaim when leftover or post-reserve. */
+export type FeeShareSettleOnceContext = { readonly insertedThisCall: boolean; reservedThisCall: boolean };
 
 /**
  * Durable copy-follow store (trade.copy residual — same pattern as #1010 TWAP).
@@ -75,9 +78,11 @@ export type FeeShareSettleOnceContext = { readonly insertedThisCall: boolean };
  * Same-follow **pending** (`settled=false`, no skip) retries `run` — crash
  * after INSERT or a post-throw must not poison follow A. Terminal rows
  * (settled or cap/zero skip) never re-run. Other follow unique-refuses.
- * Unclaim CopyError only when this call INSERTed (`insertedThisCall`).
- * Leftover pending retry that then CopyErrors keeps the row. Any other
- * throw from `run` may have posted — keep the unique fill_id.
+ * Unclaim CopyError only when this call INSERTed (`insertedThisCall`) and
+ * `reservedThisCall` is still false. After reserveEarnings, never DELETE —
+ * stamp 0-row CopyError keeps the row. Leftover pending retry that then
+ * CopyErrors keeps the row. Any other throw from `run` may have posted —
+ * keep the unique fill_id.
  * Ledger keys alone are not enough: payout keys include leaderId, so two
  * leaders would both post from one house pot. Pending retry must not
  * re-reserve (`copy-fee:${fillId}` / `copy-leader-share:${fillId}:${leaderId}`).
@@ -260,8 +265,9 @@ export interface CopyFollowStore {
    * Same-follow pending retries `run`. Terminal same-follow redelivery
    * returns the prior record without re-running. A different follow on the
    * same fill throws `trade.copy_settle_refused` (even while pending).
-   * `run` throws: unclaim CopyError only when this call INSERTed; leftover
-   * pending retry keeps the row (second leader unique-violates).
+   * `run` throws: unclaim CopyError only when this call INSERTed and
+   * reserve has not run; leftover / post-reserve keeps the row (second
+   * leader unique-violates).
    */
   runFeeShareSettleOnce(
     followId: string,
@@ -534,13 +540,14 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
         this.settledByFill.set(id, claim);
         insertedThisCall = true;
       }
+      const ctx: FeeShareSettleOnceContext = { insertedThisCall, reservedThisCall: false };
       try {
-        const record = await run({ insertedThisCall });
+        const record = await run(ctx);
         this.settled.set(settleKey(followId, id), record);
         this.settledByFill.set(id, record);
         return { status: 'claimed' as const, record };
       } catch (err) {
-        if (shouldUnclaimCopyFeeShareClaim(insertedThisCall, err)) {
+        if (shouldUnclaimCopyFeeShareClaim(ctx.insertedThisCall, err, ctx.reservedThisCall)) {
           this.settled.delete(settleKey(followId, id));
           const cur = this.settledByFill.get(id);
           if (cur?.followId === followId) this.settledByFill.delete(id);
@@ -1069,11 +1076,12 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         }
       }
 
+      const ctx: FeeShareSettleOnceContext = { insertedThisCall, reservedThisCall: false };
       let record: StoredSettledFeeShare;
       try {
-        record = await run({ insertedThisCall });
+        record = await run(ctx);
       } catch (err) {
-        if (shouldUnclaimCopyFeeShareClaim(insertedThisCall, err)) {
+        if (shouldUnclaimCopyFeeShareClaim(ctx.insertedThisCall, err, ctx.reservedThisCall)) {
           try {
             await this.sql`
               DELETE FROM copy_settled_fee_shares

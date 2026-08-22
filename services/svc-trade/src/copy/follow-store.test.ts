@@ -114,6 +114,14 @@ describe('CopyFollowStore unique (follower, leader)', () => {
     expect(shouldUnclaimCopyFeeShareClaim(false, killed)).toBe(false);
     expect(shouldUnclaimCopyFeeShareClaim(true, new Error('payout threw after sweep'))).toBe(false);
     expect(shouldUnclaimCopyFeeShareClaim(false, new Error('crash after INSERT'))).toBe(false);
+    const stampZero = new CopyError(
+      'Pending fee-share reserve stamp matched 0 rows — refuse rather than post unstamped',
+      'trade.copy_settle_refused',
+    );
+    expect(isCopyFeeSharePrePostUnclaim(stampZero)).toBe(true);
+    expect(shouldUnclaimCopyFeeShareClaim(true, stampZero)).toBe(true);
+    expect(shouldUnclaimCopyFeeShareClaim(true, stampZero, true)).toBe(false);
+    expect(shouldUnclaimCopyFeeShareClaim(false, stampZero, true)).toBe(false);
   });
 
   it('pending zeros retry; cap-skip settled=false does not', () => {
@@ -439,6 +447,32 @@ describe('runFeeShareSettleOnce claim-before-post', () => {
     expect(second.record.skippedReason).toBe('cap_reached');
   });
 
+  it('memory CopyError after reservedThisCall keeps unique fill_id', async () => {
+    const store = new MemoryCopyFollowStore();
+    await store.saveFollow(follow(FOLLOW_A, LEADER));
+    await store.saveFollow(follow(FOLLOW_B, LEADER_B));
+    const stamp = new CopyError(
+      'Pending fee-share reserve stamp matched 0 rows — refuse rather than post unstamped',
+      'trade.copy_settle_refused',
+    );
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+        ctx.reservedThisCall = true;
+        throw stamp;
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(await store.getSettledFeeShare(FOLLOW_A, FILL)).not.toBeNull();
+
+    let ranB = false;
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ranB = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ranB).toBe(false);
+  });
+
   it.each([
     new CopyError('Follower fill not found — refuse rather than invent protocolFee from notional×bps', 'trade.copy_settle_refused'),
     new CopyError('Fill does not belong to this follower — refuse fee-share', 'trade.copy_settle_refused'),
@@ -740,6 +774,34 @@ describe('SqlCopyFollowStore runFeeShareSettleOnce (order, no Postgres)', () => 
     ).rejects.toMatchObject({ code: 'trade.copy_fee_share_killed' });
     expect(seenInserted).toBe(false);
     expect(mock.events).not.toContain('insert');
+    expect(mock.events).not.toContain('delete');
+    expect(mock.byFill.get(FILL)?.follow_id).toBe(FOLLOW_A);
+
+    const storeB = new SqlCopyFollowStore(mock.sql, FOLLOW_B);
+    let ranB = false;
+    await expect(
+      storeB.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ranB = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ranB).toBe(false);
+  });
+
+  it('CopyError after reservedThisCall does not DELETE — other follow ran===false', async () => {
+    const mock = mockSettleSql();
+    const store = new SqlCopyFollowStore(mock.sql, FOLLOW_A);
+    const stamp = new CopyError(
+      'Pending fee-share reserve stamp matched 0 rows — refuse rather than post unstamped',
+      'trade.copy_settle_refused',
+    );
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async (ctx) => {
+        ctx.reservedThisCall = true;
+        throw stamp;
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect(mock.events).toContain('insert');
     expect(mock.events).not.toContain('delete');
     expect(mock.byFill.get(FILL)?.follow_id).toBe(FOLLOW_A);
 

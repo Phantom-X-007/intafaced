@@ -504,7 +504,8 @@ export class CopyService {
    * A throw after sweep/payout keeps that claim (do not DELETE). Same-follow
    * pending retries `run` (keys `copy-fee:${fillId}` /
    * `copy-leader-share:${fillId}:${leaderId}` are idempotent). Unclaim CopyError
-   * only when this call INSERTed — leftover pending retry keeps the row.
+   * only when this call INSERTed **and reserve has not run** — leftover
+   * pending retry and post-reserve CopyError (stamp 0-row) keep the row.
    * Pending retry must not re-reserve when this fill already occupied cap
    * (crash after post / before UPDATE would persist cap_reached over a paid
    * fill and burn cap twice). Post-throw does **not** releaseEarnings while
@@ -576,6 +577,7 @@ export class CopyService {
       let reservedAmount: Amount;
       if (ctx.insertedThisCall) {
         const reserved = await store.reserveEarnings(key, intend, cap);
+        ctx.reservedThisCall = true;
         reservedAmount = reserved.reserved;
         if (reservedAmount > 0n) {
           await store.savePendingFeeShareReserve(follow.followId, fillId, reservedAmount);
@@ -587,6 +589,7 @@ export class CopyService {
           reservedAmount = alreadyReserved;
         } else if (intend > 0n) {
           const reserved = await store.reserveEarnings(key, intend, cap);
+          ctx.reservedThisCall = true;
           reservedAmount = reserved.reserved;
           if (reservedAmount > 0n) {
             await store.savePendingFeeShareReserve(follow.followId, fillId, reservedAmount);
