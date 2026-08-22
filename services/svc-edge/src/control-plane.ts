@@ -12,6 +12,7 @@ import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.j
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
 import { isS2sPath, resolve } from './routes.js';
 import { registerQuantHonestyRoutes } from './quant-honesty-door.js';
+import { registerQuantSurfaceRenderRoutes } from './quant-surface-render-door.js';
 import { userCopy } from './user-copy.js';
 
 const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
@@ -276,6 +277,7 @@ export function registerNetworkAccessGuard(app: FastifyInstance): void {
 export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void {
   // Public §29 honesty door — not proxied to svc-quant (that service must not exist yet).
   registerQuantHonestyRoutes(app);
+  registerQuantSurfaceRenderRoutes(app);
   /**
    * Authenticate, or answer. Returns null when it has already replied, so a
    * handler cannot forget to stop.
