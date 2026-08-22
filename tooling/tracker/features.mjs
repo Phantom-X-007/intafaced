@@ -697,19 +697,19 @@ export const FEATURES = [
   f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
     module: 'pay',
     phase: '3',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     requires: [
       'services/svc-pay/src/gateway-mount-vs-tracker.ts',
       'services/svc-pay/src/gateway-mount-vs-tracker.test.ts',
+      'services/svc-pay/src/gateway-tracker-status-pin.test.ts',
       'services/svc-pay/src/checkout-page.ts',
       'services/svc-pay/src/router.mount.test.ts',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Stage-1 hosted checkout + merchant + payment lifecycle on tip; hosted page script-free; A2 grant refuse-closed. ' +
-      'Product still needs: card acquiring (socket.psp-partners); KYB must gate money (kybStatus echo-only today).',
+      '**Done 2026-08-22:** hosted checkout + merchant + payment lifecycle on tip; hosted page script-free; A2 grant refuse-closed. ' +
+      'Residuals: card acquiring (socket.psp-partners); KYB money-gate consumer; PSP partner credentials.',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
