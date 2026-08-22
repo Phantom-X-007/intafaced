@@ -64,3 +64,13 @@ describe('connect.data-lake done bar test files (D56)', () => {
     expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('connect.data-lake package exports board (D58)', () => {
+  it('connectDataLakeMountVsTrackerBoardCard reports all package exports present', () => {
+    const card = connectDataLakeMountVsTrackerBoardCard();
+    expect(card.exports).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
+    expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
+    expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
+    expect(card.backendDoneBarMet).toBe(true);
+  });
+});
