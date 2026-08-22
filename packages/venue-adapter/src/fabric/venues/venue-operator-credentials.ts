@@ -5,7 +5,14 @@
  * Blank env → null (refuse-closed). Never invents credentials.
  */
 import { assertTradeOnly, type VenueCredentials } from '@intafaced/venue-contracts';
-import { createVenueTradeAdapter, PUBLIC_MARKET_DATA_VENUE_IDS, type VenueTradeAdapter, type VenueTradeAdapterOptions } from './factory.js';
+import {
+  createVenueAccountAdapter,
+  createVenueTradeAdapter,
+  PUBLIC_MARKET_DATA_VENUE_IDS,
+  type VenueAccountAdapterOptions,
+  type VenueTradeAdapter,
+  type VenueTradeAdapterOptions,
+} from './factory.js';
 
 export function venueOperatorCredentialEnvPrefix(venueId: string): string {
   return `VENUE_AGGREGATION_${venueId.trim().toUpperCase().replace(/-/g, '_')}`;
@@ -41,6 +48,17 @@ export function createVenueTradeAdapterFromOperatorEnv(
   return createVenueTradeAdapter(venueId, credentials, options);
 }
 
+/** Wire account adapter from owner env — null when keys unset (refuse-closed). */
+export function createVenueAccountAdapterFromOperatorEnv(
+  venueId: string,
+  env: NodeJS.ProcessEnv = process.env,
+  options?: VenueAccountAdapterOptions,
+) {
+  const credentials = loadVenueOperatorCredentials(venueId, env);
+  if (!credentials) return null;
+  return createVenueAccountAdapter(venueId, credentials, options);
+}
+
 export type OperatorVenueTradeWire = {
   readonly adapters: Readonly<Record<string, VenueTradeAdapter>>;
   readonly wiredVenueIds: readonly string[];
@@ -55,6 +73,27 @@ export function buildOperatorVenueTradeAdapters(
   const wiredVenueIds: string[] = [];
   for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
     const adapter = createVenueTradeAdapterFromOperatorEnv(id, env, options);
+    if (!adapter) continue;
+    adapters[id] = adapter;
+    wiredVenueIds.push(id);
+  }
+  return { adapters, wiredVenueIds };
+}
+
+export type OperatorVenueAccountWire = {
+  readonly adapters: Readonly<Record<string, NonNullable<ReturnType<typeof createVenueAccountAdapter>>>>;
+  readonly wiredVenueIds: readonly string[];
+};
+
+/** Build account adapters for every public MD venue with complete operator env. */
+export function buildOperatorVenueAccountAdapters(
+  env: NodeJS.ProcessEnv = process.env,
+  options?: VenueAccountAdapterOptions,
+): OperatorVenueAccountWire {
+  const adapters: Record<string, NonNullable<ReturnType<typeof createVenueAccountAdapter>>> = {};
+  const wiredVenueIds: string[] = [];
+  for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+    const adapter = createVenueAccountAdapterFromOperatorEnv(id, env, options);
     if (!adapter) continue;
     adapters[id] = adapter;
     wiredVenueIds.push(id);
