@@ -87,3 +87,22 @@ describe('connect.latency-grading mount vs tracker — D87 denon complete', () =
     expect(latencyDoneBarTestsPresent()).toBe(true);
   });
 });
+
+describe('connect.latency-grading mount vs tracker — D89 denon complete', () => {
+  it('full mount board: symbols, SOR consumer, done-bar tests, honest gaps', () => {
+    expect(LATENCY_GRADING_TRACKER_ID).toBe('connect.latency-grading');
+    const card = latencyGradingMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'connect.latency-grading',
+      symbols: LATENCY_PRODUCT_SYMBOLS.length,
+      symbolsPresent: LATENCY_PRODUCT_SYMBOLS.length,
+      sorConsumer: true,
+      gaps: 3,
+      backendDoneBarMet: true,
+    });
+    expect(latencyGradingTrackerBackendDoneBarMet()).toBe(true);
+    expect(latencySymbolsInFabricSource()).toEqual([...LATENCY_PRODUCT_SYMBOLS]);
+    expect(sorConsumesLatencyGrade()).toBe(true);
+    expect(latencyDoneBarTestsPresent()).toBe(true);
+  });
+});
