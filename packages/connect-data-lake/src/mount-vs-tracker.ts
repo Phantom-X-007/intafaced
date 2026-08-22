@@ -22,6 +22,8 @@ export const DATA_LAKE_PACKAGE_EXPORTS = [
   'gateQuantSurfaceRender',
   'describeQuantHonestyMount',
   'refuseQuantSurfaceRender',
+  'EDGE_QUANT_SURFACE_RENDER_DOOR',
+  'EDGE_QUANT_COMPOSITE_HONESTY_DOOR',
   'evaluateQuantSurfaceRender',
 ] as const;
 

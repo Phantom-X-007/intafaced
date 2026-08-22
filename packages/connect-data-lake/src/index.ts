@@ -84,6 +84,8 @@ export {
 } from './quant-honesty-policy.js';
 export { describeQuantHonestyMount, gateQuantSurfaceRender, type QuantSurfaceRenderInput } from './quant-honesty-mount.js';
 export {
+  EDGE_QUANT_COMPOSITE_HONESTY_DOOR,
+  EDGE_QUANT_SURFACE_RENDER_DOOR,
   describeQuantSurfaceRefuse,
   refuseQuantSurfaceRender,
   type QuantSurfaceAllow,
