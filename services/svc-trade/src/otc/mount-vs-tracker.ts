@@ -50,6 +50,7 @@ export function otcPolicyHonest(): boolean {
     p.inventsMidPrice === false &&
     p.midFeedWiringHonest === true &&
     p.midFeedWiringStates.length === 4 &&
+    p.bootMidFeedWiring.wiring === 'flag_off' &&
     p.moneyViaLedgerClientOnly === true
   );
 }
