@@ -90,6 +90,11 @@ export {
   type QuantSurfaceRefuse,
 } from './quant-surface-refuse.js';
 export {
+  describeQuantSurfaceRenderConsumer,
+  evaluateQuantSurfaceRender,
+  type QuantSurfaceRenderDecision,
+} from './quant-surface-render-consumer.js';
+export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
   bookObservationFromLakeRecord,
