@@ -124,6 +124,19 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(createVenueAccountAdapterFromOperatorEnv('binance-spot', {})).toBeNull();
   });
 
+  it('loadVenueOperatorCredentials wires when operator env is complete (D45)', () => {
+    const env = {
+      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
+    };
+    expect(loadVenueOperatorCredentials('bybit-spot', env)).toMatchObject({
+      venueId: 'bybit-spot',
+      scopes: ['read', 'trade'],
+    });
+    expect(loadVenueOperatorCredentials('bybit-spot', {})).toBeNull();
+    expect(loadVenueOperatorCredentials('kraken-spot', env)).toBeNull();
+  });
+
   it('package index re-exports trading-half policy through fabric', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const pkgIndex = readFileSync(join(here, '..', '..', 'index.ts'), 'utf8');
