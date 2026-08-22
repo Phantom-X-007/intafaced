@@ -13,6 +13,7 @@ import {
   dataLakePersistenceSinkHonestInSource,
   dataLakeStage1Honest,
 } from './mount-vs-tracker.js';
+import { describeDataLakeStage1 } from './data-lake-stage1.js';
 
 describe('connect.data-lake mount vs tracker honest gaps (D26-P2-DL1)', () => {
   it('Stage-1 backend done bar met on tip — owner-wired TSDB, refuse when blank', () => {
@@ -72,5 +73,17 @@ describe('connect.data-lake package exports board (D58)', () => {
     expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
     expect(dataLakeExportsInIndexSource()).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
     expect(card.backendDoneBarMet).toBe(true);
+  });
+});
+
+describe('connect.data-lake stage1 honesty mount (D60)', () => {
+  it('dataLakeStage1Honest locks describeDataLakeStage1 board without flipping backend done bar', () => {
+    const board = describeDataLakeStage1({});
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(board.quantSurface.compositeGateWired).toBe(true);
+    expect(board.quantSurface.inventsFraming).toBe(false);
+    expect(board.capture.inventsQuietMarket).toBe(false);
+    expect(board.retention.captureLogOnly).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
   });
 });
