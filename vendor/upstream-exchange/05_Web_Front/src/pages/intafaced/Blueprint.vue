@@ -98,6 +98,20 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.blueprint.cardLead') }}
       </p>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button
+          size="small"
+          :type="cardSize === 'portrait' ? 'primary' : 'default'"
+          :loading="card.loading && cardSize === 'portrait'"
+          @click="loadCard('portrait')"
+        >{{ $t('intafaced.blueprint.cardPortrait') }}</Button>
+        <Button
+          size="small"
+          :type="cardSize === 'landscape' ? 'primary' : 'default'"
+          :loading="card.loading && cardSize === 'landscape'"
+          @click="loadCard('landscape')"
+        >{{ $t('intafaced.blueprint.cardLandscape') }}</Button>
+      </div>
       <IxState :loading="card.loading" :reason="card.reason" :message="card.message" endpoint="/api/blueprint/trpc/card">
         <div v-if="card.data" class="ix-kv">
           <div class="ix-kv-item" v-if="card.data.size">
@@ -141,7 +155,7 @@
  * Still gated on blueprint:read / blueprint:write which interactive sessions
  * may not hold — the refusal is the honest answer. Card raster "unavailable"
  * is data (no PNG rail), not a fake image URL. SVG is rendered only from the
- * service response.
+ * service response. Portrait and landscape both reload query('blueprint','card',{size}).
  *
  * `onboard` binds userId to the signed principal on the router — none is sent
  * from the browser. A missing Neural Engine is a service refusal (IxState),
@@ -171,7 +185,8 @@ export default {
       me: this.emptySection(),
       card: this.emptySection(),
       mentors: this.emptySection(),
-      onboarded: this.emptyAction()
+      onboarded: this.emptyAction(),
+      cardSize: 'portrait'
     };
   },
   computed: {
@@ -207,9 +222,17 @@ export default {
     this.reload();
   },
   methods: {
+    loadCard(size) {
+      this.cardSize = size === 'landscape' ? 'landscape' : 'portrait';
+      if (this.cardSize === 'landscape') {
+        this.load('card', query('blueprint', 'card', { size: 'landscape' }, this.ixToken));
+        return;
+      }
+      this.load('card', query('blueprint', 'card', { size: 'portrait' }, this.ixToken));
+    },
     reload() {
       this.load('me', query('blueprint', 'me', undefined, this.ixToken));
-      this.load('card', query('blueprint', 'card', { size: 'portrait' }, this.ixToken));
+      this.loadCard('portrait');
       this.load('mentors', query('blueprint', 'mentors', undefined, this.ixToken));
     },
     submitOnboard() {
