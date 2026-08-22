@@ -184,3 +184,21 @@ describe('trade.otc policy board complete (D68)', () => {
     expect(otcMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('trade.otc mounted doors in router complete (D70)', () => {
+  it('otcDoorsInRouterSource lists every OTC_MOUNTED_DOOR with policy and done bar met', () => {
+    const mounted = otcDoorsInRouterSource();
+    expect(mounted).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(mounted).toHaveLength(5);
+    expect(OTC_MOUNTED_DOORS).toEqual(['policy', 'deskStatus', 'quote', 'accept', 'settle']);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountVsTrackerBoardCard()).toMatchObject({
+      mountComplete: true,
+      backendDoneBarMet: true,
+      doorsMounted: OTC_MOUNTED_DOORS.length,
+    });
+  });
+});
