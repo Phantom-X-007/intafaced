@@ -31,6 +31,7 @@ import {
   describeVenueOperatorCredentials,
   venueOperatorCredentialEnvPrefix,
 } from '../../index.js';
+import { tradeAdapterRegisteredForAllPublicVenues } from './trading-half-policy.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
 class GetOnlyHttp implements HttpPort {
@@ -74,6 +75,15 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(typeof venueOperatorCredentialEnvPrefix).toBe('function');
     expect(typeof describeVenueOperatorCredentials).toBe('function');
     expect(PUBLIC_MARKET_DATA_VENUE_IDS).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
+  });
+
+  it('describeTradingHalfPolicy and tradeAdapterRegisteredForAllPublicVenues lock factory coverage (D57)', () => {
+    const p = describeTradingHalfPolicy();
+    expect(p.tradeFactoryCoversAllPublicMarketDataVenues).toBe(true);
+    expect(p.liveCredentialsOperatorIssued).toBe(true);
+    expect(p.inventsCredentials).toBe(false);
+    expect(p.tradingVenueIds).toEqual(PUBLIC_MARKET_DATA_VENUE_IDS);
+    expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
   });
 
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
