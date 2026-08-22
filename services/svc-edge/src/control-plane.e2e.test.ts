@@ -239,7 +239,7 @@ describe('/admin/status — control-plane summary', () => {
         mountedOnControlPlane: boolean;
         notProxiedToSvcQuant: boolean;
         statusLine: string;
-        doors: { path: string; package: string }[];
+        doors: { path: string; package: string; method: string }[];
       };
     };
     expect(body.quantHonesty.compositeHonestyWired).toBe(true);
@@ -255,6 +255,10 @@ describe('/admin/status — control-plane summary', () => {
     expect(byPath['/quant/honesty/assess-surface-render']).toBe('@intafaced/connect-data-lake');
     expect(byPath['/quant/honesty/assess-composite']).toBe('composite');
     expect(byPath['/quant/honesty/assess-backtest']).toBe('@intafaced/quant-honesty');
+    const methodsByPath = Object.fromEntries(body.quantHonesty.doors.map((door) => [door.path, door.method]));
+    expect(methodsByPath['/quant/honesty/performance-labels']).toBe('GET');
+    expect(methodsByPath['/quant/honesty/assess-backtest']).toBe('POST');
+    expect(methodsByPath['/quant/honesty/assess-surface-render']).toBe('POST');
   });
 
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
