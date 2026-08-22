@@ -375,9 +375,19 @@
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.trades.title') }}</h2>
-        <span class="ix-sub">trades.list</span>
+        <span class="ix-sub">trades.list · disputes.open · disputes.appendEvidence · disputes.get</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.p2p.trades.lead') }}</p>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-p2p-dispute-reason">{{ $t('intafaced.p2p.disputeReason') }}</label>
+          <Input element-id="ix-p2p-dispute-reason" v-model="disputeReason" :placeholder="$t('intafaced.p2p.disputeReasonHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-dispute-evidence">{{ $t('intafaced.p2p.disputeEvidence') }}</label>
+          <Input element-id="ix-p2p-dispute-evidence" v-model="disputeEvidenceText" :placeholder="$t('intafaced.p2p.disputeEvidenceHint')" />
+        </div>
+      </div>
       <IxState :loading="trades.loading" :reason="trades.reason" :message="trades.message" endpoint="/api/p2p/trpc/trades.list">
         <div v-if="trades.data && trades.data.length" class="ix-scroll">
           <table class="ix-table">
@@ -401,6 +411,20 @@
                     <Button v-if="canMarkSent(t)" size="small" :loading="lifecycle.busy && lifeId === t.id" @click="markFiatSent(t)">{{ $t('intafaced.p2p.trades.markSent') }}</Button>
                     <Button v-if="canConfirm(t)" size="small" :loading="lifecycle.busy && lifeId === t.id" @click="confirmReceived(t)">{{ $t('intafaced.p2p.trades.confirm') }}</Button>
                     <Button v-if="canCancel(t)" size="small" :loading="lifecycle.busy && lifeId === t.id" @click="cancelTrade(t)">{{ $t('intafaced.p2p.trades.cancel') }}</Button>
+                    <Button
+                      v-if="canOpenDispute(t)"
+                      size="small"
+                      :loading="disputeOpen.busy && disputeTradeId === t.id"
+                      :disabled="!canSubmitOpen"
+                      @click="openDispute(t)"
+                    >{{ $t('intafaced.p2p.disputes.open') }}</Button>
+                    <Button
+                      v-if="canAppendEvidence(t)"
+                      size="small"
+                      :loading="disputeAppend.busy && disputeTradeId === t.id"
+                      :disabled="!canSubmitAppend"
+                      @click="appendEvidence(t)"
+                    >{{ $t('intafaced.p2p.disputes.append') }}</Button>
                   </div>
                 </td>
               </tr>
@@ -416,6 +440,74 @@
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ lifecycle.data.id }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.status') }}</span><span class="v">{{ lifecycle.data.status }}</span></div>
           </div>
+        </div>
+      </IxState>
+      <IxState v-if="disputeOpen.ran" :loading="disputeOpen.busy" :reason="disputeOpen.reason" :message="disputeOpen.message" endpoint="/api/p2p/trpc/disputes.open">
+        <div v-if="disputeOpen.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.disputes.openDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeId') }}</span><span class="v">{{ disputeOpen.data.disputeId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ disputeOpen.data.tradeId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeDeadline') }}</span><span class="v">{{ disputeOpen.data.deadlineAt }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeIfNobodyRules') }}</span><span class="v">{{ disputeOpen.data.ifNobodyRules }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeModerationReachable') }}</span><span class="v">{{ disputeOpen.data.moderationReachable }}</span></div>
+          </div>
+        </div>
+      </IxState>
+      <IxState v-if="disputeAppend.ran" :loading="disputeAppend.busy" :reason="disputeAppend.reason" :message="disputeAppend.message" endpoint="/api/p2p/trpc/disputes.appendEvidence">
+        <div v-if="disputeAppend.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.disputes.appendDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeId') }}</span><span class="v">{{ disputeAppend.data.disputeId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ disputeAppend.data.tradeId }}</span></div>
+          </div>
+          <div v-if="disputeAppend.data.evidence && disputeAppend.data.evidence.length" class="ix-scroll" style="margin-top:8px;">
+            <table class="ix-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('intafaced.p2p.disputeEvidenceSeq') }}</th>
+                  <th>{{ $t('intafaced.p2p.disputeEvidenceItem') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in disputeAppend.data.evidence" :key="'append-' + entry.seq">
+                  <td>{{ entry.seq }}</td>
+                  <td>{{ formatEvidenceItem(entry.item) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </IxState>
+      <IxState v-if="dispute.loading || dispute.reason" :loading="dispute.loading" :reason="dispute.reason" :message="dispute.message" endpoint="/api/p2p/trpc/disputes.get">
+        <div v-if="dispute.data" class="ix-done">
+          <div class="ix-kv">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeId') }}</span><span class="v">{{ dispute.data.id }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ dispute.data.tradeId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeStatus') }}</span><span class="v">{{ dispute.data.status }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeDeadline') }}</span><span class="v">{{ dispute.data.deadlineAt }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeOverdue') }}</span><span class="v">{{ dispute.data.overdue }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeOpenedVia') }}</span><span class="v">{{ dispute.data.openedVia }}</span></div>
+          </div>
+          <div v-if="dispute.data.evidence && dispute.data.evidence.length" class="ix-scroll" style="margin-top:8px;">
+            <table class="ix-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('intafaced.p2p.disputeEvidenceSeq') }}</th>
+                  <th>{{ $t('intafaced.p2p.disputeEvidenceAt') }}</th>
+                  <th>{{ $t('intafaced.p2p.disputeEvidenceItem') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in dispute.data.evidence" :key="'get-' + entry.seq">
+                  <td>{{ entry.seq }}</td>
+                  <td>{{ entry.submittedAt === null ? '—' : entry.submittedAt }}</td>
+                  <td>{{ formatEvidenceItem(entry.item) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="ix-note ix-note-quiet" style="margin-top:8px;">{{ $t('intafaced.p2p.disputeEvidenceEmpty') }}</div>
         </div>
       </IxState>
     </div>
@@ -487,6 +579,13 @@
  * Merchant apply posts no body besides the session — never a userId.
  * Withdraw posts {reason} with min length 1. Never applied is me=null,
  * not "rejected". Named refuse stays named. No offer ceilings.
+ *
+ * Open dispute posts {tradeId, reason, evidence?} on a party row in
+ * escrowed or fiat_sent. Append posts {tradeId, evidence} with at least
+ * one item, only while the dispute is open. Evidence is append-only —
+ * this screen has no edit and no remove. ifNobodyRules is the service
+ * literal escalated_and_held. moderationReachable is printed from the
+ * open reply, never implied when the field is false.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
@@ -514,6 +613,12 @@ export default {
       merchantApply: this.emptyAction(),
       merchantWithdraw: this.emptyAction(),
       withdrawReason: '',
+      disputeOpen: this.emptyAction(),
+      disputeAppend: this.emptyAction(),
+      dispute: { loading: false, reason: null, message: '', data: null },
+      disputeReason: '',
+      disputeEvidenceText: '',
+      disputeTradeId: '',
       takeAmount: '',
       takeMethod: '',
       takingId: '',
@@ -649,6 +754,18 @@ export default {
         (this.withdrawReason || '').trim() &&
         !this.merchantWithdraw.busy
       );
+    },
+    disputeEvidenceItems() {
+      var raw = (this.disputeEvidenceText || '').trim();
+      if (!raw) return [];
+      return [raw];
+    },
+    canSubmitOpen() {
+      var reason = (this.disputeReason || '').trim();
+      return !!(reason.length >= 1 && reason.length <= 2000 && !this.disputeOpen.busy);
+    },
+    canSubmitAppend() {
+      return !!(this.disputeEvidenceItems.length && !this.disputeAppend.busy);
     }
   },
   watch: {
@@ -863,6 +980,61 @@ export default {
     },
     cancelTrade(trade) {
       this.runLifecycle('trades.cancel', trade);
+    },
+    isTradeParty(trade) {
+      return !!(trade && this.myId && (trade.buyerId === this.myId || trade.sellerId === this.myId));
+    },
+    canOpenDispute(trade) {
+      return !!(this.isTradeParty(trade) && (trade.status === 'escrowed' || trade.status === 'fiat_sent'));
+    },
+    canAppendEvidence(trade) {
+      return !!(this.isTradeParty(trade) && trade.status === 'disputed');
+    },
+    formatEvidenceItem(item) {
+      if (item == null) return '';
+      if (typeof item === 'string') return item;
+      try {
+        return JSON.stringify(item);
+      } catch (e) {
+        return '';
+      }
+    },
+    loadDispute(tradeId) {
+      if (!tradeId) return;
+      this.load('dispute', query('p2p', 'disputes.get', { tradeId: tradeId }, this.ixToken));
+    },
+    openDispute(trade) {
+      var self = this;
+      var reason = (this.disputeReason || '').trim();
+      if (!this.canOpenDispute(trade) || !this.canSubmitOpen() || !reason) return;
+      var input = { tradeId: trade.id, reason: reason };
+      var evidence = this.disputeEvidenceItems;
+      if (evidence.length) input.evidence = evidence;
+      this.disputeTradeId = trade.id;
+      this.act('disputeOpen', mutate('p2p', 'disputes.open', input, this.ixToken)).then(function (res) {
+        self.disputeTradeId = '';
+        if (res.ok) {
+          self.loadTrades();
+          self.loadDispute(trade.id);
+        }
+      });
+    },
+    appendEvidence(trade) {
+      var self = this;
+      var evidence = this.disputeEvidenceItems;
+      if (!this.canAppendEvidence(trade) || !this.canSubmitAppend() || !evidence.length) return;
+      this.disputeTradeId = trade.id;
+      this.act(
+        'disputeAppend',
+        mutate('p2p', 'disputes.appendEvidence', { tradeId: trade.id, evidence: evidence }, this.ixToken)
+      ).then(function (res) {
+        self.disputeTradeId = '';
+        if (res.ok) {
+          self.disputeEvidenceText = '';
+          self.loadTrades();
+          self.loadDispute(trade.id);
+        }
+      });
     }
   }
 };
