@@ -15,6 +15,7 @@ import { otcDeskLawStatusLine, requirePublishedOtcDeskLaw, type OtcDeskLaw, UNPU
 import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './maker-routing.js';
 import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL, type OtcMidFeedWiringStatus } from './mid-feed.js';
+import { describeOtcPolicy } from './otc-policy.js';
 import { NO_OTC_MIDS, normalizeOtcAsset, otcPairKey, type OtcMidSource } from './mid-source.js';
 import {
   acceptOtcQuote,
@@ -77,7 +78,7 @@ export class OtcDeskService {
       /** SOCKET §13 — platform settle real; maker route refuse-closed. */
       makerRouting: otcMakerRoutingStatus(),
       /** SOCKET §13 — boot map age-gates unless venue observation source is installed. */
-      midFeed: this.midFeedWiring ?? otcMidFeedStatus(this.liveObservationFeed),
+      midFeed: this.midFeedWiring ?? (this.liveObservationFeed ? otcMidFeedStatus(true) : describeOtcPolicy().bootMidFeedWiring),
       residuals: {
         deskLaw: this.law.published === true ? null : OTC_DESK_LAW_RESIDUAL,
         makerRouting: OTC_MAKER_ROUTING_RESIDUAL,

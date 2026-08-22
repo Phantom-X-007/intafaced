@@ -6,6 +6,7 @@ import { FixedOtcStake } from './stake-source.js';
 import { UNPUBLISHED_OTC_DESK_LAW, type OtcDeskLaw } from './desk-law.js';
 import { OtcError } from './errors.js';
 import { createConfigOtcMidSource, createObservedOtcMidSource } from './mid-source.js';
+import { describeOtcPolicy } from './otc-policy.js';
 
 const USER = '00000000-0000-4000-8000-000000000001';
 /** Minimal principal — avoid pulling auth/contracts into this suite's graph. */
@@ -26,6 +27,11 @@ function freshMids(now: () => Date) {
 }
 
 describe('OtcDeskService', () => {
+  it('deskStatus midFeed matches policy bootMidFeedWiring when wiring not injected (D42)', () => {
+    const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('0')));
+    expect(svc.deskStatus().midFeed).toEqual(describeOtcPolicy().bootMidFeedWiring);
+  });
+
   it('deskStatus refuse-closed when law blank', () => {
     const svc = new OtcDeskService(new MemoryLedger(), new FixedOtcStake(parseAmount('0')), {
       law: UNPUBLISHED_OTC_DESK_LAW,
