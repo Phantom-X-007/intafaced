@@ -633,6 +633,20 @@ describe('execution boot and sor mount — D110 denon complete', () => {
   });
 });
 
+describe('execution boot and sor mount — D112 denon complete', () => {
+  it('health/ready boot, EMS stores, credential board, and mount cert all green', () => {
+    const src = indexSrc();
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+    expect(src).toContain("app.get('/health'");
+    expect(src).toContain("app.get('/ready'");
+    expect(src).toContain('buildExecutionReadyResponse({');
+    expect(src).toContain('unionExecutionVenueIds');
+    expect(src).toContain('emsStore');
+    expect(describeExecutionVenueCredentialBoard([], {}).inventsCredentials).toBe(false);
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
