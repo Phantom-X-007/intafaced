@@ -29,3 +29,9 @@ export {
   type StrategyComparisonOrder,
   type StrategyComparisonOrderAssessment,
 } from './quant-honesty.js';
+export {
+  QUANT_STUDIO_HONEST_GAPS,
+  QUANT_STUDIO_TRACKER_ID,
+  quantStudioMountVsTrackerBoardCard,
+  quantStudioTrackerBackendDoneBarMet,
+} from './quant-studio-mount-vs-tracker.js';
