@@ -87,3 +87,17 @@ describe('connect.data-lake stage1 honesty mount (D60)', () => {
     expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
   });
 });
+
+describe('connect.data-lake tracker backend done bar complete (D62)', () => {
+  it('connectDataLakeTrackerBackendDoneBarMet requires exports, stage1, capture, and done bar tests', () => {
+    expect(DATA_LAKE_TRACKER_ID).toBe('connect.data-lake');
+    expect(dataLakeExportsInIndexSource().length).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(dataLakeCapturePolicyHonest()).toBe(true);
+    expect(dataLakeCaptureConsumerHonestInSource()).toBe(true);
+    expect(dataLakePersistenceSinkHonestInSource()).toBe(true);
+    expect(dataLakeDoneBarTestsPresent()).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+  });
+});
