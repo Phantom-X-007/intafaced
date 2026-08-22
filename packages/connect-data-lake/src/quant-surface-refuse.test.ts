@@ -22,6 +22,9 @@ describe('quant surface refuse (D32)', () => {
       compositeGateWired: true,
       inventsFraming: false,
       refuseMessagesLocked: true,
+      edgeSurfaceRenderDoor: '/quant/honesty/assess-surface-render',
+      edgeCompositeHonestyDoor: '/quant/honesty/assess-composite',
+      edgeDoorNotProxiedToSvcQuant: true,
     });
   });
 
