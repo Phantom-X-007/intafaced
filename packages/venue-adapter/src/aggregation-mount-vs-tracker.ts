@@ -33,11 +33,7 @@ export const VENUE_AGGREGATION_DONE_BAR_TEST_FILES = [
   'aggregation-mount-vs-tracker.test.ts',
 ] as const;
 
-export const VENUE_AGGREGATION_HONEST_GAPS = [
-  'gap.live_network_ci',
-  'gap.oms_wire_svc_execution',
-  'gap.operator_credential_env_live',
-] as const;
+export const VENUE_AGGREGATION_HONEST_GAPS = ['gap.live_network_ci'] as const;
 
 export function venueAggregationExportsInIndexSource(): readonly (typeof VENUE_AGGREGATION_PACKAGE_EXPORTS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
