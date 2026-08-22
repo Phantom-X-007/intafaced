@@ -30,6 +30,12 @@ export {
   type StrategyComparisonOrderAssessment,
 } from './quant-honesty.js';
 export {
+  QUANT_BACKTEST_HONEST_GAPS,
+  QUANT_BACKTEST_TRACKER_ID,
+  quantBacktestMountVsTrackerBoardCard,
+  quantBacktestTrackerBackendDoneBarMet,
+} from './quant-backtest-mount-vs-tracker.js';
+export {
   QUANT_STUDIO_HONEST_GAPS,
   QUANT_STUDIO_TRACKER_ID,
   quantStudioMountVsTrackerBoardCard,

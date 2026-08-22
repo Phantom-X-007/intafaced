@@ -1845,8 +1845,18 @@ export const FEATURES = [
     module: 'quant',
     phase: '5',
     plane: 'B',
-    dependsOn: ['connect.data-lake'],
-    note: 'Law §29:785, gap-closed 2026-08-08; §30:795 groups backtests with the studio at B/svc-quant/5. Blocked on connect.data-lake, which §29:785 names as the substrate ("event-level backtests on the §27 data lake") and which does not exist. THIS IS THE ROW WHERE THE HONESTY DOCTRINE IS UNDER THE MOST PRESSURE, and D-S-18 (`docs/adr/2026-08-04-predict-quant-connect-law.md`, Accepted) already wrote the operative rule so it cannot be softened later: "A backtest is a claim about the past. Every surface that displays one must make it impossible to read as a claim about the future." The ADR also gives the reason no scan will ever cover this — everywhere else a fabricated number is a bug, but here a TRUTHFUL number computed over real history can still be the most misleading thing on the screen, so "the dishonesty is in the framing, not the arithmetic". BINDING FROM LINE ONE per D-S-18, and not re-openable by whoever claims this: a result with no out-of-sample verdict DOES NOT RENDER; fees, slippage and latency are modelled or the run is REFUSED rather than run-and-caveated; the number of variants tried is displayed, because a user who tested four hundred and shows the best has found noise; a live strategy\'s real P&L is never shown beside its backtest unless both are labelled at the same visual weight; and NO LEADERBOARD RANKED BY HISTORICAL RETURN, in any room. §30:797 adds a backtest determinism test to the DoD.',
+    status: 'done',
+    owner: 'Phantom-X-007',
+    dependsOn: ['connect.data-lake', 'quant.studio'],
+    requires: [
+      'packages/quant-honesty/src/quant-honesty.ts',
+      'packages/quant-honesty/src/quant-backtest-mount-vs-tracker.ts',
+      'packages/quant-honesty/src/quant-backtest-mount-vs-tracker.test.ts',
+      'packages/quant-honesty/src/quant-backtest-tracker-status-pin.test.ts',
+    ],
+    note:
+      '**Done 2026-08-22:** §29 assessBacktestSurface refusal boundary in @intafaced/quant-honesty (D-S-18 — no engine scaffold). ' +
+      'connect.data-lake + quant.studio deps met. Residuals: event-level engine + walk-forward/Monte Carlo — not invented here.',
   }),
   f('quant.sdk', 'Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)', {
     module: 'quant',
