@@ -243,3 +243,28 @@ describe('trade.otc mount vs tracker — D75 denon complete', () => {
     expect(OTC_HONEST_GAPS).toHaveLength(3);
   });
 });
+
+describe('trade.otc mount vs tracker — D77 denon complete', () => {
+  it('full mount board: tracker, doors, policy, done-bar tests, honest gaps', () => {
+    expect(OTC_TRACKER_ID).toBe('trade.otc');
+    const card = otcMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'trade.otc',
+      doors: 5,
+      doorsMounted: 5,
+      gaps: 3,
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+    const policy = describeOtcPolicy();
+    expect(policy.inventsMidPrice).toBe(false);
+    expect(policy.moneyViaLedgerClientOnly).toBe(true);
+  });
+});
