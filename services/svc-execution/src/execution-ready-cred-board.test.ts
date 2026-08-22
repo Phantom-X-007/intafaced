@@ -119,6 +119,15 @@ describe('execution /ready boot wired venue ids (D49)', () => {
   });
 });
 
+describe('execution /ready boot ems and trade url (D50)', () => {
+  it('index passes emsAckCount and tradeUrl into buildExecutionReadyResponse on /ready', () => {
+    const src = indexSrc();
+    expect(src).toContain('emsStorePath,');
+    expect(src).toContain('tradeUrl: env.TRADE_URL');
+    expect(src).toContain('emsAckCount: emsStore.list().length');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
