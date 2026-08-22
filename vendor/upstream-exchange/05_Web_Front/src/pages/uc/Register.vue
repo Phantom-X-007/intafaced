@@ -30,6 +30,10 @@
           <Input type="text" v-model="formInline.region" :placeholder="$t('uc.regist.region')" maxlength="2">
           </Input>
         </FormItem>
+        <FormItem prop="referrerId">
+          <Input type="text" v-model="formInline.referrerId" :placeholder="$t('uc.reg.referrer')" autocomplete="off">
+          </Input>
+        </FormItem>
         <p v-if="registerError" class="ix-login-error" role="alert" aria-live="polite">{{ registerError }}</p>
         <div class="check-agree" style="">
           <label>
@@ -41,7 +45,7 @@
           <Button class="register_btn" @click="handleSubmit('formInline')" :loading="registing">{{$t('uc.regist.regist')}}</Button>
         </FormItem>
         <p class="ix-login-socket" role="note">
-          {{ $t('uc.regist.referralSocket') }}
+          {{ $t('uc.reg.referrerTip') }}
         </p>
       </Form>
       <Alert v-else type="warning">
@@ -200,8 +204,8 @@
 /**
  * REGISTER — against svc-identity's `auth.register`.
  *
- * The contract is `{ handle, email, password, region? }` and this form now asks
- * for exactly that. What the vendor asked for instead, and why none of it
+ * The contract is `{ handle, email, password, region?, referrerId? }` and this
+ * form asks for that. What the vendor asked for instead, and why none of it
  * survived:
  *
  * - **A mainland-China mobile number and an SMS code.** `/uc/register/phone`
@@ -210,10 +214,9 @@
  *   registration and no SMS sender; there is nothing to point them at. Keeping
  *   the fields and posting them nowhere would have been the hang this work
  *   exists to remove.
- * - **A referral / promotion code.** `auth.register` has no such field, and
- *   svc-identity stores no referral graph. A field that silently discards what
- *   the user typed is worse than no field, so it is stated as missing instead
- *   (`uc.regist.referralSocket`) rather than collected and dropped.
+ * - **A referral / promotion code string.** `auth.register` takes an optional
+ *   `referrerId` UUID, not a promo code. Blank is omitted (empty string is not
+ *   sent). A failed attribute still leaves the account; the refuse is shown.
  * - **`superPartner`, `ticket`, `randStr`.** Java-side captcha and partner-tier
  *   parameters with no counterpart here.
  *
@@ -232,6 +235,8 @@ import { mutate, subjectOf } from "../../config/intafaced.js";
 const HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
 /** Deliberately permissive: svc-identity's zod `.email()` is the real check. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Matches `z.string().uuid()` on `auth.register` — send only when this hits. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** The contract's minimum. Kept as a constant so the copy cannot drift from it. */
 const PASSWORD_MIN = 12;
 
@@ -254,6 +259,14 @@ export default {
       if (!/^[A-Za-z]{2}$/.test(value)) return callback(new Error(this.$t("uc.regist.regionerr")));
       callback();
     };
+    const validateReferrer = (rule, value, callback) => {
+      // Optional. Blank = omit. A non-UUID would fail the whole register at
+      // zod, so catch it here instead of sending an empty string or junk.
+      var trimmed = (value || "").trim();
+      if (!trimmed) return callback();
+      if (!UUID_RE.test(trimmed)) return callback(new Error(this.$t("uc.reg.referrerErr")));
+      callback();
+    };
     const validateRepassword = (rule, value, callback) => {
       if (value === "") {
         callback(new Error(this.$t("uc.regist.confirmpwdtip")));
@@ -273,7 +286,8 @@ export default {
         email: "",
         password: "",
         repassword: "",
-        region: ""
+        region: "",
+        referrerId: ""
       },
       ruleInline: {
         handle: [{ validator: validateHandle, trigger: "blur" }],
@@ -292,7 +306,8 @@ export default {
           }
         ],
         repassword: [{ validator: validateRepassword, trigger: "blur" }],
-        region: [{ validator: validateRegion, trigger: "blur" }]
+        region: [{ validator: validateRegion, trigger: "blur" }],
+        referrerId: [{ validator: validateReferrer, trigger: "blur" }]
       }
     };
   },
@@ -334,6 +349,8 @@ export default {
           password: self.formInline.password
         };
         if (self.formInline.region) input.region = self.formInline.region.toUpperCase();
+        var referrerId = (self.formInline.referrerId || "").trim();
+        if (referrerId) input.referrerId = referrerId;
 
         mutate("identity", "auth.register", input).then(function(res) {
           self.registing = false;
