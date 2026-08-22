@@ -22,3 +22,9 @@ export {
   type ScanExternalArbResult,
 } from './arbitrage.js';
 export { ARB_BRIDGE_FANTASY_REFUSE_REASON, describeArbitragePolicy, type ArbitragePolicySummary } from './arb-policy.js';
+export {
+  arbCapitalGate,
+  EXECUTION_ARB_MAX_QUOTE_AGE_MS_ENV,
+  type ArbCapitalGate,
+  type ArbCapitalRefuseReason,
+} from './arb-owner-capital-gate.js';

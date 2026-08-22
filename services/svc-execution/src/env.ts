@@ -52,6 +52,10 @@ const schema = baseEnvSchema
        * Blank (default) → spread/skew gate refuses; never invent band magnitudes.
        */
       EXECUTION_MM_SPREAD_SKEW_BANDS: z.string().default(''),
+      /**
+       * Owner max quote age (ms) for arb scans. Blank (default) → capital gate refuses.
+       */
+      EXECUTION_ARB_MAX_QUOTE_AGE_MS: z.string().default(''),
     }),
   );
 

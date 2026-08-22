@@ -1165,6 +1165,8 @@ services:
       EXECUTION_SOR_LETTER_BPS_SCHEDULE: ${EXECUTION_SOR_LETTER_BPS_SCHEDULE:-}
       # execution.market-making spread/skew owner bands — JSON bounds; blank = refuse-closed.
       EXECUTION_MM_SPREAD_SKEW_BANDS: ${EXECUTION_MM_SPREAD_SKEW_BANDS:-}
+      # execution.arbitrage owner freshness window — blank = refuse-closed (no invented maxQuoteAgeMs).
+      EXECUTION_ARB_MAX_QUOTE_AGE_MS: ${EXECUTION_ARB_MAX_QUOTE_AGE_MS:-}
     expose: ['4019']
     volumes:
       - execution-ems-journal:/data/execution

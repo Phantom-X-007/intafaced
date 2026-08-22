@@ -1,13 +1,14 @@
 /**
  * D26-P1-X4 — execution.arbitrage mount vs tracker honest gaps.
  *
- * Backend product-complete: external-only cross-exchange scanner on SOR cost model.
- * Triangular/basis/funding, OMS legs, and svc mount remain honest residuals.
+ * Cross-exchange scanner + OMS scan/planLegs + edge consumer on tip.
+ * Triangular/basis/funding classes remain honest residual.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { arbOmsWireClosed } from './arb-oms-wire.js';
 
 export const EXECUTION_ARB_TRACKER_ID = 'execution.arbitrage' as const;
 
@@ -17,12 +18,9 @@ export const ARB_PRODUCT_EXPORTS = ['scanExternalCrossExchangeArb', 'describeArb
 
 export type ArbProductExport = (typeof ARB_PRODUCT_EXPORTS)[number];
 
-export const ARB_HONEST_GAPS = [
-  'gap.triangular_basis_funding',
-  'gap.no_oms_atomic_legs',
-  'gap.no_svc_consumer',
-  'gap.capital_unset',
-] as const;
+export const ARB_HONEST_GAPS = ['gap.triangular_basis_funding'] as const;
+
+export const ARB_DONE_BAR_TEST_FILES = ['arbitrage.test.ts', 'arb-owner-capital-gate.test.ts', 'arb-oms-wire.test.ts'] as const;
 
 export function arbExportsInIndexSource(): readonly ArbProductExport[] {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -32,11 +30,15 @@ export function arbExportsInIndexSource(): readonly ArbProductExport[] {
 
 export function arbDoneBarTestPresent(): boolean {
   const here = dirname(fileURLToPath(import.meta.url));
-  return existsSync(join(here, 'arbitrage.test.ts'));
+  return ARB_DONE_BAR_TEST_FILES.every((file) => existsSync(join(here, file)));
 }
 
 export function arbProductPathComplete(): boolean {
   return arbExportsInIndexSource().length === ARB_PRODUCT_EXPORTS.length && arbDoneBarTestPresent();
+}
+
+export function executionArbOmsGapsClosed(): boolean {
+  return arbOmsWireClosed();
 }
 
 /** Denon D26-P1-X4 backend done bar met when cross-exchange scanner product path ships. */
