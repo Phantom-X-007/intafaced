@@ -110,6 +110,15 @@ describe('execution /ready boot credential board on ready (D48)', () => {
   });
 });
 
+describe('execution /ready boot wired venue ids (D49)', () => {
+  it('index wires trade, account, and market wired venue ids on /ready', () => {
+    const src = indexSrc();
+    expect(src).toContain('venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds');
+    expect(src).toContain('venueAccountWiredVenueIds: venueAccountMaps.wiredVenueIds');
+    expect(src).toContain('venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
