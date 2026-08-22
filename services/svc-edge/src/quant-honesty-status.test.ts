@@ -42,3 +42,12 @@ describe('quant honesty door status — package labels (D46)', () => {
     expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toBe('composite');
   });
 });
+
+describe('quant honesty door status — control plane mount (D48)', () => {
+  it('describeQuantHonestyDoorStatus asserts doors mount on control plane without svc-quant proxy', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
+  });
+});
