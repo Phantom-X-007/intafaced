@@ -159,6 +159,23 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     }
   });
 
+  it('describeTradingHalfPolicy and describeVenueAggregationPolicy lock complete factory door (D67)', () => {
+    const trading = describeTradingHalfPolicy();
+    const aggregation = describeVenueAggregationPolicy();
+    expect(trading.tradeFactoryCoversAllPublicMarketDataVenues).toBe(true);
+    expect(trading.inventsCredentials).toBe(false);
+    expect(aggregation.publicMarketDataVenueIds).toEqual(PUBLIC_MARKET_DATA_VENUE_IDS);
+    expect(aggregation.inventsCredentials).toBe(false);
+    expect(aggregation.unknownVenueIdRefuses).toBe(true);
+    expect(aggregation.signedTradeSeparateFactory).toBe(true);
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      expect(createVenueMarketDataAdapter(id)).not.toBeNull();
+      expect(createVenueTradeAdapter(id, null)).not.toBeNull();
+      expect(createVenueAccountAdapter(id, null)).not.toBeNull();
+    }
+    expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
+  });
+
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
     expect(describeOperatorVenueTradeMaps({})).toMatchObject({
       wiredVenueIds: [],
