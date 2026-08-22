@@ -19,5 +19,7 @@ describe('connect-data-lake package exports mount', () => {
     expect(src).toContain('describeQuantHonestyPolicy');
     expect(src).toContain('gateQuantSurfaceRender');
     expect(src).toContain('describeQuantHonestyMount');
+    expect(src).toContain('refuseQuantSurfaceRender');
+    expect(src).toContain('describeQuantSurfaceRefuse');
   });
 });

@@ -84,6 +84,12 @@ export {
 } from './quant-honesty-policy.js';
 export { describeQuantHonestyMount, gateQuantSurfaceRender, type QuantSurfaceRenderInput } from './quant-honesty-mount.js';
 export {
+  describeQuantSurfaceRefuse,
+  refuseQuantSurfaceRender,
+  type QuantSurfaceAllow,
+  type QuantSurfaceRefuse,
+} from './quant-surface-refuse.js';
+export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,
   bookObservationFromLakeRecord,
