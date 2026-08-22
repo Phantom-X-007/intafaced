@@ -126,3 +126,15 @@ describe('quant honesty door status — surface render and composite paths (D61)
     expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
   });
 });
+
+describe('quant honesty door status — complete door set (D63)', () => {
+  it('describeQuantHonestyDoorStatus lists five unique doors with control plane mount honesty', () => {
+    const status = describeQuantHonestyDoorStatus();
+    const paths = status.doors.map((door) => door.path);
+    expect(new Set(paths).size).toBe(5);
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+  });
+});
