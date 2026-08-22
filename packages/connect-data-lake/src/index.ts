@@ -46,6 +46,13 @@ export {
   type PersistenceSinkResult,
 } from './persistence-sink.js';
 export {
+  purgeExpiredLakeTicks,
+  retentionCutoffIso,
+  type LakeRetentionPurgeOk,
+  type LakeRetentionPurgeRefuse,
+  type LakeRetentionPurgeResult,
+} from './retention-purge.js';
+export {
   lakeTickRowsFromCaptureRecords,
   persistCaptureRecordsToPostgres,
   type LakeTickInsertRow,
