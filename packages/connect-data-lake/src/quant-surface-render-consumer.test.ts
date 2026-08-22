@@ -50,3 +50,12 @@ describe('quant surface render consumer refuse alignment (D47)', () => {
     expect(evaluateQuantSurfaceRender(refused)).toEqual(refuseQuantSurfaceRender(refused));
   });
 });
+
+describe('quant surface render consumer board alignment (D51)', () => {
+  it('describeQuantSurfaceRenderConsumer board matches evaluateQuantSurfaceRender wiring', () => {
+    const board = describeQuantSurfaceRenderConsumer();
+    expect(board.consumerWired).toBe(true);
+    expect(board.usesRefuseQuantSurfaceRender).toBe(true);
+    expect(evaluateQuantSurfaceRender(honestInput)).toEqual(refuseQuantSurfaceRender(honestInput));
+  });
+});
