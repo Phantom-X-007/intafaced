@@ -154,3 +154,21 @@ describe('quant honesty door status — package and method matrix (D64)', () => 
     expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
   });
 });
+
+describe('quant honesty door status — status line complete (D66)', () => {
+  it('describeQuantHonestyDoorStatus statusLine names all mounted door families', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.statusLine).toMatch(/backtest/i);
+    expect(status.statusLine).toMatch(/comparison/i);
+    expect(status.statusLine).toMatch(/labels/i);
+    expect(status.statusLine).toMatch(/surface render/i);
+    expect(status.statusLine).toMatch(/composite assess/i);
+    expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(status.mountedOnControlPlane).toBe(true);
+    expect(status.notProxiedToSvcQuant).toBe(true);
+    expect(status.inventsReturns).toBe(false);
+    expect(status.compositeHonestyWired).toBe(true);
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(status.doors).toHaveLength(5);
+  });
+});
