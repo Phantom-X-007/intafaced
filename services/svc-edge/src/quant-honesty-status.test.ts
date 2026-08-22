@@ -51,3 +51,15 @@ describe('quant honesty door status — control plane mount (D48)', () => {
     expect(status.statusLine).toMatch(/not proxied to svc-quant/i);
   });
 });
+
+describe('quant honesty door status — HTTP methods (D50)', () => {
+  it('doors label POST assess paths and GET performance labels', () => {
+    const status = describeQuantHonestyDoorStatus();
+    const byPath = Object.fromEntries(status.doors.map((door) => [door.path, door.method]));
+    expect(byPath[QUANT_HONESTY_ASSESS_PATH]).toBe('POST');
+    expect(byPath['/quant/honesty/assess-comparison-order']).toBe('POST');
+    expect(byPath['/quant/honesty/performance-labels']).toBe('GET');
+    expect(byPath[EDGE_QUANT_SURFACE_RENDER_DOOR]).toBe('POST');
+    expect(byPath[EDGE_QUANT_COMPOSITE_HONESTY_DOOR]).toBe('POST');
+  });
+});
