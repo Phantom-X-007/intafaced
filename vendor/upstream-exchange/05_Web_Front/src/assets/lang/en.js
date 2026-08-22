@@ -1411,7 +1411,11 @@ module.exports = {
             myPurchases: "My purchases",
             applied: "Application submitted",
             noApplication: "No vendor application yet.",
-            noMine: "Nothing here yet."
+            noMine: "Nothing here yet.",
+            createListing: "Create listing",
+            createOfferTypeOneTime: "One-time",
+            createPriceHint: "Decimal string",
+            createCreated: "Listing created"
         },
         support: {
             title: "Support",
