@@ -15,11 +15,14 @@ import { VenueCredentialsMissingError } from '@intafaced/venue-contracts';
 import {
   PUBLIC_MARKET_DATA_VENUE_IDS,
   createVenueAccountAdapter,
+  createVenueAccountAdapterFromOperatorEnv,
   createVenueMarketDataAdapter,
   createVenueTradeAdapter,
   createVenueTradeAdapterFromOperatorEnv,
+  describeOperatorVenueAccountMaps,
   describeTradingHalfPolicy,
   loadVenueOperatorCredentials,
+  buildOperatorVenueAccountMaps,
   buildOperatorVenueTradeMaps,
 } from '../../index.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
@@ -55,7 +58,10 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(typeof describeTradingHalfPolicy).toBe('function');
     expect(typeof loadVenueOperatorCredentials).toBe('function');
     expect(typeof createVenueTradeAdapterFromOperatorEnv).toBe('function');
+    expect(typeof createVenueAccountAdapterFromOperatorEnv).toBe('function');
     expect(typeof buildOperatorVenueTradeMaps).toBe('function');
+    expect(typeof buildOperatorVenueAccountMaps).toBe('function');
+    expect(typeof describeOperatorVenueAccountMaps).toBe('function');
     expect(PUBLIC_MARKET_DATA_VENUE_IDS).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
   });
 
