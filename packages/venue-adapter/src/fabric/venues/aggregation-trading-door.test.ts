@@ -31,6 +31,7 @@ import {
   describeVenueOperatorCredentials,
   venueOperatorCredentialEnvPrefix,
 } from '../../index.js';
+import { describeVenueAggregationPolicy } from './factory-policy.js';
 import { tradeAdapterRegisteredForAllPublicVenues } from './trading-half-policy.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
@@ -84,6 +85,16 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(p.inventsCredentials).toBe(false);
     expect(p.tradingVenueIds).toEqual(PUBLIC_MARKET_DATA_VENUE_IDS);
     expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
+  });
+
+  it('describeVenueAggregationPolicy locks venue aggregation factory honesty on door (D58)', () => {
+    const p = describeVenueAggregationPolicy();
+    expect(p.publicMarketDataVenueIds).toEqual(PUBLIC_MARKET_DATA_VENUE_IDS);
+    expect(p.inventsCredentials).toBe(false);
+    expect(p.inventsVenueList).toBe(false);
+    expect(p.unknownVenueIdRefuses).toBe(true);
+    expect(p.publicMarketDataOnly).toBe(true);
+    expect(p.signedTradeSeparateFactory).toBe(true);
   });
 
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
