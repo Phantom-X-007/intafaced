@@ -2868,7 +2868,15 @@ module.exports = {
             channelNotConfigured: 'Not configured — this channel cannot send yet.',
             channelsEmpty: 'No channel status was returned.',
             deliveryLead: 'Attempted means the service tried; accepted does not mean the recipient received it.',
-            attempts: 'Attempts'
+            attempts: 'Attempts',
+            targetTitle: 'Register a delivery address',
+            targetLead: 'Email, push token or SMS number. A confirmation is sent through that channel. If the channel has no credentials the service returns refused with the named code — not a success.',
+            targetChannel: 'Channel',
+            targetAddress: 'Address',
+            targetRegister: 'Register',
+            targetSent: 'Sent — a confirmation went through this channel.',
+            targetRefused: 'Refused',
+            targetFailed: 'Failed'
         },
         noticeItem: {
             title: 'Announcement',

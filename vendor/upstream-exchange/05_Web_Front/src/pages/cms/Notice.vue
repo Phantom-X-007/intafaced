@@ -107,6 +107,45 @@
         </div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('cms.noticePage.targetTitle') }}</h2>
+        <span class="ix-sub">notify.registerTarget</span>
+      </div>
+      <p class="ix-lead">{{ $t('cms.noticePage.targetLead') }}</p>
+      <div class="ix-form">
+        <label>{{ $t('cms.noticePage.targetChannel') }}
+          <select v-model="targetChannel">
+            <option value="email">email</option>
+            <option value="push">push</option>
+            <option value="sms">sms</option>
+          </select>
+        </label>
+        <label>{{ $t('cms.noticePage.targetAddress') }}
+          <Input v-model="targetAddress" />
+        </label>
+        <Button type="primary" :loading="registerAction.busy" :disabled="!targetAddress" @click="registerTarget">{{ $t('cms.noticePage.targetRegister') }}</Button>
+      </div>
+      <IxState
+        v-if="registerAction.ran"
+        :loading="registerAction.busy"
+        :reason="registerAction.reason"
+        :message="registerAction.message"
+        endpoint="/api/notify/trpc/notify.registerTarget"
+      >
+        <div v-if="registerAction.data && registerAction.data.status === 'sent'" class="ix-note">
+          {{ $t('cms.noticePage.targetSent') }}
+        </div>
+        <div v-else-if="registerAction.data && registerAction.data.status === 'refused'" class="ix-note">
+          {{ $t('cms.noticePage.targetRefused') }}
+          <code>{{ registerAction.data.code }}</code>
+        </div>
+        <div v-else-if="registerAction.data && registerAction.data.status === 'failed'" class="ix-note">
+          {{ $t('cms.noticePage.targetFailed') }}
+        </div>
+      </IxState>
+    </div>
   </div>
 </template>
 
@@ -141,7 +180,10 @@ export default {
       channels: this.emptySection(),
       deliveries: this.emptySection(),
       markReadAction: this.emptyAction(),
-      markAllReadAction: this.emptyAction()
+      markAllReadAction: this.emptyAction(),
+      targetChannel: 'email',
+      targetAddress: '',
+      registerAction: this.emptyAction()
     };
   },
   computed: {
@@ -184,6 +226,12 @@ export default {
       this.act('markAllReadAction', mutate('notify', 'notify.markAllRead', undefined, this.ixToken)).then((res) => {
         if (res.ok) this.refreshInbox();
       });
+    },
+    registerTarget() {
+      if (!this.targetAddress || this.registerAction.busy) return;
+      var payload = { channel: this.targetChannel, address: this.targetAddress };
+      if (this.$i18n && this.$i18n.locale) payload.locale = this.$i18n.locale;
+      this.act('registerAction', mutate('notify', 'notify.registerTarget', payload, this.ixToken));
     }
   }
 };
