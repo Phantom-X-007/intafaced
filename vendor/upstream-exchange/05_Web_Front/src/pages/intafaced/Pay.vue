@@ -102,6 +102,55 @@
       </div>
     </div>
 
+    <!-- ── enqueue a fraud review — scoring door, no ledger value ──────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.pay.overview.fraudReviewTitle') }}</h2>
+        <span class="ix-sub">fraud.enqueueReview</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.pay.overview.fraudReviewLead') }}</p>
+
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-fr-merchant">{{ $t('intafaced.pay.merchantId') }}</label>
+          <Input element-id="ix-fr-merchant" v-model="form.merchantId" :placeholder="$t('intafaced.pay.networkPage.merchantIdHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-fr-amount">{{ $t('intafaced.pay.amount') }}</label>
+          <Input element-id="ix-fr-amount" v-model="form.amount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-fr-asset">{{ $t('intafaced.pay.asset') }}</label>
+          <Input element-id="ix-fr-asset" v-model="form.assetId" :placeholder="$t('intafaced.bank.assetHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-fr-payment">{{ $t('intafaced.pay.overview.fraudReviewPaymentOptional') }}</label>
+          <Input element-id="ix-fr-payment" v-model="form.paymentId" :placeholder="$t('intafaced.pay.overview.fraudReviewPaymentHint')"></Input>
+        </div>
+      </div>
+
+      <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">
+        {{ $t('intafaced.pay.overview.fraudReviewIdempotency') }} <code>{{ draftId('fraudReview') }}</code>
+      </div>
+
+      <div class="ix-actions">
+        <Button type="primary" :loading="queued.busy" :disabled="!canEnqueue" @click="enqueueReview">
+          {{ $t('intafaced.pay.overview.fraudReviewEnqueue') }}
+        </Button>
+      </div>
+
+      <div v-if="queued.ran" style="margin-top:14px;">
+        <div v-if="queued.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.pay.overview.fraudReviewQueued') }}</strong>
+          <div style="margin-top:6px;">
+            {{ $t('intafaced.pay.overview.fraudReviewId') }}: {{ queued.data.id }} ·
+            {{ $t('intafaced.bank.status') }}: {{ queued.data.status }}
+          </div>
+        </div>
+        <IxState v-else :loading="queued.busy" :reason="queued.reason" :message="queued.message" endpoint="/api/pay/trpc/fraud.enqueueReview"></IxState>
+      </div>
+    </div>
+
     <!-- ── the rest of the vertical ─────────────────────────────────────── -->
     <div class="ix-grid">
       <router-link v-for="row in nav.slice(1)" :key="row.to" :to="row.to" class="ix-tile">
@@ -134,10 +183,15 @@
  * `merchant.me` answers `null` for an account that has never onboarded. That is
  * a 200 with no merchant, not a refusal, so it renders as the empty state and
  * points at the screen that creates one.
+ *
+ * `fraud.enqueueReview` is the only write on this page. It posts no ledger
+ * value. The amount stays a decimal string. `id` is minted once per draft so a
+ * retry is the same case. The service re-scores and refuses by name unless the
+ * outcome is review. Admin queue list/resolve stay off this screen.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import IxSubNav from '../../components/intafaced/IxSubNav.vue';
-import { query } from '../../config/intafaced.js';
+import { query, mutate } from '../../config/intafaced.js';
 import { PAY_NAV } from '../../config/ix-nav.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
@@ -150,14 +204,47 @@ export default {
       nav: PAY_NAV,
       health: this.emptySection(),
       railHealth: this.emptySection(),
-      merchant: this.emptySection()
+      merchant: this.emptySection(),
+      form: { merchantId: '', amount: '', assetId: 'USDT', paymentId: '' },
+      queued: this.emptyAction()
     };
   },
+  computed: {
+    canEnqueue() {
+      return Boolean(this.form.merchantId && this.form.amount && this.form.assetId && this.draftId('fraudReview'));
+    }
+  },
   created() {
+    var self = this;
     this.$store.commit('navigate', 'nav-platform');
     this.load('health', query('pay', 'health', undefined, this.ixToken));
     this.load('railHealth', query('pay', 'railHealth', undefined, this.ixToken));
-    this.load('merchant', query('pay', 'merchant.me', undefined, this.ixToken));
+    this.load('merchant', query('pay', 'merchant.me', undefined, this.ixToken)).then(function(res) {
+      if (res && res.ok && res.data && res.data.id && !self.form.merchantId) {
+        self.form.merchantId = res.data.id;
+      }
+    });
+  },
+  methods: {
+    enqueueReview() {
+      var self = this;
+      if (!this.canEnqueue) return;
+      var id = this.draftId('fraudReview');
+      if (!id) return;
+      var input = {
+        id: id,
+        merchantId: this.form.merchantId,
+        amount: this.form.amount,
+        assetId: this.form.assetId
+      };
+      if (this.form.paymentId) input.paymentId = this.form.paymentId;
+      this.act('queued', mutate('pay', 'fraud.enqueueReview', input, this.ixToken)).then(function(res) {
+        if (!res.ok) return;
+        self.clearDraftId('fraudReview');
+        self.form.amount = '';
+        self.form.paymentId = '';
+      });
+    }
   }
 };
 </script>

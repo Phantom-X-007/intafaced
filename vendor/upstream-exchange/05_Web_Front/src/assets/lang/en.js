@@ -842,7 +842,15 @@ module.exports = {
             overview: {
                 merchantLead: "Whether this account is a merchant. One merchant per account, so there is nothing to choose between.",
                 notAMerchant: "This account is not a merchant. That is an answer, not a refusal — svc-pay returned no merchant for it.",
-                openMerchant: "Open merchant account"
+                openMerchant: "Open merchant account",
+                fraudReviewTitle: "Enqueue a fraud review",
+                fraudReviewLead: "Same inputs scoring uses. svc-pay re-evaluates and only queues when the outcome is review; anything else is a named refusal. No ledger value moves. The amount is a decimal string.",
+                fraudReviewEnqueue: "Enqueue review",
+                fraudReviewQueued: "Review queued",
+                fraudReviewId: "Review id",
+                fraudReviewPaymentOptional: "Payment id (optional)",
+                fraudReviewPaymentHint: "UUID of the payment, if this review is about one",
+                fraudReviewIdempotency: "This draft's id, sent so a retry is the same review and not a second one:"
             },
 
             moneyPage: {
