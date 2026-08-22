@@ -38,6 +38,10 @@ const schema = baseEnvSchema
        * (`GET /api/v1/orderbook/:symbol`). Unset / blank → snapshot map empty.
        */
       TRADE_URL: blankAsAbsent(z.string().url().optional()),
+      /**
+       * JSONL path for durable EMS ack journal. Blank (default) → in-memory store.
+       */
+      EXECUTION_EMS_STORE_PATH: z.string().default(''),
     }),
   );
 

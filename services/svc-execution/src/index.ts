@@ -10,6 +10,7 @@ import { buildExecutionVenueTradeMaps, parseExecutionVenueIds } from './venue-ad
 import { buildExecutionVenueMarketMaps } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap, TRADE_BOOK_SNAPSHOT_VENUE_ID } from './trade-book-snapshot.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
+import { FileEmsOrderStore } from './file-ems-order-store.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -31,7 +32,8 @@ const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
 const venueTradeMaps = buildExecutionVenueTradeMaps(executionVenueIds);
 const venueAccountMaps = buildExecutionVenueAccountMaps(executionVenueIds);
 const venueMarketMaps = buildExecutionVenueMarketMaps(executionVenueIds);
-const emsStore = new InMemoryEmsOrderStore();
+const emsStorePath = env.EXECUTION_EMS_STORE_PATH.trim();
+const emsStore = emsStorePath ? new FileEmsOrderStore(emsStorePath) : new InMemoryEmsOrderStore();
 const tradeBookSnapshot = buildTradeBookSnapshotMap(env.TRADE_URL);
 const snapshotByVenue = { ...venueMarketMaps.snapshotByVenue, ...tradeBookSnapshot };
 const appRouter = createExecutionRouter(
@@ -61,7 +63,8 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
   stage: 'oms-ems',
-  store: 'memory',
+  store: emsStorePath ? 'file' : 'memory',
+  emsStorePath: emsStorePath || null,
   internalVenue: 'blocked',
   externalVenueTrade: venueTradeMaps.wiredVenueIds,
   externalVenueAccount: venueAccountMaps.wiredVenueIds,
