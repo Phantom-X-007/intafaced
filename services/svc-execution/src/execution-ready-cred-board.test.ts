@@ -183,6 +183,19 @@ describe('execution boot router venue maps wiring (D55)', () => {
   });
 });
 
+describe('execution boot trpc and edge context wiring (D57)', () => {
+  it('index registers fastifyTRPCPlugin with appRouter, market maps, and createEdgeContext', () => {
+    const src = indexSrc();
+    expect(src).toContain('fastifyTRPCPlugin');
+    expect(src).toContain('router: appRouter');
+    expect(src).toContain('createEdgeContext(');
+    expect(src).toContain('EDGE_PRINCIPAL_SECRET');
+    expect(src).toContain('venueMarketMaps.borrowByVenue');
+    expect(src).toContain('venueMarketMaps.latencyByVenue');
+    expect(src).toContain('venueMarketMaps.marketsByVenue');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
