@@ -309,6 +309,20 @@ describe('execution boot createExecutionRouter wiring complete (D69)', () => {
   });
 });
 
+describe('execution boot trpc mount complete (D70)', () => {
+  it('index registers trpc with edge context and graceful shutdown on boot', () => {
+    const src = indexSrc();
+    expect(src).toContain("prefix: '/trpc'");
+    expect(src).toContain('fastifyTRPCPlugin');
+    expect(src).toContain('createEdgeContext({');
+    expect(src).toContain('edgeContext({ headers: req.headers');
+    expect(src).toContain('EDGE_PRINCIPAL_SECRET');
+    expect(src).toContain('SIGTERM');
+    expect(src).toContain('SIGINT');
+    expect(src).toContain('app.close()');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
