@@ -252,6 +252,9 @@ services:
       SUPPORT_URL: http://svc-support:4017
       MARKET_URL: http://svc-market:4018
       EXECUTION_URL: http://svc-execution:4019
+      # connect.data-lake TSDB + retention owner env — blank retention refuses persist.
+      CONNECT_DATA_LAKE_TSDB_URL: postgres://svc_connect_lake:svc_connect_lake@postgres:5432/intafaced
+      CONNECT_DATA_LAKE_RETENTION_DAYS:
     ports: ['4000:4000']
     healthcheck: *healthcheck
     # Started last on purpose: the door should open onto services that are

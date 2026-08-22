@@ -1,7 +1,8 @@
 /**
  * D26-P2-DL1 — connect.data-lake mount vs tracker honest gaps.
  *
- * Stage-1 capture log only — no TSDB write, no invented quiet market.
+ * Stage-1 capture log with fleet TSDB schema + owner retention env wired in compose.
+ * Tick/fill normalisation pipeline remains Class X residual.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -41,7 +42,7 @@ export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'mount-vs-tracker.test.ts',
 ] as const;
 
-export const DATA_LAKE_HONEST_GAPS = ['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env'] as const;
+export const DATA_LAKE_HONEST_GAPS = ['gap.tick_fill_normalisation_pipeline'] as const;
 
 export function dataLakeExportsInIndexSource(): readonly (typeof DATA_LAKE_PACKAGE_EXPORTS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
