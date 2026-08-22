@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.moneyPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.moneyPage.lead') }}</p>
-      <div class="ix-source">svc-pay · withdrawal.balance · withdrawal.mine · withdrawal.create</div>
+      <div class="ix-source">svc-pay · withdrawal.balance · withdrawal.mine · withdrawal.create · svc-identity · auth.stepUp</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -45,6 +45,35 @@
       <div class="ix-note ix-note-quiet" style="margin-bottom:16px;">
         <strong>{{ $t('intafaced.pay.moneyPage.stepUpTitle') }}</strong>
         <div style="margin-top:6px;">{{ $t('intafaced.pay.moneyPage.stepUpBody') }}</div>
+        <div class="ix-form-row" style="margin-top:12px;">
+          <div class="ix-field">
+            <label for="ix-wd-totp">{{ $t('intafaced.pay.moneyPage.stepUpTotp') }}</label>
+            <Input
+              element-id="ix-wd-totp"
+              v-model="totpCode"
+              :placeholder="$t('intafaced.pay.moneyPage.stepUpTotpHint')"
+              autocomplete="one-time-code"
+            ></Input>
+          </div>
+          <div class="ix-form-action">
+            <Button type="primary" :loading="stepped.busy" :disabled="!canStepUp" @click="submitStepUp">
+              {{ $t('intafaced.pay.moneyPage.stepUpBtn') }}
+            </Button>
+          </div>
+        </div>
+        <div v-if="stepped.ran" style="margin-top:14px;">
+          <div v-if="stepped.reason === 'ok'" class="ix-done">
+            <strong>{{ $t('intafaced.pay.moneyPage.stepUpBtnDone') }}</strong>
+            <div style="margin-top:6px;">{{ (stepped.data.scopes || []).join(', ') }}</div>
+          </div>
+          <IxState
+            v-else
+            :loading="stepped.busy"
+            :reason="stepped.reason"
+            :message="stepped.message"
+            endpoint="/api/identity/trpc/auth.stepUp"
+          ></IxState>
+        </div>
       </div>
 
       <div class="ix-field-grid">
@@ -165,9 +194,11 @@
  * ── THE FORM IS DRAWN EVEN THOUGH IT USUALLY REFUSES ──────────────────────
  * `withdrawal.create` demands `trade:withdraw`, which is INTERACTIVE_ONLY and
  * which `requireScope` will not honour on a session that has not passed 2FA
- * step-up. An ordinary session therefore gets a named refusal, and the note
- * above the form says so BEFORE the reader fills it in. Hiding the form would
- * be the other kind of dishonesty: a withdrawal path that exists and that the
+ * step-up. The note above the form is the step-up door: `auth.stepUp` with a
+ * TOTP (or recovery) code replaces the in-memory access token with the
+ * elevated one, then Send uses that token. Refuse stays named (missing
+ * `trade:withdraw`, bad code, not enrolled). Hiding the form would be the
+ * other kind of dishonesty: a withdrawal path that exists and that the
  * product pretends it does not have.
  *
  * `clientRef` is REQUIRED by the router — "there is no cancelling a payout" —
@@ -188,11 +219,13 @@ export default {
     return {
       nav: PAY_NAV,
       assetId: 'USDT',
+      totpCode: '',
       form: { assetId: 'USDT', amount: '', railId: '', destinationKind: '', destinationRef: '', clientRef: '' },
       health: this.emptySection(),
       balance: this.emptySection(),
       withdrawals: this.emptySection(),
-      sent: this.emptyAction()
+      sent: this.emptyAction(),
+      stepped: this.emptyAction()
     };
   },
   computed: {
@@ -208,6 +241,9 @@ export default {
           this.form.destinationRef &&
           this.form.clientRef
       );
+    },
+    canStepUp() {
+      return /^(\d{6}|[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5})$/.test(this.totpCode);
     }
   },
   created() {
@@ -223,6 +259,19 @@ export default {
     },
     reloadWithdrawals() {
       this.load('withdrawals', query('pay', 'withdrawal.mine', {}, this.ixToken));
+    },
+    submitStepUp() {
+      var self = this;
+      if (!this.canStepUp) return;
+      this.act(
+        'stepped',
+        mutate('identity', 'auth.stepUp', { totpCode: this.totpCode }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        var current = self.$store.getters.ixSession || {};
+        self.$store.commit('setIxSession', Object.assign({}, current, res.data));
+        self.totpCode = '';
+      });
     },
     submitWithdrawal() {
       var self = this;
