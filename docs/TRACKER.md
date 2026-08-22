@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**118 of 158 shipped (75%)** · 0 in progress · 23 ready to claim · 17 blocked · 30 deliberate §13 sockets
+**118 of 158 shipped (75%)** · 1 in progress · 22 ready to claim · 17 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -30,7 +30,6 @@ pnpm wt feat/<the-thing>
 | OTC RFQ desk, staked-tier gate | `trade` | 2 | `trade.otc` |
 | Copy trading, audited leaders, fee-share (not profit-share) | `trade` | 2 | `trade.copy` |
 | Fiat pairs on the same engine | `trade` | 2 | `trade.forex` |
-| External venue adapters via CCXT (cross-venue) | `trade` | 2 | `venue.aggregation` |
 | Pro terminal — depth, charts, hotkeys, sub-accounts | `trade` | 2 | `web.terminal` |
 | Branded gateway, hosted checkout, payment links | `pay` | 3 | `pay.gateway` |
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
@@ -55,7 +54,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **12** | External venue adapters via CCXT (cross-venue) | 🟢 ready | `venue.aggregation` |
+| **12** | External venue adapters via CCXT (cross-venue) | 🔨 wip | `venue.aggregation` |
 | **11** | Branded gateway, hosted checkout, payment links | 🟢 ready | `pay.gateway` |
 | **6** | INTACHAIN — CometBFT + native CLOB module | 🟢 ready | `chain.mainnet` |
 | **5** | Unified data lake — normalised ticks, books and fills to a time-series store (§27) | ⛔ blocked | `connect.data-lake` |
@@ -63,6 +62,12 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **2** | Perps: isolated margin, funding, partial-liquidation ladder | 🟢 ready | `trade.futures` |
 | **2** | OTC RFQ desk, staked-tier gate | 🟢 ready | `trade.otc` |
 | **2** | Copy trading, audited leaders, fee-share (not profit-share) | 🟢 ready | `trade.copy` |
+
+## 🔨 In progress
+
+| Feature | Owner | Module |
+|---|---|---|
+| External venue adapters via CCXT (cross-venue) | **Phantom-X-007** | `trade` |
 
 ---
 
@@ -123,7 +128,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | VWAP / POV execution <br/>_§13 — owner market maturity, not missing candles. Agents must not invent VWAP/POV product, fills, volume curves, or participation defaults. TWAP shipped on trade.algo. Empty-tape refuse in src/algo is honesty, not a claim these algos exist as product._ | F |  | `socket.trade-vwap-pov` |
 | ✅ | CCXT-compatible public API (bots + terminals connect) <br/>_**DONE 2026-08-13 D26-P1-T5:** claim ≡ wire — `ccxt-capability-matrix.test.ts` fails if a REST_ROUTES row is missing or a refuse arm drifts. GET /api/v1/capabilities serves matrix. Residual not blocking: paper-list exclude (N3 Nitro — do not invent), published rate-limit vs edge 300/min (N4), mm seed ops. On OPEN_MONEY allowlist 2026-08-08. Contract-complete — all REST_ROUTES mounted. Bot-ready capability matrix + refuse surface in services/svc-trade/src/ccxt-capability-matrix.ts (D26-P1-T5 / paste-w10 L02 A1): every REST_ROUTES row + open/close extensions; refuse arms setLeverage/setMarginMode 501, funding-rate unsupported 501, caller price on open/close 400 — tests fail if matrix claim ≠ wire. Public: markets (paper + schedule/sessionOpen), orderbook, ticker, tickers, trades (?since=), ohlcv (real fills only), funding-rate (published or NotSupported). Private: orders, account, positions list/open/close. Edge rate limiter ON (N4 residual vs published contract). W13 L10: public GET /api/v1/capabilities serves matrix+refuse arms._ | F |  | `trade.ccxt-api` |
 | ✅ | Internal market-maker seeding books at launch <br/>_**DONE 2026-08-16 #2207:** Title is true on tip. seedMarket (#325) + job host default OFF (#326, #1962) + marketMakerMakerFill/settleFill house-MM (#328) + cancel/reseed (#340) + mid port (#356) + seed-honesty (#1710) + fill-account recovery on live orderFilled → settleFillEvent (#1852). TRADE_MM_SEED_ENABLED kills jobs and the seeded placeOrder path. Production mid ops (TRADE_MM_SEED_MID_FROM_VENUE / venue map) is an operator enable, not missing seed machinery — never invents mids or manufactured crosses. Pin: fill-account.test.ts fails if recoverMatchingAccountId leaves settleFillEvent. Did not mark trade.algo or venue.aggregation done._ | F |  | `trade.mm-bot` |
-| 🟢 | External venue adapters via CCXT (cross-venue) <br/>_**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — quote-only MD fabric is not the trading half. Public market-data fabric on tip (binance/bybit/okx); no ccxt in money path; never invent mid. Product still needs: trading half (OMS wire); no live-network CI; futures M3 human risk truth._ | F |  | `venue.aggregation` |
+| 🔨 | External venue adapters via CCXT (cross-venue) <br/>_**D27-P4 WIP 2026-08-22:** trading-half-policy + aggregation-trading-door on tip — trade/account/MD factories aligned for binance/bybit/okx. Place/cancel/fetch refuse not_ready without operator HTTP port + credentials. Product still needs: live-network CI; OMS wire on svc-execution; no invent mids._ | F |  | `venue.aggregation` |
 | ✅ | Latency grading — every adapter scored live, feeding routing weights (§27) <br/>_**D26-P1-X1 Done 2026-08-21:** REST round-trip measurement-not-estimate (`latency-mount-vs-tracker.ts`); ungraded → null + routing weight 0. `execution.sor` `scoreSorCost` consumes `latencyGrade` (unscored → weight 0). Never invent default grade or letter→bps. Class X residual: owner DEFAULT_THRESHOLDS; WS stream lag not graded; UNMEASURED_LATENCY_MS sentinel._ | B |  | `connect.latency-grading` |
 | ⛔ | Unified data lake — normalised ticks, books and fills to a time-series store (§27) <br/>_WIP D27-P4: TSDB write path in packages/connect-data-lake — measured rows INSERT to connect_lake.lake_ticks when CONNECT_DATA_LAKE_TSDB_URL + CONNECT_DATA_LAKE_RETENTION_DAYS owner-set; blank env refuse-closed. Unconnected venue = absent hole. Class X residual: compose TSDB provisioning; tick/fill normalisation pipeline; retention enforcement job._ | B | `venue.aggregation` | `connect.data-lake` |
 | ⛔ | svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports (§28) <br/>_**D27-P4 WIP 2026-08-22:** OMS boot wires public MD observation + trade/account maps; in-memory EMS ack journal on execute. SOR cost model + plan/execute/cancel/fetch doors on svc-execution tip. Product still needs: durable EMS store; letter→bps owner schedule; live venue creds operator wiring._ | B | `venue.aggregation` | `execution.sor` |

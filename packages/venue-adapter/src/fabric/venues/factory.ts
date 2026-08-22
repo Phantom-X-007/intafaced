@@ -59,7 +59,7 @@ export function createVenueMarketDataAdapter(venueId: string, options?: VenueMar
 }
 
 export type VenueTradeAdapter = BinanceSpotTrade | BybitSpotTrade | OkxSpotTrade;
-export type VenueTradeAdapterOptions = OkxSpotTradeOptions;
+export type VenueTradeAdapterOptions = BinanceSpotTradeOptions & BybitSpotTradeOptions & OkxSpotTradeOptions;
 
 /**
  * Signed spot trade adapters by venue id.
@@ -73,8 +73,8 @@ export function createVenueTradeAdapter(
 ): VenueTradeAdapter | null {
   const id = venueId.trim().toLowerCase();
   if (!id || id === 'off' || id === 'none' || id === 'false') return null;
-  if (id === 'binance-spot') return new BinanceSpotTrade(credentials);
-  if (id === 'bybit-spot') return new BybitSpotTrade(credentials);
+  if (id === 'binance-spot') return new BinanceSpotTrade(credentials, options);
+  if (id === 'bybit-spot') return new BybitSpotTrade(credentials, options);
   if (id === 'okx-spot') return new OkxSpotTrade(credentials, options);
   return null;
 }

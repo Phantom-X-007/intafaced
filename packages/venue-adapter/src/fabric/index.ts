@@ -40,6 +40,8 @@
  *     and unregistered is a file, not a venue.
  *   · `venues/factory-policy.ts` — venue.aggregation honesty door. Public
  *     market-data ids from the factory; unknown ids refuse; no invented list.
+ *   · `venues/trading-half-policy.ts` — venue.aggregation trading half contract
+ *     (D27-P4). Trade factory covers every public MD id; ops keys still required.
  */
 export * from './sequenced-book.js';
 export * from './book-feed.js';
@@ -65,3 +67,5 @@ export {
 } from './venues/okx-spot.js';
 export * from './venues/factory.js';
 export * from './venues/factory-policy.js';
+export * from './venues/trading-half-policy.js';
+export * from './venues/trading-half-policy.js';
