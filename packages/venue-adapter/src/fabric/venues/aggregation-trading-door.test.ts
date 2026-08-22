@@ -86,6 +86,23 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     });
   });
 
+  it('describeOperatorVenueAccountMaps wires when operator env is complete (D42)', () => {
+    expect(describeOperatorVenueAccountMaps({})).toMatchObject({
+      wiredVenueIds: [],
+      inventsAdapters: false,
+      operatorCredentialsRequired: true,
+    });
+    expect(
+      describeOperatorVenueAccountMaps({
+        VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'k',
+        VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 's',
+      }),
+    ).toMatchObject({
+      wiredVenueIds: ['binance-spot'],
+      inventsAdapters: false,
+    });
+  });
+
   it('package index re-exports trading-half policy through fabric', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const pkgIndex = readFileSync(join(here, '..', '..', 'index.ts'), 'utf8');
