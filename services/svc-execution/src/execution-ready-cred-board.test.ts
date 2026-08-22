@@ -170,6 +170,19 @@ describe('execution boot sealed registry wiring (D54)', () => {
   });
 });
 
+describe('execution boot router venue maps wiring (D55)', () => {
+  it('index passes trade, account, and market maps into createExecutionRouter', () => {
+    const src = indexSrc();
+    expect(src).toContain('venueTradeMaps.submitByVenue');
+    expect(src).toContain('venueTradeMaps.cancelByVenue');
+    expect(src).toContain('venueTradeMaps.fetchByVenue');
+    expect(src).toContain('venueAccountMaps.balancesByVenue');
+    expect(src).toContain('venueAccountMaps.positionsByVenue');
+    expect(src).toContain('venueMarketMaps.fundingByVenue');
+    expect(src).toContain('operatorAccountSupplementVenueIds: venueAccountMaps.operatorSupplementVenueIds');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
