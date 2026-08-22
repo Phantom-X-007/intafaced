@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
+import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import { buildExecutionReadyResponse } from './ready-response.js';
-import { describeExecutionVenueCredentialBoard } from './venue-adapters.js';
+import {
+  buildExecutionVenueTradeMapsWithOperatorSupplement,
+  describeExecutionVenueCredentialBoard,
+  unionExecutionVenueIds,
+} from './venue-adapters.js';
 
 const apps: FastifyInstance[] = [];
 
@@ -87,5 +92,53 @@ describe('execution /ready supplement inject (D35)', () => {
       externalVenueAccount: ['okx-spot'],
       externalVenueMarketData: ['binance-spot', 'bybit-spot'],
     });
+  });
+});
+
+describe('execution /ready trade supplement inject (D40)', () => {
+  it('GET /ready wires operator trade supplement and credential board union over HTTP', async () => {
+    const env = {
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 's',
+    };
+    const tradeMaps = buildExecutionVenueTradeMapsWithOperatorSupplement([], { env });
+    const accountMaps = buildExecutionVenueAccountMapsWithOperatorSupplement([], { env });
+    const venueCredentialBoard = describeExecutionVenueCredentialBoard(
+      unionExecutionVenueIds([], tradeMaps.operatorSupplementVenueIds, accountMaps.operatorSupplementVenueIds),
+      env,
+    );
+    const emsStore = new InMemoryEmsOrderStore();
+    const payload = buildExecutionReadyResponse({
+      emsStorePath: '',
+      tradeUrl: '',
+      venueTradeWiredVenueIds: tradeMaps.wiredVenueIds,
+      operatorSupplementVenueIds: tradeMaps.operatorSupplementVenueIds,
+      operatorAccountSupplementVenueIds: accountMaps.operatorSupplementVenueIds,
+      publicMdSupplementVenueIds: [],
+      venueCredentialBoard,
+      venueAccountWiredVenueIds: accountMaps.wiredVenueIds,
+      venueMarketWiredVenueIds: [],
+      emsAckCount: emsStore.list().length,
+    });
+
+    const app = Fastify({ logger: false });
+    app.get('/ready', async () => payload);
+    await app.ready();
+    apps.push(app);
+
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      operatorSupplementVenueIds: ['binance-spot'],
+      operatorAccountSupplementVenueIds: ['binance-spot'],
+      externalVenueTrade: ['binance-spot'],
+      externalVenueAccount: ['binance-spot'],
+      venueCredentialBoard: {
+        wiredVenueIds: ['binance-spot'],
+        inventsCredentials: false,
+      },
+    });
+    expect(tradeMaps.operatorSupplementVenueIds).toEqual(['binance-spot']);
+    expect(Object.keys(tradeMaps.submitByVenue)).toContain('binance-spot');
   });
 });
