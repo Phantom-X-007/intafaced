@@ -241,3 +241,18 @@ describe('connect.latency-grading mount vs tracker — D107 denon complete', () 
     expect(latencyDoneBarTestsPresent()).toBe(true);
   });
 });
+
+describe('connect.latency-grading mount vs tracker — D109 denon complete', () => {
+  it('full mount board: symbols, SOR consumer, done-bar tests, honest gaps', () => {
+    expect(LATENCY_GRADING_TRACKER_ID).toBe('connect.latency-grading');
+    const card = latencyGradingMountVsTrackerBoardCard();
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(card.symbolsPresent).toBe(LATENCY_PRODUCT_SYMBOLS.length);
+    expect(card.sorConsumer).toBe(true);
+    expect(card.gaps).toBe(3);
+    expect(latencyGradingTrackerBackendDoneBarMet()).toBe(true);
+    expect(Array.from(latencySymbolsInFabricSource()).sort()).toEqual(Array.from(LATENCY_PRODUCT_SYMBOLS).sort());
+    expect(sorConsumesLatencyGrade()).toBe(true);
+    expect(latencyDoneBarTestsPresent()).toBe(true);
+  });
+});
