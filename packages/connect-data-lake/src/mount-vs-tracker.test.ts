@@ -101,3 +101,19 @@ describe('connect.data-lake tracker backend done bar complete (D62)', () => {
     expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('connect.data-lake quant edge doors in exports (D64)', () => {
+  it('package exports wire EDGE_QUANT surface render and composite honesty doors', () => {
+    const exports = dataLakeExportsInIndexSource();
+    expect(exports).toContain('EDGE_QUANT_SURFACE_RENDER_DOOR');
+    expect(exports).toContain('EDGE_QUANT_COMPOSITE_HONESTY_DOOR');
+    expect(exports).toContain('describeQuantHonestyMount');
+    expect(exports).toContain('gateQuantSurfaceRender');
+    expect(exports).toContain('refuseQuantSurfaceRender');
+    const board = describeDataLakeStage1({});
+    expect(board.quantSurface.edgeDoorNotProxiedToSvcQuant).toBe(true);
+    expect(board.quantSurface.compositeGateWired).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+  });
+});
