@@ -50,6 +50,7 @@ import { parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { parseOtcDeskLawJson } from './otc/desk-law.js';
 import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
+import { describeOtcMidFeedWiring } from './otc/mid-feed.js';
 import { OtcDeskService } from './otc/otc-service.js';
 import { SqlOtcQuoteStore } from './otc/quote-store.js';
 import { createOtcStakeSource } from './otc/stake-source.js';
@@ -164,10 +165,17 @@ const otcMidBuilt = createOtcMidSourceFromConfig({
   venueSymbols: env.TRADE_OTC_VENUE_SYMBOLS,
   ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
+const otcMidFeedWiring = describeOtcMidFeedWiring({
+  midFromVenue: env.TRADE_OTC_MID_FROM_VENUE,
+  venueAdapterInstalled: venuePublicAdapter != null,
+  venueSymbolsConfigured: env.TRADE_OTC_VENUE_SYMBOLS.trim().length > 0,
+  liveObservationFeed: otcMidBuilt.liveObservationFeed,
+});
 const otc = new OtcDeskService(ledger, otcStakes, {
   law: otcDeskLaw,
   midSource: otcMidBuilt.source,
   liveObservationFeed: otcMidBuilt.liveObservationFeed,
+  midFeedWiring: otcMidFeedWiring,
   store: new SqlOtcQuoteStore(sql),
 });
 
