@@ -323,6 +323,26 @@ describe('/admin/status — control-plane summary', () => {
     expect(quantHonesty.doors).toHaveLength(5);
   });
 
+  it('quant honesty doors report package and method per path over HTTP (D71)', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const { quantHonesty } = res.json() as {
+      quantHonesty: { doors: { path: string; package: string; method: string }[] };
+    };
+    const byPath = Object.fromEntries(quantHonesty.doors.map((door) => [door.path, door]));
+    expect(byPath['/quant/honesty/assess-backtest']).toMatchObject({ method: 'POST', package: '@intafaced/quant-honesty' });
+    expect(byPath['/quant/honesty/assess-comparison-order']).toMatchObject({ method: 'POST', package: '@intafaced/quant-honesty' });
+    expect(byPath['/quant/honesty/performance-labels']).toMatchObject({ method: 'GET', package: '@intafaced/quant-honesty' });
+    expect(byPath['/quant/honesty/assess-surface-render']).toMatchObject({ method: 'POST', package: '@intafaced/connect-data-lake' });
+    expect(byPath['/quant/honesty/assess-composite']).toMatchObject({ method: 'POST', package: 'composite' });
+    expect(quantHonesty.doors).toHaveLength(5);
+  });
+
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
     const h = await edge();
     // Seed via admin API method through status surface — open is not HTTP yet
