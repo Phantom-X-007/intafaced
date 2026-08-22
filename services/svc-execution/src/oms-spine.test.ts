@@ -143,3 +143,23 @@ describe('execution.sor spine — D86 denon complete', () => {
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
   });
 });
+
+describe('execution.sor spine — D88 denon complete', () => {
+  it('spine catalog, router mounts, and mount-vs-tracker cert all green on tip', () => {
+    const spine = describeExecutionSpine();
+    expect(spine.externalOnly).toBe(true);
+    expect(spine.houseInternalRefuse).toBe(true);
+    expect(spine.sorUsesVenueAdapterPlanRoute).toBe(true);
+    expect(spine.doors.map((d) => d.id)).toEqual(EXECUTION_SPINE_DOORS.map((d) => d.id));
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'execution.sor',
+      backendDoneBarMet: true,
+      mountComplete: true,
+      gaps: 3,
+    });
+    expect(routerSource).toMatch(/describeExecutionSpine/);
+    expect(routerSource).toMatch(/execution\.oms\.plan/);
+    expect(routerSource).toMatch(/execution\.oms\.execute/);
+  });
+});
