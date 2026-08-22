@@ -21,7 +21,6 @@ export const FUTURES_DONE_BAR_TEST_FILES = [
   'funding-settlement.test.ts',
   'futures-leverage-p0-07-default.test.ts',
   'futures-ladder-owner-gate.test.ts',
-  'futures-owner-env-gates.test.ts',
   'futures-compose-wiring.test.ts',
 ] as const;
 

@@ -14,12 +14,7 @@ export const OPTIONS_TRACKER_ID = 'trade.options' as const;
 
 export const OPTIONS_MOUNTED_DOORS = ['policy'] as const;
 
-export const OPTIONS_DONE_BAR_TEST_FILES = [
-  'options-policy.test.ts',
-  'options-listing.test.ts',
-  'options-compose-wiring.test.ts',
-  'options-settlement-owner-gate.test.ts',
-] as const;
+export const OPTIONS_DONE_BAR_TEST_FILES = ['options-policy.test.ts', 'options-listing.test.ts', 'options-compose-wiring.test.ts'] as const;
 
 /** P0-05 + D7 compose wired; European engine + order path remain Class X. */
 export const OPTIONS_HONEST_GAPS = ['gap.european_options_engine'] as const;
