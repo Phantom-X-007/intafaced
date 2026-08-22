@@ -117,3 +117,18 @@ describe('connect.data-lake quant edge doors in exports (D64)', () => {
     expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('connect.data-lake mount vs tracker board complete (D66)', () => {
+  it('connectDataLakeMountVsTrackerBoardCard reports exports, gaps, and backend done bar met', () => {
+    const card = connectDataLakeMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('connect.data-lake');
+    expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
+    expect(card.gaps).toBe(DATA_LAKE_HONEST_GAPS.length);
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env']);
+    expect(dataLakeDoneBarTestsPresent()).toBe(true);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(dataLakeCapturePolicyHonest()).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+  });
+});
