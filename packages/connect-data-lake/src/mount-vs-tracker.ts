@@ -18,6 +18,7 @@ export const DATA_LAKE_PACKAGE_EXPORTS = [
   'ingestCaptureLakeBatch',
   'retentionPersistenceGate',
   'purgeExpiredLakeTicks',
+  'runConnectDataLakeRetentionMaintenance',
 ] as const;
 
 export const DATA_LAKE_DONE_BAR_TEST_FILES = [
@@ -26,6 +27,7 @@ export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'capture-lake-consumer.test.ts',
   'persistence-sink.test.ts',
   'retention-purge.test.ts',
+  'retention-maintenance.test.ts',
   'package-export-mount.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;

@@ -14,6 +14,7 @@ describe('connect-data-lake package exports mount', () => {
     expect(src).toContain('flushCaptureLogToPersistenceSink');
     expect(src).toContain('retentionPersistenceGate');
     expect(src).toContain('purgeExpiredLakeTicks');
+    expect(src).toContain('runConnectDataLakeRetentionMaintenance');
     expect(src).toContain('gateBacktestRender');
     expect(src).toContain('describeQuantHonestyPolicy');
   });
