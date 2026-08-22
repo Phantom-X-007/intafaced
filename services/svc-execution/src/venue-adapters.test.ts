@@ -200,11 +200,7 @@ describe('buildExecutionVenueTradeMaps', () => {
       VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'k',
       VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 's',
     };
-    const maps = buildExecutionVenueTradeMapsWithOperatorSupplement([], {
-      env,
-      credentialsFor: (id) => loadExecutionVenueCredentials(id, env),
-      createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
-    });
+    const maps = buildExecutionVenueTradeMapsWithOperatorSupplement([], { env });
     expect(maps.wiredVenueIds).toEqual(['binance-spot']);
     expect(maps.operatorSupplementVenueIds).toEqual(['binance-spot']);
     expect(maps.submitByVenue['binance-spot']).toBeTypeOf('function');

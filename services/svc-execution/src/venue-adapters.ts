@@ -6,7 +6,7 @@
  * underscores, uppercased). Blank credential env → refuse-closed (venue not wired).
  * Unknown ids skipped (no map entry).
  */
-import { buildOperatorVenueTradeAdapters, createVenueTradeAdapter, loadVenueOperatorCredentials } from '@intafaced/venue-adapter';
+import { buildOperatorVenueTradeMaps, createVenueTradeAdapter, loadVenueOperatorCredentials } from '@intafaced/venue-adapter';
 import { assertTradeOnly, type TradeAdapter, type VenueCredentials } from '@intafaced/venue-contracts';
 import type { OmsCancelFn } from './oms-cancel.js';
 import type { OmsFetchFn } from './oms-fetch.js';
@@ -251,7 +251,7 @@ export function buildExecutionVenueTradeMapsWithOperatorSupplement(
     credentialsFor: options.credentialsFor ?? ((id) => loadExecutionVenueCredentials(id, env)),
   });
 
-  const { adapters } = buildOperatorVenueTradeAdapters(env);
+  const operatorMaps = buildOperatorVenueTradeMaps(env);
   const submitByVenue = { ...primary.submitByVenue };
   const cancelByVenue = { ...primary.cancelByVenue };
   const fetchByVenue = { ...primary.fetchByVenue };
@@ -259,13 +259,12 @@ export function buildExecutionVenueTradeMapsWithOperatorSupplement(
   const wiredVenueIds = [...primary.wiredVenueIds];
   const operatorSupplementVenueIds: string[] = [];
 
-  for (const [venueId, adapter] of Object.entries(adapters)) {
+  for (const venueId of operatorMaps.wiredVenueIds) {
     if (submitByVenue[venueId]) continue;
-    const wire = wireTradeAdapter(adapter);
-    submitByVenue[venueId] = wire.submit;
-    cancelByVenue[venueId] = wire.cancel;
-    fetchByVenue[venueId] = wire.fetch;
-    openOrdersByVenue[venueId] = wire.openOrders;
+    submitByVenue[venueId] = operatorMaps.placeByVenue[venueId];
+    cancelByVenue[venueId] = operatorMaps.cancelByVenue[venueId];
+    fetchByVenue[venueId] = operatorMaps.fetchByVenue[venueId];
+    openOrdersByVenue[venueId] = operatorMaps.openOrdersByVenue[venueId];
     wiredVenueIds.push(venueId);
     operatorSupplementVenueIds.push(venueId);
   }
