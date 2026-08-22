@@ -896,6 +896,9 @@ importers:
       '@intafaced/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@intafaced/connect-data-lake':
+        specifier: workspace:*
+        version: link:../../packages/connect-data-lake
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
