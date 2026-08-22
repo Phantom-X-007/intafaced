@@ -1146,7 +1146,19 @@ services:
       HTTP_PORT: '4019'
       # OMS book snapshot on venue intafaced-spot via trade public orderbook REST.
       TRADE_URL: http://svc-trade:4004
+      # Durable EMS ack journal — survives container replace (refuse-closed when path blank).
+      EXECUTION_EMS_STORE_PATH: ${EXECUTION_EMS_STORE_PATH:-/data/execution/ems-journal.jsonl}
+      # venue.aggregation operator keys — pass-through from host `.env`; blank per venue = refuse-closed.
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: ${VENUE_AGGREGATION_BINANCE_SPOT_API_KEY:-}
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: ${VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET:-}
+      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: ${VENUE_AGGREGATION_BYBIT_SPOT_API_KEY:-}
+      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: ${VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET:-}
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: ${VENUE_AGGREGATION_OKX_SPOT_API_KEY:-}
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: ${VENUE_AGGREGATION_OKX_SPOT_API_SECRET:-}
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: ${VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE:-}
     expose: ['4019']
+    volumes:
+      - execution-ems-journal:/data/execution
     healthcheck: *healthcheck
     # OMS snapshot reads trade public orderbook — start after trade is healthy.
     depends_on:
@@ -1514,3 +1526,4 @@ services:
 
 volumes:
   matchingjournal:
+  execution-ems-journal:
