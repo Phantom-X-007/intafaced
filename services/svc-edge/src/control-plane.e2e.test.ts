@@ -277,6 +277,32 @@ describe('/admin/status — control-plane summary', () => {
     );
   });
 
+  it('quant honesty status reports five unique doors with mount honesty flags (D65)', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const { quantHonesty } = res.json() as {
+      quantHonesty: {
+        doors: { path: string }[];
+        mountedOnControlPlane: boolean;
+        notProxiedToSvcQuant: boolean;
+        inventsReturns: boolean;
+        compositeHonestyWired: boolean;
+        edgeDoorPathsAlignedWithDataLake: boolean;
+      };
+    };
+    expect(new Set(quantHonesty.doors.map((door) => door.path)).size).toBe(5);
+    expect(quantHonesty.mountedOnControlPlane).toBe(true);
+    expect(quantHonesty.notProxiedToSvcQuant).toBe(true);
+    expect(quantHonesty.inventsReturns).toBe(false);
+    expect(quantHonesty.compositeHonestyWired).toBe(true);
+    expect(quantHonesty.edgeDoorPathsAlignedWithDataLake).toBe(true);
+  });
+
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
     const h = await edge();
     // Seed via admin API method through status surface — open is not HTTP yet
