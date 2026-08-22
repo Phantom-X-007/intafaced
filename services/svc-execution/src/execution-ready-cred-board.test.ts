@@ -196,6 +196,18 @@ describe('execution boot trpc and edge context wiring (D57)', () => {
   });
 });
 
+describe('execution boot health and credential union (D59)', () => {
+  it('index exposes /health and /ready and wires unionExecutionVenueIds into credential board', () => {
+    const src = indexSrc();
+    expect(src).toContain("app.get('/health'");
+    expect(src).toContain("app.get('/ready'");
+    expect(src).toContain('SERVICE_NAME');
+    expect(src).toContain('unionExecutionVenueIds(executionVenueIds');
+    expect(src).toContain('describeExecutionVenueCredentialBoard(');
+    expect(src).toContain('venueCredentialBoard,');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
