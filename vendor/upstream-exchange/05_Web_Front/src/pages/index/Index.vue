@@ -53,6 +53,49 @@
             </IxState>
           </div>
         </div>
+        <div class="ix-waitlist-card">
+          <h2>{{ $t('intafaced.kyc.submitTitle') }}</h2>
+          <p>{{ $t('intafaced.kyc.submitLead') }}</p>
+          <form @submit.prevent="submitKyc">
+            <select v-model="kycTier" required>
+              <option value="basic">{{ $t('intafaced.kyc.tierBasic') }}</option>
+              <option value="full">{{ $t('intafaced.kyc.tierFull') }}</option>
+              <option value="institutional">{{ $t('intafaced.kyc.tierInstitutional') }}</option>
+            </select>
+            <input
+              v-model.trim="kycJurisdiction"
+              maxlength="2"
+              required
+              :placeholder="$t('intafaced.kyc.jurisdictionHint')"
+              :aria-label="$t('intafaced.kyc.jurisdiction')"
+            >
+            <button type="submit">{{ $t('intafaced.kyc.submit') }}</button>
+          </form>
+          <IxState
+            :loading="kycAction.busy"
+            :reason="kycAction.ran ? kycAction.reason : null"
+            :message="kycAction.message"
+            endpoint="/api/identity/trpc/kyc.submit"
+          >
+          </IxState>
+          <div class="ix-waitlist-position">
+            <IxState
+              :loading="kycStatus.loading"
+              :reason="kycStatus.reason"
+              :message="kycStatus.message"
+              endpoint="/api/identity/trpc/kyc.status"
+            >
+              <span v-if="kycPendingRows.length">
+                <span v-for="r in kycPendingRows" :key="'status-' + r.id">
+                  {{ $t('intafaced.kyc.submitPending') }}:
+                  <code>{{ r.tier }}</code> ·
+                  <code>{{ r.jurisdiction }}</code> ·
+                  <code>{{ r.status }}</code>
+                </span>
+              </span>
+            </IxState>
+          </div>
+        </div>
       </div>
       <div id="pagetips" style="background: #1a1a1a;">
         <div class="agent-panel">
@@ -687,7 +730,11 @@ export default {
       waitlistReferralCode: "",
       waitlistLookupCode: "",
       waitlistAction: this.emptyAction(),
-      waitlistPosition: this.emptySection()
+      waitlistPosition: this.emptySection(),
+      kycTier: "basic",
+      kycJurisdiction: "",
+      kycAction: this.emptyAction(),
+      kycStatus: { loading: false, reason: null, message: "", data: null }
     };
   },
   created: function() {
@@ -696,6 +743,11 @@ export default {
   computed: {
     waitlistResult: function() {
       return this.waitlistAction.data;
+    },
+    kycPendingRows: function() {
+      var data = this.kycStatus.data;
+      var records = data && data.records ? data.records : [];
+      return records.filter(function (r) { return r.status === "pending"; });
     },
     isLogin: function() {
       return this.$store.getters.isLogin;
@@ -752,6 +804,14 @@ export default {
     lookupWaitlistPosition() {
       if (!this.waitlistLookupCode) return;
       this.load("waitlistPosition", query("identity", "waitlist.position", { referralCode: this.waitlistLookupCode }, null));
+    },
+    submitKyc() {
+      var self = this;
+      this.act("kycAction", mutate('identity', 'kyc.submit', { tier: this.kycTier, jurisdiction: this.kycJurisdiction.toUpperCase() }, this.ixToken)).then(function (res) {
+        if (res.ok) {
+          self.load("kycStatus", query('identity', 'kyc.status', undefined, self.ixToken));
+        }
+      });
     },
     seachInputChange(){
       this.searchKey = this.searchKey.toUpperCase();
