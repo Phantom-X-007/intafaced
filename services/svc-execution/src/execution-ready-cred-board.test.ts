@@ -230,6 +230,27 @@ describe('execution boot listen and venue ids parsing (D63)', () => {
   });
 });
 
+describe('execution boot index wiring complete (D65)', () => {
+  it('index wires registry, venue maps, ems store, trpc, health, ready, and listen', () => {
+    const src = indexSrc();
+    expect(src).toContain('parseExecutionVenueIds(env.EXECUTION_VENUE_IDS)');
+    expect(src).toContain('SealedHouseTenantRegistry');
+    expect(src).toContain('buildExecutionVenueTradeMapsWithOperatorSupplement');
+    expect(src).toContain('buildExecutionVenueAccountMapsWithOperatorSupplement');
+    expect(src).toContain('buildExecutionVenueMarketMapsWithPublicMdSupplement');
+    expect(src).toContain('buildTradeBookSnapshotMap(env.TRADE_URL)');
+    expect(src).toContain('createExecutionRouter(');
+    expect(src).toContain('fastifyTRPCPlugin');
+    expect(src).toContain("app.get('/health'");
+    expect(src).toContain("app.get('/ready'");
+    expect(src).toContain('app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT })');
+    expect(src).toContain('venueTradeMaps.openOrdersByVenue');
+    expect(src).toContain('venueAccountMaps.railsByVenue');
+    expect(src).toContain('describeExecutionVenueCredentialBoard(');
+    expect(src).toContain('createEdgeContext(');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
