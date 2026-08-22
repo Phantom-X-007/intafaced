@@ -244,6 +244,16 @@ describe('the OTC desk is mounted, and what is mounted refuses', () => {
     await desk.app.close();
   });
 
+  it('otc.policy bootMidFeedWiring matches describeOtcPolicy over HTTP (D44)', async () => {
+    const desk = await buildDesk();
+    const res = await callQuery(desk, 'otc.policy');
+    expect(res.statusCode).toBe(200);
+    const policy = resultData<ReturnType<typeof describeOtcPolicy>>(res);
+    expect(policy.bootMidFeedWiring).toEqual(describeOtcPolicy().bootMidFeedWiring);
+    expect(policy.midFeedWiringHonest).toBe(true);
+    await desk.app.close();
+  });
+
   /** Quote, accept and settle are all really there. Refusing is still answering. */
   it('mounts quote, accept and settle — none of them 404', async () => {
     const desk = await buildDesk();
