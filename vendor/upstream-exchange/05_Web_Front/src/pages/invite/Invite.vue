@@ -1,115 +1,188 @@
 <template>
-  <div class="invite">
-    <div class="invite_container">
-      <h1>{{$t("header.invite")}}</h1>
-      <IxNoSurface socket-key="affiliate.overview" />
+  <div class="ix-page invite-page">
+    <div class="ix-page-head">
+      <h1>{{ $t('header.invite') }}</h1>
+      <p>{{ $t('invite.attribute.lead') }}</p>
+      <div class="ix-source">{{ $t("shellResidual.svcIdentityPath") }}</div>
+    </div>
+
+    <!-- ── who this account is attributed to ─────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('invite.referrer.title') }}</h2>
+        <span class="ix-sub">affiliates.myReferrer</span>
+      </div>
+      <p class="ix-lead">{{ $t('invite.referrer.lead') }}</p>
+      <IxState
+        :loading="referrer.loading"
+        :reason="referrer.reason"
+        :message="referrer.message"
+        endpoint="/api/identity/trpc/affiliates.myReferrer"
+      >
+        <div v-if="referrer.data" class="ix-kv">
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.referrer.id') }}</span>
+            <span class="v">{{ referrer.data.referrerId }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.referrer.userId') }}</span>
+            <span class="v">{{ referrer.data.userId }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.referrer.attributedAt') }}</span>
+            <span class="v">{{ referrer.data.attributedAt }}</span>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('invite.referrer.empty') }}</div>
+      </IxState>
+    </div>
+
+    <!-- ── paste a UUID and attribute once ───────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('invite.attribute.title') }}</h2>
+        <span class="ix-sub">affiliates.attribute</span>
+      </div>
+      <p class="ix-lead">{{ $t('invite.attribute.formLead') }}</p>
+
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-invite-referrer">{{ $t('invite.attribute.hint') }}</label>
+          <Input
+            element-id="ix-invite-referrer"
+            v-model="referrerId"
+            :placeholder="$t('invite.attribute.hint')"
+            @on-enter="submitAttribute"
+          ></Input>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="attributed.busy" :disabled="!canAttribute" @click="submitAttribute">
+            {{ $t('invite.attribute.btn') }}
+          </Button>
+        </div>
+      </div>
+
+      <div v-if="attributed.ran">
+        <div v-if="attributed.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('invite.attribute.ok') }}</strong>
+          <div style="margin-top:6px;">{{ attributed.data && attributed.data.referrerId }}</div>
+        </div>
+        <IxState
+          v-else
+          :loading="attributed.busy"
+          :reason="attributed.reason"
+          :message="attributed.message"
+          endpoint="/api/identity/trpc/affiliates.attribute"
+        ></IxState>
+      </div>
+    </div>
+
+    <!-- ── policy honesty: structure yes, invented rates no ──────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('invite.attribute.policyTitle') }}</h2>
+        <span class="ix-sub">affiliates.policy</span>
+      </div>
+      <p class="ix-lead">{{ $t('invite.attribute.policyLead') }}</p>
+      <IxState
+        :loading="policy.loading"
+        :reason="policy.reason"
+        :message="policy.message"
+        endpoint="/api/identity/trpc/affiliates.policy"
+      >
+        <div v-if="policy.data" class="ix-kv">
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.policyInventsRates') }}</span>
+            <span class="v">{{ policy.data.inventsCommissionRates ? $t('invite.attribute.yes') : $t('invite.attribute.no') }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.policyInventsPayouts') }}</span>
+            <span class="v">{{ policy.data.inventsPayoutMagnitudes ? $t('invite.attribute.yes') : $t('invite.attribute.no') }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.policyLedgerOnly') }}</span>
+            <span class="v">{{ policy.data.moneyViaLedgerClientOnly ? $t('invite.attribute.yes') : $t('invite.attribute.no') }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.policyDepthCap') }}</span>
+            <span class="v">{{ policy.data.maxReferralDepthCap }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.policyPayoutResidual') }}</span>
+            <span class="v">{{ policy.data.payoutResidual }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.policyAccrualResidual') }}</span>
+            <span class="v">{{ policy.data.accrualRateResidual }}</span>
+          </div>
+        </div>
+      </IxState>
     </div>
   </div>
 </template>
 
 <script>
 /**
- * Referral programme — §13 socket.
+ * Referral attribution — svc-identity `affiliates.attribute`.
  *
- * ── THE PART THAT MATTERS MOST, FIRST ──────────────────────────────────────
+ * A signed-in user pastes a referrer UUID; the service records the edge once.
+ * Self, cycle, unknown, already-set, and depth refusals arrive named via IxState.
+ * Commission rates and payout magnitudes stay unpublished owner law — this
+ * screen never prints a rate or an earnings figure.
  *
- * This page published a **fee-share rate card**: six partner tiers paying a
- * referrer 20%, 30%, 40%, 50% and 60% of a referred account's trading fees for
- * 6, 12 or 24 months or for life, plus a 5-15% "partner dividend" on top.
- *
- * Nobody here set those numbers. They arrived with the vendored tree.
- * DIRECTION-2026-07-31 §8.10 reserves `leader_share_bps` and **every other
- * fee-share rate** to the owner, alongside the jurisdiction list they may be
- * offered in — so an agent restating them, even behind a "coming soon" banner,
- * would be publishing a commercial commitment the platform never made. The
- * table is deleted rather than hidden. When the owner sets rates, they get
- * written down once, in a spec, and this screen reads them.
- *
- * The same pass removed, from this file and from the `invite.*` block in
- * assets/lang/en.js:
- *
- *   · Two worked EARNINGS EXAMPLES quoting a referrer "about 7200 / month" and
- *     "135000 / month" in CNY. Invented income projections attributed to this
- *     platform by name — the exact class of fabrication the landing page was
- *     just fixed for, and on a referral programme it is a regulated-marketing
- *     hazard as well as a false number.
- *   · "Get 30 cards for free (≈2000 CNY)" and "Free promotion grant of 2000
- *     CNY" — a free-money offer with an amount, funded by nothing.
- *   · A gift-card rule promising the card's value is "frozen for 180 days after
- *     collection and released into user account balance automatically" — an
- *     automatic balance credit with no ledger recipe behind it.
- *   · A superlative claim to pay "the highest proportion of online commission
- *     return and the longest time of commission return" in the market.
- *   · `promotion@intafaced.com`, a mailbox nobody owns, offered as the contact
- *     for paid custom card orders.
- *   · Two hardcoded fake leaderboard rows (`dataFanyong` / `dataFanyong1`) with
- *     invented user handles and commission figures. They were unbound in the
- *     template and so invisible — which is precisely why they survived every
- *     previous honesty pass. Dead fabricated data is one careless `:data` bind
- *     away from being live fabricated data.
- *   · Six partner tier names transliterated from the vendor's own imperial-rank
- *     scheme, and a worked example built around one of its personas — both
- *     stragglers from the vendored tree rather than anything chosen here.
- *
- * ── AND WHY IT IS A SOCKET RATHER THAN A DELETE ────────────────────────────
- *
- * `ops.affiliates` — "Multi-tier affiliate / IB trees, payout automation" — is a
- * live row in tooling/tracker/features.mjs. The platform intends to build this.
- * Deleting finished UI for a planned product is how a capability gets rebuilt
- * from nothing six months later, which is the failure the adoption ADR
- * (docs/adr/2026-08-02-adopt-vendored-product-keep-our-ledger.md) exists to
- * stop. The shell stays; the promises do not.
- *
- * ── WHAT IS ACTUALLY MISSING ───────────────────────────────────────────────
- *
- * svc-identity records no referrer on an account, so there is no tree at any
- * level and no query to write. No service consumes trade fees for a split, so
- * no commission has ever been computed. Both gaps are named on the panel.
- *
- * The invite link and its QR code went with the rest. They were built from the
- * venue session's `promotionPrefix + promotionCode` — a code that identifies a
- * referrer to a system that records no referrers. Handing someone a link that
- * credits nothing is a promise, not a convenience.
+ * `affiliates.policy` is the honesty board (structure, not rates). Empty
+ * referrer stays empty copy, never a zero.
  */
-import IxNoSurface from '../../components/intafaced/IxNoSurface.vue';
+import IxState from '../../components/intafaced/IxState.vue';
+import { query, mutate } from '../../config/intafaced.js';
+import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'InvitePage',
-  components: { IxNoSurface },
-  created: function() {
+  components: { IxState },
+  mixins: [ixModule],
+  data() {
+    return {
+      referrerId: '',
+      referrer: this.emptySection(),
+      policy: this.emptySection(),
+      attributed: this.emptyAction()
+    };
+  },
+  computed: {
+    canAttribute() {
+      return Boolean((this.referrerId || '').trim());
+    }
+  },
+  created() {
     this.$store.commit('navigate', 'nav-invite');
+    this.reloadReferrer();
+    this.load('policy', query('identity', 'affiliates.policy', undefined, this.ixToken));
+  },
+  methods: {
+    reloadReferrer() {
+      this.load('referrer', query('identity', 'affiliates.myReferrer', undefined, this.ixToken));
+    },
+    submitAttribute() {
+      var self = this;
+      var referrerId = (this.referrerId || '').trim();
+      if (!referrerId) return;
+      this.act(
+        'attributed',
+        mutate('identity', 'affiliates.attribute', { referrerId: referrerId }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.referrerId = '';
+        self.reloadReferrer();
+      });
+    }
   }
 };
 </script>
 
 <style lang="scss" scoped>
-.invite {
-  background: var(--ix-bg, #0a0c10);
-  color: var(--ix-text, #e8ebf0);
-  min-height: 100%;
-  padding-top: 60px;
+.invite-page {
+  padding-top: 80px;
   padding-bottom: 60px;
-  overflow: hidden;
-}
-.invite_container {
-  padding: 40px 12%;
-  min-height: 600px;
-  > h1 {
-    font-size: 32px;
-    line-height: 1;
-    padding: 0 0 20px 0;
-    letter-spacing: 3px;
-  }
-}
-@media screen and (max-width: 768px) {
-  .invite {
-    padding-top: 45px;
-  }
-  .invite_container {
-    padding: 24px 4%;
-    > h1 {
-      font-size: 20px;
-    }
-  }
 }
 </style>

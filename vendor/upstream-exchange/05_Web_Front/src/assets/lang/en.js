@@ -73,6 +73,34 @@ module.exports = {
         subAccountsUnavailable: "List unavailable",
         subAccountsEmpty: "No sub-accounts yet · parent only"
     },
+    invite: {
+        attribute: {
+            title: "Attribute a referrer",
+            lead: "Paste the referrer's account id. This records who introduced you. It does not pay a commission and does not print a rate.",
+            formLead: "The service records the edge once. Self, cycle, unknown, already-set, and depth refusals are named on this card.",
+            btn: "Attribute",
+            hint: "Referrer UUID",
+            ok: "Referrer recorded",
+            yes: "yes",
+            no: "no",
+            policyTitle: "Affiliate policy",
+            policyLead: "Tree structure and unpublished-rate honesty. No commission figure is shown here.",
+            policyInventsRates: "Invented commission rates",
+            policyInventsPayouts: "Invented payout amounts",
+            policyLedgerOnly: "Money only through ledger-client",
+            policyDepthCap: "Max referral depth",
+            policyPayoutResidual: "Payout residual",
+            policyAccrualResidual: "Accrual residual"
+        },
+        referrer: {
+            title: "Your referrer",
+            lead: "The account this session is attributed to. Empty until you attribute one.",
+            empty: "No referrer on this account",
+            id: "Referrer id",
+            attributedAt: "Attributed at",
+            userId: "Your id"
+        }
+    },
     /**
      * The INTAFACED platform surfaces — every feature area of the Sovereign OS,
      * embedded in this shell rather than served as a second app.
