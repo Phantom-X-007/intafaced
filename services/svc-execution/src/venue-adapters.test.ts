@@ -150,7 +150,7 @@ describe('buildExecutionVenueTradeMaps', () => {
   it('missing credentials skip the venue at map build — never invent a wired door', () => {
     const maps = buildExecutionVenueTradeMaps(['binance-spot'], {
       credentialsFor: () => null,
-      createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
+      createAdapter: ((id, creds) => (creds ? fakeTradeAdapter(id) : null)) as typeof createVenueTradeAdapter,
     });
     expect(maps.wiredVenueIds).toEqual([]);
     expect(maps.submitByVenue['binance-spot']).toBeUndefined();
