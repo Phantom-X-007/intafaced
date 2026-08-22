@@ -502,6 +502,29 @@ describe('/admin/status — control-plane summary', () => {
     expect(quantHonesty.notProxiedToSvcQuant).toBe(true);
   });
 
+  it('quant honesty HTTP admin status denon board complete (D89)', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const status = describeQuantHonestyDoorStatus();
+    const { quantHonesty } = res.json() as { quantHonesty: ReturnType<typeof describeQuantHonestyDoorStatus> };
+    expect(quantHonesty).toEqual(status);
+    expect(quantHonesty.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(quantHonesty.mountedOnControlPlane).toBe(true);
+    expect(quantHonesty.compositeHonestyWired).toBe(true);
+    expect(quantHonesty.doors.map((door) => door.package)).toEqual([
+      '@intafaced/quant-honesty',
+      '@intafaced/quant-honesty',
+      '@intafaced/quant-honesty',
+      '@intafaced/connect-data-lake',
+      'composite',
+    ]);
+  });
+
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
     const h = await edge();
     // Seed via admin API method through status surface — open is not HTTP yet
