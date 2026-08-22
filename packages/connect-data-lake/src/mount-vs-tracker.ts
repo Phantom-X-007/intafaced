@@ -57,7 +57,8 @@ export function dataLakeStage1Honest(): boolean {
     board.retention.canPersist === false &&
     board.retention.captureLogOnly === true &&
     board.quantSurface.compositeGateWired === true &&
-    board.quantSurface.inventsFraming === false
+    board.quantSurface.inventsFraming === false &&
+    board.quantSurface.edgeDoorNotProxiedToSvcQuant === true
   );
 }
 

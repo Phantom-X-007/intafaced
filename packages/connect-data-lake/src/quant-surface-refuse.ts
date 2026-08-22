@@ -31,10 +31,16 @@ export function refuseQuantSurfaceRender(input: QuantSurfaceRenderInput): QuantS
   return { ok: false, reason: gate.reason, message: REFUSE_MESSAGES[gate.reason] };
 }
 
+export const EDGE_QUANT_SURFACE_RENDER_DOOR = '/quant/honesty/assess-surface-render' as const;
+export const EDGE_QUANT_COMPOSITE_HONESTY_DOOR = '/quant/honesty/assess-composite' as const;
+
 export function describeQuantSurfaceRefuse() {
   return {
     compositeGateWired: true as const,
     inventsFraming: false as const,
     refuseMessagesLocked: true as const,
+    edgeSurfaceRenderDoor: EDGE_QUANT_SURFACE_RENDER_DOOR,
+    edgeCompositeHonestyDoor: EDGE_QUANT_COMPOSITE_HONESTY_DOOR,
+    edgeDoorNotProxiedToSvcQuant: true as const,
   };
 }
