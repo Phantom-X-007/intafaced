@@ -19,3 +19,22 @@ describe('connect.latency-grading mount vs tracker honest gaps (D26-P1-X1)', () 
     expect(latencyGradingMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('connect.latency-grading mount vs tracker — D81 denon complete', () => {
+  it('full mount board: symbols, SOR consumer, done-bar tests, honest gaps', () => {
+    expect(LATENCY_GRADING_TRACKER_ID).toBe('connect.latency-grading');
+    const card = latencyGradingMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'connect.latency-grading',
+      symbols: LATENCY_PRODUCT_SYMBOLS.length,
+      symbolsPresent: LATENCY_PRODUCT_SYMBOLS.length,
+      sorConsumer: true,
+      gaps: 3,
+      backendDoneBarMet: true,
+    });
+    expect(latencyGradingTrackerBackendDoneBarMet()).toBe(true);
+    expect(latencySymbolsInFabricSource()).toEqual([...LATENCY_PRODUCT_SYMBOLS]);
+    expect(sorConsumesLatencyGrade()).toBe(true);
+    expect(latencyDoneBarTestsPresent()).toBe(true);
+  });
+});
