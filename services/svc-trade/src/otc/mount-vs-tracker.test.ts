@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeOtcPolicy } from './otc-policy.js';
 import {
+  OTC_DONE_BAR_TEST_FILES,
   OTC_HONEST_GAPS,
   OTC_MOUNTED_DOORS,
   OTC_TRACKER_ID,
@@ -63,5 +64,19 @@ describe('trade.otc mount vs tracker gaps board (D52)', () => {
     expect(card.gaps).toBe(OTC_HONEST_GAPS.length);
     expect(card.backendDoneBarMet).toBe(true);
     expect(OTC_HONEST_GAPS).toEqual(['gap.owner_desk_law_numbers', 'gap.socket_otc_maker_routing', 'gap.connect_venue_vault_custody']);
+  });
+});
+
+describe('trade.otc done bar test files (D54)', () => {
+  it('otcDoneBarTestsPresent locks all OTC_DONE_BAR_TEST_FILES on disk', () => {
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(OTC_DONE_BAR_TEST_FILES).toEqual([
+      'otc-rfq-settle-donebar.test.ts',
+      'otc-mount.reachable.test.ts',
+      'otc-maker-routing-donebar.test.ts',
+      'otc-mid-feed-donebar.test.ts',
+    ]);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
