@@ -24,6 +24,8 @@ import {
   loadVenueOperatorCredentials,
   buildOperatorVenueAccountMaps,
   buildOperatorVenueTradeMaps,
+  buildOperatorVenueAccountAdapters,
+  buildOperatorVenueTradeAdapters,
   describeOperatorVenueAccountMaps,
   describeOperatorVenueTradeMaps,
   describeVenueOperatorCredentials,
@@ -64,6 +66,8 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(typeof createVenueAccountAdapterFromOperatorEnv).toBe('function');
     expect(typeof buildOperatorVenueTradeMaps).toBe('function');
     expect(typeof buildOperatorVenueAccountMaps).toBe('function');
+    expect(typeof buildOperatorVenueTradeAdapters).toBe('function');
+    expect(typeof buildOperatorVenueAccountAdapters).toBe('function');
     expect(typeof describeOperatorVenueAccountMaps).toBe('function');
     expect(typeof describeOperatorVenueTradeMaps).toBe('function');
     expect(PUBLIC_MARKET_DATA_VENUE_IDS).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
@@ -153,6 +157,18 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
       wiredVenueIds: ['binance-spot'],
       unsetVenueIds: ['bybit-spot', 'okx-spot'],
     });
+  });
+
+  it('buildOperatorVenueTradeAdapters and buildOperatorVenueAccountAdapters wire when operator env is complete (D47)', () => {
+    const env = {
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+    };
+    expect(buildOperatorVenueTradeAdapters(env).wiredVenueIds).toEqual(['okx-spot']);
+    expect(buildOperatorVenueAccountAdapters(env).wiredVenueIds).toEqual(['okx-spot']);
+    expect(buildOperatorVenueTradeAdapters({}).wiredVenueIds).toEqual([]);
+    expect(buildOperatorVenueAccountAdapters({}).wiredVenueIds).toEqual([]);
   });
 
   it('package index re-exports trading-half policy through fabric', () => {
