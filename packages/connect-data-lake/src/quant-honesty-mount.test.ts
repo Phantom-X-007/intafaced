@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { describeQuantHonestyMount, gateQuantSurfaceRender } from './quant-honesty-mount.js';
+import { refuseQuantSurfaceRender } from './quant-surface-refuse.js';
 
 const honestInput = {
   backtest: {
@@ -45,5 +46,20 @@ describe('quant honesty mount (D31)', () => {
         leaderboard: { rankedByHistoricalReturn: true, surface: 'copy' },
       }),
     ).toEqual({ ok: false, reason: 'returns_leaderboard' });
+  });
+});
+
+describe('gate and refuse quant surface render alignment (D49)', () => {
+  it('refuseQuantSurfaceRender ok mirrors gateQuantSurfaceRender for honest input', () => {
+    expect(refuseQuantSurfaceRender(honestInput).ok).toBe(gateQuantSurfaceRender(honestInput).ok);
+  });
+
+  it('refuseQuantSurfaceRender reason mirrors gate when refused', () => {
+    const refused = {
+      ...honestInput,
+      leaderboard: { rankedByHistoricalReturn: true, surface: 'copy' as const },
+    };
+    const gate = gateQuantSurfaceRender(refused);
+    expect(refuseQuantSurfaceRender(refused)).toMatchObject({ ok: false, reason: gate.reason });
   });
 });
