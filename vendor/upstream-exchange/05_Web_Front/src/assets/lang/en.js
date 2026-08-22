@@ -590,7 +590,16 @@ module.exports = {
                 resume: "Resume",
                 resumeDone: "Round-up resumed",
                 cancel: "Cancel",
-                cancelDone: "Round-up cancelled"
+                cancelDone: "Round-up cancelled",
+                title: "Auto-invest",
+                lead: "Keep a decimal amount in your primary available. Excess of the same asset moves into an earn pool you name. No rate is consulted — a pool in a different asset is refused. Creating the rule does not move value; the runner does.",
+                threshold: "Keep this amount",
+                thresholdHint: "Decimal string, e.g. 100.50",
+                targetPool: "Earn pool id",
+                targetPoolHint: "UUID of an open earn pool in the same asset",
+                create: "Create threshold sweep",
+                created: "Threshold sweep created",
+                noRules: "No auto-invest rule on this account."
             },
 
             overview: {

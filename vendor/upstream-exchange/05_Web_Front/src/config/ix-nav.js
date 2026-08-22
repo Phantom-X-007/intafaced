@@ -18,7 +18,7 @@
 
 /** svc-bank. Every row maps to a router in services/svc-bank/src/router.ts. */
 export const BANK_NAV = [
-    { to: '/bank', labelKey: 'intafaced.bank.nav.overview', procedures: 'spaces.unnamed · loans.health' },
+    { to: '/bank', labelKey: 'intafaced.bank.nav.overview', procedures: 'spaces.unnamed · loans.health · autoInvest.*' },
     { to: '/bank/spaces', labelKey: 'intafaced.bank.nav.spaces', procedures: 'spaces.*' },
     { to: '/bank/transfers', labelKey: 'intafaced.bank.nav.transfers', procedures: 'transfers.*' },
     { to: '/bank/earn', labelKey: 'intafaced.bank.nav.earn', procedures: 'earn.*' },
