@@ -121,9 +121,13 @@ export function buildExecutionVenueAccountMapsWithOperatorSupplement(
   const operatorMaps = buildOperatorVenueAccountMaps(env);
   for (const venueId of operatorMaps.wiredVenueIds) {
     if (balancesByVenue[venueId]) continue;
-    balancesByVenue[venueId] = operatorMaps.balancesByVenue[venueId];
-    positionsByVenue[venueId] = operatorMaps.positionsByVenue[venueId];
-    railsByVenue[venueId] = operatorMaps.transferRailsByVenue[venueId];
+    const balances = operatorMaps.balancesByVenue[venueId];
+    const positions = operatorMaps.positionsByVenue[venueId];
+    const rails = operatorMaps.transferRailsByVenue[venueId];
+    if (!balances || !positions || !rails) continue;
+    balancesByVenue[venueId] = balances;
+    positionsByVenue[venueId] = positions;
+    railsByVenue[venueId] = rails;
     wiredVenueIds.push(venueId);
     operatorSupplementVenueIds.push(venueId);
   }
