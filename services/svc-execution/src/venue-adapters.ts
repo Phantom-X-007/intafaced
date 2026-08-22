@@ -6,7 +6,7 @@
  * underscores, uppercased). Blank credential env → refuse-closed (venue not wired).
  * Unknown ids skipped (no map entry).
  */
-import { createVenueTradeAdapter } from '@intafaced/venue-adapter';
+import { createVenueTradeAdapter, loadVenueOperatorCredentials } from '@intafaced/venue-adapter';
 import { assertTradeOnly, type TradeAdapter, type VenueCredentials } from '@intafaced/venue-contracts';
 import type { OmsCancelFn } from './oms-cancel.js';
 import type { OmsFetchFn } from './oms-fetch.js';
@@ -79,13 +79,13 @@ export function executionVenueCredentialEnvPrefix(venueId: string): string {
   return `EXECUTION_VENUE_${venueId.trim().toUpperCase().replace(/-/g, '_')}`;
 }
 
-export function loadExecutionVenueCredentials(venueId: string): VenueCredentials | null {
+export function loadExecutionVenueCredentialsFromEnv(venueId: string, env: NodeJS.ProcessEnv = process.env): VenueCredentials | null {
   const prefix = executionVenueCredentialEnvPrefix(venueId);
-  const apiKey = process.env[`${prefix}_API_KEY`]?.trim() ?? '';
-  const apiSecret = process.env[`${prefix}_API_SECRET`]?.trim() ?? '';
+  const apiKey = env[`${prefix}_API_KEY`]?.trim() ?? '';
+  const apiSecret = env[`${prefix}_API_SECRET`]?.trim() ?? '';
   if (!apiKey || !apiSecret) return null;
 
-  const passphrase = process.env[`${prefix}_PASSPHRASE`]?.trim();
+  const passphrase = env[`${prefix}_PASSPHRASE`]?.trim();
   const credentials: VenueCredentials = {
     venueId: venueId.trim().toLowerCase(),
     apiKey,
@@ -95,6 +95,35 @@ export function loadExecutionVenueCredentials(venueId: string): VenueCredentials
   };
   assertTradeOnly(credentials);
   return credentials;
+}
+
+/** EXECUTION_VENUE_* first; falls back to VENUE_AGGREGATION_* operator keys — never invents. */
+export function loadExecutionVenueCredentials(venueId: string, env: NodeJS.ProcessEnv = process.env): VenueCredentials | null {
+  const execution = loadExecutionVenueCredentialsFromEnv(venueId, env);
+  if (execution) return execution;
+  return loadVenueOperatorCredentials(venueId, env);
+}
+
+export function describeExecutionVenueCredentialSources(
+  venueId: string,
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  readonly venueId: string;
+  readonly executionEnvWired: boolean;
+  readonly operatorEnvWired: boolean;
+  readonly wired: boolean;
+  readonly inventsCredentials: false;
+} {
+  const id = venueId.trim().toLowerCase();
+  const executionEnvWired = loadExecutionVenueCredentialsFromEnv(id, env) !== null;
+  const operatorEnvWired = loadVenueOperatorCredentials(id, env) !== null;
+  return {
+    venueId: id,
+    executionEnvWired,
+    operatorEnvWired,
+    wired: executionEnvWired || operatorEnvWired,
+    inventsCredentials: false,
+  };
 }
 
 function openOrdersBridge(adapter: TradeAdapter): OmsOpenOrdersFn {

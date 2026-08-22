@@ -11,6 +11,7 @@ import {
 } from '@intafaced/venue-contracts';
 import {
   buildExecutionVenueTradeMaps,
+  describeExecutionVenueCredentialSources,
   ExecutionVenueCredentialsUnsetError,
   ExecutionVenueUnknownError,
   executionVenueCredentialEnvPrefix,
@@ -154,5 +155,42 @@ describe('buildExecutionVenueTradeMaps', () => {
     });
     expect(maps.wiredVenueIds).toEqual([]);
     expect(maps.submitByVenue['binance-spot']).toBeUndefined();
+  });
+
+  it('loadExecutionVenueCredentials prefers EXECUTION_VENUE_* over VENUE_AGGREGATION_*', () => {
+    const env = {
+      EXECUTION_VENUE_BINANCE_SPOT_API_KEY: 'exec-key',
+      EXECUTION_VENUE_BINANCE_SPOT_API_SECRET: 'exec-secret',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'agg-key',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 'agg-secret',
+    };
+    const creds = loadExecutionVenueCredentials('binance-spot', env);
+    expect(creds?.apiKey).toBe('exec-key');
+    expect(describeExecutionVenueCredentialSources('binance-spot', env)).toMatchObject({
+      executionEnvWired: true,
+      operatorEnvWired: true,
+      wired: true,
+      inventsCredentials: false,
+    });
+  });
+
+  it('loadExecutionVenueCredentials falls back to VENUE_AGGREGATION_* when execution env blank', () => {
+    const env = {
+      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'agg-key',
+      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 'agg-secret',
+    };
+    const creds = loadExecutionVenueCredentials('bybit-spot', env);
+    expect(creds?.apiKey).toBe('agg-key');
+    expect(describeExecutionVenueCredentialSources('bybit-spot', env)).toMatchObject({
+      executionEnvWired: false,
+      operatorEnvWired: true,
+      wired: true,
+    });
+
+    const maps = buildExecutionVenueTradeMaps(['bybit-spot'], {
+      credentialsFor: (id) => loadExecutionVenueCredentials(id, env),
+      createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
+    });
+    expect(maps.wiredVenueIds).toEqual(['bybit-spot']);
   });
 });
