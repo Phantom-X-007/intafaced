@@ -1545,14 +1545,20 @@ export const FEATURES = [
     module: 'launch',
     phase: '5',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['launch.token-factory'],
-    requires: ['services/svc-protocol/contracts/vaults/TreasuryYieldVault.sol'],
+    requires: [
+      'services/svc-protocol/contracts/vaults/TreasuryYieldVault.sol',
+      'services/svc-protocol/src/vaults/treasury-yield-honesty.test.ts',
+      'services/svc-protocol/src/vaults/treasury-yield-mount-vs-tracker.ts',
+      'services/svc-protocol/src/vaults/treasury-yield-mount-vs-tracker.test.ts',
+      'services/svc-protocol/src/vaults/treasury-yield-tracker-status-pin.test.ts',
+    ],
     note:
-      'S-L5 contract half 2026-08-18: TreasuryYieldVault — owner is constructor msg.sender, licenceHash immutable, ' +
-      'deposit/withdraw revert LicenceUnset while hash is bytes32(0). STATUS ready (not done): licence *content* is Class X ' +
-      '(Nitro human / counsel) — no contract makes that go away. Unaudited.',
+      'S-L5 CLOSED engineering bar 2026-08-22: TreasuryYieldVault — owner is constructor msg.sender, licenceHash immutable, ' +
+      'deposit/withdraw revert LicenceUnset while hash is bytes32(0). On-chain honesty + mount board card. ' +
+      'Residual: licence *content* is Class X (counsel); contract unaudited.',
   }),
   f('launch.fundraising', 'Fundraising module — milestones, investor management (§25:658)', {
     module: 'launch',
