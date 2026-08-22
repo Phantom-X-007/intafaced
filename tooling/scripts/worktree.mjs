@@ -15,7 +15,7 @@
  *
  *   node tooling/scripts/worktree.mjs --self-test   start-point fixtures (no git, no I/O)
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve, basename } from 'node:path';
 
@@ -85,9 +85,14 @@ function baseBranch() {
  *
  * Returns null when the name is legal, or the operator-facing message when not.
  */
-/** True when the committed graph is far enough behind HEAD that a cook would query a stale map. */
+/** True when the seed is too old to query — block `pnpm wt` until `graphify update` finishes. */
 export function shouldRefreshGraph(commitsBehind) {
   return Number.isFinite(commitsBehind) && commitsBehind > 50;
+}
+
+/** True when a detached (non-blocking) update is enough (1–50 commits behind). */
+export function shouldDetachRefreshGraph(commitsBehind) {
+  return Number.isFinite(commitsBehind) && commitsBehind >= 1 && commitsBehind <= 50;
 }
 
 /**
@@ -112,23 +117,39 @@ function refreshGraphIfStale(worktreePath) {
     encoding: 'utf8',
   });
   const n = Number((behindOut.stdout || '').trim());
-  if (!shouldRefreshGraph(n)) return;
+  const blocking = shouldRefreshGraph(n);
+  const detached = shouldDetachRefreshGraph(n);
+  if (!blocking && !detached) return;
 
-  const env = { ...process.env, PATH: `/Users/Nitro/.local/bin:${process.env.PATH || ''}` };
+  const env = {
+    ...process.env,
+    PATH: `/Users/Nitro/.local/bin:${process.env.PATH || ''}`,
+    GRAPHIFY_MAX_WORKERS: process.env.GRAPHIFY_MAX_WORKERS || '1',
+  };
+  const script = join(worktreePath, 'tooling/scripts/graphify-worktree-update.sh');
   const which = spawnSync('command', ['-v', 'graphify'], { encoding: 'utf8', shell: true, env });
-  if (which.status !== 0) {
+  if (which.status !== 0 && !existsSync(script)) {
     console.log('· graphify CLI missing — skip map refresh');
     return;
   }
-  console.log(`· graphify update (${n} commits behind)`);
-  const upd = spawnSync('graphify', ['update', '.'], {
-    cwd: worktreePath,
-    encoding: 'utf8',
-    env: { ...env, GRAPHIFY_MAX_WORKERS: process.env.GRAPHIFY_MAX_WORKERS || '1' },
-    timeout: 600000,
-  });
-  if (upd.status !== 0) {
-    console.error('⚠ graphify update failed — worktree is usable; run GRAPHIFY_MAX_WORKERS=1 graphify update . in it');
+  if (blocking) {
+    console.log(`· graphify update (${n} commits behind)`);
+    const upd = existsSync(script)
+      ? spawnSync(script, ['--wait'], { cwd: worktreePath, encoding: 'utf8', env, timeout: 600000 })
+      : spawnSync('graphify', ['update', '.'], {
+          cwd: worktreePath,
+          encoding: 'utf8',
+          env,
+          timeout: 600000,
+        });
+    if (upd.status !== 0) {
+      console.error('⚠ graphify update failed — worktree is usable; run GRAPHIFY_MAX_WORKERS=1 graphify update . in it');
+    }
+    return;
+  }
+  console.log(`· graphify update detached (${n} commits behind)`);
+  if (existsSync(script)) {
+    spawn(script, [], { cwd: worktreePath, env, detached: true, stdio: 'ignore' }).unref();
   }
 }
 
@@ -517,9 +538,13 @@ if (selfTest) {
   check('a bare name is refused', conventionError('worktree-fix') !== null, true);
   check('an unknown prefix is refused', conventionError('wip/thing') !== null, true);
   check('no name at all is refused', conventionError('') !== null, true);
-  check('graph behind 50 does not refresh', shouldRefreshGraph(50), false);
-  check('graph behind 51 does refresh', shouldRefreshGraph(51), true);
+  check('graph behind 50 does not blocking-refresh', shouldRefreshGraph(50), false);
+  check('graph behind 51 does blocking-refresh', shouldRefreshGraph(51), true);
   check('graph behind NaN does not refresh', shouldRefreshGraph(Number.NaN), false);
+  check('graph behind 0 does not detach-refresh', shouldDetachRefreshGraph(0), false);
+  check('graph behind 1 does detach-refresh', shouldDetachRefreshGraph(1), true);
+  check('graph behind 50 does detach-refresh', shouldDetachRefreshGraph(50), true);
+  check('graph behind 51 does not detach-refresh', shouldDetachRefreshGraph(51), false);
 
   // ── the wiring, which fixtures cannot see ─────────────────────────────────
   // Everything above tests `planStartPoint` and `worktreeAddArgs` in isolation.

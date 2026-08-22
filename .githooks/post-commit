@@ -1,4 +1,20 @@
 #!/bin/sh
+# inta-wt-graphify-start
+# Worktree-local map refresh. Official graphify block below skips worktrees
+# (shared hooksPath must not rewrite the primary checkout). This prefix sits
+# outside # graphify-hook-start so `graphify hook install` keeps it.
+_INTA_GITDIR=$(cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd)
+_INTA_COMMONDIR=$(cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd)
+if [ -n "$_INTA_COMMONDIR" ] && [ "$_INTA_GITDIR" != "$_INTA_COMMONDIR" ]; then
+  [ "${GRAPHIFY_SKIP_HOOK:-0}" = "1" ] && exit 0
+  _INTA_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+  _INTA_UPD="$_INTA_ROOT/tooling/scripts/graphify-worktree-update.sh"
+  if [ -x "$_INTA_UPD" ]; then
+    "$_INTA_UPD" || true
+  fi
+  exit 0
+fi
+# inta-wt-graphify-end
 # graphify-hook-start
 # Auto-rebuilds the knowledge graph after each commit (code files only, no LLM needed).
 # Installed by: graphify hook install
