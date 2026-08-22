@@ -4,6 +4,7 @@ import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { createAdminApi, type LedgerOperatorCall } from './admin-api.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
 import { KillSwitchState } from './kill-switch.js';
+import { describeQuantHonestyDoorStatus } from './quant-honesty-status.js';
 
 /**
  * PULLING THE SWITCH, END TO END (§14.6).
@@ -341,6 +342,36 @@ describe('/admin/status — control-plane summary', () => {
     expect(byPath['/quant/honesty/assess-surface-render']).toMatchObject({ method: 'POST', package: '@intafaced/connect-data-lake' });
     expect(byPath['/quant/honesty/assess-composite']).toMatchObject({ method: 'POST', package: 'composite' });
     expect(quantHonesty.doors).toHaveLength(5);
+  });
+
+  it('quant honesty HTTP admin status mirrors describeQuantHonestyDoorStatus board (D75)', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const { quantHonesty } = res.json() as {
+      quantHonesty: {
+        statusLine: string;
+        mountedOnControlPlane: boolean;
+        notProxiedToSvcQuant: boolean;
+        inventsReturns: boolean;
+        compositeHonestyWired: boolean;
+        edgeDoorPathsAlignedWithDataLake: boolean;
+        doors: { path: string; package: string; method: string }[];
+      };
+    };
+    const status = describeQuantHonestyDoorStatus();
+    expect(quantHonesty.mountedOnControlPlane).toBe(status.mountedOnControlPlane);
+    expect(quantHonesty.notProxiedToSvcQuant).toBe(status.notProxiedToSvcQuant);
+    expect(quantHonesty.inventsReturns).toBe(false);
+    expect(quantHonesty.compositeHonestyWired).toBe(status.compositeHonestyWired);
+    expect(quantHonesty.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(quantHonesty.doors).toHaveLength(5);
+    expect(quantHonesty.statusLine).toMatch(/not proxied to svc-quant/i);
+    expect(quantHonesty.doors.map((door) => door.path).sort()).toEqual(status.doors.map((door) => door.path).sort());
   });
 
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
