@@ -29,6 +29,7 @@ import {
   describeOperatorVenueAccountMaps,
   describeOperatorVenueTradeMaps,
   describeVenueOperatorCredentials,
+  venueOperatorCredentialEnvPrefix,
 } from '../../index.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
@@ -70,6 +71,8 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(typeof buildOperatorVenueAccountAdapters).toBe('function');
     expect(typeof describeOperatorVenueAccountMaps).toBe('function');
     expect(typeof describeOperatorVenueTradeMaps).toBe('function');
+    expect(typeof venueOperatorCredentialEnvPrefix).toBe('function');
+    expect(typeof describeVenueOperatorCredentials).toBe('function');
     expect(PUBLIC_MARKET_DATA_VENUE_IDS).toEqual(['binance-spot', 'bybit-spot', 'okx-spot']);
   });
 
@@ -169,6 +172,16 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(buildOperatorVenueAccountAdapters(env).wiredVenueIds).toEqual(['okx-spot']);
     expect(buildOperatorVenueTradeAdapters({}).wiredVenueIds).toEqual([]);
     expect(buildOperatorVenueAccountAdapters({}).wiredVenueIds).toEqual([]);
+  });
+
+  it('venueOperatorCredentialEnvPrefix maps venue ids to operator env keys (D49)', () => {
+    expect(venueOperatorCredentialEnvPrefix('binance-spot')).toBe('VENUE_AGGREGATION_BINANCE_SPOT');
+    expect(venueOperatorCredentialEnvPrefix('okx-spot')).toBe('VENUE_AGGREGATION_OKX_SPOT');
+    const env = {
+      [`${venueOperatorCredentialEnvPrefix('bybit-spot')}_API_KEY`]: 'k',
+      [`${venueOperatorCredentialEnvPrefix('bybit-spot')}_API_SECRET`]: 's',
+    };
+    expect(loadVenueOperatorCredentials('bybit-spot', env)).toMatchObject({ venueId: 'bybit-spot' });
   });
 
   it('package index re-exports trading-half policy through fabric', () => {
