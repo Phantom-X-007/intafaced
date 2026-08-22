@@ -439,7 +439,7 @@ describe('aggregation trading door — D74 mount cert complete', () => {
     expect(venueAggregationMountVsTrackerBoardCard()).toMatchObject({
       tracker: 'venue.aggregation',
       backendDoneBarMet: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(describeTradingHalfPolicy().tradingVenueIds).toEqual([...PUBLIC_MARKET_DATA_VENUE_IDS]);
     expect(describeTradingHalfPolicy().inventsCredentials).toBe(false);
@@ -479,7 +479,7 @@ describe('aggregation trading door — D78 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -522,7 +522,7 @@ describe('aggregation trading door — D82 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -565,7 +565,7 @@ describe('aggregation trading door — D86 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -608,7 +608,7 @@ describe('aggregation trading door — D90 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -634,7 +634,7 @@ describe('aggregation trading door — D92 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -660,7 +660,7 @@ describe('aggregation trading door — D94 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -686,7 +686,7 @@ describe('aggregation trading door — D96 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -712,7 +712,7 @@ describe('aggregation trading door — D98 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -738,7 +738,7 @@ describe('aggregation trading door — D100 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -764,7 +764,7 @@ describe('aggregation trading door — D102 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -790,7 +790,7 @@ describe('aggregation trading door — D104 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -816,7 +816,7 @@ describe('aggregation trading door — D106 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -842,7 +842,7 @@ describe('aggregation trading door — D108 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -868,7 +868,7 @@ describe('aggregation trading door — D110 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -894,7 +894,7 @@ describe('aggregation trading door — D112 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -920,7 +920,7 @@ describe('aggregation trading door — D114 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -946,7 +946,7 @@ describe('aggregation trading door — D116 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -972,7 +972,7 @@ describe('aggregation trading door — D118 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
@@ -998,7 +998,7 @@ describe('aggregation trading door — D120 denon complete', () => {
       tracker: 'venue.aggregation',
       exports: 9,
       exportsPresent: 9,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
     });
     expect(describeVenueAggregationPolicy().signedTradeSeparateFactory).toBe(true);
