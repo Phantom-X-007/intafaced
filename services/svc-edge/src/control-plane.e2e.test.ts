@@ -254,13 +254,16 @@ describe('/admin/status — control-plane summary', () => {
     const doorPaths = body.quantHonesty.doors.map((door) => door.path);
     expect(doorPaths).toContain('/quant/honesty/assess-composite');
     expect(doorPaths).toContain('/quant/honesty/assess-surface-render');
+    expect(doorPaths).toContain('/quant/honesty/assess-comparison-order');
     const byPath = Object.fromEntries(body.quantHonesty.doors.map((door) => [door.path, door.package]));
     expect(byPath['/quant/honesty/assess-surface-render']).toBe('@intafaced/connect-data-lake');
     expect(byPath['/quant/honesty/assess-composite']).toBe('composite');
     expect(byPath['/quant/honesty/assess-backtest']).toBe('@intafaced/quant-honesty');
+    expect(byPath['/quant/honesty/assess-comparison-order']).toBe('@intafaced/quant-honesty');
     const methodsByPath = Object.fromEntries(body.quantHonesty.doors.map((door) => [door.path, door.method]));
     expect(methodsByPath['/quant/honesty/performance-labels']).toBe('GET');
     expect(methodsByPath['/quant/honesty/assess-backtest']).toBe('POST');
+    expect(methodsByPath['/quant/honesty/assess-comparison-order']).toBe('POST');
     expect(methodsByPath['/quant/honesty/assess-surface-render']).toBe('POST');
     expect(body.quantHonesty.doors).toHaveLength(5);
   });
