@@ -15,6 +15,7 @@ import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
+import { planOmsArbAtomicLegs } from './oms-arb-plan-legs.js';
 import { describeExecutionSpine } from './oms-spine.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
@@ -108,6 +109,16 @@ const omsArbScanInput = z.object({
   }),
   nowMs: z.number().int(),
   maxQuoteAgeMs: z.number().int().nonnegative().nullable(),
+});
+
+const omsArbPlanLegsInput = z.object({
+  symbol: z.string().min(1).max(64),
+  amount: decimalString,
+  buyVenueId: z.string().min(1).max(128),
+  sellVenueId: z.string().min(1).max(128),
+  inventory: z.object({
+    prePositionedByVenue: z.record(z.string().min(1).max(128), z.boolean()),
+  }),
 });
 
 const omsMmInventoryInput = z.object({
@@ -555,6 +566,11 @@ export function createExecutionRouter(
           .input(omsArbScanInput)
           .mutation(async ({ input }) => {
             return withExecutionSpan('execution.arb.scan', input.symbol, async () => scanOmsExternalArb(input));
+          }),
+        planLegs: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsArbPlanLegsInput)
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.arb.planLegs', input.symbol, async () => planOmsArbAtomicLegs(input));
           }),
       }),
 

@@ -17,6 +17,7 @@ export const EXECUTION_SPINE_DOORS: readonly ExecutionSpineDoor[] = [
   { id: 'execution.oms.plan', module: 'execution.sor', kind: 'plan', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.oms.execute', module: 'execution.sor', kind: 'execute', inventsQuotes: false, callerSubmit: true },
   { id: 'execution.arb.scan', module: 'execution.arbitrage', kind: 'scan', inventsQuotes: false, callerSubmit: false },
+  { id: 'execution.arb.planLegs', module: 'execution.arbitrage', kind: 'plan', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.mm.quote', module: 'execution.market-making', kind: 'quote', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.mm.hedge', module: 'execution.market-making', kind: 'hedge', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.tenant.describe', module: 'execution.house-tenant', kind: 'admin', inventsQuotes: false, callerSubmit: false },
