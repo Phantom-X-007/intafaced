@@ -92,6 +92,16 @@ describe('execution /ready boot trade supplement fields (D45)', () => {
   });
 });
 
+describe('execution /ready boot credential board union (D47)', () => {
+  it('index wires supplement union into describeExecutionVenueCredentialBoard', () => {
+    const src = indexSrc();
+    expect(src).toContain(
+      'unionExecutionVenueIds(executionVenueIds, venueTradeMaps.operatorSupplementVenueIds, venueAccountMaps.operatorSupplementVenueIds)',
+    );
+    expect(src).toContain('venueCredentialBoard');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
