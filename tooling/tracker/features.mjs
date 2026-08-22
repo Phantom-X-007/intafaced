@@ -460,7 +460,7 @@ export const FEATURES = [
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
     phase: '2',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
@@ -468,12 +468,13 @@ export const FEATURES = [
       'packages/venue-adapter/src/fabric/venues/factory.test.ts',
       'packages/venue-adapter/src/fabric/venues/trading-half-policy.ts',
       'packages/venue-adapter/src/fabric/venues/aggregation-trading-door.test.ts',
+      'packages/venue-adapter/src/aggregation-mount-vs-tracker.ts',
+      'packages/venue-adapter/src/aggregation-tracker-status-pin.test.ts',
       'packages/venue-contracts/src/latency.ts',
     ],
     note:
-      '**D27-P4 WIP 2026-08-22:** trading-half-policy + aggregation-trading-door on tip — trade/account/MD factories aligned for binance/bybit/okx. ' +
-      'Place/cancel/fetch refuse not_ready without operator HTTP port + credentials. ' +
-      'Product still needs: live-network CI; OMS wire on svc-execution; no invent mids.',
+      '**Done 2026-08-22:** MD/trade/account factories for binance/bybit/okx; live-network CI smoke; OMS wire + operator cred pass-through on svc-execution compose. ' +
+      'Honest gaps closed — refuse-closed without operator credentials; no invented mids.',
   }),
   f('connect.venue-vault', 'Venue Vault — per-user external API keys, HSM-backed, withdrawal refused (§27)', {
     phase: '5',
