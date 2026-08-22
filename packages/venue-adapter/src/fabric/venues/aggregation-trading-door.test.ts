@@ -112,6 +112,18 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(buildOperatorVenueAccountMaps(env).wiredVenueIds).toEqual(['bybit-spot']);
   });
 
+  it('createVenueTradeAdapterFromOperatorEnv and createVenueAccountAdapterFromOperatorEnv wire when operator env is complete (D44)', () => {
+    const env = {
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+    };
+    expect(createVenueTradeAdapterFromOperatorEnv('okx-spot', env)).not.toBeNull();
+    expect(createVenueAccountAdapterFromOperatorEnv('okx-spot', env)).not.toBeNull();
+    expect(createVenueTradeAdapterFromOperatorEnv('okx-spot', {})).toBeNull();
+    expect(createVenueAccountAdapterFromOperatorEnv('binance-spot', {})).toBeNull();
+  });
+
   it('package index re-exports trading-half policy through fabric', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const pkgIndex = readFileSync(join(here, '..', '..', 'index.ts'), 'utf8');
