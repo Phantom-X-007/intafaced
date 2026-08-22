@@ -200,9 +200,6 @@ export type RunPlaceMirrorOnceResult =
   | { readonly status: 'duplicate'; readonly record: StoredPlacedMirror }
   | { readonly status: 'claimed'; readonly record: StoredPlacedMirror };
 
-/** Process-local place claims for Sql clones (spot clientOrderId is the durable retry key). */
-const sqlPlacedMirrors = new Map<string, StoredPlacedMirror>();
-
 export interface CopyFollowStore {
   /**
    * Linearize every action for one follow across processes.
@@ -820,12 +817,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     // Keep copy_settled_fee_shares — unique fill_id must survive unfollow
     // so a re-follow cannot share the same fill with a second leader.
     await this.sql`DELETE FROM copy_mirrored_fills WHERE follow_id = ${followId}`;
+    await this.sql`DELETE FROM copy_placed_mirrors WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_follows WHERE follow_id = ${followId}`;
-    for (const key of [...sqlPlacedMirrors.keys()]) {
-      if (key.startsWith(`${followId}\0`)) {
-        sqlPlacedMirrors.delete(key);
-      }
-    }
   }
 
   async listFollows(): Promise<CopyFollow[]> {
@@ -1287,16 +1280,70 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     return this.withAdvisoryLock(fillLockKey, settleOnce);
   }
 
-  async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
-    const key = mirrorKey(followId, canonicalizeCopyFillId(fillId));
-    const existing = sqlPlacedMirrors.get(key);
-    if (existing) {
-      return { status: 'duplicate' as const, record: existing };
-    }
-    const record = await run();
-    sqlPlacedMirrors.set(key, record);
-    return { status: 'claimed' as const, record };
+  async getPlacedMirror(followId: string, fillId: string): Promise<StoredPlacedMirror | null> {
+    const id = canonicalizeCopyFillId(fillId);
+    const rows = await this.sql<PlacedMirrorRow[]>`
+      SELECT follow_id, fill_id, order_id, client_order_id, price::text
+        FROM copy_placed_mirrors
+       WHERE follow_id = ${followId} AND fill_id = ${id}
+       LIMIT 1
+    `;
+    const row = rows[0];
+    return row ? rowToPlacedMirror(row) : null;
   }
+
+  async runPlaceMirrorOnce(followId: string, fillId: string, run: () => Promise<StoredPlacedMirror>): Promise<RunPlaceMirrorOnceResult> {
+    const id = canonicalizeCopyFillId(fillId);
+    const placeOnce = async () => {
+      const existing = await this.getPlacedMirror(followId, id);
+      if (existing) {
+        return { status: 'duplicate' as const, record: existing };
+      }
+      const record = await run();
+      try {
+        await this.sql`
+          INSERT INTO copy_placed_mirrors (
+            follow_id, fill_id, order_id, client_order_id, price, created_at
+          ) VALUES (
+            ${record.followId},
+            ${canonicalizeCopyFillId(record.fillId)},
+            ${record.orderId},
+            ${record.clientOrderId},
+            ${formatAmount(record.price)},
+            now()
+          )
+        `;
+      } catch (err) {
+        if (isPgUniqueViolation(err)) {
+          const saved = await this.getPlacedMirror(followId, id);
+          if (saved) {
+            return { status: 'duplicate' as const, record: saved };
+          }
+        }
+        throw err;
+      }
+      return { status: 'claimed' as const, record };
+    };
+    return this.withAdvisoryLock(`copy-place:${followId}:${id}`, placeOnce);
+  }
+}
+
+type PlacedMirrorRow = {
+  follow_id: string;
+  fill_id: string;
+  order_id: string;
+  client_order_id: string;
+  price: string;
+};
+
+function rowToPlacedMirror(row: PlacedMirrorRow): StoredPlacedMirror {
+  return {
+    followId: row.follow_id,
+    fillId: row.fill_id,
+    orderId: row.order_id,
+    clientOrderId: row.client_order_id,
+    price: parseAmount(String(row.price)),
+  };
 }
 
 type SettledFeeShareRow = {
