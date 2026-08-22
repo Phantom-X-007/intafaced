@@ -2,7 +2,7 @@
  * D26-P1-X5 — execution.market-making mount vs tracker honest gaps.
  *
  * Backend product-complete: external-only MM half on SOR cost model.
- * Internal venue MM blocked until owner ruling; OMS wire is residual.
+ * Internal venue MM blocked until owner ruling; spread/skew bands owner residual.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -22,7 +22,7 @@ export const MM_PRODUCT_EXPORTS = [
 
 export type MmProductExport = (typeof MM_PRODUCT_EXPORTS)[number];
 
-export const MM_HONEST_GAPS = ['gap.internal_venue_mm_blocked', 'gap.no_oms_wire', 'gap.owner_spread_skew_bands'] as const;
+export const MM_HONEST_GAPS = ['gap.internal_venue_mm_blocked', 'gap.owner_spread_skew_bands'] as const;
 
 export function mmExportsInIndexSource(): readonly MmProductExport[] {
   const here = dirname(fileURLToPath(import.meta.url));
