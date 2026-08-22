@@ -61,3 +61,13 @@ describe('execution credential board supplement union (D36)', () => {
     });
   });
 });
+
+describe('execution /ready boot supplement fields (D43)', () => {
+  it('index wires account and public MD supplement venue ids on /ready', () => {
+    const src = indexSrc();
+    expect(src).toContain('buildExecutionVenueAccountMapsWithOperatorSupplement');
+    expect(src).toContain('buildExecutionVenueMarketMapsWithPublicMdSupplement');
+    expect(src).toContain('operatorAccountSupplementVenueIds: venueAccountMaps.operatorSupplementVenueIds');
+    expect(src).toContain('publicMdSupplementVenueIds: venueMarketMaps.publicMdSupplementVenueIds');
+  });
+});
