@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.pools') }}</h1>
       <p>{{ $t('intafaced.bank.earnPage.lead') }}</p>
-      <div class="ix-source">svc-bank · earn.pools · earn.positions · earn.deposit · earn.withdraw</div>
+      <div class="ix-source">svc-bank · earn.pools · earn.positions · earn.deposit · earn.withdraw · autoInvest.list · autoInvest.createDca</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -144,6 +144,94 @@
         <IxState v-else :loading="withdrawn.busy" :reason="withdrawn.reason" :message="withdrawn.message" endpoint="/api/bank/trpc/earn.withdraw"></IxState>
       </div>
     </div>
+
+    <!-- ── DCA schedules on this account ──────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.earnPage.dcaList') }}</h2>
+        <span class="ix-sub">autoInvest.list</span>
+      </div>
+      <IxState :loading="dcaRules.loading" :reason="dcaRules.reason" :message="dcaRules.message" endpoint="/api/bank/trpc/autoInvest.list">
+        <div v-if="dcaSchedules.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('intafaced.bank.earnPage.dcaId') }}</th>
+                <th>{{ $t('intafaced.bank.earnPage.dcaSpend') }}</th>
+                <th>{{ $t('intafaced.bank.earnPage.dcaBuy') }}</th>
+                <th>{{ $t('intafaced.pay.amount') }}</th>
+                <th>{{ $t('intafaced.bank.cadence') }}</th>
+                <th>{{ $t('intafaced.bank.nextRun') }}</th>
+                <th>{{ $t('intafaced.bank.status') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in dcaSchedules" :key="r.id">
+                <td>{{ r.id }}</td>
+                <td>{{ r.assetId }}</td>
+                <td>{{ r.buyAssetId }}</td>
+                <td>{{ r.amount }}</td>
+                <td>{{ r.cadence }}</td>
+                <td>{{ r.nextRunAt }}</td>
+                <td>{{ r.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.earnPage.dcaEmpty') }}</div>
+      </IxState>
+    </div>
+
+    <!-- ── create a DCA schedule ──────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.earnPage.dcaTitle') }}</h2>
+        <span class="ix-sub">autoInvest.createDca</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.earnPage.dcaLead') }}</p>
+      <div class="ix-note" style="margin-bottom:14px;">
+        {{ $t('intafaced.bank.earnPage.dcaRateUnset') }}
+      </div>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-dca-spend">{{ $t('intafaced.bank.earnPage.dcaSpend') }}</label>
+          <Input element-id="ix-dca-spend" v-model="dcaForm.spendAssetId" :placeholder="$t('intafaced.bank.assetHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-dca-buy">{{ $t('intafaced.bank.earnPage.dcaBuy') }}</label>
+          <Input element-id="ix-dca-buy" v-model="dcaForm.buyAssetId" :placeholder="$t('intafaced.bank.assetHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-dca-amount">{{ $t('intafaced.pay.amount') }}</label>
+          <Input element-id="ix-dca-amount" v-model="dcaForm.amount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label>{{ $t('intafaced.bank.cadence') }}</label>
+          <Select v-model="dcaForm.cadence">
+            <Option value="daily" :label="$t('intafaced.bank.daily')"></Option>
+            <Option value="weekly" :label="$t('intafaced.bank.weekly')"></Option>
+            <Option value="monthly" :label="$t('intafaced.bank.monthly')"></Option>
+          </Select>
+        </div>
+        <div class="ix-field">
+          <label for="ix-dca-start">{{ $t('intafaced.bank.startsAt') }}</label>
+          <Input element-id="ix-dca-start" v-model="dcaForm.startsAt" :placeholder="$t('intafaced.bank.isoHint')"></Input>
+        </div>
+      </div>
+      <div class="ix-actions">
+        <Button type="primary" :loading="dcaCreated.busy" :disabled="!canCreateDca" @click="submitDca">
+          {{ $t('intafaced.bank.earnPage.dcaCreate') }}
+        </Button>
+      </div>
+
+      <div v-if="dcaCreated.ran" style="margin-top:14px;">
+        <div v-if="dcaCreated.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.earnPage.dcaCreated') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.bank.earnPage.dcaId') }}: {{ dcaCreated.data.id }}</div>
+        </div>
+        <IxState v-else :loading="dcaCreated.busy" :reason="dcaCreated.reason" :message="dcaCreated.message" endpoint="/api/bank/trpc/autoInvest.createDca"></IxState>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -163,6 +251,12 @@
  * because a deposit that lands twice adds principal rather than moving value
  * out, and pinning the id would silently merge two deliberate deposits of the
  * same size into one. The service's own `positionId` is what comes back.
+ *
+ * DCA is the other user-facing auto-invest door on this page. Amount stays the
+ * decimal string the form holds. `startsAt` is an ISO datetime. The mutate
+ * always fires; if this deployment has no convert counterparty, svc-bank
+ * refuses `bank.auto_invest_rate_unset` and that code stays on the screen.
+ * This page does not invent a rate.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -181,16 +275,32 @@ export default {
       chosen: null,
       depositAmount: '',
       withdrawingId: '',
+      dcaForm: { spendAssetId: '', buyAssetId: '', amount: '', cadence: 'daily', startsAt: '' },
       pools: this.emptySection(),
       positions: this.emptySection(),
+      dcaRules: this.emptySection(),
       deposited: this.emptyAction(),
-      withdrawn: this.emptyAction()
+      withdrawn: this.emptyAction(),
+      dcaCreated: this.emptyAction()
     };
+  },
+  computed: {
+    canCreateDca() {
+      return Boolean(this.dcaForm.spendAssetId && this.dcaForm.buyAssetId && this.dcaForm.amount && this.dcaForm.cadence);
+    },
+    dcaSchedules() {
+      var rows = this.dcaRules.data;
+      if (!rows || !rows.length) return [];
+      return rows.filter(function(r) {
+        return r.kind === 'dca';
+      });
+    }
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.reloadPools();
     this.reloadPositions();
+    this.reloadDca();
   },
   methods: {
     bps(value) {
@@ -225,6 +335,28 @@ export default {
       this.act('withdrawn', mutate('bank', 'earn.withdraw', { positionId: position.id }, this.ixToken)).then(function(res) {
         self.withdrawingId = '';
         if (res.ok) self.reloadPositions();
+      });
+    },
+    reloadDca() {
+      this.load('dcaRules', query('bank', 'autoInvest.list', undefined, this.ixToken));
+    },
+    submitDca() {
+      var self = this;
+      if (!this.canCreateDca) return;
+      var startsAt = this.dcaForm.startsAt || new Date().toISOString();
+      this.act(
+        'dcaCreated',
+        mutate('bank', 'autoInvest.createDca', {
+          spendAssetId: this.dcaForm.spendAssetId,
+          buyAssetId: this.dcaForm.buyAssetId,
+          amount: this.dcaForm.amount,
+          cadence: this.dcaForm.cadence,
+          startsAt: startsAt
+        }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.dcaForm = { spendAssetId: '', buyAssetId: '', amount: '', cadence: 'daily', startsAt: '' };
+        self.reloadDca();
       });
     }
   }
