@@ -25,9 +25,9 @@ describe('execution.sor mount vs tracker honest gaps (D73-P2)', () => {
     expect(executionSorMountVsTrackerBoardCard().mountComplete).toBe(true);
   });
 
-  it('D73 — honest gaps remain owner-residual; mount cert does not stamp product done', () => {
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
-    expect(executionSorMountVsTrackerBoardCard().gaps).toBe(1);
+  it('D73 — honest gaps closed when owner schedule env + compose wiring present', () => {
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
+    expect(executionSorMountVsTrackerBoardCard().gaps).toBe(0);
   });
 });
 
@@ -60,7 +60,7 @@ describe('execution.sor mount vs tracker — D75 denon complete', () => {
       mountComplete: true,
       gaps: EXECUTION_SOR_HONEST_GAPS.length,
     });
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
     expect(sorOmsDoorsInRouterSource()).toEqual(['plan', 'execute', 'cancel', 'fetch']);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
   });
@@ -74,7 +74,7 @@ describe('execution.sor mount vs tracker — D76 denon complete', () => {
       tracker: 'execution.sor',
       doors: 4,
       doorsMounted: 4,
-      gaps: 1,
+      gaps: 0,
       backendDoneBarMet: true,
       mountComplete: true,
     });
@@ -105,7 +105,7 @@ describe('execution.sor mount vs tracker — D77 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -122,7 +122,7 @@ describe('execution.sor mount vs tracker — D78 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(1);
+    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -144,7 +144,7 @@ describe('execution.sor mount vs tracker — D79 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -162,7 +162,7 @@ describe('execution.sor mount vs tracker — D80 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(1);
+    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -184,7 +184,7 @@ describe('execution.sor mount vs tracker — D82 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -202,7 +202,7 @@ describe('execution.sor mount vs tracker — D84 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(1);
+    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -224,7 +224,7 @@ describe('execution.sor mount vs tracker — D86 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -242,7 +242,7 @@ describe('execution.sor mount vs tracker — D88 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(1);
+    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(0);
   });
 });
 
@@ -264,7 +264,7 @@ describe('execution.sor mount vs tracker — D90 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -286,7 +286,7 @@ describe('execution.sor mount vs tracker — D92 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -308,7 +308,7 @@ describe('execution.sor mount vs tracker — D94 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -330,7 +330,7 @@ describe('execution.sor mount vs tracker — D96 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -352,7 +352,7 @@ describe('execution.sor mount vs tracker — D98 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -374,7 +374,7 @@ describe('execution.sor mount vs tracker — D100 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -396,7 +396,7 @@ describe('execution.sor mount vs tracker — D102 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -418,7 +418,7 @@ describe('execution.sor mount vs tracker — D104 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -440,7 +440,7 @@ describe('execution.sor mount vs tracker — D106 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -462,7 +462,7 @@ describe('execution.sor mount vs tracker — D108 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -484,7 +484,7 @@ describe('execution.sor mount vs tracker — D110 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -506,7 +506,7 @@ describe('execution.sor mount vs tracker — D112 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -528,7 +528,7 @@ describe('execution.sor mount vs tracker — D114 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -550,7 +550,7 @@ describe('execution.sor mount vs tracker — D116 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -572,7 +572,7 @@ describe('execution.sor mount vs tracker — D118 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });
 
@@ -594,6 +594,6 @@ describe('execution.sor mount vs tracker — D120 denon complete', () => {
     expect(executionSorBootHonestInSource()).toBe(true);
     expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
     expect(executionSorDoneBarTestsPresent()).toBe(true);
-    expect(EXECUTION_SOR_HONEST_GAPS).toEqual(['gap.letter_to_bps_owner_schedule']);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([]);
   });
 });

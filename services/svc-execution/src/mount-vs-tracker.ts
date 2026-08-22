@@ -1,14 +1,18 @@
 /**
  * D73-P2 — execution.sor mount vs tracker honest gaps.
  *
- * OMS plan/execute/cancel/fetch doors on svc-execution; file EMS journal wired
- * in fleet compose. Letter→bps owner schedule remains Class X residual.
+ * OMS plan/execute/cancel/fetch doors on svc-execution; fleet EMS + operator cred +
+ * letter→bps owner schedule env wired in compose.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { executionEmsStoreComposeWired, executionVenueOperatorCredComposeWired } from './execution-compose-wiring.js';
+import {
+  executionEmsStoreComposeWired,
+  executionLetterBpsScheduleComposeWired,
+  executionVenueOperatorCredComposeWired,
+} from './execution-compose-wiring.js';
 import { describeExecutionSpine } from './oms-spine.js';
 
 export const EXECUTION_SOR_TRACKER_ID = 'execution.sor' as const;
@@ -26,13 +30,15 @@ export const EXECUTION_SOR_DONE_BAR_TEST_FILES = [
   'router.mount.test.ts',
   'execution-ready-cred-board.test.ts',
   'execution-policy-route.test.ts',
+  'letter-to-bps-schedule.test.ts',
+  'sor-tracker-status-pin.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
 
-export const EXECUTION_SOR_HONEST_GAPS = ['gap.letter_to_bps_owner_schedule'] as const;
+export const EXECUTION_SOR_HONEST_GAPS = [] as const;
 
 export function executionSorComposeGapsClosed(): boolean {
-  return executionEmsStoreComposeWired() && executionVenueOperatorCredComposeWired();
+  return executionEmsStoreComposeWired() && executionVenueOperatorCredComposeWired() && executionLetterBpsScheduleComposeWired();
 }
 
 export function sorOmsDoorsInRouterSource(): readonly ExecutionSorOmsDoor[] {

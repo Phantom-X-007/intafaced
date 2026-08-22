@@ -30,3 +30,8 @@ export function executionVenueOperatorCredComposeWired(): boolean {
     /VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE:/.test(block)
   );
 }
+
+export function executionLetterBpsScheduleComposeWired(): boolean {
+  const block = executionComposeBlock();
+  return /EXECUTION_SOR_LETTER_BPS_SCHEDULE:\s*\$\{EXECUTION_SOR_LETTER_BPS_SCHEDULE:-\}/.test(block);
+}

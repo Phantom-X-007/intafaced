@@ -42,6 +42,11 @@ const schema = baseEnvSchema
        * JSONL path for durable EMS ack journal. Blank (default) → in-memory store.
        */
       EXECUTION_EMS_STORE_PATH: z.string().default(''),
+      /**
+       * Owner JSON map of latency letter → routing bps (A/B/C/D/F keys).
+       * Blank (default) → letter→bps gate refuses; never invent DEFAULT_THRESHOLDS.
+       */
+      EXECUTION_SOR_LETTER_BPS_SCHEDULE: z.string().default(''),
     }),
   );
 

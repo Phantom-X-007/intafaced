@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   executionComposeBlock,
   executionEmsStoreComposeWired,
+  executionLetterBpsScheduleComposeWired,
   executionVenueOperatorCredComposeWired,
 } from './execution-compose-wiring.js';
 import { executionSorComposeGapsClosed } from './mount-vs-tracker.js';
@@ -16,7 +17,11 @@ describe('execution.sor fleet compose wiring', () => {
     expect(executionVenueOperatorCredComposeWired()).toBe(true);
   });
 
-  it('closes durable_ems_store and live_venue_cred_operator_wiring compose gaps', () => {
+  it('svc-execution passes letter→bps owner schedule env through', () => {
+    expect(executionLetterBpsScheduleComposeWired()).toBe(true);
+  });
+
+  it('closes durable_ems_store, live_venue_cred_operator_wiring, and letter_to_bps_owner_schedule compose gaps', () => {
     expect(executionSorComposeGapsClosed()).toBe(true);
   });
 });
