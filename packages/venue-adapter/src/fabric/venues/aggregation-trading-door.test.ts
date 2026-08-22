@@ -198,6 +198,25 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     }
   });
 
+  it('describeVenueOperatorCredentials wires every public venue when operator env is complete (D70)', () => {
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      const prefix = venueOperatorCredentialEnvPrefix(id);
+      const env = {
+        [`${prefix}_API_KEY`]: 'k',
+        [`${prefix}_API_SECRET`]: 's',
+        ...(id === 'okx-spot' ? { [`${prefix}_PASSPHRASE`]: 'p' } : {}),
+      };
+      const board = describeVenueOperatorCredentials(env);
+      expect(board.wiredVenueIds).toEqual([id]);
+      expect(board.inventsCredentials).toBe(false);
+      expect(loadVenueOperatorCredentials(id, env)).toMatchObject({ venueId: id });
+    }
+    expect(describeVenueOperatorCredentials({})).toMatchObject({
+      wiredVenueIds: [],
+      inventsCredentials: false,
+    });
+  });
+
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
     expect(describeOperatorVenueTradeMaps({})).toMatchObject({
       wiredVenueIds: [],
