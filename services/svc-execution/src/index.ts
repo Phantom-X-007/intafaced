@@ -7,7 +7,9 @@ import { env } from './env.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { buildExecutionVenueAccountMaps } from './venue-account-adapters.js';
 import { buildExecutionVenueTradeMaps, parseExecutionVenueIds } from './venue-adapters.js';
+import { buildExecutionVenueMarketMaps } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap, TRADE_BOOK_SNAPSHOT_VENUE_ID } from './trade-book-snapshot.js';
+import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -28,7 +30,10 @@ const registry = new SealedHouseTenantRegistry();
 const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
 const venueTradeMaps = buildExecutionVenueTradeMaps(executionVenueIds);
 const venueAccountMaps = buildExecutionVenueAccountMaps(executionVenueIds);
-const snapshotByVenue = buildTradeBookSnapshotMap(env.TRADE_URL);
+const venueMarketMaps = buildExecutionVenueMarketMaps(executionVenueIds);
+const emsStore = new InMemoryEmsOrderStore();
+const tradeBookSnapshot = buildTradeBookSnapshotMap(env.TRADE_URL);
+const snapshotByVenue = { ...venueMarketMaps.snapshotByVenue, ...tradeBookSnapshot };
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
@@ -38,11 +43,12 @@ const appRouter = createExecutionRouter(
   venueAccountMaps.balancesByVenue,
   venueAccountMaps.positionsByVenue,
   venueAccountMaps.railsByVenue,
-  {},
-  {},
-  {},
-  {},
+  venueMarketMaps.fundingByVenue,
+  venueMarketMaps.borrowByVenue,
+  venueMarketMaps.latencyByVenue,
+  venueMarketMaps.marketsByVenue,
   snapshotByVenue,
+  emsStore,
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
@@ -54,11 +60,13 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  stage: 'oms-snapshot',
+  stage: 'oms-ems',
   store: 'memory',
   internalVenue: 'blocked',
   externalVenueTrade: venueTradeMaps.wiredVenueIds,
   externalVenueAccount: venueAccountMaps.wiredVenueIds,
+  externalVenueMarketData: venueMarketMaps.wiredVenueIds,
+  emsAckCount: emsStore.list().length,
   tradeBookSnapshotVenue: env.TRADE_URL ? TRADE_BOOK_SNAPSHOT_VENUE_ID : null,
 }));
 

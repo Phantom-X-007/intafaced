@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
+import type { SubmitRequest, VenueExecution } from '@intafaced/venue-adapter';
+import type { VenueOrder } from '@intafaced/venue-contracts';
+import { InMemoryEmsOrderStore } from './oms-ems-store.js';
+import { latencyGradeWire } from './oms-plan.js';
+import type { OmsFetchFn } from './oms-fetch.js';
+import type { OmsSubmitFn } from './oms-execute.js';
 import { createExecutionRouter } from './router.js';
 
 const SECRET = 'a-execution-mount-test-edge-secret-long';
@@ -67,5 +74,124 @@ describe('execution.tenant tRPC', () => {
       ok: false,
       reason: 'internal_venue',
     });
+  });
+});
+
+const venueBody = {
+  id: 'street',
+  kind: 'external-cex' as const,
+  price: '100',
+  amount: '10',
+  feeBps: 10,
+  costTerms: {
+    feeBps: 10,
+    expectedImpactBps: 5,
+    transferCostBps: 2,
+    latencyGrade: latencyGradeWire('street'),
+  },
+};
+
+describe('execution.oms plan → execute → fetch + EMS journal', () => {
+  it('records venue ack in EMS and fetch reads the injected venue row', async () => {
+    const emsStore = new InMemoryEmsOrderStore();
+    const calls: SubmitRequest[] = [];
+    const submit: OmsSubmitFn = async (req) => {
+      calls.push(req);
+      const execution: VenueExecution = {
+        venueId: 'street',
+        venueOrderId: 'v-street-1',
+        filledAmount: req.amount,
+        averagePrice: req.limitPrice,
+        feeAmount: parseAmount('0'),
+        feeAsset: 'USDT',
+        status: 'filled',
+        executedAt: new Date('2026-08-22T00:00:00.000Z'),
+      };
+      return execution;
+    };
+    const fetch: OmsFetchFn = async (symbol, clientOrderId) => {
+      const order: VenueOrder = {
+        venueId: 'street',
+        venueOrderId: 'v-street-1',
+        clientOrderId,
+        symbol,
+        side: 'buy',
+        type: 'limit',
+        price: parseAmount('100'),
+        amount: parseAmount('1'),
+        filled: parseAmount('1'),
+        remaining: parseAmount('0'),
+        averagePrice: parseAmount('100'),
+        status: 'filled',
+        feePaid: parseAmount('0'),
+        feeAsset: 'USDT',
+        createdAt: new Date('2026-08-22T00:00:00.000Z'),
+        observedAt: new Date('2026-08-22T00:00:00.000Z'),
+      };
+      return order;
+    };
+
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      { street: submit },
+      {},
+      { street: fetch },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      emsStore,
+    ).createCaller(signed());
+
+    const planned = await caller.execution.oms.plan({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [venueBody],
+    });
+    expect(planned.ok).toBe(true);
+    expect(calls).toHaveLength(0);
+
+    const executed = await caller.execution.oms.execute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [venueBody],
+    });
+    expect(executed.ok).toBe(true);
+    if (!executed.ok) return;
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.clientOrderId).toBe('oms-street');
+
+    const ack = await caller.execution.oms.ems.get({ clientOrderId: 'oms-street' });
+    expect(ack.execution.venueOrderId).toBe('v-street-1');
+    expect(emsStore.list({ venueId: 'street', symbol: 'BTC/USDT' })).toHaveLength(1);
+
+    const fetched = await caller.execution.oms.fetch({
+      venueId: 'street',
+      symbol: 'BTC/USDT',
+      clientOrderId: 'oms-street',
+    });
+    expect(fetched.ok).toBe(true);
+    if (!fetched.ok) return;
+    expect(fetched.order.venueOrderId).toBe('v-street-1');
+  });
+
+  it('refuses execute when venue submit is not wired', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}).createCaller(
+      signed(),
+    );
+    const out = await caller.execution.oms.execute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [venueBody],
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'submit_failed' });
   });
 });

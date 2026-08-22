@@ -529,18 +529,20 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'ready',
+    status: 'wip',
     owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation', 'connect.latency-grading'],
     requires: [
       'packages/venue-adapter/src/sor-policy.ts',
       'packages/venue-adapter/src/cost-model.ts',
       'packages/venue-adapter/src/execution-report.ts',
+      'services/svc-execution/src/venue-market-adapters.ts',
+      'services/svc-execution/src/oms-ems-store.ts',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — cost model is not OMS/EMS. ' +
-      'Stage-1 ranking rule + SOR cost model + execution reports on tip; 5 bps internal preference capped; incomplete cost → weight 0. ' +
-      'Product still needs: OMS/EMS on svc-execution; letter→bps owner schedule; full execution mount (#2248 leftover).',
+      '**D27-P4 WIP 2026-08-22:** OMS boot wires public MD observation + trade/account maps; in-memory EMS ack journal on execute. ' +
+      'SOR cost model + plan/execute/cancel/fetch doors on svc-execution tip. ' +
+      'Product still needs: durable EMS store; letter→bps owner schedule; live venue creds operator wiring.',
   }),
   f('execution.arbitrage', 'Arbitrage engine — cross-exchange, triangular, basis, funding, DEX to CEX (§28)', {
     module: 'trade',
