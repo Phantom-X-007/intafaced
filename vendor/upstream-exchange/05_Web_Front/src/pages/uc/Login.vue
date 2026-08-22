@@ -25,7 +25,10 @@
           </router-link>
         </p>
         <FormItem style="margin-bottom:15px;">
-          <Button class="login_btn" :loading="signingIn" @click="handleSubmit('formInline')">{{$t('uc.login.login')}}</Button>
+          <Button class="login_btn" :loading="signingIn" :disabled="signingPasskey" @click="handleSubmit('formInline')">{{$t('uc.login.login')}}</Button>
+        </FormItem>
+        <FormItem style="margin-bottom:15px;">
+          <Button class="passkey_btn" :loading="signingPasskey" :disabled="signingIn" @click="handlePasskey">{{$t('uc.login.passkey')}}</Button>
         </FormItem>
         <div class='to_register'>
           <span>{{$t('uc.login.noaccount')}}</span>
@@ -74,6 +77,19 @@
             border-color: var(--ix-orange, #ff6b00);
             color: var(--ix-on-accent, #1A0A00);
             font-size: 18px;
+            border-radius: 5px;
+            &:focus-visible {
+              outline: 2px solid var(--ix-orange-light, #ff8534);
+              outline-offset: 2px;
+            }
+          }
+.passkey_btn.ivu-btn {
+            width: 100%;
+            background-color: transparent;
+            outline: none;
+            border-color: var(--ix-orange, #ff6b00);
+            color: var(--ix-orange, #ff6b00);
+            font-size: 16px;
             border-radius: 5px;
             &:focus-visible {
               outline: 2px solid var(--ix-orange-light, #ff8534);
@@ -164,13 +180,56 @@
  * with "Two-factor code required" when the account is enrolled and the field
  * was blank, and that message is shown verbatim rather than being guessed at
  * in advance.
+ *
+ * Passkey sign-in uses the existing public doors: webauthn.authOptions then
+ * navigator.credentials.get then webauthn.authVerify. The session commit is
+ * the same as auth.login. A disabled service, a cancelled prompt, or a missing
+ * authenticator is shown as a named refuse — never a fake session.
  */
 import { mutate, subjectOf } from "../../config/intafaced.js";
+
+function b64urlToBytes(s) {
+  var b64 = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4) b64 += "=";
+  var bin = atob(b64);
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64url(buf) {
+  var bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  var bin = "";
+  for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function assertionFromCredential(cred) {
+  var response = cred.response || {};
+  var body = {
+    id: cred.id,
+    rawId: bytesToB64url(cred.rawId),
+    type: "public-key",
+    response: {
+      clientDataJSON: bytesToB64url(response.clientDataJSON),
+      authenticatorData: bytesToB64url(response.authenticatorData),
+      signature: bytesToB64url(response.signature)
+    }
+  };
+  if (response.userHandle) {
+    body.response.userHandle = bytesToB64url(response.userHandle);
+  }
+  if (typeof cred.getClientExtensionResults === "function") {
+    body.clientExtensionResults = cred.getClientExtensionResults();
+  }
+  return body;
+}
 
 export default {
   data() {
     return {
       signingIn: false,
+      signingPasskey: false,
       signInError: "",
       formInline: {
         user: "",
@@ -217,8 +276,24 @@ export default {
         this.handleSubmit("formInline");
       }
     },
+    commitSession(data) {
+      this.$store.commit("setIxSession", data);
+      // The member is a projection of the session, not a second record.
+      // Only what the shell's chrome actually renders, and `username` is the
+      // identifier the user typed — svc-identity does not return a display
+      // name, and inventing one here would be inventing content.
+      this.$store.commit("setMember", {
+        id: data.userId || subjectOf(data.accessToken),
+        username: this.formInline.user
+      });
+      this.formInline.password = "";
+      this.formInline.totp = "";
+      this.$Message.success(this.$t("uc.login.success"));
+      this.$router.push("/uc/safe");
+    },
     handleSubmit(name) {
       var self = this;
+      if (this.signingIn || this.signingPasskey) return;
       this.$refs[name].validate(function(valid) {
         if (!valid) return;
 
@@ -244,20 +319,88 @@ export default {
             return;
           }
 
-          self.$store.commit("setIxSession", res.data);
-          // The member is a projection of the session, not a second record.
-          // Only what the shell's chrome actually renders, and `username` is the
-          // identifier the user typed — svc-identity does not return a display
-          // name, and inventing one here would be inventing content.
-          self.$store.commit("setMember", {
-            id: res.data.userId || subjectOf(res.data.accessToken),
-            username: self.formInline.user
-          });
-          self.formInline.password = "";
-          self.formInline.totp = "";
-          self.$Message.success(self.$t("uc.login.success"));
-          self.$router.push("/uc/safe");
+          self.commitSession(res.data);
         });
+      });
+    },
+    handlePasskey() {
+      var self = this;
+      var identifier = (this.formInline.user || "").trim();
+      if (this.signingIn || this.signingPasskey) return;
+      if (!identifier) {
+        this.signInError = this.$t("uc.login.passkeyNeedIdentifier");
+        return;
+      }
+      if (
+        typeof window === "undefined" ||
+        !window.PublicKeyCredential ||
+        !navigator.credentials ||
+        typeof navigator.credentials.get !== "function"
+      ) {
+        this.signInError = this.$t("uc.login.webauthnUnavailable");
+        return;
+      }
+
+      this.signingPasskey = true;
+      this.signInError = "";
+
+      mutate("identity", "webauthn.authOptions", { identifier: identifier }).then(function(res) {
+        if (!res.ok) {
+          self.signingPasskey = false;
+          self.signInError = res.message;
+          return;
+        }
+
+        var opts = res.data || {};
+        var allow = (opts.allowCredentials || []).map(function(c) {
+          var item = { type: "public-key", id: b64urlToBytes(c.id) };
+          if (c.transports && c.transports.length) item.transports = c.transports;
+          return item;
+        });
+        var publicKey = {
+          challenge: b64urlToBytes(opts.challenge),
+          timeout: opts.timeout,
+          rpId: opts.rpId,
+          userVerification: opts.userVerification || "required",
+          allowCredentials: allow
+        };
+
+        return Promise.resolve()
+          .then(function() {
+            return navigator.credentials.get({ publicKey: publicKey });
+          })
+          .then(function(cred) {
+            if (!cred) {
+              self.signingPasskey = false;
+              self.signInError = self.$t("uc.login.webauthnUnavailable");
+              return;
+            }
+            return mutate("identity", "webauthn.authVerify", {
+              identifier: identifier,
+              credential: assertionFromCredential(cred)
+            }).then(function(verifyRes) {
+              self.signingPasskey = false;
+              if (!verifyRes.ok) {
+                self.signInError = verifyRes.message;
+                return;
+              }
+              self.commitSession(verifyRes.data);
+            });
+          }, function(err) {
+            self.signingPasskey = false;
+            if (err && err.name === "NotAllowedError") {
+              self.signInError = self.$t("uc.login.webauthnCancelled");
+              return;
+            }
+            self.signInError =
+              (err && err.message) || self.$t("uc.login.webauthnUnavailable");
+          });
+      }).then(null, function(err) {
+        self.signingPasskey = false;
+        if (!self.signInError) {
+          self.signInError =
+            (err && err.message) || self.$t("uc.login.webauthnUnavailable");
+        }
       });
     }
   }
