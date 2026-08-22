@@ -80,3 +80,16 @@ describe('trade.otc done bar test files (D54)', () => {
     expect(otcMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('trade.otc mount board complete (D56)', () => {
+  it('otcMountVsTrackerBoardCard reports mountComplete with policy honesty and all doors', () => {
+    const card = otcMountVsTrackerBoardCard();
+    expect(card.mountComplete).toBe(true);
+    expect(card.doorsMounted).toBe(OTC_MOUNTED_DOORS.length);
+    expect(card.doors).toBe(OTC_MOUNTED_DOORS.length);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(OTC_MOUNTED_DOORS).toEqual(['policy', 'deskStatus', 'quote', 'accept', 'settle']);
+    expect(card.backendDoneBarMet).toBe(true);
+  });
+});
