@@ -399,3 +399,29 @@ describe('execution.sor mount vs tracker — D98 denon complete', () => {
     ]);
   });
 });
+
+describe('execution.sor mount vs tracker — D100 denon complete', () => {
+  it('full mount board: tracker, OMS doors, policy, boot, venue-adapter, done-bar tests, honest gaps', () => {
+    expect(EXECUTION_SOR_TRACKER_ID).toBe('execution.sor');
+    const card = executionSorMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'execution.sor',
+      doors: EXECUTION_SOR_OMS_DOORS.length,
+      doorsMounted: EXECUTION_SOR_OMS_DOORS.length,
+      gaps: EXECUTION_SOR_HONEST_GAPS.length,
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(sorOmsDoorsInRouterSource()).toEqual([...EXECUTION_SOR_OMS_DOORS]);
+    expect(executionSorPolicyHonest()).toBe(true);
+    expect(executionSorBootHonestInSource()).toBe(true);
+    expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
+    expect(executionSorDoneBarTestsPresent()).toBe(true);
+    expect(EXECUTION_SOR_HONEST_GAPS).toEqual([
+      'gap.durable_ems_store',
+      'gap.letter_to_bps_owner_schedule',
+      'gap.live_venue_cred_operator_wiring',
+    ]);
+  });
+});
