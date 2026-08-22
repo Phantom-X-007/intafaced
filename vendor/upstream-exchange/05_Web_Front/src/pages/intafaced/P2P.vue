@@ -12,6 +12,88 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.p2p.createOffer') }}</h2>
+        <span class="ix-sub">offers.create</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.p2p.createOfferLead') }}</p>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-p2p-create-side">{{ $t('intafaced.p2p.side') }}</label>
+          <select id="ix-p2p-create-side" v-model="createForm.side">
+            <option value="sell">sell</option>
+            <option value="buy">buy</option>
+          </select>
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-asset">{{ $t('intafaced.p2p.createOfferAsset') }}</label>
+          <Input element-id="ix-p2p-create-asset" v-model="createForm.asset" :placeholder="$t('intafaced.p2p.createOfferAssetHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-fiat">{{ $t('intafaced.p2p.createOfferFiat') }}</label>
+          <Input element-id="ix-p2p-create-fiat" v-model="createForm.fiatCurrency" :placeholder="$t('intafaced.p2p.createOfferFiatHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-price-type">{{ $t('intafaced.p2p.createOfferPriceType') }}</label>
+          <select id="ix-p2p-create-price-type" v-model="createForm.priceType">
+            <option value="fixed">fixed</option>
+            <option value="float">float</option>
+          </select>
+        </div>
+      </div>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-p2p-create-price">{{ $t('intafaced.p2p.price') }}</label>
+          <Input element-id="ix-p2p-create-price" v-model="createForm.price" :placeholder="$t('intafaced.p2p.take.amountHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-min">{{ $t('intafaced.p2p.createOfferMin') }}</label>
+          <Input element-id="ix-p2p-create-min" v-model="createForm.minAmount" :placeholder="$t('intafaced.p2p.take.amountHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-max">{{ $t('intafaced.p2p.createOfferMax') }}</label>
+          <Input element-id="ix-p2p-create-max" v-model="createForm.maxAmount" :placeholder="$t('intafaced.p2p.take.amountHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-total">{{ $t('intafaced.p2p.createOfferTotal') }}</label>
+          <Input element-id="ix-p2p-create-total" v-model="createForm.totalAmount" :placeholder="$t('intafaced.p2p.createOfferTotalHint')" />
+        </div>
+      </div>
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-field">
+          <label for="ix-p2p-create-methods">{{ $t('intafaced.p2p.createOfferMethods') }}</label>
+          <Input element-id="ix-p2p-create-methods" v-model="createForm.methods" :placeholder="$t('intafaced.p2p.createOfferMethodsHint')" />
+        </div>
+        <div class="ix-field">
+          <label for="ix-p2p-create-terms">{{ $t('intafaced.p2p.createOfferTerms') }}</label>
+          <Input element-id="ix-p2p-create-terms" v-model="createForm.terms" :placeholder="$t('intafaced.p2p.createOfferTermsHint')" />
+        </div>
+      </div>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button
+          v-if="ixToken"
+          size="small"
+          :loading="create.busy"
+          :disabled="!canCreate"
+          @click="createOffer"
+        >{{ $t('intafaced.p2p.createOfferSubmit') }}</Button>
+        <router-link v-else to="/platform">{{ $t('intafaced.p2p.createOfferSignIn') }}</router-link>
+      </div>
+      <IxState v-if="create.ran" :loading="create.busy" :reason="create.reason" :message="create.message" endpoint="/api/p2p/trpc/offers.create">
+        <div v-if="create.data" class="ix-done">
+          <strong>{{ $t('intafaced.p2p.createOfferDone') }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.createOfferId') }}</span><span class="v">{{ create.data.id }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.side') }}</span><span class="v">{{ create.data.side }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.createOfferAsset') }}</span><span class="v">{{ create.data.asset }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.price') }}</span><span class="v">{{ create.data.price }} {{ create.data.fiatCurrency }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ create.data.status }}</span></div>
+          </div>
+        </div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.offers') }}</h2>
         <span class="ix-sub">offers.list · trades.take</span>
       </div>
@@ -180,6 +262,10 @@
  *
  * Take posts {offerId, amount, method} as the router takes them. Amount stays a
  * decimal string. This screen never posts a lock and never invents a rail.
+ *
+ * Create posts {side, asset, fiatCurrency, priceType, price, minAmount,
+ * maxAmount, methods} the same way. Optional totalAmount and terms are omitted
+ * when blank. Amounts stay decimal strings. methods are non-empty string ids.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
@@ -195,13 +281,26 @@ export default {
       fiat: this.emptySection(),
       methods: this.emptySection(),
       take: this.emptyAction(),
+      create: this.emptyAction(),
       trades: this.emptySection(),
       lifecycle: this.emptyAction(),
       takeAmount: '',
       takeMethod: '',
       takingId: '',
       lifeId: '',
-      lifeEndpoint: '/api/p2p/trpc/trades.list'
+      lifeEndpoint: '/api/p2p/trpc/trades.list',
+      createForm: {
+        side: 'sell',
+        asset: '',
+        fiatCurrency: '',
+        priceType: 'fixed',
+        price: '',
+        minAmount: '',
+        maxAmount: '',
+        totalAmount: '',
+        methods: '',
+        terms: ''
+      }
     };
   },
   computed: {
@@ -210,6 +309,26 @@ export default {
     },
     canTake() {
       return !!(this.takeAmount && this.takeMethod && !this.take.busy);
+    },
+    createMethodIds() {
+      return (this.createForm.methods || '')
+        .split(',')
+        .map(function (s) { return s.trim(); })
+        .filter(function (s) { return s; });
+    },
+    canCreate() {
+      var f = this.createForm;
+      return !!(
+        f.side &&
+        f.priceType &&
+        (f.asset || '').trim() &&
+        (f.fiatCurrency || '').trim() &&
+        (f.price || '').trim() &&
+        (f.minAmount || '').trim() &&
+        (f.maxAmount || '').trim() &&
+        this.createMethodIds.length &&
+        !this.create.busy
+      );
     },
     myId() {
       return subjectOf(this.ixToken);
@@ -244,6 +363,32 @@ export default {
       ).then(function () {
         self.takingId = '';
         self.loadTrades();
+      });
+    },
+    createOffer() {
+      var self = this;
+      if (!this.canCreate) return;
+      var f = this.createForm;
+      var methods = this.createMethodIds;
+      if (!methods.length) return;
+      var input = {
+        side: f.side,
+        asset: (f.asset || '').trim().toUpperCase(),
+        fiatCurrency: (f.fiatCurrency || '').trim().toUpperCase(),
+        priceType: f.priceType,
+        price: (f.price || '').trim(),
+        minAmount: (f.minAmount || '').trim(),
+        maxAmount: (f.maxAmount || '').trim(),
+        methods: methods
+      };
+      var totalAmount = (f.totalAmount || '').trim();
+      if (totalAmount) input.totalAmount = totalAmount;
+      var terms = (f.terms || '').trim();
+      if (terms) input.terms = terms;
+      this.act('create', mutate('p2p', 'offers.create', input, this.ixToken)).then(function (res) {
+        if (res.ok) {
+          self.load('offers', query('p2p', 'offers.list', undefined, self.ixToken));
+        }
       });
     },
     loadTrades() {
