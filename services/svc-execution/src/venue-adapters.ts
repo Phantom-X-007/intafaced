@@ -6,7 +6,7 @@
  * underscores, uppercased). Blank credential env → refuse-closed (venue not wired).
  * Unknown ids skipped (no map entry).
  */
-import { createVenueTradeAdapter, loadVenueOperatorCredentials } from '@intafaced/venue-adapter';
+import { buildOperatorVenueTradeAdapters, createVenueTradeAdapter, loadVenueOperatorCredentials } from '@intafaced/venue-adapter';
 import { assertTradeOnly, type TradeAdapter, type VenueCredentials } from '@intafaced/venue-contracts';
 import type { OmsCancelFn } from './oms-cancel.js';
 import type { OmsFetchFn } from './oms-fetch.js';
@@ -56,9 +56,11 @@ export type ExecutionVenueTradeMaps = {
   readonly fetchByVenue: ExecutionFetchMap;
   readonly openOrdersByVenue: ExecutionOpenOrdersMap;
   readonly wiredVenueIds: readonly string[];
+  readonly operatorSupplementVenueIds: readonly string[];
 };
 
 export type BuildExecutionVenueTradeMapsOptions = {
+  readonly env?: NodeJS.ProcessEnv;
   readonly credentialsFor?: (venueId: string) => VenueCredentials | null;
   readonly createAdapter?: typeof createVenueTradeAdapter;
 };
@@ -220,5 +222,38 @@ export function buildExecutionVenueTradeMaps(
     }
   }
 
-  return { submitByVenue, cancelByVenue, fetchByVenue, openOrdersByVenue, wiredVenueIds };
+  return { submitByVenue, cancelByVenue, fetchByVenue, openOrdersByVenue, wiredVenueIds, operatorSupplementVenueIds: [] };
+}
+
+/** EXECUTION_VENUE_IDS first; supplements unwired public MD venues from VENUE_AGGREGATION_* operator env. */
+export function buildExecutionVenueTradeMapsWithOperatorSupplement(
+  venueIds: readonly string[],
+  options: BuildExecutionVenueTradeMapsOptions = {},
+): ExecutionVenueTradeMaps {
+  const env = options.env ?? process.env;
+  const primary = buildExecutionVenueTradeMaps(venueIds, {
+    ...options,
+    credentialsFor: options.credentialsFor ?? ((id) => loadExecutionVenueCredentials(id, env)),
+  });
+
+  const { adapters } = buildOperatorVenueTradeAdapters(env);
+  const submitByVenue = { ...primary.submitByVenue };
+  const cancelByVenue = { ...primary.cancelByVenue };
+  const fetchByVenue = { ...primary.fetchByVenue };
+  const openOrdersByVenue = { ...primary.openOrdersByVenue };
+  const wiredVenueIds = [...primary.wiredVenueIds];
+  const operatorSupplementVenueIds: string[] = [];
+
+  for (const [venueId, adapter] of Object.entries(adapters)) {
+    if (submitByVenue[venueId]) continue;
+    const wire = wireTradeAdapter(adapter);
+    submitByVenue[venueId] = wire.submit;
+    cancelByVenue[venueId] = wire.cancel;
+    fetchByVenue[venueId] = wire.fetch;
+    openOrdersByVenue[venueId] = wire.openOrders;
+    wiredVenueIds.push(venueId);
+    operatorSupplementVenueIds.push(venueId);
+  }
+
+  return { submitByVenue, cancelByVenue, fetchByVenue, openOrdersByVenue, wiredVenueIds, operatorSupplementVenueIds };
 }
