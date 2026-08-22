@@ -11,6 +11,7 @@ import {
 } from '@intafaced/venue-contracts';
 import {
   buildExecutionVenueTradeMaps,
+  buildExecutionVenueTradeMapsWithOperatorSupplement,
   describeExecutionVenueCredentialSources,
   ExecutionVenueCredentialsUnsetError,
   ExecutionVenueUnknownError,
@@ -192,5 +193,36 @@ describe('buildExecutionVenueTradeMaps', () => {
       createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
     });
     expect(maps.wiredVenueIds).toEqual(['bybit-spot']);
+  });
+
+  it('buildExecutionVenueTradeMapsWithOperatorSupplement wires operator-only venues', () => {
+    const env = {
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 's',
+    };
+    const maps = buildExecutionVenueTradeMapsWithOperatorSupplement([], {
+      env,
+      credentialsFor: (id) => loadExecutionVenueCredentials(id, env),
+      createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
+    });
+    expect(maps.wiredVenueIds).toEqual(['binance-spot']);
+    expect(maps.operatorSupplementVenueIds).toEqual(['binance-spot']);
+    expect(maps.submitByVenue['binance-spot']).toBeTypeOf('function');
+  });
+
+  it('execution list wins over operator supplement for the same venue id', () => {
+    const env = {
+      EXECUTION_VENUE_BINANCE_SPOT_API_KEY: 'exec-k',
+      EXECUTION_VENUE_BINANCE_SPOT_API_SECRET: 'exec-s',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'agg-k',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 'agg-s',
+    };
+    const maps = buildExecutionVenueTradeMapsWithOperatorSupplement(['binance-spot'], {
+      env,
+      credentialsFor: (id) => loadExecutionVenueCredentials(id, env),
+      createAdapter: ((id, creds) => createVenueTradeAdapter(id, creds)) as typeof createVenueTradeAdapter,
+    });
+    expect(maps.wiredVenueIds).toEqual(['binance-spot']);
+    expect(maps.operatorSupplementVenueIds).toEqual([]);
   });
 });

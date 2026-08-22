@@ -5,6 +5,7 @@ export type ExecutionReadyInput = {
   readonly emsStorePath: string;
   readonly tradeUrl: string;
   readonly venueTradeWiredVenueIds: readonly string[];
+  readonly operatorSupplementVenueIds: readonly string[];
   readonly venueCredentialBoard: {
     readonly venues: readonly ExecutionVenueCredentialBoardEntry[];
     readonly wiredVenueIds: readonly string[];
@@ -24,6 +25,7 @@ export function buildExecutionReadyResponse(input: ExecutionReadyInput) {
     emsStorePath: input.emsStorePath || null,
     internalVenue: 'blocked' as const,
     externalVenueTrade: input.venueTradeWiredVenueIds,
+    operatorSupplementVenueIds: input.operatorSupplementVenueIds,
     venueCredentialBoard: input.venueCredentialBoard,
     externalVenueAccount: input.venueAccountWiredVenueIds,
     externalVenueMarketData: input.venueMarketWiredVenueIds,
