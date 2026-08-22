@@ -636,19 +636,19 @@ export const FEATURES = [
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
     requires: [
       'vendor/upstream-exchange/05_Web_Front/src/terminal-mount-vs-tracker.ts',
       'vendor/upstream-exchange/05_Web_Front/src/terminal-mount-vs-tracker.test.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/terminal-tracker-status-pin.test.ts',
       'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue',
       'vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-depth-feed.js',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — mount cert is not the public-door product bar. ' +
-      'Vendored Vue desk + live ix-depth-feed wired on tip; feedLive only after snapshot; ix-wire refuses float decimals. ' +
-      'Product still needs: brand drain / depth number refuse / snapshot provenance (Nitro craft L11 W5).',
+      '**Done 2026-08-22:** vendored Vue desk + live ix-depth-feed wired; feedLive only after snapshot; ix-wire refuses float decimals. ' +
+      'Residuals: brand drain / depth number refuse / snapshot provenance (Nitro craft L11).',
   }),
   f('web.shell', 'Product shell — the served customer surface', {
     module: 'core-ops',
