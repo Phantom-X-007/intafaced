@@ -219,6 +219,17 @@ describe('execution boot open orders and rails wiring (D61)', () => {
   });
 });
 
+describe('execution boot listen and venue ids parsing (D63)', () => {
+  it('index parses execution venue ids and listens on HTTP_PORT', () => {
+    const src = indexSrc();
+    expect(src).toContain('parseExecutionVenueIds(env.EXECUTION_VENUE_IDS)');
+    expect(src).toContain('app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT })');
+    expect(src).toContain('buildExecutionReadyResponse({');
+    expect(src).toContain('tradeUrl: env.TRADE_URL');
+    expect(src).toContain('svc-execution ready');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
