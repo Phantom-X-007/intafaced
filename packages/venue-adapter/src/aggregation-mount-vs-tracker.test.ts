@@ -171,3 +171,26 @@ describe('venue.aggregation mount vs tracker — D86 denon complete', () => {
     expect(VENUE_AGGREGATION_HONEST_GAPS).toHaveLength(3);
   });
 });
+
+describe('venue.aggregation mount vs tracker — D88 denon complete', () => {
+  it('full mount board: tracker, exports, policy, factory, done-bar tests, honest gaps', () => {
+    const card = venueAggregationMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'venue.aggregation',
+      exports: VENUE_AGGREGATION_PACKAGE_EXPORTS.length,
+      exportsPresent: VENUE_AGGREGATION_PACKAGE_EXPORTS.length,
+      gaps: VENUE_AGGREGATION_HONEST_GAPS.length,
+      backendDoneBarMet: true,
+    });
+    expect(venueAggregationTrackerBackendDoneBarMet()).toBe(true);
+    expect(venueAggregationExportsInIndexSource()).toEqual([...VENUE_AGGREGATION_PACKAGE_EXPORTS]);
+    expect(venueAggregationPolicyHonest()).toBe(true);
+    expect(venueAggregationTradeFactoryComplete()).toBe(true);
+    expect(venueAggregationDoneBarTestsPresent()).toBe(true);
+    expect(VENUE_AGGREGATION_HONEST_GAPS).toEqual([
+      'gap.live_network_ci',
+      'gap.oms_wire_svc_execution',
+      'gap.operator_credential_env_live',
+    ]);
+  });
+});
