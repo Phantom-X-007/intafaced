@@ -56,3 +56,36 @@ describe('execution /ready inject (D34)', () => {
     });
   });
 });
+
+describe('execution /ready supplement inject (D35)', () => {
+  it('GET /ready exposes operator account and public MD supplement venue ids', async () => {
+    const emsStore = new InMemoryEmsOrderStore();
+    const payload = buildExecutionReadyResponse({
+      emsStorePath: '',
+      tradeUrl: '',
+      venueTradeWiredVenueIds: [],
+      operatorSupplementVenueIds: ['okx-spot'],
+      operatorAccountSupplementVenueIds: ['okx-spot'],
+      publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
+      venueCredentialBoard: describeExecutionVenueCredentialBoard([]),
+      venueAccountWiredVenueIds: ['okx-spot'],
+      venueMarketWiredVenueIds: ['binance-spot', 'bybit-spot'],
+      emsAckCount: emsStore.list().length,
+    });
+
+    const app = Fastify({ logger: false });
+    app.get('/ready', async () => payload);
+    await app.ready();
+    apps.push(app);
+
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      operatorSupplementVenueIds: ['okx-spot'],
+      operatorAccountSupplementVenueIds: ['okx-spot'],
+      publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
+      externalVenueAccount: ['okx-spot'],
+      externalVenueMarketData: ['binance-spot', 'bybit-spot'],
+    });
+  });
+});
