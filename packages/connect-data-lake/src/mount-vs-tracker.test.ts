@@ -151,3 +151,19 @@ describe('connect.data-lake stage1 and capture honesty complete (D68)', () => {
     expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('connect.data-lake package exports complete (D69)', () => {
+  it('dataLakeExportsInIndexSource lists every DATA_LAKE_PACKAGE_EXPORT on index', () => {
+    const exports = dataLakeExportsInIndexSource();
+    expect(exports).toEqual([...DATA_LAKE_PACKAGE_EXPORTS]);
+    expect(exports).toContain('ingestCaptureLakeBatch');
+    expect(exports).toContain('runConnectDataLakeRetentionMaintenance');
+    expect(exports).toContain('evaluateQuantSurfaceRender');
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard()).toMatchObject({
+      exports: DATA_LAKE_PACKAGE_EXPORTS.length,
+      exportsPresent: DATA_LAKE_PACKAGE_EXPORTS.length,
+      backendDoneBarMet: true,
+    });
+  });
+});
