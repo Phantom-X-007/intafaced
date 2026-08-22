@@ -134,3 +134,20 @@ describe('trade.otc tracker identity and policy board (D62)', () => {
     });
   });
 });
+
+describe('trade.otc mounted doors and done bar files complete (D64)', () => {
+  it('otcTrackerBackendDoneBarMet requires all five mounted doors and done bar test files', () => {
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoorsInRouterSource()).toEqual([...OTC_MOUNTED_DOORS]);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(OTC_DONE_BAR_TEST_FILES).toHaveLength(4);
+    expect(OTC_MOUNTED_DOORS).toEqual(['policy', 'deskStatus', 'quote', 'accept', 'settle']);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountVsTrackerBoardCard()).toMatchObject({
+      mountComplete: true,
+      backendDoneBarMet: true,
+      doorsMounted: OTC_MOUNTED_DOORS.length,
+    });
+  });
+});
