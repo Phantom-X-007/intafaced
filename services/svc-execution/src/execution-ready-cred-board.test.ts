@@ -293,6 +293,22 @@ describe('execution ready response fields complete (D67)', () => {
   });
 });
 
+describe('execution boot createExecutionRouter wiring complete (D69)', () => {
+  it('index passes funding, borrow, latency, markets, and snapshot maps into createExecutionRouter', () => {
+    const src = indexSrc();
+    expect(src).toContain('venueMarketMaps.fundingByVenue');
+    expect(src).toContain('venueMarketMaps.borrowByVenue');
+    expect(src).toContain('venueMarketMaps.latencyByVenue');
+    expect(src).toContain('venueMarketMaps.marketsByVenue');
+    expect(src).toContain('snapshotByVenue');
+    expect(src).toContain('tradeBookSnapshot');
+    expect(src).toContain('venueTradeMaps.submitByVenue');
+    expect(src).toContain('venueAccountMaps.balancesByVenue');
+    expect(src).toContain('emsStore');
+    expect(src).toContain('createExecutionRouter(');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
