@@ -39,7 +39,8 @@ export interface ExecutionReport {
   readonly side: 'buy' | 'sell';
   readonly requestedAmount: string;
   readonly routedAmount: string;
-  readonly averageEffectivePrice: string;
+  /** Decimal string, or `null` when nothing routed — 0 would read as filled-at-zero. */
+  readonly averageEffectivePrice: string | null;
   readonly improvementBps: number;
   readonly shortfall: ExecutionShortfall;
   readonly venues: readonly VenueAttribution[];
@@ -86,7 +87,7 @@ export function buildExecutionReport(plan: RoutePlan): ExecutionReport {
     side: plan.side,
     requestedAmount: amt(plan.requestedAmount),
     routedAmount: amt(plan.routedAmount),
-    averageEffectivePrice: amt(plan.averageEffectivePrice),
+    averageEffectivePrice: plan.averageEffectivePrice === null ? null : amt(plan.averageEffectivePrice),
     improvementBps: plan.improvementBps,
     shortfall,
     venues: plan.legs.map(legAttribution),

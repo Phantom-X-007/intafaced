@@ -164,7 +164,8 @@ describe('smart order router', () => {
       { maxSlippageBps: 1000 },
     );
 
-    expect(formatAmount(plan.averageEffectivePrice)).toBe('101');
+    expect(plan.averageEffectivePrice).not.toBeNull();
+    expect(formatAmount(plan.averageEffectivePrice!)).toBe('101');
     expect(formatAmount(plan.totalCost)).toBe('202');
   });
 
@@ -320,6 +321,28 @@ describe('venue exclusion — the failures that cost money', () => {
     expect(plan.rejected.find((r) => r.venueId === 'broken')?.reason).toBe('no_quote');
   });
 
+  it('refuses a zero-price quote as no_quote — 0 is not a fillable price', async () => {
+    const plan = await planRoute(buy('1'), [venue({ id: 'free', kind: 'external-cex', price: '0', amount: '1', feeBps: 0 })]);
+    expect(plan.legs).toHaveLength(0);
+    expect(plan.rejected.find((r) => r.venueId === 'free')?.reason).toBe('no_quote');
+  });
+
+  it('refuses a negative-price quote as no_quote', async () => {
+    const plan = await planRoute(buy('1'), [venue({ id: 'neg', kind: 'external-cex', price: '-1', amount: '1', feeBps: 0 })]);
+    expect(plan.legs).toHaveLength(0);
+    expect(plan.rejected.find((r) => r.venueId === 'neg')?.reason).toBe('no_quote');
+  });
+
+  it('does not rank a free-looking zero price ahead of a real book', async () => {
+    const plan = await planRoute(buy('1'), [
+      venue({ id: 'free', kind: 'external-cex', price: '0', amount: '1', feeBps: 0 }),
+      venue({ id: 'real', kind: 'internal', price: '90000', amount: '10', feeBps: 0 }),
+    ]);
+    expect(plan.legs).toHaveLength(1);
+    expect(plan.legs[0]?.venueId).toBe('real');
+    expect(plan.rejected.find((r) => r.venueId === 'free')?.reason).toBe('no_quote');
+  });
+
   it('drops legs beyond the slippage tolerance rather than filling at any price', async () => {
     const plan = await planRoute(
       buy('10'),
@@ -356,6 +379,7 @@ describe('venue exclusion — the failures that cost money', () => {
     ]);
     expect(plan.legs).toHaveLength(0);
     expect(formatAmount(plan.unfilledAmount)).toBe('1');
+    expect(plan.averageEffectivePrice).toBeNull();
     expect(explainRoute(plan)).toMatch(/No route/);
   });
 });
@@ -503,6 +527,63 @@ describe('sweepCost', () => {
     const book = await consolidateBook('BTC/USDT', [deep]);
     const result = sweepCost(book, 'sell', amt('1'));
     expect(formatAmount(result.filled)).toBe('0');
+    expect(() => result.averagePrice).toThrow(/no averagePrice/);
+  });
+
+  it('empty sweep does not invent averagePrice 0 — 0 would read as filled-at-zero', async () => {
+    const empty = venue({
+      id: 'empty',
+      kind: 'internal',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: { bids: [], asks: [] },
+    });
+    const book = await consolidateBook('BTC/USDT', [empty]);
+    const buySweep = sweepCost(book, 'buy', amt('1'));
+    const sellSweep = sweepCost(book, 'sell', amt('1'));
+    expect(buySweep.filled).toBe(0n);
+    expect(() => buySweep.averagePrice).toThrow(/filled-at-zero/);
+    expect(sellSweep.filled).toBe(0n);
+    expect(() => sellSweep.averagePrice).toThrow(/filled-at-zero/);
+  });
+
+  it('does not fill a zero-price ask — 0 is not a price', async () => {
+    const free = venue({
+      id: 'free',
+      kind: 'internal',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: {
+        bids: [],
+        asks: [
+          ['0', '10'],
+          ['-1', '10'],
+          ['100', '1'],
+        ],
+      },
+    });
+    const book = await consolidateBook('BTC/USDT', [free]);
+    expect(book.asks.map((l) => formatAmount(l.price))).toEqual(['100']);
+    const result = sweepCost(book, 'buy', amt('1'));
+    expect(formatAmount(result.filled)).toBe('1');
+    expect(formatAmount(result.averagePrice)).toBe('100');
+  });
+
+  it('sweep of only zero-price levels does not invent averagePrice 0', async () => {
+    const free = venue({
+      id: 'free',
+      kind: 'internal',
+      price: '1',
+      amount: '1',
+      feeBps: 0,
+      book: { bids: [], asks: [['0', '10']] },
+    });
+    const book = await consolidateBook('BTC/USDT', [free]);
+    const result = sweepCost(book, 'buy', amt('1'));
+    expect(result.filled).toBe(0n);
+    expect(() => result.averagePrice).toThrow(/filled-at-zero/);
   });
 });
 
