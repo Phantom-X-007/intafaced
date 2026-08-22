@@ -11,6 +11,7 @@ import {
   rethrowCopyFeeShareUnique,
   resolveExistingFeeShareClaim,
   shouldUnclaimCopyFeeShareClaim,
+  stampedPendingFeeShareReserve,
   type StoredSettledFeeShare,
 } from './follow-store.js';
 import type { CopyFollow } from './follows.js';
@@ -150,6 +151,11 @@ describe('CopyFollowStore unique (follower, leader)', () => {
     expect(isPendingFeeShareClaim(pending)).toBe(true);
     expect(isPendingFeeShareClaim(capSkip)).toBe(false);
     expect(isPendingFeeShareClaim(paid)).toBe(false);
+    expect(stampedPendingFeeShareReserve(pending)).toBe(0n);
+    expect(stampedPendingFeeShareReserve({ ...pending, cappedLeaderShare: parseAmount('0.5') })).toBe(parseAmount('0.5'));
+    expect(stampedPendingFeeShareReserve(capSkip)).toBe(0n);
+    expect(stampedPendingFeeShareReserve(paid)).toBe(0n);
+    expect(stampedPendingFeeShareReserve(null)).toBe(0n);
     expect(resolveExistingFeeShareClaim(FOLLOW_A, pending)).toEqual({ action: 'retry' });
     expect(resolveExistingFeeShareClaim(FOLLOW_A, capSkip)).toEqual({ action: 'duplicate', record: capSkip });
     expect(resolveExistingFeeShareClaim(FOLLOW_A, paid)).toEqual({ action: 'duplicate', record: paid });
@@ -185,6 +191,28 @@ describe('CopyFollowStore unique (follower, leader)', () => {
       name: 'CopyError',
       code: 'trade.copy_settle_refused',
     });
+  });
+
+  it('reserveAndStampPendingFeeShare stamps the pending row; 0-row rolls the cap back', async () => {
+    const store = new MemoryCopyFollowStore();
+    const key = `${LEADER}:${FOLLOWER}`;
+    const cap = parseAmount('100');
+    await expect(store.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), cap, FOLLOW_A, FILL)).rejects.toMatchObject({
+      name: 'CopyError',
+      code: 'trade.copy_settle_refused',
+    });
+    expect((await store.getPeriodStats(key)).earningsPaid).toBe(0n);
+
+    await expect(
+      store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+        throw new Error('crash after INSERT');
+      }),
+    ).rejects.toThrow(/crash after INSERT/);
+    const reserved = await store.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), cap, FOLLOW_A, FILL);
+    expect(reserved.reserved).toBe(parseAmount('0.5'));
+    const stamped = await store.getSettledFeeShare(FOLLOW_A, FILL);
+    expect(stampedPendingFeeShareReserve(stamped)).toBe(parseAmount('0.5'));
+    expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
   });
 
   it('memory getMirroredFill / claimMirrorFill canonicalize UUID fill ids', async () => {
@@ -507,7 +535,11 @@ type SettledRow = {
 };
 
 /** Tagged-template stand-in — records INSERT vs run() order without Postgres. */
-function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string }; uniqueMissingRow?: boolean }) {
+function mockSettleSql(opts?: {
+  uniqueOther?: { followId: string; fillId: string };
+  uniqueMissingRow?: boolean;
+  persistZeroRow?: boolean;
+}) {
   const events: string[] = [];
   const byFill = new Map<string, SettledRow>();
   const uniqueOther = opts?.uniqueOther;
@@ -560,6 +592,9 @@ function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string
       events.push('update');
       const fillId = String(values[10]);
       const prev = byFill.get(fillId);
+      if (opts?.persistZeroRow) {
+        return Promise.resolve([]);
+      }
       if (prev && prev.follow_id === String(values[9])) {
         byFill.set(fillId, {
           ...prev,
@@ -573,6 +608,7 @@ function mockSettleSql(opts?: { uniqueOther?: { followId: string; fillId: string
           skipped_reason: (values[7] as string | null) ?? null,
           settled: values[8] === true,
         });
+        return Promise.resolve([{ fill_id: fillId }]);
       }
       return Promise.resolve([]);
     }
@@ -830,5 +866,28 @@ describe('SqlCopyFollowStore runFeeShareSettleOnce (order, no Postgres)', () => 
     expect(mock.events).toContain('insert');
     expect(mock.events).toContain('delete');
     expect(mock.byFill.get(FILL)).toBeUndefined();
+  });
+
+  it('persist UPDATE 0-row after run throws — does not leave pending zeros as claimed', async () => {
+    const mock = mockSettleSql({ persistZeroRow: true });
+    const store = new SqlCopyFollowStore(mock.sql, FOLLOW_A);
+    await expect(store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => share(FOLLOW_A, FILL, LEADER))).rejects.toThrow(
+      /persist matched 0 rows/,
+    );
+    expect(mock.events).toContain('insert');
+    expect(mock.events).toContain('update');
+    expect(mock.events).not.toContain('delete');
+    expect(mock.byFill.get(FILL)?.settled).toBe(false);
+    expect(mock.byFill.get(FILL)?.capped_leader_share).toBe('0');
+
+    const storeB = new SqlCopyFollowStore(mock.sql, FOLLOW_B);
+    let ranB = false;
+    await expect(
+      storeB.runFeeShareSettleOnce(FOLLOW_B, FILL, async () => {
+        ranB = true;
+        return share(FOLLOW_B, FILL, LEADER_B);
+      }),
+    ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_settle_refused' });
+    expect(ranB).toBe(false);
   });
 });

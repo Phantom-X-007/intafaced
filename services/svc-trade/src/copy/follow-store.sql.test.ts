@@ -295,5 +295,29 @@ if (!available) {
       expect(stamped?.skippedReason).toBeNull();
       expect(stamped?.settled).toBe(false);
     });
+
+    it('reserveAndStampPendingFeeShare 0-row rolls back earningsPaid', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow(follow(FOLLOW_A, LEADER));
+      const key = `${LEADER}:${FOLLOWER}`;
+      await expect(store.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL)).rejects.toMatchObject(
+        {
+          name: 'CopyError',
+          code: 'trade.copy_settle_refused',
+        },
+      );
+      expect((await store.getPeriodStats(key)).earningsPaid).toBe(0n);
+
+      await expect(
+        store.runFeeShareSettleOnce(FOLLOW_A, FILL, async () => {
+          throw new Error('crash after INSERT');
+        }),
+      ).rejects.toThrow(/crash after INSERT/);
+      const reserved = await store.reserveAndStampPendingFeeShare(key, parseAmount('0.5'), parseAmount('100'), FOLLOW_A, FILL);
+      expect(reserved.reserved).toBe(parseAmount('0.5'));
+      const stamped = await store.getSettledFeeShare(FOLLOW_A, FILL);
+      expect(stamped?.cappedLeaderShare).toBe(parseAmount('0.5'));
+      expect((await store.getPeriodStats(key)).earningsPaid).toBe(parseAmount('0.5'));
+    });
   });
 }

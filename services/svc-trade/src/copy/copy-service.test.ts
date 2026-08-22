@@ -1921,20 +1921,79 @@ describe('CopyService', () => {
     expect(leftover?.settled).toBe(false);
     expect(leftover?.skippedReason).toBeNull();
     expect(leftover?.cappedLeaderShare).toBe(0n);
-    expect((await store.getPeriodStats(`${LEADER}:${FOLLOWER}`)).earningsPaid).toBe(parseAmount('0.5'));
+    expect((await store.getPeriodStats(`${LEADER}:${FOLLOWER}`)).earningsPaid).toBe(0n);
     expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
 
-    await expect(
-      svc.settleFeeShare(principal, { ...input, followId: followA.followId, fillId: 'fill-reserve-before-stamp' }),
-    ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
-    const still = await store.getSettledFeeShare(followA.followId, 'fill-reserve-before-stamp');
-    expect(still?.skippedReason).toBeNull();
-    expect(still?.settled).toBe(false);
-    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+    const retried = await svc.settleFeeShare(principal, { ...input, followId: followA.followId, fillId: 'fill-reserve-before-stamp' });
+    expect(retried.settled).toBe(true);
+    expect(retried.skippedReason).toBeNull();
+    expect(retried.cappedLeaderShare).toBe('0.5');
+    expect((await store.getPeriodStats(`${LEADER}:${FOLLOWER}`)).earningsPaid).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(parseAmount('0.5'));
 
     await expect(
       svc.settleFeeShare(principal, { ...input, followId: followB.followId, fillId: 'fill-reserve-before-stamp' }),
     ).rejects.toMatchObject({ code: 'trade.copy_settle_refused' });
+    expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('leftover pending stamp-0 after committed reserve does not re-reserve when cap has room', async () => {
+    class CrashAfterReserveStore extends MemoryCopyFollowStore {
+      reserveCalls = 0;
+      crashStamp = true;
+      override async reserveEarnings(...args: Parameters<MemoryCopyFollowStore['reserveEarnings']>) {
+        this.reserveCalls += 1;
+        return super.reserveEarnings(...args);
+      }
+      override async savePendingFeeShareReserve(
+        followId: Parameters<MemoryCopyFollowStore['savePendingFeeShareReserve']>[0],
+        fillId: Parameters<MemoryCopyFollowStore['savePendingFeeShareReserve']>[1],
+        reserved: Parameters<MemoryCopyFollowStore['savePendingFeeShareReserve']>[2],
+      ) {
+        if (this.crashStamp) {
+          this.crashStamp = false;
+          throw new Error('crash after reserve before stamp');
+        }
+        return super.savePendingFeeShareReserve(followId, fillId, reserved);
+      }
+    }
+    const ledger = new MemoryLedger();
+    await seedHouseFees(ledger, 'copy-stamp0-no-rereserve', '100');
+    const store = new CrashAfterReserveStore();
+    const svc = new CopyService(ledger, {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupFollowerFillFee: lookupFillFee('1'),
+    });
+    const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
+    const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
+    const FILL = 'fill-stamp0-no-rereserve';
+    await planOneMirror(svc, followA.followId, FILL);
+    await planOneMirror(svc, followB.followId, FILL);
+    const input = { assetId: 'USDT', followerFillNotional: '1000', protocolFeeBps: 10 };
+
+    await expect(svc.settleFeeShare(principal, { ...input, followId: followA.followId, fillId: FILL })).rejects.toThrow(
+      /crash after reserve before stamp/,
+    );
+    const leftover = await store.getSettledFeeShare(followA.followId, FILL);
+    expect(leftover).not.toBeNull();
+    expect(leftover?.settled).toBe(false);
+    expect(leftover?.skippedReason).toBeNull();
+    expect(leftover?.cappedLeaderShare).toBe(0n);
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(0n);
+
+    const retried = await svc.settleFeeShare(principal, { ...input, followId: followA.followId, fillId: FILL });
+    expect(retried.settled).toBe(true);
+    expect(retried.skippedReason).toBeNull();
+    expect(retried.cappedLeaderShare).toBe('0.5');
+    expect((await store.getPeriodStats(`${LEADER}:${FOLLOWER}`)).earningsPaid).toBe(parseAmount('0.5'));
+    expect((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount).toBe(parseAmount('0.5'));
+
+    await expect(svc.settleFeeShare(principal, { ...input, followId: followB.followId, fillId: FILL })).rejects.toMatchObject({
+      code: 'trade.copy_settle_refused',
+    });
     expect((await ledger.balance(userAvailable(LEADER_B, 'USDT'))).amount).toBe(0n);
     expect(ledger.reconcile()).toEqual({ ok: true });
   });

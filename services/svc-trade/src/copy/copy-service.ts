@@ -48,7 +48,13 @@ import {
   refusePnlLinkedCopyFee,
 } from './fee-share.js';
 import { parseLeaderFillObservation, planMirror, presentMirrorPlan, refuseCopyLeaderRanking, type MirrorSide } from './mirror.js';
-import { MemoryCopyFollowStore, isPendingFeeShareClaim, rethrowCopyFollowUnique, type CopyFollowStore } from './follow-store.js';
+import {
+  MemoryCopyFollowStore,
+  isPendingFeeShareClaim,
+  rethrowCopyFollowUnique,
+  stampedPendingFeeShareReserve,
+  type CopyFollowStore,
+} from './follow-store.js';
 
 /** Settled follower fill fee — `fills.fee_amount`, never a notional×bps invent. */
 export type FollowerFillFee = {
@@ -507,10 +513,13 @@ export class CopyService {
    * only when this call INSERTed **and reserve has not run** — leftover
    * pending retry and post-reserve CopyError (stamp 0-row) keep the row.
    * Pending retry must not re-reserve when this fill already occupied cap
-   * (crash after post / before UPDATE would persist cap_reached over a paid
-   * fill and burn cap twice). Post-throw does **not** releaseEarnings while
-   * unique fill_id is kept — a burned cap slot is better than over-pay.
-   * Leftover retry re-posts the persisted reserved amount, never gross.
+   * (stamped `cappedLeaderShare` on the pending row). Reserve+stamp is one
+   * step so leftover stamp-0 cannot mean both never-reserved and reserved-
+   * stamp-lost. Crash after post / before UPDATE would persist cap_reached
+   * over a paid fill and burn cap twice. Post-throw does **not**
+   * releaseEarnings while unique fill_id is kept — a burned cap slot is
+   * better than over-pay. Leftover retry re-posts the persisted reserved
+   * amount, never gross.
    */
   async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {
     return this.store.runFollowExclusive(input.followId, (store) => this.settleFeeShareExclusive(store, principal, input));
@@ -566,34 +575,28 @@ export class CopyService {
       const cap = parseAmount(law.earningsCapPerFollower);
 
       // Intended claim: 0 when attribute already skipped (cap/zero), else capped share.
-      // First INSERT reserves and stamps the amount on the pending row before
-      // post. Leftover retry uses that stamp (ledger keys copy-fee:${fillId} /
+      // First INSERT reserves and stamps in one step before post. Leftover
+      // retry uses that stamp (ledger keys copy-fee:${fillId} /
       // copy-leader-share:${fillId}:${leaderId} are idempotent). Never post
-      // grossLeaderShare. Stamp 0-row throws (do not post unstamped). Crash
-      // after reserve before stamp leaves pending skip=null with stamp 0 —
-      // leftover retry must not persist cap_reached / zero_share over that
-      // reserved fill (burned slot > over-pay).
+      // grossLeaderShare. Stamp 0-row throws (do not post unstamped) and rolls
+      // the reserve back — leftover stamp-0 means never reserved and may
+      // reserve once. A committed reserve is distinguishable on the pending
+      // row (cappedLeaderShare > 0); leftover must not re-reserve.
       const intend = attribution.skippedReason !== null ? 0n : attribution.cappedLeaderShare;
       let reservedAmount: Amount;
       if (ctx.insertedThisCall) {
-        const reserved = await store.reserveEarnings(key, intend, cap);
         ctx.reservedThisCall = true;
+        const reserved = await store.reserveAndStampPendingFeeShare(key, intend, cap, follow.followId, fillId);
         reservedAmount = reserved.reserved;
-        if (reservedAmount > 0n) {
-          await store.savePendingFeeShareReserve(follow.followId, fillId, reservedAmount);
-        }
       } else {
         const pending = await store.getSettledFeeShare(follow.followId, fillId);
-        const alreadyReserved = pending && isPendingFeeShareClaim(pending) ? pending.cappedLeaderShare : 0n;
+        const alreadyReserved = stampedPendingFeeShareReserve(pending);
         if (alreadyReserved > 0n) {
           reservedAmount = alreadyReserved;
         } else if (intend > 0n) {
-          const reserved = await store.reserveEarnings(key, intend, cap);
           ctx.reservedThisCall = true;
+          const reserved = await store.reserveAndStampPendingFeeShare(key, intend, cap, follow.followId, fillId);
           reservedAmount = reserved.reserved;
-          if (reservedAmount > 0n) {
-            await store.savePendingFeeShareReserve(follow.followId, fillId, reservedAmount);
-          }
         } else {
           reservedAmount = 0n;
         }

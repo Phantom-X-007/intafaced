@@ -85,7 +85,10 @@ export type FeeShareSettleOnceContext = { readonly insertedThisCall: boolean; re
  * keep the unique fill_id.
  * Ledger keys alone are not enough: payout keys include leaderId, so two
  * leaders would both post from one house pot. Pending retry must not
- * re-reserve (`copy-fee:${fillId}` / `copy-leader-share:${fillId}:${leaderId}`).
+ * re-reserve a fill that already occupied cap (`cappedLeaderShare` on the
+ * pending row). Reserve+stamp is one store step so leftover stamp-0 cannot
+ * mean both never-reserved and reserved-stamp-lost (`copy-fee:${fillId}` /
+ * `copy-leader-share:${fillId}:${leaderId}`).
  */
 
 export interface CopyPeriodStats {
@@ -160,6 +163,15 @@ export function isPendingFeeShareClaim(record: StoredSettledFeeShare): boolean {
   return record.settled === false && record.skippedReason === null;
 }
 
+/**
+ * Durable reserved amount on a leftover pending row. Stamp-0 means reserve
+ * never committed (crash-before-reserve, or stamp failed and rolled back).
+ * After reserve+stamp in one step, a committed reserve cannot stay stamp-0.
+ */
+export function stampedPendingFeeShareReserve(record: StoredSettledFeeShare | null | undefined): Amount {
+  return record && isPendingFeeShareClaim(record) ? record.cappedLeaderShare : 0n;
+}
+
 export type ExistingFeeShareClaimResolution =
   { readonly action: 'duplicate'; readonly record: StoredSettledFeeShare } | { readonly action: 'retry' };
 
@@ -228,6 +240,20 @@ export interface CopyFollowStore {
    * 0-row UPDATE throws — CopyService must not post an unstamped reserve.
    */
   savePendingFeeShareReserve(followId: string, fillId: string, reserved: Amount): Promise<void>;
+  /**
+   * Reserve cap headroom and stamp the pending unique fill_id in **one**
+   * step. Leftover pending with a committed reserve then has
+   * `cappedLeaderShare > 0` (retry must not call reserveEarnings again).
+   * Stamp 0-row / throw rolls the reserve back — refuse to keep a consumed
+   * slot the row cannot record. Same CopyError as savePendingFeeShareReserve.
+   */
+  reserveAndStampPendingFeeShare(
+    pairKey: string,
+    amount: Amount,
+    cap: Amount,
+    followId: string,
+    fillId: string,
+  ): Promise<ReserveEarningsResult>;
   /**
    * Roll back a prior reserve. Settle does not call this when unique fill_id
    * is kept (post-throw) — releasing would let a later fill occupy the same
@@ -461,6 +487,25 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     const next = { ...cur, cappedLeaderShare: reserved };
     this.settled.set(key, next);
     this.settledByFill.set(id, next);
+  }
+
+  async reserveAndStampPendingFeeShare(
+    pairKey: string,
+    amount: Amount,
+    cap: Amount,
+    followId: string,
+    fillId: string,
+  ): Promise<ReserveEarningsResult> {
+    const reserved = await this.reserveEarnings(pairKey, amount, cap);
+    try {
+      if (reserved.reserved > 0n) {
+        await this.savePendingFeeShareReserve(followId, fillId, reserved.reserved);
+      }
+      return reserved;
+    } catch (err) {
+      await this.releaseEarnings(pairKey, reserved.reserved);
+      throw err;
+    }
   }
 
   async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
@@ -889,6 +934,60 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     }
   }
 
+  async reserveAndStampPendingFeeShare(
+    pairKey: string,
+    amount: Amount,
+    cap: Amount,
+    followId: string,
+    fillId: string,
+  ): Promise<ReserveEarningsResult> {
+    const id = canonicalizeCopyFillId(fillId);
+    return await this.sql.begin(async (tx) => {
+      await tx`
+        INSERT INTO copy_period_stats (pair_key, earnings_paid, round_trips, updated_at)
+        VALUES (${pairKey}, 0, 0, now())
+        ON CONFLICT (pair_key) DO NOTHING
+      `;
+      const rows = await tx<Array<{ earnings_paid: string; round_trips: number }>>`
+        SELECT earnings_paid::text, round_trips
+          FROM copy_period_stats
+         WHERE pair_key = ${pairKey}
+         FOR UPDATE
+      `;
+      const row = rows[0]!;
+      const paid = parseAmount(String(row.earnings_paid));
+      const remaining = cap > paid ? cap - paid : 0n;
+      const want = amount > 0n ? amount : 0n;
+      const reserved = want <= remaining ? want : remaining;
+      const newPaid = paid + reserved;
+      const roundTrips = row.round_trips + 1;
+      await tx`
+        UPDATE copy_period_stats
+           SET earnings_paid = ${formatAmount(newPaid)},
+               round_trips = ${roundTrips},
+               updated_at = now()
+         WHERE pair_key = ${pairKey}
+      `;
+      if (reserved > 0n) {
+        const stamped = await tx<Array<{ fill_id: string }>>`
+          UPDATE copy_settled_fee_shares
+             SET capped_leader_share = ${formatAmount(reserved)}
+           WHERE follow_id = ${followId} AND fill_id = ${id}
+             AND settled = false
+             AND skipped_reason IS NULL
+          RETURNING fill_id
+        `;
+        if (stamped.length === 0) {
+          throw new CopyError(
+            'Pending fee-share reserve stamp matched 0 rows — refuse rather than post unstamped',
+            'trade.copy_settle_refused',
+          );
+        }
+      }
+      return { reserved, newPaid, roundTrips };
+    });
+  }
+
   async releaseEarnings(pairKey: string, amount: Amount): Promise<void> {
     if (amount <= 0n) return;
     const amountStr = formatAmount(amount);
@@ -1094,7 +1193,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         throw err;
       }
 
-      await this.sql`
+      const persisted = await this.sql<Array<{ fill_id: string }>>`
         UPDATE copy_settled_fee_shares
            SET leader_id = ${record.leaderId},
                follower_id = ${record.followerId},
@@ -1106,7 +1205,11 @@ export class SqlCopyFollowStore implements CopyFollowStore {
                skipped_reason = ${record.skippedReason},
                settled = ${record.settled}
          WHERE follow_id = ${followId} AND fill_id = ${id}
+        RETURNING fill_id
       `;
+      if (persisted.length === 0) {
+        throw new Error('Pending fee-share persist matched 0 rows — refuse rather than leave pending zeros after a successful post');
+      }
       const saved = (await this.getSettledFeeShare(followId, id)) ?? record;
       return { status: 'claimed' as const, record: saved };
     };
