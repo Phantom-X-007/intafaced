@@ -15,7 +15,7 @@ import type { OmsSubmitFn } from './oms-trade-submit.js';
 import { tradeAdapterCancel } from './oms-trade-cancel.js';
 import { tradeAdapterFetch } from './oms-trade-fetch.js';
 import { tradeAdapterOpenOrders } from './oms-trade-open-orders.js';
-import { tradeAdapterSubmit } from './oms-trade-submit.js';
+import { tradeAdapterSubmit, venueOrderToExecution } from './oms-trade-submit.js';
 import type { ExecutionCancelMap, ExecutionFetchMap, ExecutionOpenOrdersMap, ExecutionSubmitMap } from './router.js';
 
 const OFF_TOKENS = new Set(['', 'off', 'none', 'false']);
@@ -266,7 +266,17 @@ export function buildExecutionVenueTradeMapsWithOperatorSupplement(
     const fetch = operatorMaps.fetchByVenue[venueId];
     const openOrders = operatorMaps.openOrdersByVenue[venueId];
     if (!place || !cancel || !fetch || !openOrders) continue;
-    submitByVenue[venueId] = place;
+    submitByVenue[venueId] = async (request) => {
+      const order = await place({
+        symbol: request.symbol,
+        side: request.side,
+        type: 'limit',
+        amount: request.amount,
+        price: request.limitPrice,
+        clientOrderId: request.clientOrderId,
+      });
+      return venueOrderToExecution(order, request);
+    };
     cancelByVenue[venueId] = cancel;
     fetchByVenue[venueId] = fetch;
     openOrdersByVenue[venueId] = openOrders;
