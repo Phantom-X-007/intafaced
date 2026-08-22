@@ -2094,16 +2094,20 @@ export const FEATURES = [
     module: 'dex',
     phase: '5',
     plane: 'P',
-    status: 'ready',
+    status: 'done',
     owner: 'shehzad002',
     dependsOn: ['dex.quote-router'],
-    requires: ['services/svc-dex/src/quote/clob-costs.ts'],
+    requires: [
+      'services/svc-dex/src/quote/clob-costs.ts',
+      'services/svc-dex/src/quote/dex-fee-compose-wiring.ts',
+      'services/svc-dex/src/quote/dex-fee-compose-wiring.test.ts',
+      'services/svc-dex/src/quote/dex-fee-mount-vs-tracker.ts',
+      'services/svc-dex/src/quote/dex-fee-mount-vs-tracker.test.ts',
+      'services/svc-dex/src/quote/dex-fee-tracker-status-pin.test.ts',
+    ],
     note:
-      'Owner set 2026-08-07 (board S-I3). S-C1 2026-08-18: SovereignVenue publishes takerFeeBps + settlementCostQuote()=0. ' +
-      "S-I3 2026-08-18: CLOB knobs no longer default to 0 / '0' — that understated every on-chain quote. " +
-      'DEX_CLOB_FEE_BPS and DEX_CLOB_SETTLEMENT_COST must be set together (operator copies SovereignVenue.takerFeeBps / settlementCostQuote) or omitted together; omitted means intachain-clob is not quoted. One-sided config fails boot. ' +
-      'Quote path still reads projections, never eth_call (doctrine). Internal-book DEX_INTERNAL_BOOK_FEE_BPS default 20 remains a configured guess (ledger post has no gas leg; svc-trade markets still unreadable across services §2). ' +
-      'Not done: live CLOB still needs the operator to paste venue figures; quoting still does not eth_call the venue; internal-book bps is still not sourced.',
+      '**Done 2026-08-22:** S-I3 paired DEX_CLOB_FEE_BPS + DEX_CLOB_SETTLEMENT_COST compose pass-through; refuse when one-sided. ' +
+      'Residuals: internal-book fee not sourced from svc-trade; CLOB quote path projection not eth_call.',
   }),
   f('socket.dex-execution', 'Order execution against a quoted venue (§27 vault, §28 OMS)', {
     module: 'dex',
