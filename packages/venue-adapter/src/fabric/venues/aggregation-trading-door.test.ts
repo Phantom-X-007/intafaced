@@ -176,6 +176,28 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(tradeAdapterRegisteredForAllPublicVenues()).toBe(true);
   });
 
+  it('buildOperatorVenueTradeMaps and buildOperatorVenueAccountMaps align for every public venue (D68)', () => {
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      const prefix = venueOperatorCredentialEnvPrefix(id);
+      const env = {
+        [`${prefix}_API_KEY`]: 'k',
+        [`${prefix}_API_SECRET`]: 's',
+        ...(id === 'okx-spot' ? { [`${prefix}_PASSPHRASE`]: 'p' } : {}),
+      };
+      const tradeMaps = buildOperatorVenueTradeMaps(env);
+      const accountMaps = buildOperatorVenueAccountMaps(env);
+      expect(tradeMaps.wiredVenueIds).toEqual([id]);
+      expect(accountMaps.wiredVenueIds).toEqual([id]);
+      expect(Object.keys(tradeMaps.placeByVenue)).toEqual([id]);
+      expect(Object.keys(tradeMaps.cancelByVenue)).toEqual([id]);
+      expect(Object.keys(tradeMaps.fetchByVenue)).toEqual([id]);
+      expect(Object.keys(tradeMaps.openOrdersByVenue)).toEqual([id]);
+      expect(Object.keys(accountMaps.balancesByVenue)).toEqual([id]);
+      expect(Object.keys(accountMaps.positionsByVenue)).toEqual([id]);
+      expect(Object.keys(accountMaps.transferRailsByVenue)).toEqual([id]);
+    }
+  });
+
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
     expect(describeOperatorVenueTradeMaps({})).toMatchObject({
       wiredVenueIds: [],
