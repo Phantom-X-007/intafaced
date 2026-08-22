@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EDGE_QUANT_COMPOSITE_HONESTY_DOOR, EDGE_QUANT_SURFACE_RENDER_DOOR } from '@intafaced/connect-data-lake';
 import { QUANT_COMPOSITE_HONESTY_PATH } from './quant-composite-honesty-door.js';
 import { QUANT_HONESTY_ASSESS_PATH } from './quant-honesty-door.js';
 import { describeQuantHonestyDoorStatus } from './quant-honesty-status.js';
@@ -15,8 +16,17 @@ describe('quant honesty door status (D36)', () => {
       QUANT_HONESTY_ASSESS_PATH,
       '/quant/honesty/assess-comparison-order',
       '/quant/honesty/performance-labels',
-      QUANT_SURFACE_RENDER_PATH,
-      QUANT_COMPOSITE_HONESTY_PATH,
+      EDGE_QUANT_SURFACE_RENDER_DOOR,
+      EDGE_QUANT_COMPOSITE_HONESTY_DOOR,
     ]);
+  });
+});
+
+describe('quant honesty door status — data-lake path alignment (D39)', () => {
+  it('edge door paths match connect.data-lake stage1 board constants', () => {
+    const status = describeQuantHonestyDoorStatus();
+    expect(status.edgeDoorPathsAlignedWithDataLake).toBe(true);
+    expect(QUANT_SURFACE_RENDER_PATH).toBe(EDGE_QUANT_SURFACE_RENDER_DOOR);
+    expect(QUANT_COMPOSITE_HONESTY_PATH).toBe(EDGE_QUANT_COMPOSITE_HONESTY_DOOR);
   });
 });
