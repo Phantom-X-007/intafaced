@@ -167,3 +167,20 @@ describe('trade.otc mount vs tracker board complete (D66)', () => {
     expect(otcTrackerBackendDoneBarMet()).toBe(true);
   });
 });
+
+describe('trade.otc policy board complete (D68)', () => {
+  it('describeOtcPolicy reports honest policy with all invent flags false and mid feed wiring', () => {
+    const policy = describeOtcPolicy();
+    expect(policy.inventsSpreadBps).toBe(false);
+    expect(policy.inventsStakeGate).toBe(false);
+    expect(policy.inventsMakerBook).toBe(false);
+    expect(policy.inventsMidPrice).toBe(false);
+    expect(policy.midFeedWiringHonest).toBe(true);
+    expect(policy.midFeedWiringStates).toHaveLength(4);
+    expect(policy.bootMidFeedWiring.wiring).toBe('flag_off');
+    expect(policy.moneyViaLedgerClientOnly).toBe(true);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
+  });
+});
