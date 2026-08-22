@@ -406,14 +406,21 @@ export const FEATURES = [
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'pay.rails'],
-    requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'services/svc-trade/src/spot/forex-settlement-public-doors.test.ts'],
+    requires: [
+      'services/svc-trade/src/spot/forex-settlement.ts',
+      'services/svc-trade/src/spot/forex-settlement-public-doors.test.ts',
+      'services/svc-trade/src/spot/forex-mount-vs-tracker.ts',
+      'services/svc-trade/src/spot/forex-mount-vs-tracker.test.ts',
+      'services/svc-trade/src/spot/forex-compose-wiring.ts',
+      'services/svc-trade/src/spot/forex-compose-wiring.test.ts',
+      'services/svc-trade/src/spot/forex-tracker-status-pin.test.ts',
+    ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Refuse-closed settlement posture on tip; forex.settlementStatus + assertProductionListing; six majors listed but unfundable until rails. ' +
-      'Product still needs: owner P0-05 settlement asset stamp; fiat settle rails — never invent settlement asset.',
+      '**Done 2026-08-22:** refuse-closed settlement posture on public doors; P0-05 TRADE_OPTIONS_SETTLEMENT_ASSET_LAW env pass-through (blank = refuse). ' +
+      'Residual: fiat settle rails — never invent settlement asset.',
   }),
   f('trade.algo', 'TWAP execution', {
     module: 'trade',
