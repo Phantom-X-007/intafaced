@@ -1499,6 +1499,30 @@ module.exports = {
             sourceHash: "Template source hash",
             refusal: "Refusal",
             maxSupply: "Max whole supply (API cap)"
+        },
+        exchange: {
+            copy: {
+                title: "Follow",
+                lead: "Follow a leader under a signed envelope. Follower funds stay in your account. This shell holds no copy escrow.",
+                leaderId: "Leader id",
+                region: "Region",
+                regionHint: "Type your region code. The owner publishes the served list — this form never invents one.",
+                markets: "Permitted markets",
+                marketsHint: "Comma-separated market ids you permit. Empty is refused — nothing is invented.",
+                maxNotional: "Max notional per order",
+                maxExposure: "Max aggregate exposure",
+                expires: "Expires at",
+                expiresHint: "ISO-8601 datetime with timezone, for example 2026-12-01T00:00:00.000Z.",
+                follow: "Follow",
+                following: "Following…",
+                unfollow: "Unfollow",
+                signIn: "Sign in on Platform to follow",
+                invalid: "Enter leader, region, at least one market, decimal caps greater than zero, and a future ISO expiry.",
+                refused: "Copy follow was refused — trade.copy_jurisdiction_blank / trade.copy_place_disabled / validation. No escrow was taken.",
+                empty: "No follows. Empty is honest — this is not a hidden book.",
+                list: "Your follows",
+                loading: "Reading follows…"
+            }
         }
     },
     sectionPage: {
