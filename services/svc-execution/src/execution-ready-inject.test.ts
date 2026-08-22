@@ -195,3 +195,55 @@ describe('execution /ready public MD supplement inject (D41)', () => {
     expect(marketMaps.snapshotByVenue['binance-spot']).toEqual(expect.any(Function));
   });
 });
+
+describe('execution /ready full supplement inject (D42)', () => {
+  it('GET /ready wires trade, account, and public MD supplements with credential board union', async () => {
+    const env = {
+      VENUE_AGGREGATION_OKX_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
+      VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
+    };
+    const tradeMaps = buildExecutionVenueTradeMapsWithOperatorSupplement([], { env });
+    const accountMaps = buildExecutionVenueAccountMapsWithOperatorSupplement([], { env });
+    const marketMaps = buildExecutionVenueMarketMapsWithPublicMdSupplement([], {
+      createAdapter: (id) => (id === 'binance-spot' || id === 'bybit-spot' ? fakeMd(id) : null),
+    });
+    const venueCredentialBoard = describeExecutionVenueCredentialBoard(
+      unionExecutionVenueIds([], tradeMaps.operatorSupplementVenueIds, accountMaps.operatorSupplementVenueIds),
+      env,
+    );
+    const emsStore = new InMemoryEmsOrderStore();
+    const payload = buildExecutionReadyResponse({
+      emsStorePath: '',
+      tradeUrl: '',
+      venueTradeWiredVenueIds: tradeMaps.wiredVenueIds,
+      operatorSupplementVenueIds: tradeMaps.operatorSupplementVenueIds,
+      operatorAccountSupplementVenueIds: accountMaps.operatorSupplementVenueIds,
+      publicMdSupplementVenueIds: marketMaps.publicMdSupplementVenueIds,
+      venueCredentialBoard,
+      venueAccountWiredVenueIds: accountMaps.wiredVenueIds,
+      venueMarketWiredVenueIds: marketMaps.wiredVenueIds,
+      emsAckCount: emsStore.list().length,
+    });
+
+    const app = Fastify({ logger: false });
+    app.get('/ready', async () => payload);
+    await app.ready();
+    apps.push(app);
+
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      operatorSupplementVenueIds: ['okx-spot'],
+      operatorAccountSupplementVenueIds: ['okx-spot'],
+      publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
+      externalVenueTrade: ['okx-spot'],
+      externalVenueAccount: ['okx-spot'],
+      externalVenueMarketData: ['binance-spot', 'bybit-spot'],
+      venueCredentialBoard: {
+        wiredVenueIds: ['okx-spot'],
+        inventsCredentials: false,
+      },
+    });
+  });
+});
