@@ -216,3 +216,22 @@ describe('connect.data-lake mount vs tracker — D74 denon complete', () => {
     expect(DATA_LAKE_HONEST_GAPS).toHaveLength(3);
   });
 });
+
+describe('connect.data-lake mount vs tracker — D76 denon complete', () => {
+  it('full mount board: tracker, exports, stage1 quant surface, capture, persistence, honest gaps', () => {
+    const card = connectDataLakeMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('connect.data-lake');
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(card.exportsPresent).toBe(DATA_LAKE_PACKAGE_EXPORTS.length);
+    expect(card.gaps).toBe(3);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(dataLakeDoneBarTestsPresent()).toBe(true);
+    const board = describeDataLakeStage1({});
+    expect(board.quantSurface.compositeGateWired).toBe(true);
+    expect(board.quantSurface.inventsFraming).toBe(false);
+    expect(board.batch.captureLogOnly).toBe(true);
+    expect(board.retention.captureLogOnly).toBe(true);
+    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env']);
+  });
+});
