@@ -315,3 +315,22 @@ describe('execution.sor spine — D104 denon complete', () => {
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
   });
 });
+
+describe('execution.sor spine — D106 denon complete', () => {
+  it('spine catalog, router policy mount, and mount-vs-tracker cert all green', () => {
+    const spine = describeExecutionSpine();
+    expect(spine.doors).toEqual(EXECUTION_SPINE_DOORS);
+    expect(spine.doors.every((d) => d.inventsQuotes === false)).toBe(true);
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'execution.sor',
+      doors: 4,
+      doorsMounted: 4,
+      backendDoneBarMet: true,
+      mountComplete: true,
+      gaps: 3,
+    });
+    expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
+    expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
+  });
+});
