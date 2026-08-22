@@ -93,3 +93,15 @@ describe('trade.otc mount board complete (D56)', () => {
     expect(card.backendDoneBarMet).toBe(true);
   });
 });
+
+describe('trade.otc mounted doors in router (D58)', () => {
+  it('otcDoorsInRouterSource lists every OTC_MOUNTED_DOOR in router source', () => {
+    const mounted = otcDoorsInRouterSource();
+    for (const door of OTC_MOUNTED_DOORS) {
+      expect(mounted).toContain(door);
+    }
+    expect(mounted).toHaveLength(OTC_MOUNTED_DOORS.length);
+    expect(otcMountVsTrackerBoardCard().doorsMounted).toBe(OTC_MOUNTED_DOORS.length);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+  });
+});
