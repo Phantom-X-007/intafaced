@@ -476,6 +476,42 @@ describe('D26-P2-01a public doors — copy refuse invent §8 rates / jurisdictio
   });
 });
 
+describe('D30 public doors — copy.placeMirror refuse-closed on mounted tRPC', () => {
+  it('copy.placeMirror refuses trade.copy_place_disabled when copy service is unwired', async () => {
+    const { app } = await mountTrpc({ copy: null });
+
+    const { statusCode, body } = await postTrpc(app, 'copy.placeMirror', {
+      followId: 'aaaa1111-1111-4111-8111-111111111111',
+      fillId: 'leader-fill-door-1',
+      leaderPaper: false,
+    });
+
+    expect(statusCode).toBe(412);
+    expect(body.error!.message).toMatch(/trade\.copy_place_disabled|TRADE_COPY_PLACE_MIRROR/i);
+    await app.close();
+  });
+
+  it('copy.placeMirror refuses when TRADE_COPY_PLACE_MIRROR is off even if the port is wired', async () => {
+    const copy = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      placeMirrorEnabled: false,
+      placeFollowerOrder: async () => ({ orderId: 'should-not-run' }),
+    });
+    const { app } = await mountTrpc({ copy });
+
+    const { statusCode, body } = await postTrpc(app, 'copy.placeMirror', {
+      followId: 'bbbb2222-2222-4222-8222-222222222222',
+      fillId: 'leader-fill-door-2',
+      leaderPaper: false,
+    });
+
+    expect(statusCode).toBe(412);
+    expect(body.error!.message).toMatch(/trade\.copy_place_disabled|TRADE_COPY_PLACE_MIRROR/i);
+    await app.close();
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Algo — tRPC doors
 // ═══════════════════════════════════════════════════════════════════════════════
