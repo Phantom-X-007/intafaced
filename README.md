@@ -14,17 +14,19 @@
 
 Phases: **0** 11/12 · **1** ✅ · **2** 13/26 · **3** 16/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 42/59 · **5P** 4/7
 
-**🟢 23 ready to claim** — nothing blocks these:
+**In progress:** External venue adapters via CCXT (cross-venue) (Phantom-X-007)
+
+**🟢 22 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `trade.futures` — Perps: isolated margin, funding, partial-liquidation ladder
 - `trade.otc` — OTC RFQ desk, staked-tier gate
 - `trade.copy` — Copy trading, audited leaders, fee-share (not profit-share)
 - `trade.forex` — Fiat pairs on the same engine
-- `venue.aggregation` — External venue adapters via CCXT (cross-venue)
 - `web.terminal` — Pro terminal — depth, charts, hotkeys, sub-accounts
 - `pay.gateway` — Branded gateway, hosted checkout, payment links
-- …and 15 more
+- `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
+- …and 14 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
