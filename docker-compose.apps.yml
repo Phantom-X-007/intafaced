@@ -1161,6 +1161,8 @@ services:
       VENUE_AGGREGATION_OKX_SPOT_API_KEY: ${VENUE_AGGREGATION_OKX_SPOT_API_KEY:-}
       VENUE_AGGREGATION_OKX_SPOT_API_SECRET: ${VENUE_AGGREGATION_OKX_SPOT_API_SECRET:-}
       VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: ${VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE:-}
+      # execution.sor letter→bps owner schedule — JSON map A/B/C/D/F; blank = refuse-closed (no invented defaults).
+      EXECUTION_SOR_LETTER_BPS_SCHEDULE: ${EXECUTION_SOR_LETTER_BPS_SCHEDULE:-}
     expose: ['4019']
     volumes:
       - execution-ems-journal:/data/execution

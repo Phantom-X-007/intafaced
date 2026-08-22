@@ -534,7 +534,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation', 'connect.latency-grading'],
     requires: [
@@ -543,11 +543,14 @@ export const FEATURES = [
       'packages/venue-adapter/src/execution-report.ts',
       'services/svc-execution/src/venue-market-adapters.ts',
       'services/svc-execution/src/oms-ems-store.ts',
+      'services/svc-execution/src/letter-to-bps-schedule.ts',
+      'services/svc-execution/src/letter-to-bps-schedule.test.ts',
+      'services/svc-execution/src/mount-vs-tracker.ts',
+      'services/svc-execution/src/sor-tracker-status-pin.test.ts',
     ],
     note:
-      '**D27-P4 WIP 2026-08-22:** OMS boot wires public MD observation + trade/account maps; in-memory EMS ack journal on execute. ' +
-      'SOR cost model + plan/execute/cancel/fetch doors on svc-execution tip. ' +
-      'Product still needs: durable EMS store; letter→bps owner schedule; live venue creds operator wiring.',
+      '**Done 2026-08-22:** OMS plan/execute/cancel/fetch on svc-execution; durable EMS journal; operator cred + letter→bps owner schedule env pass-through in compose. ' +
+      'Refuse-closed when schedule unset — never invent DEFAULT_THRESHOLDS.',
   }),
   f('execution.arbitrage', 'Arbitrage engine — cross-exchange, triangular, basis, funding, DEX to CEX (§28)', {
     module: 'trade',
