@@ -31,3 +31,15 @@ describe('trade.otc policy honesty mount (D46)', () => {
     expect(p.moneyViaLedgerClientOnly).toBe(true);
   });
 });
+
+describe('trade.otc policy invent flags (D48)', () => {
+  it('otcPolicyHonest locks all describeOtcPolicy invent flags false', () => {
+    const p = describeOtcPolicy();
+    expect(p.inventsSpreadBps).toBe(false);
+    expect(p.inventsStakeGate).toBe(false);
+    expect(p.inventsMakerBook).toBe(false);
+    expect(p.inventsMidPrice).toBe(false);
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+  });
+});
