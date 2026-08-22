@@ -1003,14 +1003,19 @@ function mockReservedSql() {
     return [];
   }
 
-  function attach(kind: 'pool' | 'reserved') {
-    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) =>
-      Promise.resolve(run(strings.join('?'), values))) as unknown as Sql & {
+  function attach(kind: 'pool' | 'reserved'): Sql {
+    // Loose bag, then one `as unknown as Sql`. Intersecting with Sql first
+    // makes unsafe/reserve/begin fail TS2322/TS2352 — postgres PendingQuery,
+    // ReservedSql, and begin's TransactionSql overloads. ReservedSql extends
+    // Sql so .d.ts has begin; runtime reserved clients do not (postgres@3.4.9).
+    type MockSql = {
+      (strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]>;
       unsafe: (s: string, args?: unknown[]) => Promise<unknown[]>;
       release?: () => void;
       reserve?: () => Promise<Sql>;
-      begin?: Sql['begin'];
+      begin?: (fn: (tx: Sql) => Promise<unknown>) => Promise<unknown>;
     };
+    const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => Promise.resolve(run(strings.join('?'), values))) as MockSql;
     sql.unsafe = (s: string, args: unknown[] = []) => Promise.resolve(run(s, args));
     if (kind === 'reserved') {
       sql.release = () => {
@@ -1021,11 +1026,11 @@ function mockReservedSql() {
         events.push('reserve');
         return attach('reserved');
       };
-      sql.begin = (async (fn: (tx: Sql) => Promise<unknown>) => {
+      sql.begin = async (fn: (tx: Sql) => Promise<unknown>) => {
         events.push('pool-begin');
         snapshot();
         try {
-          return await fn(sql);
+          return await fn(sql as unknown as Sql);
         } catch (err) {
           restore();
           throw err;
@@ -1033,9 +1038,9 @@ function mockReservedSql() {
           snapPeriod = null;
           snapFill = null;
         }
-      }) as Sql['begin'];
+      };
     }
-    return sql;
+    return sql as unknown as Sql;
   }
 
   return { sql: attach('pool'), events, period, byFill };
