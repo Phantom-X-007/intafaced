@@ -138,6 +138,16 @@ describe('execution /ready boot venue map builders (D51)', () => {
   });
 });
 
+describe('execution boot trade book snapshot wiring (D52)', () => {
+  it('index wires buildTradeBookSnapshotMap into createExecutionRouter snapshotByVenue', () => {
+    const src = indexSrc();
+    expect(src).toContain('buildTradeBookSnapshotMap(env.TRADE_URL)');
+    expect(src).toContain('snapshotByVenue = { ...venueMarketMaps.snapshotByVenue, ...tradeBookSnapshot }');
+    expect(src).toContain('createExecutionRouter(');
+    expect(src).toContain('snapshotByVenue,');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
