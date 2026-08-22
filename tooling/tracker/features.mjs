@@ -387,7 +387,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
@@ -395,11 +395,13 @@ export const FEATURES = [
       'services/svc-trade/src/copy/mount-vs-tracker.test.ts',
       'services/svc-trade/src/copy/copy-policy.ts',
       'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
+      'services/svc-trade/src/copy/copy-compose-wiring.ts',
+      'services/svc-trade/src/copy/copy-compose-wiring.test.ts',
+      'services/svc-trade/src/copy/copy-tracker-status-pin.test.ts',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
-      'Stage-1 sovereign desk + follow/kill/unfollow on tip; fee-share not profit-share; blank §8 rates/jurisdiction refuse-closed. ' +
-      'Product still needs: owner fee-share/jurisdiction env pins; durable auto-mirror session-key (socket.copy-auto-mirror).',
+      '**Done 2026-08-22:** sovereign desk + follow/kill/unfollow; fee-share not profit-share; TRADE_COPY_FEE_SHARE_LAW + TRADE_COPY_JURISDICTION_LAW owner env pass-through (blank = refuse). ' +
+      'Residual sockets: durable auto-mirror session-key + returns-ranked board — not invented here.',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',

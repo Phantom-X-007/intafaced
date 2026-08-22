@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { copyOwnerLawComposeGapsClosed as copyOwnerLawComposeWired } from './copy-compose-wiring.js';
 import { describeCopyPolicy } from './copy-policy.js';
 
 export const COPY_TRACKER_ID = 'trade.copy' as const;
@@ -16,12 +17,12 @@ export const COPY_MOUNTED_DOORS = ['policy', 'deskStatus', 'follow', 'unfollow',
 
 export type CopyMountedDoor = (typeof COPY_MOUNTED_DOORS)[number];
 
-export const COPY_HONEST_GAPS = [
-  'gap.class_x_fee_share_rates',
-  'gap.class_x_jurisdiction_list',
-  'gap.auto_mirror_place_socket',
-  'gap.no_returns_ranked_board',
-] as const;
+/** Fee-share + jurisdiction owner env wired in compose; auto-mirror socket + ranked board remain Class X. */
+export const COPY_HONEST_GAPS = ['gap.auto_mirror_place_socket', 'gap.no_returns_ranked_board'] as const;
+
+export function copyOwnerLawComposeGapsClosed(): boolean {
+  return copyOwnerLawComposeWired();
+}
 
 export function copyDoorsInRouterSource(): readonly CopyMountedDoor[] {
   const here = dirname(fileURLToPath(import.meta.url));
