@@ -32,7 +32,7 @@ import {
   venueOperatorCredentialEnvPrefix,
 } from '../../index.js';
 import { describeVenueAggregationPolicy } from './factory-policy.js';
-import { tradeAdapterRegisteredForAllPublicVenues } from './trading-half-policy.js';
+import { tradeAdapterRegisteredForAllPublicVenues, shouldRefuseTradeAdapterConstruction } from './trading-half-policy.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
 class GetOnlyHttp implements HttpPort {
@@ -95,6 +95,15 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(p.unknownVenueIdRefuses).toBe(true);
     expect(p.publicMarketDataOnly).toBe(true);
     expect(p.signedTradeSeparateFactory).toBe(true);
+  });
+
+  it('shouldRefuseTradeAdapterConstruction refuses unknown and blank venue ids on door (D59)', () => {
+    expect(shouldRefuseTradeAdapterConstruction('')).toBe(true);
+    expect(shouldRefuseTradeAdapterConstruction('off')).toBe(true);
+    expect(shouldRefuseTradeAdapterConstruction('kraken-spot')).toBe(true);
+    for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
+      expect(shouldRefuseTradeAdapterConstruction(id)).toBe(false);
+    }
   });
 
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
