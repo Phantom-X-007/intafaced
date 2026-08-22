@@ -181,3 +181,17 @@ describe('connect.data-lake done bar files complete (D71)', () => {
     expect(connectDataLakeMountVsTrackerBoardCard().backendDoneBarMet).toBe(true);
   });
 });
+
+describe('connect.data-lake mount vs tracker — D73 denon audit complete', () => {
+  it('backend done bar met; honest gaps remain owner-residual across denon WIP lanes', () => {
+    expect(DATA_LAKE_HONEST_GAPS).toEqual(['gap.no_tsdb_compose', 'gap.tick_fill_normalisation_pipeline', 'gap.retention_owner_env']);
+    expect(dataLakeStage1Honest()).toBe(true);
+    expect(dataLakeDoneBarTestsPresent()).toBe(true);
+    expect(connectDataLakeTrackerBackendDoneBarMet()).toBe(true);
+    expect(connectDataLakeMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'connect.data-lake',
+      gaps: 3,
+      backendDoneBarMet: true,
+    });
+  });
+});
