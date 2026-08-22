@@ -5,7 +5,7 @@
  * Venue ids from EXECUTION_VENUE_IDS. Public market data only — no credentials.
  * Unknown ids skipped (no map entry).
  */
-import { createVenueMarketDataAdapter } from '@intafaced/venue-adapter';
+import { createVenueMarketDataAdapter, PUBLIC_MARKET_DATA_VENUE_IDS } from '@intafaced/venue-adapter';
 import type { MarketDataAdapter } from '@intafaced/venue-contracts';
 import { marketDataAdapterBorrow } from './oms-market-borrow.js';
 import { marketDataAdapterFunding } from './oms-market-funding.js';
@@ -35,6 +35,7 @@ export type ExecutionVenueMarketMaps = {
   readonly fundingByVenue: ExecutionFundingMap;
   readonly borrowByVenue: ExecutionBorrowMap;
   readonly wiredVenueIds: readonly string[];
+  readonly publicMdSupplementVenueIds: readonly string[];
 };
 
 export type BuildExecutionVenueMarketMapsOptions = {
@@ -116,7 +117,57 @@ export function buildExecutionVenueMarketMaps(
     }
   }
 
-  return { snapshotByVenue, marketsByVenue, latencyByVenue, fundingByVenue, borrowByVenue, wiredVenueIds };
+  return {
+    snapshotByVenue,
+    marketsByVenue,
+    latencyByVenue,
+    fundingByVenue,
+    borrowByVenue,
+    wiredVenueIds,
+    publicMdSupplementVenueIds: [],
+  };
+}
+
+/** EXECUTION_VENUE_IDS first; supplements unwired public MD venue ids (no credentials). */
+export function buildExecutionVenueMarketMapsWithPublicMdSupplement(
+  venueIds: readonly string[],
+  options: BuildExecutionVenueMarketMapsOptions = {},
+): ExecutionVenueMarketMaps {
+  const primary = buildExecutionVenueMarketMaps(venueIds, options);
+  const snapshotByVenue = { ...primary.snapshotByVenue };
+  const marketsByVenue = { ...primary.marketsByVenue };
+  const latencyByVenue = { ...primary.latencyByVenue };
+  const fundingByVenue = { ...primary.fundingByVenue };
+  const borrowByVenue = { ...primary.borrowByVenue };
+  const wiredVenueIds = [...primary.wiredVenueIds];
+  const publicMdSupplementVenueIds: string[] = [];
+
+  for (const venueId of PUBLIC_MARKET_DATA_VENUE_IDS) {
+    if (snapshotByVenue[venueId]) continue;
+    try {
+      const wire = wireExecutionVenueMarketAdapter(venueId, options);
+      snapshotByVenue[venueId] = wire.snapshot;
+      marketsByVenue[venueId] = wire.markets;
+      latencyByVenue[venueId] = wire.latency;
+      fundingByVenue[venueId] = wire.funding;
+      borrowByVenue[venueId] = wire.borrow;
+      wiredVenueIds.push(venueId);
+      publicMdSupplementVenueIds.push(venueId);
+    } catch (err) {
+      if (err instanceof ExecutionVenueUnknownError) continue;
+      throw err;
+    }
+  }
+
+  return {
+    snapshotByVenue,
+    marketsByVenue,
+    latencyByVenue,
+    fundingByVenue,
+    borrowByVenue,
+    wiredVenueIds,
+    publicMdSupplementVenueIds,
+  };
 }
 
 export { parseExecutionVenueIds };

@@ -6,6 +6,8 @@ export type ExecutionReadyInput = {
   readonly tradeUrl: string;
   readonly venueTradeWiredVenueIds: readonly string[];
   readonly operatorSupplementVenueIds: readonly string[];
+  readonly operatorAccountSupplementVenueIds: readonly string[];
+  readonly publicMdSupplementVenueIds: readonly string[];
   readonly venueCredentialBoard: {
     readonly venues: readonly ExecutionVenueCredentialBoardEntry[];
     readonly wiredVenueIds: readonly string[];
@@ -26,6 +28,8 @@ export function buildExecutionReadyResponse(input: ExecutionReadyInput) {
     internalVenue: 'blocked' as const,
     externalVenueTrade: input.venueTradeWiredVenueIds,
     operatorSupplementVenueIds: input.operatorSupplementVenueIds,
+    operatorAccountSupplementVenueIds: input.operatorAccountSupplementVenueIds,
+    publicMdSupplementVenueIds: input.publicMdSupplementVenueIds,
     venueCredentialBoard: input.venueCredentialBoard,
     externalVenueAccount: input.venueAccountWiredVenueIds,
     externalVenueMarketData: input.venueMarketWiredVenueIds,

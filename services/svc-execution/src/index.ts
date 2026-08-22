@@ -5,13 +5,13 @@ import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
-import { buildExecutionVenueAccountMaps } from './venue-account-adapters.js';
+import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
   describeExecutionVenueCredentialBoard,
   parseExecutionVenueIds,
 } from './venue-adapters.js';
-import { buildExecutionVenueMarketMaps } from './venue-market-adapters.js';
+import { buildExecutionVenueMarketMapsWithPublicMdSupplement } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap } from './trade-book-snapshot.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { FileEmsOrderStore } from './file-ems-order-store.js';
@@ -36,8 +36,8 @@ const registry = new SealedHouseTenantRegistry();
 const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
 const venueCredentialBoard = describeExecutionVenueCredentialBoard(executionVenueIds);
 const venueTradeMaps = buildExecutionVenueTradeMapsWithOperatorSupplement(executionVenueIds);
-const venueAccountMaps = buildExecutionVenueAccountMaps(executionVenueIds);
-const venueMarketMaps = buildExecutionVenueMarketMaps(executionVenueIds);
+const venueAccountMaps = buildExecutionVenueAccountMapsWithOperatorSupplement(executionVenueIds);
+const venueMarketMaps = buildExecutionVenueMarketMapsWithPublicMdSupplement(executionVenueIds);
 const emsStorePath = env.EXECUTION_EMS_STORE_PATH.trim();
 const emsStore = emsStorePath ? new FileEmsOrderStore(emsStorePath) : new InMemoryEmsOrderStore();
 const tradeBookSnapshot = buildTradeBookSnapshotMap(env.TRADE_URL);
@@ -72,6 +72,8 @@ app.get('/ready', async () =>
     tradeUrl: env.TRADE_URL,
     venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds,
     operatorSupplementVenueIds: venueTradeMaps.operatorSupplementVenueIds,
+    operatorAccountSupplementVenueIds: venueAccountMaps.operatorSupplementVenueIds,
+    publicMdSupplementVenueIds: venueMarketMaps.publicMdSupplementVenueIds,
     venueCredentialBoard,
     venueAccountWiredVenueIds: venueAccountMaps.wiredVenueIds,
     venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds,
