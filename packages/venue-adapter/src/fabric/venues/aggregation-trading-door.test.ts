@@ -125,6 +125,21 @@ describe('D27-P4 aggregation trading door — package export + factory trio', ()
     expect(Object.keys(accountMaps.transferRailsByVenue)).toEqual(['okx-spot']);
   });
 
+  it('describeOperatorVenueTradeMaps and describeOperatorVenueAccountMaps align on wired venues (D63)', () => {
+    const env = {
+      VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: 'k',
+      VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: 's',
+    };
+    const tradeBoard = describeOperatorVenueTradeMaps(env);
+    const accountBoard = describeOperatorVenueAccountMaps(env);
+    const creds = describeVenueOperatorCredentials(env);
+    expect(tradeBoard.wiredVenueIds).toEqual(accountBoard.wiredVenueIds);
+    expect(tradeBoard.wiredVenueIds).toEqual(creds.wiredVenueIds);
+    expect(tradeBoard.wiredVenueIds).toEqual(['binance-spot']);
+    expect(tradeBoard.inventsAdapters).toBe(false);
+    expect(accountBoard.inventsAdapters).toBe(false);
+  });
+
   it('describeOperatorVenueTradeMaps wires when operator env is complete (D41)', () => {
     expect(describeOperatorVenueTradeMaps({})).toMatchObject({
       wiredVenueIds: [],
