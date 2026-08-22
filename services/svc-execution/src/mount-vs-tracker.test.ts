@@ -120,3 +120,20 @@ describe('execution.sor mount vs tracker — D77 denon complete', () => {
     ]);
   });
 });
+
+describe('execution.sor mount vs tracker — D78 denon complete', () => {
+  it('mount cert board complete: OMS doors, spine, boot, venue-adapter, done-bar tests', () => {
+    const card = executionSorMountVsTrackerBoardCard();
+    expect(card.tracker).toBe('execution.sor');
+    expect(card.backendDoneBarMet).toBe(true);
+    expect(card.mountComplete).toBe(true);
+    expect(card.doorsMounted).toBe(EXECUTION_SOR_OMS_DOORS.length);
+    expect(card.gaps).toBe(EXECUTION_SOR_HONEST_GAPS.length);
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorPolicyHonest()).toBe(true);
+    expect(executionSorBootHonestInSource()).toBe(true);
+    expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
+    expect(executionSorDoneBarTestsPresent()).toBe(true);
+    expect(EXECUTION_SOR_HONEST_GAPS).toHaveLength(3);
+  });
+});
