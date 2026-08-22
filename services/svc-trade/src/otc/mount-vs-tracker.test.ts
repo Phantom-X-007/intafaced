@@ -119,3 +119,18 @@ describe('trade.otc backend done bar complete (D60)', () => {
     });
   });
 });
+
+describe('trade.otc tracker identity and policy board (D62)', () => {
+  it('otcMountVsTrackerBoardCard reports tracker id and honest policy without inventing', () => {
+    expect(OTC_TRACKER_ID).toBe('trade.otc');
+    const policy = describeOtcPolicy();
+    expect(policy.moneyViaLedgerClientOnly).toBe(true);
+    expect(policy.midFeedWiringHonest).toBe(true);
+    expect(policy.inventsMidPrice).toBe(false);
+    expect(otcMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'trade.otc',
+      backendDoneBarMet: true,
+      gaps: OTC_HONEST_GAPS.length,
+    });
+  });
+});
