@@ -102,6 +102,14 @@ describe('execution /ready boot credential board union (D47)', () => {
   });
 });
 
+describe('execution /ready boot credential board on ready (D48)', () => {
+  it('index passes venueCredentialBoard into buildExecutionReadyResponse on /ready', () => {
+    const src = indexSrc();
+    expect(src).toContain('buildExecutionReadyResponse({');
+    expect(src).toContain('venueCredentialBoard,');
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
