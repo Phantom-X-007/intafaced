@@ -84,8 +84,25 @@ describe('venueOrderToExecution', () => {
       expect(ex.status).toBe('rejected');
       expect(ex.filledAmount).toBe(ZERO);
       expect(ex.feeAmount).toBe(ZERO);
-      expect(ex.averagePrice).toBe(parseAmount('100'));
+      expect(ex.averagePrice).toBeNull();
     }
+  });
+
+  it('does not substitute request.limitPrice when averagePrice is null (rejected/canceled/open filled=0)', () => {
+    const req = request();
+    for (const status of ['rejected', 'canceled', 'open'] as const) {
+      const ex = venueOrderToExecution(order({ status, filled: ZERO, remaining: parseAmount('1'), averagePrice: null }), req);
+      expect(ex.averagePrice).toBeNull();
+      expect(ex.averagePrice).not.toBe(req.limitPrice);
+      expect(ex.averagePrice).not.toBe(ZERO);
+    }
+  });
+
+  it('keeps unfilled open averagePrice null — not a successful partial at price 0', () => {
+    const ex = venueOrderToExecution(order({ status: 'open', filled: ZERO, remaining: parseAmount('1'), averagePrice: null }), request());
+    expect(ex.status).toBe('partial');
+    expect(ex.filledAmount).toBe(ZERO);
+    expect(ex.averagePrice).toBeNull();
   });
 
   it('throws on pending instead of fabricating an execution', () => {

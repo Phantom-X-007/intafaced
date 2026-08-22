@@ -1,7 +1,11 @@
 /**
  * Bridge TradeAdapter.placeOrder → LiquiditySource.submit (OMS execute).
  *
- * Does not invent an average on a fill. Does not treat pending as executed.
+ * Does not invent an average from the request limit. Filled + null average
+ * throws. Unfilled + null average stays null — ZERO would read as filled-at-zero.
+ * `open` still maps to `partial` (VenueExecution has no resting status); execute
+ * treats only `rejected` as failure, so a 0-fill rest stays ok:true with a null
+ * price. Does not treat pending as executed.
  * Unknown fees are 0 — never a fabricated venue fee.
  */
 import { ZERO, type Amount } from '@intafaced/ledger-client';
@@ -9,6 +13,11 @@ import type { TradeAdapter, VenueOrder } from '@intafaced/venue-contracts';
 import type { SubmitRequest, VenueExecution } from '@intafaced/venue-adapter';
 
 export type OmsSubmitFn = (request: SubmitRequest) => Promise<VenueExecution>;
+
+/** venue-adapter VenueExecution.averagePrice is Amount; unfilled stays null here. */
+export type OmsVenueExecution = Omit<VenueExecution, 'averagePrice'> & {
+  readonly averagePrice: Amount | null;
+};
 
 function hasFill(filled: Amount): boolean {
   return filled > 0n;
@@ -30,7 +39,7 @@ function mapStatus(order: VenueOrder): VenueExecution['status'] {
   }
 }
 
-export function venueOrderToExecution(order: VenueOrder, request: SubmitRequest): VenueExecution {
+export function venueOrderToExecution(order: VenueOrder, _request: SubmitRequest): OmsVenueExecution {
   if (order.status === 'pending') {
     throw new Error('venue order is still pending — no VenueExecution until the venue acknowledges');
   }
@@ -44,13 +53,11 @@ export function venueOrderToExecution(order: VenueOrder, request: SubmitRequest)
     throw new Error('filled venue order has null averagePrice — refusing to invent a fill price');
   }
 
-  const averagePrice = order.averagePrice ?? request.limitPrice;
-
   return {
     venueId: order.venueId,
     venueOrderId: order.venueOrderId,
     filledAmount: order.filled,
-    averagePrice,
+    averagePrice: order.averagePrice,
     feeAmount: order.feePaid ?? ZERO,
     feeAsset: order.feeAsset ?? '',
     status,
@@ -68,6 +75,6 @@ export function tradeAdapterSubmit(adapter: TradeAdapter): OmsSubmitFn {
       price: request.limitPrice,
       clientOrderId: request.clientOrderId,
     });
-    return venueOrderToExecution(order, request);
+    return venueOrderToExecution(order, request) as VenueExecution;
   };
 }

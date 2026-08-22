@@ -72,7 +72,7 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () =>
   buildExecutionReadyResponse({
     emsStorePath,
-    tradeUrl: env.TRADE_URL,
+    tradeUrl: env.TRADE_URL ?? '',
     venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds,
     operatorSupplementVenueIds: venueTradeMaps.operatorSupplementVenueIds,
     operatorAccountSupplementVenueIds: venueAccountMaps.operatorSupplementVenueIds,

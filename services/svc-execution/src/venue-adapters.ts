@@ -261,10 +261,15 @@ export function buildExecutionVenueTradeMapsWithOperatorSupplement(
 
   for (const venueId of operatorMaps.wiredVenueIds) {
     if (submitByVenue[venueId]) continue;
-    submitByVenue[venueId] = operatorMaps.placeByVenue[venueId];
-    cancelByVenue[venueId] = operatorMaps.cancelByVenue[venueId];
-    fetchByVenue[venueId] = operatorMaps.fetchByVenue[venueId];
-    openOrdersByVenue[venueId] = operatorMaps.openOrdersByVenue[venueId];
+    const place = operatorMaps.placeByVenue[venueId];
+    const cancel = operatorMaps.cancelByVenue[venueId];
+    const fetch = operatorMaps.fetchByVenue[venueId];
+    const openOrders = operatorMaps.openOrdersByVenue[venueId];
+    if (!place || !cancel || !fetch || !openOrders) continue;
+    submitByVenue[venueId] = place;
+    cancelByVenue[venueId] = cancel;
+    fetchByVenue[venueId] = fetch;
+    openOrdersByVenue[venueId] = openOrders;
     wiredVenueIds.push(venueId);
     operatorSupplementVenueIds.push(venueId);
   }
