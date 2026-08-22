@@ -34,3 +34,23 @@ describe('execution.sor mount vs tracker honest gaps (D73-P2)', () => {
     expect(executionSorMountVsTrackerBoardCard().gaps).toBe(3);
   });
 });
+
+describe('execution.sor mount vs tracker — D74 denon complete', () => {
+  it('mount cert board, OMS doors, spine, boot, venue-adapter policy, and done-bar tests all green', () => {
+    const card = executionSorMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'execution.sor',
+      doors: EXECUTION_SOR_OMS_DOORS.length,
+      doorsMounted: EXECUTION_SOR_OMS_DOORS.length,
+      gaps: EXECUTION_SOR_HONEST_GAPS.length,
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(sorOmsDoorsInRouterSource()).toEqual([...EXECUTION_SOR_OMS_DOORS]);
+    expect(executionSorDoneBarTestsPresent()).toBe(true);
+    expect(executionSorPolicyHonest()).toBe(true);
+    expect(executionSorBootHonestInSource()).toBe(true);
+    expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
+  });
+});
