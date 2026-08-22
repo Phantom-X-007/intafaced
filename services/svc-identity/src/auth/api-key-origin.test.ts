@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { apiKeyOriginAllowed } from './api-key-origin.js';
+
+const authSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'auth-service.ts'), 'utf8');
 
 describe('apiKeyOriginAllowed', () => {
   it('allows any origin when the whitelist is empty (server bots)', () => {
@@ -25,5 +30,17 @@ describe('apiKeyOriginAllowed', () => {
   it('allows a subdomain of a listed registrable host', () => {
     expect(apiKeyOriginAllowed(['example.com'], 'https://app.example.com')).toBe(true);
     expect(apiKeyOriginAllowed(['example.com'], 'https://example.com')).toBe(true);
+  });
+});
+
+describe('API key mode of record — default live, never sandbox unless minted', () => {
+  it('createApiKey defaults omitted mode to live and prefixes via generateApiKey(mode)', () => {
+    expect(authSrc).toMatch(/const mode = input\.mode === ['"]sandbox['"] \? ['"]sandbox['"] : ['"]live['"]/);
+    expect(authSrc).toMatch(/generateApiKey\(mode\)/);
+  });
+
+  it('exchangeApiKey mints keyEnv from verified.mode — default live cannot become sandbox', () => {
+    expect(authSrc).toMatch(/keyEnv:\s*verified\.mode/);
+    expect(authSrc).not.toMatch(/keyEnv:\s*['"]sandbox['"]/);
   });
 });

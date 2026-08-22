@@ -757,6 +757,55 @@ if (!available) {
         code: 'auth.domain_not_allowed',
       });
     });
+
+    it('default-minted keys are live; exchange JWT key_env is never sandbox', async () => {
+      const session = await register();
+      const minted = await auth.createApiKey({
+        userId: session.userId,
+        name: 'live-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+
+      expect(minted.mode).toBe('live');
+      expect(minted.key.startsWith('ifc_')).toBe(true);
+      expect(minted.key.startsWith('ifc_test_')).toBe(false);
+
+      const stored = await db.sql<Array<{ mode: string }>>`
+        SELECT mode FROM api_keys WHERE id = ${minted.id}
+      `;
+      expect(stored[0]!.mode).toBe('live');
+
+      const exchanged = await auth.exchangeApiKey(minted.key);
+      expect(exchanged.mode).toBe('live');
+      const principal = await verifyAccessToken(exchanged.accessToken, tokenConfig);
+      expect(principal.key_env).toBe('live');
+      expect(principal.key_env).not.toBe('sandbox');
+    });
+
+    it('explicit sandbox mint prefixes ifc_test_ and puts key_env sandbox on the JWT', async () => {
+      const session = await register();
+      const minted = await auth.createApiKey({
+        userId: session.userId,
+        name: 'sandbox-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        mode: 'sandbox',
+      });
+
+      expect(minted.mode).toBe('sandbox');
+      expect(minted.key.startsWith('ifc_test_')).toBe(true);
+
+      const stored = await db.sql<Array<{ mode: string }>>`
+        SELECT mode FROM api_keys WHERE id = ${minted.id}
+      `;
+      expect(stored[0]!.mode).toBe('sandbox');
+
+      const exchanged = await auth.exchangeApiKey(minted.key);
+      expect(exchanged.mode).toBe('sandbox');
+      const principal = await verifyAccessToken(exchanged.accessToken, tokenConfig);
+      expect(principal.key_env).toBe('sandbox');
+    });
   });
 
   describe('sub-accounts', () => {
