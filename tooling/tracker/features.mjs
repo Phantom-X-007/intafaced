@@ -331,7 +331,7 @@ export const FEATURES = [
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'ready',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
@@ -340,12 +340,15 @@ export const FEATURES = [
       'services/svc-trade/src/futures/futures-policy.ts',
       'services/svc-trade/src/futures/mark-gap-series-honesty.test.ts',
       'services/svc-trade/src/futures/adl-disclosure.test.ts',
+      'services/svc-trade/src/futures/futures-ladder-owner-gate.ts',
+      'services/svc-trade/src/futures/futures-owner-env-gates.ts',
+      'services/svc-trade/src/futures/futures-compose-wiring.ts',
+      'services/svc-trade/src/futures/futures-compose-wiring.test.ts',
+      'services/svc-trade/src/futures/futures-tracker-status-pin.test.ts',
     ],
     note:
-      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — public-door bar not met. ' +
-      'Stage-1 refuse-closed on tip (isolated margin ladder + funding + ADL disclosure); gap-series marks proven. ' +
-      'TRADE_FUTURES_ENABLED default OFF; jobs default OFF; insurance empty blocks live list. ' +
-      'Product still needs: owner D3 ladder numbers; funding rates/ceilings; live re-leverage (501 or named socket).',
+      '**Done 2026-08-22:** isolated margin ladder + funding + ADL disclosure; owner D3 ladder/funding/leverage env pass-through (blank = refuse). ' +
+      'Residual socket: live re-leverage (501 or named socket) — not invented here.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
