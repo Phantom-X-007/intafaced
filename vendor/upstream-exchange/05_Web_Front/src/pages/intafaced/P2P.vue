@@ -95,7 +95,7 @@
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.offers') }}</h2>
-        <span class="ix-sub">offers.list · trades.take</span>
+        <span class="ix-sub">offers.list · trades.take · offers.pause · offers.resume</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.p2p.take.lead') }}</p>
       <IxState :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
@@ -134,20 +134,43 @@
                 <td>{{ methodIds(o) }}</td>
                 <td>{{ o.status }}</td>
                 <td>
-                  <Button
-                    v-if="ixToken"
-                    size="small"
-                    :loading="take.busy && takingId === o.id"
-                    :disabled="!canTake"
-                    @click="takeOffer(o)"
-                  >{{ $t('intafaced.p2p.take.action') }}</Button>
-                  <router-link v-else to="/platform">{{ $t('intafaced.p2p.take.signIn') }}</router-link>
+                  <div class="ix-actions">
+                    <Button
+                      v-if="ixToken && canPause(o)"
+                      size="small"
+                      :loading="pause.busy && pauseId === o.id"
+                      @click="pauseOffer(o)"
+                    >{{ $t('intafaced.p2p.pause') }}</Button>
+                    <Button
+                      v-if="ixToken && canResume(o)"
+                      size="small"
+                      :loading="pause.busy && pauseId === o.id"
+                      @click="resumeOffer(o)"
+                    >{{ $t('intafaced.p2p.resume') }}</Button>
+                    <Button
+                      v-if="ixToken"
+                      size="small"
+                      :loading="take.busy && takingId === o.id"
+                      :disabled="!canTake"
+                      @click="takeOffer(o)"
+                    >{{ $t('intafaced.p2p.take.action') }}</Button>
+                    <router-link v-else to="/platform">{{ $t('intafaced.p2p.take.signIn') }}</router-link>
+                  </div>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
+      </IxState>
+      <IxState v-if="pause.ran" :loading="pause.busy" :reason="pause.reason" :message="pause.message" :endpoint="pauseEndpoint">
+        <div v-if="pause.data" class="ix-done">
+          <strong>{{ pauseDoneLabel }}</strong>
+          <div class="ix-kv" style="margin-top:8px;">
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.createOfferId') }}</span><span class="v">{{ pause.data.id }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ pause.data.status }}</span></div>
+          </div>
+        </div>
       </IxState>
       <IxState v-if="take.ran" :loading="take.busy" :reason="take.reason" :message="take.message" endpoint="/api/p2p/trpc/trades.take">
         <div v-if="take.data" class="ix-done">
@@ -266,6 +289,9 @@
  * Create posts {side, asset, fiatCurrency, priceType, price, minAmount,
  * maxAmount, methods} the same way. Optional totalAmount and terms are omitted
  * when blank. Amounts stay decimal strings. methods are non-empty string ids.
+ *
+ * Pause and resume post {offerId} on the caller's own row. They do not move
+ * escrow. Named refuse stays named.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
@@ -282,11 +308,14 @@ export default {
       methods: this.emptySection(),
       take: this.emptyAction(),
       create: this.emptyAction(),
+      pause: this.emptyAction(),
       trades: this.emptySection(),
       lifecycle: this.emptyAction(),
       takeAmount: '',
       takeMethod: '',
       takingId: '',
+      pauseId: '',
+      pauseEndpoint: '/api/p2p/trpc/offers.pause',
       lifeId: '',
       lifeEndpoint: '/api/p2p/trpc/trades.list',
       createForm: {
@@ -332,6 +361,11 @@ export default {
     },
     myId() {
       return subjectOf(this.ixToken);
+    },
+    pauseDoneLabel() {
+      return this.pauseEndpoint.indexOf('offers.resume') !== -1
+        ? this.$t('intafaced.p2p.resumeDone')
+        : this.$t('intafaced.p2p.pauseDone');
     }
   },
   created() {
@@ -352,6 +386,52 @@ export default {
         else if (x && typeof x.id === 'string' && x.id) out.push(x.id);
       }
       return out.join(', ');
+    },
+    isMine(offer) {
+      return !!(offer && this.myId && offer.makerId === this.myId);
+    },
+    canPause(offer) {
+      return this.isMine(offer) && offer.status === 'active';
+    },
+    canResume(offer) {
+      return this.isMine(offer) && offer.status === 'paused';
+    },
+    keepOffer(offer, status, data) {
+      var rows = (this.offers.data || []).slice();
+      var next = Object.assign({}, offer, data || {}, { status: (data && data.status) || status });
+      var found = false;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].id === offer.id) {
+          rows[i] = next;
+          found = true;
+          break;
+        }
+      }
+      if (!found) rows.unshift(next);
+      this.offers.data = rows;
+    },
+    pauseOffer(offer) {
+      var self = this;
+      if (!offer || this.pause.busy) return;
+      this.pauseId = offer.id;
+      this.pauseEndpoint = '/api/p2p/trpc/offers.pause';
+      this.act('pause', mutate('p2p', 'offers.pause', { offerId: offer.id }, this.ixToken)).then(function (res) {
+        self.pauseId = '';
+        if (res.ok) self.keepOffer(offer, 'paused', res.data);
+      });
+    },
+    resumeOffer(offer) {
+      var self = this;
+      if (!offer || this.pause.busy) return;
+      this.pauseId = offer.id;
+      this.pauseEndpoint = '/api/p2p/trpc/offers.resume';
+      this.act('pause', mutate('p2p', 'offers.resume', { offerId: offer.id }, this.ixToken)).then(function (res) {
+        self.pauseId = '';
+        if (res.ok) {
+          self.keepOffer(offer, 'active', res.data);
+          self.load('offers', query('p2p', 'offers.list', undefined, self.ixToken));
+        }
+      });
     },
     takeOffer(offer) {
       var self = this;

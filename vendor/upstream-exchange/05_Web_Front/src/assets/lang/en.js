@@ -988,7 +988,11 @@ module.exports = {
                 cancel: "Cancel",
                 empty: "No held trades",
                 updated: "Updated"
-            }
+            },
+            pause: "Pause",
+            pauseDone: "Paused",
+            resume: "Resume",
+            resumeDone: "On the book"
         },
         token: {
             lead: "Figures for the account holding this platform session.",
