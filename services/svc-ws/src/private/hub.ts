@@ -1,5 +1,6 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { encodePrivatePositionFrame, encodePrivatePositionsSnapshotFrame } from './private-positions-payload-freeze.js';
 
 /**
  * PRIVATE ORDER / FILL / POSITION FAN-OUT.
@@ -240,7 +241,7 @@ export class PrivateOrderHub {
   }
 
   sendPositionsSnapshot(sink: PrivateSink, userId: string, positions: readonly PrivatePositionUpdate[]): void {
-    this.#snapshot(sink, JSON.stringify({ channel: 'positions', type: 'snapshot', userId, positions }));
+    this.#snapshot(sink, encodePrivatePositionsSnapshotFrame(userId, positions));
   }
 
   #snapshot(sink: PrivateSink, frame: string): void {
@@ -289,7 +290,7 @@ export class PrivateOrderHub {
         } else {
           for (const position of positions) {
             if (sub.closed) return;
-            this.#write(sub, JSON.stringify({ channel: 'positions', ...position }));
+            this.#write(sub, encodePrivatePositionFrame(position));
           }
         }
       } catch (err) {
@@ -326,7 +327,7 @@ export class PrivateOrderHub {
   }
 
   publishPosition(update: PrivatePositionUpdate): void {
-    this.#fanout(update.userId, 'positions', JSON.stringify({ channel: 'positions', ...update }));
+    this.#fanout(update.userId, 'positions', encodePrivatePositionFrame(update));
   }
 
   #fanout(userId: string, channel: PrivateStreamChannel, frame: string): void {
