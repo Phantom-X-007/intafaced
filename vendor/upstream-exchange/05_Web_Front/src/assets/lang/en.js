@@ -660,6 +660,17 @@ module.exports = {
                 offrampLead: "Crypto only. The amount is a decimal string and leaves your balance the moment svc-bank accepts the hold."
             },
 
+            ramps: {
+                withdrawDestTitle: "Withdraw destination",
+                withdrawDestLead: "Save the address or account a later offramp will send to. Saving does not move value.",
+                withdrawDestKind: "Kind",
+                withdrawDestKindHint: "crypto or bank",
+                withdrawDestRef: "Reference",
+                withdrawDestRefHint: "EVM address, or IBAN/IFSC for bank",
+                withdrawDestSave: "Save destination",
+                withdrawDestSaved: "Destination saved"
+            },
+
             analyticsPage: {
                 title: "Spending",
                 lead: "What left this account, what arrived, and where it went — summarised by svc-bank over a window you choose.",

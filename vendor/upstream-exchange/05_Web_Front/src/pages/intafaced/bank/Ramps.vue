@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.rampsPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.rampsPage.lead') }}</p>
-      <div class="ix-source">svc-bank · ramps.programme · ramps.onramps · ramps.offramps · ramps.offramp</div>
+      <div class="ix-source">svc-bank · ramps.programme · ramps.onramps · ramps.offramps · ramps.setWithdrawDestination · ramps.offramp</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -93,6 +93,40 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.noOnramps') }}</div>
       </IxState>
+    </div>
+
+    <!-- ── persist withdraw dest (no value move) ─────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.ramps.withdrawDestTitle') }}</h2>
+        <span class="ix-sub">ramps.setWithdrawDestination</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.ramps.withdrawDestLead') }}</p>
+
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-ramp-wd-kind">{{ $t('intafaced.bank.ramps.withdrawDestKind') }}</label>
+          <Input element-id="ix-ramp-wd-kind" v-model="dest.kind" :placeholder="$t('intafaced.bank.ramps.withdrawDestKindHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-ramp-wd-ref">{{ $t('intafaced.bank.ramps.withdrawDestRef') }}</label>
+          <Input element-id="ix-ramp-wd-ref" v-model="dest.ref" :placeholder="$t('intafaced.bank.ramps.withdrawDestRefHint')"></Input>
+        </div>
+      </div>
+
+      <div class="ix-actions">
+        <Button type="primary" :loading="destSaved.busy" :disabled="!canSaveDest" @click="submitDest">
+          {{ $t('intafaced.bank.ramps.withdrawDestSave') }}
+        </Button>
+      </div>
+
+      <div v-if="destSaved.ran" style="margin-top:14px;">
+        <div v-if="destSaved.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.ramps.withdrawDestSaved') }}</strong>
+          <div style="margin-top:6px;">{{ destSaved.data.kind }} · {{ destSaved.data.ref }}</div>
+        </div>
+        <IxState v-else :loading="destSaved.busy" :reason="destSaved.reason" :message="destSaved.message" endpoint="/api/bank/trpc/ramps.setWithdrawDestination"></IxState>
+      </div>
     </div>
 
     <!-- ── send value out ─────────────────────────────────────────────────── -->
@@ -213,6 +247,9 @@
  * reference and is theirs to reuse.
  *
  * Amounts are decimal strings the service sent. Nothing here parses one.
+ *
+ * `ramps.setWithdrawDestination` persists kind+ref (crypto EVM or bank
+ * IBAN/IFSC) and does not post ledger. There is no `ramps.onramp` mutate.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -228,13 +265,18 @@ export default {
     return {
       nav: BANK_NAV,
       form: { assetId: '', amount: '', destinationRef: '', clientRef: '' },
+      dest: { kind: 'crypto', ref: '' },
       programme: this.emptySection(),
       onramps: this.emptySection(),
       offramps: this.emptySection(),
-      sent: this.emptyAction()
+      sent: this.emptyAction(),
+      destSaved: this.emptyAction()
     };
   },
   computed: {
+    canSaveDest() {
+      return Boolean(this.dest.kind && this.dest.ref);
+    },
     canSend() {
       return Boolean(
         this.form.assetId && this.form.amount && this.form.destinationRef && this.form.clientRef && this.draftId('offramp')
@@ -250,6 +292,13 @@ export default {
     reloadMovements() {
       this.load('onramps', query('bank', 'ramps.onramps', undefined, this.ixToken));
       this.load('offramps', query('bank', 'ramps.offramps', undefined, this.ixToken));
+    },
+    submitDest() {
+      if (!this.canSaveDest) return;
+      this.act(
+        'destSaved',
+        mutate('bank', 'ramps.setWithdrawDestination', { kind: this.dest.kind, ref: this.dest.ref }, this.ixToken)
+      );
     },
     submitOfframp() {
       var self = this;
