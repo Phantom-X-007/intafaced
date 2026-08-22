@@ -11,6 +11,7 @@ import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOps
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
 import { isS2sPath, resolve } from './routes.js';
+import { describeQuantHonestyDoorStatus } from './quant-honesty-status.js';
 import { registerQuantCompositeHonestyRoutes } from './quant-composite-honesty-door.js';
 import { registerQuantHonestyRoutes } from './quant-honesty-door.js';
 import { registerQuantSurfaceRenderRoutes } from './quant-surface-render-door.js';
@@ -392,6 +393,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
         etlWatermarkAt: ops.analytics.etlWatermarkAt,
         etlNote: ops.analytics.etlNote,
       },
+      quantHonesty: describeQuantHonestyDoorStatus(),
     };
   });
 

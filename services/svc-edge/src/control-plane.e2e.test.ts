@@ -223,6 +223,26 @@ describe('/admin/status — control-plane summary', () => {
     expect(body.analytics.surfaceStatus).not.toBe('ok');
   });
 
+  it('surfaces quant honesty door status including composite assess path', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'GET',
+      url: '/admin/status',
+      headers: { authorization: await asOperator() },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      quantHonesty: {
+        compositeHonestyWired: boolean;
+        inventsReturns: boolean;
+        doors: { path: string }[];
+      };
+    };
+    expect(body.quantHonesty.compositeHonestyWired).toBe(true);
+    expect(body.quantHonesty.inventsReturns).toBe(false);
+    expect(body.quantHonesty.doors.map((door) => door.path)).toContain('/quant/honesty/assess-composite');
+  });
+
   it('refuses partner_cleared on the queue HTTP path without a screening partner', async () => {
     const h = await edge();
     // Seed via admin API method through status surface — open is not HTTP yet
