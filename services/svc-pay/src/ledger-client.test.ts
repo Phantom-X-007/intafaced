@@ -8,8 +8,12 @@ import {
   userAvailable,
   type PostRequest,
 } from '@intafaced/ledger-client';
-import { verifyServiceCall } from '@intafaced/contracts';
+import { serviceAuthHeaders, verifyServiceHeaders } from '@intafaced/contracts';
 import { createLedgerClient } from './ledger-client.js';
+
+function retained(body: string) {
+  return { retained: true as const, bytes: Buffer.from(body, 'utf8') };
+}
 
 /**
  * THE WIRE SHAPE.
@@ -238,13 +242,75 @@ describe('post — amounts leave as decimal strings', () => {
     const headers = sent[0]!.headers;
     expect(headers['x-intafaced-service']).toBe('svc-pay');
     expect(headers['x-intafaced-service-sig']).toMatch(/^[0-9a-f]{64}$/);
+    // v2 marker. A v1 pin (identity + timestamp, no body) used to pass here
+    // via verifyServiceCall without a digest — that is the hole this closes.
+    expect(headers['x-intafaced-service-body']).toMatch(/^[0-9a-f]{64}$/);
 
-    // Verified against the same secret the ledger would hold, rather than
-    // merely asserting the header is present and non-empty.
+    // Verified as the ledger will after INTERNAL_SERVICE_BODY_BIND=require,
+    // against the exact bytes that left the process.
     expect(
-      verifyServiceCall(headers['x-intafaced-service'], headers['x-intafaced-service-ts'], headers['x-intafaced-service-sig'], SECRET)
-        .service,
-    ).toBe('svc-pay');
+      verifyServiceHeaders(headers, SECRET, {
+        rawBody: retained(sent[0]!.raw),
+        mode: 'require',
+      }),
+    ).toEqual({ service: 'svc-pay', rejected: null, scheme: 'v2' });
+  });
+
+  /**
+   * THE TEST THIS CHANGE EXISTS FOR.
+   *
+   * v1 signed identity and a timestamp only. A captured header plus a mutated
+   * amount still authenticated for 300 seconds, and ledger accept-both still
+   * admits that. Pay must not send that shape: /trpc/post carries a body
+   * digest, so a v1 replay of a different amount is not what left this client.
+   */
+  it('binds /trpc/post to the body so a captured v1 header with a mutated amount is not what pay sends', async () => {
+    await client().post(
+      recipes.paymentCapture({
+        paymentId: 'p-bind',
+        merchantId: MERCHANT,
+        assetId: 'USDT',
+        amount: amt('1'),
+        rail: 'card-sandbox',
+        railRef: 'ch_bind',
+      }),
+    );
+
+    const captured = sent[0]!;
+    expect(captured.url).toBe('http://ledger.test/trpc/post');
+    expect(captured.headers['x-intafaced-service-body']).toMatch(/^[0-9a-f]{64}$/);
+
+    const honest = captured.raw;
+    const mutated = honest.replaceAll('"amount":"1"', '"amount":"99999"');
+    expect(mutated).not.toBe(honest);
+
+    expect(
+      verifyServiceHeaders(captured.headers, SECRET, {
+        rawBody: retained(honest),
+        mode: 'require',
+      }),
+    ).toEqual({ service: 'svc-pay', rejected: null, scheme: 'v2' });
+
+    // Same headers, different amount — refused even under accept-both, because
+    // the bytes disagree with a digest we can actually check.
+    expect(
+      verifyServiceHeaders(captured.headers, SECRET, {
+        rawBody: retained(mutated),
+        mode: 'accept-both',
+      }).rejected,
+    ).toBe('body-mismatch');
+
+    // A captured v1 header replayed with that mutated amount still verifies
+    // under accept-both. That is the hole. It is not what pay sent.
+    const v1 = serviceAuthHeaders('svc-pay', SECRET);
+    expect(v1['x-intafaced-service-body']).toBeUndefined();
+    expect(
+      verifyServiceHeaders(v1, SECRET, {
+        rawBody: retained(mutated),
+        mode: 'accept-both',
+      }).scheme,
+    ).toBe('v1');
+    expect(captured.headers['x-intafaced-service-sig']).not.toBe(v1['x-intafaced-service-sig']);
   });
 
   it('normalises a trailing slash on the base URL rather than doubling it', async () => {
