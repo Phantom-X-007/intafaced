@@ -22,6 +22,7 @@ export const DATA_LAKE_PACKAGE_EXPORTS = [
   'gateQuantSurfaceRender',
   'describeQuantHonestyMount',
   'refuseQuantSurfaceRender',
+  'evaluateQuantSurfaceRender',
 ] as const;
 
 export const DATA_LAKE_DONE_BAR_TEST_FILES = [
@@ -33,6 +34,7 @@ export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'retention-maintenance.test.ts',
   'quant-honesty-mount.test.ts',
   'quant-surface-refuse.test.ts',
+  'quant-surface-render-consumer.test.ts',
   'package-export-mount.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
@@ -53,7 +55,9 @@ export function dataLakeStage1Honest(): boolean {
     board.batch.writesTsdbWhenOwnerWired === true &&
     board.batch.captureLogOnly === true &&
     board.retention.canPersist === false &&
-    board.retention.captureLogOnly === true
+    board.retention.captureLogOnly === true &&
+    board.quantSurface.compositeGateWired === true &&
+    board.quantSurface.inventsFraming === false
   );
 }
 

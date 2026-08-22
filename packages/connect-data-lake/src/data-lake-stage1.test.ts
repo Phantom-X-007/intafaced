@@ -9,5 +9,7 @@ describe('describeDataLakeStage1', () => {
     expect(board.batch.captureLogOnly).toBe(true);
     expect(board.retention.canPersist).toBe(false);
     expect(board.retention.captureLogOnly).toBe(true);
+    expect(board.quantSurface.compositeGateWired).toBe(true);
+    expect(board.quantSurface.inventsFraming).toBe(false);
   });
 });
