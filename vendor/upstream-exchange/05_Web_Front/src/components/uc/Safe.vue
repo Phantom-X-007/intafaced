@@ -64,7 +64,10 @@
         :message="keys.message"
         endpoint="/api/identity/trpc/webauthn.list"
       >
-        <div v-if="keys.data && keys.data.length" class="ix-scroll">
+        <p v-if="webauthnError" class="ix-empty ix-empty-error" role="alert">{{ webauthnError }}</p>
+        <p v-if="webauthnDone" class="ix-ok" role="status">{{ $t('uc.safe.webauthnEnrolled') }}</p>
+        <Button type="primary" :loading="enrollingKey" @click="enrollPasskey">{{ $t('uc.safe.webauthnEnrollBtn') }}</Button>
+        <div v-if="keys.data && keys.data.length" class="ix-scroll" style="margin-top:16px;">
           <table class="ix-table">
             <thead>
               <tr>
@@ -82,8 +85,7 @@
             </tbody>
           </table>
         </div>
-        <div v-else class="ix-note ix-note-quiet">{{ $t('uc.safe.noKeys') }}</div>
-        <p class="ix-cap-note">{{ $t('uc.safe.keysEnrolSocket') }}</p>
+        <div v-else class="ix-note ix-note-quiet" style="margin-top:16px;">{{ $t('uc.safe.noKeys') }}</div>
       </IxState>
     </div>
 
@@ -735,7 +737,8 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
  * What svc-identity does implement, and what this page therefore does:
  *
  * - `totp.enrol` / `totp.confirm` — genuine two-factor enrolment, two steps.
- * - `webauthn.list` — security keys already registered.
+ * - `webauthn.list` / `webauthn.registerOptions` / `webauthn.registerVerify`
+ *   — security keys already registered, and enrol via the browser ceremony.
  * - `auth.logoutAll` — revoke every refresh token for this user.
  * - `kyc.status` — the verification tier, read-only here, managed on
  *   /identbusiness.
@@ -751,16 +754,70 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
  * copying them has lost them. That warning is the most load-bearing sentence on
  * this screen.
  *
- * WEBAUTHN ENROLMENT IS NOT WIRED. `registerOptions` / `registerVerify` exist on
- * the service, but driving them needs `navigator.credentials.create()` and a
- * correct base64url encoding of the attestation response. Half-implementing a
- * credential registration is worse than not offering it — a key that appears to
- * register and does not is a lockout waiting to happen — so the list is shown
- * and the enrol button is stated as missing rather than mocked.
+ * WEBAUTHN ENROL is options → credentials.create → verify. A disabled
+ * service is quoted via IxState; the page never invents a credential.
  */
 import IxState from "../intafaced/IxState.vue";
 import ixModule from "../intafaced/module-mixin.js";
 import { query, mutate } from "../../config/intafaced.js";
+
+function b64urlToBytes(s) {
+  var b64 = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4) b64 += "=";
+  var bin = atob(b64);
+  var out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64url(buf) {
+  var bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  var bin = "";
+  for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function publicKeyFromRegisterOptions(options) {
+  var exclude = (options && options.excludeCredentials) || [];
+  return {
+    challenge: b64urlToBytes(options.challenge),
+    rp: options.rp,
+    user: {
+      id: b64urlToBytes(options.user.id),
+      name: options.user.name,
+      displayName: options.user.displayName
+    },
+    pubKeyCredParams: options.pubKeyCredParams,
+    timeout: options.timeout,
+    excludeCredentials: exclude.map(function (c) {
+      var row = { type: c.type, id: b64urlToBytes(c.id) };
+      if (c.transports && c.transports.length) row.transports = c.transports;
+      return row;
+    }),
+    authenticatorSelection: options.authenticatorSelection,
+    attestation: options.attestation
+  };
+}
+
+function registrationResponseFromCredential(cred) {
+  var att = cred.response;
+  var payload = {
+    id: cred.id,
+    rawId: bytesToB64url(cred.rawId),
+    type: "public-key",
+    response: {
+      clientDataJSON: bytesToB64url(att.clientDataJSON),
+      attestationObject: bytesToB64url(att.attestationObject)
+    }
+  };
+  if (typeof att.getTransports === "function") {
+    payload.response.transports = att.getTransports();
+  }
+  if (typeof cred.getClientExtensionResults === "function") {
+    payload.clientExtensionResults = cred.getClientExtensionResults();
+  }
+  return payload;
+}
 
 export default {
   components: { IxState },
@@ -777,13 +834,81 @@ export default {
       totpDone: false,
       revoking: false,
       revokedCount: null,
-      sessionError: ""
+      sessionError: "",
+      enrollingKey: false,
+      webauthnError: "",
+      webauthnDone: false
     };
   },
   methods: {
     shortId(id) {
       var s = String(id || "");
       return s.length <= 16 ? s : s.slice(0, 16) + "…";
+    },
+    applyWebauthnRefuse(res) {
+      var message = res && res.message ? String(res.message) : "";
+      var disabled = (res && res.reason === "forbidden") || message.indexOf("WebAuthn is disabled") !== -1;
+      if (disabled) {
+        this.keys = {
+          loading: false,
+          reason: (res && res.reason) || "forbidden",
+          message: message,
+          data: null
+        };
+        return;
+      }
+      this.webauthnError = message;
+    },
+    enrollPasskey() {
+      var self = this;
+      this.webauthnError = "";
+      this.webauthnDone = false;
+      if (!navigator.credentials || typeof navigator.credentials.create !== "function") {
+        this.webauthnError = this.$t("uc.safe.webauthnUnavailable");
+        return;
+      }
+      this.enrollingKey = true;
+      mutate('identity', 'webauthn.registerOptions', {}, this.ixToken)
+        .then(function (res) {
+          if (!res.ok) {
+            self.enrollingKey = false;
+            self.applyWebauthnRefuse(res);
+            return null;
+          }
+          return navigator.credentials.create({
+            publicKey: publicKeyFromRegisterOptions(res.data)
+          });
+        })
+        .then(function (cred) {
+          if (self.enrollingKey === false) return null;
+          if (!cred) {
+            self.enrollingKey = false;
+            self.webauthnError = self.$t("uc.safe.webauthnCancelled");
+            return null;
+          }
+          return mutate('identity', 'webauthn.registerVerify', registrationResponseFromCredential(cred), self.ixToken);
+        })
+        .then(function (res) {
+          if (!res) return;
+          self.enrollingKey = false;
+          if (!res.ok) {
+            self.applyWebauthnRefuse(res);
+            return;
+          }
+          self.webauthnDone = true;
+          self.load("keys", query("identity", "webauthn.list", undefined, self.ixToken));
+        })
+        .catch(function (err) {
+          self.enrollingKey = false;
+          var name = err && err.name;
+          if (name === "NotAllowedError" || name === "AbortError") {
+            self.webauthnError = self.$t("uc.safe.webauthnCancelled");
+            return;
+          }
+          self.webauthnError = err && err.message
+            ? String(err.message)
+            : self.$t("uc.safe.webauthnUnavailable");
+        });
     },
     startTotp() {
       var self = this;
