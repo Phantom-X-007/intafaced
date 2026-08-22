@@ -126,6 +126,25 @@ export function describeExecutionVenueCredentialSources(
   };
 }
 
+export type ExecutionVenueCredentialBoardEntry = ReturnType<typeof describeExecutionVenueCredentialSources>;
+
+/** Operator board for EXECUTION_VENUE_IDS — per-venue credential source honesty. */
+export function describeExecutionVenueCredentialBoard(
+  venueIds: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): {
+  readonly venues: readonly ExecutionVenueCredentialBoardEntry[];
+  readonly wiredVenueIds: readonly string[];
+  readonly inventsCredentials: false;
+} {
+  const venues = venueIds.map((id) => describeExecutionVenueCredentialSources(id, env));
+  return {
+    venues,
+    wiredVenueIds: venues.filter((entry) => entry.wired).map((entry) => entry.venueId),
+    inventsCredentials: false,
+  };
+}
+
 function openOrdersBridge(adapter: TradeAdapter): OmsOpenOrdersFn {
   const listAcknowledged = tradeAdapterOpenOrders(adapter);
   return async (symbol, side, type, clientOrderId, venueOrderId, feeAsset, status) => {

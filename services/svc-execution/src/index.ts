@@ -6,7 +6,7 @@ import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { buildExecutionVenueAccountMaps } from './venue-account-adapters.js';
-import { buildExecutionVenueTradeMaps, parseExecutionVenueIds } from './venue-adapters.js';
+import { buildExecutionVenueTradeMaps, describeExecutionVenueCredentialBoard, parseExecutionVenueIds } from './venue-adapters.js';
 import { buildExecutionVenueMarketMaps } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap, TRADE_BOOK_SNAPSHOT_VENUE_ID } from './trade-book-snapshot.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -29,6 +29,7 @@ registerProcessHooks(
  */
 const registry = new SealedHouseTenantRegistry();
 const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);
+const venueCredentialBoard = describeExecutionVenueCredentialBoard(executionVenueIds);
 const venueTradeMaps = buildExecutionVenueTradeMaps(executionVenueIds);
 const venueAccountMaps = buildExecutionVenueAccountMaps(executionVenueIds);
 const venueMarketMaps = buildExecutionVenueMarketMaps(executionVenueIds);
@@ -67,6 +68,7 @@ app.get('/ready', async () => ({
   emsStorePath: emsStorePath || null,
   internalVenue: 'blocked',
   externalVenueTrade: venueTradeMaps.wiredVenueIds,
+  venueCredentialBoard,
   externalVenueAccount: venueAccountMaps.wiredVenueIds,
   externalVenueMarketData: venueMarketMaps.wiredVenueIds,
   emsAckCount: emsStore.list().length,
