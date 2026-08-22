@@ -59,7 +59,7 @@ describe('execution.sor spine — D78 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -78,7 +78,7 @@ describe('execution.sor spine — D80 denon complete', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/describeExecutionSpine/);
     expect(routerSource).toMatch(/execution\.oms\.plan/);
@@ -98,7 +98,7 @@ describe('execution.sor spine — D82 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -117,7 +117,7 @@ describe('execution.sor spine — D84 denon complete', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/describeExecutionSpine/);
     expect(routerSource).toMatch(/execution\.oms\.plan/);
@@ -137,7 +137,7 @@ describe('execution.sor spine — D86 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -156,7 +156,7 @@ describe('execution.sor spine — D88 denon complete', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/describeExecutionSpine/);
     expect(routerSource).toMatch(/execution\.oms\.plan/);
@@ -176,7 +176,7 @@ describe('execution.sor spine — D90 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -195,7 +195,7 @@ describe('execution.sor spine — D92 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -214,7 +214,7 @@ describe('execution.sor spine — D94 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -233,7 +233,7 @@ describe('execution.sor spine — D96 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -252,7 +252,7 @@ describe('execution.sor spine — D98 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -271,7 +271,7 @@ describe('execution.sor spine — D100 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -290,7 +290,7 @@ describe('execution.sor spine — D102 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -309,7 +309,7 @@ describe('execution.sor spine — D104 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -328,7 +328,7 @@ describe('execution.sor spine — D106 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -347,7 +347,7 @@ describe('execution.sor spine — D108 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -366,7 +366,7 @@ describe('execution.sor spine — D110 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -385,7 +385,7 @@ describe('execution.sor spine — D112 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -404,7 +404,7 @@ describe('execution.sor spine — D114 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -423,7 +423,7 @@ describe('execution.sor spine — D116 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -442,7 +442,7 @@ describe('execution.sor spine — D118 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);
@@ -461,7 +461,7 @@ describe('execution.sor spine — D120 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(routerSource).toMatch(/policy:\s*publicProcedure\.query\(\(\)\s*=>\s*describeExecutionSpine\(\)\)/);
     expect(routerSource).toMatch(/spine:\s*scopedProcedure/);

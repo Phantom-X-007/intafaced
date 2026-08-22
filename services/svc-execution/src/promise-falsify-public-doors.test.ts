@@ -66,7 +66,7 @@ async function mountRouter(router = createExecutionRouter(new SealedHouseTenantR
     trpcOptions: {
       router,
       createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
-    } as FastifyTRPCPluginOptions<typeof router>,
+    } satisfies FastifyTRPCPluginOptions<typeof router>['trpcOptions'],
   });
   await app.ready();
   return app;

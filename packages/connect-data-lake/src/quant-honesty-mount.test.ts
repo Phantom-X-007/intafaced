@@ -60,6 +60,8 @@ describe('gate and refuse quant surface render alignment (D49)', () => {
       leaderboard: { rankedByHistoricalReturn: true, surface: 'copy' as const },
     };
     const gate = gateQuantSurfaceRender(refused);
+    expect(gate.ok).toBe(false);
+    if (gate.ok) return;
     expect(refuseQuantSurfaceRender(refused)).toMatchObject({ ok: false, reason: gate.reason });
   });
 });

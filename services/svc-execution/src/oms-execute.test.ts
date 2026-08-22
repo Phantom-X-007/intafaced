@@ -8,7 +8,6 @@ import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, planOmsRoute, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
-import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 
 const SECRET = 'a-execution-oms-execute-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';

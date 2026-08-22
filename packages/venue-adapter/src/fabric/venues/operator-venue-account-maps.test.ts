@@ -23,10 +23,19 @@ describe('operator venue account maps (D36)', () => {
   });
 
   it('balances refuses not_ready without HTTP port — never silent success', async () => {
-    const maps = buildOperatorVenueAccountMaps({
-      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
-      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
-    });
+    const maps = buildOperatorVenueAccountMaps(
+      {
+        VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
+        VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
+      },
+      {
+        http: {
+          async get() {
+            return { status: 503, body: null, header: () => null };
+          },
+        },
+      },
+    );
     await expect(maps.balancesByVenue['bybit-spot']!()).rejects.toMatchObject({
       reason: expect.stringMatching(/not_ready|unreachable/),
     });

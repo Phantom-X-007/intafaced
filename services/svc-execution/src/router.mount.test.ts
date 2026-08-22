@@ -225,7 +225,9 @@ describe('execution.oms EMS file journal mount', () => {
       return execution;
     };
 
-    const fetch: OmsFetchFn = async () => null;
+    const fetch: OmsFetchFn = async () => {
+      throw new Error('fetch unused');
+    };
 
     const caller = createExecutionRouter(
       new SealedHouseTenantRegistry(),

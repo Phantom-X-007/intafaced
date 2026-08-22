@@ -25,10 +25,20 @@ describe('operator venue trade maps (D33)', () => {
   });
 
   it('place refuses not_ready without HTTP port — never silent success', async () => {
-    const maps = buildOperatorVenueTradeMaps({
-      VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
-      VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
-    });
+    const maps = buildOperatorVenueTradeMaps(
+      {
+        VENUE_AGGREGATION_BYBIT_SPOT_API_KEY: 'k',
+        VENUE_AGGREGATION_BYBIT_SPOT_API_SECRET: 's',
+      },
+      {
+        // Get-only: no signed POST. Must refuse, never hit a live venue.
+        http: {
+          async get() {
+            return { status: 503, body: null, header: () => null };
+          },
+        },
+      },
+    );
     await expect(
       maps.placeByVenue['bybit-spot']!({
         symbol: 'BTC/USDT',

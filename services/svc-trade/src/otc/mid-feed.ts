@@ -29,9 +29,13 @@ export type OtcMidFeedWiringInput = {
   readonly liveObservationFeed: boolean;
 };
 
-export type OtcMidFeedWiringStatus = ReturnType<typeof otcMidFeedStatus> & {
-  readonly wiring: OtcMidFeedWiring;
+export type OtcMidFeedWiringStatus = {
+  readonly published: boolean;
+  readonly socket: typeof OTC_MID_FEED_SOCKET;
   readonly residual: string | null;
+  readonly bootMapAllowed: boolean;
+  readonly liveObservationFeed: boolean;
+  readonly wiring: OtcMidFeedWiring;
 };
 
 /** Honest mid-feed wiring posture for deskStatus — names flag-on-but-unwired separately. */

@@ -58,9 +58,18 @@ export interface Context {
   requestId: string;
 }
 
+function causeCode(cause: unknown): string | undefined {
+  if (cause instanceof AuthError || cause instanceof JurisdictionError) return cause.code;
+  if (cause && typeof cause === 'object' && 'code' in cause && typeof cause.code === 'string') {
+    return cause.code;
+  }
+  return undefined;
+}
+
 const t = initTRPC.context<Context>().create({
   errorFormatter({ shape, error }) {
     const cause = error.cause;
+    const code = causeCode(cause);
     return {
       ...shape,
       data: {
@@ -72,6 +81,9 @@ const t = initTRPC.context<Context>().create({
         // name the step the user has to take; one that ignores it is no worse
         // off than before.
         requiredTier: cause instanceof JurisdictionError ? cause.requiredTier : undefined,
+        // tRPC strips `cause` in production. Copy the named code so a public
+        // door can assert `token.buyback_tokens_unmoved` instead of prose.
+        ...(code ? { cause: { code } } : {}),
       },
     };
   },
