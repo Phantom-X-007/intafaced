@@ -11,6 +11,7 @@ import { buildExecutionVenueMarketMaps } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap, TRADE_BOOK_SNAPSHOT_VENUE_ID } from './trade-book-snapshot.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { FileEmsOrderStore } from './file-ems-order-store.js';
+import { buildExecutionReadyResponse } from './ready-response.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -61,19 +62,17 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  stage: 'oms-ems',
-  store: emsStorePath ? 'file' : 'memory',
-  emsStorePath: emsStorePath || null,
-  internalVenue: 'blocked',
-  externalVenueTrade: venueTradeMaps.wiredVenueIds,
-  venueCredentialBoard,
-  externalVenueAccount: venueAccountMaps.wiredVenueIds,
-  externalVenueMarketData: venueMarketMaps.wiredVenueIds,
-  emsAckCount: emsStore.list().length,
-  tradeBookSnapshotVenue: env.TRADE_URL ? TRADE_BOOK_SNAPSHOT_VENUE_ID : null,
-}));
+app.get('/ready', async () =>
+  buildExecutionReadyResponse({
+    emsStorePath,
+    tradeUrl: env.TRADE_URL,
+    venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds,
+    venueCredentialBoard,
+    venueAccountWiredVenueIds: venueAccountMaps.wiredVenueIds,
+    venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds,
+    emsAckCount: emsStore.list().length,
+  }),
+);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
