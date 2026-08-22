@@ -53,6 +53,11 @@ export {
   type LakeRetentionPurgeResult,
 } from './retention-purge.js';
 export {
+  describeRetentionMaintenance,
+  runConnectDataLakeRetentionMaintenance,
+  type RetentionMaintenanceSummary,
+} from './retention-maintenance.js';
+export {
   lakeTickRowsFromCaptureRecords,
   persistCaptureRecordsToPostgres,
   type LakeTickInsertRow,
