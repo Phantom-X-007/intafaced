@@ -512,7 +512,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'wip',
+    status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation'],
     requires: [
@@ -522,11 +522,13 @@ export const FEATURES = [
       'packages/connect-data-lake/src/capture-policy.ts',
       'packages/connect-data-lake/src/capture-lake-consumer.ts',
       'packages/connect-data-lake/src/persistence-sink.ts',
+      'packages/connect-data-lake/src/tick-fill-normalisation-pipeline.ts',
+      'packages/connect-data-lake/src/data-lake-tracker-status-pin.test.ts',
       'packages/venue-adapter/src/fabric/capture-lake.ts',
     ],
     note:
-      'WIP D27-P4: TSDB write path in packages/connect-data-lake — measured rows INSERT to connect_lake.lake_ticks when CONNECT_DATA_LAKE_TSDB_URL + CONNECT_DATA_LAKE_RETENTION_DAYS owner-set; blank env refuse-closed. ' +
-      'Unconnected venue = absent hole. Class X residual: compose TSDB provisioning; tick/fill normalisation pipeline; retention enforcement job.',
+      '**Done 2026-08-22:** Fleet TSDB schema + svc-edge CONNECT_DATA_LAKE_* wiring; tick/fill normalisation pipeline; retention owner env pass-through. ' +
+      'Measured rows INSERT when owner env complete; absent holes never synthetic quiet markets.',
   }),
   f('execution.sor', 'svc-execution — cross-venue Smart Order Router, OMS/EMS, execution reports (§28)', {
     module: 'trade',
