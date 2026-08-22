@@ -6,6 +6,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { buildExecutionReadyResponse } from './ready-response.js';
 import { describeExecutionVenueCredentialBoard, unionExecutionVenueIds } from './venue-adapters.js';
+import { executionSorMountVsTrackerBoardCard, executionSorTrackerBackendDoneBarMet } from './mount-vs-tracker.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const indexSrc = () => readFileSync(join(here, 'index.ts'), 'utf8');
@@ -335,6 +336,23 @@ describe('execution boot ready and health complete (D72)', () => {
     expect(src).toContain('EXECUTION_EMS_STORE_PATH');
     expect(src).toContain('emsAckCount: emsStore.list().length');
     expect(src).toContain('tradeUrl: env.TRADE_URL');
+  });
+});
+
+describe('execution boot ready and mount cert complete (D74)', () => {
+  it('boot wiring and execution.sor mount-vs-tracker cert both green on tip', () => {
+    const src = indexSrc();
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorMountVsTrackerBoardCard()).toMatchObject({
+      tracker: 'execution.sor',
+      backendDoneBarMet: true,
+      mountComplete: true,
+      gaps: 3,
+    });
+    expect(src).toContain("app.get('/ready'");
+    expect(src).toContain('createExecutionRouter(');
+    expect(src).toContain('emsStore');
+    expect(src).toContain('describeExecutionVenueCredentialBoard(');
   });
 });
 
