@@ -331,7 +331,7 @@ export const FEATURES = [
   f('trade.futures', 'Perps: isolated margin, funding, partial-liquidation ladder', {
     module: 'trade',
     phase: '2',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
@@ -342,26 +342,27 @@ export const FEATURES = [
       'services/svc-trade/src/futures/adl-disclosure.test.ts',
     ],
     note:
-      '**D26-P1-T1 Done 2026-08-21:** isolated margin ladder + funding + ADL disclosure (`mount-vs-tracker.ts`); gap-series marks proven. ' +
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — public-door bar not met. ' +
+      'Stage-1 refuse-closed on tip (isolated margin ladder + funding + ADL disclosure); gap-series marks proven. ' +
       'TRADE_FUTURES_ENABLED default OFF; jobs default OFF; insurance empty blocks live list. ' +
-      'Class X residual: owner D3 ladder numbers; funding rates/ceilings; live re-leverage 501.',
+      'Product still needs: owner D3 ladder numbers; funding rates/ceilings; live re-leverage (501 or named socket).',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
     phase: '2',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.futures'],
     requires: ['services/svc-trade/src/spot/options-policy.ts', 'services/svc-trade/src/spot/options-listing.test.ts'],
     note:
-      '**D26-P1-T6 Done 2026-08-21:** settlement law refuse on options.policy (`options-mount-vs-tracker.ts`). ' +
-      'SOCKET §13 socket.options-settlement-asset-law; never invent live set / settlement asset / IV. ' +
-      'Class X residual: owner P0-05 stamp; D7 fixing; complete European terms + engine.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Settlement law refuse on options.policy on tip; SOCKET §13 socket.options-settlement-asset-law — never invent live set / settlement asset / IV. ' +
+      'Product still needs: owner P0-05 settlement asset stamp; D7 fixing; complete European terms + engine.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',
     phase: '2',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'token.staking'],
     requires: [
@@ -372,15 +373,15 @@ export const FEATURES = [
       'services/svc-trade/src/otc/otc-policy.ts',
     ],
     note:
-      '**D26-P1-T2 Done 2026-08-21:** RFQ→stake→fail-closed quote→ledger settle (`mount-vs-tracker.ts`); durable quotes + venue mid feed. ' +
-      'Accept binds quoted price; caller mid refused; platform-principal settle via ledger-client only. ' +
-      'Class X residual: owner §8 desk-law numbers; socket.otc-maker-routing; connect.venue-vault custody.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Stage-1 RFQ→stake→fail-closed quote→ledger settle on tip; accept binds quoted price; caller mid refused; ledger-client only. ' +
+      'Product still needs: owner §8 desk-law numbers; socket.otc-maker-routing; connect.venue-vault custody.',
   }),
   f('trade.copy', 'Copy trading, audited leaders, fee-share (not profit-share)', {
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
@@ -390,21 +391,21 @@ export const FEATURES = [
       'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
     ],
     note:
-      '**D26-P1-T3 Done 2026-08-21:** sovereign desk + follow/kill/unfollow (`mount-vs-tracker.ts`); fee-share not profit-share. ' +
-      'Blank §8 rates/jurisdiction refuse-closed; never invent leader share or returns-ranked board. ' +
-      'Class X residual: owner fee-share/jurisdiction env pins; auto-mirror place socket.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Stage-1 sovereign desk + follow/kill/unfollow on tip; fee-share not profit-share; blank §8 rates/jurisdiction refuse-closed. ' +
+      'Product still needs: owner fee-share/jurisdiction env pins; durable auto-mirror session-key (socket.copy-auto-mirror).',
   }),
   f('trade.forex', 'Fiat pairs on the same engine', {
     module: 'trade',
     phase: '2',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'pay.rails'],
     requires: ['services/svc-trade/src/spot/forex-settlement.ts', 'services/svc-trade/src/spot/forex-settlement-public-doors.test.ts'],
     note:
-      '**D26-P1-T7 Done 2026-08-21:** refuse-closed settlement posture (`forex-mount-vs-tracker.ts`). ' +
-      'forex.settlementStatus + assertProductionListing; six majors listed but unfundable until rails. ' +
-      'Class X residual: owner P0-05 settlement asset; fiat settle rails — never invent settlement asset.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Refuse-closed settlement posture on tip; forex.settlementStatus + assertProductionListing; six majors listed but unfundable until rails. ' +
+      'Product still needs: owner P0-05 settlement asset stamp; fiat settle rails — never invent settlement asset.',
   }),
   f('trade.algo', 'TWAP execution', {
     module: 'trade',
@@ -459,7 +460,7 @@ export const FEATURES = [
   f('venue.aggregation', 'External venue adapters via CCXT (cross-venue)', {
     module: 'trade',
     phase: '2',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot'],
     requires: [
@@ -468,9 +469,9 @@ export const FEATURES = [
       'packages/venue-contracts/src/latency.ts',
     ],
     note:
-      '**D26-P1-V1 Done 2026-08-21:** public market-data fabric (`aggregation-mount-vs-tracker.ts`); binance/bybit/okx adapters; no ccxt in money path. ' +
-      'Never invent mid — empty/dark/unmapped → null. `createVenueMarketDataAdapter` refuse unknown ids. ' +
-      'Class X residual: trading half not_ready; no live-network CI; futures M3 human risk truth.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — quote-only MD fabric is not the trading half. ' +
+      'Public market-data fabric on tip (binance/bybit/okx); no ccxt in money path; never invent mid. ' +
+      'Product still needs: trading half (OMS wire); no live-network CI; futures M3 human risk truth.',
   }),
   f('connect.venue-vault', 'Venue Vault — per-user external API keys, HSM-backed, withdrawal refused (§27)', {
     phase: '5',
@@ -528,7 +529,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['venue.aggregation', 'connect.latency-grading'],
     requires: [
@@ -537,9 +538,9 @@ export const FEATURES = [
       'packages/venue-adapter/src/execution-report.ts',
     ],
     note:
-      '**D26-P1-X3 Done 2026-08-21:** one ranking rule + SOR cost model + execution reports (`sor-mount-vs-tracker.ts`). ' +
-      '5 bps internal preference capped; incomplete cost refuses weight 0; never invent spreads. ' +
-      'Class X residual: OMS/EMS svc scaffold, letter→bps owner schedule, full svc-execution mount.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — cost model is not OMS/EMS. ' +
+      'Stage-1 ranking rule + SOR cost model + execution reports on tip; 5 bps internal preference capped; incomplete cost → weight 0. ' +
+      'Product still needs: OMS/EMS on svc-execution; letter→bps owner schedule; full execution mount (#2248 leftover).',
   }),
   f('execution.arbitrage', 'Arbitrage engine — cross-exchange, triangular, basis, funding, DEX to CEX (§28)', {
     module: 'trade',
@@ -564,7 +565,7 @@ export const FEATURES = [
     module: 'trade',
     phase: '2',
     plane: 'B',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['execution.sor', 'trade.mm-bot'],
     requires: [
@@ -574,27 +575,27 @@ export const FEATURES = [
       'packages/execution-mm/src/mm-policy.ts',
     ],
     note:
-      '**D26-P1-X5 Done 2026-08-21:** external-only MM half on SOR cost model (`mount-vs-tracker.ts`, `@intafaced/execution-mm`). ' +
-      'Refuses internal venue MM; kill switches + hedge plan; never invents mids/fees. ' +
-      'Class X residual: internal MM blocked (D26-P0-01), OMS wire, owner spread/skew bands.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Stage-1 external-only MM half on SOR cost model on tip; refuses internal venue MM; kill switches + hedge plan. ' +
+      'Product still needs: internal MM + house-on-own-venue (owner unfreeze or never); OMS wire; owner spread/skew bands.',
   }),
   f('execution.house-tenant', 'House desk sealed private tenant — the Throne Law (§28)', {
     module: 'trade',
     phase: '2',
     plane: 'F',
-    status: 'done',
+    status: 'ready',
     owner: 'Nitro',
     dependsOn: ['execution.sor'],
     requires: ['packages/execution-house-tenant/src/house-tenant-policy.ts', 'services/svc-execution/src/execution-policy-route.test.ts'],
     note:
-      '**D26-P0-01 Done 2026-08-21:** Stage-1 external-only tenant (`house-mount-vs-tracker.ts`); kill-first adminKill. ' +
-      'execution.tenant.describe|kill mounted; internal_venue + matching-book refuse. ' +
-      'Class X residual: internal-venue half blocked until owner ruling; existence disclosure deferred.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Stage-1 external-only tenant on tip; kill-first adminKill; internal_venue + matching-book refuse. ' +
+      'Product still needs: internal-venue half (owner ruling unfreeze or never); existence disclosure deferred.',
   }),
   f('web.terminal', 'Pro terminal — depth, charts, hotkeys, sub-accounts', {
     module: 'trade',
     phase: '2',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['trade.spot', 'infra.ui-tokens', 'ws.depth'],
     requires: [
@@ -604,9 +605,9 @@ export const FEATURES = [
       'vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-depth-feed.js',
     ],
     note:
-      '**D26-P4-C1 Done 2026-08-21:** vendored Vue desk + live ix-depth-feed wired (`terminal-mount-vs-tracker.ts`). ' +
-      'feedLive only after snapshot; ix-wire refuses float decimals; shell-golden gates on tip. ' +
-      'Class X residual: brand drain / depth number refuse / snapshot provenance L11 W5.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done — mount cert is not the public-door product bar. ' +
+      'Vendored Vue desk + live ix-depth-feed wired on tip; feedLive only after snapshot; ix-wire refuses float decimals. ' +
+      'Product still needs: brand drain / depth number refuse / snapshot provenance (Nitro craft L11 W5).',
   }),
   f('web.shell', 'Product shell — the served customer surface', {
     module: 'core-ops',
@@ -655,7 +656,7 @@ export const FEATURES = [
   f('pay.gateway', 'Branded gateway, hosted checkout, payment links', {
     module: 'pay',
     phase: '3',
-    status: 'done',
+    status: 'ready',
     owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
     requires: [
@@ -665,9 +666,9 @@ export const FEATURES = [
       'services/svc-pay/src/router.mount.test.ts',
     ],
     note:
-      '**D26-P1-P1 Done 2026-08-21:** hosted checkout + merchant + payment lifecycle (`gateway-mount-vs-tracker.ts`). ' +
-      'Checkout/merchant/payment doors mounted; hosted page script-free. A2 grant stays refuse-closed. ' +
-      'Class X residual: card acquiring absent (socket.psp-partners); kybStatus echo-only until pay.psp wires gates.',
+      '**D27-P0 UNSTAMP 2026-08-22:** mount-vs-tracker cert ≠ product done. ' +
+      'Stage-1 hosted checkout + merchant + payment lifecycle on tip; hosted page script-free; A2 grant refuse-closed. ' +
+      'Product still needs: card acquiring (socket.psp-partners); KYB must gate money (kybStatus echo-only today).',
   }),
   f('pay.psp', 'PSP mode — own the merchant, digital KYB, custom pricing', {
     module: 'pay',
