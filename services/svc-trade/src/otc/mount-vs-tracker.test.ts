@@ -105,3 +105,17 @@ describe('trade.otc mounted doors in router (D58)', () => {
     expect(otcTrackerBackendDoneBarMet()).toBe(true);
   });
 });
+
+describe('trade.otc backend done bar complete (D60)', () => {
+  it('otcTrackerBackendDoneBarMet requires policy honesty, mount matrix, and done bar tests', () => {
+    expect(otcPolicyHonest()).toBe(true);
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcDoneBarTestsPresent()).toBe(true);
+    expect(otcTrackerBackendDoneBarMet()).toBe(true);
+    expect(otcMountVsTrackerBoardCard()).toMatchObject({
+      mountComplete: true,
+      backendDoneBarMet: true,
+      gaps: OTC_HONEST_GAPS.length,
+    });
+  });
+});
