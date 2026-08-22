@@ -17,6 +17,7 @@ import {
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
 import { OtcDeskService } from './otc-service.js';
+import { describeOtcPolicy } from './otc-policy.js';
 import { FixedOtcStake } from './stake-source.js';
 import { UNPUBLISHED_OTC_DESK_LAW, type OtcDeskLaw } from './desk-law.js';
 import { createConfigOtcMidSource, createObservedOtcMidSource } from './mid-source.js';
@@ -231,6 +232,15 @@ describe('the OTC desk is mounted, and what is mounted refuses', () => {
     expect(status.residual).toContain('spread');
     expect(status.statusLine).toContain('published=0');
 
+    await desk.app.close();
+  });
+
+  it('deskStatus midFeed boot wiring matches policy over HTTP (D43)', async () => {
+    const desk = await buildDesk();
+    const res = await callQuery(desk, 'otc.deskStatus');
+    expect(res.statusCode).toBe(200);
+    const status = resultData<{ midFeed: ReturnType<typeof describeOtcPolicy>['bootMidFeedWiring'] }>(res);
+    expect(status.midFeed).toEqual(describeOtcPolicy().bootMidFeedWiring);
     await desk.app.close();
   });
 
