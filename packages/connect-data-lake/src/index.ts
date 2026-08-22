@@ -82,6 +82,7 @@ export {
   type QuantHonestyRefuseReason,
   type ReturnsLeaderboardInput,
 } from './quant-honesty-policy.js';
+export { describeQuantHonestyMount, gateQuantSurfaceRender, type QuantSurfaceRenderInput } from './quant-honesty-mount.js';
 export {
   absentReasonFromCaptureLakeHole,
   bookLevelsFromLakeRecord,

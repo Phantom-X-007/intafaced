@@ -19,6 +19,8 @@ export const DATA_LAKE_PACKAGE_EXPORTS = [
   'retentionPersistenceGate',
   'purgeExpiredLakeTicks',
   'runConnectDataLakeRetentionMaintenance',
+  'gateQuantSurfaceRender',
+  'describeQuantHonestyMount',
 ] as const;
 
 export const DATA_LAKE_DONE_BAR_TEST_FILES = [
@@ -28,6 +30,7 @@ export const DATA_LAKE_DONE_BAR_TEST_FILES = [
   'persistence-sink.test.ts',
   'retention-purge.test.ts',
   'retention-maintenance.test.ts',
+  'quant-honesty-mount.test.ts',
   'package-export-mount.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
