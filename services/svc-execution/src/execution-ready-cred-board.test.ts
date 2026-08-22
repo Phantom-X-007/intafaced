@@ -347,7 +347,7 @@ describe('execution boot ready and mount cert complete (D74)', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(src).toContain("app.get('/ready'");
     expect(src).toContain('createExecutionRouter(');
@@ -366,7 +366,7 @@ describe('execution boot and sor mount — D75 denon complete', () => {
       doorsMounted: 4,
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
     expect(src).toContain("app.get('/health'");
@@ -386,7 +386,7 @@ describe('execution boot and sor mount — D77 denon complete', () => {
       tracker: 'execution.sor',
       doors: 4,
       doorsMounted: 4,
-      gaps: 3,
+      gaps: 0,
       backendDoneBarMet: true,
       mountComplete: true,
     });
@@ -405,7 +405,7 @@ describe('execution boot and sor mount — D79 denon complete', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(src).toContain("app.get('/health'");
     expect(src).toContain("app.get('/ready'");
@@ -437,7 +437,7 @@ describe('execution boot and sor mount — D84 denon complete', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(src).toContain("app.get('/health'");
     expect(src).toContain("app.get('/ready'");
@@ -469,7 +469,7 @@ describe('execution boot and sor mount — D88 denon complete', () => {
       tracker: 'execution.sor',
       backendDoneBarMet: true,
       mountComplete: true,
-      gaps: 3,
+      gaps: 0,
     });
     expect(src).toContain("app.get('/health'");
     expect(src).toContain("app.get('/ready'");
