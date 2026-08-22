@@ -251,6 +251,48 @@ describe('execution boot index wiring complete (D65)', () => {
   });
 });
 
+describe('execution ready response fields complete (D67)', () => {
+  it('buildExecutionReadyResponse exposes venue trade, account, market, and ems ack fields', () => {
+    const src = indexSrc();
+    expect(src).toContain('buildExecutionReadyResponse({');
+    expect(src).toContain('venueTradeWiredVenueIds:');
+    expect(src).toContain('operatorSupplementVenueIds:');
+    expect(src).toContain('operatorAccountSupplementVenueIds:');
+    expect(src).toContain('publicMdSupplementVenueIds:');
+    expect(src).toContain('venueAccountWiredVenueIds:');
+    expect(src).toContain('venueMarketWiredVenueIds:');
+    expect(src).toContain('emsAckCount:');
+    expect(src).toContain('tradeUrl: env.TRADE_URL');
+    const venueCredentialBoard = describeExecutionVenueCredentialBoard(['binance-spot']);
+    const payload = buildExecutionReadyResponse({
+      emsStorePath: '/tmp/ems',
+      tradeUrl: 'http://trade',
+      venueTradeWiredVenueIds: ['binance-spot'],
+      operatorSupplementVenueIds: ['okx-spot'],
+      operatorAccountSupplementVenueIds: ['bybit-spot'],
+      publicMdSupplementVenueIds: ['binance-spot'],
+      venueCredentialBoard,
+      venueAccountWiredVenueIds: ['bybit-spot'],
+      venueMarketWiredVenueIds: ['binance-spot'],
+      emsAckCount: 2,
+    });
+    expect(payload).toMatchObject({
+      ready: true,
+      stage: 'oms-ems',
+      store: 'file',
+      externalVenueTrade: ['binance-spot'],
+      operatorSupplementVenueIds: ['okx-spot'],
+      operatorAccountSupplementVenueIds: ['bybit-spot'],
+      publicMdSupplementVenueIds: ['binance-spot'],
+      externalVenueAccount: ['bybit-spot'],
+      externalVenueMarketData: ['binance-spot'],
+      emsAckCount: 2,
+      tradeBookSnapshotVenue: 'intafaced-spot',
+    });
+    expect(payload.venueCredentialBoard.inventsCredentials).toBe(false);
+  });
+});
+
 describe('execution /ready credential board inject (D44)', () => {
   it('GET /ready exposes supplement-union credential board over HTTP', async () => {
     const env = {
