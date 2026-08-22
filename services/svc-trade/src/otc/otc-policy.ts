@@ -6,6 +6,7 @@
 import { OTC_DESK_LAW_RESIDUAL } from './errors.js';
 import { OTC_MAKER_ROUTING_RESIDUAL, OTC_MAKER_ROUTING_SOCKET } from './maker-routing.js';
 import {
+  describeOtcMidFeedWiring,
   OTC_MID_FEED_FLAG_ON_SYMBOL_MAP_EMPTY,
   OTC_MID_FEED_FLAG_ON_VENUE_UNWIRED,
   OTC_MID_FEED_RESIDUAL,
@@ -33,6 +34,12 @@ export function describeOtcPolicy() {
     midFeedFlagOnVenueUnwiredResidual: OTC_MID_FEED_FLAG_ON_VENUE_UNWIRED,
     midFeedFlagOnSymbolMapEmptyResidual: OTC_MID_FEED_FLAG_ON_SYMBOL_MAP_EMPTY,
     midFeedWiringHonest: true as const,
+    bootMidFeedWiring: describeOtcMidFeedWiring({
+      midFromVenue: false,
+      venueAdapterInstalled: false,
+      venueSymbolsConfigured: false,
+      liveObservationFeed: false,
+    }),
     platformPrincipalOnly: true as const,
     inventsSpreadBps: false as const,
     inventsStakeGate: false as const,

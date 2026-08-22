@@ -14,6 +14,8 @@ describe('describeOtcPolicy', () => {
     expect(p.midFeedFlagOnVenueUnwiredResidual).toBe(OTC_MID_FEED_FLAG_ON_VENUE_UNWIRED);
     expect(p.midFeedFlagOnSymbolMapEmptyResidual).toBe(OTC_MID_FEED_FLAG_ON_SYMBOL_MAP_EMPTY);
     expect(p.midFeedWiringHonest).toBe(true);
+    expect(p.bootMidFeedWiring.wiring).toBe('flag_off');
+    expect(p.bootMidFeedWiring.residual).toBe(OTC_MID_FEED_RESIDUAL);
     expect(p.inventsSpreadBps).toBe(false);
     expect(p.inventsMakerBook).toBe(false);
     expect(p.moneyViaLedgerClientOnly).toBe(true);
