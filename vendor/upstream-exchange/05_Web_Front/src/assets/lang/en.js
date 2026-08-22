@@ -1046,6 +1046,27 @@ module.exports = {
                 withdrawReason: "Reason",
                 withdrawReasonHint: "Required",
                 withdrawDone: "Withdrawn"
+            },
+            disputeReason: "Reason",
+            disputeReasonHint: "Required, 1–2000 characters",
+            disputeEvidence: "Evidence",
+            disputeEvidenceHint: "Optional on open. Required to append. One item. Append-only — nothing already filed can be edited or removed.",
+            disputeEvidenceSeq: "Seq",
+            disputeEvidenceAt: "Filed",
+            disputeEvidenceItem: "Item",
+            disputeEvidenceEmpty: "No evidence filed by you",
+            disputeId: "Dispute",
+            disputeStatus: "Status",
+            disputeDeadline: "Deadline",
+            disputeOverdue: "Overdue",
+            disputeOpenedVia: "Opened via",
+            disputeIfNobodyRules: "If nobody rules",
+            disputeModerationReachable: "Moderation reachable",
+            disputes: {
+                open: "Open dispute",
+                openDone: "Opened",
+                append: "Append evidence",
+                appendDone: "Appended"
             }
         },
         token: {
