@@ -158,6 +158,18 @@ module.exports = {
             lookup: "Look up position",
             position: "Position"
         },
+        kyc: {
+            submitTitle: "Ask to be verified",
+            submitLead: "This records a request. It grants nothing until an operator reviews it.",
+            submit: "Submit",
+            submitPending: "Pending",
+            tier: "Tier",
+            tierBasic: "Basic",
+            tierFull: "Full",
+            tierInstitutional: "Institutional",
+            jurisdiction: "Jurisdiction",
+            jurisdictionHint: "Two-letter country code"
+        },
         state: {
             loading: "Reading",
             serviceSaid: "The service said:",
