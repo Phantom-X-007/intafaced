@@ -5,6 +5,7 @@ import {
   OTC_TRACKER_ID,
   otcDoneBarTestsPresent,
   otcDoorsInRouterSource,
+  otcMountMatrixComplete,
   otcMountVsTrackerBoardCard,
   otcPolicyHonest,
   otcTrackerBackendDoneBarMet,
@@ -41,5 +42,16 @@ describe('trade.otc policy invent flags (D48)', () => {
     expect(p.inventsMidPrice).toBe(false);
     expect(otcPolicyHonest()).toBe(true);
     expect(otcTrackerBackendDoneBarMet()).toBe(true);
+  });
+});
+
+describe('trade.otc mount matrix (D50)', () => {
+  it('otcMountMatrixComplete locks all OTC_MOUNTED_DOORS in router source', () => {
+    expect(otcMountMatrixComplete()).toBe(true);
+    expect(otcMountVsTrackerBoardCard()).toMatchObject({
+      doors: OTC_MOUNTED_DOORS.length,
+      doorsMounted: OTC_MOUNTED_DOORS.length,
+      mountComplete: true,
+    });
   });
 });
