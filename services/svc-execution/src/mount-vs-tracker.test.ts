@@ -73,3 +73,24 @@ describe('execution.sor mount vs tracker — D75 denon complete', () => {
     expect(executionSorDoneBarTestsPresent()).toBe(true);
   });
 });
+
+describe('execution.sor mount vs tracker — D76 denon complete', () => {
+  it('full mount board: OMS doors, spine policy, boot, venue-adapter wiring, done-bar tests', () => {
+    expect(EXECUTION_SOR_TRACKER_ID).toBe('execution.sor');
+    const card = executionSorMountVsTrackerBoardCard();
+    expect(card).toMatchObject({
+      tracker: 'execution.sor',
+      doors: 4,
+      doorsMounted: 4,
+      gaps: 3,
+      backendDoneBarMet: true,
+      mountComplete: true,
+    });
+    expect(executionSorTrackerBackendDoneBarMet()).toBe(true);
+    expect(executionSorPolicyHonest()).toBe(true);
+    expect(executionSorBootHonestInSource()).toBe(true);
+    expect(executionSorVenueAdapterPolicyInSource()).toBe(true);
+    expect(sorOmsDoorsInRouterSource()).toEqual([...EXECUTION_SOR_OMS_DOORS]);
+    expect(executionSorDoneBarTestsPresent()).toBe(true);
+  });
+});
