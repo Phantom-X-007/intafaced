@@ -3,8 +3,9 @@
 **Status:** BINDING law · 2026-08-04  
 **Tip at land:** re-derive `origin/main`  
 **Doctrine home:** `INTAFACED_DEFINITIVE_BUILD.md` §16–§25 (two planes, INTACHAIN §17)  
-**Shehzad board:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md)  
-**Denon live board:** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 IDs · LIVE-LANES `denon-hard-parallel`)  
+**Last MVP boards (live queue 2026-08-23):** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) — Phantom short integrity list · Shehzad P0 venue + #2473 · parked sockets/INTACHAIN · human blockers  
+**Shehzad full runway:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) (INTACHAIN stays here; **not** the MVP wave)  
+**Denon live board:** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) §3. Historical 120-ID list: [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md)  
 **Denon historical + D-S factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) · index [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md) (18/18 done)  
 **Ownership lock:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md)
 
@@ -114,7 +115,8 @@ STOP expanding non-blockchain (pay card/bank/futures/OTC as product mountains).
 #346: finish clean OR hand off residual to Nitro (comment on the PR) — do not abandon proof silently.
 
 YOUR SOLE MOUNTAIN: Protocol Plane + INTACHAIN (~49 board IDs).
-Board: https://github.com/Phantom-X-007/intafaced/blob/main/docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md
+This wave (MVP then stop): https://github.com/Phantom-X-007/intafaced/blob/main/docs/LAST-MVP-BOARDS-2026-08-23.md
+Full runway: https://github.com/Phantom-X-007/intafaced/blob/main/docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md
 Ownership: https://github.com/Phantom-X-007/intafaced/blob/main/docs/GITHUB-OWNERSHIP-SHEHZAD.md
 Split: https://github.com/Phantom-X-007/intafaced/blob/main/docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
 
@@ -129,9 +131,10 @@ Class X (mainnet keys / go-live) remains Nitro human.
 ### Denon
 
 ```
-Denon — hard board REWRITTEN on tip (mega judgment list + SPEC FACTORY).
+Denon — last MVP board on tip (short integrity list + parked + human blockers).
 
-Live board: https://github.com/Phantom-X-007/intafaced/blob/main/docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md
+Live board: https://github.com/Phantom-X-007/intafaced/blob/main/docs/LAST-MVP-BOARDS-2026-08-23.md
+Historical 120-ID list: https://github.com/Phantom-X-007/intafaced/blob/main/docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md
 Historical + factory origin: https://github.com/Phantom-X-007/intafaced/blob/main/docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
 Split: https://github.com/Phantom-X-007/intafaced/blob/main/docs/THREE-WAY-DISTRIBUTION-2026-08-04.md
 
