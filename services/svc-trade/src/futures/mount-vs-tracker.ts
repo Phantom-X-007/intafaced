@@ -1,8 +1,9 @@
 /**
  * D26-P1-T1 — trade.futures mount vs tracker honest gaps.
  *
- * Backend product-complete: isolated margin ladder, funding, ADL disclosure, gap-series marks.
- * Owner ladder numbers / funding rates / live re-leverage stay Class X residuals.
+ * Backend product-complete: isolated margin ladder, funding, ADL disclosure, gap-series marks,
+ * isolated live re-leverage (ledger delta, sealed 10×). Owner ladder JSON still refuse-closed
+ * when unset; TRADE_FUTURES_MAX_LEVERAGE empty is DIRECTION 10× (D26-P0-07), not refuse-unset.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -22,13 +23,35 @@ export const FUTURES_DONE_BAR_TEST_FILES = [
   'futures-leverage-p0-07-default.test.ts',
   'futures-ladder-owner-gate.test.ts',
   'futures-compose-wiring.test.ts',
+  'futures-leverage-501-notsupported.test.ts',
+  'futures-live-releverage.test.ts',
 ] as const;
 
-/** Owner ladder/funding/leverage env + compose wired; live re-leverage socket remains Class X. */
-export const FUTURES_HONEST_GAPS = ['gap.live_releverage_501'] as const;
+/** Owner ladder/funding compose wired; live re-leverage is a working path, not a 501 residual. */
+export const FUTURES_HONEST_GAPS = [] as const;
 
 export function futuresOwnerEnvComposeGapsClosed(): boolean {
   return futuresOwnerComposeGapsClosed();
+}
+
+/** POST leverage is the live isolated path (ledger add/release), not the 501 helper. */
+export function futuresLiveReleverageMounted(): boolean {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const rest = readFileSync(join(here, '..', 'private-rest.ts'), 'utf8');
+  const service = readFileSync(join(here, 'position-service.ts'), 'utf8');
+  const index = readFileSync(join(here, '..', 'index.ts'), 'utf8');
+  const setLev = service.match(/async setLeverage\([\s\S]*?^  async addIsolatedMargin/m)?.[0] ?? '';
+  return (
+    /app\.post\('\/api\/v1\/positions\/leverage',\s*async/.test(rest) &&
+    !/app\.post\('\/api\/v1\/positions\/leverage',\s*derivativesNotSupported\('setLeverage'/.test(rest) &&
+    /deps\.setLeverage\(/.test(rest) &&
+    /typeof body\.leverage === 'string'/.test(rest) &&
+    /async setLeverage\(/.test(setLev) &&
+    /recipes\.futuresMarginAdd\(/.test(setLev) &&
+    /recipes\.futuresMarginRelease\(/.test(setLev) &&
+    !/notSupported\(/.test(setLev) &&
+    /positions\.setLeverage\(/.test(index)
+  );
 }
 
 export function futuresDoorsInRouterSource(): readonly (typeof FUTURES_MOUNTED_DOORS)[number][] {
@@ -59,7 +82,10 @@ export function futuresDoneBarTestsPresent(): boolean {
 
 export function futuresTrackerBackendDoneBarMet(): boolean {
   return (
-    futuresDoorsInRouterSource().length === FUTURES_MOUNTED_DOORS.length && futuresPolicyHonestInSource() && futuresDoneBarTestsPresent()
+    futuresDoorsInRouterSource().length === FUTURES_MOUNTED_DOORS.length &&
+    futuresPolicyHonestInSource() &&
+    futuresDoneBarTestsPresent() &&
+    futuresLiveReleverageMounted()
   );
 }
 
