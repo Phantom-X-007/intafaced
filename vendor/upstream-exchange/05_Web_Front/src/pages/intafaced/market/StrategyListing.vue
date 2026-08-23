@@ -25,6 +25,51 @@
     </IxState>
     <p class="ix-note ix-note-quiet">{{ $t('intafaced.quant.market.noRank') }}</p>
 
+    <section class="ix-card ix-copy-directory">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.agents.copy.title') }}</h2>
+        <span class="ix-sub">copyIntel.buildStats</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.agents.copy.lead') }}</p>
+      <IxState :loading="copy.loading" :reason="copy.reason" :message="copy.message" endpoint="/api/agents/trpc/copyIntel.buildStats">
+        <div v-if="copy.data && copy.data.status === 'empty'" class="ix-note ix-note-quiet">
+          {{ $t('intafaced.agents.copy.empty') }}
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'unavailable'" class="ix-note">
+          {{ $t('intafaced.agents.copy.unavailable') }}
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'ok' && copy.data.presentation && copy.data.presentation.rankedByReturns" class="ix-note">
+          {{ $t('intafaced.agents.copy.unavailable') }}
+        </div>
+        <div v-else-if="copy.data && copy.data.status === 'ok' && copy.data.presentation && copy.data.presentation.kind === 'directory' && copy.data.presentation.sortKey === 'leaderId'">
+          <div v-if="copyDirectory.length" class="ix-scroll">
+            <table class="ix-table">
+              <thead>
+                <tr>
+                  <th>{{ $t('intafaced.agents.copy.leaderId') }}</th>
+                  <th>{{ $t('intafaced.agents.copy.realisedPnl') }}</th>
+                  <th>{{ $t('intafaced.agents.copy.closedTrades') }}</th>
+                  <th>{{ $t('intafaced.agents.copy.winRate') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in copyDirectory" :key="row.leaderId">
+                  <td>{{ row.leaderId }}</td>
+                  <td>{{ row.realisedPnl }}</td>
+                  <td>{{ row.closedTrades }}</td>
+                  <td>{{ row.winRate }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.agents.copy.empty') }}</div>
+        </div>
+        <div v-else class="ix-note">
+          {{ $t('intafaced.agents.copy.unavailable') }}
+        </div>
+      </IxState>
+    </section>
+
     <section class="ix-card ix-copy-confirm">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.quant.market.planMirror') }}</h2>
@@ -76,7 +121,7 @@
  * No profit-share field. No returns board.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
-import { mutate } from '../../../config/intafaced.js';
+import { query, mutate } from '../../../config/intafaced.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
 import ixMoney from '../../../assets/js/ix-money.js';
 export default {
@@ -87,11 +132,26 @@ export default {
     return {
       strategy: { title: '', description: '', assetId: '', price: '', periodSeconds: null },
       publish: this.emptyAction(),
+      copy: this.emptySection(),
       mirror: { followId: '', fillId: '', marketId: '', side: 'buy', qty: '', notional: '', leaderPaper: null },
       mirrorPlan: null,
       mirrorPlanAction: this.emptyAction(),
       mirrorConfirm: this.emptyAction()
     };
+  },
+  computed: {
+    copyDirectory() {
+      var data = this.copy.data;
+      if (!data || data.status !== 'ok' || !Array.isArray(data.stats) || !data.presentation ||
+        data.presentation.kind !== 'directory' || data.presentation.sortKey !== 'leaderId' ||
+        data.presentation.rankedByReturns !== false) {
+        return [];
+      }
+      return data.stats.slice();
+    }
+  },
+  created() {
+    this.load('copy', query('agents', 'copyIntel.buildStats', { fixtures: [], copyPlane: 'live' }, this.ixToken));
   },
   methods: {
     submitStrategy() {
