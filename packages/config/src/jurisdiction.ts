@@ -178,6 +178,9 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   agents: { status: 'open', minTier: 'none' },
   'core-ops': { status: 'open', minTier: 'none' },
   support: { status: 'open', minTier: 'none' },
+  // Reporting view over the caller's own books. No custody; minTier none.
+  // Mapped regions come from owner TAX_JURISDICTION_MAP_JSON, not this matrix.
+  tax: { status: 'open', minTier: 'none' },
   // Inbox only — no custody, no money movement. minTier none so a user can
   // always read their own notifications regardless of verification tier.
   notify: { status: 'open', minTier: 'none' },

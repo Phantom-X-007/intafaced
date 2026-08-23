@@ -252,6 +252,7 @@ services:
       SUPPORT_URL: http://svc-support:4017
       MARKET_URL: http://svc-market:4018
       EXECUTION_URL: http://svc-execution:4019
+      TAX_URL: http://svc-tax:4020
       # connect.data-lake TSDB + retention owner env — blank retention refuses persist.
       CONNECT_DATA_LAKE_TSDB_URL: postgres://svc_connect_lake:svc_connect_lake@postgres:5432/intafaced
       CONNECT_DATA_LAKE_RETENTION_DAYS:
@@ -1176,6 +1177,27 @@ services:
     # OMS snapshot reads trade public orderbook — start after trade is healthy.
     depends_on:
       svc-trade: { condition: service_healthy }
+
+  # Lot export (tax.engine). Reads ledger; no second book. Owner map blank →
+  # tax.jurisdiction_unmapped at the door — never a silent country default.
+  svc-tax:
+    <<: *app
+    container_name: intafaced-svc-tax
+    command: ['node', 'services/svc-tax/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-tax
+      HTTP_PORT: '4020'
+      LEDGER_URL: http://svc-ledger:4001
+      # Counsel/owner map. Blank is refuse-closed (tax.jurisdiction_unmapped).
+      TAX_JURISDICTION_MAP_JSON: ${TAX_JURISDICTION_MAP_JSON:-}
+      # Lake / indexer — blank names absent on the pack; never a fabricated $0.
+      CONNECT_DATA_LAKE_TSDB_URL: ${CONNECT_DATA_LAKE_TSDB_URL:-}
+      INDEXER_URL: ${INDEXER_URL:-}
+    expose: ['4020']
+    healthcheck: *healthcheck
+    depends_on:
+      svc-ledger: { condition: service_healthy }
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
   # LEDGER_URL, and nothing in this process could reach anything that moves

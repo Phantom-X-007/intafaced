@@ -87,6 +87,7 @@ export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/support', module: 'support', envVar: 'SUPPORT_URL', devUrl: 'http://localhost:4017' },
   { prefix: '/api/market', module: 'market', envVar: 'MARKET_URL', devUrl: 'http://localhost:4018' },
   { prefix: '/api/execution', module: 'execution', envVar: 'EXECUTION_URL', devUrl: 'http://localhost:4019' },
+  { prefix: '/api/tax', module: 'tax', envVar: 'TAX_URL', devUrl: 'http://localhost:4020' },
 ] as const;
 
 /**

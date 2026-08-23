@@ -1,0 +1,33 @@
+/** Machine-readable refuses. The code leads the tRPC message so IxState can quote it. */
+export const TAX_JURISDICTION_UNMAPPED = 'tax.jurisdiction_unmapped' as const;
+export const TAX_JURISDICTION_MAP_INVALID = 'tax.jurisdiction_map_invalid' as const;
+export const TAX_LOT_METHOD_REQUIRED = 'tax.lot_method_required' as const;
+export const TAX_LEDGER_UNWIRED = 'tax.ledger_unwired' as const;
+export const TAX_LEDGER_HISTORY_UNAVAILABLE = 'tax.ledger_history_unavailable' as const;
+export const TAX_DATA_LAKE_UNAVAILABLE = 'tax.data_lake_unavailable' as const;
+export const TAX_INDEXER_UNAVAILABLE = 'tax.indexer_unavailable' as const;
+export const TAX_COST_BASIS_UNAVAILABLE = 'tax.cost_basis_unavailable' as const;
+export const TAX_CLOSED_LOTS_UNINDEXED = 'tax.closed_lots_unindexed' as const;
+export const TAX_LOT_UNDERFLOW = 'tax.lot_underflow' as const;
+
+export type TaxRefuseCode =
+  | typeof TAX_JURISDICTION_UNMAPPED
+  | typeof TAX_JURISDICTION_MAP_INVALID
+  | typeof TAX_LOT_METHOD_REQUIRED
+  | typeof TAX_LEDGER_UNWIRED
+  | typeof TAX_LEDGER_HISTORY_UNAVAILABLE
+  | typeof TAX_DATA_LAKE_UNAVAILABLE
+  | typeof TAX_INDEXER_UNAVAILABLE
+  | typeof TAX_COST_BASIS_UNAVAILABLE
+  | typeof TAX_CLOSED_LOTS_UNINDEXED
+  | typeof TAX_LOT_UNDERFLOW;
+
+export class TaxError extends Error {
+  readonly code: TaxRefuseCode;
+
+  constructor(code: TaxRefuseCode, message: string) {
+    super(message);
+    this.name = 'TaxError';
+    this.code = code;
+  }
+}
