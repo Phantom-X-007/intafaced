@@ -39,4 +39,13 @@ export {
   type UnwiredCmsPluginFamily,
 } from './cms-unwired.js';
 export { describeCmsPluginStatus, type CmsPluginFamilyStatus, type CmsPluginStatusSummary } from './cms-status.js';
+export {
+  listReferenceCmsAdapters,
+  magentoAdapter,
+  opencartAdapter,
+  woocommerceAdapter,
+  REFERENCE_CMS_ADAPTERS,
+  type ReferenceCmsAdapter,
+  type ReferenceCmsFamily,
+} from './cms-adapters.js';
 export { FROZEN_CAPTURED_BODY, frozenWebhookVectors, MERCHANT_WEBHOOK_HEADERS, type FrozenWebhookVector } from './webhook-vectors.js';
