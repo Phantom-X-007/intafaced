@@ -14,8 +14,6 @@ export async function postDisputeOpening(
     fromMerchantBalance: Amount;
   },
 ): Promise<{ txId: string }> {
-  const tx = await ledger.post(
-    recipes.chargebackOpen(input),
-  );
+  const tx = await ledger.post(recipes.chargebackOpen(input));
   return { txId: tx.id };
 }

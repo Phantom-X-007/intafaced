@@ -98,9 +98,7 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
     if (existing) return existing;
 
     const now = (input.now ?? new Date()).toISOString();
-    const ledgerRefuse = input.ledgerPost
-      ? null
-      : refuseChargebackLedgerPost({ disputeId, paymentId: input.paymentId });
+    const ledgerRefuse = input.ledgerPost ? null : refuseChargebackLedgerPost({ disputeId, paymentId: input.paymentId });
     const row: DisputeCase = {
       disputeId,
       paymentId: input.paymentId,

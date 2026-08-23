@@ -1107,7 +1107,7 @@ export function createPayRouter(
           }
         }),
 
-    /** Dispute case surface — opening posts the existing ledger recipe. */
+      /** Dispute case surface — opening posts the existing ledger recipe. */
       openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
         .input(
           z.object({
@@ -1133,15 +1133,16 @@ export function createPayRouter(
             // Lightweight router fixtures may omit the money port; production
             // PayService always provides it. Keeping that fixture mode honest
             // preserves refuse-closed behavior when no ledger is available.
-            const ledgerPost = typeof pay.openChargeback === 'function'
-              ? await pay.openChargeback({
-                  disputeId: input.disputeId,
-                  paymentId: input.paymentId,
-                  merchantId: input.merchantId,
-                  amount: input.amount,
-                  assetId: input.assetId,
-                })
-              : undefined;
+            const ledgerPost =
+              typeof pay.openChargeback === 'function'
+                ? await pay.openChargeback({
+                    disputeId: input.disputeId,
+                    paymentId: input.paymentId,
+                    merchantId: input.merchantId,
+                    amount: input.amount,
+                    assetId: input.assetId,
+                  })
+                : undefined;
             const c = defaultDisputeCaseStore.open({
               disputeId: input.disputeId,
               paymentId: input.paymentId,
