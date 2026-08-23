@@ -61,7 +61,7 @@ Shell freeProduct=0 does **not** mean the product is distributed. Most tracker r
 
 ## 4 · Denon — true human hard (mega board)
 
-**Live full inventory (2026-08-09):** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 hard IDs · SAFE START vs HOT HOLD · substance audit).  
+**Live full inventory (2026-08-23):** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md). Historical 120-ID list: [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md).  
 **Historical shape / factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md).  
 **D-S-01…18:** **done on tip** — [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md). Agents implement from law; they must not invent §8 numbers.
 

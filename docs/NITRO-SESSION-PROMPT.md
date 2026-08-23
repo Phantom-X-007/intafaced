@@ -14,10 +14,10 @@ PRE-FLIGHT (first 60s — anti-drift + free-work discovery)
 4. Never implement on main checkout — worktree only.
 5. Swarm / free work (mandatory when go all-out / AFK / parallel): docs/SWARM-ALL-OUT-ORIENT-2026-08-03.md · pnpm swarm:freeze · pnpm swarm:status · pnpm swarm:next · docs/ops/DASHBOARD.md
 6. Denon product queue (tip): docs/REGROUP-2026-08-03.md · retire ADR: docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md
-6b. Denon hard board LIVE (agents babysit only — not free craft / not invent-risk engines): docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md · LIVE-LANES denon-hard-parallel · factory done: docs/SPEC-FACTORY-INDEX-2026-08-04.md · historical: docs/DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md
+6b. Last MVP boards LIVE (agents babysit Phantom/Shehzad lists — not free craft / not invent-risk / not parked sockets): docs/LAST-MVP-BOARDS-2026-08-23.md · factory done: docs/SPEC-FACTORY-INDEX-2026-08-04.md · historical 120-ID: docs/DENON-HARD-PARALLEL-BOARD-2026-08-09.md
 7. FE residual: docs/FRONTEND-AFK-AUTONOMOUS-CAMPAIGN-2026-08-02.md · tooling/frontend/residual-register.json · pnpm frontend:residual
 8. Also if present: docs/START-HERE.md · docs/VENDORED-SHELL-PEACE-OF-MIND-MAP-2026-08-03.md · docs/WORK-RECOVERY-PEACE-OF-MIND-2026-08-03.md · docs/REDUNDANT-VS-PORT-2026-08-03.md
-9. Owners: Nitro=FE/shell · Denon=spine + his open PRs (no dual-edit) · Shehzad @shehzad002=M1–M7 (babysit only).
+9. Owners: Nitro=shell + remaining agent mountains · Denon=integrity/owner numbers (LAST-MVP §3) · Shehzad @shehzad002=Protocol Plane + INTACHAIN only (this wave = LAST-MVP §4; babysit chain paths).
 10. Specs live on main AND on open PRs AND on branches without PRs (e.g. origin/fix/shell-*) — fetch branches; prefer finish over re-implement.
 11. Board Clear SCOREBOARD is AGENT-COMPLETE — do not re-open agent Done bars; free = REGROUP + residual craft + hygiene + babysit + reports.
 12. Chat memory is not high water. Tip + open PRs + docs/branches are.
