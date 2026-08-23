@@ -24,6 +24,7 @@
       </div>
       <IxState v-if="create.ran" :loading="create.busy" :reason="create.reason" :message="create.message" endpoint="/api/market/trpc/createListing"><div v-if="create.data" class="ix-note ix-note-success">{{ $t('intafaced.market.createCreated') }}</div></IxState>
     </div>
+    <IxStrategyListing @created="reloadMineListings" />
     <div class="ix-card"><div class="ix-card-head"><h2>{{ $t('intafaced.market.myListings') }}</h2></div><IxState :loading="listings.loading" :reason="listings.reason" :message="listings.message" endpoint="/api/market/trpc/myListings"><div v-if="listings.data && listings.data.length" class="ix-scroll"><table class="ix-table"><thead><tr><th>{{ $t('intafaced.market.listingTitle') }}</th><th>{{ $t('intafaced.market.assetId') }}</th><th>{{ $t('intafaced.market.price') }}</th></tr></thead><tbody><tr v-for="row in listings.data" :key="row.id"><td>{{ row.title }}</td><td>{{ row.assetId }}</td><td>{{ row.price }}</td></tr></tbody></table></div><div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.market.noMine') }}</div></IxState></div>
     <div class="ix-card"><div class="ix-card-head"><h2>{{ $t('intafaced.market.myPurchases') }}</h2></div><IxState :loading="purchases.loading" :reason="purchases.reason" :message="purchases.message" endpoint="/api/market/trpc/myPurchases"><div v-if="purchases.data && purchases.data.length" class="ix-scroll"><table class="ix-table"><thead><tr><th>{{ $t('intafaced.market.listingTitle') }}</th><th>{{ $t('intafaced.market.price') }}</th><th>status</th><th>ledgerTxId</th></tr></thead><tbody><tr v-for="row in purchases.data" :key="row.id"><td>{{ row.listingId }}</td><td>{{ row.price }}</td><td>{{ row.status }}</td><td>{{ row.ledgerTxId || '—' }}</td></tr></tbody></table></div><div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.market.noMine') }}</div></IxState></div>
   </div>
@@ -31,11 +32,12 @@
 <script>
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
+import IxStrategyListing from './StrategyListing.vue';
 import { query, mutate } from '../../../config/intafaced.js';
 import { MARKET_NAV } from '../../../config/ix-nav.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
 export default {
-  name: 'IxMarketMine', components: { IxState, IxSubNav }, mixins: [ixModule],
+  name: 'IxMarketMine', components: { IxState, IxSubNav, IxStrategyListing }, mixins: [ixModule],
   data() { return { nav: MARKET_NAV, form: { displayName: '', description: '' }, listing: { title: '', description: '', assetId: '', price: '' }, vendor: this.emptySection(), listings: this.emptySection(), purchases: this.emptySection(), apply: this.emptyAction(), create: this.emptyAction() }; },
   created() { this.$store.commit('navigate', 'nav-platform'); this.load('vendor', query('market', 'mine', undefined, this.ixToken)); this.load('listings', query('market', 'myListings', undefined, this.ixToken)); this.load('purchases', query('market', 'myPurchases', undefined, this.ixToken)); },
   methods: {
@@ -44,9 +46,12 @@ export default {
       this.act('create', mutate('market', 'createListing', { title: this.listing.title, description: this.listing.description, offerType: 'one_time', assetId: this.listing.assetId, price: this.listing.price }, this.ixToken)).then((res) => {
         if (res && res.ok) {
           this.listing = { title: '', description: '', assetId: '', price: '' };
-          this.load('listings', query('market', 'myListings', undefined, this.ixToken));
+          this.reloadMineListings();
         }
       });
+    },
+    reloadMineListings() {
+      this.load('listings', query('market', 'myListings', undefined, this.ixToken));
     }
   }
 };

@@ -1900,8 +1900,20 @@ export const FEATURES = [
     module: 'quant',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['quant.studio', 'market.commerce'],
-    note: 'Law §29:788, gap-closed 2026-08-08. PHASE: §30:793 gives Marketplace "**Phase 5+**"; §30:795 records B/svc-quant+market/5. Same treatment as quant.sdk — `5` in the field, the law\'s "5+" in this note, because the registry has no 5+ bucket and an unknown phase key would drop the row out of the by-phase render. Blocked on quant.studio (nothing to publish before strategies can be built) and market.commerce (subscriptions and house commission already live there, and a second commerce path would be a second answer to the same question). FLAGGED — A CONTRADICTION THE BOARD ALREADY CARRIES ONCE, ARRIVING A SECOND TIME. §29:788 offers publication "as subscriptions **or profit-share** (copy-trading generalised to systems)". `SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md:95` forbids, in v1, "any fee computed from follower P&L, in any form — percentage of gains, high-water mark, hurdle rate, or \'success fee\'", and audit §B5 #1 records the law being stale in precisely this way for trade.copy. If copy trading may not charge on P&L, then a strategy marketplace that does is the same unlicensed-manager structure with a different noun — and NOBODY HAS RULED THAT SYSTEMS DIFFER FROM LEADERS. An ADR settles that; a PR must not. Also binding from D-S-18: no leaderboard ranked by historical return, which removes the obvious way to rank a strategy market and means the ranking signal has to be designed rather than defaulted. NOT DECIDED: compute-tier magnitudes — §29:789 token-gates tiers per §4.3, and every economic magnitude is owner-only under D-S-14.',
+    requires: [
+      'services/svc-market/src/strategy/strategy-listing.ts',
+      'services/svc-market/src/strategy/strategy-listing.test.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/market/StrategyListing.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/strategy-listing.golden.js',
+    ],
+    note:
+      '**Done 2026-08-23:** createStrategyListing glue on market.commerce — subscription listing with periodSeconds, same shop as createListing (no second catalogue). ' +
+      'Token-gated via existing vendor stake; unstaked → market.stake_required. Copy-law: no P&L/profit-share fee (market.strategy_profit_share_forbidden). ' +
+      'Catalogue stays registration order — no returns board. Shell card on /market/mine. ' +
+      'Residuals: compute-tier magnitudes owner-only (§29:789 / D-S-14); no P&L fee.',
   }),
 
   f('agents.portfolio', 'Portfolio Agent — auto-rebalance inside user guardrails (§8.2)', {
