@@ -197,7 +197,7 @@ export class EvmChainSource implements ChainSource {
     }
     if (isZeroAddress(config.venue)) {
       throw new ChainUnavailableError(
-        'indexer.chain_not_configured',
+        'indexer.venue_unset',
         `INDEXER_VENUE_ADDRESS is the zero address. eth_getLogs against 0x0 succeeds and returns [] forever, ` +
           `which would fill this read model with a confident, permanent "no liquidity". Refusing to start on it.`,
       );

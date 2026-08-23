@@ -41,6 +41,8 @@
 export type ChainRefusalCode =
   /** No RPC URL, or the venue address is still the zero-address default. */
   | 'indexer.chain_not_configured'
+  /** A chain is configured but no venue was selected for this environment. */
+  | 'indexer.venue_unset'
   /** The RPC endpoint did not answer: refused, timed out, or unresolvable. */
   | 'indexer.chain_unreachable'
   /** The RPC answered for a different chain than the one we are projecting. */

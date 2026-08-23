@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
+/** Deterministic CREATE(addressIndex=5, nonce=0) for the disposable Anvil deploy. */
+export const DEV_VENUE_ADDRESS = '0x0116686E2291dbd5e317F47faDBFb43B599786Ef';
+export const ZERO_VENUE_ADDRESS = '0x0000000000000000000000000000000000000000';
+
 /**
  * Environment for svc-indexer.
  *
@@ -52,16 +56,16 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     /**
      * The venue contract whose logs are this read model's only input.
      *
-     * Zero-address default, and `EvmChainSource` REFUSES to construct on it.
-     * `eth_getLogs` against `0x0` does not fail — it returns `[]`, forever — so a
-     * plausible-looking default here would fill this database with a confident,
-     * permanent "no liquidity" for every market. A loud zero is the safe default;
-     * see `chain/evm/availability.ts`.
+     * Dev defaults to the deterministic disposable Anvil deployment; prod
+     * defaults to the zero address and `EvmChainSource` refuses it. `eth_getLogs`
+     * against `0x0` does not fail — it returns `[]`, forever — so production's
+     * loud zero is surfaced as `indexer.venue_unset`.
      */
     INDEXER_VENUE_ADDRESS: z
       .string()
-      .regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address')
-      .default('0x0000000000000000000000000000000000000000'),
+      .optional()
+      .transform((value) => value || (process.env.APP_ENV === 'prod' ? ZERO_VENUE_ADDRESS : DEV_VENUE_ADDRESS))
+      .pipe(z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address')),
 
     /**
      * First height to index — in practice the venue's deployment block.
