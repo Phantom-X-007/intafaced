@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import type { VenueBookSnapshot } from '@intafaced/venue-contracts';
 import { chainMmMidSources, createConfigMmMidSource, createMmMidSourceFromConfig, createVenueMmMidSource } from './mid-source.js';
+import { AcceptedMmMid } from './accepted-mid.js';
+
+const priceOf = (mid: AcceptedMmMid | null): string | null => mid?.price ?? null;
 
 /**
  * A venue snapshot AS THE CONTRACT DEFINES IT — `observedAt` included.
@@ -57,10 +60,10 @@ function unstampedBook(input: { bid: readonly [string, string]; ask: readonly [s
 const healthyBook = () => venueBook({ bid: ['100', '5'], ask: ['102', '5'] });
 
 describe('createConfigMmMidSource', () => {
-  it('returns mapped mid; never invents missing', () => {
+  it('returns mapped mid; never invents missing', async () => {
     const src = createConfigMmMidSource(new Map([['m1', '100.5']]));
-    expect(src('m1')).toBe('100.5');
-    expect(src('missing')).toBeNull();
+    expect(priceOf(await src('m1'))).toBe('100.5');
+    expect(await src('missing')).toBeNull();
   });
 
   it('treats blank mid as null', () => {
@@ -80,7 +83,7 @@ describe('createVenueMmMidSource', () => {
     });
     const mid = await src('m1');
     expect(mid).not.toBeNull();
-    expect(Number(mid)).toBeCloseTo(101, 5);
+    expect(priceOf(mid)).toBe('101');
 
     expect(await src('no-map')).toBeNull();
 
@@ -157,7 +160,7 @@ describe('createVenueMmMidSource', () => {
      */
     it('a deep, fresh book still yields its mid', async () => {
       const deep = venueBook({ bid: ['30000', '2'], ask: ['30010', '2'], observedAt: new Date(NOW.getTime() - 5_000) });
-      expect(await midFor(deep)).toBe('30005');
+      expect(priceOf(await midFor(deep))).toBe('30005');
     });
 
     it('a book just inside the age limit still yields its mid', async () => {
@@ -185,10 +188,10 @@ describe('chainMmMidSources', () => {
   it('prefers first non-null', async () => {
     const chain = chainMmMidSources(
       () => null,
-      () => '50',
-      () => '99',
+      () => AcceptedMmMid.configured('50'),
+      () => AcceptedMmMid.configured('99'),
     );
-    expect(await chain('x')).toBe('50');
+    expect(priceOf(await chain('x'))).toBe('50');
   });
 
   it('all null → null', async () => {
@@ -212,7 +215,7 @@ describe('createMmMidSourceFromConfig', () => {
       },
       resolveVenueSymbol: () => 'BTC/USDT',
     });
-    expect(await src('m1')).toBe('42');
+    expect(priceOf(await src('m1'))).toBe('42');
     expect(await src('m2')).toBeNull();
   });
 
@@ -236,7 +239,7 @@ describe('createMmMidSourceFromConfig', () => {
       resolveVenueSymbol: () => 'BTC/USDT',
       now: readNow,
     });
-    expect(await src('m1')).toBe('10');
+    expect(priceOf(await src('m1'))).toBe('10');
   });
 
   it('null venue adapter with midFromVenue → config only', async () => {
@@ -266,7 +269,7 @@ describe('createMmMidSourceFromConfig', () => {
       venueAdapter: null,
       resolveVenueSymbol: () => null,
     });
-    expect(await src('m1')).toBe('0.000000000000000001');
+    expect(priceOf(await src('m1'))).toBe('0.000000000000000001');
   });
 });
 

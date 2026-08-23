@@ -21,16 +21,17 @@ import { depthRequirement, type DepthQuotePolicy } from '../futures/mark-from-de
 import { midFromVenueBook, readObservedAt, type MaintainedVenueBookPort } from '../futures/mark-from-venue.js';
 import { DEFAULT_FUTURES_MARK_POLICY, acceptableForMarking, type MarkPolicy } from '../futures/mark-policy.js';
 import { toQuotedMark } from '../futures/mark-source.js';
+import { AcceptedMmMid } from './accepted-mid.js';
 import { parseMmSeedMids } from './seed-jobs.js';
 
-export type MmMidSource = (marketId: string) => string | null | Promise<string | null>;
+export type MmMidSource = (marketId: string) => AcceptedMmMid | null | Promise<AcceptedMmMid | null>;
 
 /** Static ops map only. */
 export function createConfigMmMidSource(mids: ReadonlyMap<string, string>): MmMidSource {
   return (marketId) => {
     const mid = mids.get(marketId);
     if (mid == null || mid.trim() === '') return null;
-    return mid.trim();
+    return AcceptedMmMid.configured(mid);
   };
 }
 
@@ -49,11 +50,12 @@ export function createConfigMmMidSource(mids: ReadonlyMap<string, string>): MmMi
  *
  * WHAT MADE THIS COPY THE WORST OF THE THREE. Both fixed paths hand their mid to
  * a `QuotedMarkSource`, so a bad answer still met `mark-policy.ts` downstream.
- * `MmMidSource` returns a bare `string | null`. `mm/seed-jobs.ts:141` checks it
- * for null and blank and nothing else; `mm/seed-market.ts` hands it to
- * `planSeedQuotes`, which validates the DECIMAL and never asks where it came
- * from. There is no `MarkQuality`, no `asOf`, no staleness limit and no notional
- * floor anywhere on this path. Whatever this function returned was posted.
+ * `MmMidSource` originally returned a bare `string | null`. `mm/seed-jobs.ts`
+ * checked it for null and blank and nothing else; `mm/seed-market.ts` handed it
+ * to `planSeedQuotes`, which validated the DECIMAL and never asked where it came
+ * from. The port now returns `AcceptedMmMid`: configured inputs are explicitly
+ * sealed at their boundary and venue inputs are sealed only after the existing
+ * futures size and age policies accept them.
  *
  * ── HOW A BOOK THE FUTURES PATH REFUSED CAME BACK AS OUR OWN PRICE ────────────
  *
@@ -198,7 +200,7 @@ export function createVenueMmMidSource(input: {
         const quote = toQuotedMark({ marketId, symbol, price: mid, quality: 'mid', asOfMs: observedAt.getTime() });
         if (quote == null) return null;
         if (!acceptableForMarking(quote, readNow(), policy).ok) return null;
-        return mid;
+        return AcceptedMmMid.venue(mid);
       }
 
       const snap = await input.adapter.snapshotBook(symbol, limit);
@@ -230,7 +232,7 @@ export function createVenueMmMidSource(input: {
       if (quote == null) return null;
       if (!acceptableForMarking(quote, readNow(), policy).ok) return null;
 
-      return mid;
+      return AcceptedMmMid.venue(mid);
     } catch {
       return null;
     }
@@ -244,7 +246,7 @@ export function chainMmMidSources(...sources: readonly MmMidSource[]): MmMidSour
   return async (marketId) => {
     for (const src of sources) {
       const mid = await src(marketId);
-      if (mid != null && String(mid).trim() !== '') return String(mid).trim();
+      if (mid != null) return mid;
     }
     return null;
   };

@@ -16,6 +16,7 @@ import { dirname } from 'node:path';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
+import { acceptedMmMidPrice, type AcceptedMmMid } from './accepted-mid.js';
 import { mmSeedJobsArmed } from './seed-honesty.js';
 import {
   cancelSeedMarket,
@@ -85,9 +86,9 @@ export interface MmSeedJobsDeps {
   ledger: Pick<LedgerClient, 'post' | 'balance'>;
   matching: Pick<MatchingClient, 'submit' | 'depth' | 'cancel'>;
   /**
-   * External mid for a market. Null/empty → skip that market (never invent).
+   * Accepted configured/venue mid for a market. Null or unsealed → skip.
    */
-  midSource: (marketId: string) => string | null | Promise<string | null>;
+  midSource: (marketId: string) => AcceptedMmMid | null | Promise<AcceptedMmMid | null>;
   /**
    * Catalog row for assertTradable (same gate as placeOrder). Null → skip
    * that market — never invent active/spot to bypass the gate (handoff §7).
@@ -159,8 +160,8 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
         continue;
       }
 
-      const mid = await deps.midSource(target.marketId);
-      if (mid == null || String(mid).trim() === '') {
+      const mid = acceptedMmMidPrice(await deps.midSource(target.marketId));
+      if (mid == null) {
         deps.onResult?.(target.marketId, { skipped: 'missing_mid' });
         continue;
       }
