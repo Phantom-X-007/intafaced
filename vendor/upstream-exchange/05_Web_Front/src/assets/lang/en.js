@@ -215,6 +215,11 @@ module.exports = {
             lookup: "Look up position",
             position: "Position"
         },
+        drop: {
+            unbuilt: "This drop is not open. Waitlist and referral are named unbuilt — not a silent queue.",
+            waitlistOff: "Waitlist is off (FlagDisabledError). Named unbuilt — enroll did not join a queue.",
+            referralOff: "Referral queue is off (FlagDisabledError). Named unbuilt — the code was not discarded silently."
+        },
         kyc: {
             submitTitle: "Ask to be verified",
             submitLead: "This records a request. It grants nothing until an operator reviews it.",
