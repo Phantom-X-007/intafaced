@@ -1072,6 +1072,34 @@ export const businessApprovals = bank.table(
   (t) => [index('business_approvals_account_status_idx').on(t.accountId, t.status)],
 );
 
+export const businessPayrollRuns = bank.table(
+  'business_payroll_runs',
+  {
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => businessAccounts.id),
+    actorUserId: text('actor_user_id').notNull(),
+    fromSpaceId: uuid('from_space_id').notNull(),
+    assetId: text('asset_id').notNull(),
+    ledgerTxId: text('ledger_tx_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('business_payroll_runs_account_idx').on(t.accountId, t.createdAt)],
+);
+
+export const businessPayrollLines = bank.table(
+  'business_payroll_lines',
+  {
+    payrollId: uuid('payroll_id')
+      .notNull()
+      .references(() => businessPayrollRuns.id),
+    toSpaceId: uuid('to_space_id').notNull(),
+    amount: amount('amount').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.payrollId, t.toSpaceId] })],
+);
+
 export const schema = {
   spaces,
   scheduledTransfers,
@@ -1099,4 +1127,6 @@ export const schema = {
   businessAccounts,
   businessMembers,
   businessApprovals,
+  businessPayrollRuns,
+  businessPayrollLines,
 };

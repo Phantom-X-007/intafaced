@@ -19,14 +19,15 @@ import { recipes, type RecipeName } from './index.js';
  * here: count + named row must match registry keys. #1643 added three
  * business-approval recipes and bumped the registry length to 53 without the
  * header — D26-P2-11 closes that count lie (and the live-path inventory).
- * D26-P1-M2 adds two §13 market fee recipes → 55.
+ * D26-P1-M2 adds two §13 market fee recipes → 55. businessPayroll → 56.
  */
 describe('recipes registry', () => {
   it('exports every named recipe and nothing unnamed', () => {
     const names = Object.keys(recipes) as RecipeName[];
-    expect(names.length).toBe(55);
+    expect(names.length).toBe(56);
     expect(names).toContain('marketPurchase');
     expect(names).toContain('businessApprovalHold');
+    expect(names).toContain('businessPayroll');
     expect(names).toContain('marketListingFee');
     expect(names).toContain('marketPremiumPlacement');
     // Every key is a callable pure function.
@@ -39,7 +40,7 @@ describe('recipes registry', () => {
     const mdPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'RECIPES.md');
     const md = readFileSync(mdPath, 'utf8');
     const countMatch = md.match(/\*\*(\d+) pure recipes\.\*\*/);
-    expect(countMatch?.[1], 'RECIPES.md must state the pure-recipe count').toBe('55');
+    expect(countMatch?.[1], 'RECIPES.md must state the pure-recipe count').toBe('56');
 
     const rowNames = [...md.matchAll(/^\| `([a-zA-Z][a-zA-Z0-9]*)`\s*\|/gm)].map((m) => m[1]!);
     const registry = Object.keys(recipes).sort();

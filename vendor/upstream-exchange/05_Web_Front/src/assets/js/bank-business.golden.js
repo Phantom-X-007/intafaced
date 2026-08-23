@@ -25,8 +25,12 @@ var page = fs.readFileSync(path.join(root, 'pages/intafaced/bank/Business.vue'),
 assertContains(page, "mutate('bank', 'business.create'");
 assertContains(page, "mutate('bank', 'business.proposeTransfer'");
 assertContains(page, "mutate('bank', 'business.approve'");
+assertContains(page, "mutate('bank', 'business.runPayroll'");
 assertContains(page, "query('bank', 'business.list'");
 assertContains(page, "query('bank', 'business.pending'");
+assertContains(page, '@click="submitPayroll"');
+assertContains(page, 'bank.business_payroll_rate_unset');
+assertContains(page, "draftId('payroll')");
 
 assertContains(page, 'spendThreshold: this.createForm.spendThreshold');
 assertContains(page, 'amount: this.propose.amount');
@@ -53,5 +57,7 @@ assertContains(nav, "to: '/bank/business'", 'ix-nav.js');
 var lang = fs.readFileSync(path.join(root, 'assets/lang/en.js'), 'utf8');
 assertContains(lang, 'noAccounts:', 'en.js');
 assertContains(lang, 'selfApprove:', 'en.js');
+assertContains(lang, 'payroll:', 'en.js');
+assertContains(lang, 'payrollRateUnset:', 'en.js');
 
 console.log('bank-business.golden: ok');

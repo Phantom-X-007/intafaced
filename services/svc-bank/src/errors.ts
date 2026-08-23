@@ -278,7 +278,16 @@ export type BankErrorCode =
   | 'bank.business_approval_inactive'
   | 'bank.business_self_approve'
   | 'bank.business_rejected'
-  | 'bank.business_cancelled';
+  | 'bank.business_cancelled'
+  /**
+   * Multi-recipient payroll named a different asset than the debit pot.
+   * A mix would need an FX / withholding rate this service does not invent.
+   */
+  | 'bank.business_payroll_rate_unset'
+  /** Payroll with no recipients is not a run. */
+  | 'bank.business_payroll_empty'
+  /** Retry reused a payroll id with different account, source, or lines. */
+  | 'bank.business_payroll_conflict';
 
 export class BankError extends Error {
   constructor(
