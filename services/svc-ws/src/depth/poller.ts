@@ -29,10 +29,18 @@ import { DepthNoBookError, type DepthSource } from './source.js';
  * and it can only be repaired on a tick that happens.
  */
 
+/** Private seats with no depth watcher still need matching-down named. */
+export interface PrivateMatchingProbe {
+  readonly connections: () => number;
+  readonly markDown: () => void;
+  readonly markUp: () => void;
+}
+
 export interface DepthPollerOptions {
   readonly intervalMs: number;
   readonly depthLimit: number;
   readonly marketsRefreshMs: number;
+  readonly probePrivate?: PrivateMatchingProbe;
 }
 
 export class DepthPoller {
@@ -99,8 +107,27 @@ export class DepthPoller {
           }
         }),
       );
+      await this.#probePrivateMatching();
     } finally {
       this.#ticking = false;
+    }
+  }
+
+  /**
+   * Kill-matching with only a private blotter open never hits a depth snapshot.
+   * Probe `GET /markets` so that door still names `orders.engine_unavailable`.
+   * Depth subscribers already drive the flip via snapshot fail + hub callback.
+   */
+  async #probePrivateMatching(): Promise<void> {
+    const probe = this.#options.probePrivate;
+    if (!probe || probe.connections() === 0) return;
+    if (this.#hub.activeMarkets.length > 0) return;
+    try {
+      await this.#source.markets();
+      probe.markUp();
+    } catch (err) {
+      probe.markDown();
+      this.#log.warn({ err: String(err) }, 'ws: matching probe for private stream failed — disclosing orders.engine_unavailable');
     }
   }
 }

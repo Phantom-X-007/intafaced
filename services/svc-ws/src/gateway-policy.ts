@@ -8,8 +8,17 @@
 /** Mirrors `depth/hub.ts` — named unavailability, not a priced empty ladder. */
 export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 
+/**
+ * Mirrors `private/hub.ts` — matching-down on the private orders stream.
+ * Honest private name in the `*.engine_unavailable` family; not a blank blotter.
+ */
+export const ORDERS_ENGINE_UNAVAILABLE = 'orders.engine_unavailable' as const;
+
 /** HTTP + WS refuse/close codes on the public depth door. */
 export const GATEWAY_DEPTH_REFUSE_CODES = ['NoBook', 'MarketNotFound', DEPTH_ENGINE_UNAVAILABLE] as const;
+
+/** Named unavailability on the authenticated private orders/fills stream. */
+export const GATEWAY_PRIVATE_REFUSE_CODES = [ORDERS_ENGINE_UNAVAILABLE] as const;
 
 export interface DepthSnapshotSides {
   readonly bids: readonly (readonly [string, string])[];
@@ -37,6 +46,7 @@ export function describeGatewayPolicy() {
     depthWorksWithoutNats: true as const,
     privateRequiresAuth: true as const,
     refuseCodes: [...GATEWAY_DEPTH_REFUSE_CODES],
+    privateRefuseCodes: [...GATEWAY_PRIVATE_REFUSE_CODES],
     inventsQuietMarket: false as const,
     inventsFuturesPositions: false as const,
   };

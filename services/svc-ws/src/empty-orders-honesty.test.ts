@@ -2,8 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { DepthSnapshot } from '@intafaced/market-data';
 import { CLOSE_POLICY, DepthHub, type DepthSink } from './depth/hub.js';
 import type { DepthSource } from './depth/source.js';
+import { ORDERS_ENGINE_UNAVAILABLE } from './gateway-policy.js';
 import {
   isLiveZeroBlotterFrame,
+  ORDERS_ENGINE_UNAVAILABLE as PRIVATE_ORDERS_ENGINE_UNAVAILABLE,
+  PrivateNoBlotterError,
   PrivateOrderHub,
   type PrivateFillUpdate,
   type PrivateOrderUpdate,
@@ -81,6 +84,7 @@ class FakeSource implements DepthSource {
   constructor(
     readonly marketList: string[],
     readonly current = new Map<string, DepthSnapshot>(),
+    public failSnapshot: Error | null = null,
   ) {}
 
   async markets(): Promise<readonly string[]> {
@@ -88,6 +92,7 @@ class FakeSource implements DepthSource {
   }
 
   async snapshot(marketId: string): Promise<DepthSnapshot> {
+    if (this.failSnapshot) throw this.failSnapshot;
     const s = this.current.get(marketId);
     if (!s) throw new Error(`no upstream book for ${marketId}`);
     return s;
@@ -131,11 +136,14 @@ describe('isLiveZeroBlotterFrame', () => {
     expect(isLiveZeroBlotterFrame('{"fills":[]}')).toBe(true);
   });
 
-  it('does not flag a real order, position, or ready frame', () => {
+  it('does not flag a real order, position, ready, or engine-unavailable status frame', () => {
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', ...order() }))).toBe(false);
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'positions', ...position() }))).toBe(false);
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', type: 'ready', userId: 'user-a', bus: false }))).toBe(false);
     expect(isLiveZeroBlotterFrame(JSON.stringify({ channel: 'orders', type: 'snapshot', userId: 'user-a', orders: [] }))).toBe(false);
+    expect(
+      isLiveZeroBlotterFrame(JSON.stringify({ type: 'status', code: ORDERS_ENGINE_UNAVAILABLE, channel: 'orders', userId: 'user-a' })),
+    ).toBe(false);
   });
 });
 
@@ -156,13 +164,13 @@ describe('empty orders blotter is absent, not a zero book', () => {
     expectNoInventedFills(sink.frames);
   });
 
-  it('does not emit { orders: [] } when matching 404s / seed throws', async () => {
+  it('does not emit { orders: [] } when matching 404s / no-blotter seed', async () => {
     const hub = new PrivateOrderHub({
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
-      seedOrders: async () => {
-        throw new Error('svc-matching 404: no blotter');
+      seedOrders: async (userId) => {
+        throw new PrivateNoBlotterError(userId);
       },
       seedPositions: async () => {
         throw new Error('svc-matching 404: no positions');
@@ -174,8 +182,67 @@ describe('empty orders blotter is absent, not a zero book', () => {
 
     expect(sink.closed).toBeNull();
     expect(sink.frames).toEqual([]);
+    expect(hub.matchingAvailable).toBe(true);
     expectNoLiveZeroBlotter(sink.frames);
     expectNoInventedFills(sink.frames);
+  });
+
+  it('names orders.engine_unavailable when matching is down — not a blank blotter', async () => {
+    const hub = new PrivateOrderHub({
+      highWaterBytes: 1_000,
+      maxLagTicks: 3,
+      maxConnections: 100,
+      seedOrders: async () => {
+        throw new Error('svc-matching unreachable');
+      },
+    });
+    const sink = new FakeSink();
+    hub.attach('user-a', sink);
+    await settle();
+
+    expect(sink.closed).toBeNull();
+    expect(hub.matchingAvailable).toBe(false);
+    expect(hub.engineCode).toBe(ORDERS_ENGINE_UNAVAILABLE);
+    expect(sink.frames.map((f) => JSON.parse(f))).toEqual([
+      { type: 'status', code: ORDERS_ENGINE_UNAVAILABLE, channel: 'orders', userId: 'user-a' },
+    ]);
+    expect(PRIVATE_ORDERS_ENGINE_UNAVAILABLE).toBe(ORDERS_ENGINE_UNAVAILABLE);
+    expectNoLiveZeroBlotter(sink.frames);
+    expectNoInventedFills(sink.frames);
+  });
+
+  it('names orders.engine_unavailable on private seats when public depth matching-down flips', async () => {
+    const privateHub = new PrivateOrderHub({
+      highWaterBytes: 1_000,
+      maxLagTicks: 3,
+      maxConnections: 100,
+    });
+    const privateSink = new FakeSink();
+    privateHub.attach('user-a', privateSink);
+
+    const source = new FakeSource([MARKET], new Map(), new Error('svc-matching unreachable'));
+    const depth = new DepthHub(source, {
+      depthLimit: 50,
+      highWaterBytes: 1_000,
+      maxLagTicks: 3,
+      maxConnections: 100,
+      marketsRefreshMs: 0,
+      onMatchingAvailabilityChange: (available) => {
+        if (available) privateHub.noteEngineUp();
+        else privateHub.markEngineUnavailable();
+      },
+    });
+    const depthSink = new FakeSink();
+    depth.attach(MARKET, depthSink);
+    await settle();
+
+    expect(depth.matchingAvailable).toBe(false);
+    expect(privateHub.engineCode).toBe(ORDERS_ENGINE_UNAVAILABLE);
+    expect(privateSink.frames.map((f) => JSON.parse(f))).toEqual([
+      { type: 'status', code: ORDERS_ENGINE_UNAVAILABLE, channel: 'orders', userId: 'user-a' },
+    ]);
+    expectNoLiveZeroBlotter(privateSink.frames);
+    expectNoInventedFills(privateSink.frames);
   });
 
   it('does not emit { orders: [] } or { positions: [] } when seed returns empty', async () => {

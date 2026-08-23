@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
 import type { DepthMessage, DepthSnapshot } from '@intafaced/market-data';
 import { CLOSE_POLICY, DEPTH_ENGINE_UNAVAILABLE, DepthHub, snapshotHasRestingDepth, type DepthSink } from './depth/hub.js';
+import { ORDERS_ENGINE_UNAVAILABLE } from './gateway-policy.js';
 import { DepthNoBookError, type DepthSource } from './depth/source.js';
 import { PrivateOrderHub } from './private/hub.js';
 import { registerRoutes } from './routes.js';
@@ -209,7 +210,7 @@ describe('empty vs engine-down on public HTTP doors', () => {
       tradesBus: () => false,
       privateBus: () => false,
     });
-    return { app, hub };
+    return { app, hub, privateHub };
   }
 
   it('GET /markets/:id/depth is 404 NoBook for a listed never-traded market', async () => {
@@ -242,6 +243,19 @@ describe('empty vs engine-down on public HTTP doors', () => {
     expect(ready.json().depth).toMatchObject({
       matchingAvailable: false,
       code: DEPTH_ENGINE_UNAVAILABLE,
+    });
+    await app.close();
+  });
+
+  it('GET /ready names orders.engine_unavailable when the private hub is matching-down', async () => {
+    const source = new FakeSource([MARKET], new Map([[MARKET, liveSnapshot(1)]]));
+    const { app, privateHub } = await appFor(source);
+    privateHub.markEngineUnavailable();
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(200);
+    expect(ready.json().private).toMatchObject({
+      matchingAvailable: false,
+      code: ORDERS_ENGINE_UNAVAILABLE,
     });
     await app.close();
   });

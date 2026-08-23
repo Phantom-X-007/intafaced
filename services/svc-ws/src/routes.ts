@@ -104,6 +104,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       depth: hub.stats,
       trades: tradeHub.stats,
       privateConnections: privateHub.connections,
+      private: privateHub.stats,
       tradesBus: tradesBus(),
       privateBus: privateBus(),
     };

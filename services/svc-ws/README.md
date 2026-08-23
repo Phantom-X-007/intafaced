@@ -336,6 +336,16 @@ running, or private subscribe failed). Silence with `bus: false` is **unsubscrib
 not a quiet market — clients must not treat it as "no orders". `bus: true` and empty
 is the honest quiet case.
 
+Matching-down is **named**, not a blank blotter:
+
+```jsonc
+{ "type": "status", "code": "orders.engine_unavailable", "channel": "orders", "userId": "<uuid>" }
+```
+
+Same `*.engine_unavailable` family as public `depth.engine_unavailable`. A matching
+404 / empty blotter stays absence (no `{ orders: [] }` live-zero). `/ready.private.code`
+surfaces the same code.
+
 Positions updates are emitted only when `trade.futures` publishes `positionUpdated`. Until then the channel is
 mounted and silent — same honesty as REST `GET /positions → []`. Never invent a position frame.
 

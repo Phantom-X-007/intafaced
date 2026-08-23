@@ -159,7 +159,11 @@ async function hydratePrivateBook(input: {
       } catch (err) {
         log.warn({ userId, err: String(err) }, 'ws-private: open-orders snapshot read failed — empty list');
       }
-      hub.sendOrdersSnapshot(sink, userId, orders);
+      // Matching-down is named on the hub. An empty reconnect snapshot next to
+      // that still looks like a blank blotter — skip the empty one.
+      if (orders.length > 0 || !hub.isEngineUnavailable) {
+        hub.sendOrdersSnapshot(sink, userId, orders);
+      }
     }
     if (wantPositions) {
       let positions: Awaited<ReturnType<PrivateBookPort['listOpenPositions']>> = [];
