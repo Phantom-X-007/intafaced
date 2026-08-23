@@ -260,8 +260,8 @@ const schema = serviceEnvSchema
         .default(false)
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
-      /** Seed scan interval when enabled. Default 60s. */
-      TRADE_MM_SEED_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).default(60_000),
+      /** Seed scan interval when enabled. Unset keeps the host unscheduled. */
+      TRADE_MM_SEED_INTERVAL_MS: z.coerce.number().int().min(5_000).max(3_600_000).optional(),
 
       /**
        * Explicit seed targets: `marketId:base:quote,...`

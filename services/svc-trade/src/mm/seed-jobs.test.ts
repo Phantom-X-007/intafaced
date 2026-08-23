@@ -115,6 +115,44 @@ describe('mm seed last-run durability', () => {
 });
 
 describe('startMmSeedJobs', () => {
+  it('unnamed targets or an unset interval schedule zero timers', () => {
+    const base = {
+      ledger: new MemoryLedger(),
+      matching: new JobStubMatching(),
+      midSource: () => AcceptedMmMid.configured('100'),
+      marketFor: marketForActive,
+      config: {
+        enabled: true,
+        intervalMs: 1000,
+        halfSpreadBps: 10,
+        stepBps: 10,
+        levels: 1,
+        qtyPerLevel: '1',
+        targets: [{ marketId: '', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+      },
+    };
+    const unnamed = startMmSeedJobs(base);
+    expect(unnamed.host.list()).toEqual([]);
+    unnamed.stop();
+
+    const noInterval = startMmSeedJobs({
+      ...base,
+      config: {
+        ...base.config,
+        intervalMs: undefined,
+        targets: [{ marketId: 'btc-usdt', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+      },
+    });
+    expect(noInterval.host.list()).toEqual([]);
+    noInterval.stop();
+  });
+
+  it('production env does not manufacture an MM seed interval', () => {
+    const envSource = readFileSync(new URL('../env.ts', import.meta.url), 'utf8');
+    expect(envSource).toMatch(/TRADE_MM_SEED_INTERVAL_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(5_000\)\.max\(3_600_000\)\.optional\(\)/);
+    expect(envSource).not.toMatch(/TRADE_MM_SEED_INTERVAL_MS:[^\n]*\.default\(/);
+  });
+
   it('disabled or empty targets → no scheduled jobs', () => {
     const host1 = startMmSeedJobs({
       ledger: new MemoryLedger(),
