@@ -35,6 +35,10 @@ assert(
   page.indexOf("query('bank', 'autoInvest.list'") !== -1,
   'autoInvest.list query present'
 );
+assert(
+  page.indexOf("mutate('bank', 'ops.runAutoInvest'") !== -1,
+  'ops.runAutoInvest mutate present'
+);
 
 var createBlock = page.match(/submitDca\(\)\s*\{[\s\S]*?\n    \}/);
 assert(Boolean(createBlock), 'submitDca present');

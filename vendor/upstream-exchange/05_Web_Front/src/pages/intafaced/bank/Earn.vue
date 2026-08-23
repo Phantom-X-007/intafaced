@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.pools') }}</h1>
       <p>{{ $t('intafaced.bank.earnPage.lead') }}</p>
-      <div class="ix-source">svc-bank · earn.pools · earn.positions · earn.deposit · earn.withdraw · autoInvest.list · autoInvest.createDca</div>
+      <div class="ix-source">svc-bank · earn.pools · earn.positions · earn.deposit · earn.withdraw · autoInvest.list · autoInvest.createDca · ops.runAutoInvest</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -180,6 +180,31 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.earnPage.dcaEmpty') }}</div>
       </IxState>
+
+      <p class="ix-lead" style="margin-top:16px;">{{ $t('intafaced.bank.earnPage.dcaRunLead') }}</p>
+      <div class="ix-note" style="margin-bottom:14px;">
+        {{ $t('intafaced.bank.earnPage.dcaRateUnset') }}
+      </div>
+      <div class="ix-actions">
+        <Button type="primary" :loading="dcaRun.busy" @click="runAutoInvest">
+          {{ $t('intafaced.bank.earnPage.dcaRun') }}
+        </Button>
+      </div>
+      <div v-if="dcaRun.ran" style="margin-top:14px;">
+        <div v-if="dcaRun.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.earnPage.dcaRunDone') }}</strong>
+          <div style="margin-top:6px;">
+            {{ $t('intafaced.bank.earnPage.dcaRunConsidered') }}: {{ dcaRun.data.considered }}
+            · {{ $t('intafaced.bank.earnPage.dcaRunSettled') }}: {{ dcaRun.data.settled }}
+            · {{ $t('intafaced.bank.earnPage.dcaRunSkipped') }}: {{ dcaRun.data.skipped }}
+            · {{ $t('intafaced.bank.earnPage.dcaRunRejected') }}: {{ dcaRun.data.rejected }}
+          </div>
+          <div v-if="dcaRun.data.failures && dcaRun.data.failures.length" style="margin-top:6px;">
+            <div v-for="(f, i) in dcaRun.data.failures" :key="i">{{ f.code }}</div>
+          </div>
+        </div>
+        <IxState v-else :loading="dcaRun.busy" :reason="dcaRun.reason" :message="dcaRun.message" endpoint="/api/bank/trpc/ops.runAutoInvest"></IxState>
+      </div>
     </div>
 
     <!-- ── create a DCA schedule ──────────────────────────────────────── -->
@@ -257,6 +282,12 @@
  * always fires; if this deployment has no convert counterparty, svc-bank
  * refuses `bank.auto_invest_rate_unset` and that code stays on the screen.
  * This page does not invent a rate.
+ *
+ * RUN is `ops.runAutoInvest` (admin:treasury), same IxState clone as Pay.vue
+ * railHealth: a session without the scope sees the named refusal rather than a
+ * hidden door. Convert success prints the runner counts; a missing convert
+ * counterparty lands `bank.auto_invest_rate_unset` on create, on run failures,
+ * or as the mutate refuse. No mid is invented here.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -281,7 +312,8 @@ export default {
       dcaRules: this.emptySection(),
       deposited: this.emptyAction(),
       withdrawn: this.emptyAction(),
-      dcaCreated: this.emptyAction()
+      dcaCreated: this.emptyAction(),
+      dcaRun: this.emptyAction()
     };
   },
   computed: {
@@ -357,6 +389,12 @@ export default {
         if (!res.ok) return;
         self.dcaForm = { spendAssetId: '', buyAssetId: '', amount: '', cadence: 'daily', startsAt: '' };
         self.reloadDca();
+      });
+    },
+    runAutoInvest() {
+      var self = this;
+      this.act('dcaRun', mutate('bank', 'ops.runAutoInvest', {}, this.ixToken)).then(function(res) {
+        if (res.ok) self.reloadDca();
       });
     }
   }

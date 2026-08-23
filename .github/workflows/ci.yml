@@ -783,7 +783,7 @@ jobs:
       - run: pnpm build
 
       - name: Pay/bank package tests
-        run: pnpm --filter @intafaced/svc-pay --filter @intafaced/svc-bank --filter @intafaced/svc-p2p test
+        run: pnpm turbo run test --filter=@intafaced/svc-pay --filter=@intafaced/svc-bank --filter=@intafaced/svc-p2p
       - name: Annotate shard failure
         if: failure()
         run: echo "::error title=Tests (pay-bank)::Read this job log, not the merge seal. Fix this shard and re-push."
