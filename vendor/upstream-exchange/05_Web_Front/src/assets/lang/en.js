@@ -1804,6 +1804,27 @@ module.exports = {
                 empty: "No raises yet.",
                 milestonesEmpty: "No milestones yet.",
                 chainUnwired: "On-chain escrow and vesting are not wired (ops.fundraising_chain_unwired). This card stores records only."
+            },
+            custody: {
+                title: "Custody",
+                api: "custody.list · custody.createApproval · ops.custody_wrap_unset",
+                lead: "House wallet tiers — cold, warm, hot. Keys stay empty until wrap is set. This card never invents a key or a balance.",
+                wrapUnset: "Wrap is unset (ops.custody_wrap_unset). Wrap and execute stay refuse-closed. Real keys are not stored here.",
+                chainUnwired: "On-chain multi-sig is not this card (ops.custody_chain_unwired).",
+                keysEmpty: "No keys. Empty is honest — nothing was invented.",
+                tier: "Tier",
+                keys: "Keys",
+                fromTier: "From",
+                toTier: "To",
+                amount: "Amount (optional)",
+                request: "Request approval",
+                requested: "Approval requested",
+                execute: "Execute",
+                status: "Status",
+                approvalsEmpty: "No approval requests.",
+                cold: "Cold",
+                warm: "Warm",
+                hot: "Hot"
             }
         },
         launch: {

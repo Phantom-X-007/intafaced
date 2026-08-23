@@ -13,6 +13,7 @@ describe('svc-ops compose mount', () => {
     const block = match![0];
     expect(block).toContain("HTTP_PORT: '4022'");
     expect(block).toContain('SERVICE_NAME: svc-ops');
+    expect(block).toContain('OPS_CUSTODY_WRAP:');
     expect(compose).toMatch(/OPS_URL: http:\/\/svc-ops:4022/);
   });
 });

@@ -18,6 +18,11 @@ import {
   OPS_WAREHOUSE_LAG_STALE,
   OPS_WAREHOUSE_LAG_UNKNOWN,
   OPS_WAREHOUSE_UNWIRED,
+  OPS_CUSTODY_WRAP_UNSET,
+  OPS_CUSTODY_CHAIN_UNWIRED,
+  OPS_CUSTODY_KEYS_FORBIDDEN,
+  OPS_CUSTODY_TIER_REQUIRED,
+  OPS_CUSTODY_AMOUNT_INVALID,
   OpsError,
 } from './codes.js';
 
@@ -86,8 +91,38 @@ export type TeamResult = {
   payroll: { forbidden: true; code: typeof OPS_PAYROLL_INVENT_FORBIDDEN };
 };
 
+export const CUSTODY_TIERS = ['cold', 'warm', 'hot'] as const;
+export type CustodyTierId = (typeof CUSTODY_TIERS)[number];
+
+export type CustodyKey = {
+  readonly id: string;
+  readonly label: string;
+};
+
+export type CustodyTier = {
+  readonly id: CustodyTierId;
+  readonly keys: readonly CustodyKey[];
+};
+
+export type CustodyWrap = { readonly status: 'unset'; readonly code: typeof OPS_CUSTODY_WRAP_UNSET } | { readonly status: 'configured' };
+
+export type CustodyApproval = {
+  readonly id: string;
+  readonly fromTier: CustodyTierId;
+  readonly toTier: CustodyTierId;
+  readonly amount: string | null;
+  readonly status: 'pending';
+};
+
+export type CustodyResult = {
+  wrap: CustodyWrap;
+  tiers: CustodyTier[];
+  approvals: CustodyApproval[];
+};
+
 const PAYROLL_KEYS = ['salary', 'compensation', 'payroll', 'wage', 'pay'] as const;
 const CHAIN_KEYS = ['escrow', 'vesting', 'settlement', 'fund', 'release', 'tokenPrice', 'valuation', 'price', 'mid'] as const;
+const KEY_MATERIAL_KEYS = ['privateKey', 'mnemonic', 'seed', 'secret', 'key', 'wrapped', 'hex', 'wif', 'xprv', 'wrap'] as const;
 const DECIMAL_AMOUNT = /^\d+(\.\d{1,18})?$/;
 
 export interface OpsServiceDeps {
@@ -98,6 +133,8 @@ export interface OpsServiceDeps {
   readonly facts?: readonly CubeFactRow[] | null;
   readonly now?: () => Date;
   readonly id?: () => string;
+  /** Presence only. Blank → wrap/execute refuse-closed. Never echoed or invented. */
+  readonly custodyWrap?: string;
 }
 
 function absent<T>(code: string): SourcedRows<T> {
@@ -111,11 +148,13 @@ export class OpsService {
   private readonly identityTeamSource: () => Promise<SourcedRows<TeamMember>>;
   private readonly facts: readonly CubeFactRow[];
   private readonly id: () => string;
+  private readonly custodyWrap: string;
   private readonly contacts = new Map<string, Contact>();
   private readonly members = new Map<string, TeamMember>();
   private readonly projects = new Map<string, Project>();
   private readonly raises = new Map<string, Raise>();
   private readonly milestones = new Map<string, Milestone>();
+  private readonly approvals = new Map<string, CustodyApproval>();
 
   constructor(deps: OpsServiceDeps = {}) {
     this.warehouseEnv = deps.warehouseEnv ?? {};
@@ -124,6 +163,7 @@ export class OpsService {
     this.identityTeamSource = deps.identityTeamSource ?? (async () => absent<TeamMember>(OPS_IDENTITY_UNWIRED));
     this.facts = deps.facts ?? [];
     this.id = deps.id ?? (() => crypto.randomUUID());
+    this.custodyWrap = (deps.custodyWrap ?? '').trim();
   }
 
   async listContacts(): Promise<ContactsResult> {
@@ -278,6 +318,48 @@ export class OpsService {
     throw new OpsError(OPS_FUNDRAISING_CHAIN_UNWIRED, 'On-chain escrow and vesting are not wired. Fundraising records do not move value.');
   }
 
+  listCustody(): CustodyResult {
+    return {
+      wrap: this.wrapState(),
+      tiers: CUSTODY_TIERS.map((id) => ({ id, keys: [] })),
+      approvals: [...this.approvals.values()],
+    };
+  }
+
+  createApproval(input: Record<string, unknown>): CustodyApproval {
+    this.refuseKeyMaterial(input);
+    const fromTier = this.parseTier(input.fromTier);
+    const toTier = this.parseTier(input.toTier);
+    if (fromTier === toTier) {
+      throw new OpsError(OPS_CUSTODY_TIER_REQUIRED, 'An approval needs two different tiers — nothing was invented');
+    }
+    const approval: CustodyApproval = {
+      id: this.id(),
+      fromTier,
+      toTier,
+      amount: this.parseCustodyAmount(input.amount),
+      status: 'pending',
+    };
+    this.approvals.set(approval.id, approval);
+    return approval;
+  }
+
+  wrapKeys(_input: Record<string, unknown> = {}): never {
+    this.refuseKeyMaterial(_input);
+    if (!this.wrapConfigured()) {
+      throw new OpsError(OPS_CUSTODY_WRAP_UNSET, 'Custody wrap is unset. Wrap stays refuse-closed. No key was invented.');
+    }
+    throw new OpsError(OPS_CUSTODY_KEYS_FORBIDDEN, 'Real keys are not stored or invented');
+  }
+
+  executeApproval(_input: Record<string, unknown> = {}): never {
+    this.refuseKeyMaterial(_input);
+    if (!this.wrapConfigured()) {
+      throw new OpsError(OPS_CUSTODY_WRAP_UNSET, 'Custody wrap is unset. Execute stays refuse-closed. No key was invented.');
+    }
+    throw new OpsError(OPS_CUSTODY_CHAIN_UNWIRED, 'On-chain multi-sig is not wired here. Custody records do not move value.');
+  }
+
   private parseTargetAmount(raw: unknown): string | null {
     if (raw == null) return null;
     if (typeof raw === 'number') {
@@ -320,6 +402,52 @@ export class OpsService {
     for (const key of PAYROLL_KEYS) {
       if (Object.prototype.hasOwnProperty.call(input, key) && input[key] != null && input[key] !== '') {
         throw new OpsError(OPS_PAYROLL_INVENT_FORBIDDEN, 'Payroll is not built and must not be invented');
+      }
+    }
+  }
+
+  private wrapConfigured(): boolean {
+    return this.custodyWrap.length > 0;
+  }
+
+  private wrapState(): CustodyWrap {
+    if (!this.wrapConfigured()) {
+      return { status: 'unset', code: OPS_CUSTODY_WRAP_UNSET };
+    }
+    return { status: 'configured' };
+  }
+
+  private parseTier(raw: unknown): CustodyTierId {
+    if (typeof raw !== 'string') {
+      throw new OpsError(OPS_CUSTODY_TIER_REQUIRED, 'A custody approval needs a cold/warm/hot tier — nothing was invented');
+    }
+    const tier = raw.trim();
+    if (!CUSTODY_TIERS.includes(tier as CustodyTierId)) {
+      throw new OpsError(OPS_CUSTODY_TIER_REQUIRED, 'A custody approval needs a cold/warm/hot tier — nothing was invented');
+    }
+    return tier as CustodyTierId;
+  }
+
+  private parseCustodyAmount(raw: unknown): string | null {
+    if (raw == null) return null;
+    if (typeof raw === 'number') {
+      throw new OpsError(OPS_CUSTODY_AMOUNT_INVALID, 'amount must be a decimal string — money is never a number');
+    }
+    if (typeof raw !== 'string') {
+      throw new OpsError(OPS_CUSTODY_AMOUNT_INVALID, 'amount must be a decimal string — money is never a number');
+    }
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return null;
+    if (!DECIMAL_AMOUNT.test(trimmed)) {
+      throw new OpsError(OPS_CUSTODY_AMOUNT_INVALID, 'amount must be a decimal string — no invented balance');
+    }
+    return trimmed;
+  }
+
+  private refuseKeyMaterial(input: Record<string, unknown>): void {
+    for (const key of KEY_MATERIAL_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(input, key) && input[key] != null && input[key] !== '') {
+        throw new OpsError(OPS_CUSTODY_KEYS_FORBIDDEN, 'Real keys are not stored or invented');
       }
     }
   }

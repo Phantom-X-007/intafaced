@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { OPS_FUNDRAISING_CHAIN_UNWIRED, OPS_PAYROLL_INVENT_FORBIDDEN, OPS_WAREHOUSE_UNWIRED } from './codes.js';
+import {
+  OPS_CUSTODY_CHAIN_UNWIRED,
+  OPS_CUSTODY_KEYS_FORBIDDEN,
+  OPS_CUSTODY_WRAP_UNSET,
+  OPS_FUNDRAISING_CHAIN_UNWIRED,
+  OPS_PAYROLL_INVENT_FORBIDDEN,
+  OPS_WAREHOUSE_UNWIRED,
+} from './codes.js';
 import { OpsService } from './ops-service.js';
 import { createOpsRouter } from './router.js';
 
@@ -102,6 +109,46 @@ describe('svc-ops router', () => {
     await expect(api.fundraising.fund({ raiseId: raise.id, amount: '100' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_FUNDRAISING_CHAIN_UNWIRED),
+    });
+  });
+
+  it('custody.list empty keys; wrap unset fail-closes wrap/execute; amounts stay strings', async () => {
+    let n = 0;
+    const api = createOpsRouter(new OpsService({ id: () => `id-${++n}` })).createCaller(await signed());
+
+    const listed = await api.custody.list();
+    expect(listed.wrap).toEqual({ status: 'unset', code: OPS_CUSTODY_WRAP_UNSET });
+    expect(listed.tiers.map((t) => t.id)).toEqual(['cold', 'warm', 'hot']);
+    expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
+    expect(listed.approvals).toEqual([]);
+
+    const approval = await api.custody.createApproval({ fromTier: 'cold', toTier: 'warm', amount: '10.25' });
+    expect(approval.amount).toBe('10.25');
+    expect(typeof approval.amount).toBe('string');
+    expect((await api.custody.list()).approvals).toEqual([approval]);
+
+    await expect(api.custody.wrap({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_WRAP_UNSET),
+    });
+    await expect(api.custody.execute({ id: approval.id })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_WRAP_UNSET),
+    });
+  });
+
+  it('custody wrap present still refuses keys and on-chain execute', async () => {
+    const api = createOpsRouter(new OpsService({ custodyWrap: 'present' })).createCaller(await signed());
+    const listed = await api.custody.list();
+    expect(listed.wrap).toEqual({ status: 'configured' });
+    expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
+    await expect(api.custody.wrap({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_KEYS_FORBIDDEN),
+    });
+    await expect(api.custody.execute({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_CHAIN_UNWIRED),
     });
   });
 });

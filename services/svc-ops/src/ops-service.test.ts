@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   OPS_CONTACT_REQUIRED,
+  OPS_CUSTODY_AMOUNT_INVALID,
+  OPS_CUSTODY_CHAIN_UNWIRED,
+  OPS_CUSTODY_KEYS_FORBIDDEN,
+  OPS_CUSTODY_TIER_REQUIRED,
+  OPS_CUSTODY_WRAP_UNSET,
   OPS_FUNDRAISING_AMOUNT_INVALID,
   OPS_FUNDRAISING_CHAIN_UNWIRED,
   OPS_IDENTITY_UNWIRED,
@@ -137,5 +142,77 @@ describe('OpsService', () => {
       expect.objectContaining({ code: OPS_FUNDRAISING_CHAIN_UNWIRED }),
     );
     expect(ops.listRaises().raises).toEqual([]);
+  });
+
+  it('unset wrap lists cold/warm/hot with empty keys and named wrap refuse', () => {
+    const ops = new OpsService();
+    const listed = ops.listCustody();
+    expect(listed.wrap).toEqual({ status: 'unset', code: OPS_CUSTODY_WRAP_UNSET });
+    expect(listed.tiers.map((t) => t.id)).toEqual(['cold', 'warm', 'hot']);
+    expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
+    expect(listed.approvals).toEqual([]);
+    expect(JSON.stringify(listed)).not.toMatch(/privateKey|mnemonic|0x[0-9a-fA-F]{16,}|\$0|0\.00/);
+  });
+
+  it('createApproval then list; omitted amount stays null — no invented balance', () => {
+    const ops = new OpsService({ id: () => 'a1' });
+    const approval = ops.createApproval({ fromTier: 'cold', toTier: 'hot' });
+    expect(approval).toEqual({
+      id: 'a1',
+      fromTier: 'cold',
+      toTier: 'hot',
+      amount: null,
+      status: 'pending',
+    });
+    expect(ops.listCustody().approvals).toEqual([approval]);
+    const withAmount = new OpsService({ id: () => 'a2' }).createApproval({
+      fromTier: 'warm',
+      toTier: 'hot',
+      amount: '12.5',
+    });
+    expect(withAmount.amount).toBe('12.5');
+    expect(typeof withAmount.amount).toBe('string');
+  });
+
+  it('approval amount is a decimal string — never Number(), never a default 0', () => {
+    const ops = new OpsService({ id: () => 'a1' });
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot', amount: 100 })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_AMOUNT_INVALID }),
+    );
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot', amount: 'not-a-decimal' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_AMOUNT_INVALID }),
+    );
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'cold' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_TIER_REQUIRED }),
+    );
+    expect(() => ops.createApproval({ fromTier: '  ', toTier: 'hot' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_TIER_REQUIRED }),
+    );
+  });
+
+  it('key material on any custody call is ops.custody_keys_forbidden — never stored', () => {
+    const ops = new OpsService({ id: () => 'a1' });
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot', privateKey: 'x' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_KEYS_FORBIDDEN }),
+    );
+    expect(() => ops.wrapKeys({ mnemonic: 'x' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_KEYS_FORBIDDEN }));
+    expect(ops.listCustody().approvals).toEqual([]);
+    expect(ops.listCustody().tiers.every((t) => t.keys.length === 0)).toBe(true);
+  });
+
+  it('unset wrap fail-closes wrap and execute — ops.custody_wrap_unset', () => {
+    const ops = new OpsService();
+    expect(() => ops.wrapKeys({})).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_WRAP_UNSET }));
+    expect(() => ops.executeApproval({ id: 'a1' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_WRAP_UNSET }));
+  });
+
+  it('configured wrap still refuses invented keys; execute is chain-unwired not a live send', () => {
+    const ops = new OpsService({ custodyWrap: 'present', id: () => 'a1' });
+    const listed = ops.listCustody();
+    expect(listed.wrap).toEqual({ status: 'configured' });
+    expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
+    expect(JSON.stringify(listed.wrap)).not.toContain('present');
+    expect(() => ops.wrapKeys({})).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_KEYS_FORBIDDEN }));
+    expect(() => ops.executeApproval({ id: 'a1' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_CHAIN_UNWIRED }));
   });
 });

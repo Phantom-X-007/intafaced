@@ -1691,9 +1691,18 @@ export const FEATURES = [
   f('ops.custody', 'Custody operations — cold/warm/hot wallet tiers, multi-sig approval workflow', {
     module: 'core-ops',
     phase: '5',
-    status: 'socket',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['ledger.double-entry'],
-    note: 'Law §25 custody line, gap-closed 2026-08-07 and DELIBERATELY SPLIT rather than given one owner. This is how the PLATFORM holds its own funds — which wallets are online, how much sits in each tier, and who must approve a movement. The on-chain half (the multi-sig contract, the threshold policy, the hot-wallet perimeter) is @shehzad002 and already has board coverage as S-B2; the operational half (tiering policy, approval workflow, the console an operator uses) is ordinary agent work and Class X where real keys are involved. Naming it here so the capability stops being invisible: an unrowed custody surface is the one nobody notices is missing until it is needed under pressure.',
+    requires: [
+      'services/svc-ops/src/ops-service.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/Ops.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/ops-custody.golden.js',
+    ],
+    note:
+      '**Done 2026-08-23:** /ops custody console — cold/warm/hot tiers, approval list, wrap/execute refuse-closed. ' +
+      'Blank OPS_CUSTODY_WRAP → ops.custody_wrap_unset. Keys stay empty — never invented (ops.custody_keys_forbidden). ' +
+      'On-chain multi-sig stays Shehzad (ops.custody_chain_unwired). Amounts decimal strings.',
   }),
   f('ops.support', 'Support desk, tickets, KB', {
     module: 'core-ops',

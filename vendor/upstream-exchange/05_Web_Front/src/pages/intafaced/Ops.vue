@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.ops.biz.title') }}</h1>
       <p>{{ $t('intafaced.ops.biz.lead') }}</p>
-      <div class="ix-source">svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden · ops.fundraising_chain_unwired</div>
+      <div class="ix-source">svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden · ops.fundraising_chain_unwired · ops.custody_wrap_unset · ops.custody_chain_unwired</div>
     </div>
 
     <div class="ix-card">
@@ -163,6 +163,57 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.fundraising.milestonesEmpty') }}</div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.ops.custody.title') }}</h2>
+        <span class="ix-sub">{{ $t('intafaced.ops.custody.api') }}</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.ops.custody.lead') }}</p>
+      <p class="ix-lead">{{ $t('intafaced.ops.custody.wrapUnset') }}</p>
+      <p class="ix-lead">{{ $t('intafaced.ops.custody.chainUnwired') }}</p>
+      <IxState :loading="custody.loading" :reason="custody.reason" :message="custody.message" endpoint="/api/ops/trpc/custody.list">
+        <div v-if="custody.data && custody.data.wrap && custody.data.wrap.code" class="ix-note ix-note-quiet">{{ custody.data.wrap.code }}</div>
+        <div v-if="custody.data && custody.data.tiers && custody.data.tiers.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead><tr><th>{{ $t('intafaced.ops.custody.tier') }}</th><th>{{ $t('intafaced.ops.custody.keys') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="row in custody.data.tiers" :key="row.id">
+                <td>{{ $t('intafaced.ops.custody.' + row.id) }}</td>
+                <td>{{ row.keys && row.keys.length ? row.keys.length : $t('intafaced.ops.custody.keysEmpty') }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.custody.keysEmpty') }}</div>
+        <div v-if="custody.data && custody.data.approvals && custody.data.approvals.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead><tr><th>{{ $t('intafaced.ops.custody.fromTier') }}</th><th>{{ $t('intafaced.ops.custody.toTier') }}</th><th>{{ $t('intafaced.ops.custody.amount') }}</th><th>{{ $t('intafaced.ops.custody.status') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="row in custody.data.approvals" :key="row.id">
+                <td>{{ $t('intafaced.ops.custody.' + row.fromTier) }}</td>
+                <td>{{ $t('intafaced.ops.custody.' + row.toTier) }}</td>
+                <td>{{ row.amount || '—' }}</td>
+                <td>{{ row.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.custody.approvalsEmpty') }}</div>
+      </IxState>
+      <div class="ix-form">
+        <label>{{ $t('intafaced.ops.custody.fromTier') }} <Input v-model="approvalForm.fromTier" /></label>
+        <label>{{ $t('intafaced.ops.custody.toTier') }} <Input v-model="approvalForm.toTier" /></label>
+        <label>{{ $t('intafaced.ops.custody.amount') }} <Input v-model="approvalForm.amount" /></label>
+        <Button type="primary" :loading="createdApproval.busy" @click="addApproval">{{ $t('intafaced.ops.custody.request') }}</Button>
+        <Button :loading="executedApproval.busy" @click="executeApproval">{{ $t('intafaced.ops.custody.execute') }}</Button>
+      </div>
+      <IxState v-if="createdApproval.ran" :loading="createdApproval.busy" :reason="createdApproval.reason" :message="createdApproval.message" endpoint="/api/ops/trpc/custody.createApproval">
+        <div v-if="createdApproval.data" class="ix-note ix-note-success">{{ $t('intafaced.ops.custody.requested') }} · {{ createdApproval.data.fromTier }} → {{ createdApproval.data.toTier }}</div>
+      </IxState>
+      <IxState v-if="executedApproval.ran" :loading="executedApproval.busy" :reason="executedApproval.reason" :message="executedApproval.message" endpoint="/api/ops/trpc/custody.execute">
+      </IxState>
+    </div>
   </div>
 </template>
 <script>
@@ -179,16 +230,20 @@ export default {
       teamForm: { handle: '', role: 'operator' },
       projectForm: { title: '' },
       raiseForm: { name: '', milestoneLabels: '', targetAmount: '' },
+      approvalForm: { fromTier: 'cold', toTier: 'hot', amount: '' },
       contacts: this.emptySection(),
       team: this.emptySection(),
       revenue: this.emptySection(),
       projects: this.emptySection(),
       raises: this.emptySection(),
       milestones: this.emptySection(),
+      custody: this.emptySection(),
       createdContact: this.emptyAction(),
       createdMember: this.emptyAction(),
       createdProject: this.emptyAction(),
-      createdRaise: this.emptyAction()
+      createdRaise: this.emptyAction(),
+      createdApproval: this.emptyAction(),
+      executedApproval: this.emptyAction()
     };
   },
   created() {
@@ -199,6 +254,7 @@ export default {
     this.loadProjects();
     this.loadRaises();
     this.loadMilestones();
+    this.loadCustody();
   },
   methods: {
     loadContacts() { this.load('contacts', query('ops', 'contacts', undefined, this.ixToken)); },
@@ -256,6 +312,22 @@ export default {
           self.loadMilestones();
         }
       });
+    },
+    loadCustody() { this.load('custody', query('ops', 'custody.list', undefined, this.ixToken)); },
+    addApproval() {
+      var self = this;
+      var payload = { fromTier: this.approvalForm.fromTier, toTier: this.approvalForm.toTier };
+      var amount = String(this.approvalForm.amount || '').trim();
+      if (amount) payload.amount = amount;
+      this.act('createdApproval', mutate('ops', 'custody.createApproval', payload, this.ixToken)).then(function(res) {
+        if (res && res.ok) {
+          self.approvalForm = { fromTier: 'cold', toTier: 'hot', amount: '' };
+          self.loadCustody();
+        }
+      });
+    },
+    executeApproval() {
+      this.act('executedApproval', mutate('ops', 'custody.execute', {}, this.ixToken));
     }
   }
 };

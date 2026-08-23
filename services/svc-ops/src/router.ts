@@ -1,7 +1,15 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
-import { OPS_FUNDRAISING_CHAIN_UNWIRED, OPS_PAYROLL_INVENT_FORBIDDEN, OPS_WAREHOUSE_UNWIRED, OpsError } from './codes.js';
+import {
+  OPS_CUSTODY_CHAIN_UNWIRED,
+  OPS_CUSTODY_KEYS_FORBIDDEN,
+  OPS_CUSTODY_WRAP_UNSET,
+  OPS_FUNDRAISING_CHAIN_UNWIRED,
+  OPS_PAYROLL_INVENT_FORBIDDEN,
+  OPS_WAREHOUSE_UNWIRED,
+  OpsError,
+} from './codes.js';
 import type { OpsService } from './ops-service.js';
 
 const contactSchema = z.object({
@@ -44,6 +52,31 @@ const pointSchema = z.object({
   metricId: z.string().min(1),
   value: z.string(),
   dim: z.string().nullable(),
+});
+
+const custodyTierId = z.enum(['cold', 'warm', 'hot']);
+
+const custodyKeySchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+});
+
+const custodyTierSchema = z.object({
+  id: custodyTierId,
+  keys: z.array(custodyKeySchema),
+});
+
+const custodyWrapSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('unset'), code: z.literal(OPS_CUSTODY_WRAP_UNSET) }),
+  z.object({ status: z.literal('configured') }),
+]);
+
+const custodyApprovalSchema = z.object({
+  id: z.string().min(1),
+  fromTier: custodyTierId,
+  toTier: custodyTierId,
+  amount: z.string().nullable(),
+  status: z.literal('pending'),
 });
 
 function mapError(err: unknown): never {
@@ -214,6 +247,61 @@ export function createOpsRouter(ops: OpsService) {
           }
         }),
     }),
+
+    custody: router({
+      list: scopedProcedure('ops:read', guards)
+        .output(
+          z.object({
+            wrap: custodyWrapSchema,
+            tiers: z.array(custodyTierSchema),
+            approvals: z.array(custodyApprovalSchema),
+          }),
+        )
+        .query(() => {
+          const out = ops.listCustody();
+          return {
+            wrap: out.wrap,
+            tiers: out.tiers.map((t) => ({ id: t.id, keys: [...t.keys] })),
+            approvals: [...out.approvals],
+          };
+        }),
+      createApproval: scopedProcedure('ops:write', guards)
+        .input(
+          z
+            .object({
+              fromTier: z.string().optional(),
+              toTier: z.string().optional(),
+              amount: z.string().nullable().optional(),
+            })
+            .passthrough(),
+        )
+        .output(custodyApprovalSchema)
+        .mutation(({ input }) => {
+          try {
+            return ops.createApproval(input as Record<string, unknown>);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+      wrap: scopedProcedure('ops:write', guards)
+        .input(z.object({}).passthrough().optional())
+        .mutation(({ input }) => {
+          try {
+            ops.wrapKeys((input ?? {}) as Record<string, unknown>);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+      execute: scopedProcedure('ops:write', guards)
+        .input(z.object({}).passthrough().optional())
+        .mutation(({ input }) => {
+          try {
+            ops.executeApproval((input ?? {}) as Record<string, unknown>);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+    }),
   });
 }
 
@@ -223,3 +311,6 @@ export type OpsRouter = ReturnType<typeof createOpsRouter>;
 export const WAREHOUSE_UNWIRED = OPS_WAREHOUSE_UNWIRED;
 export const PAYROLL_INVENT_FORBIDDEN = OPS_PAYROLL_INVENT_FORBIDDEN;
 export const FUNDRAISING_CHAIN_UNWIRED = OPS_FUNDRAISING_CHAIN_UNWIRED;
+export const CUSTODY_WRAP_UNSET = OPS_CUSTODY_WRAP_UNSET;
+export const CUSTODY_CHAIN_UNWIRED = OPS_CUSTODY_CHAIN_UNWIRED;
+export const CUSTODY_KEYS_FORBIDDEN = OPS_CUSTODY_KEYS_FORBIDDEN;
