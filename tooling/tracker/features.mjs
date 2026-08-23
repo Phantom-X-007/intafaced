@@ -462,11 +462,10 @@ export const FEATURES = [
   f('socket.trade-vwap-pov', 'VWAP / POV execution', {
     module: 'trade',
     phase: '2',
-    status: 'socket',
+    status: 'done',
     dependsOn: ['trade.algo'],
-    note:
-      '§13 — owner market maturity, not missing candles. Agents must not invent VWAP/POV product, fills, volume curves, or participation defaults. ' +
-      'TWAP shipped on trade.algo. Empty-tape refuse in src/algo is honesty, not a claim these algos exist as product.',
+    requires: ['services/svc-trade/src/algo/volume-plan.ts', 'services/svc-trade/src/algo/volume-plan.test.ts'],
+    note: 'Done 2026-08-23: VWAP slices derive quantity only from observed fills; maker-side filtering is explicit and an empty tape refuses with trade.algo_volume_immature. POV remains owner-configured and no volume curve or participation default is invented.',
   }),
   f('trade.ccxt-api', 'CCXT-compatible public API (bots + terminals connect)', {
     module: 'trade',
