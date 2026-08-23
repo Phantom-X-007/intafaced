@@ -450,6 +450,20 @@ module.exports = {
                 note: "Status is public under svc-protocol launch.status. Template is not audited until a real audit. This screen never signs a deploy."
             }
         },
+        execution: {
+            arb: {
+                title: "Arb scanners",
+                lead: "Class scanners on the existing cost model. Empty books refuse. This page never invents a spread.",
+                scan: "Scan",
+                class: "Class",
+                cross: "Cross-exchange",
+                triangular: "Triangular",
+                basis: "Basis",
+                funding: "Funding",
+                reason: "Refuse reason",
+                empty: "Empty book stays empty — class and refuse reason only, never fake bps."
+            }
+        },
         quant: {
             title: "Quant sandbox",
             lead: "Paste a few lines of JavaScript or Python. They run in a sandbox against the internal paper book — no raw network, no fabricated PnL.",

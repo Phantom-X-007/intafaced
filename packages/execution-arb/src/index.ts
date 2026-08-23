@@ -28,3 +28,4 @@ export {
   type ArbCapitalGate,
   type ArbCapitalRefuseReason,
 } from './arb-owner-capital-gate.js';
+export { ARB_SCAN_CLASSES, EMPTY_BOOK_REFUSE, scanArbClass, type ArbScanClass, type ScanArbClassInput } from './arb-classes.js';
