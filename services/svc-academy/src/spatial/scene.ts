@@ -252,44 +252,39 @@ export function sceneBytesAtMost(scene: SceneV1, n: number): boolean {
 }
 
 /**
- * Scene v1 is the server contract (schema + size gate). It is NOT a navigable
- * product shell, VR client, or finished 2D canvas. Those remain HUMAN/Vue residual.
+ * Scene v1 is the server contract. The navigable product shell is Canvas.vue
+ * (lobby session scene). VR client is residual (`socket.vr-client`) — do not invent VR.
  */
 export const SCENE_NAVIGABLE_SHELL_RESIDUAL =
-  'TRK-academy.spatial — Scene v1 schema+size gate only; navigable shell that uses server scene is residual; do not invent a finished VR/canvas product' as const;
+  'TRK-academy.spatial — navigable shell is Canvas.vue; VR client residual (socket.vr-client); do not invent a finished VR product' as const;
 
 export type SceneProductHonesty = {
   readonly version: typeof SCENE_VERSION;
   readonly maxBytes: typeof SCENE_MAX_BYTES;
-  readonly isNavigableProductShell: false;
+  readonly isNavigableProductShell: true;
   readonly isFinishedVrProduct: false;
   readonly isFinishedCanvasProduct: false;
   readonly residual: typeof SCENE_NAVIGABLE_SHELL_RESIDUAL;
 };
 
-/** Honesty card: server Scene v1 exists; product shell does not. */
+/** Honesty card: Scene v1 + navigable shell exist; VR product does not. */
 export function sceneProductHonesty(): SceneProductHonesty {
   return {
     version: SCENE_VERSION,
     maxBytes: SCENE_MAX_BYTES,
-    isNavigableProductShell: false,
+    isNavigableProductShell: true,
     isFinishedVrProduct: false,
     isFinishedCanvasProduct: false,
     residual: SCENE_NAVIGABLE_SHELL_RESIDUAL,
   };
 }
 
-/** Always false — parse/size gate is not a Vue/canvas product. */
-export function sceneIsNavigableProductShell(_scene?: SceneV1): false {
-  return false;
+/** True — Canvas.vue is the lobby-session navigable shell. Not a VR client. */
+export function sceneIsNavigableProductShell(_scene?: SceneV1): true {
+  return true;
 }
 
-/** True when residual names the shell as residual and forbids inventing VR/canvas. */
+/** True when residual still names VR as residual and forbids inventing a VR product. */
 export function sceneNavigableShellIsResidual(residual: string = SCENE_NAVIGABLE_SHELL_RESIDUAL): boolean {
-  return (
-    residual.includes('navigable shell') &&
-    residual.includes('residual') &&
-    residual.includes('do not invent') &&
-    residual.includes('VR/canvas')
-  );
+  return residual.includes('VR') && residual.includes('residual') && residual.includes('do not invent');
 }

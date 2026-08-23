@@ -20,7 +20,6 @@ Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 �
 - `web.mobile-apps` — Native mobile apps — iOS and Android, own name, zero attribution (§25:727)
 - `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
 - `chain.mainnet` — INTACHAIN — CometBFT + native CLOB module
-- `academy.spatial` — 2D navigable room canvas, VR-ready scene state
 - `mining.pool` — Stratum share protocol, PPLNS payouts
 - `quant.sdk` — Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)
 - `quant.marketplace` — Strategy marketplace and compute tiers — subscriptions, token-gated tiers (§29)
