@@ -22,6 +22,56 @@ function emptyBook(marketId) {
   return { marketId: marketId, sequence: -1, bids: Object.create(null), asks: Object.create(null) };
 }
 
+/**
+ * Ladder order without IEEE. Lexicographic "9" > "10"; parseFloat("9") is a
+ * price-as-Number. Digit-length then lexicographic on the stripped parts.
+ * Unreadable strings fall through to < so a bad key never becomes 0.
+ */
+function compareDecimalStrings(a, b) {
+  function parts(s) {
+    s = String(s == null ? '' : s).trim();
+    var neg = false;
+    if (s.charAt(0) === '+') s = s.slice(1);
+    if (s.charAt(0) === '-') {
+      neg = true;
+      s = s.slice(1);
+    }
+    if (!s || /[^0-9.]/.test(s) || (s.split('.').length > 2)) {
+      return null;
+    }
+    var dot = s.indexOf('.');
+    var whole = dot < 0 ? s : s.slice(0, dot);
+    var frac = dot < 0 ? '' : s.slice(dot + 1);
+    whole = whole.replace(/^0+/, '');
+    frac = frac.replace(/0+$/, '');
+    if (!whole) whole = '0';
+    if (neg && whole === '0' && !frac) neg = false;
+    return { neg: neg, whole: whole, frac: frac };
+  }
+  var pa = parts(a);
+  var pb = parts(b);
+  if (pa === null || pb === null) {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+  }
+  if (pa.neg !== pb.neg) return pa.neg ? -1 : 1;
+  var sign = pa.neg ? -1 : 1;
+  if (pa.whole.length !== pb.whole.length) {
+    return (pa.whole.length < pb.whole.length ? -1 : 1) * sign;
+  }
+  if (pa.whole !== pb.whole) {
+    return (pa.whole < pb.whole ? -1 : 1) * sign;
+  }
+  var n = pa.frac.length > pb.frac.length ? pa.frac.length : pb.frac.length;
+  var fa = pa.frac;
+  var fb = pb.frac;
+  while (fa.length < n) fa += '0';
+  while (fb.length < n) fb += '0';
+  if (fa === fb) return 0;
+  return (fa < fb ? -1 : 1) * sign;
+}
+
 function sideFromWire(levels) {
   var side = Object.create(null);
   if (!Array.isArray(levels)) return side;
@@ -105,12 +155,9 @@ function applyDelta(book, delta) {
 function levelsFromSide(side, sortDir) {
   var keys = Object.keys(side || {});
   keys.sort(function (a, b) {
-    /* Lexicographic fails for numbers; compare as decimals via Number only for order —
-       quantities stay strings. Sort keys numerically for ladder order. */
-    var na = parseFloat(a);
-    var nb = parseFloat(b);
-    if (isNaN(na) || isNaN(nb)) return a < b ? -1 : a > b ? 1 : 0;
-    return sortDir === 'asc' ? na - nb : nb - na;
+    var c = compareDecimalStrings(a, b);
+    if (c === 0) return 0;
+    return sortDir === 'asc' ? c : -c;
   });
   var out = [];
   for (var i = 0; i < keys.length; i++) {
@@ -304,6 +351,7 @@ module.exports = {
   applyDelta: applyDelta,
   platePayload: platePayload,
   levelsFromSide: levelsFromSide,
+  compareDecimalStrings: compareDecimalStrings,
   streamUrl: streamUrl,
   resnapshotUrl: resnapshotUrl,
   createDepthFeed: createDepthFeed
