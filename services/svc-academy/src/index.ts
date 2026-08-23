@@ -9,7 +9,7 @@ import { AcademyService } from './academy-service.js';
 import { createHostRightsSource } from './host-rights.js';
 import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
-import { isUsable, NullStreamProvider, type StreamProvider } from './stream/provider.js';
+import { isUsable, streamProviderFromEnv, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
 import { videoGateFromEnv, videoStorageFromEnv } from './video/library.js';
 import { createTradePublicPaperFlagPort } from './paper/market-flag-verify.js';
@@ -82,7 +82,13 @@ const hostRights = createHostRightsSource(env.IDENTITY_URL, env.INTERNAL_SERVICE
  * stream credential is refused by name rather than answered with a token that
  * cannot connect (SOCKET §13 `socket.stream-provider`).
  */
-const stream: StreamProvider = new NullStreamProvider();
+const stream: StreamProvider = streamProviderFromEnv({
+  provider: env.ACADEMY_STREAM_PROVIDER,
+  url: env.LIVEKIT_URL,
+  apiKey: env.LIVEKIT_API_KEY,
+  apiSecret: env.LIVEKIT_API_SECRET,
+  tokenTtlSeconds: env.LIVEKIT_TOKEN_TTL_SECONDS,
+});
 
 /**
  * The one publish: cert grant → `intafaced.identity.xp.earned`.

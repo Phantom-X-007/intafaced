@@ -50,7 +50,13 @@ const schema = serviceEnvSchema
        * Chosen explicitly, never by fallback: a misconfigured provider must
        * fail loudly instead of quietly degrading a paid lobby to text.
        */
-      ACADEMY_STREAM_PROVIDER: z.enum(['none']).default('none'),
+      ACADEMY_STREAM_PROVIDER: z.enum(['none', 'livekit']).default('none'),
+      /** LiveKit websocket URL. Blank keeps the provider refuse-closed. */
+      LIVEKIT_URL: z.string().optional().default(''),
+      /** LiveKit API credentials. Never included in readiness or logs. */
+      LIVEKIT_API_KEY: z.string().optional().default(''),
+      LIVEKIT_API_SECRET: z.string().optional().default(''),
+      LIVEKIT_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
 
       /**
        * Hard ceiling on a lobby, above whatever a room asks for.
