@@ -41,10 +41,13 @@ describe('compose emissions kill and auto-tick for svc-token', () => {
     expect(envTs).toMatch(/EMISSIONS_AUTO_TICK:\s*z/);
     expect(envTs).toMatch(/EMISSIONS_TICK_MS:\s*z/);
     expect(envTs).toMatch(/YIELD_JOB_ENABLED:\s*z/);
+    expect(envTs).toMatch(/BUYBACK_JOB_ENABLED:\s*z/);
     const autoSlice = envTs.slice(envTs.indexOf('EMISSIONS_AUTO_TICK:'));
     expect(autoSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
     const yieldSlice = envTs.slice(envTs.indexOf('YIELD_JOB_ENABLED:'));
     expect(yieldSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
+    const buybackSlice = envTs.slice(envTs.indexOf('BUYBACK_JOB_ENABLED:'));
+    expect(buybackSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
   });
 
   it('wires unique host pass-through keys (auto-tick default false)', () => {
@@ -61,6 +64,9 @@ describe('compose emissions kill and auto-tick for svc-token', () => {
   it('does not open yield cron or invent a curve on the compose block', () => {
     expect(block).toMatch(/YIELD_JOB_ENABLED:\s*\$\{YIELD_JOB_ENABLED:-false\}/);
     expect(block).not.toMatch(/YIELD_JOB_ENABLED:\s*\$\{YIELD_JOB_ENABLED:-true\}/);
+    expect(block).toMatch(/BUYBACK_JOB_ENABLED:\s*\$\{BUYBACK_JOB_ENABLED:-false\}/);
+    expect(block).not.toMatch(/BUYBACK_JOB_ENABLED:\s*\$\{BUYBACK_JOB_ENABLED:-true\}/);
+    expect(block).toMatch(/TRADE_URL:\s*http:\/\/svc-trade:4004/);
     expect(block).not.toMatch(/^\s+YIELD_DISTRIBUTION_CRON_HOURS:/m);
     expect(block).not.toMatch(/HALVING/i);
     expect(block).not.toMatch(/MINTER_ADDRESS/i);

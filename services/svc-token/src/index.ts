@@ -11,7 +11,10 @@ import { createTokenRouter, type TokenRouter } from './router.js';
 import { registerInternalStake } from './internal-stake.js';
 import { registerInternalEmissions } from './internal-emissions.js';
 import { registerInternalYield } from './internal-yield.js';
+import { registerInternalBuyback } from './internal-buyback.js';
 import { runYieldWindow } from './yield-job.js';
+import { runBuybackWindow } from './buyback-job.js';
+import { createTradeIocMarketBuy } from './buyback-trade-client.js';
 import { readGovernanceParams } from './governance-close.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -82,9 +85,24 @@ const yieldJob = {
   distributeRevenue: (input: Parameters<typeof token.distributeRevenue>[0]) => token.distributeRevenue(input),
 };
 
+const buybackJob = {
+  buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
+  assetId: env.TOKEN_ASSET_ID,
+  quoteAssetId: env.BUYBACK_QUOTE_ASSET,
+  ledger,
+  buybackParams: () => token.buybackParams(),
+  placeIocMarketBuy: createTradeIocMarketBuy({
+    tradeUrl: env.TRADE_URL,
+    symbol: env.BUYBACK_SYMBOL,
+    internalSecret: env.INTERNAL_SERVICE_SECRET,
+  }),
+  settleBuyback: (input: Parameters<typeof token.settleBuybackFill>[0]) => token.settleBuybackFill(input),
+};
+
 export const appRouter = createTokenRouter(token, {
   emissionsEnabled: env.EMISSIONS_ENABLED,
   runYieldWindow: (input) => runYieldWindow(yieldJob, input),
+  runBuybackWindow: (input) => runBuybackWindow(buybackJob, input),
 });
 export type AppRouter = typeof appRouter;
 
@@ -98,6 +116,7 @@ app.get('/ready', async () => ({
   emissionsEnabled: env.EMISSIONS_ENABLED,
   emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
   yieldJobEnabled: env.YIELD_JOB_ENABLED,
+  buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
 }));
 
 // The S2S stake gate. Lives in its own module so it can be tested — see
@@ -119,6 +138,12 @@ registerInternalYield(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   yieldJobEnabled: env.YIELD_JOB_ENABLED,
   runWindow: (input) => runYieldWindow(yieldJob, input),
+});
+
+registerInternalBuyback(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
+  runWindow: (input) => runBuybackWindow(buybackJob, input),
 });
 
 // ── Optional emissions auto-tick ─────────────────────────────────────────────

@@ -85,6 +85,16 @@ export class TokenError extends Error {
        * write a DB-only buy (and a fee-funded burn is not a buy).
        */
       | 'token.buyback_tokens_unmoved'
+      /**
+       * Live buyback job unset / off (`BUYBACK_JOB_ENABLED=false`), or a
+       * caller tried to type `tokensBought`. The job fills from placeOrder.
+       */
+      | 'token.buyback_job_unset'
+      /**
+       * IOC market-buy found no resting asks (or filled qty 0). Named empty,
+       * never an invented mid.
+       */
+      | 'token.buyback_book_empty'
       | 'token.params_missing'
       | 'token.params_invalid'
       | 'token.proposal_not_found'
@@ -222,6 +232,13 @@ export interface YieldRunResult {
   skipped: number;
   /** Planned rows this run found already posted — the resumability signal. */
   alreadyPaid: number;
+}
+
+export interface BuybackRunResult {
+  runId: string;
+  tokensBought: Amount;
+  burned: Amount;
+  toRewards: Amount;
 }
 
 export interface StakeRecord {
@@ -1177,6 +1194,91 @@ export class TokenService {
     // a second package). Clear the gate in a packages/events PR, or restore
     // the publisher here only after a recipe actually posts.
     return this.refuseUnbookedBuyback(claimed.id, input.runId, input.tokensBought, { fresh: claimed.fresh });
+  }
+
+  /**
+   * Settle a buyback whose tokensBought is a real IOC fill.
+   *
+   * The live job calls this AFTER `placeIocMarketBuy`. Operator HTTP still
+   * uses `recordBuyback` and still refuses unmoved. Claim then `recipes.burn`
+   * from the rewards engine — the fill must have credited that pot or the
+   * burn fails closed (insufficient funds), never a fee-funded fake buy.
+   *
+   * Does not emit `buybackExecuted` (WIRING_SOCKETS publisher is a
+   * packages/events PR).
+   */
+  async settleBuybackFill(input: {
+    runId: string;
+    revenueWindow: { from: Date; to: Date };
+    revenueTotal: Record<string, string>;
+    tokensBought: Amount;
+  }): Promise<{ runId: string; burned: Amount; toRewards: Amount }> {
+    return withMoneySpan('token.settleBuybackFill', { operation: 'buyback', amount: formatAmount(input.tokensBought) }, async () =>
+      this.settleBuybackFillInner(input),
+    );
+  }
+
+  private async settleBuybackFillInner(input: {
+    runId: string;
+    revenueWindow: { from: Date; to: Date };
+    revenueTotal: Record<string, string>;
+    tokensBought: Amount;
+  }): Promise<{ runId: string; burned: Amount; toRewards: Amount }> {
+    if (!(input.revenueWindow.from.getTime() < input.revenueWindow.to.getTime())) {
+      throw new TokenError(
+        `Revenue window [${iso(input.revenueWindow.from)}, ${iso(input.revenueWindow.to)}) is empty or inverted`,
+        'token.buyback_window_invalid',
+      );
+    }
+    if (input.tokensBought <= 0n) {
+      throw new TokenError(
+        'tokensBought must be positive — a zero fill is token.buyback_book_empty on the job, not a settle',
+        'token.buyback_revenue_invalid',
+      );
+    }
+
+    const revenueTotal = normaliseRevenueTotal(input.revenueTotal);
+    const buyback = await this.buybackParams();
+    const { toBurn, toRewards } = splitBuyback(input.tokensBought, buyback);
+
+    const claimed = await this.claimBuybackWindow({
+      runId: input.runId,
+      window: input.revenueWindow,
+      revenueTotal,
+      tokensBought: input.tokensBought,
+      toBurn,
+      toRewards,
+    });
+
+    if (claimed.status === 'settled') {
+      return { runId: claimed.id, burned: claimed.burned, toRewards: claimed.toRewards };
+    }
+
+    try {
+      if (toBurn > 0n) {
+        await this.ledger.post(
+          recipes.burn({
+            runId: input.runId,
+            assetId: this.assetId,
+            amount: toBurn,
+            from: rewardsEngine(this.assetId),
+          }),
+        );
+      }
+    } catch (err) {
+      if (err instanceof InsufficientFundsError && claimed.fresh) {
+        await this.sql`
+          DELETE FROM token.buyback_runs WHERE id = ${claimed.id} AND status = 'pending'
+        `;
+      }
+      throw err;
+    }
+
+    await this.sql`
+      UPDATE token.buyback_runs SET status = 'settled' WHERE id = ${claimed.id} AND status = 'pending'
+    `;
+
+    return { runId: claimed.id, burned: toBurn, toRewards };
   }
 
   /**
