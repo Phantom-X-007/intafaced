@@ -100,12 +100,22 @@ function toWireSide(side) {
 
 /** CCXT order type → the desk's LIMIT_PRICE/MARKET_PRICE vocabulary. */
 function toDeskType(type) {
-  return String(type).toLowerCase() === 'market' ? 'MARKET_PRICE' : 'LIMIT_PRICE';
+  var value = String(type || '').toLowerCase();
+  if (value === 'market') return 'MARKET_PRICE';
+  if (value === 'limit') return 'LIMIT_PRICE';
+  if (value === 'stop') return 'STOP';
+  if (value === 'stop_limit') return 'STOP_LIMIT';
+  if (value === 'take_profit') return 'TAKE_PROFIT';
+  return String(type || '').toUpperCase();
 }
 
 /** The desk's order-type constant → the CCXT wire's market/limit. */
 function toWireType(type) {
-  return String(type).toUpperCase() === 'MARKET_PRICE' ? 'market' : 'limit';
+  var value = String(type || '').toLowerCase();
+  if (value === 'market_price') return 'market';
+  if (value === 'limit_price') return 'limit';
+  if (value === 'market' || value === 'limit' || value === 'stop' || value === 'stop_limit' || value === 'take_profit') return value;
+  return 'limit';
 }
 
 /**
@@ -492,9 +502,15 @@ function toCreateOrderBody(input) {
     side: toWireSide(input.side),
     amount: String(input.amount)
   };
-  if (body.type === 'limit') {
+  if (body.type === 'limit' || body.type === 'stop_limit') {
     body.price = String(input.price);
   }
+  if (body.type === 'stop' || body.type === 'stop_limit' || body.type === 'take_profit') {
+    body.stopPrice = String(input.stopPrice);
+  }
+  if (input.timeInForce) body.timeInForce = String(input.timeInForce);
+  if (input.postOnly === true) body.postOnly = true;
+  if (input.reduceOnly === true) body.reduceOnly = true;
   if (input.clientOrderId) body.clientOrderId = String(input.clientOrderId);
   if (input.subAccountId) body.subAccountId = String(input.subAccountId);
   return body;

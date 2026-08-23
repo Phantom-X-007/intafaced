@@ -454,7 +454,7 @@
                     <tr v-for="(row, i) in openOrders" :key="row.orderId || i">
                       <td class="ix-dim">{{ date(row.time) }}</td>
                       <td>{{ row.symbol }}</td>
-                      <td class="ix-dim">{{ row.type === 'MARKET_PRICE' ? $t('exchange.terminal.typeMarket') : $t('exchange.terminal.typeLimit') }}</td>
+                      <td class="ix-dim">{{ orderTypeLabel(row) }}</td>
                       <td :class="row.direction === 'BUY' ? 'ix-up' : 'ix-down'">
                         {{ row.direction === 'BUY' ? $t('exchange.terminal.buy') : $t('exchange.terminal.sell') }}
                       </td>
@@ -923,6 +923,9 @@
             :aria-pressed="orderType === 'MARKET_PRICE' ? 'true' : 'false'"
             @click="setOrderType('MARKET_PRICE')"
           >{{ $t("exchange.terminal.typeMarket") }}</button>
+          <button type="button" :class="{ 'is-active': orderType === 'stop' }" @click="setOrderType('stop')">{{ $t("exchange.hlplus.stop") }}</button>
+          <button type="button" :class="{ 'is-active': orderType === 'stop_limit' }" @click="setOrderType('stop_limit')">{{ $t("exchange.hlplus.stopLimit") }}</button>
+          <button type="button" :class="{ 'is-active': orderType === 'take_profit' }" @click="setOrderType('take_profit')">{{ $t("exchange.hlplus.takeProfit") }}</button>
         </nav>
 
         <div class="ix-order-body">
@@ -951,15 +954,15 @@
 
           <div class="ix-field">
             <label for="ix-ticket-price">{{ $t("exchange.terminal.fieldPrice") }}</label>
-            <div class="ix-input" :class="{ 'is-disabled': orderType === 'MARKET_PRICE' }">
+            <div class="ix-input" :class="{ 'is-disabled': !orderNeedsLimitPrice }">
               <input
                 id="ix-ticket-price"
                 ref="ticketPrice"
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
-                :disabled="orderType === 'MARKET_PRICE'"
-                :placeholder="orderType === 'MARKET_PRICE' ? $t('exchange.terminal.bestAvailable') : ''"
+                :disabled="!orderNeedsLimitPrice"
+                :placeholder="!orderNeedsLimitPrice ? $t('exchange.terminal.bestAvailable') : ''"
                 :aria-invalid="ticketPriceAria['aria-invalid']"
                 :aria-describedby="ticketPriceAria['aria-describedby']"
                 v-model="form.price"
@@ -968,6 +971,34 @@
               />
               <span class="ix-unit">{{ currentCoin.base }}</span>
             </div>
+          </div>
+
+          <div class="ix-field" v-if="orderNeedsStopPrice">
+            <label for="ix-ticket-stop-price">{{ $t("exchange.hlplus.triggerPrice") }}</label>
+            <div class="ix-input">
+              <input
+                id="ix-ticket-stop-price"
+                type="text"
+                inputmode="decimal"
+                spellcheck="false"
+                v-model="form.stopPrice"
+                @input="onStopPriceInput"
+                @keydown.enter.prevent="submitOrder"
+              />
+              <span class="ix-unit">{{ currentCoin.base }}</span>
+            </div>
+          </div>
+
+          <div class="ix-field ix-hlplus-options">
+            <label for="ix-ticket-tif">{{ $t("exchange.hlplus.timeInForce") }}</label>
+            <select id="ix-ticket-tif" v-model="timeInForce" :disabled="wireOrderType === 'market'" @change="clearPendingOrderIdentity">
+              <option value="GTC">GTC</option>
+              <option value="IOC">IOC</option>
+              <option value="FOK">FOK</option>
+              <option value="PO">{{ $t("exchange.hlplus.postOnly") }}</option>
+            </select>
+            <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market'" @change="clearPendingOrderIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
+            <label><input type="checkbox" v-model="reduceOnly" @change="clearPendingOrderIdentity" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
           </div>
 
           <div class="ix-field">
@@ -1028,7 +1059,7 @@
                 <em>{{ side === 'BUY' ? currentCoin.base : currentCoin.coin }}</em>
               </dd>
             </div>
-            <div v-if="orderType === 'LIMIT_PRICE'">
+            <div v-if="orderNeedsLimitPrice">
               <dt>{{ $t("exchange.terminal.orderValue") }}</dt>
               <dd>{{ fmt(orderValue, baseCoinScale) }} <em>{{ currentCoin.base }}</em></dd>
             </div>
@@ -1310,8 +1341,12 @@ export default {
 
       side: 'BUY',
       orderType: 'LIMIT_PRICE',
+      timeInForce: 'GTC',
+      postOnly: false,
+      reduceOnly: false,
+      pendingClientOrderId: '',
       percent: 0,
-      form: { price: '', amount: '' },
+      form: { price: '', stopPrice: '', amount: '' },
 
       trend: 0,
       submitting: false,
@@ -1328,6 +1363,17 @@ export default {
   },
 
   computed: {
+    wireOrderType() {
+      if (this.orderType === 'MARKET_PRICE') return 'market';
+      if (this.orderType === 'LIMIT_PRICE') return 'limit';
+      return this.orderType;
+    },
+    orderNeedsLimitPrice() {
+      return this.wireOrderType === 'limit' || this.wireOrderType === 'stop_limit';
+    },
+    orderNeedsStopPrice() {
+      return this.wireOrderType === 'stop' || this.wireOrderType === 'stop_limit' || this.wireOrderType === 'take_profit';
+    },
     /* A-UI-A11Y / B10 — GOV.UK error-summary model (verbatim ticket error). */
     orderErrorSummary() {
       return deskA11y.buildTicketErrorSummary(this.orderValidationError);
@@ -2921,23 +2967,33 @@ export default {
       }
       this.orderType = 'LIMIT_PRICE';
       this.form.price = price;
+      this.clearPendingOrderIdentity();
       this.applyPercent();
     },
 
     setSide(side) {
       this.side = side;
+      this.clearPendingOrderIdentity();
       this.percent = 0;
       this.form.amount = '';
     },
 
     setOrderType(type) {
       this.orderType = type;
+      this.clearPendingOrderIdentity();
+      if (this.wireOrderType === 'market') {
+        this.timeInForce = 'IOC';
+        this.postOnly = false;
+      } else if (this.timeInForce === 'IOC' && type !== 'stop') {
+        this.timeInForce = 'GTC';
+      }
       this.percent = 0;
       this.form.amount = '';
     },
 
     setPercent(value) {
       this.percent = value;
+      this.clearPendingOrderIdentity();
       this.applyPercent();
     },
 
@@ -2979,6 +3035,7 @@ export default {
 
     onPriceInput() {
       this.form.price = this.clamp(this.form.price, this.baseCoinScale);
+      this.clearPendingOrderIdentity();
       this.orderValidationError = '';
       if (this.percent > 0) {
         this.applyPercent();
@@ -2987,8 +3044,19 @@ export default {
 
     onAmountInput() {
       this.form.amount = this.clamp(this.form.amount, this.quoteSized ? this.baseCoinScale : this.coinScale);
+      this.clearPendingOrderIdentity();
       this.percent = 0;
       this.orderValidationError = '';
+    },
+
+    onStopPriceInput() {
+      this.form.stopPrice = this.clamp(this.form.stopPrice, this.baseCoinScale);
+      this.clearPendingOrderIdentity();
+      this.orderValidationError = '';
+    },
+
+    clearPendingOrderIdentity() {
+      this.pendingClientOrderId = '';
     },
 
     /**
@@ -3004,10 +3072,17 @@ export default {
       }
       if (!ixMoney.isPositive(amountRaw)) return 'Enter a valid amount greater than zero.';
       if (ixMoney.greaterThan(amountRaw, '1000000000000')) return 'Amount is too large.';
-      if (this.orderType === 'LIMIT_PRICE') {
+      if (this.orderNeedsLimitPrice) {
         if (!priceRaw) return 'Enter a limit price.';
         if (!ixMoney.isPositive(priceRaw)) return 'Enter a valid limit price greater than zero.';
         if (ixMoney.greaterThan(priceRaw, '1000000000000')) return 'Price is too large.';
+      }
+      if (this.orderNeedsStopPrice) {
+        var stopRaw = String(this.form.stopPrice || '').trim();
+        if (!stopRaw || !ixMoney.isPositive(stopRaw)) return 'Enter a valid trigger price greater than zero.';
+      }
+      if (this.postOnly && this.timeInForce !== 'GTC' && this.timeInForce !== 'PO') {
+        return 'Post-only cannot be combined with IOC or FOK.';
       }
       /* Cost for the insufficient-balance check only — not a wire amount. */
       var costStr = this.quoteSized
@@ -3102,9 +3177,9 @@ export default {
       const priceText = String(this.form.price == null ? '' : this.form.price).trim() || '—';
 
       const side = this.side === 'BUY' ? this.$t('exchange.terminal.buy') : this.$t('exchange.terminal.sell');
-      const type = this.orderType === 'MARKET_PRICE' ? this.$t('exchange.terminal.typeMarket') : this.$t('exchange.terminal.typeLimit');
+      const type = this.orderTypeLabel({ type: this.wireOrderType.toUpperCase() });
       const priceLine =
-        this.orderType === 'MARKET_PRICE'
+        !this.orderNeedsLimitPrice
           ? this.$t('exchange.terminal.confirmPriceBest')
           : this.$t('exchange.terminal.confirmPriceLine', { price: priceText + ' ' + (this.currentCoin.base || '') });
       const amountLine =
@@ -3178,12 +3253,18 @@ export default {
         return this.warn(subBlock);
       }
       this.submitting = true;
+      if (!this.pendingClientOrderId) this.pendingClientOrderId = this.nextClientOrderId();
       const body = ixTrade.toCreateOrderBody({
         symbol: this.currentCoin.symbol,
         type: this.orderType,
         side: this.side,
         amount: String(this.form.amount).trim(),
-        price: String(this.form.price).trim()
+        price: String(this.form.price).trim(),
+        stopPrice: String(this.form.stopPrice).trim(),
+        timeInForce: this.timeInForce,
+        postOnly: this.postOnly || this.timeInForce === 'PO',
+        reduceOnly: this.reduceOnly,
+        clientOrderId: this.pendingClientOrderId
       });
       return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
         this.submitting = false;
@@ -3192,6 +3273,8 @@ export default {
           this.liveAnnounce = '';
           this.$Notice.success({ title: this.$t('intafaced.trade.placed'), desc: this.submitLabel });
           this.form.amount = '';
+          this.form.stopPrice = '';
+          this.pendingClientOrderId = '';
           this.percent = 0;
           this.accountTab = 'open';
           this.loadAccount();
@@ -3204,6 +3287,21 @@ export default {
         this.focusOrderError(rejectMsg);
         this.$Notice.error({ title: this.$t('intafaced.trade.rejected'), desc: rejectMsg });
       });
+    },
+
+    nextClientOrderId() {
+      var suffix = Math.random().toString(36).slice(2, 12);
+      return ('desk-' + Date.now().toString(36) + '-' + suffix).slice(0, 64);
+    },
+
+    orderTypeLabel(row) {
+      var type = String(row && row.type || '').toUpperCase();
+      if (type === 'MARKET_PRICE' || type === 'MARKET') return this.$t('exchange.terminal.typeMarket');
+      if (type === 'LIMIT_PRICE' || type === 'LIMIT') return this.$t('exchange.terminal.typeLimit');
+      if (type === 'STOP') return this.$t('exchange.hlplus.stop');
+      if (type === 'STOP_LIMIT') return this.$t('exchange.hlplus.stopLimit');
+      if (type === 'TAKE_PROFIT') return this.$t('exchange.hlplus.takeProfit');
+      return type || '—';
     },
 
     cancelOrder(order) {
