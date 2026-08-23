@@ -1482,10 +1482,12 @@ services:
       DATABASE_URL: postgres://svc_indexer:svc_indexer@postgres:5432/intafaced
       # Matches PROTOCOL_CHAIN_ID — the two services describe one chain.
       INDEXER_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
-      # Empty on purpose — see the note above. `http://evm:8545` is the value to
-      # set, together with a venue address, once there is a venue.
-      INDEXER_RPC_URL: ${INDEXER_RPC_URL:-}
-      INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-0x0000000000000000000000000000000000000000}
+      # Dev follows the disposable anvil. `chain:deploy` deploys DevVenue from
+      # account #5 at this deterministic CREATE address; production keeps the
+      # explicit zero (the app default in APP_ENV=prod) and reports
+      # indexer.venue_unset until an owner supplies a real venue address.
+      INDEXER_RPC_URL: ${INDEXER_RPC_URL:-http://evm:8545}
+      INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-}
       INDEXER_START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
       INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-64}
       INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-2000}

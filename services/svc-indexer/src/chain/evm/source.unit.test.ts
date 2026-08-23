@@ -76,12 +76,12 @@ describe('EvmChainSource · refuse a dark chain at construct (no RPC)', () => {
    * check the projection would stay empty and every read would report an empty
    * book with total confidence — the quietest failure available to a log decoder.
    */
-  it('refuses a zero venue address with indexer.chain_not_configured, before any RPC', () => {
+  it('refuses a zero venue address with indexer.venue_unset, before any RPC', () => {
     expect(() => new EvmChainSource({ chainId: 31337, rpcUrl: 'http://127.0.0.1:8545', venue: ZERO })).toThrow(ChainUnavailableError);
     try {
       new EvmChainSource({ chainId: 31337, rpcUrl: 'http://127.0.0.1:8545', venue: ZERO });
     } catch (err) {
-      expect(err).toMatchObject({ code: 'indexer.chain_not_configured' });
+      expect(err).toMatchObject({ code: 'indexer.venue_unset' });
       expect((err as Error).message).toMatch(/zero address/i);
     }
   });

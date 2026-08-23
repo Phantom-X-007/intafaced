@@ -16,6 +16,7 @@ import { userCopy } from './user-copy.js';
  */
 export const SERVING_REFUSE_CODES = new Set([
   'indexer.chain_not_configured',
+  'indexer.venue_unset',
   'indexer.chain_unreachable',
   'indexer.chain_id_mismatch',
   'indexer.venue_not_deployed',
