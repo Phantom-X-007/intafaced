@@ -30,6 +30,11 @@ export interface CopyFollow {
   readonly createdAt: Date;
   /** Kill switch for fee-share on this follow (earnings stop; follow may remain). */
   readonly feeShareKilled: boolean;
+  /** sha256 of the auto-mirror session-key — never the raw token. */
+  readonly sessionKeyHash?: string | null;
+  readonly sessionKeyPrefix?: string | null;
+  /** Kill of the auto-mirror grant; follow may remain. */
+  readonly sessionKeyRevoked?: boolean;
 }
 
 export interface PresentCopyFollow {
@@ -47,6 +52,12 @@ export interface PresentCopyFollow {
   readonly region: string;
   readonly createdAt: string;
   readonly feeShareKilled: boolean;
+  readonly sessionKeyGranted: boolean;
+  readonly sessionKeyRevoked: boolean;
+  readonly sessionKeyPrefix?: string;
+  readonly sessionKeyId?: string;
+  /** Raw token — grantSessionKey only, never list/store. */
+  readonly sessionKey?: string;
 }
 
 export function parseCopyEnvelope(input: {
@@ -112,5 +123,8 @@ export function presentCopyFollow(follow: CopyFollow, currentExposure: Amount = 
     region: follow.region,
     createdAt: follow.createdAt.toISOString(),
     feeShareKilled: follow.feeShareKilled,
+    sessionKeyGranted: Boolean(follow.sessionKeyHash) && follow.sessionKeyRevoked !== true,
+    sessionKeyRevoked: follow.sessionKeyRevoked === true,
+    ...(follow.sessionKeyPrefix ? { sessionKeyPrefix: follow.sessionKeyPrefix, sessionKeyId: follow.sessionKeyPrefix } : {}),
   };
 }

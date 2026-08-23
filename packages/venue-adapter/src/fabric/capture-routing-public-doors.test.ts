@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import {
   planRoute,
   routingWeightFromCapture,
@@ -23,7 +23,7 @@ import {
   type VenueHealth,
 } from '../index.js';
 
-function graded(venueId = 'v'): VenueLatencyGrade {
+function graded(venueId = 'v'): RestLatencyGrade {
   return {
     venueId,
     measurement: 'rest-round-trip',

@@ -29,7 +29,11 @@ assert(!/maxNotionalPerOrder:\s*(Number|parseFloat|parseInt)\(/.test(exchange), 
 assert(!/maxAggregateExposure:\s*(Number|parseFloat|parseInt)\(/.test(exchange), 'maxAggregateExposure stays a string');
 assert(exchange.indexOf('id="ix-copy-max-notional" type="text"') !== -1, 'notional input is type=text');
 assert(exchange.indexOf('id="ix-copy-max-exposure" type="text"') !== -1, 'exposure input is type=text');
-assert(exchange.indexOf("copy.placeMirror") === -1, 'must not call copy.placeMirror');
+assertContains(exchange, "mutate('trade', 'copy.grantSessionKey'");
+assert(
+  exchange.indexOf("copy.placeMirror") === -1 || exchange.indexOf("copy.grantSessionKey") !== -1,
+  'placeMirror is allowed only AFTER grant',
+);
 assert(exchange.indexOf('TRADE_COPY_PLACE_MIRROR') === -1, 'must not enable TRADE_COPY_PLACE_MIRROR');
 assert(en.indexOf('intafaced.exchange.copy') !== -1 || /exchange:\s*\{[\s\S]*copy:\s*\{/.test(en), 'en.js has intafaced.exchange.copy keys');
 assertContains(en, 'trade.copy_jurisdiction_blank');

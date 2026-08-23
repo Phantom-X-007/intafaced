@@ -12,6 +12,8 @@ describe('describeLatencyGradingPolicy', () => {
     expect(p.inventsLetterToBpsScaling).toBe(false);
     expect(p.inventsDefaultGrade).toBe(false);
     expect(p.inventsVenueList).toBe(false);
+    expect(p.wsMeasurement).toBe('ws-round-trip');
+    expect(p.wsRoundTripMeasured).toBe(true);
     expect(p.streamLagNotMeasured).toBe(true);
   });
 });

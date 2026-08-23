@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { UNRESOLVED_REGION } from '@intafaced/config';
-import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
+import { EDGE_REGION_UNTRUSTED, resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 
 /**
  * Break: edge stamped one DEFAULT_REGION constant; geo header could be forged
@@ -32,8 +32,9 @@ describe('resolveRequestRegion — trusted header', () => {
       headers: { 'cf-ipcountry': 'US' },
     });
     expect(r.source).toBe('header_ignored_no_trust');
-    expect(r.region).toBe('XX');
+    expect(r.region).toBe(UNRESOLVED_REGION);
     expect(r.regionResolved).toBe(false);
+    expect(r.refuseCode).toBe(EDGE_REGION_UNTRUSTED);
     expect(r.note).toMatch(/EDGE_TRUST_PROXY/i);
   });
 
@@ -57,6 +58,7 @@ describe('resolveRequestRegion — trusted header', () => {
     expect(missing.region).toBe(UNRESOLVED_REGION);
     expect(missing.regionResolved).toBe(false);
     expect(missing.source).toBe('unresolved');
+    expect(missing.refuseCode).toBe(EDGE_REGION_UNTRUSTED);
 
     const junk = resolveRequestRegion({
       defaultRegion: 'US',

@@ -137,6 +137,7 @@ export default [
     { path: '/quant', component: resolve=>(require(["../pages/intafaced/quant/Sandbox"],resolve)) },
     { path: '/quant/studio', component: resolve=>(require(["../pages/intafaced/quant/Studio"],resolve)) },
     { path: '/quant/backtest', component: resolve=>(require(["../pages/intafaced/quant/Backtest"],resolve)) },
+    { path: '/execution', component: resolve=>(require(["../pages/intafaced/execution/Arb"],resolve)) },
     { path: '/chain', component: resolve=>(require(["../pages/intafaced/Chain"],resolve)) },
     // Two modules with no service behind them at all. Same component, told
     // which one it is — see pages/intafaced/NotBuilt.vue.

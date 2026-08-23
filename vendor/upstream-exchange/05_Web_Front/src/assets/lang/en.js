@@ -450,6 +450,20 @@ module.exports = {
                 note: "Status is public under svc-protocol launch.status. Template is not audited until a real audit. This screen never signs a deploy."
             }
         },
+        execution: {
+            arb: {
+                title: "Arb scanners",
+                lead: "Class scanners on the existing cost model. Empty books refuse. This page never invents a spread.",
+                scan: "Scan",
+                class: "Class",
+                cross: "Cross-exchange",
+                triangular: "Triangular",
+                basis: "Basis",
+                funding: "Funding",
+                reason: "Refuse reason",
+                empty: "Empty book stays empty — class and refuse reason only, never fake bps."
+            }
+        },
         quant: {
             title: "Quant sandbox",
             lead: "Paste a few lines of JavaScript or Python. They run in a sandbox against the internal paper book — no raw network, no fabricated PnL.",
@@ -1853,10 +1867,25 @@ module.exports = {
                 unfollow: "Unfollow",
                 signIn: "Sign in on Platform to follow",
                 invalid: "Enter leader, region, at least one market, decimal caps greater than zero, and a future ISO expiry.",
-                refused: "Copy follow was refused — trade.copy_jurisdiction_blank / trade.copy_place_disabled / validation. No escrow was taken.",
+                refused: "Copy follow was refused — trade.copy_jurisdiction_blank / trade.copy_place_disabled / trade.copy_session_key_missing / validation. No escrow was taken.",
                 empty: "No follows. Empty is honest — this is not a hidden book.",
                 list: "Your follows",
-                loading: "Reading follows…"
+                loading: "Reading follows…",
+                sessionKey: "Auto-mirror key",
+                sessionNone: "Not granted",
+                sessionRevoked: "Revoked",
+                grantSession: "Grant auto-mirror",
+                granting: "Granting…",
+                killSession: "Kill auto-mirror",
+                killing: "Killing…",
+                placeLead: "Place a planned mirror after grant. Amounts stay decimal strings. Kill revokes; place then refuses trade.copy_session_key_missing.",
+                followId: "Follow id",
+                fillId: "Leader fill id",
+                qty: "Qty",
+                notional: "Notional",
+                placeMirror: "Place mirror",
+                placing: "Placing…",
+                invalidPlace: "Enter follow id, fill id, market, and decimal qty/notional greater than zero. Grant the auto-mirror key first."
             },
             options: {
                 title: "Options",

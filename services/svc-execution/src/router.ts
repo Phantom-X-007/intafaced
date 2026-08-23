@@ -91,6 +91,8 @@ const sorCostTermsInput = z.object({
 const omsArbScanInput = z.object({
   symbol: z.string().min(1).max(64),
   amount: decimalString,
+  scanClass: z.enum(['cross-exchange', 'triangular', 'basis', 'funding']).default('cross-exchange'),
+  fundingRate: z.string().max(64).nullable().optional(),
   quotes: z
     .array(
       z.object({
@@ -101,7 +103,6 @@ const omsArbScanInput = z.object({
         asOfMs: z.number().int().nullable(),
       }),
     )
-    .min(1)
     .max(32),
   costTermsByVenue: z.record(z.string().min(1).max(128), sorCostTermsInput),
   inventory: z.object({

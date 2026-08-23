@@ -14,13 +14,18 @@ export const EXECUTION_ARB_TRACKER_ID = 'execution.arbitrage' as const;
 
 export const EXECUTION_ARB_BLOCKER_TRACKER_ID = 'execution.sor' as const;
 
-export const ARB_PRODUCT_EXPORTS = ['scanExternalCrossExchangeArb', 'describeArbitragePolicy'] as const;
+export const ARB_PRODUCT_EXPORTS = ['scanExternalCrossExchangeArb', 'describeArbitragePolicy', 'scanArbClass'] as const;
 
 export type ArbProductExport = (typeof ARB_PRODUCT_EXPORTS)[number];
 
-export const ARB_HONEST_GAPS = ['gap.triangular_basis_funding'] as const;
+export const ARB_HONEST_GAPS = ['gap.oms_atomic_legs'] as const;
 
-export const ARB_DONE_BAR_TEST_FILES = ['arbitrage.test.ts', 'arb-owner-capital-gate.test.ts', 'arb-oms-wire.test.ts'] as const;
+export const ARB_DONE_BAR_TEST_FILES = [
+  'arbitrage.test.ts',
+  'arb-owner-capital-gate.test.ts',
+  'arb-oms-wire.test.ts',
+  'arb-classes.test.ts',
+] as const;
 
 export function arbExportsInIndexSource(): readonly ArbProductExport[] {
   const here = dirname(fileURLToPath(import.meta.url));

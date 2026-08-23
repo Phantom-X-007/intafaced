@@ -6,20 +6,23 @@ import {
   type LatencyObservation,
   type VenueLatencyGrade,
 } from '@intafaced/venue-contracts';
+import type { StreamPort } from './transport.js';
 
 // The vocabulary lives in `@intafaced/venue-contracts` (`latency.ts`) so that
 // `MarketDataAdapter` can declare `latencyGrade()` — an adapter cannot offer a
 // grade through an interface with no word for one. Re-exported here because this
 // is where callers already look for grading, and a caller should not have to know
 // which of the two packages a type happens to be declared in.
-export { isGraded };
+export { isGraded, isRestGrade, isWsGrade } from '@intafaced/venue-contracts';
 export type {
   GradedVenueLatency,
   LatencyGrade,
   LatencyMeasurement,
   LatencyObservation,
   ObservationOutcome,
+  RestLatencyGrade,
   VenueLatencyGrade,
+  WsLatencyGrade,
 } from '@intafaced/venue-contracts';
 
 /**
@@ -101,12 +104,17 @@ export type {
  */
 
 /**
- * What every grade in this file measures. See the `latency.ts` header in
- * `@intafaced/venue-contracts` for the full list of what it does NOT measure —
- * in short: not stream delivery lag, not book staleness, not venue-side
+ * Default measurement for a grader that does not say otherwise. See the
+ * `latency.ts` header in `@intafaced/venue-contracts` for the full list of
+ * what these numbers are NOT — in short: not stream delivery lag (depth-delta
+ * travel after the socket is open), not book staleness, not venue-side
  * matching, and not time spent waiting on our own rate-limit governor.
+ *
+ * REST and WS live on SEPARATE graders. Mixing them in one window would let a
+ * consumer read handshake time as HTTP time.
  */
-const MEASUREMENT: LatencyMeasurement = 'rest-round-trip';
+export const REST_MEASUREMENT: LatencyMeasurement = 'rest-round-trip';
+export const WS_MEASUREMENT: LatencyMeasurement = 'ws-round-trip';
 
 export interface LatencyThresholds {
   /** p95 round-trip ceilings, in ms, for grades A/B/C/D. Above the last is F. */
@@ -135,14 +143,25 @@ export const DEFAULT_THRESHOLDS: LatencyThresholds = {
  */
 export class VenueLatencyGrader {
   readonly venueId: string;
+  /** Which latency this window holds. Set at construction; never inferred from samples. */
+  readonly measurement: LatencyMeasurement;
   readonly #thresholds: LatencyThresholds;
   readonly #maxSamples: number;
   readonly #maxAgeMs: number;
   #window: LatencyObservation[] = [];
   #lastObservedAt: Date | null = null;
 
-  constructor(venueId: string, options: { thresholds?: LatencyThresholds; maxSamples?: number; maxAgeMs?: number } = {}) {
+  constructor(
+    venueId: string,
+    options: {
+      thresholds?: LatencyThresholds;
+      maxSamples?: number;
+      maxAgeMs?: number;
+      measurement?: LatencyMeasurement;
+    } = {},
+  ) {
     this.venueId = venueId;
+    this.measurement = options.measurement ?? REST_MEASUREMENT;
     this.#thresholds = options.thresholds ?? DEFAULT_THRESHOLDS;
     this.#maxSamples = options.maxSamples ?? 200;
     this.#maxAgeMs = options.maxAgeMs ?? 60_000;
@@ -203,7 +222,7 @@ export class VenueLatencyGrader {
     if (samples === 0) {
       return {
         venueId: this.venueId,
-        measurement: MEASUREMENT,
+        measurement: this.measurement,
         grade: null,
         samples: 0,
         p50Ms: null,
@@ -249,7 +268,7 @@ export class VenueLatencyGrader {
 
     return {
       venueId: this.venueId,
-      measurement: MEASUREMENT,
+      measurement: this.measurement,
       grade,
       samples,
       p50Ms,
@@ -326,7 +345,8 @@ export const UNMEASURED_LATENCY_MS = Number.MAX_SAFE_INTEGER;
 /**
  * Connect score-feed routing weight (D26-P1-X2 / D-S-18).
  *
- * Eligibility is a **measured** rest round-trip, not a letter. An adapter that
+ * Eligibility is a **measured** round-trip of THIS grade's measurement, not a
+ * letter. An adapter that
  * has never run (`grade: null`) contributes **zero**. So does a letter with
  * `p95Ms: null` — answering in errors is not a latency score, and substituting
  * a sentinel number would treat missing as a score (the residual this door
@@ -399,12 +419,18 @@ export class LatencyGradeRegistry {
     this.#options = options;
   }
 
-  /** Creates on first use — a venue we have not measured yet still needs somewhere to record. */
-  for(venueId: string): VenueLatencyGrader {
-    let grader = this.#graders.get(venueId);
+  /**
+   * Creates on first use — a venue we have not measured yet still needs somewhere to record.
+   *
+   * REST and WS are separate keys. `for(id)` is REST, matching every existing
+   * caller. `for(id, 'ws-round-trip')` is the handshake window, never mixed.
+   */
+  for(venueId: string, measurement: LatencyMeasurement = REST_MEASUREMENT): VenueLatencyGrader {
+    const key = `${venueId}\0${measurement}`;
+    let grader = this.#graders.get(key);
     if (!grader) {
-      grader = new VenueLatencyGrader(venueId, this.#options);
-      this.#graders.set(venueId, grader);
+      grader = new VenueLatencyGrader(venueId, { ...this.#options, measurement });
+      this.#graders.set(key, grader);
     }
     return grader;
   }
@@ -412,6 +438,36 @@ export class LatencyGradeRegistry {
   gradeAll(now: Date = new Date()): VenueLatencyGrade[] {
     return [...this.#graders.values()].map((grader) => grader.grade(now));
   }
+}
+
+/**
+ * Time `StreamPort.open` (the WebSocket handshake) onto a `ws-round-trip` grader.
+ *
+ * This is the observe path. Deleting the `observe` calls makes the WS-grade
+ * tests fail: the wrapper exists so REST samples cannot be relabelled as WS,
+ * and so a fake `StreamPort` in an adapter test still produces a real
+ * handshake observation.
+ *
+ * First-frame / depth-delta travel is NOT timed here. A quiet book would
+ * look like a slow stream, which is scoring silence.
+ */
+export function observeStreamRoundTrip(port: StreamPort, grader: VenueLatencyGrader, clock: () => number = Date.now): StreamPort {
+  if (grader.measurement !== WS_MEASUREMENT) {
+    throw new Error(`observeStreamRoundTrip records ${WS_MEASUREMENT}; this grader measures ${grader.measurement}`);
+  }
+  return {
+    async open(url) {
+      const started = clock();
+      try {
+        const handle = await port.open(url);
+        grader.observe({ roundTripMs: clock() - started, outcome: 'ok', at: new Date(clock()) });
+        return handle;
+      } catch (error) {
+        grader.observe({ roundTripMs: clock() - started, outcome: 'error', at: new Date(clock()) });
+        throw error;
+      }
+    },
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

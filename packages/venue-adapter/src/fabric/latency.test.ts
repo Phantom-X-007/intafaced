@@ -6,13 +6,16 @@ import {
   isGraded,
   LatencyGradeRegistry,
   measuredLatencyMs,
+  observeStreamRoundTrip,
+  REST_MEASUREMENT,
   routingWeightFromGrade,
   UNMEASURED_LATENCY_MS,
   VenueLatencyGrader,
+  WS_MEASUREMENT,
 } from './latency.js';
 import { isRoutable, type LiquiditySource, type VenueHealth } from '../source.js';
 import { planRoute } from '../router.js';
-import type { HttpPort, HttpResponse } from './transport.js';
+import { webSocketStreamPort, type HttpPort, type HttpResponse, type StreamHandle, type StreamPort } from './transport.js';
 import { BINANCE_SPOT_RATE_LIMIT, BinanceSpotMarketData } from './venues/binance-spot.js';
 import { BybitSpotMarketData } from './venues/bybit-spot.js';
 import { RateLimitGovernor } from './rate-limit.js';
@@ -663,5 +666,178 @@ describe('an unmeasured venue cannot win a routing tie-break', () => {
 
     expect(plan.legs.map((leg) => leg.venueId)).toEqual(['measured']);
     expect(plan.rejected).toEqual(expect.arrayContaining([expect.objectContaining({ venueId: 'unmeasured', reason: 'unhealthy' })]));
+  });
+});
+
+describe('ws-round-trip — handshake grade, not REST relabelled', () => {
+  function openPort(open: StreamPort['open']): StreamPort {
+    return { open };
+  }
+
+  it('names ws-round-trip on an ungraded WS window — silence is not a letter', () => {
+    const ws = new VenueLatencyGrader('v', { measurement: WS_MEASUREMENT });
+    const grade = ws.grade(T0);
+
+    expect(ws.measurement).toBe('ws-round-trip');
+    expect(grade.measurement).toBe('ws-round-trip');
+    expect(grade.grade).toBeNull();
+    expect(grade.grade).not.toBe('A');
+    expect(grade.grade).not.toBe('F');
+    expect(grade.samples).toBe(0);
+    expect(routingWeightFromGrade(grade)).toBe(0);
+    expect(measuredLatencyMs(grade)).toBeNull();
+  });
+
+  it('does not mix REST samples into a WS grade, or the reverse', () => {
+    const rest = new VenueLatencyGrader('v');
+    const ws = new VenueLatencyGrader('v', { measurement: WS_MEASUREMENT });
+    feed(rest, 20, 40);
+
+    expect(rest.grade(at(100)).measurement).toBe(REST_MEASUREMENT);
+    expect(rest.grade(at(100)).samples).toBe(20);
+    expect(ws.grade(at(100)).measurement).toBe(WS_MEASUREMENT);
+    expect(ws.grade(at(100)).samples).toBe(0);
+    expect(ws.grade(at(100)).grade).toBeNull();
+    expect(routingWeightFromGrade(ws.grade(at(100)))).toBe(0);
+
+    feed(ws, 20, 80);
+    expect(ws.grade(at(100)).measurement).toBe('ws-round-trip');
+    expect(ws.grade(at(100)).p95Ms).toBe(80);
+    expect(rest.grade(at(100)).p95Ms).toBe(40);
+    expect(rest.grade(at(100)).measurement).toBe('rest-round-trip');
+  });
+
+  it('records StreamPort.open onto the WS grader — deleting observe fails this', async () => {
+    const clock = { now: T0.getTime() };
+    const ws = new VenueLatencyGrader('v', { measurement: WS_MEASUREMENT });
+    const inner = openPort(async () => {
+      clock.now += 35;
+      return {
+        messages: (async function* () {})(),
+        close: async () => undefined,
+      } satisfies StreamHandle;
+    });
+
+    const timed = observeStreamRoundTrip(inner, ws, () => clock.now);
+    await timed.open('wss://ws.test/stream');
+
+    const grade = ws.grade(new Date(clock.now));
+    expect(grade.measurement).toBe('ws-round-trip');
+    expect(grade.samples).toBe(1);
+    expect(grade.p95Ms).toBe(35);
+    expect(grade.grade).not.toBeNull();
+    expect(routingWeightFromGrade(grade)).toBe(1);
+  });
+
+  it('records a failed handshake as error, still ws-round-trip, weight 0 without p95', async () => {
+    const clock = { now: T0.getTime() };
+    const ws = new VenueLatencyGrader('v', { measurement: WS_MEASUREMENT });
+    const inner = openPort(async () => {
+      clock.now += 12;
+      throw new Error('websocket closed before it opened');
+    });
+
+    await expect(observeStreamRoundTrip(inner, ws, () => clock.now).open('wss://ws.test')).rejects.toThrow(/closed before it opened/);
+
+    const grade = ws.grade(new Date(clock.now));
+    expect(grade.measurement).toBe('ws-round-trip');
+    expect(grade.samples).toBe(1);
+    expect(grade.p95Ms).toBeNull();
+    expect(grade.errorRateBps).toBe(10_000);
+    expect(routingWeightFromGrade(grade)).toBe(0);
+  });
+
+  it('REFUSES to hang WS observations on a REST grader', () => {
+    const rest = new VenueLatencyGrader('v');
+    expect(() =>
+      observeStreamRoundTrip(
+        openPort(async () => ({ messages: (async function* () {})(), close: async () => undefined })),
+        rest,
+      ),
+    ).toThrow(/ws-round-trip/);
+  });
+
+  it('holds REST and WS separately in the registry', () => {
+    const registry = new LatencyGradeRegistry();
+    feed(registry.for('v'), 20, 40);
+    feed(registry.for('v', WS_MEASUREMENT), 20, 2_000);
+
+    const grades = registry.gradeAll(at(100));
+    const rest = grades.find((g) => g.measurement === 'rest-round-trip');
+    const ws = grades.find((g) => g.measurement === 'ws-round-trip');
+
+    expect(rest?.p95Ms).toBe(40);
+    expect(ws?.p95Ms).toBe(2_000);
+    expect(rest?.venueId).toBe('v');
+    expect(ws?.venueId).toBe('v');
+    expect(registry.for('v').grade(at(100)).measurement).toBe('rest-round-trip');
+  });
+
+  it('times the real StreamPort handshake — not a REST sample relabelled', async () => {
+    class FakeSocket {
+      static last: FakeSocket | null = null;
+      onopen: (() => void) | null = null;
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      constructor(readonly url: string) {
+        FakeSocket.last = this;
+        setTimeout(() => this.onopen?.(), 0);
+      }
+      send(): void {}
+      close(): void {
+        this.onclose?.();
+      }
+    }
+
+    const slot = globalThis as { WebSocket?: unknown };
+    const original = slot.WebSocket;
+    slot.WebSocket = FakeSocket;
+    try {
+      const ws = new VenueLatencyGrader('v', { measurement: WS_MEASUREMENT });
+      const rest = new VenueLatencyGrader('v');
+      const port = observeStreamRoundTrip(webSocketStreamPort(), ws);
+      const handle = await port.open('wss://ws.test/stream');
+      expect(FakeSocket.last?.url).toBe('wss://ws.test/stream');
+
+      const grade = ws.grade(new Date());
+      expect(grade.measurement).toBe('ws-round-trip');
+      expect(grade.samples).toBe(1);
+      expect(grade.grade).not.toBeNull();
+      expect(rest.grade(new Date()).samples).toBe(0);
+      expect(routingWeightFromGrade(rest.grade(new Date()))).toBe(0);
+      await handle.close();
+    } finally {
+      if (original === undefined) delete slot.WebSocket;
+      else slot.WebSocket = original;
+    }
+  });
+
+  it('is reachable through MarketDataAdapter.streamLatencyGrade after a real stream open', async () => {
+    const stream: StreamPort = {
+      async open() {
+        return { messages: (async function* () {})(), close: async () => undefined };
+      },
+    };
+    const adapter: MarketDataAdapter = new BinanceSpotMarketData({
+      stream,
+      restBase: 'https://rest.test',
+      clock: () => T0.getTime(),
+    });
+
+    expect(typeof adapter.streamLatencyGrade).toBe('function');
+    const before = adapter.streamLatencyGrade!(T0);
+    expect(before.measurement).toBe('ws-round-trip');
+    expect(before.grade).toBeNull();
+    expect(routingWeightFromGrade(before)).toBe(0);
+    expect(adapter.latencyGrade!(T0).measurement).toBe('rest-round-trip');
+
+    await adapter.streamBook('BTC/USDT');
+
+    const after = adapter.streamLatencyGrade!(T0);
+    expect(after.measurement).toBe('ws-round-trip');
+    expect(after.samples).toBe(1);
+    expect(after.grade).not.toBeNull();
+    expect(adapter.latencyGrade!(T0).samples).toBe(0);
   });
 });

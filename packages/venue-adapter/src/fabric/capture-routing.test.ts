@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import { scoreSorCost, type SorCostTerms } from '../cost-model.js';
 import { planRoute } from '../router.js';
 import type { LiquiditySource, QuoteRequest, VenueHealth } from '../source.js';
 import { isCaptureRoutingHole, routingWeightFromCapture, type CaptureRoutingRecord } from './capture-routing.js';
 
-function graded(): VenueLatencyGrade {
+function graded(): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',

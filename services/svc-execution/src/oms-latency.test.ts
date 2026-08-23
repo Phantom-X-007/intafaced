@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
 import { createExecutionRouter } from './router.js';
 
@@ -35,7 +35,7 @@ function signed(p: Principal = principal()) {
   });
 }
 
-function ungraded(over: Partial<VenueLatencyGrade> = {}): VenueLatencyGrade {
+function ungraded(over: Partial<RestLatencyGrade> = {}): RestLatencyGrade {
   return {
     venueId: 'street',
     measurement: 'rest-round-trip',
@@ -55,7 +55,7 @@ function ungraded(over: Partial<VenueLatencyGrade> = {}): VenueLatencyGrade {
 class FakeLatency {
   calls = 0;
   nows: Array<Date | undefined> = [];
-  constructor(private readonly next: VenueLatencyGrade | Error) {}
+  constructor(private readonly next: RestLatencyGrade | Error) {}
   fn: OmsLatencyFn = (now?: Date) => {
     this.calls += 1;
     this.nows.push(now);

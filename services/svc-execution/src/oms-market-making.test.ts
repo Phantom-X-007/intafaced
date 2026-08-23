@@ -3,7 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { SorCostTerms } from '@intafaced/venue-adapter';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { createExecutionRouter } from './router.js';
 
@@ -37,7 +37,7 @@ function signed(p: Principal = principal()) {
   });
 }
 
-function graded(): VenueLatencyGrade {
+function graded(): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',

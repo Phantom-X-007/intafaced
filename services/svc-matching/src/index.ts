@@ -5,6 +5,7 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { MatchingEngine, MemorySnapshotSink } from './engine/engine.js';
 import { FileJournal } from './engine/journal.js';
+import { registerMetrics } from './metrics.js';
 import { registerRoutes } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -54,6 +55,17 @@ const engine = new MatchingEngine({
 const recovered = engine.recover();
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL } });
+
+/**
+ * §14.5 — the engine's scrape surface. Not the user SLO (that is svc-edge);
+ * this is this process's HTTP latency. Registered before listen so the
+ * `onResponse` hook is in place for every reply the process sends.
+ *
+ * `tooling/infra/prometheus.yaml` scrapes this at `svc-matching:4005/metrics`.
+ * `observability-wiring.test.ts` asserts that host, port and path against the
+ * real compose file. `metrics.boot.e2e.test.ts` fails if this call is deleted.
+ */
+registerMetrics(app, { service: env.SERVICE_NAME });
 
 /**
  * `restingOrders` is on here because "the engine came back up" and "the engine
