@@ -134,7 +134,10 @@ export type P2pErrorCode =
   // admin:compliance — the queue exists but nobody can authenticate into it.
   | 'p2p.moderation_unreachable'
   // Allowlist is set; this principal is simply not on it.
-  | 'p2p.not_a_moderator';
+  | 'p2p.not_a_moderator'
+  // Open wrote a dispute without a thread id. Should not happen: open allocates
+  // when the trade has none. Named so a client never sees a fake empty chat.
+  | 'p2p.chat_thread_unset';
 
 /**
  * A lowercase canonical UUID — the natural-person identifier space, and the ONE
@@ -357,6 +360,8 @@ export interface TradeRecord {
   status: TradeStatus;
   resolution: TradeResolution | null;
   resolutionReason: string | null;
+  /** Present once a thread is allocated — at take never, at dispute open always. */
+  chatThreadId: string | null;
   deadlines: Deadlines;
   deadlineAt: Date | null;
   createdAt: Date;
@@ -377,6 +382,8 @@ export interface DisputeRecord {
    */
   openedVia: 'party' | 'timeout';
   reason: string;
+  /** Null only on rows opened before 0007. New opens always persist one. */
+  chatThreadId: string | null;
   evidence: readonly EvidenceEntry[];
   moderatorId: string | null;
   resolution: 'release' | 'refund' | null;
@@ -409,6 +416,7 @@ interface TradeRow {
   status: TradeStatus;
   resolution: TradeResolution | null;
   resolution_reason: string | null;
+  chat_thread_id: string | null;
   deadlines: Deadlines;
   deadline_at: Date | null;
   created_at: Date;
@@ -442,6 +450,7 @@ interface DisputeRow {
   opened_by: string;
   opened_via: 'party' | 'timeout';
   reason: string;
+  chat_thread_id: string | null;
   evidence: unknown;
   moderator_id: string | null;
   resolution: 'release' | 'refund' | null;
@@ -1349,6 +1358,9 @@ export class P2pService {
         const now = await txNow(tx);
         const deadlineAt = deadlineFor('disputed', now, this.deadlines);
         const deadlines = withDeadline(trade.deadlines, 'disputed', deadlineAt);
+        // Copy the trade's thread when it already has one; otherwise allocate
+        // and persist on BOTH rows. A uuid is an identifier, not a transcript.
+        const chatThreadId = trade.chatThreadId ?? crypto.randomUUID();
 
         // Attributed from the first entry, not from the first APPEND. Evidence
         // filed at open and evidence filed on Tuesday are the same kind of
@@ -1357,20 +1369,26 @@ export class P2pService {
         const opening = envelopesFor(supplied, input.openedBy, now, 0);
 
         const rows = await tx<DisputeRow[]>`
-          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, opened_via, reason, evidence, status, deadline_at, opened_at)
+          INSERT INTO p2p.p2p_disputes (id, trade_id, opened_by, opened_via, reason, evidence, status, deadline_at, opened_at, chat_thread_id)
           VALUES (
             ${disputeId}, ${input.tradeId}, ${input.openedBy}, ${origin}, ${input.reason ?? ''},
-            ${tx.json(opening as never)}, 'open', ${deadlineAt}, ${now}
+            ${tx.json(opening as never)}, 'open', ${deadlineAt}, ${now}, ${chatThreadId}
           )
           ON CONFLICT (trade_id) DO NOTHING
           RETURNING *
         `;
 
         if (!rows[0]) throw new P2pError(`Trade ${input.tradeId} already has a dispute`, 'p2p.dispute_already_open');
+        if (!rows[0].chat_thread_id) {
+          throw new P2pError('This trade has no chat thread to attach the dispute to', 'p2p.chat_thread_unset');
+        }
 
         await tx`
           UPDATE p2p.p2p_trades
-             SET status = 'disputed', deadline_at = ${deadlineAt}, deadlines = ${tx.json(deadlines as never)}
+             SET status = 'disputed',
+                 deadline_at = ${deadlineAt},
+                 deadlines = ${tx.json(deadlines as never)},
+                 chat_thread_id = COALESCE(chat_thread_id, ${chatThreadId}::uuid)
            WHERE id = ${input.tradeId}
         `;
 
@@ -2496,6 +2514,7 @@ function toTrade(row: TradeRow): TradeRecord {
     status: row.status,
     resolution: row.resolution,
     resolutionReason: row.resolution_reason,
+    chatThreadId: row.chat_thread_id ?? null,
     deadlines: (row.deadlines ?? {}) as Deadlines,
     deadlineAt: row.deadline_at,
     createdAt: row.created_at,
@@ -2515,6 +2534,7 @@ function toDispute(row: DisputeRow): DisputeRecord {
     // value as party rather than inventing a third origin on the wire.
     openedVia: row.opened_via === 'timeout' ? 'timeout' : 'party',
     reason: row.reason,
+    chatThreadId: row.chat_thread_id ?? null,
     evidence: normaliseEvidence(row.evidence),
     moderatorId: row.moderator_id,
     resolution: row.resolution,

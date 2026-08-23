@@ -27,6 +27,7 @@ const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
 const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
+const disputeChatThreadMigration = readFileSync(join(here, '..', 'drizzle', '0007_p2p_dispute_chat_thread.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -62,6 +63,7 @@ if (!available) {
     await tx.unsafe(disputeRulingMigration);
     await tx.unsafe(lateSettleErrorMigration);
     await tx.unsafe(disputeOpenOriginMigration);
+    await tx.unsafe(disputeChatThreadMigration);
   });
 
   const instruments = new InstrumentService(sql);

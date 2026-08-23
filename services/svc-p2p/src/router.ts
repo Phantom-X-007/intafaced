@@ -126,6 +126,8 @@ const disputeOutput = z.object({
    */
   openedVia: z.enum(['party', 'timeout']),
   reason: z.string(),
+  /** Null only on disputes opened before chat threads were persisted. */
+  chatThreadId: z.string().uuid().nullable(),
   status: z.enum(['open', 'resolved']),
   moderatorId: z.string().nullable(),
   resolution: z.enum(['release', 'refund']).nullable(),
@@ -233,6 +235,7 @@ function toTrpcError(err: unknown): TRPCError {
       // PRECONDITION_FAILED so an operator dash can alarm on the code, not on
       // a generic FORBIDDEN that looks like a missing scope on the caller.
       case 'p2p.moderation_unreachable':
+      case 'p2p.chat_thread_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.merchant_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -961,6 +964,7 @@ export function createP2pRouter(
           z.object({
             disputeId: z.string().uuid(),
             tradeId: z.string().uuid(),
+            chatThreadId: z.string().uuid(),
             deadlineAt: z.string(),
             /**
              * THE DISPOSITION, DISCLOSED BEFORE IT CAN HAPPEN.
@@ -988,9 +992,13 @@ export function createP2pRouter(
               reason: input.reason,
               ...(input.evidence ? { evidence: input.evidence } : {}),
             });
+            if (!dispute.chatThreadId) {
+              throw new P2pError('This trade has no chat thread to attach the dispute to', 'p2p.chat_thread_unset');
+            }
             return {
               disputeId: dispute.id,
               tradeId: dispute.tradeId,
+              chatThreadId: dispute.chatThreadId,
               deadlineAt: dispute.deadlineAt.toISOString(),
               ifNobodyRules: 'escalated_and_held' as const,
               moderationReachable,
@@ -1518,6 +1526,7 @@ function toDisputeOut(d: DisputeRecord, viewerId: string | null): z.infer<typeof
     openedBy: d.openedBy,
     openedVia: d.openedVia,
     reason: d.reason,
+    chatThreadId: d.chatThreadId,
     status: d.status,
     moderatorId: d.moderatorId,
     resolution: d.resolution,

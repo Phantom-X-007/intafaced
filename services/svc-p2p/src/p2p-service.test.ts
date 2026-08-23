@@ -69,6 +69,7 @@ const fieldGuardMigration = readFileSync(join(here, '..', 'drizzle', '0002_p2p_i
 const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
 const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
 const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
+const disputeChatThreadMigration = readFileSync(join(here, '..', 'drizzle', '0007_p2p_dispute_chat_thread.sql'), 'utf8');
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
@@ -125,6 +126,7 @@ if (!available) {
     await tx.unsafe(disputeRulingMigration);
     await tx.unsafe(lateSettleErrorMigration);
     await tx.unsafe(disputeOpenOriginMigration);
+    await tx.unsafe(disputeChatThreadMigration);
   });
 
   /**
@@ -779,6 +781,34 @@ if (!available) {
       await expect(p2p.openDispute({ tradeId: trade.id, openedBy: OTHER, reason: 'nosy' })).rejects.toMatchObject({
         code: 'p2p.not_a_party',
       });
+    });
+
+    it('persists a chat thread id on the dispute and the trade', async () => {
+      const trade = await escrowedTrade('100');
+      const dispute = await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'seller unresponsive' });
+
+      expect(dispute.chatThreadId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+
+      const disputeRows = await sql<Array<{ chat_thread_id: string }>>`
+        SELECT chat_thread_id FROM p2p.p2p_disputes WHERE id = ${dispute.id}
+      `;
+      expect(disputeRows[0]!.chat_thread_id).toBe(dispute.chatThreadId);
+
+      const tradeRows = await sql<Array<{ chat_thread_id: string }>>`
+        SELECT chat_thread_id FROM p2p.p2p_trades WHERE id = ${trade.id}
+      `;
+      expect(tradeRows[0]!.chat_thread_id).toBe(dispute.chatThreadId);
+      expect((await p2p.getTrade(trade.id)).chatThreadId).toBe(dispute.chatThreadId);
+    });
+
+    it('reuses the trade chat thread id when one already exists', async () => {
+      const existing = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const trade = await escrowedTrade('100');
+      await sql`UPDATE p2p.p2p_trades SET chat_thread_id = ${existing}::uuid WHERE id = ${trade.id}`;
+
+      const dispute = await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
+      expect(dispute.chatThreadId).toBe(existing);
+      expect((await p2p.getTrade(trade.id)).chatThreadId).toBe(existing);
     });
 
     it('refuses a dispute on a trade with nothing in escrow', async () => {

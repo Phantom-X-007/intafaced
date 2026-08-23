@@ -448,6 +448,7 @@
           <div class="ix-kv" style="margin-top:8px;">
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeId') }}</span><span class="v">{{ disputeOpen.data.disputeId }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ disputeOpen.data.tradeId }}</span></div>
+            <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeChatThread') }}</span><span class="v">{{ disputeOpen.data.chatThreadId }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeDeadline') }}</span><span class="v">{{ disputeOpen.data.deadlineAt }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeIfNobodyRules') }}</span><span class="v">{{ disputeOpen.data.ifNobodyRules }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeModerationReachable') }}</span><span class="v">{{ disputeOpen.data.moderationReachable }}</span></div>
@@ -484,6 +485,7 @@
           <div class="ix-kv">
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeId') }}</span><span class="v">{{ dispute.data.id }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.take.tradeId') }}</span><span class="v">{{ dispute.data.tradeId }}</span></div>
+            <div v-if="dispute.data.chatThreadId" class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeChatThread') }}</span><span class="v">{{ dispute.data.chatThreadId }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeStatus') }}</span><span class="v">{{ dispute.data.status }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeDeadline') }}</span><span class="v">{{ dispute.data.deadlineAt }}</span></div>
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeOverdue') }}</span><span class="v">{{ dispute.data.overdue }}</span></div>

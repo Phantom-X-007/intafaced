@@ -207,6 +207,12 @@ export const p2pDisputes = p2p.table(
     openedVia: text('opened_via').notNull().default('party'),
     reason: text('reason').notNull().default(''),
     /**
+     * Same identifier space as `p2p_trades.chat_thread_id`. Copied from the
+     * trade at open when set; allocated and written onto both rows when not.
+     * An id, not a transcript — empty chat stays empty.
+     */
+    chatThreadId: uuid('chat_thread_id'),
+    /**
      * APPEND-ONLY, and the database enforces it
      * (`p2p_disputes_evidence_append_only_trg`). A jsonb array of attributed
      * envelopes: `{ seq, submittedBy, submittedAt, item }`. Evidence that can be

@@ -64,6 +64,8 @@ const migrations = [
   '0002_p2p_instrument_field_guard.sql',
   '0003_p2p_dispute_ruling_invariant.sql',
   '0005_p2p_late_settle_error.sql',
+  '0006_p2p_dispute_open_origin.sql',
+  '0007_p2p_dispute_chat_thread.sql',
 ].map((file) => readFileSync(join(here, '..', 'drizzle', file), 'utf8'));
 
 type WireBody = {
@@ -397,7 +399,9 @@ describe('D26-P2-01f public doors — dispute refuse invent rulings', () => {
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         tradeId: TRADE,
         openedBy: BUYER,
+        openedVia: 'party' as const,
         reason: 'x',
+        chatThreadId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
         evidence: [],
         moderatorId: null,
         resolution: null,
@@ -425,6 +429,7 @@ describe('D26-P2-01f public doors — dispute refuse invent rulings', () => {
     expect(body.result?.data).toMatchObject({
       ifNobodyRules: 'escalated_and_held',
       moderationReachable: false,
+      chatThreadId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     });
     await app.close();
   });

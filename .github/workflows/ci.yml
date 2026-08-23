@@ -778,6 +778,10 @@ jobs:
           docker logs intafaced-ci-nats || true
           exit 1
 
+      # vitest resolves workspace packages via dist/. Without this, the shard
+      # fails `Failed to resolve entry for package "@intafaced/ledger-client"`.
+      - run: pnpm build
+
       - name: Pay/bank package tests
         run: pnpm --filter @intafaced/svc-pay --filter @intafaced/svc-bank --filter @intafaced/svc-p2p test
       - name: Annotate shard failure

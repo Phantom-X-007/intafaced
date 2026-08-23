@@ -1375,6 +1375,7 @@ module.exports = {
             disputeEvidenceItem: "Item",
             disputeEvidenceEmpty: "No evidence filed by you",
             disputeId: "Dispute",
+            disputeChatThread: "Chat thread",
             disputeStatus: "Status",
             disputeDeadline: "Deadline",
             disputeOverdue: "Overdue",
