@@ -108,8 +108,8 @@ export function registerWidgetRampRoute(app: FastifyInstance, config: WidgetRamp
   app.get(
     WIDGET_RAMP_PATH,
     {
-      // Skip helmet frameguard — this document is the embed target.
-      config: { helmet: { skipRoute: true } },
+      // Helmet has no skipRoute on FastifyContextConfig. Framing is lifted in
+      // onSend / allowFraming so the document can be the embed target.
       onSend: framingOnSend,
     },
     send,
