@@ -320,6 +320,12 @@ await app.register(async (api) => {
       geoHeaderName: env.EDGE_GEO_COUNTRY_HEADER,
       headers: req.headers as Record<string, string | string[] | undefined>,
     });
+    if (regionRes.refuseCode) {
+      return reply.code(403).send({
+        error: regionRes.note,
+        code: regionRes.refuseCode,
+      });
+    }
 
     const exchanged = await exchangePrincipal(req.headers, {
       tokens: tokenConfig,
