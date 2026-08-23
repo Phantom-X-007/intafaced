@@ -593,14 +593,16 @@ export const FEATURES = [
     requires: [
       'packages/execution-arb/src/arbitrage.ts',
       'packages/execution-arb/src/arbitrage.test.ts',
+      'packages/execution-arb/src/arb-classes.ts',
+      'packages/execution-arb/src/arb-classes.test.ts',
       'packages/execution-arb/src/mount-vs-tracker.ts',
       'packages/execution-arb/src/mount-vs-tracker.test.ts',
       'packages/execution-arb/src/arb-policy.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/arb-classes.golden.js',
     ],
     note:
-      '**D26-P1-X4 Done 2026-08-21:** external-only cross-exchange scanner on SOR cost model (`mount-vs-tracker.ts`, `@intafaced/execution-arb`). ' +
-      'Refuses internal legs, bridge fantasy, missing inventory, no-edge after costs — never invents spreads/fees. ' +
-      'Class X residual: triangular/basis/funding classes, OMS atomic legs, svc consumer mount, owner capital magnitudes.',
+      '**Done 2026-08-23:** triangular/basis/funding class scanners on SOR cost model; empty books refuse; never fake bps. ' +
+      'Residual: OMS atomic legs, owner capital magnitudes.',
   }),
   f('execution.market-making', 'Market-making engine — internal MM and external-venue MM, one engine (§28)', {
     module: 'trade',

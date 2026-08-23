@@ -5,7 +5,13 @@
  * This module never invents mids, spreads, fees, or freshness windows.
  */
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import { scanExternalCrossExchangeArb, type ArbOpportunity, type ArbRefusal, type ScanExternalArbResult } from '@intafaced/execution-arb';
+import {
+  scanArbClass,
+  type ArbOpportunity,
+  type ArbRefusal,
+  type ArbScanClass,
+  type ScanExternalArbResult,
+} from '@intafaced/execution-arb';
 import type { SorCostTerms, VenueKind } from '@intafaced/venue-adapter';
 
 export type OmsArbQuoteInput = {
@@ -27,6 +33,8 @@ export type OmsArbScanInput = {
   readonly nowMs: number;
   /** Owner freshness window. Null → every quote stale (not invented). */
   readonly maxQuoteAgeMs: number | null;
+  readonly scanClass?: ArbScanClass;
+  readonly fundingRate?: string | null;
 };
 
 export type OmsArbOpportunityWire = {
@@ -76,7 +84,9 @@ function wireScanResult(result: ScanExternalArbResult): OmsArbScanResultWire {
 }
 
 export function scanOmsExternalArb(input: OmsArbScanInput): OmsArbScanResultWire {
-  const result = scanExternalCrossExchangeArb({
+  const result = scanArbClass({
+    scanClass: input.scanClass ?? 'cross-exchange',
+    fundingRate: input.fundingRate,
     symbol: input.symbol,
     amount: parseAmount(input.amount),
     quotes: input.quotes.map((quote) => ({
