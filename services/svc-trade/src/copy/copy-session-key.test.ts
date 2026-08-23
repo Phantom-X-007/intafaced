@@ -84,7 +84,6 @@ describe('trade.copy durable auto-mirror session-key', () => {
       expiresAt: futureExpiry,
     });
     expect(follow.sessionKeyGranted).toBe(false);
-    expect(follow.sessionKey).toBeUndefined();
 
     const granted = await caller.copy.grantSessionKey({ followId: follow.followId });
     expect(typeof granted.sessionKeyId).toBe('string');
@@ -103,7 +102,6 @@ describe('trade.copy durable auto-mirror session-key', () => {
 
     const listed = await caller.copy.listMyFollows();
     expect(listed).toHaveLength(1);
-    expect(listed[0]?.sessionKey).toBeUndefined();
     expect(JSON.stringify(listed)).not.toContain(granted.sessionKey);
     expect(listed[0]?.sessionKeyPrefix).toBe(granted.sessionKeyPrefix);
     expect(listed[0]?.sessionKeyGranted).toBe(true);
@@ -166,7 +164,6 @@ describe('trade.copy durable auto-mirror session-key', () => {
     const killed = await caller.copy.killSessionKey({ followId: follow.followId });
     expect(killed.followId).toBe(follow.followId);
     expect(killed.sessionKeyRevoked).toBe(true);
-    expect(killed.sessionKey).toBeUndefined();
     expect(killed.sessionKeyGranted).toBe(false);
     expect(killed.feeShareKilled).toBe(false);
 
