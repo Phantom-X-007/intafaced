@@ -1285,6 +1285,16 @@ services:
     volumes:
       - academy-miniodata:/data
 
+  # Self-hosted SFU for the explicit LiveKit provider mode. Academy still
+  # refuses streaming when ACADEMY_STREAM_PROVIDER is `none` or credentials
+  # are blank; starting this container never invents a credential.
+  livekit:
+    image: livekit/livekit-server:v1.9.0
+    container_name: intafaced-livekit
+    restart: unless-stopped
+    command: ['--dev', '--bind', '0.0.0.0']
+    expose: ['7880', '7881', '7882/udp']
+
   svc-academy:
     <<: *app
     container_name: intafaced-svc-academy
