@@ -2318,7 +2318,19 @@ module.exports = {
             nextFundingTime: "Next funding",
             markSourceDepth: "Accepted depth",
             markSourceVenue: "Accepted venue",
-            futuresTickerUnavailable: "Futures mark and funding are unavailable."
+            futuresTickerUnavailable: "Futures mark and funding are unavailable.",
+            twap: "TWAP",
+            twapDurationSeconds: "Duration (seconds)",
+            twapMinimum: "Child orders are spaced 30 seconds apart; duration must be 30–86400 seconds.",
+            twapParentId: "TWAP parent",
+            twapNextSlice: "Next child due",
+            submitTwap: "Create TWAP",
+            twapAmountRequired: "Enter a valid TWAP amount greater than zero.",
+            twapDurationInvalid: "Enter a whole-number duration from 30 to 86400 seconds.",
+            twapConfirmTitle: "Confirm TWAP",
+            twapConfirm: "Create a TWAP for {amount} over {duration} seconds? Child orders are emitted by the live algo engine.",
+            twapUnavailable: "The TWAP service refused the request. No TWAP was created.",
+            twapCreated: "TWAP created"
         },
         convert: {
             title: "Convert",

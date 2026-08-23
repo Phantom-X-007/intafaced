@@ -993,6 +993,7 @@
           <button type="button" :class="{ 'is-active': orderType === 'stop' }" @click="setOrderType('stop')">{{ $t("exchange.hlplus.stop") }}</button>
           <button type="button" :class="{ 'is-active': orderType === 'stop_limit' }" @click="setOrderType('stop_limit')">{{ $t("exchange.hlplus.stopLimit") }}</button>
           <button type="button" :class="{ 'is-active': orderType === 'take_profit' }" @click="setOrderType('take_profit')">{{ $t("exchange.hlplus.takeProfit") }}</button>
+          <button type="button" :class="{ 'is-active': orderType === 'twap' }" @click="setOrderType('twap')">{{ $t("exchange.hlplus.twap") }}</button>
         </nav>
 
         <div class="ix-order-body">
@@ -1019,7 +1020,7 @@
             </ul>
           </div>
 
-          <div class="ix-field">
+          <div class="ix-field" v-if="orderType !== 'twap'">
             <label for="ix-ticket-price">{{ $t("exchange.terminal.fieldPrice") }}</label>
             <div class="ix-input" :class="{ 'is-disabled': !orderNeedsLimitPrice }">
               <input
@@ -1040,6 +1041,22 @@
             </div>
           </div>
 
+          <div class="ix-field" v-if="orderType === 'twap'">
+            <label for="ix-ticket-twap-duration">{{ $t('exchange.hlplus.twapDurationSeconds') }}</label>
+            <div class="ix-input">
+              <input
+                id="ix-ticket-twap-duration"
+                type="text"
+                inputmode="numeric"
+                spellcheck="false"
+                v-model="twapDurationSeconds"
+                @input="clearPendingAlgoIdentity"
+                @keydown.enter.prevent="submitOrder"
+              />
+            </div>
+            <p class="ix-order-note">{{ $t('exchange.hlplus.twapMinimum') }}</p>
+          </div>
+
           <div class="ix-field" v-if="orderNeedsStopPrice">
             <label for="ix-ticket-stop-price">{{ $t("exchange.hlplus.triggerPrice") }}</label>
             <div class="ix-input">
@@ -1056,7 +1073,7 @@
             </div>
           </div>
 
-          <div class="ix-field ix-hlplus-options">
+          <div class="ix-field ix-hlplus-options" v-if="orderType !== 'twap'">
             <label for="ix-ticket-tif">{{ $t("exchange.hlplus.timeInForce") }}</label>
             <select id="ix-ticket-tif" v-model="timeInForce" :disabled="wireOrderType === 'market'" @change="clearPendingOrderIdentity">
               <option value="GTC">GTC</option>
@@ -1066,6 +1083,12 @@
             </select>
             <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market'" @change="clearPendingOrderIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
             <label><input type="checkbox" v-model="reduceOnly" @change="clearPendingOrderIdentity" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
+          </div>
+
+          <div class="ix-meta" v-if="twapParent">
+            <div><dt>{{ $t('exchange.hlplus.twapParentId') }}</dt><dd>{{ twapParent.id }}</dd></div>
+            <div><dt>{{ $t('exchange.hlplus.positionStatus') }}</dt><dd>{{ twapParent.status }}</dd></div>
+            <div><dt>{{ $t('exchange.hlplus.twapNextSlice') }}</dt><dd>{{ twapParent.nextDueAt || '—' }}</dd></div>
           </div>
 
           <div class="ix-field">
@@ -1424,6 +1447,9 @@ export default {
       postOnly: false,
       reduceOnly: false,
       pendingClientOrderId: '',
+      pendingClientAlgoId: '',
+      twapDurationSeconds: '',
+      twapParent: null,
       percent: 0,
       form: { price: '', stopPrice: '', amount: '' },
 
@@ -1736,6 +1762,7 @@ export default {
       return '';
     },
     submitLabel() {
+      if (this.orderType === 'twap') return this.$t('exchange.hlplus.submitTwap');
       const verb = this.side === 'BUY'
         ? this.$t('exchange.terminal.buy')
         : this.$t('exchange.terminal.sell');
@@ -3175,6 +3202,7 @@ export default {
     setSide(side) {
       this.side = side;
       this.clearPendingOrderIdentity();
+      this.clearPendingAlgoIdentity();
       this.percent = 0;
       this.form.amount = '';
     },
@@ -3182,6 +3210,7 @@ export default {
     setOrderType(type) {
       this.orderType = type;
       this.clearPendingOrderIdentity();
+      this.clearPendingAlgoIdentity();
       if (this.wireOrderType === 'market') {
         this.timeInForce = 'IOC';
         this.postOnly = false;
@@ -3195,6 +3224,7 @@ export default {
     setPercent(value) {
       this.percent = value;
       this.clearPendingOrderIdentity();
+      this.clearPendingAlgoIdentity();
       this.applyPercent();
     },
 
@@ -3215,6 +3245,7 @@ export default {
      * against a balance that does not exist.
      */
     applyPercent() {
+      this.clearPendingAlgoIdentity();
       if (!this.canSize || this.percent <= 0) {
         if (this.percent <= 0) {
           this.form.amount = '';
@@ -3246,6 +3277,7 @@ export default {
     onAmountInput() {
       this.form.amount = this.clamp(this.form.amount, this.quoteSized ? this.baseCoinScale : this.coinScale);
       this.clearPendingOrderIdentity();
+      this.clearPendingAlgoIdentity();
       this.percent = 0;
       this.orderValidationError = '';
     },
@@ -3358,6 +3390,7 @@ export default {
     },
 
     submitOrder() {
+      if (this.orderType === 'twap') return this.submitTwap();
       if (!this.tradable || this.submitting) {
         return;
       }
@@ -3425,6 +3458,70 @@ export default {
            `amount` and `price` above are floats parsed for this dialog's copy
            and must not reach the wire. */
         onOk: () => this.placeOrder()
+      });
+    },
+
+    clearPendingAlgoIdentity() {
+      this.pendingClientAlgoId = '';
+      this.twapParent = null;
+      this.orderValidationError = '';
+    },
+
+    submitTwap() {
+      if (!this.tradable || this.submitting) return;
+      if (this.orderBlockReason) {
+        this.focusOrderError(this.orderBlockReason);
+        return this.warn(this.orderBlockReason);
+      }
+      const amount = String(this.form.amount || '').trim();
+      const duration = String(this.twapDurationSeconds || '').trim();
+      let error = '';
+      if (!amount || !ixMoney.isPositive(amount)) error = this.$t('exchange.hlplus.twapAmountRequired');
+      else if (!/^\d+$/.test(duration) || Number(duration) < 30 || Number(duration) > 86400) {
+        error = this.$t('exchange.hlplus.twapDurationInvalid');
+      }
+      if (error) {
+        this.focusOrderError(error);
+        return this.warn(error);
+      }
+      const durationMs = Number(duration) * 1000;
+      const self = this;
+      this.$Modal.confirm({
+        title: this.$t('exchange.hlplus.twapConfirmTitle'),
+        content: this.$t('exchange.hlplus.twapConfirm', { amount: amount, duration: duration }),
+        onOk: function() {
+          return self.placeTwap(durationMs);
+        }
+      });
+    },
+
+    placeTwap(durationMs) {
+      if (!this.ixToken) return;
+      this.submitting = true;
+      if (!this.pendingClientAlgoId) {
+        this.pendingClientAlgoId = ('desk-twap-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)).slice(0, 48);
+      }
+      const input = {
+        symbol: this.currentCoin.symbol,
+        side: this.side === 'BUY' ? 'buy' : 'sell',
+        totalQty: String(this.form.amount).trim(),
+        durationMs: durationMs,
+        sliceIntervalMs: 30000,
+        clientAlgoId: this.pendingClientAlgoId
+      };
+      return mutate('trade', 'algo.createTwap', input, this.ixToken).then(res => {
+        this.submitting = false;
+        const row = res && res.ok && res.data;
+        if (!row || typeof row.id !== 'string' || typeof row.status !== 'string') {
+          this.focusOrderError((res && (res.message || res.code)) || this.$t('exchange.hlplus.twapUnavailable'));
+          return;
+        }
+        this.twapParent = row;
+        this.pendingClientAlgoId = '';
+        this.form.amount = '';
+        this.orderValidationError = '';
+        this.liveAnnounce = this.$t('exchange.hlplus.twapCreated');
+        this.$Notice.success({ title: this.$t('exchange.hlplus.twapCreated'), desc: row.id });
       });
     },
 
