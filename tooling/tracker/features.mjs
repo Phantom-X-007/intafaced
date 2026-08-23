@@ -2049,8 +2049,21 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'B',
+    status: 'done',
     dependsOn: ['blueprint.card', 'ops.affiliates'],
-    note: 'Law §25:725 ("Social promotion (one-tap share, tracked attribution, every surface) | B | share pipeline + Blueprint cards | 4/5"), gap-closed 2026-08-08. blueprint.card covers RENDERING the §7.2 acquisition artefact and is `done`; the distribution half — the share pipeline and attribution on every surface — had no row (audit §A1.a #6). PHASE: the matrix gives 4/5 and the registry has no range bucket. It reads `5` because the phase-4 half IS the card, which already shipped, so what remains is the attribution half that follows ops.affiliates at 5 — and phasing it 4 would have put a phase-5 dependency in front of a phase-4 row, which is the exact defect this same PR removed from venue.aggregation and v22.alerts. Blocked on ops.affiliates (`ready`, not `done`), which owns the multi-tier trees attribution belongs in; a second attribution system would be a second answer to "who brought this user". NOT DECIDED, and genuinely load-bearing for a share pipeline: what leaves the platform in a share. blueprint.card is derived from a Blueprint session, and §26:742-746 plus blueprint.ownership make Blueprint data owned and private with deletion cascading. A share URL that outlives a deleted Blueprint breaks that, so the attribution token has to be revocable rather than permanent — an ADR-shaped question, not a default someone picks while wiring a share button.',
+    requires: [
+      'services/svc-identity/src/affiliates/share-service.ts',
+      'services/svc-identity/src/affiliates/share-service.test.ts',
+      'services/svc-identity/drizzle/0017_affiliate_share_tokens.sql',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/invite/Invite.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/invite-share.golden.js',
+    ],
+    note:
+      'Done 2026-08-23: /invite one-tap share via identity affiliates.createShare / revokeShare / shareHits. ' +
+      "Token maps to the sharer's referrer id on the existing affiliate tree — not a second attribution book. " +
+      'Signed-out open of /invite?share= increments hits; signed-in shareHits attributes through affiliates.attribute (one tree). ' +
+      'Revoke and closed/missing profile are named refuses (`share.revoked`, `share.profile_gone`) so later hits do not attribute. ' +
+      'blueprint.card still owns card rendering (untouched). Residual: out-of-app email/push/SMS stay sockets.',
   }),
   f('ops.infra-b2b', 'INTAFACED INFRA — embeddable ramp widget and white-label tiers (§37)', {
     module: 'core-ops',
