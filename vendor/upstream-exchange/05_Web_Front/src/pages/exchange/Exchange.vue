@@ -962,17 +962,19 @@
         </div>
 
         <template v-else>
-        <div class="ix-side-toggle" role="group" aria-label="Order side">
+        <div class="ix-side-toggle" role="group" aria-label="Order side" v-if="orderType !== 'tpsl'">
           <button
             type="button"
             :class="{ 'is-active': side === 'BUY' }"
             :aria-pressed="side === 'BUY' ? 'true' : 'false'"
+            :disabled="advancedPlanLocked"
             @click="setSide('BUY')"
           >{{ $t("exchange.terminal.buy") }}</button>
           <button
             type="button"
             :class="{ 'is-active': side === 'SELL' }"
             :aria-pressed="side === 'SELL' ? 'true' : 'false'"
+            :disabled="advancedPlanLocked"
             @click="setSide('SELL')"
           >{{ $t("exchange.terminal.sell") }}</button>
         </div>
@@ -982,18 +984,22 @@
             type="button"
             :class="{ 'is-active': orderType === 'LIMIT_PRICE' }"
             :aria-pressed="orderType === 'LIMIT_PRICE' ? 'true' : 'false'"
+            :disabled="advancedPlanLocked"
             @click="setOrderType('LIMIT_PRICE')"
           >{{ $t("exchange.terminal.typeLimit") }}</button>
           <button
             type="button"
             :class="{ 'is-active': orderType === 'MARKET_PRICE' }"
             :aria-pressed="orderType === 'MARKET_PRICE' ? 'true' : 'false'"
+            :disabled="advancedPlanLocked"
             @click="setOrderType('MARKET_PRICE')"
           >{{ $t("exchange.terminal.typeMarket") }}</button>
-          <button type="button" :class="{ 'is-active': orderType === 'stop' }" @click="setOrderType('stop')">{{ $t("exchange.hlplus.stop") }}</button>
-          <button type="button" :class="{ 'is-active': orderType === 'stop_limit' }" @click="setOrderType('stop_limit')">{{ $t("exchange.hlplus.stopLimit") }}</button>
-          <button type="button" :class="{ 'is-active': orderType === 'take_profit' }" @click="setOrderType('take_profit')">{{ $t("exchange.hlplus.takeProfit") }}</button>
-          <button type="button" :class="{ 'is-active': orderType === 'twap' }" @click="setOrderType('twap')">{{ $t("exchange.hlplus.twap") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'stop' }" @click="setOrderType('stop')">{{ $t("exchange.hlplus.stop") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'stop_limit' }" @click="setOrderType('stop_limit')">{{ $t("exchange.hlplus.stopLimit") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'take_profit' }" @click="setOrderType('take_profit')">{{ $t("exchange.hlplus.takeProfit") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'twap' }" @click="setOrderType('twap')">{{ $t("exchange.hlplus.twap") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'scale' }" @click="setOrderType('scale')">{{ $t("exchange.hlplus.scale") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'tpsl' }" @click="setOrderType('tpsl')">{{ $t("exchange.hlplus.attachedTpsl") }}</button>
         </nav>
 
         <div class="ix-order-body">
@@ -1020,7 +1026,7 @@
             </ul>
           </div>
 
-          <div class="ix-field" v-if="orderType !== 'twap'">
+          <div class="ix-field" v-if="orderType !== 'twap' && orderType !== 'tpsl'">
             <label for="ix-ticket-price">{{ $t("exchange.terminal.fieldPrice") }}</label>
             <div class="ix-input" :class="{ 'is-disabled': !orderNeedsLimitPrice }">
               <input
@@ -1029,7 +1035,7 @@
                 type="text"
                 inputmode="decimal"
                 spellcheck="false"
-                :disabled="!orderNeedsLimitPrice"
+                :disabled="!orderNeedsLimitPrice || advancedPlanLocked"
                 :placeholder="!orderNeedsLimitPrice ? $t('exchange.terminal.bestAvailable') : ''"
                 :aria-invalid="ticketPriceAria['aria-invalid']"
                 :aria-describedby="ticketPriceAria['aria-describedby']"
@@ -1040,6 +1046,79 @@
               <span class="ix-unit">{{ currentCoin.base }}</span>
             </div>
           </div>
+
+          <template v-if="orderType === 'scale'">
+            <div class="ix-field">
+              <label for="ix-ticket-scale-end">{{ $t('exchange.hlplus.scaleEndPrice') }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-scale-end"
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  v-model="scaleEndPrice"
+                  :disabled="advancedPlanLocked"
+                  @input="onScaleEndPriceInput"
+                  @keydown.enter.prevent="submitOrder"
+                />
+                <span class="ix-unit">{{ currentCoin.base }}</span>
+              </div>
+            </div>
+            <div class="ix-field">
+              <label for="ix-ticket-scale-count">{{ $t('exchange.hlplus.scaleOrderCount') }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-scale-count"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  v-model="scaleOrderCount"
+                  :disabled="advancedPlanLocked"
+                  @input="clearPendingScaleIdentity"
+                  @keydown.enter.prevent="submitOrder"
+                />
+              </div>
+              <p class="ix-order-note">{{ $t('exchange.hlplus.scaleCountRange') }}</p>
+            </div>
+          </template>
+
+          <template v-if="orderType === 'tpsl'">
+            <p class="ix-order-note" v-if="attachedPosition">
+              {{ $t('exchange.hlplus.attachedPosition', { id: attachedPosition.id, side: positionSideLabel(attachedPosition.side), size: attachedPosition.contracts }) }}
+            </p>
+            <div class="ix-field">
+              <label for="ix-ticket-take-profit">{{ $t('exchange.hlplus.takeProfitTrigger') }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-take-profit"
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  v-model="attachedTakeProfit"
+                  :disabled="advancedPlanLocked"
+                  @input="onAttachedTriggerInput('take')"
+                  @keydown.enter.prevent="submitOrder"
+                />
+                <span class="ix-unit">{{ currentCoin.base }}</span>
+              </div>
+            </div>
+            <div class="ix-field">
+              <label for="ix-ticket-stop-loss">{{ $t('exchange.hlplus.stopLossTrigger') }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-stop-loss"
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  v-model="attachedStopLoss"
+                  :disabled="advancedPlanLocked"
+                  @input="onAttachedTriggerInput('stop')"
+                  @keydown.enter.prevent="submitOrder"
+                />
+                <span class="ix-unit">{{ currentCoin.base }}</span>
+              </div>
+            </div>
+          </template>
 
           <div class="ix-field" v-if="orderType === 'twap'">
             <label for="ix-ticket-twap-duration">{{ $t('exchange.hlplus.twapDurationSeconds') }}</label>
@@ -1073,16 +1152,16 @@
             </div>
           </div>
 
-          <div class="ix-field ix-hlplus-options" v-if="orderType !== 'twap'">
+          <div class="ix-field ix-hlplus-options" v-if="orderType !== 'twap' && orderType !== 'tpsl'">
             <label for="ix-ticket-tif">{{ $t("exchange.hlplus.timeInForce") }}</label>
-            <select id="ix-ticket-tif" v-model="timeInForce" :disabled="wireOrderType === 'market'" @change="clearPendingOrderIdentity">
+            <select id="ix-ticket-tif" v-model="timeInForce" :disabled="wireOrderType === 'market' || advancedPlanLocked" @change="clearOrderSubmissionIdentity">
               <option value="GTC">GTC</option>
               <option value="IOC">IOC</option>
               <option value="FOK">FOK</option>
               <option value="PO">{{ $t("exchange.hlplus.postOnly") }}</option>
             </select>
-            <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market'" @change="clearPendingOrderIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
-            <label><input type="checkbox" v-model="reduceOnly" @change="clearPendingOrderIdentity" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
+            <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market' || advancedPlanLocked" @change="clearOrderSubmissionIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
+            <label><input type="checkbox" v-model="reduceOnly" :disabled="advancedPlanLocked" @change="clearOrderSubmissionIdentity" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
           </div>
 
           <div class="ix-meta" v-if="twapParent">
@@ -1101,6 +1180,7 @@
                 inputmode="decimal"
                 spellcheck="false"
                 placeholder=""
+                :disabled="advancedPlanLocked"
                 :aria-invalid="ticketAmountAria['aria-invalid']"
                 :aria-describedby="ticketAmountAria['aria-describedby']"
                 v-model="form.amount"
@@ -1111,7 +1191,7 @@
             </div>
           </div>
 
-          <div class="ix-slider">
+          <div class="ix-slider" v-if="orderType !== 'tpsl'">
             <input
               type="range"
               min="0"
@@ -1134,7 +1214,7 @@
           </div>
 
           <dl class="ix-meta">
-            <div>
+            <div v-if="orderType !== 'tpsl'">
               <dt>{{ $t("exchange.terminal.available") }} <em class="ix-dim">(ledger)</em></dt>
               <!-- Three distinct states. `availableBalance` is null when the
                    ledger holds no row for this asset, which is neither "unknown"
@@ -1191,7 +1271,7 @@
           <button
             type="button"
             class="ix-submit"
-            :class="side === 'BUY' ? 'is-buy' : 'is-sell'"
+            :class="orderType === 'tpsl' && attachedPosition ? (attachedPosition.side === 'long' ? 'is-sell' : 'is-buy') : (side === 'BUY' ? 'is-buy' : 'is-sell')"
             :disabled="!tradable || submitting || !!orderBlockReason"
             :aria-busy="submitting ? 'true' : 'false'"
             @click="submitOrder"
@@ -1450,6 +1530,15 @@ export default {
       pendingClientAlgoId: '',
       twapDurationSeconds: '',
       twapParent: null,
+      scaleEndPrice: '',
+      scaleOrderCount: '',
+      pendingScaleOrders: [],
+      batchAcceptedChildren: 0,
+      attachedTakeProfit: '',
+      attachedStopLoss: '',
+      pendingBracketOrders: [],
+      bracketAcceptedCount: 0,
+      pendingBracketPositionId: '',
       percent: 0,
       form: { price: '', stopPrice: '', amount: '' },
 
@@ -1484,8 +1573,17 @@ export default {
       if (this.orderType === 'LIMIT_PRICE') return 'limit';
       return this.orderType;
     },
+    attachedPosition() {
+      if (!this.isPerpKind || !this.positionsReachable) return null;
+      const symbol = this.currentCoin && this.currentCoin.symbol;
+      const rows = this.positions.filter(row => row.symbol === symbol && row.status === 'open');
+      return rows.length === 1 ? rows[0] : null;
+    },
+    advancedPlanLocked() {
+      return this.batchAcceptedChildren > 0 || this.bracketAcceptedCount > 0;
+    },
     orderNeedsLimitPrice() {
-      return this.wireOrderType === 'limit' || this.wireOrderType === 'stop_limit';
+      return this.wireOrderType === 'limit' || this.wireOrderType === 'stop_limit' || this.orderType === 'scale';
     },
     orderNeedsStopPrice() {
       return this.wireOrderType === 'stop' || this.wireOrderType === 'stop_limit' || this.wireOrderType === 'take_profit';
@@ -1734,7 +1832,7 @@ export default {
     /* A percent of an unknown balance is not a number. isPositive is false for
        null/empty, so the percent buttons stay off rather than sizing fiction. */
     canSize() {
-      return this.isLogin && ixMoney.isPositive(this.availableBalance) &&
+      return !this.advancedPlanLocked && this.isLogin && ixMoney.isPositive(this.availableBalance) &&
         (this.orderType === 'MARKET_PRICE' || ixMoney.isPositive(this.form.price));
     },
     marketAllowed() {
@@ -1763,6 +1861,8 @@ export default {
     },
     submitLabel() {
       if (this.orderType === 'twap') return this.$t('exchange.hlplus.submitTwap');
+      if (this.orderType === 'scale') return this.$t('exchange.hlplus.submitScale');
+      if (this.orderType === 'tpsl') return this.$t('exchange.hlplus.submitAttachedTpsl');
       const verb = this.side === 'BUY'
         ? this.$t('exchange.terminal.buy')
         : this.$t('exchange.terminal.sell');
@@ -2153,6 +2253,9 @@ export default {
         base,
         symbol: coin + '/' + base
       });
+      this.clearPendingOrderIdentity();
+      this.clearPendingAlgoIdentity();
+      this.clearPendingAdvancedIdentity();
       /* Keep a remembered market-list filter when it is "favor"; otherwise
          follow the pair's quote so the list matches the desk. */
       if (this.baseFilter !== 'favor') {
@@ -3196,21 +3299,26 @@ export default {
       this.orderType = 'LIMIT_PRICE';
       this.form.price = price;
       this.clearPendingOrderIdentity();
+      this.clearPendingScaleIdentity();
       this.applyPercent();
     },
 
     setSide(side) {
+      if (this.advancedPlanLocked) return this.warn(this.$t('exchange.hlplus.partialPlanLocked'));
       this.side = side;
       this.clearPendingOrderIdentity();
       this.clearPendingAlgoIdentity();
+      this.clearPendingAdvancedIdentity();
       this.percent = 0;
       this.form.amount = '';
     },
 
     setOrderType(type) {
+      if (this.advancedPlanLocked) return this.warn(this.$t('exchange.hlplus.partialPlanLocked'));
       this.orderType = type;
       this.clearPendingOrderIdentity();
       this.clearPendingAlgoIdentity();
+      this.clearPendingAdvancedIdentity();
       if (this.wireOrderType === 'market') {
         this.timeInForce = 'IOC';
         this.postOnly = false;
@@ -3225,6 +3333,7 @@ export default {
       this.percent = value;
       this.clearPendingOrderIdentity();
       this.clearPendingAlgoIdentity();
+      this.clearPendingAdvancedIdentity();
       this.applyPercent();
     },
 
@@ -3268,6 +3377,7 @@ export default {
     onPriceInput() {
       this.form.price = this.clamp(this.form.price, this.baseCoinScale);
       this.clearPendingOrderIdentity();
+      this.clearPendingScaleIdentity();
       this.orderValidationError = '';
       if (this.percent > 0) {
         this.applyPercent();
@@ -3278,6 +3388,7 @@ export default {
       this.form.amount = this.clamp(this.form.amount, this.quoteSized ? this.baseCoinScale : this.coinScale);
       this.clearPendingOrderIdentity();
       this.clearPendingAlgoIdentity();
+      this.clearPendingAdvancedIdentity();
       this.percent = 0;
       this.orderValidationError = '';
     },
@@ -3290,6 +3401,43 @@ export default {
 
     clearPendingOrderIdentity() {
       this.pendingClientOrderId = '';
+    },
+
+    clearOrderSubmissionIdentity() {
+      this.clearPendingOrderIdentity();
+      this.clearPendingAdvancedIdentity();
+    },
+
+    clearPendingScaleIdentity() {
+      this.pendingScaleOrders = [];
+      this.batchAcceptedChildren = 0;
+      this.orderValidationError = '';
+    },
+
+    clearPendingBracketIdentity() {
+      this.pendingBracketOrders = [];
+      this.bracketAcceptedCount = 0;
+      this.pendingBracketPositionId = '';
+      this.orderValidationError = '';
+    },
+
+    clearPendingAdvancedIdentity() {
+      this.clearPendingScaleIdentity();
+      this.clearPendingBracketIdentity();
+    },
+
+    onScaleEndPriceInput() {
+      this.scaleEndPrice = this.clamp(this.scaleEndPrice, this.baseCoinScale);
+      this.clearPendingScaleIdentity();
+    },
+
+    onAttachedTriggerInput(kind) {
+      if (kind === 'take') {
+        this.attachedTakeProfit = this.clamp(this.attachedTakeProfit, this.baseCoinScale);
+      } else {
+        this.attachedStopLoss = this.clamp(this.attachedStopLoss, this.baseCoinScale);
+      }
+      this.clearPendingBracketIdentity();
     },
 
     /**
@@ -3391,6 +3539,8 @@ export default {
 
     submitOrder() {
       if (this.orderType === 'twap') return this.submitTwap();
+      if (this.orderType === 'scale') return this.submitScale();
+      if (this.orderType === 'tpsl') return this.submitAttachedTpsl();
       if (!this.tradable || this.submitting) {
         return;
       }
@@ -3523,6 +3673,242 @@ export default {
         this.liveAnnounce = this.$t('exchange.hlplus.twapCreated');
         this.$Notice.success({ title: this.$t('exchange.hlplus.twapCreated'), desc: row.id });
       });
+    },
+
+    submitScale() {
+      if (!this.tradable || this.submitting) return;
+      if (this.orderBlockReason) {
+        this.focusOrderError(this.orderBlockReason);
+        return this.warn(this.orderBlockReason);
+      }
+      const commonError = this.validateOrderFields();
+      const end = String(this.scaleEndPrice || '').trim();
+      const countText = String(this.scaleOrderCount || '').trim();
+      let error = commonError;
+      if (!error && (!ixMoney.isPositive(end) || ixMoney.compare(end, this.form.price) === 0)) {
+        error = this.$t('exchange.hlplus.scaleEndInvalid');
+      }
+      if (!error && (!/^\d+$/.test(countText) || Number(countText) < 2 || Number(countText) > 64)) {
+        error = this.$t('exchange.hlplus.scaleCountInvalid');
+      }
+      if (error) {
+        this.focusOrderError(error);
+        return this.warn(error);
+      }
+      if (!this.pendingScaleOrders.length) {
+        const built = this.buildScaleOrders(Number(countText));
+        if (!built.ok) {
+          this.focusOrderError(built.message);
+          return this.warn(built.message);
+        }
+        this.pendingScaleOrders = built.orders;
+        this.batchAcceptedChildren = 0;
+      }
+      const self = this;
+      this.$Modal.confirm({
+        title: this.$t('exchange.hlplus.scaleConfirmTitle'),
+        content: this.$t('exchange.hlplus.scaleConfirm', {
+          count: this.pendingScaleOrders.length,
+          start: String(this.form.price).trim(),
+          end: end
+        }),
+        onOk: function() {
+          return self.placeScale();
+        }
+      });
+    },
+
+    buildScaleOrders(count) {
+      const start = String(this.form.price).trim();
+      const end = String(this.scaleEndPrice).trim();
+      const total = String(this.form.amount).trim();
+      const step = ixMoney.divide(ixMoney.subtract(end, start), String(count - 1), this.baseCoinScale);
+      const slice = ixMoney.divide(total, String(count), this.coinScale);
+      if (step === null || ixMoney.compare(step, '0') === 0) {
+        return { ok: false, message: this.$t('exchange.hlplus.scaleStepTooSmall') };
+      }
+      if (!ixMoney.isPositive(slice)) {
+        return { ok: false, message: this.$t('exchange.hlplus.scaleAmountTooSmall') };
+      }
+      const orders = [];
+      let remaining = total;
+      for (let index = 0; index < count; index += 1) {
+        const price = index === count - 1
+          ? end
+          : ixMoney.add(start, ixMoney.multiply(step, String(index), this.baseCoinScale));
+        const amount = index === count - 1 ? remaining : slice;
+        if (!ixMoney.isPositive(price) || !ixMoney.isPositive(amount)) {
+          return { ok: false, message: this.$t('exchange.hlplus.scaleAmountTooSmall') };
+        }
+        orders.push(ixTrade.toCreateOrderBody({
+          symbol: this.currentCoin.symbol,
+          type: 'LIMIT_PRICE',
+          side: this.side,
+          amount: amount,
+          price: price,
+          timeInForce: this.timeInForce,
+          postOnly: this.postOnly || this.timeInForce === 'PO',
+          reduceOnly: this.reduceOnly,
+          clientOrderId: this.nextClientOrderId()
+        }));
+        remaining = ixMoney.subtract(remaining, amount);
+      }
+      return { ok: true, orders: orders };
+    },
+
+    placeScale() {
+      if (!this.ixToken || !this.pendingScaleOrders.length) return;
+      this.submitting = true;
+      const sendNext = () => {
+        if (this.batchAcceptedChildren >= this.pendingScaleOrders.length) {
+          const count = this.pendingScaleOrders.length;
+          this.submitting = false;
+          this.pendingScaleOrders = [];
+          this.batchAcceptedChildren = 0;
+          this.form.amount = '';
+          this.scaleEndPrice = '';
+          this.scaleOrderCount = '';
+          this.percent = 0;
+          this.accountTab = 'open';
+          this.orderValidationError = '';
+          this.liveAnnounce = this.$t('exchange.hlplus.scaleCreated', { count: count });
+          this.$Notice.success({ title: this.liveAnnounce });
+          this.loadAccount();
+          return;
+        }
+        const body = this.pendingScaleOrders[this.batchAcceptedChildren];
+        return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
+          if (!res.ok) {
+            this.submitting = false;
+            const reason = ixTrade.orderFailureMessage(res, 'create');
+            const message = this.$t('exchange.hlplus.scalePartial', {
+              accepted: this.batchAcceptedChildren,
+              total: this.pendingScaleOrders.length,
+              reason: reason
+            });
+            this.focusOrderError(message);
+            this.$Notice.error({ title: this.$t('intafaced.trade.rejected'), desc: message });
+            return;
+          }
+          this.batchAcceptedChildren += 1;
+          return sendNext();
+        });
+      };
+      return sendNext();
+    },
+
+    submitAttachedTpsl() {
+      if (!this.tradable || this.submitting) return;
+      if (this.orderBlockReason) {
+        this.focusOrderError(this.orderBlockReason);
+        return this.warn(this.orderBlockReason);
+      }
+      const symbol = this.currentCoin && this.currentCoin.symbol;
+      const matchingPositions = this.positions.filter(row => row.symbol === symbol && row.status === 'open');
+      const amount = String(this.form.amount || '').trim();
+      const take = String(this.attachedTakeProfit || '').trim();
+      const stop = String(this.attachedStopLoss || '').trim();
+      let error = '';
+      if (!this.isPerpKind) error = this.$t('exchange.hlplus.tpslPerpsOnly');
+      else if (!this.positionsReachable) error = this.$t('exchange.hlplus.tpslPositionsUnavailable');
+      else if (matchingPositions.length === 0) error = this.$t('exchange.hlplus.tpslPositionRequired');
+      else if (matchingPositions.length > 1) error = this.$t('exchange.hlplus.tpslPositionAmbiguous');
+      else if (!ixMoney.isPositive(amount) || ixMoney.greaterThan(amount, matchingPositions[0].contracts)) {
+        error = this.$t('exchange.hlplus.tpslAmountInvalid');
+      } else if (!ixMoney.isPositive(take) || !ixMoney.isPositive(stop)) {
+        error = this.$t('exchange.hlplus.tpslTriggersRequired');
+      } else {
+        const entry = matchingPositions[0].entryPrice;
+        const takeVsEntry = ixMoney.compare(take, entry);
+        const stopVsEntry = ixMoney.compare(stop, entry);
+        const validDirection = matchingPositions[0].side === 'long'
+          ? takeVsEntry > 0 && stopVsEntry < 0
+          : takeVsEntry < 0 && stopVsEntry > 0;
+        if (!validDirection) error = this.$t('exchange.hlplus.tpslTriggerDirection');
+      }
+      if (error) {
+        this.focusOrderError(error);
+        return this.warn(error);
+      }
+      const position = matchingPositions[0];
+      if (this.pendingBracketOrders.length && this.pendingBracketPositionId !== position.id) {
+        this.clearPendingBracketIdentity();
+      }
+      if (!this.pendingBracketOrders.length) {
+        const closeSide = position.side === 'long' ? 'SELL' : 'BUY';
+        this.pendingBracketOrders = [
+          ixTrade.toCreateOrderBody({
+            symbol: symbol,
+            type: 'take_profit',
+            side: closeSide,
+            amount: amount,
+            stopPrice: take,
+            timeInForce: 'GTC',
+            reduceOnly: true,
+            clientOrderId: this.nextClientOrderId()
+          }),
+          ixTrade.toCreateOrderBody({
+            symbol: symbol,
+            type: 'stop',
+            side: closeSide,
+            amount: amount,
+            stopPrice: stop,
+            timeInForce: 'GTC',
+            reduceOnly: true,
+            clientOrderId: this.nextClientOrderId()
+          })
+        ];
+        this.bracketAcceptedCount = 0;
+        this.pendingBracketPositionId = position.id;
+      }
+      const self = this;
+      this.$Modal.confirm({
+        title: this.$t('exchange.hlplus.tpslConfirmTitle'),
+        content: this.$t('exchange.hlplus.tpslConfirm', { amount: amount, take: take, stop: stop }),
+        onOk: function() {
+          return self.placeAttachedTpsl();
+        }
+      });
+    },
+
+    placeAttachedTpsl() {
+      if (!this.ixToken || !this.pendingBracketOrders.length) return;
+      this.submitting = true;
+      const sendNext = () => {
+        if (this.bracketAcceptedCount >= this.pendingBracketOrders.length) {
+          this.submitting = false;
+          this.pendingBracketOrders = [];
+          this.bracketAcceptedCount = 0;
+          this.pendingBracketPositionId = '';
+          this.form.amount = '';
+          this.attachedTakeProfit = '';
+          this.attachedStopLoss = '';
+          this.percent = 0;
+          this.accountTab = 'open';
+          this.orderValidationError = '';
+          this.liveAnnounce = this.$t('exchange.hlplus.tpslCreated');
+          this.$Notice.success({ title: this.liveAnnounce });
+          this.loadAccount();
+          return;
+        }
+        const body = this.pendingBracketOrders[this.bracketAcceptedCount];
+        return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
+          if (!res.ok) {
+            this.submitting = false;
+            const reason = ixTrade.orderFailureMessage(res, 'create');
+            const message = this.$t('exchange.hlplus.tpslPartial', {
+              accepted: this.bracketAcceptedCount,
+              reason: reason
+            });
+            this.focusOrderError(message);
+            this.$Notice.error({ title: this.$t('intafaced.trade.rejected'), desc: message });
+            return;
+          }
+          this.bracketAcceptedCount += 1;
+          return sendNext();
+        });
+      };
+      return sendNext();
     },
 
     /**
