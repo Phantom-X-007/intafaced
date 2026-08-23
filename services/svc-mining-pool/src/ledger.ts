@@ -18,7 +18,12 @@ export function buildPayoutRecipes(input: PplnsInput): PostRequest[] {
 export async function postPayouts(ledger: Pick<LedgerClient, 'post'>, input: PplnsInput): Promise<void> {
   if (!Number.isInteger(input.epoch) || (input.epoch ?? 0) < 0) throw new Error('mining.epoch_unset');
   await ledger.post(
-    recipes.mintEmission({ epoch: input.epoch, assetId: input.assetId, amount: parseAmount(input.reward), destination: rewardsEngine(input.assetId) }),
+    recipes.mintEmission({
+      epoch: input.epoch,
+      assetId: input.assetId,
+      amount: parseAmount(input.reward),
+      destination: rewardsEngine(input.assetId),
+    }),
   );
   for (const recipe of buildPayoutRecipes(input)) await ledger.post(recipe);
 }
