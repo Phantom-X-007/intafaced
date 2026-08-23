@@ -1,10 +1,15 @@
 export type StratumRequest = { id: string | number | null; method: string; params: unknown[] };
 export type Share = { minerId: string; worker: string; jobId: string; nonce: string; shareHash: string; target: string };
-export type ShareResult = { accepted: true } | { accepted: false; reason: 'malformed' | 'job_not_found' | 'invalid_nonce' | 'low_difficulty' };
+export type ShareResult =
+  { accepted: true } | { accepted: false; reason: 'malformed' | 'job_not_found' | 'invalid_nonce' | 'low_difficulty' };
 
 export function parseRequest(input: string): StratumRequest {
   let value: unknown;
-  try { value = JSON.parse(input); } catch { throw new Error('stratum_malformed'); }
+  try {
+    value = JSON.parse(input);
+  } catch {
+    throw new Error('stratum_malformed');
+  }
   if (!value || typeof value !== 'object') throw new Error('stratum_malformed');
   const v = value as Record<string, unknown>;
   if ((typeof v.id !== 'string' && typeof v.id !== 'number' && v.id !== null) || typeof v.method !== 'string' || !Array.isArray(v.params)) {
@@ -21,6 +26,8 @@ export function acceptShare(share: Share): ShareResult {
   }
   try {
     if (BigInt(`0x${share.shareHash}`) > BigInt(`0x${share.target}`)) return { accepted: false, reason: 'low_difficulty' };
-  } catch { return { accepted: false, reason: 'invalid_nonce' }; }
+  } catch {
+    return { accepted: false, reason: 'invalid_nonce' };
+  }
   return { accepted: true };
 }

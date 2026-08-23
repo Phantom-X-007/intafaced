@@ -6,13 +6,16 @@ export type Payout = { minerId: string; amount: string };
 export type PplnsPlan = { windowId: string; assetId: string; gross: string; fee: string; net: string; retained: string; payouts: Payout[] };
 
 const BPS = 10_000n;
-function positive(name: string, value: Amount): void { if (value <= 0n) throw new Error(`${name}_unconfigured`); }
+function positive(name: string, value: Amount): void {
+  if (value <= 0n) throw new Error(`${name}_unconfigured`);
+}
 
 /** Pure PPLNS calculation. Amounts are decimal strings at the boundary and scaled bigint inside. */
 export function planPplns(input: PplnsInput): PplnsPlan {
   if (!input.windowId || !input.assetId) throw new Error('window_unconfigured');
   if (!input.reward.trim()) throw new Error('reward_unconfigured');
-  const gross = parseAmount(input.reward); positive('reward', gross);
+  const gross = parseAmount(input.reward);
+  positive('reward', gross);
   if (!Number.isInteger(input.feeBps) || input.feeBps < 0 || input.feeBps >= 10_000) throw new Error('fee_unconfigured');
   const shares = input.shares.filter((s) => s.weight > 0n);
   const totalWeight = shares.reduce((sum, s) => sum + s.weight, 0n);
@@ -28,5 +31,13 @@ export function planPplns(input: PplnsInput): PplnsPlan {
     paid += amount;
     if (amount > 0n) payouts.push({ minerId, amount: formatAmount(amount) });
   }
-  return { windowId: input.windowId, assetId: input.assetId, gross: formatAmount(gross), fee: formatAmount(fee), net: formatAmount(net), retained: formatAmount(net - paid), payouts };
+  return {
+    windowId: input.windowId,
+    assetId: input.assetId,
+    gross: formatAmount(gross),
+    fee: formatAmount(fee),
+    net: formatAmount(net),
+    retained: formatAmount(net - paid),
+    payouts,
+  };
 }

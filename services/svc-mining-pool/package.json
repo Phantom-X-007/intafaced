@@ -4,7 +4,17 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "test": "vitest run" },
-  "dependencies": { "@intafaced/ledger-client": "workspace:*" },
-  "devDependencies": { "@types/node": "^22.10.2", "typescript": "^5.7.2", "vitest": "^3.0.5" }
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@intafaced/ledger-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
 }
