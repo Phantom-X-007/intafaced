@@ -138,6 +138,11 @@ export interface DepthHubOptions {
   readonly maxPendingDeltas?: number;
   /** Injected in tests, so the market-list cache window is not wall-clock. */
   readonly clock?: () => number;
+  /**
+   * Fires when matching availability flips (any-market down ↔ all clear).
+   * Private orders stream uses this so kill-matching is named, not a blank blotter.
+   */
+  readonly onMatchingAvailabilityChange?: (available: boolean) => void;
 }
 
 export interface HubLogger {
@@ -178,7 +183,8 @@ const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 export class DepthHub {
   readonly #source: DepthSource;
   readonly #registry: MarketRegistry;
-  readonly #options: Required<Omit<DepthHubOptions, 'registry'>>;
+  readonly #options: Required<Omit<DepthHubOptions, 'registry' | 'onMatchingAvailabilityChange'>>;
+  readonly #onMatchingAvailabilityChange?: (available: boolean) => void;
   readonly #log: HubLogger;
 
   readonly #subscriptions = new Set<Subscription>();
@@ -208,10 +214,11 @@ export class DepthHub {
   readonly #unavailable = new Set<string>();
 
   constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
-    const { registry, ...rest } = options;
+    const { registry, onMatchingAvailabilityChange, ...rest } = options;
     this.#source = source;
     this.#registry = registry ?? source;
     this.#options = { maxPendingDeltas: 512, clock: Date.now, ...rest };
+    this.#onMatchingAvailabilityChange = onMatchingAvailabilityChange;
     this.#log = log;
   }
 
@@ -649,10 +656,14 @@ export class DepthHub {
   }
 
   #noteEngineDown(marketId: string): void {
+    const wasAvailable = this.#unavailable.size === 0;
     this.#unavailable.add(marketId);
+    if (wasAvailable) this.#onMatchingAvailabilityChange?.(false);
   }
 
   #noteEngineUp(marketId: string): void {
+    const wasAvailable = this.#unavailable.size === 0;
     this.#unavailable.delete(marketId);
+    if (!wasAvailable && this.#unavailable.size === 0) this.#onMatchingAvailabilityChange?.(true);
   }
 }

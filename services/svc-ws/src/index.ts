@@ -100,6 +100,16 @@ const registry = new UnionMarketRegistry(
   app.log,
 );
 
+const privateOrderHub = new PrivateOrderHub(
+  {
+    highWaterBytes: env.WS_HIGH_WATER_BYTES,
+    maxLagTicks: env.WS_MAX_LAG_TICKS,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+    maxConnectionsPerUser: env.WS_PRIVATE_MAX_CONNECTIONS_PER_USER,
+  },
+  app.log,
+);
+
 const hub = new DepthHub(
   source,
   {
@@ -109,6 +119,10 @@ const hub = new DepthHub(
     maxConnections: env.WS_MAX_CONNECTIONS,
     marketsRefreshMs: env.WS_MARKETS_REFRESH_MS,
     registry,
+    onMatchingAvailabilityChange: (available) => {
+      if (available) privateOrderHub.noteEngineUp();
+      else privateOrderHub.markEngineUnavailable();
+    },
   },
   app.log,
 );
@@ -120,16 +134,6 @@ const tradeHub = new TradeHub(
     maxConnections: env.WS_MAX_CONNECTIONS,
     recentLimit: env.WS_TRADE_RECENT_LIMIT,
     ensureKnownMarket: (marketId) => hub.ensureKnownMarket(marketId),
-  },
-  app.log,
-);
-
-const privateOrderHub = new PrivateOrderHub(
-  {
-    highWaterBytes: env.WS_HIGH_WATER_BYTES,
-    maxLagTicks: env.WS_MAX_LAG_TICKS,
-    maxConnections: env.WS_MAX_CONNECTIONS,
-    maxConnectionsPerUser: env.WS_PRIVATE_MAX_CONNECTIONS_PER_USER,
   },
   app.log,
 );
@@ -224,7 +228,16 @@ const busLifecycle = createBusLifecycle({
 const poller = new DepthPoller(
   source,
   hub,
-  { intervalMs: env.WS_POLL_INTERVAL_MS, depthLimit: env.WS_DEPTH_LIMIT, marketsRefreshMs: env.WS_MARKETS_REFRESH_MS },
+  {
+    intervalMs: env.WS_POLL_INTERVAL_MS,
+    depthLimit: env.WS_DEPTH_LIMIT,
+    marketsRefreshMs: env.WS_MARKETS_REFRESH_MS,
+    probePrivate: {
+      connections: () => privateOrderHub.connections,
+      markDown: () => privateOrderHub.markEngineUnavailable(),
+      markUp: () => privateOrderHub.noteEngineUp(),
+    },
+  },
   app.log,
 );
 

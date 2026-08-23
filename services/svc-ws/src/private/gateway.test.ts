@@ -2,7 +2,7 @@ import { createServer, request as httpRequest, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
-import { PrivateOrderHub } from './hub.js';
+import { ORDERS_ENGINE_UNAVAILABLE, PrivateOrderHub } from './hub.js';
 import {
   CLOSE_UNAUTHORIZED,
   createPrivateWebSocketGateway,
@@ -327,6 +327,33 @@ describe('private WebSocket gateway', () => {
     }
     const ordersSnap = client.parsed().find((f) => f.channel === 'orders' && f.type === 'snapshot');
     expect(ordersSnap).toMatchObject({ userId: USER, orders: [] });
+    client.socket.close();
+  });
+
+  it('names orders.engine_unavailable when matching is already down — not a blank blotter', async () => {
+    await boot();
+    hub.markEngineUnavailable();
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
+    await client.frameCount(2);
+
+    const parsed = client.parsed();
+    expect(parsed.some((f) => f.channel === 'orders' && f.type === 'ready')).toBe(true);
+    expect(parsed.some((f) => f.type === 'status' && f.code === ORDERS_ENGINE_UNAVAILABLE && f.channel === 'orders')).toBe(true);
+    expect(parsed.some((f) => f.type === 'snapshot')).toBe(false);
+    client.socket.close();
+  });
+
+  it('names orders.engine_unavailable on a live private seat when matching is killed', async () => {
+    await boot();
+    const token = await accessToken(['trade:read']);
+    const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}&channel=orders`);
+    await client.untilSnapshot('orders');
+
+    hub.markEngineUnavailable();
+    await client.frameCount(client.frames.length + 1);
+
+    expect(client.parsed().some((f) => f.type === 'status' && f.code === ORDERS_ENGINE_UNAVAILABLE)).toBe(true);
     client.socket.close();
   });
 

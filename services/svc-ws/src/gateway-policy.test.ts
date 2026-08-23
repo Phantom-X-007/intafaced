@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   DEPTH_ENGINE_UNAVAILABLE,
   GATEWAY_DEPTH_REFUSE_CODES,
+  GATEWAY_PRIVATE_REFUSE_CODES,
+  ORDERS_ENGINE_UNAVAILABLE,
   allowsConnectDepthSnapshot,
   describeGatewayPolicy,
   wouldInventInitialEmptyLadder,
@@ -36,6 +38,8 @@ describe('describeGatewayPolicy', () => {
     expect(p.holeNotSyntheticEmptyBook).toBe(true);
     expect(p.refuseCodes).toEqual([...GATEWAY_DEPTH_REFUSE_CODES]);
     expect(p.refuseCodes).toContain(DEPTH_ENGINE_UNAVAILABLE);
+    expect(p.privateRefuseCodes).toEqual([...GATEWAY_PRIVATE_REFUSE_CODES]);
+    expect(p.privateRefuseCodes).toContain(ORDERS_ENGINE_UNAVAILABLE);
     expect(p.inventsQuietMarket).toBe(false);
     expect(p.inventsFuturesPositions).toBe(false);
   });

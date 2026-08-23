@@ -1,6 +1,9 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { ORDERS_ENGINE_UNAVAILABLE } from '../gateway-policy.js';
 import { encodePrivatePositionFrame, encodePrivatePositionsSnapshotFrame } from './private-positions-payload-freeze.js';
+
+export { ORDERS_ENGINE_UNAVAILABLE };
 
 /**
  * PRIVATE ORDER / FILL / POSITION FAN-OUT.
@@ -11,13 +14,15 @@ import { encodePrivatePositionFrame, encodePrivatePositionsSnapshotFrame } from 
  *
  * ── Empty ≠ zero ────────────────────────────────────────────────────────────
  *
- * An unseeded blotter, a matching 404, or a seed failure is **absence**.
+ * An unseeded blotter, a matching 404, or a no-blotter seed is **absence**.
  * Emitting `{ orders: [] }` / `{ positions: [] }` (or a JSON `[]`) would let a
  * client treat that as a live zero book of nothing. Listed seats stay
  * subscribed with no blotter frames until a real order or position exists.
- * Fills are never invented. Ready frames (`type: "ready"`) are honesty about
- * the bus. A `type: "snapshot"` hydrate (including `orders: []`) is a reconnect
- * book, not a live-zero delta — empty list is honest empty, not omitted.
+ * Matching-down is **named** (`orders.engine_unavailable`) — never a blank
+ * blotter that looks like a quiet book. Fills are never invented. Ready frames
+ * (`type: "ready"`) are honesty about the bus. A `type: "snapshot"` hydrate
+ * (including `orders: []`) is a reconnect book, not a live-zero delta — empty
+ * list is honest empty, not omitted, and is skipped when the engine is down.
  */
 
 export type PrivateSink = DepthSink;
@@ -109,7 +114,7 @@ export function isLiveZeroBlotterPayload(value: unknown): boolean {
   if (Array.isArray(value) && value.length === 0) return true;
   if (value === null || typeof value !== 'object') return false;
   const rec = value as Record<string, unknown>;
-  if (rec.type === 'ready' || rec.type === 'snapshot') return false;
+  if (rec.type === 'ready' || rec.type === 'snapshot' || rec.type === 'status') return false;
   for (const key of ['orders', 'positions', 'fills'] as const) {
     if (key in rec && Array.isArray(rec[key]) && rec[key].length === 0) return true;
   }
@@ -122,6 +127,29 @@ export function isLiveZeroBlotterFrame(frame: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Matching 404 / no private blotter. Absence, not engine-down — callers must
+ * not coerce it into `{ orders: [] }` or a status frame.
+ */
+export class PrivateNoBlotterError extends Error {
+  constructor(readonly userId: string) {
+    super(`${userId}: matching holds no blotter`);
+    this.name = 'PrivateNoBlotterError';
+  }
+}
+
+export interface PrivateEngineStatusFrame {
+  readonly type: 'status';
+  readonly code: typeof ORDERS_ENGINE_UNAVAILABLE;
+  readonly channel: 'orders' | 'fills';
+  readonly userId: string;
+}
+
+export function ordersEngineUnavailableFrame(userId: string, channel: 'orders' | 'fills' = 'orders'): string {
+  const frame: PrivateEngineStatusFrame = { type: 'status', code: ORDERS_ENGINE_UNAVAILABLE, channel, userId };
+  return JSON.stringify(frame);
 }
 
 interface Subscription {
@@ -146,6 +174,8 @@ export class PrivateOrderHub {
   #droppedFrames = 0;
   #evictions = 0;
   #updates = 0;
+  /** Matching-down (process-wide). Distinct from a 404 / empty blotter. */
+  #engineUnavailable = false;
 
   constructor(options: PrivateOrderHubOptions, log: HubLogger = NO_LOG) {
     this.#options = options;
@@ -166,12 +196,33 @@ export class PrivateOrderHub {
     return this.#options.maxConnectionsPerUser ?? 16;
   }
 
-  get stats(): { connections: number; updates: number; droppedFrames: number; evictions: number } {
+  get matchingAvailable(): boolean {
+    return !this.#engineUnavailable;
+  }
+
+  get engineCode(): typeof ORDERS_ENGINE_UNAVAILABLE | null {
+    return this.#engineUnavailable ? ORDERS_ENGINE_UNAVAILABLE : null;
+  }
+
+  get isEngineUnavailable(): boolean {
+    return this.#engineUnavailable;
+  }
+
+  get stats(): {
+    connections: number;
+    updates: number;
+    droppedFrames: number;
+    evictions: number;
+    matchingAvailable: boolean;
+    code: typeof ORDERS_ENGINE_UNAVAILABLE | null;
+  } {
     return {
       connections: this.#subscriptions.size,
       updates: this.#updates,
       droppedFrames: this.#droppedFrames,
       evictions: this.#evictions,
+      matchingAvailable: this.matchingAvailable,
+      code: this.engineCode,
     };
   }
 
@@ -215,6 +266,7 @@ export class PrivateOrderHub {
       pending: [],
     };
     this.#subscriptions.add(sub);
+    if (this.#engineUnavailable) this.#queueOrWriteUnavailable(sub);
     if (this.#options.seedOrders || this.#options.seedPositions) {
       void this.#seed(sub);
     }
@@ -272,10 +324,18 @@ export class PrivateOrderHub {
           }
         }
       } catch (err) {
-        this.#log.warn(
-          { userId: sub.userId, err: err instanceof Error ? err.message : String(err) },
-          'ws-private: order seed failed — no blotter on the wire; matching 404 is absence not { orders: [] }',
-        );
+        if (err instanceof PrivateNoBlotterError) {
+          this.#log.warn(
+            { userId: sub.userId, err: err.message },
+            'ws-private: order seed — matching holds no blotter (absence, not engine-down)',
+          );
+        } else {
+          this.markEngineUnavailable();
+          this.#log.warn(
+            { userId: sub.userId, err: err instanceof Error ? err.message : String(err) },
+            'ws-private: order seed failed — disclosing orders.engine_unavailable; matching 404 is absence not { orders: [] }',
+          );
+        }
       }
     }
     if (sub.closed) return;
@@ -316,6 +376,42 @@ export class PrivateOrderHub {
         this.#write(sub, JSON.stringify({ channel, type: 'ready', userId: sub.userId, bus }));
       }
     }
+  }
+
+  /**
+   * Matching is down. Named disclosure once per down-edge so a private seat
+   * cannot read silence as a blank blotter. Positions-only seats skip — they
+   * are not the matching orders book.
+   */
+  markEngineUnavailable(): void {
+    const first = !this.#engineUnavailable;
+    this.#engineUnavailable = true;
+    if (!first) return;
+    for (const sub of this.#subscriptions) {
+      if (sub.closed) continue;
+      this.#queueOrWriteUnavailable(sub);
+    }
+  }
+
+  /** Matching answered again. Status is not retracted; live order frames resume. */
+  noteEngineUp(): void {
+    this.#engineUnavailable = false;
+  }
+
+  #engineUnavailableFrame(sub: Subscription): string | null {
+    if (sub.channel === 'positions') return null;
+    const channel = sub.channel === 'fills' ? 'fills' : 'orders';
+    return ordersEngineUnavailableFrame(sub.userId, channel);
+  }
+
+  #queueOrWriteUnavailable(sub: Subscription): void {
+    const frame = this.#engineUnavailableFrame(sub);
+    if (frame === null) return;
+    if (!sub.hydrated) {
+      sub.pending.push(frame);
+      return;
+    }
+    this.#write(sub, frame);
   }
 
   publish(update: PrivateOrderUpdate): void {

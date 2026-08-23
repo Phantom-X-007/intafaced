@@ -11,7 +11,12 @@ import { fileURLToPath } from 'node:url';
 
 export const WS_GATEWAY_TRACKER_ID = 'ws.gateway' as const;
 
-export const GATEWAY_PRODUCT_SYMBOLS = ['describeGatewayPolicy', 'DEPTH_ENGINE_UNAVAILABLE', 'createWebSocketGateway'] as const;
+export const GATEWAY_PRODUCT_SYMBOLS = [
+  'describeGatewayPolicy',
+  'DEPTH_ENGINE_UNAVAILABLE',
+  'ORDERS_ENGINE_UNAVAILABLE',
+  'createWebSocketGateway',
+] as const;
 
 export const GATEWAY_HONEST_GAPS = ['gap.residual_private_stream_ops', 'gap.no_invented_positions_blotter'] as const;
 
@@ -42,7 +47,8 @@ export function gatewayPolicyHonestInSource(): boolean {
     /emptyBookStaysEmpty:\s*true/.test(src) &&
     /inventsQuietMarket:\s*false/.test(src) &&
     /inventsFuturesPositions:\s*false/.test(src) &&
-    /DEPTH_ENGINE_UNAVAILABLE/.test(src)
+    /DEPTH_ENGINE_UNAVAILABLE/.test(src) &&
+    /ORDERS_ENGINE_UNAVAILABLE/.test(src)
   );
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DepthSnapshot } from '@intafaced/market-data';
+import { ORDERS_ENGINE_UNAVAILABLE, PrivateOrderHub } from '../private/hub.js';
 import { DepthHub, type DepthSink } from './hub.js';
 import { DepthPoller } from './poller.js';
 import type { DepthSource } from './source.js';
@@ -28,8 +29,12 @@ class CountingSource implements DepthSource {
   readonly calls: string[] = [];
   sequence = 10;
   failNext = false;
+  failMarkets: Error | null = null;
+  marketCalls = 0;
 
   async markets(): Promise<readonly string[]> {
+    this.marketCalls += 1;
+    if (this.failMarkets) throw this.failMarkets;
     return [MARKET, OTHER];
   }
 
@@ -123,5 +128,64 @@ describe('DepthPoller', () => {
     await first;
 
     expect(source.calls).toEqual([MARKET]);
+  });
+
+  it('names orders.engine_unavailable on a private-only seat when matching is down', async () => {
+    const { source, hub, poller } = rig();
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10 });
+    const privateSink = new RecordingSink();
+    privateHub.attach('user-a', privateSink);
+    source.failMarkets = new Error('svc-matching unreachable');
+
+    const probing = new DepthPoller(
+      source,
+      hub,
+      {
+        intervalMs: 1_000,
+        depthLimit: 50,
+        marketsRefreshMs: 30_000,
+        probePrivate: {
+          connections: () => privateHub.connections,
+          markDown: () => privateHub.markEngineUnavailable(),
+          markUp: () => privateHub.noteEngineUp(),
+        },
+      },
+      log,
+    );
+
+    await probing.tick();
+
+    expect(source.calls).toEqual([]);
+    expect(source.marketCalls).toBe(1);
+    expect(privateHub.engineCode).toBe(ORDERS_ENGINE_UNAVAILABLE);
+    expect(JSON.parse(privateSink.frames[0]!)).toMatchObject({
+      type: 'status',
+      code: ORDERS_ENGINE_UNAVAILABLE,
+      channel: 'orders',
+    });
+  });
+
+  it('does not probe matching for private when nobody holds a private seat', async () => {
+    const { source, hub } = rig();
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10 });
+    const probing = new DepthPoller(
+      source,
+      hub,
+      {
+        intervalMs: 1_000,
+        depthLimit: 50,
+        marketsRefreshMs: 30_000,
+        probePrivate: {
+          connections: () => privateHub.connections,
+          markDown: () => privateHub.markEngineUnavailable(),
+          markUp: () => privateHub.noteEngineUp(),
+        },
+      },
+      log,
+    );
+
+    await probing.tick();
+    expect(source.marketCalls).toBe(0);
+    expect(privateHub.matchingAvailable).toBe(true);
   });
 });

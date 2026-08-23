@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PrivateOrderHub, type PrivateOrderUpdate, type PrivatePositionUpdate } from './hub.js';
+import { ORDERS_ENGINE_UNAVAILABLE, PrivateOrderHub, type PrivateOrderUpdate, type PrivatePositionUpdate } from './hub.js';
 
 function sink() {
   const sent: string[] = [];
@@ -315,5 +315,53 @@ describe('PrivateOrderHub', () => {
     hub.releaseSnapshot(alice);
     expect(JSON.parse(alice.sent[0]!).type).toBe('snapshot');
     expect(JSON.parse(alice.sent[1]!).orderId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  });
+
+  it('names orders.engine_unavailable once per down-edge, not a blank blotter', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    const bob = sink();
+    hub.attach('user-a', alice);
+    hub.attach('user-b', bob);
+
+    hub.markEngineUnavailable();
+    hub.markEngineUnavailable();
+
+    expect(hub.engineCode).toBe(ORDERS_ENGINE_UNAVAILABLE);
+    expect(alice.sent).toHaveLength(1);
+    expect(JSON.parse(alice.sent[0]!)).toEqual({
+      type: 'status',
+      code: ORDERS_ENGINE_UNAVAILABLE,
+      channel: 'orders',
+      userId: 'user-a',
+    });
+    expect(JSON.parse(bob.sent[0]!).userId).toBe('user-b');
+  });
+
+  it('discloses engine-down to a seat that attaches after matching is already down', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    hub.markEngineUnavailable();
+    const alice = sink();
+    hub.attach('user-a', alice);
+    expect(JSON.parse(alice.sent[0]!)).toMatchObject({ type: 'status', code: ORDERS_ENGINE_UNAVAILABLE, channel: 'orders' });
+  });
+
+  it('does not send engine-unavailable onto a positions-only seat', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const positions = sink();
+    hub.attach('user-a', positions, 'positions');
+    hub.markEngineUnavailable();
+    expect(positions.sent).toEqual([]);
+    expect(hub.isEngineUnavailable).toBe(true);
+  });
+
+  it('queues engine-unavailable behind holdUntilSnapshot so ready/snapshot stay first', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach('user-a', alice, 'orders', { holdUntilSnapshot: true });
+    hub.markEngineUnavailable();
+    expect(alice.sent).toHaveLength(0);
+    hub.releaseSnapshot(alice);
+    expect(JSON.parse(alice.sent[0]!)).toMatchObject({ type: 'status', code: ORDERS_ENGINE_UNAVAILABLE });
   });
 });
