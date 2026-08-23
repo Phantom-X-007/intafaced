@@ -4,6 +4,7 @@ import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-service.js';
 import type { CommerceService } from './commerce/commerce-service.js';
 import { userCopy } from './user-copy.js';
+import { createStrategyListing } from './strategy/strategy-listing.js';
 
 /**
  * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
@@ -139,7 +140,9 @@ function mapError(err: unknown): never {
       err.code === 'market.subscription_past_due' ||
       err.code === 'market.subscription_cancelled' ||
       err.code === 'market.subscription_no_access' ||
-      err.code === 'market.period_not_applicable'
+      err.code === 'market.period_not_applicable' ||
+      err.code === 'market.strategy_profit_share_forbidden' ||
+      err.code === 'market.strategy_return_rank_forbidden'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
     }
@@ -403,6 +406,35 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         try {
           // Blank MARKET_HOUSE_COMMISSION_BPS refuses before insert/slot claim.
           return await commerce.createListing({ userId: ctx.principal!.userId, ...input });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    /**
+     * Strategy marketplace publish — same shop as createListing.
+     * Always a subscription with periodSeconds. Stake gate is claimSlot.
+     * No profit-share input. Catalogue ranking is not this door.
+     */
+    createStrategyListing: scopedProcedure('market:write', { module: 'market' })
+      .input(
+        z
+          .object({
+            title: z.string().min(1).max(120),
+            description: z.string().min(1).max(4_000),
+            assetId: z.string().min(1).max(32),
+            /** Decimal string — never a number. */
+            price: z.string().min(1).max(64),
+            /** Whole seconds. Required. No default month. */
+            periodSeconds: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .output(listingOut)
+      .mutation(async ({ ctx, input }) => {
+        requireCommerce(commerce);
+        try {
+          return await createStrategyListing(commerce, { userId: ctx.principal!.userId, ...input });
         } catch (err) {
           mapError(err);
         }

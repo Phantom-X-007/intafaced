@@ -524,6 +524,83 @@ describe('svc-market mount — commerce scopes', () => {
     });
   });
 
+  it('createStrategyListing writes through createListing as a subscription with periodSeconds', async () => {
+    const commerce = stubCommerce();
+    const result = await createMarketRouter(stubVendors(), commerce as never)
+      .createCaller(signed())
+      .createStrategyListing({
+        title: 'Mean revert',
+        description: 'A listed strategy',
+        assetId: 'USDT',
+        price: '12.50',
+        periodSeconds: 86_400,
+      });
+    expect(result.id).toBe(listingId);
+    expect(commerce.createListing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER,
+        offerType: 'subscription',
+        periodSeconds: 86_400,
+        price: '12.50',
+      }),
+    );
+  });
+
+  it('refuses createStrategyListing without market:write', async () => {
+    const commerce = stubCommerce();
+    const reader = principal({ scopes: ['market:read'] });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed(reader))
+        .createStrategyListing({
+          title: 'Mean revert',
+          description: 'A listed strategy',
+          assetId: 'USDT',
+          price: '12.50',
+          periodSeconds: 86_400,
+        }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(commerce.createListing).not.toHaveBeenCalled();
+  });
+
+  it('maps unstaked createStrategyListing to FORBIDDEN market.stake_required', async () => {
+    const commerce = stubCommerce();
+    commerce.createListing = vi.fn(async () => {
+      throw new MarketError('Stake is required to hold a listing slot', 'market.stake_required');
+    });
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .createStrategyListing({
+          title: 'Mean revert',
+          description: 'A listed strategy',
+          assetId: 'USDT',
+          price: '12.50',
+          periodSeconds: 86_400,
+        }),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: 'market.stake_required',
+    });
+  });
+
+  it('rejects a profit-share field on createStrategyListing (strict input)', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(signed())
+        .createStrategyListing({
+          title: 'Mean revert',
+          description: 'A listed strategy',
+          assetId: 'USDT',
+          price: '12.50',
+          periodSeconds: 86_400,
+          profitShareBps: 200,
+        } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(commerce.createListing).not.toHaveBeenCalled();
+  });
+
   it('maps blank-commission createListing refuse to PRECONDITION_FAILED', async () => {
     const commerce = stubCommerce({ commissionBps: null });
     commerce.createListing = vi.fn(async () => {
