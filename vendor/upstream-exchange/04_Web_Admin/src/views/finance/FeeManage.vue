@@ -1,5 +1,16 @@
 <template>
   <div>
+    <Card class="ix-fee-schedule-card">
+      <p slot="title">
+        已配置市场费率
+        <Button type="primary" size="small" :loading="feeScheduleLoading" @click="refreshFeeSchedule">
+          <Icon type="refresh"></Icon>
+          刷新
+        </Button>
+      </p>
+      <Alert v-if="feeScheduleUnavailable" type="warning" show-icon>{{ feeScheduleUnavailable }}</Alert>
+      <Table v-else :columns="feeScheduleColumns" :data="feeScheduleRows" border :loading="feeScheduleLoading"></Table>
+    </Card>
     <Card>
       <p slot="title">
         手续费管理
@@ -65,6 +76,14 @@ import { perTradeAll  } from '@/service/getData';
 					endTime: ''
 				},
         ifLoading: true,
+        feeScheduleLoading: true,
+        feeScheduleUnavailable: '',
+        feeScheduleRows: [],
+        feeScheduleColumns: [
+          { title: '交易对', key: 'symbol' },
+          { title: 'Maker', key: 'maker' },
+          { title: 'Taker', key: 'taker' }
+        ],
         current: 1,
         pageNum: null,
         userpage: [],
@@ -101,6 +120,39 @@ import { perTradeAll  } from '@/service/getData';
       }
     },
     methods: {
+      refreshFeeSchedule() {
+        // Keep the canonical maker/taker configured decimal strings untouched.
+        this.feeScheduleLoading = true;
+        this.feeScheduleUnavailable = '';
+        fetch('/api/v1/admin/fees', {
+          method: 'GET',
+          credentials: 'same-origin',
+          headers: { Accept: 'application/json' }
+        }).then((response) => {
+          return response.json().catch(() => null).then((payload) => {
+            if (!response.ok) throw new Error('fee schedule refused');
+          const rows = [];
+          if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+            Object.keys(payload).forEach((symbol) => {
+              const fee = payload[symbol];
+              if (fee && typeof fee.maker === 'string' && fee.maker.length > 0 &&
+                  typeof fee.taker === 'string' && fee.taker.length > 0 && fee.percentage === true) {
+                rows.push({ symbol, maker: fee.maker, taker: fee.taker });
+              }
+            });
+          }
+          this.feeScheduleRows = rows;
+          if (rows.length === 0) {
+            this.feeScheduleUnavailable = '费率未配置或 svc-trade 未返回可用的 maker/taker 十进制字符串。';
+          }
+          this.feeScheduleLoading = false;
+          });
+        }).catch(() => {
+          this.feeScheduleRows = [];
+          this.feeScheduleUnavailable = '费率服务不可用；未显示猜测的费率。';
+          this.feeScheduleLoading = false;
+        });
+      },
       searchByFilter(){
         this.current = 1;
         console.log(this.filterSearch)
@@ -151,6 +203,7 @@ import { perTradeAll  } from '@/service/getData';
 
     },
     created () {
+      this.refreshFeeSchedule();
       this.refreshPage();
     }
   }
@@ -159,4 +212,3 @@ import { perTradeAll  } from '@/service/getData';
 <style lang="less" scoped>
 
 </style>
-

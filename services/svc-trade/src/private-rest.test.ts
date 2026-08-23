@@ -511,6 +511,28 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('admin fees requires admin:read and preserves configured decimal strings', async () => {
+    const rich = fakeMarket({ id: market.id, symbol: 'BTC/USDT', makerBps: 10, takerBps: 20 });
+    const app = await build(deps({ markets: async () => [rich] }));
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/fees',
+      headers: signedHeaders(),
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/fees',
+      headers: signedHeaders(principal({ scopes: ['admin:read'] })),
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toEqual({
+      'BTC/USDT': { symbol: 'BTC/USDT', maker: '0.001', taker: '0.002', percentage: true },
+    });
+    await app.close();
+  });
+
   it('filters open orders by symbol when provided', async () => {
     let seenMarket: string | undefined = 'unset';
     const app = await build(

@@ -41,6 +41,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read
  *   GET    /api/v1/admin/orders/open scope: admin:read (canonical order rows)
+ *   GET    /api/v1/admin/fees        scope: admin:read (configured market fee strings)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
@@ -620,6 +621,19 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         wire.push({ ...presentCcxtOrder(order, symbol), userId: order.userId, seeded: order.seeded });
       }
       return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.get('/api/v1/admin/fees', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    try {
+      requireScope(principal, 'admin:read');
+      return reply.code(200).send(presentTradingFees(await deps.markets()));
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
