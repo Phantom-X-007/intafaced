@@ -60,6 +60,18 @@ const schema = serviceEnvSchema
 
       /** Real-yield distribution cadence. §4.3 specifies weekly. */
       YIELD_DISTRIBUTION_CRON_HOURS: z.coerce.number().int().min(1).default(168),
+
+      /**
+       * Owner quorum for `closeProposal`, in bps of active stake. No default —
+       * blank / missing is `token.governance_quorum_unset`. Never invent a bar.
+       */
+      TOKEN_GOVERNANCE_QUORUM_BPS: z.string().optional(),
+
+      /**
+       * Owner for-threshold for `closeProposal`, in bps of (for+against).
+       * Same blank-refuse as quorum. Explicit `0` is owner-present.
+       */
+      TOKEN_GOVERNANCE_THRESHOLD_BPS: z.string().optional(),
     }),
   );
 

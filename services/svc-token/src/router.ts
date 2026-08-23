@@ -29,8 +29,10 @@ import { userCopy } from './user-copy.js';
  *                    (that would lie). Missing-publisher socket is a
  *                    packages/events PR — exclusive this service cannot
  *                    declare WIRING_SOCKETS.
- *   token.governance ballots are recorded and weighted correctly; no code can
- *                    move a proposal to passed/rejected/executed/cancelled.
+ *   token.governance `closeProposal` writes passed|rejected from owner env bps.
+ *                    Blank TOKEN_GOVERNANCE_QUORUM_BPS / THRESHOLD_BPS refuses
+ *                    `token.governance_quorum_unset`. Grant/listing close does
+ *                    not execute (`token.governance_execute_unwired`).
  *
  * Say so wherever these are described. An operator mutation is not a flywheel.
  */
@@ -122,6 +124,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.params_invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       case 'token.yield_job_unset':
+      case 'token.governance_quorum_unset':
+      case 'token.governance_execute_unwired':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
@@ -456,20 +460,11 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         })),
       ),
 
-    // ── Governance — ballots only (§4.3) ───────────────────────────────────
+    // ── Governance — ballots + close tally (§4.3) ──────────────────────────
     //
-    // These four procedures record and read an election. They do not decide one.
-    // `getProposal` returns a tally that nothing acts on, and no procedure here
-    // or job anywhere can set a proposal to passed, rejected, executed or
-    // cancelled — see the note on proposalStatusEnum in db/schema.ts.
-    //
-    // No `closeProposal` / `executeProposal` is offered deliberately. A mutation
-    // that flipped the status column would read to a caller as the outcome being
-    // enacted while nothing outside this table changed, which is a worse lie
-    // than the current silence. §13 socket `token.governance` records what has
-    // to be decided by an owner first: quorum, pass threshold, and how each of
-    // the four proposal kinds executes (three cross a service boundary; `grant`
-    // moves value and is therefore a ledger recipe — DIRECTION §3 carve-out).
+    // `closeProposal` writes passed|rejected from the tally vs owner env bps.
+    // Blank env → token.governance_quorum_unset. Grant/listing do not execute
+    // (token.governance_execute_unwired). No executeProposal.
 
     createProposal: protectedProcedure
       .input(
@@ -579,6 +574,31 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
               totalWeight: formatAmount(detail.tally.totalWeight),
               voterCount: detail.tally.voterCount,
             },
+          };
+        }),
+      ),
+
+    closeProposal: scopedProcedure('token:stake', { module: 'token' })
+      .input(z.object({ proposalId: z.string().uuid() }))
+      .output(
+        proposalOutput.extend({
+          tally: tallyOutput,
+          execute: z.literal('token.governance_execute_unwired').nullable(),
+        }),
+      )
+      .mutation(async ({ input }) =>
+        guard(async () => {
+          const closed = await token.closeProposal({ proposalId: input.proposalId });
+          return {
+            ...proposalToWire(closed),
+            tally: {
+              forWeight: formatAmount(closed.tally.forWeight),
+              againstWeight: formatAmount(closed.tally.againstWeight),
+              abstainWeight: formatAmount(closed.tally.abstainWeight),
+              totalWeight: formatAmount(closed.tally.totalWeight),
+              voterCount: closed.tally.voterCount,
+            },
+            execute: closed.execute,
           };
         }),
       ),

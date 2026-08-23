@@ -91,6 +91,9 @@ if (!available) {
     buyback: DEFAULT_BUYBACK_PARAMS,
     loadParamsFromDb: false,
     feeScheduleTtlMs: 0,
+    // Test fixture only — production env has no default bar.
+    governanceQuorumBps: 1000,
+    governanceThresholdBps: 5000,
   };
 
   /** Put real IFC in a user's available balance so a stake has something behind it. */
@@ -2252,6 +2255,154 @@ if (!available) {
       expect(await balanceOf(USER_A)).toBe(availableBefore);
       expect(await stakedOf(USER_A)).toBe(stakedBefore);
       expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('close writes passed when quorum and for-threshold hold', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'fee_param',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+
+      const closed = await token.closeProposal({
+        proposalId: proposal.id,
+        now: closesAt,
+      });
+      expect(closed.status).toBe('passed');
+      expect(closed.execute).toBeNull();
+      expect((await token.getProposal(proposal.id)).status).toBe('passed');
+    });
+
+    it('close writes rejected when against wins', async () => {
+      await fund(USER_A, '400');
+      await fund(USER_B, '600');
+      await token.stake({ userId: USER_A, amount: amt('400'), tier: 'flex' });
+      await token.stake({ userId: USER_B, amount: amt('600'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'curriculum',
+        createdBy: USER_A,
+        asAdmin: true,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+      await token.castVote({ proposalId: proposal.id, userId: USER_B, choice: 'against', now });
+
+      const closed = await token.closeProposal({ proposalId: proposal.id, now: closesAt });
+      expect(closed.status).toBe('rejected');
+    });
+
+    it('close writes rejected when quorum fails even if every ballot is for', async () => {
+      await fund(USER_A, '1000');
+      await fund(USER_B, '99');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_B, amount: amt('99'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'fee_param',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_B, choice: 'for', now });
+
+      const closed = await token.closeProposal({ proposalId: proposal.id, now: closesAt });
+      expect(closed.status).toBe('rejected');
+    });
+
+    it('refuses close when quorum/threshold env is blank — never invents a bar', async () => {
+      const unset = new TokenService(sql, ledger, bus, {
+        ...options,
+        governanceQuorumBps: undefined,
+        governanceThresholdBps: undefined,
+      });
+      await fund(USER_A, '1000');
+      await unset.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await unset.createProposal({
+        kind: 'fee_param',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await unset.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+
+      await expect(unset.closeProposal({ proposalId: proposal.id, now: closesAt })).rejects.toMatchObject({
+        code: 'token.governance_quorum_unset',
+      });
+      expect((await unset.getProposal(proposal.id)).status).toBe('open');
+    });
+
+    it('grant close writes passed|rejected and names execute unwired — no value moved', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const availableBefore = await balanceOf(USER_A);
+      const stakedBefore = await stakedOf(USER_A);
+      const postsBefore = ledger.journal().length;
+
+      const proposal = await token.createProposal({
+        kind: 'grant',
+        body: { amount: '999' },
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+
+      const closed = await token.closeProposal({ proposalId: proposal.id, now: closesAt });
+      expect(closed.status).toBe('passed');
+      expect(closed.execute).toBe('token.governance_execute_unwired');
+      expect(await balanceOf(USER_A)).toBe(availableBefore);
+      expect(await stakedOf(USER_A)).toBe(stakedBefore);
+      expect(ledger.journal().length).toBe(postsBefore);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('listing close names execute unwired and does not open a market', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'listing',
+        body: { symbol: 'X' },
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+      const closed = await token.closeProposal({ proposalId: proposal.id, now: closesAt });
+      expect(closed.status).toBe('passed');
+      expect(closed.execute).toBe('token.governance_execute_unwired');
+    });
+
+    it('refuses close before the window ends, and refuses a second close', async () => {
+      await fund(USER_A, '1000');
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const proposal = await token.createProposal({
+        kind: 'fee_param',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+
+      await expect(token.closeProposal({ proposalId: proposal.id, now })).rejects.toMatchObject({
+        code: 'token.proposal_window',
+      });
+      expect((await token.getProposal(proposal.id)).status).toBe('open');
+
+      await token.closeProposal({ proposalId: proposal.id, now: closesAt });
+      await expect(token.closeProposal({ proposalId: proposal.id, now: closesAt })).rejects.toMatchObject({
+        code: 'token.proposal_not_open',
+      });
     });
   });
 

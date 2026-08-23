@@ -91,6 +91,23 @@ function stubToken(overrides: Partial<TokenService> = {}): TokenService {
       toRewards: amt('50'),
     })),
     burnedSupply: vi.fn(async () => amt('0')),
+    closeProposal: vi.fn(async () => ({
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      kind: 'fee_param' as const,
+      body: {},
+      status: 'passed' as const,
+      opensAt: new Date('2026-07-15T00:00:00.000Z'),
+      closesAt: new Date('2026-07-22T00:00:00.000Z'),
+      createdAt: new Date('2026-07-15T00:00:00.000Z'),
+      tally: {
+        forWeight: amt('1000'),
+        againstWeight: amt('0'),
+        abstainWeight: amt('0'),
+        totalWeight: amt('1000'),
+        voterCount: 1,
+      },
+      execute: null,
+    })),
     ...overrides,
   } as unknown as TokenService;
 }
@@ -453,6 +470,66 @@ describe('svc-token mount — yield + buyback', () => {
     const token = stubToken({ burnedSupply: vi.fn(async () => amt('42')) });
     const result = await createTokenRouter(token).createCaller(signed()).burnedSupply();
     expect(result).toEqual({ burned: '42' });
+  });
+});
+
+describe('svc-token mount — governance close', () => {
+  const PID = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+  it('refuses closeProposal without token:stake', async () => {
+    const token = stubToken();
+    await expect(
+      createTokenRouter(token)
+        .createCaller(signed(principal({ scopes: ['token:read'] })))
+        .closeProposal({ proposalId: PID }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(token.closeProposal).not.toHaveBeenCalled();
+  });
+
+  it('closes and returns passed|rejected as decimal tally strings', async () => {
+    const token = stubToken();
+    const result = await createTokenRouter(token).createCaller(signed()).closeProposal({ proposalId: PID });
+    expect(result.status).toBe('passed');
+    expect(result.tally.forWeight).toBe('1000');
+    expect(result.execute).toBeNull();
+    expect(token.closeProposal).toHaveBeenCalledWith({ proposalId: PID });
+  });
+
+  it('maps quorum unset to PRECONDITION_FAILED', async () => {
+    const token = stubToken({
+      closeProposal: vi.fn(async () => {
+        throw new TokenError('Governance quorum/threshold is unset', 'token.governance_quorum_unset');
+      }),
+    });
+    await expect(createTokenRouter(token).createCaller(signed()).closeProposal({ proposalId: PID })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'token.governance_quorum_unset' },
+    });
+  });
+
+  it('returns token.governance_execute_unwired on grant close without inventing a transfer', async () => {
+    const token = stubToken({
+      closeProposal: vi.fn(async () => ({
+        id: PID,
+        kind: 'grant' as const,
+        body: { amount: '999' },
+        status: 'passed' as const,
+        opensAt: new Date('2026-07-15T00:00:00.000Z'),
+        closesAt: new Date('2026-07-22T00:00:00.000Z'),
+        createdAt: new Date('2026-07-15T00:00:00.000Z'),
+        tally: {
+          forWeight: amt('1000'),
+          againstWeight: amt('0'),
+          abstainWeight: amt('0'),
+          totalWeight: amt('1000'),
+          voterCount: 1,
+        },
+        execute: 'token.governance_execute_unwired' as const,
+      })),
+    });
+    const result = await createTokenRouter(token).createCaller(signed()).closeProposal({ proposalId: PID });
+    expect(result.status).toBe('passed');
+    expect(result.execute).toBe('token.governance_execute_unwired');
   });
 });
 

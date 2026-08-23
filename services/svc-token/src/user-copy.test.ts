@@ -41,5 +41,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(distribute).toBe('token.nothing_to_distribute');
     expect(distribute).not.toMatch(/ /);
     expect(distribute).not.toMatch(/no revenue|yield|bps/i);
+
+    const quorum = userCopy('token.governance_quorum_unset');
+    expect(quorum).toBe('token.governance_quorum_unset');
+    expect(quorum).not.toMatch(/ /);
+    const unwired = userCopy('token.governance_execute_unwired');
+    expect(unwired).toBe('token.governance_execute_unwired');
   });
 });

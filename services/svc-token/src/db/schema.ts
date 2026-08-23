@@ -33,19 +33,10 @@ export const proposalKindEnum = token.enum('proposal_kind', ['listing', 'fee_par
  * a future tally job and executor can branch on it without a typo silently
  * making a passed proposal un-executable.
  *
- * READ THIS BEFORE BELIEVING THE ENUM. Four of these six values are declared and
- * never written. Nothing in this repo issues `UPDATE token.proposals`: the only
- * status write is the draft/open choice made once at INSERT
- * (token-service.ts:950). There is no tally job, no close job, no quorum, no
- * threshold and no executor, so no proposal has ever moved to `passed`,
- * `rejected`, `executed` or `cancelled` — and none can. `draft` is likewise
- * terminal: a proposal opened with a future `opens_at` can never become `open`,
- * so it can never be voted on.
- *
- * The enum is kept, rather than trimmed to the two reachable values, because
- * the shape is §4.3's and the gap is a missing mechanism, not a wrong column.
- * §13 socket `token.governance` (tooling/tracker/features.mjs) is the record of
- * that decision and of why the outcome half is an owner call, not an agent one.
+ * `closeProposal` writes `passed` | `rejected` from the tally vs owner env bps.
+ * `executed` and `cancelled` are still never written — grant/listing close
+ * returns `token.governance_execute_unwired` and does not move value. `draft`
+ * is still terminal: a future `opens_at` is never flipped to `open`.
  */
 export const proposalStatusEnum = token.enum('proposal_status', ['draft', 'open', 'passed', 'rejected', 'executed', 'cancelled']);
 
@@ -227,10 +218,7 @@ export const proposals = token.table(
   },
   (t) => [
     /**
-     * The query a tally job would run — open proposals whose window has closed.
-     * No such job exists (§13 socket `token.governance`), so nothing reads this
-     * index today. Kept because the index is right and the job is what is
-     * missing, not the shape.
+     * Close scans open proposals by window end. `closeProposal` is the caller.
      */
     index('proposals_status_closes_idx').on(t.status, t.closesAt),
     index('proposals_kind_idx').on(t.kind),

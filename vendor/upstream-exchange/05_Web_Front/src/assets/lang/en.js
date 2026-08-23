@@ -1456,7 +1456,12 @@ module.exports = {
             yieldWindow: "Window",
             yieldWindowHint: "Window id",
             yieldRun: "Run window",
-            yieldPaid: "Paid"
+            yieldPaid: "Paid",
+            closeTitle: "Close proposal",
+            closeLead: "Tallies an open proposal after its window. Quorum and pass threshold come from env — blank is token.governance_quorum_unset. Grant and listing do not execute (token.governance_execute_unwired). Status is passed or rejected.",
+            proposalId: "Proposal",
+            proposalIdHint: "Proposal id",
+            closeRun: "Close"
         },
         agents: {
             routes: "Routing table",

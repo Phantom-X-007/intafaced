@@ -12,6 +12,7 @@ import { registerInternalStake } from './internal-stake.js';
 import { registerInternalEmissions } from './internal-emissions.js';
 import { registerInternalYield } from './internal-yield.js';
 import { runYieldWindow } from './yield-job.js';
+import { readGovernanceParams } from './governance-close.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -60,10 +61,18 @@ const bus = await JetStreamEventBus.connect({
 // (Doctrine §0.6). This client is the only path.
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 
+const governanceBps = readGovernanceParams({
+  TOKEN_GOVERNANCE_QUORUM_BPS: env.TOKEN_GOVERNANCE_QUORUM_BPS,
+  TOKEN_GOVERNANCE_THRESHOLD_BPS: env.TOKEN_GOVERNANCE_THRESHOLD_BPS,
+});
+
 const token = new TokenService(sql, ledger, bus, {
   assetId: env.TOKEN_ASSET_ID,
   // T-02: buyback + emission from token_params, not code defaults.
   loadParamsFromDb: true,
+  // Blank env stays undefined — close refuses token.governance_quorum_unset.
+  governanceQuorumBps: governanceBps.quorumBps,
+  governanceThresholdBps: governanceBps.thresholdBps,
 });
 
 const yieldJob = {
