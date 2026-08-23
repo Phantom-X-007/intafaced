@@ -2466,10 +2466,12 @@ export const FEATURES = [
     phase: '2',
     status: 'socket',
     dependsOn: ['trade.copy', 'trade.spot'],
-    requires: ['services/svc-trade/src/copy/auto-mirror-place.ts', 'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts'],
-    note:
-      'CORRECTED 2026-08-15 D26-P4-09 — do not read as unwired on tip. Production `svc-trade` `index.ts` wires `placeFollowerOrder` → follower `placeOrder` (IOC market; #1811). Unwired port still refuses by name (never invent fills). ' +
-      'deskStatus.autoMirrorPlace.published tracks the port. Status stays `socket` (not flipped to done): session-key / protocol residual still open. Closing needs that durable allowance, not a fake order id.',
+    requires: [
+      'services/svc-trade/src/copy/auto-mirror-place.ts',
+      'services/svc-trade/src/copy/copy-auto-mirror-place-done-bar.test.ts',
+      'services/svc-trade/src/copy/session-key.ts',
+    ],
+    note: 'E5 2026-08-23 — place port stays wired; durable auto-mirror session-key is the allowance. `copy.grantSessionKey` hashes at rest (sidecar map keyed followId — schema has no column). `copy.placeMirror` requires an unrevoked grant else `trade.copy_session_key_missing`. `copy.killSessionKey` revokes; subsequent place refuses. Envelope expiresAt is not this key. Amounts stay strings. /exchange copy card: grant + kill + place after grant.',
   }),
   f('socket.vr-client', 'VR lobby client', { module: 'academy', phase: '5', status: 'socket', dependsOn: ['academy.spatial'] }),
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {

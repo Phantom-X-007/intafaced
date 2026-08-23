@@ -55,6 +55,7 @@ import {
   stampedPendingFeeShareReserve,
   type CopyFollowStore,
 } from './follow-store.js';
+import { generateCopySessionKey, requireUnrevokedCopySessionKey } from './session-key.js';
 
 /** Settled follower fill fee — `fills.fee_amount`, never a notional×bps invent. */
 export type FollowerFillFee = {
@@ -197,6 +198,7 @@ export class CopyService {
       if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
         throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
       }
+      requireUnrevokedCopySessionKey(follow);
       const prior = await store.getMirroredFill(follow.followId, canonicalizeCopyFillId(input.fillId));
       if (!prior) {
         throw new CopyError(
@@ -358,6 +360,53 @@ export class CopyService {
       // is a period key, not a user-triggered delete.)
       await store.deleteFollow(follow.followId);
       return { followId: follow.followId, revoked: true as const };
+    });
+  }
+
+  /**
+   * Grant a durable auto-mirror session-key. Raw shown once; hash at rest.
+   * Rotates an existing grant. Envelope expiry is not this key.
+   */
+  async grantSessionKey(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(input.followId, async (store) => {
+      const follow = await store.getFollow(input.followId);
+      if (!follow) {
+        throw new CopyError('Follow not found', 'trade.copy_not_following');
+      }
+      if (follow.followerId !== principal.userId) {
+        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+      }
+      const generated = generateCopySessionKey();
+      const next: CopyFollow = {
+        ...follow,
+        sessionKeyHash: generated.hash,
+        sessionKeyPrefix: generated.prefix,
+        sessionKeyRevoked: false,
+      };
+      await store.saveFollow(next);
+      const currentExposure = await store.getExposure(follow.followId);
+      return {
+        ...presentCopyFollow(next, currentExposure),
+        sessionKeyId: generated.id,
+        sessionKey: generated.key,
+      };
+    });
+  }
+
+  /** Revoke the auto-mirror session-key. Follow may remain; subsequent place refuses. */
+  async killSessionKey(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(input.followId, async (store) => {
+      const follow = await store.getFollow(input.followId);
+      if (!follow) {
+        throw new CopyError('Follow not found', 'trade.copy_not_following');
+      }
+      if (follow.followerId !== principal.userId) {
+        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
+      }
+      const next: CopyFollow = { ...follow, sessionKeyRevoked: true };
+      await store.saveFollow(next);
+      const currentExposure = await store.getExposure(follow.followId);
+      return presentCopyFollow(next, currentExposure);
     });
   }
 
