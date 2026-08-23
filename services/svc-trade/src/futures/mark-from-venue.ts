@@ -207,6 +207,7 @@ export function markSourceFromVenuePublicBook(input: {
   const limit = input.depthLimit ?? 5;
   const depthPolicy = input.depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY;
   return markSourceFromBook({
+    provenance: 'venue',
     policy: input.policy,
     async readBook(marketId, authorisesSize) {
       const symbol = input.resolveSymbol(marketId);
@@ -251,6 +252,7 @@ export function markSourceFromMaintainedVenueBook(input: {
 }): QuotedMarkSource {
   const depthPolicy = input.depthPolicy ?? DEFAULT_DEPTH_QUOTE_POLICY;
   return markSourceFromBook({
+    provenance: 'venue',
     policy: input.policy,
     async readBook(marketId, authorisesSize) {
       const symbol = input.resolveSymbol(marketId);

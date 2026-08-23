@@ -12,6 +12,8 @@ import type { FundingRateQuote, FundingRateSource } from './funding-tick.js';
 export interface FundingRateEntry extends FundingRateQuote {
   /** When the rate was observed/published (ms epoch). */
   asOfMs: number;
+  /** Publisher-supplied end of this period. Omitted means the deadline is unknown. */
+  periodEndIso?: string;
 }
 
 export interface FundingRatePolicy {

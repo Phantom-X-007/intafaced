@@ -515,6 +515,7 @@ export function sideDepthNotional(
  */
 export function markSourceFromDepth(readDepth: DepthReader, policy?: MarkPolicy, depthPolicy?: DepthQuotePolicy): QuotedMarkSource {
   return markSourceFromBook({
+    provenance: 'depth',
     policy,
     async readBook(marketId, authorisesSize) {
       const depth = await readDepth(marketId);

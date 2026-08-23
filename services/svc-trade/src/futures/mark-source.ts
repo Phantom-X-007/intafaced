@@ -25,6 +25,7 @@ import {
   DEFAULT_FUTURES_MARK_POLICY,
   acceptableForLiquidation,
   type FuturesQuotedMark,
+  type FuturesMarkProvenance,
   type MarkPolicy,
   type MarkQuality,
 } from './mark-policy.js';
@@ -43,6 +44,7 @@ export interface FuturesMarkQuote {
   asOfMs: number;
   marketId: string;
   symbol?: string;
+  provenance?: FuturesMarkProvenance;
 }
 
 /** Parse a fed quote into the money-path shape. Non-positive / malformed → null. */
@@ -61,6 +63,7 @@ export function toQuotedMark(input: FuturesMarkQuote): FuturesQuotedMark | null 
     price,
     asOf: new Date(input.asOfMs),
     quality: input.quality,
+    ...(input.provenance ? { provenance: input.provenance } : {}),
   };
 }
 
@@ -191,6 +194,8 @@ export function memoryMarkBook(): {
  * Empty book → null (never invent).
  */
 export function markSourceFromBook(input: {
+  /** Physical source label for public provenance. Generic callers may omit it. */
+  provenance?: FuturesMarkProvenance;
   /**
    * Return best bid/ask/last for a market. Any field may be null.
    *
@@ -253,10 +258,24 @@ export function markSourceFromBook(input: {
 
     const mid = midFromBook(book.bestBid, book.bestAsk);
     if (mid != null) {
-      return toQuotedMark({ marketId: args.marketId, symbol: args.symbol, price: mid, quality: 'mid', asOfMs });
+      return toQuotedMark({
+        marketId: args.marketId,
+        symbol: args.symbol,
+        price: mid,
+        quality: 'mid',
+        asOfMs,
+        ...(input.provenance ? { provenance: input.provenance } : {}),
+      });
     }
     if (book.last != null) {
-      return toQuotedMark({ marketId: args.marketId, symbol: args.symbol, price: book.last, quality: 'last', asOfMs });
+      return toQuotedMark({
+        marketId: args.marketId,
+        symbol: args.symbol,
+        price: book.last,
+        quality: 'last',
+        asOfMs,
+        ...(input.provenance ? { provenance: input.provenance } : {}),
+      });
     }
     return null;
   };

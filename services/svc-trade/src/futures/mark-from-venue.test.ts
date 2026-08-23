@@ -663,6 +663,7 @@ describe('markSourceFromMaintainedVenueBook', () => {
     const q = await src.quote!({ marketId: 'm1', at: new Date('2026-08-14T05:00:01.000Z') });
     expect(q && formatAmount(q.price)).toBe('101');
     expect(q?.asOf).toEqual(observedAt);
+    expect(q?.provenance).toBe('venue');
   });
 
   it('withholds the mark while the feed is desynced — never invents from a gap', async () => {
