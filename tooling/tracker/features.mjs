@@ -256,12 +256,12 @@ export const FEATURES = [
     requires: ['services/svc-token'],
     note: 'PR feat/token-yield-job: runYieldWindow({windowId}) reads ledger.balance(houseFees(module, assetId)) for known modules, builds sources, calls distributeRevenue. Job/tRPC yield.runWindow/S2S POST /internal/yield/run-window have NO sources parameter — caller-typed amounts are refused. YIELD_JOB_ENABLED unset/off → TokenError token.yield_job_unset. Token.vue card: window run → paid or token.yield_job_unset. Operator distributeRevenue remains a treasury mutation.',
   }),
-  f('token.buyback', 'Operator-recorded burn (no buyback — nothing is bought)', {
+  f('token.buyback', 'Buyback market-buy job — IOC on internal book then burn', {
     module: 'token',
     phase: '1',
-    status: 'socket',
+    status: 'done',
     requires: ['services/svc-token'],
-    note: 'CORRECTED 2026-08-03, was `done` "live path". There is no buyback. §4.3 specifies "market-buy on internal book -> split to burn address account + rewards engine account. Structural, scheduled." What ships is recordBuyback: tokensBought is operator-typed input (router.ts:346), revenueTotal is an unvalidated jsonb blob from the same caller, and the ONLY ledger movement is a burn debited from the rewards engine (token-service.ts:771-775). No purchase is executed anywhere, so nothing is bought back and no buy pressure exists. buybackBudget(), the function that would size the spend from revenue, has no caller in the repo outside its own tests (economics/buyback.ts:73) — tested dead code. The burn destination is house/burn (packages/ledger-client/src/accounts.ts:155-157), an ordinary operator-owned internal ledger account of kind `available`; "never move again" (recipes/index.ts:857) is a convention, not an enforced invariant. Socket until svc-trade can execute a real market-buy.',
+    note: 'PR feat/token-buyback-market-buy: runBuybackWindow({runId,revenueWindow}) sizes spend via buybackBudget(houseFees), placeIocMarketBuy IOC on the internal book, then recipes.burn of the fill. Job/tRPC buyback.runWindow/S2S POST /internal/buyback/run-window have NO tokensBought parameter — caller-typed fills are refused. Empty book → TokenError token.buyback_book_empty. BUYBACK_JOB_ENABLED unset/off → token.buyback_job_unset. Token.vue card: run → burn from real fill or token.buyback_book_empty. Operator recordBuyback remains a treasury mutation and still refuses unmoved.',
   }),
   f('token.governance', 'IFC-weighted ballots + close tally writes passed|rejected (§4.3)', {
     module: 'token',

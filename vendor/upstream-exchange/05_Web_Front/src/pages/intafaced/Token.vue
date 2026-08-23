@@ -171,6 +171,38 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.token.buybackTitle') }}</h2>
+        <span class="ix-sub">buyback.runWindow</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.token.buybackLead') }}
+      </p>
+      <div class="ix-form-row">
+        <div class="ix-field">
+          <label for="ix-token-buyback-from">{{ $t('intafaced.token.buybackFrom') }}</label>
+          <Input element-id="ix-token-buyback-from" v-model="buybackFrom" :placeholder="$t('intafaced.token.buybackFromHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-token-buyback-to">{{ $t('intafaced.token.buybackTo') }}</label>
+          <Input element-id="ix-token-buyback-to" v-model="buybackTo" :placeholder="$t('intafaced.token.buybackToHint')"></Input>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="bought.busy" :disabled="!canRunBuyback" @click="submitBuyback">
+            {{ $t('intafaced.token.buybackRun') }}
+          </Button>
+        </div>
+      </div>
+      <div v-if="bought.ran" style="margin-top:14px;">
+        <div v-if="bought.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.token.buybackBurned') }}</strong>
+          <div style="margin-top:6px;">{{ bought.data.burned }} · {{ bought.data.tokensBought }}</div>
+        </div>
+        <IxState v-else :loading="bought.busy" :reason="bought.reason" :message="bought.message" endpoint="/api/token/trpc/buyback.runWindow"></IxState>
+      </div>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('intafaced.token.closeTitle') }}</h2>
         <span class="ix-sub">closeProposal</span>
       </div>
@@ -211,9 +243,12 @@
  * live user mutates already on main. yield.runWindow sends `{ windowId }`
  * only — house fee amounts are read by the service. Off/unset is
  * token.yield_job_unset. Paid is the service figure, not a local total.
+ * buyback.runWindow sends `{ runId, revenueWindow }` only — fill comes from
+ * the IOC book, never a typed tokensBought. Empty book is
+ * token.buyback_book_empty. Unset is token.buyback_job_unset.
  * closeProposal writes passed|rejected from owner env bps. Blank env is
  * token.governance_quorum_unset. Grant/listing close does not execute —
- * token.governance_execute_unwired. mintEpoch and buyback are not drawn.
+ * token.governance_execute_unwired. mintEpoch is not drawn.
  *
  * NOTE ON `tier`. If the service still answers `"[object Object]"` it is shown
  * exactly as received. Formatting it here would hide a service bug.
@@ -235,10 +270,13 @@ export default {
       stake: this.emptySection(),
       stakes: this.emptySection(),
       yieldWindow: '',
+      buybackFrom: '',
+      buybackTo: '',
       proposalId: '',
       staked: this.emptyAction(),
       unstaked: this.emptyAction(),
       yielded: this.emptyAction(),
+      bought: this.emptyAction(),
       closed: this.emptyAction()
     };
   },
@@ -251,6 +289,9 @@ export default {
     },
     canRunYield() {
       return typeof this.yieldWindow === 'string' && this.yieldWindow.length > 0;
+    },
+    canRunBuyback() {
+      return typeof this.buybackFrom === 'string' && this.buybackFrom.length > 0 && typeof this.buybackTo === 'string' && this.buybackTo.length > 0;
     },
     canClose() {
       return typeof this.proposalId === 'string' && this.proposalId.length > 0;
@@ -292,6 +333,16 @@ export default {
       if (!this.canRunYield) return;
       if (typeof this.yieldWindow !== 'string') return;
       this.act('yielded', mutate('token', 'yield.runWindow', { windowId: this.yieldWindow }, this.ixToken));
+    },
+    submitBuyback() {
+      var self = this;
+      if (!this.canRunBuyback) return;
+      if (typeof this.buybackFrom !== 'string' || typeof this.buybackTo !== 'string') return;
+      var runId = this.draftId('tokenBuyback');
+      this.act('bought', mutate('token', 'buyback.runWindow', { runId: runId, revenueWindow: { from: this.buybackFrom, to: this.buybackTo } }, this.ixToken)).then(function(res) {
+        if (!res.ok) return;
+        self.clearDraftId('tokenBuyback');
+      });
     },
     submitClose() {
       if (!this.canClose) return;

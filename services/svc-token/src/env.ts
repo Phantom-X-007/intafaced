@@ -62,6 +62,31 @@ const schema = serviceEnvSchema
       YIELD_DISTRIBUTION_CRON_HOURS: z.coerce.number().int().min(1).default(168),
 
       /**
+       * Buyback market-buy job. Default OFF: unset must refuse
+       * `token.buyback_job_unset` rather than invent a fill. Host `.env`
+       * turns it on; do not default true.
+       */
+      BUYBACK_JOB_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** svc-trade — public orderbook + POST /api/v1/orders IOC. */
+      TRADE_URL: z.string().url().default('http://localhost:4004'),
+
+      /**
+       * Internal-book symbol for the IOC market-buy. Blank is refuse-closed
+       * (`token.buyback_job_unset`) — do not default a listing.
+       */
+      BUYBACK_SYMBOL: z.string().default(''),
+
+      /**
+       * Quote asset whose houseFees size the spend. Blank is refuse-closed —
+       * do not default USDT.
+       */
+      BUYBACK_QUOTE_ASSET: z.string().default(''),
+
+      /**
        * Owner quorum for `closeProposal`, in bps of active stake. No default —
        * blank / missing is `token.governance_quorum_unset`. Never invent a bar.
        */

@@ -900,6 +900,24 @@ if (!available) {
   // ── Buyback & burn ────────────────────────────────────────────────────────
 
   describe('buyback and burn', () => {
+    it('settleBuybackFill burns the fill split from the rewards engine', async () => {
+      await ledger.post(recipes.mintEmission({ epoch: 0, assetId: 'IFC', amount: amt('10'), destination: rewardsEngine('IFC') }));
+      const runId = crypto.randomUUID();
+      const result = await token.settleBuybackFill({
+        runId,
+        revenueWindow: { from: new Date('2026-07-01T00:00:00.000Z'), to: new Date('2026-07-08T00:00:00.000Z') },
+        revenueTotal: { USDT: '100' },
+        tokensBought: amt('10'),
+      });
+      expect(result).toEqual({ runId, burned: amt('6'), toRewards: amt('4') });
+      expect(await burnIfC()).toBe(amt('6'));
+      expect(await engineIfC()).toBe(amt('4'));
+      const rows = await sql<Array<{ status: string }>>`SELECT status FROM token.buyback_runs WHERE id = ${runId}`;
+      expect(rows[0]?.status).toBe('settled');
+      expect(bus.emitted('buybackExecuted')).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
     it('settled recordBuyback(tokensBought=1000) moves that many on the ledger (buy into engine + burn toBurn)', async () => {
       await accrueFees('trade', '1000');
       await token.distributeRevenue({ windowId: 'w-bb-delta', sources: [{ module: 'trade', amount: amt('1000') }] });

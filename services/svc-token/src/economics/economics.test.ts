@@ -36,7 +36,7 @@ import {
   stakeWeight,
   unlockDate,
 } from './staking.js';
-import { DEFAULT_BUYBACK_PARAMS, buybackBudget, distributeYield, splitBuyback } from './buyback.js';
+import { DEFAULT_BUYBACK_PARAMS, buybackBudget, distributeYield, sizeIocBuyFromAsks, splitBuyback } from './buyback.js';
 
 const WEI = 1n;
 const D = DEFAULT_EMISSION_PARAMS;
@@ -969,6 +969,28 @@ describe('buyback — budget', () => {
     expect(() => buybackBudget(amt('1'), { ...DEFAULT_BUYBACK_PARAMS, buybackBps: 10_001 })).toThrow(RangeError);
     expect(() => buybackBudget(amt('1'), { ...DEFAULT_BUYBACK_PARAMS, buybackBps: -1 })).toThrow(RangeError);
     expect(() => buybackBudget(amt('1'), { ...DEFAULT_BUYBACK_PARAMS, buybackBps: 50.5 })).toThrow(RangeError);
+  });
+});
+
+describe('buyback — IOC size from real asks', () => {
+  it('empty book is zero — never invents a mid', () => {
+    expect(sizeIocBuyFromAsks([], amt('100'))).toBe(ZERO);
+  });
+
+  it('walks asks until the quote budget is spent, flooring the last take', () => {
+    const qty = sizeIocBuyFromAsks(
+      [
+        { price: amt('2'), qty: amt('10') },
+        { price: amt('4'), qty: amt('10') },
+      ],
+      amt('24'),
+    );
+    // 10 @ 2 = 20 spent, 4 remaining → floor(4/4) = 1
+    expect(qty).toBe(amt('11'));
+  });
+
+  it('budget of one wei below the first ask is zero, not a guessed partial', () => {
+    expect(sizeIocBuyFromAsks([{ price: amt('10'), qty: amt('1') }], WEI)).toBe(ZERO);
   });
 });
 
