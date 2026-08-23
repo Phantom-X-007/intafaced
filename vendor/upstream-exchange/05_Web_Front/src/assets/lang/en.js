@@ -2241,6 +2241,15 @@ module.exports = {
             statusCancelled: "Cancelled",
             statusOpen: "Open"
         },
+        hlplus: {
+            stop: "Stop",
+            stopLimit: "Stop Limit",
+            takeProfit: "Take Profit",
+            triggerPrice: "Trigger price",
+            timeInForce: "Time in force",
+            postOnly: "Post only",
+            reduceOnly: "Reduce only"
+        },
         convert: {
             title: "Convert",
             quantity: "Quantity",
