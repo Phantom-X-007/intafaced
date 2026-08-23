@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.0  
+**Version:** 1.1 — final red-team completeness pass
 **Research cutoff:** 23 August 2026  
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -84,11 +84,14 @@ The venue must work as one coherent system for these users. Designing only for a
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | Discretionary active trader   | Fast amend/cancel, multi-monitor workspaces, reliable hotkeys, rich orders, precise PnL, mobile risk control, and excellent support     |
 | Systematic trader             | Deterministic APIs, idempotency, replay, stable schemas, testnet parity, complete timestamps, bulk actions, and predictable rate limits |
+| Quant researcher/algo owner   | Honest event-level backtests, SDK/studio parity, versioned deployment, approvals, runtime isolation, drift evidence, and kill controls  |
 | Market maker                  | Mass quote, market-maker protection, cancel-on-disconnect, self-trade prevention, queue data, fee/rebate certainty, and portfolio risk  |
 | Options volatility desk       | Full chain, IV surface, Greeks, scenario margin, combos, RFQ, position builder, settlement certainty, and delta/vega controls           |
 | Basis and relative-value desk | Unified spot/perp/future/options risk, borrow and funding history, spreads, cross-instrument execution, and capital offsets             |
 | Fund or asset manager         | Organizations, mandates, pre-trade limits, allocations, NAV/PnL, statements, approvals, custody choice, and audit evidence              |
 | Broker, DMA, or OEMS          | Client hierarchy, tags, allocations, FIX, drop copy, give-up/settlement workflow, commissions, and delegated controls                   |
+| Agency/care-order desk        | Staged instructions, claiming, multi-shift handoff, child-order control, TCA, fill confirmation, and client evidence                    |
+| Agentic trader/operator       | Read/draft/live modes, structured confirmation, least privilege, provenance, injection defense, model audit, and immediate revocation   |
 | Treasury or corporate         | Large-block execution, RFQ privacy, policy approvals, settlement finality, reporting, and named counterparties                          |
 | Risk/compliance operator      | Real-time exposure, kill switches, surveillance, case evidence, rulebook authority, change history, and safe intervention               |
 | Exchange operator             | Capacity headroom, book health, breaks, oracle divergence, liquidation queues, incident playbooks, and reversible controls              |
@@ -107,6 +110,11 @@ This research uses first-party exchange/API documentation and primary regulatory
 | Kraken                       | FIX 4.4, atomic amend with retained queue priority, L3 order data and queue timestamps                                                                            | Queue-aware execution and amend semantics materially improve professional outcomes                                       |
 | Binance                      | Broad REST/WebSocket/FIX access, binary/SBE market data, amend-keep-priority, mature connector/testnet ecosystem                                                  | Protocol breadth, bandwidth efficiency, schema stability, and client tooling are part of the product                     |
 | Hyperliquid                  | Integrated portfolio state, transparent mark/oracle construction, partial liquidation, order-linked TP/SL, account analytics                                      | Risk truth should be visible and composable, not hidden behind unexplained liquidation events                            |
+| Bybit                        | Unified account modes, hedge/one-way positions, 25-leg RFQ, batch option strategies, and dynamic delta hedging                                                    | Position semantics and automated portfolio hedging must be first-class, not implicit order behavior                      |
+| Trading Technologies         | Professional DOM, synthetic spreads, hedge manager, staged/care orders, order passing, algo lifecycle, audit trail, workspace safety, and connection diagnostics  | A pro terminal is also an OMS and operational control plane, not only charts plus an order ticket                        |
+| Interactive Brokers          | Basket/rebalance tools, extensive order/algo semantics, pre-trade what-if, scenario risk, and portfolio drill-down                                                | Portfolio construction, benchmark execution, and hypothetical risk belong in professional workflow                       |
+| CME Globex                   | Cancel-on-disconnect, kill switch, self-match prevention, session-level controls, and deterministic audit fields                                                  | Mature exchange-session controls and explicit cancel reasons are part of the market contract                             |
+| OKX Agent Trade Kit          | Exchange-native MCP/CLI/skills, demo/read-only modes, permission-aware tools, local signing, and explicit AI-risk disclosures                                     | Agentic execution needs its own authority, confirmation, provenance, privacy, and adversarial-safety contract            |
 | Institutional custody market | Third-party custody and off-exchange settlement reduce exchange prefunding and counterparty concentration                                                         | Custody choice, collateral control, settlement cycles, default procedures, and reconciliation require their own mountain |
 | ESMA MiCA Article 76         | Fair/orderly non-discretionary rules, peak capacity, erroneous-order controls, continuity, abuse detection, transparent market data/fees, five-year order records | Market integrity and exchange governance are product requirements, not a later legal wrapper                             |
 | CFTC DCM principles/reviews  | Audit trails, trade and market surveillance, position accountability, discipline, disputes, safeguards, emergency authority                                       | A serious derivatives venue needs enforceable rules, reconstruction, surveillance operations, and tested resilience      |
@@ -126,6 +134,23 @@ The initial review correctly identified portfolio margin, richer APIs, deeper de
 - capital/treasury/default management, not only per-user liquidation logic;
 - data licensing, statements, tax lots, institutional books and records, and evidentiary exports;
 - service model, onboarding, connectivity certification, test environments, and change-management discipline.
+
+### 3.2 What the final red-team pass added
+
+The final pass deliberately searched outside the usual crypto-exchange checklist, using professional derivatives terminals, OMS platforms, prime brokerage, quantitative tooling, and the repository's own tracker. It found another set of real omissions:
+
+- staged/care orders, dealer claiming, order passing, shift handoff, fill confirmation, and client instruction controls;
+- explicit parent/child order trees, synthetic-order ownership, hedge-order repair, and disconnect policy per strategy;
+- custom algo creation, backtesting, paper/shadow execution, approval, signed deployment, sharing, monitoring, rollback, and retirement;
+- transaction-cost analysis against decision/arrival/VWAP/TWAP/close benchmarks, including market impact, opportunity cost, fees, funding, and markouts;
+- advanced professional intent such as pegged/relative, midpoint, minimum-quantity, all-or-none, basket, rebalance, benchmark, and multi-account-per-leg workflows;
+- terminal order-entry lock, live/sim separation, connection/session diagnostics, long-session performance, crash recovery, and prevention of duplicate intent after reconnect;
+- position-mode law—net/one-way versus simultaneous long/short hedge mode—and safe migration between them;
+- automated delta hedging and hedge-failure behavior for volatility portfolios;
+- explicit mapping for the existing quant studio, backtest, SDK, strategy marketplace, copy trading, Convert, and FX capabilities;
+- trade-finance/credit-line buying power and settlement-date exposure, which is distinct from ordinary margin borrowing.
+
+These are incorporated below as additions to existing mountains and five new mountains. They are not decorative terminal features; each changes authority, risk, order state, money, or evidentiary truth.
 
 ---
 
@@ -176,6 +201,8 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M01-R04` Dual control/four-eyes applies to policy changes, key changes, high-risk transfers, and institutional administration.
 - `PTX-M01-R05` Session/API-key attribution survives into every order, fill, ledger posting, configuration change, and report.
 - `PTX-M01-R06` Broker/DMA hierarchies support client tags, commission schedules, segregation, allocation, revocation, and client-visible evidence.
+- `PTX-M01-R07` Trading desks, groups, shifts, execution traders, originators, caretakers, and risk supervisors have explicit visibility and action boundaries.
+- `PTX-M01-R08` Account/order-routing profiles can default by market, product, strategy, leg, and broker but show the resolved account before commitment and never bypass ownership.
 
 **Existing contract:** [`docs/SPEC-SUBACCOUNTS-2026-08-02.md`](docs/SPEC-SUBACCOUNTS-2026-08-02.md).  
 **Current baseline:** sub-account isolation is well specified; organization, mandate, broker, and fine-grained institutional authority need deeper evidence.  
@@ -222,6 +249,10 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M04-R06` Order preview returns buying power/margin, fees, estimated impact, liquidation effect, and rejection reason before commitment.
 - `PTX-M04-R07` Execution reports expose ack, reject, rest, amend, cancel, partial fill, fill, expire, trigger, liquidation, bust/correct, and recovery states.
 - `PTX-M04-R08` Smart order routing states venues, fees, price protection, partial-fill policy, information leakage, and best-execution evidence.
+- `PTX-M04-R09` Professional order attributes include pegged/relative and midpoint behavior where market structure supports them, minimum quantity, all-or-none, display quantity, and benchmark/auction instructions; unsupported intent refuses rather than being silently weakened.
+- `PTX-M04-R10` Every native, venue-simulated, and platform-synthetic order is visibly identified, with its execution location, parent/child tree, persistence owner, failure domain, cancel propagation, and reconnect behavior.
+- `PTX-M04-R11` Basket, portfolio rebalance, scale, accumulate/distribute, arrival-price/implementation-shortfall, and conditional cross-instrument workflows have worst-case pre-trade risk and deterministic partial-failure policy.
+- `PTX-M04-R12` Multi-leg execution models quote legs, hedge legs, working risk, legging state, hedge-repair choices, account per leg, and the consequence of abandoning a parent while children remain live.
 
 **Current baseline:** core order schema and TWAP/VWAP/POV implementations exist; production enablement and advanced lifecycle depth are uneven. Iceberg remains out under current direction unless separately re-decided.  
 **Maturity:** `BUILT` / `PARTIAL` / `SOCKET`.
@@ -255,6 +286,8 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M06-R06` Queue-position and fill-probability tooling is derived honestly from L3/order events where permitted, never implied from L2 alone.
 - `PTX-M06-R07` Data licensing, redistribution, retention, entitlement, privacy, and commercial terms are explicit.
 - `PTX-M06-R08` Internal and external consumers share canonical identifiers and timestamps; adapters cannot silently reinterpret instruments.
+- `PTX-M06-R09` Implied and synthetic markets, spread BBO, auction imbalance, indicative prices, index constituents, and non-actionable reference prices are unmistakably distinguished from executable native liquidity.
+- `PTX-M06-R10` Terminal consumers receive per-stream freshness, entitlement, source, sequence health, clock offset, and last-good-update metadata—not a single misleading global “connected” flag.
 
 **Current baseline:** public book, trades, candles, ticker, funding, and normalized venue data exist; L3, full derivative analytics, data products, and correction/licensing machinery need work.  
 **Maturity:** `BUILT` / `PARTIAL` / `ABSENT`.
@@ -271,6 +304,15 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M07-R06` Risk workspace exposes collateral, utilization, Greeks, scenarios, concentration, liquidation bands, ADL/default indicators, and alerts.
 - `PTX-M07-R07` Mobile is a secure control plane for monitoring, alerts, cancel-all, reduce risk, approvals, and incidents—not a placeholder.
 - `PTX-M07-R08` Accessibility, localization, timezone, number format, precision, error clarity, degraded-state truth, and no-stale-data signaling are first-class.
+- `PTX-M07-R09` A persistent session-status surface distinguishes authentication, trading connection, private state, each market-data subscription, clock health, software/schema version, and degraded dependencies.
+- `PTX-M07-R10` Workspace safety supports lock-all, lock-order-entry, live/simulation banners, configurable confirmations, protected destructive hotkeys, account/color coding, and a globally visible trading-enabled state.
+- `PTX-M07-R11` Browser/desktop crash, sleep, network transition, refresh, tab duplication, and reconnect recover server truth before enabling new intent; client retries cannot duplicate orders.
+- `PTX-M07-R12` The terminal remains responsive through long sessions, dense L3 books, large portfolios, burst fills, many charts, and multi-window use, with explicit render/input/memory budgets and graceful shedding.
+- `PTX-M07-R13` Order and strategy trees show parent, children, hedge orders, venue, account, owner, strategy, working exposure, orphan state, and all causal messages in a persistent trader audit trail.
+- `PTX-M07-R14` Funding, expiry, settlement, listing/delisting, maintenance, governance, economic-event, and exchange-announcement calendars drive configurable in-app, push, email, webhook, and sound alerts with provenance.
+- `PTX-M07-R15` Presets, columns, hotkeys, layouts, alert rules, and order profiles are versioned, portable, shareable under organization permission, and recoverable from a known-good version.
+- `PTX-M07-R16` A trade journal can attach rationale, tags, screenshots, strategy, and review notes without altering authoritative order/fill/PnL history; replay clearly separates historical simulation from live trading.
+- `PTX-M07-R17` Scoped join/cross, reprice-by-tick, cancel, cancel-all, close, flatten, and reverse controls show affected accounts/orders/positions, preserve reduce-only intent, and require protection proportional to blast radius.
 
 **Current baseline:** the vendored terminal contains substantial chart, depth, trade, position, hotkey, and account UI; adapter coverage and institutional workflows lag the visual shell.  
 **Maturity:** `BUILT` / `PARTIAL`.
@@ -287,6 +329,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M08-R06` Borrowing defines inventory, utilization, interest index, caps, recalls, term/open loans, collateral, repayment, defaults, and lender risk.
 - `PTX-M08-R07` Financing includes cross-currency liabilities, interest accrual, auto-borrow/repay with consent, funding, and transparent all-in cost.
 - `PTX-M08-R08` Cross-sub-account or organization offsets are separate consented products and never emerge from aggregate reads.
+- `PTX-M08-R09` Trade-finance and bilateral-credit products define committed/uncommitted lines, eligible use, tenor/settlement date, utilization, high-water or other fee basis, collateral, buying power, withdrawal power, margin interaction, recall, default, and lender concentration.
 
 **Current baseline:** isolated futures and lending primitives exist; multi-collateral and portfolio margin are material missing mountains and may conflict with current v1 isolation if treated as implicit upgrades.  
 **Maturity:** `BUILT` for isolated slice; `ABSENT` / `OWNER-SET` for north-star modes.
@@ -318,6 +361,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M10-R04` Cross-instrument spread and basis execution can be priced, risk-checked, executed, and attributed coherently.
 - `PTX-M10-R05` Funding predicts, accrues, settles, corrects, and reports consistently across UI/API/ledger/statements.
 - `PTX-M10-R06` Contract migrations and emergency settlement cannot strand orders, positions, PnL, or collateral.
+- `PTX-M10-R07` Position mode is explicit: net/one-way versus simultaneous long/short hedge mode, including order-side semantics, reduce/close behavior, margin, reporting, API fields, and migration constraints with open orders/positions.
 
 **Current baseline:** spot and isolated perpetual-style futures are broadly present; dated futures, production depth, and integrated basis workflows need proof.  
 **Maturity:** `BUILT` / `PARTIAL`.
@@ -334,6 +378,8 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M11-R06` Options RFQ supports multi-leg strategies, targeted makers, anonymity rules, quote expiry, hedge leg, block reporting, and allocations.
 - `PTX-M11-R07` Scenario portfolio margin captures spot, vol, skew, basis, time, concentration, liquidity, and minimum floors.
 - `PTX-M11-R08` Exercise/expiry/assignment/fixing jobs are idempotent, recoverable, reconciled, pre-announced, and independently reproducible.
+- `PTX-M11-R09` Automated delta hedging defines target/range, hedge instrument, trigger/cadence, order type, slippage/size caps, interaction with manual orders, residual delta, failure/termination, position persistence, fees, and complete attribution.
+- `PTX-M11-R10` Options risk supports saved/imported what-if portfolios, user-defined spot/vol/time/rate/skew shocks, drill-down by underlying/expiry/strategy, unresolved-position warnings, hedge preview, and export.
 
 **Current baseline:** the tracker names fully collateralized European options, but the settlement-asset law remains a socket and the professional volatility stack is not proven.  
 **Maturity:** `PARTIAL` / `SOCKET` / `ABSENT`.
@@ -349,6 +395,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M12-R05` Block thresholds, delayed/public reporting, surveillance, wash prevention, and order-book interaction follow the rulebook.
 - `PTX-M12-R06` OTC settlement covers escrow/DvP, custody location, confirmation, netting where lawful, fails, disputes, and counterparty limits.
 - `PTX-M12-R07` Voice/chat/manual-assisted execution enters the same audit, risk, fee, compliance, and ledger path as electronic orders.
+- `PTX-M12-R08` Give-up, clearing account, average-price/bunched allocation, affirmation, confirmation, settlement instruction, and allocation-break workflows preserve client, broker, executing, and carrying-account identity.
 
 **Existing contract:** [`docs/SPEC-OTC-RFQ-AND-EARN-2026-08-02.md`](docs/SPEC-OTC-RFQ-AND-EARN-2026-08-02.md).  
 **Current baseline:** firm-quote honesty is specified and RFQ primitives exist; maker routing, multi-leg blocks, allocation, and institutional post-trade depth remain incomplete.  
@@ -521,6 +568,137 @@ These mountains are the stable decomposition. They describe enduring product dom
 **Current baseline:** the one-ledger doctrine and reconciliation tooling are strong foundations; exchange-level solvency transparency, capital planning, and wind-down require explicit scope and evidence.  
 **Maturity:** `BUILT` foundation / `PARTIAL`.
 
+### M24 — Quantitative strategy lifecycle and governed automation
+
+**Outcome:** A professional can research, test, approve, deploy, observe, and retire automated strategies without confusing historical results, simulated intent, or live money.
+
+- `PTX-M24-R01` No-code studio and TypeScript/Python SDK share a typed strategy model for market data, signals, state, timers, orders, positions, risk blocks, parameters, and deterministic versioning.
+- `PTX-M24-R02` Backtests are event-level where required and disclose data provenance, gaps, survivorship, fees, spread, slippage, latency, funding, borrow, liquidity, queue assumptions, and unsupported market mechanics.
+- `PTX-M24-R03` Research enforces in-sample/out-of-sample or walk-forward separation, records every tried variant, resists selection bias, and never presents simulated PnL as live performance.
+- `PTX-M24-R04` Paper and shadow modes consume production-shaped feeds/contracts while making money movement impossible; visual state and credentials cannot be confused with live.
+- `PTX-M24-R05` Deployment binds immutable strategy version, owner, approvers, environment, accounts, instruments, capital, order/position/loss/message limits, schedule, secrets, and expiry.
+- `PTX-M24-R06` Organization policy can require independent review and approval before live use; code/config changes invalidate approval and produce a new version.
+- `PTX-M24-R07` Runtime isolates compute, network, secrets, tenant data, and failure; deterministic recovery states whether strategies and children resume, pause, cancel, or require intervention.
+- `PTX-M24-R08` Live control includes launch, schedule, pause, resume, drain, cancel children, flatten within authority, kill, rollback, and undeploy, with all actions audited.
+- `PTX-M24-R09` Monitoring attributes signals, decisions, rejects, parent/child orders, fills, costs, risk, drift, data health, latency, and exceptions to the exact strategy version.
+- `PTX-M24-R10` Backtest-to-paper-to-live promotion has parity tests, capacity tests, historical stress replay, model/data change gates, canary capital, and automatic rollback conditions.
+- `PTX-M24-R11` Shared strategies separate view, clone, edit, approve, launch, and capital permissions; revocation and creator departure cannot leave unowned live automation.
+- `PTX-M24-R12` Strategy marketplace claims use verified live versus simulated records, net-of-cost performance, drawdown and risk context, version continuity, capacity, conflicts, fees, and delisting/wind-down rules.
+
+**Existing repository surfaces:** `quant.studio`, `quant.backtest`, `quant.sdk`, `quant.marketplace`, `services/svc-quant`, and `packages/quant-honesty`.
+
+**Current baseline:** meaningful refuse-closed studio/backtest/SDK/marketplace foundations exist, but Monte Carlo remains a named residual and a complete institutional approval/deployment/runtime proof requires audit.
+**Maturity:** `BUILT` / `PARTIAL`.
+
+### M25 — Professional OMS, desk workflow, and execution intelligence
+
+**Outcome:** Funds, brokers, agency desks, and multi-shift teams can originate, work, hand off, evaluate, and prove client execution without losing order ownership or queue state.
+
+- `PTX-M25-R01` Staged/care orders distinguish originator, client instruction, execution owner, account, limit, benchmark, urgency, discretion, expiry, and compliance tags from exchange-live child orders.
+- `PTX-M25-R02` Claim, unclaim, assign, pass, accept, reject, and undo-pass maintain visible current ownership, original authority, shared visibility, queue continuity where possible, and immutable history.
+- `PTX-M25-R03` Night-desk/shift handoff transfers monitoring and permitted management without transferring account risk, changing originator identity, or creating an interval of unowned live orders.
+- `PTX-M25-R04` Parent instructions cap the aggregate quantity and price discretion of all children; split, bulk, stitch, combine, stage, hold, release, and manual-fill workflows cannot exceed or worsen the mandate without approval.
+- `PTX-M25-R05` Cancel/change requests, price worsening, manual fills, fill assignment, correction, and client fill confirmation use permissions, approval states, and an irreversible evidentiary trail.
+- `PTX-M25-R06` OMS views unify care, synthetic, algo, RFQ, routed, native, liquidation, and manual workflows while preserving their distinct risk and execution semantics.
+- `PTX-M25-R07` TCA compares decision, arrival, interval VWAP/TWAP, midpoint, close/fixing, quoted spread, and explicit client benchmark using reproducible clocks and market data.
+- `PTX-M25-R08` Cost attribution separates spread capture, market impact, delay/opportunity cost, fees/rebates, funding, borrow, FX, venue/routing, partial fill, and unexecuted residual.
+- `PTX-M25-R09` Post-trade markouts and adverse-selection analysis work by order, parent, strategy, trader, client, venue, maker/taker, route, account, and market regime without implying causality from correlation.
+- `PTX-M25-R10` Best-execution review can reproduce available venues/liquidity, exclusions, route decisions, rejects, amendments, market movement, conflicts, and outcome from retained point-in-time data.
+- `PTX-M25-R11` Pre-trade what-if compares execution method, market impact, risk/margin, capital use, fees, and legging/hedge risk; estimates state confidence and assumptions.
+- `PTX-M25-R12` Desk dashboards expose unattended orders, orphaned children, unconfirmed fills, breached instructions, failed hedges, stale ownership, allocation breaks, and client-reporting obligations.
+
+**Current baseline:** core order/algo/RFQ/broker primitives exist, but a professional care-order OMS, shift handoff, and formal TCA layer were not found.
+**Maturity:** `PARTIAL` / `ABSENT`.
+
+### M26 — Copy, delegated, and distributed strategy execution
+
+**Outcome:** A follower can delegate bounded trade replication while retaining custody, informed consent, independent risk limits, and immediate revocation.
+
+- `PTX-M26-R01` Leader eligibility distinguishes verified live performance from backtest, paper, imported, or self-reported history and discloses tenure, costs, drawdown, leverage, capacity, concentration, and conflicts.
+- `PTX-M26-R02` Followers choose an explicit sub-account and independent allocation, instrument, leverage, loss, drawdown, slippage, concurrency, and concentration limits; leader settings can never widen them.
+- `PTX-M26-R03` Replication defines sizing, rounding, minimums, latency, price divergence, partial fill, unavailable market, insufficient funds, reduce-only, and follower/leader position drift.
+- `PTX-M26-R04` A leader order is intent input, never authority over follower money. Every follower order passes ordinary ownership, compliance, market, balance, margin, and risk checks.
+- `PTX-M26-R05` Start, pause, stop, detach, cancel-open, and flatten choices are explicit; revocation prevents new mirrors immediately without inventing a close action the follower did not choose.
+- `PTX-M26-R06` Fees and leader compensation state basis, crystallization, high-water mark if applicable, refunds/corrections, conflicts, tax records, and ledger recipes; profit-sharing is absent unless separately authorized.
+- `PTX-M26-R07` Leader edits, strategy-version changes, delisting, suspension, compromise, disappearance, capacity exhaustion, and extreme drawdown trigger defined follower protection and communication.
+- `PTX-M26-R08` Anti-gaming controls cover self-trading, affiliate followers, front-running, delayed disclosure, illiquid price marking, volume farming, cherry-picking accounts, and survivorship-biased rankings.
+- `PTX-M26-R09` Followers receive causal mapping from leader intent through their own order/fill/reject/divergence and can export a complete history without exposing other followers.
+- `PTX-M26-R10` Signals, marketplace strategies, API delegates, and future managed execution use the same consent/revocation/risk boundary rather than inventing parallel custody or authority models.
+
+**Existing contract:** [`docs/SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md`](docs/SPEC-SOVEREIGN-ROUTING-AND-COPY-2026-08-01.md).
+
+**Current baseline:** plan/confirmation and bounded mirror foundations exist; complete live replication, leader integrity, drift, capacity, compensation, and abuse proof require audit.
+**Maturity:** `SPECIFIED` / `PARTIAL` / `SOCKET`.
+
+### M27 — Conversion, FX, and adjacent cross-asset execution
+
+**Outcome:** Conversion and FX products reuse the exchange's money, pricing, risk, settlement, and disclosure laws while remaining visibly distinct from an order book.
+
+- `PTX-M27-R01` Convert states whether price is principal quote or routed execution, source/reference price, spread/markup, fees, size, expiry, settlement asset, and refusal reason; it never masquerades as a fee-free market trade.
+- `PTX-M27-R02` Quote acceptance is idempotent and firm until expiry, binds exact input/output decimal amounts, and settles through one balanced ledger recipe with correction policy.
+- `PTX-M27-R03` FX instrument law defines base/terms currency, pip/tick, trade date, value/settlement date, holiday calendar, cutoffs, funding/roll, fixing, and supported fiat settlement rails.
+- `PTX-M27-R04` Spot FX, crypto-fiat book, stablecoin conversion, and derivative FX exposure are separate products with explicit counterparty, custody, leverage, and settlement truth.
+- `PTX-M27-R05` Position/PnL/accounting use configurable reporting currency and preserve original currency amounts, rates, sources, timestamps, and realized/unrealized translation effects.
+- `PTX-M27-R06` Cross-asset SOR and RFQ compare all-in executable outcomes only when custody, credit, settlement date, fees, and finality are comparable; otherwise differences remain visible.
+- `PTX-M27-R07` Bank holiday, rail outage, capital-control, failed settlement, rate-source disruption, negative/zero rate, and currency redenomination have deterministic degraded and wind-down behavior.
+- `PTX-M27-R08` New adjacent products enter through M02 admission and must map every cross-cutting gate before being added; a shared screen or matching engine does not make their legal/economic models interchangeable.
+
+**Current baseline:** tracker and trade-service surfaces exist for Convert and FX, while the forex settlement rail/asset law remains socketed.
+**Maturity:** `BUILT` / `PARTIAL` / `SOCKET` / `EXTERNAL`.
+
+### M28 — Agentic trading and AI decision support
+
+**Outcome:** Professionals can use natural-language and autonomous agents for research and execution without allowing probabilistic model output to become unbounded money authority.
+
+- `PTX-M28-R01` Modes are explicit and visually distinct: research-only, read-only monitoring, draft/preview, confirm-each-action, and bounded autonomous execution; mode changes require authenticated consent.
+- `PTX-M28-R02` Each agent has a named owner, provider/model/version, purpose, environment, expiry, sub-account, tool allowlist, product/instrument scope, and revocable credential that never includes withdrawal unless separately justified and approved.
+- `PTX-M28-R03` Deterministic exchange ownership, compliance, balance, margin, position, price, message-rate, loss, drawdown, and concentration controls remain authoritative after the model chooses an action; model text cannot override them.
+- `PTX-M28-R04` High-consequence actions render canonical structured previews—side, instrument, order type, size, price/trigger, account, leverage, margin, fees, estimated impact, liquidation effect, and expiry—rather than relying on prose confirmation.
+- `PTX-M28-R05` Agent tool calls use idempotency, bounded retries, terminal-state lookup, stale-data limits, sequence-aware recovery, and explicit partial-success handling; conversational repetition cannot duplicate intent.
+- `PTX-M28-R06` Research outputs cite source, observation time, market/data environment, assumptions, uncertainty, and unsupported claims; generated analysis is never represented as exchange fact or professional advice.
+- `PTX-M28-R07` Untrusted web, message, issuer, social, on-chain, document, and tool output is isolated from system policy and executable instructions; prompt injection and data poisoning are continuously tested.
+- `PTX-M28-R08` Complete audit retains user instruction, resolved structured intent, relevant context hashes, model/provider/version, policy decision, tool input/output, confirmations, exchange IDs, fills/rejects, and later revocation without leaking secrets or unrelated private data.
+- `PTX-M28-R09` Agent runtime supports demo, historical evaluation, adversarial evaluation, shadow, canary capital, live monitoring, pause, kill, credential revoke, child-order policy, and safe provider/model degradation.
+- `PTX-M28-R10` Multiple agents and manual traders on one account have conflict, duplicate, netting, priority, and risk-budget rules; one agent cannot unknowingly unwind or amplify another's strategy.
+- `PTX-M28-R11` Private portfolio, order, identity, and strategy data have explicit provider boundaries, retention, residency, training-use prohibition, redaction, deletion constraints, and customer export.
+- `PTX-M28-R12` Agent/skill/tool marketplaces verify publisher, permissions, code/package provenance, version, claims, incidents, revocation, and conflicts; installation never implies trading authority.
+
+**Current baseline:** the platform has an agent service and model-gateway doctrine, but exchange-native delegated agent scopes, structured confirmation, prompt-injection controls, and agent execution evidence require dedicated proof.
+**Maturity:** `PARTIAL` / `ABSENT` / `OWNER-SET`.
+
+### Tracker-to-scope reconciliation
+
+This table is the proof that an existing green row or socket cannot disappear between the delivery tracker and the north-star scope. It is a mapping, not a duplicate status board.
+
+| Tracker capability            | Owning north-star scope                                                                   |
+| ----------------------------- | ----------------------------------------------------------------------------------------- |
+| `trade.spot`                  | M02 instrument lifecycle; M03 matching; M04 orders; M10 spot; M21 fees                    |
+| `trade.convert`               | M27 conversion quote, markup, settlement, and refusal law                                 |
+| `trade.futures`               | M08 collateral/margin; M09 liquidation/default; M10 perpetuals and dated futures          |
+| `trade.options`               | M08 portfolio margin; M11 complete volatility venue                                       |
+| `trade.otc`                   | M12 RFQ/block/OTC/allocation; M15 settlement                                              |
+| `trade.copy`                  | M26 delegated replication; M01 sub-account authority                                      |
+| `trade.forex`                 | M27 FX instrument/settlement law; M15 fiat rails                                          |
+| `trade.algo`, VWAP/POV        | M04 native execution algos; M24 governed strategy lifecycle                               |
+| `trade.ccxt-api`              | M05 connectivity; M19 developer ecosystem; M22 adapter semantics                          |
+| `trade.mm-bot`                | M13 liquidity/maker constitution; M24 runtime governance                                  |
+| `venue.aggregation`           | M22 multi-venue execution and capital truth                                               |
+| `connect.latency-grading`     | M05 timestamps/connectivity; M22 route inputs; M25 TCA                                    |
+| `connect.data-lake`           | M06 history; M14 reporting; M24 backtest provenance; M25 TCA evidence                     |
+| `execution.sor`               | M04 execution intent; M22 venue routing; M25 best-execution proof                         |
+| `execution.arbitrage`         | M22 cross-venue execution; M24 strategy governance                                        |
+| `execution.market-making`     | M13 liquidity/conflicts/MMP; M24 automated runtime                                        |
+| `execution.house-tenant`      | M01 tenant authority; M13 information barriers; M16 surveillance; M23 finance segregation |
+| `web.terminal`                | M07 complete professional workstation; M25 OMS/desk workflow                              |
+| `ws.depth`, `ws.gateway`      | M05 realtime contracts; M06 sequence/freshness; M18 degraded recovery                     |
+| Options/FX settlement sockets | M11 option settlement; M27 FX law; M15 rails/finality                                     |
+| OTC maker/mid sockets         | M12 firm RFQ/routing; M06 reference-price truth; M15 settlement                           |
+| Copy live-mirror socket       | M26 ordinary order/risk checks, divergence, revocation, and causal evidence               |
+| `quant.studio`                | M24 typed no-code strategy authoring and mandatory risk blocks                            |
+| `quant.backtest`              | M24 honest event-level/OOS research and cost assumptions                                  |
+| `quant.sdk`                   | M24 sandboxed code strategy lifecycle; M19 SDK support                                    |
+| `quant.marketplace`           | M24 performance/capacity claims; M26 delegated strategy authority                         |
+
 ---
 
 ## 6. Cross-cutting completeness gates
@@ -545,6 +723,7 @@ A child spec is incomplete until it answers every applicable gate below. “Not 
 16. **Migration:** How are existing accounts, orders, positions, data, and clients moved or preserved without surprise?
 17. **Economics:** Who pays, who earns, what capital is tied up, what loss is possible, and how is every amount accounted?
 18. **Decommission:** How can the capability be halted, rolled back, delisted, closed, or replaced without losing money or records?
+19. **Automation/AI:** Is intent deterministic or probabilistic; what version, data, approval, authority, limit, explanation, adversarial test, and kill path governs it?
 
 ---
 
@@ -559,26 +738,29 @@ The repository is not an empty exchange. It has unusually strong breadth and a s
 - Matching, order book, public/private WebSocket, REST market data, fills, positions, funding, and OHLCV foundations.
 - Isolated derivative risk with partial liquidation, insurance fund, ADL, and funding mechanisms.
 - TWAP/VWAP/POV code paths, venue adapters, latency grading, data lake, SOR, arbitrage, and market-making engines.
+- Quant studio, event-level walk-forward backtesting, TypeScript/Python SDK, marketplace, and refuse-closed performance-claim boundaries.
 - A substantial vendored trading terminal rather than an unnecessary second SPA.
 - Matching journal/replay, telemetry, ledger reconciliation, and refuse-closed doctrine.
 - Existing product specs for sub-account isolation, sovereign routing/copy, and OTC/RFQ honesty.
 
 ### 7.2 Highest-consequence gaps
 
-| Priority class | Gap                                                                     | Why it determines professional adoption                                                       |
-| -------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Existential    | Real sustainable liquidity and market quality                           | A complete UI/API with non-actionable depth is not an exchange professionals can use          |
-| Existential    | Venue-wide financial/custody reconciliation and default proof           | Professionals need to know where assets, liabilities, collateral, and losses sit under stress |
-| Existential    | Market integrity, rulebook, surveillance, and reconstruction            | A venue cannot be fair, licensable, or trusted without enforceable non-discretionary rules    |
-| Critical       | Portfolio/multi-collateral margin                                       | Capital efficiency is a decisive venue-selection variable for multi-product desks             |
-| Critical       | FIX, drop copy, binary/L3 data, deterministic recovery                  | Institutions and high-throughput firms require infrastructure integration, not UI automation  |
-| Critical       | Full options/volatility stack                                           | Listing European options is not equivalent to serving an options desk                         |
-| Critical       | Off-exchange custody and settlement                                     | Large firms actively minimize prefunding and single-venue counterparty exposure               |
-| Critical       | Broker, allocation, mandate, and institutional reporting                | Funds and intermediaries operate legal/client books, not one undifferentiated account         |
-| Critical       | Severe-market resilience and capacity proof                             | The moment of greatest trader need is the moment an unproven exchange fails                   |
-| High           | Risk workstation and trader control plane                               | Pros need scenario understanding and rapid risk reduction, not only balances and positions    |
-| High           | Dated futures, combos, advanced orders, and native execution workflow   | These unlock basis, volatility, hedging, and precise execution strategies                     |
-| High           | Developer certification, testnet parity, change discipline, and service | Integration trust is built before production capital arrives                                  |
+| Priority class | Gap                                                                     | Why it determines professional adoption                                                              |
+| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Existential    | Real sustainable liquidity and market quality                           | A complete UI/API with non-actionable depth is not an exchange professionals can use                 |
+| Existential    | Venue-wide financial/custody reconciliation and default proof           | Professionals need to know where assets, liabilities, collateral, and losses sit under stress        |
+| Existential    | Market integrity, rulebook, surveillance, and reconstruction            | A venue cannot be fair, licensable, or trusted without enforceable non-discretionary rules           |
+| Critical       | Portfolio/multi-collateral margin                                       | Capital efficiency is a decisive venue-selection variable for multi-product desks                    |
+| Critical       | FIX, drop copy, binary/L3 data, deterministic recovery                  | Institutions and high-throughput firms require infrastructure integration, not UI automation         |
+| Critical       | Full options/volatility stack                                           | Listing European options is not equivalent to serving an options desk                                |
+| Critical       | Off-exchange custody and settlement                                     | Large firms actively minimize prefunding and single-venue counterparty exposure                      |
+| Critical       | Broker, allocation, mandate, and institutional reporting                | Funds and intermediaries operate legal/client books, not one undifferentiated account                |
+| Critical       | Severe-market resilience and capacity proof                             | The moment of greatest trader need is the moment an unproven exchange fails                          |
+| High           | Risk workstation and trader control plane                               | Pros need scenario understanding and rapid risk reduction, not only balances and positions           |
+| High           | Dated futures, combos, advanced orders, and native execution workflow   | These unlock basis, volatility, hedging, and precise execution strategies                            |
+| High           | Developer certification, testnet parity, change discipline, and service | Integration trust is built before production capital arrives                                         |
+| High           | Professional OMS, strategy governance, and TCA                          | Funds and desks need controlled delegation, shift continuity, and execution-quality proof            |
+| High           | Terminal operational integrity                                          | Hidden stale feeds, unsafe live/sim state, duplicate intent, or orphan orders make a terminal unsafe |
 
 ### 7.3 The most important interpretation rule
 
@@ -605,6 +787,12 @@ These are legitimate product/risk/legal choices. The code must remain refuse-clo
 13. SLOs, capacity headroom, maintenance windows, RTO/RPO, severe-market modes, and customer compensation policy.
 14. Institutional service tiers, support coverage, certification, connectivity products, and due-diligence disclosures.
 15. Reserve/solvency transparency claims, audit/attestation model, insurance claims, and wind-down funding.
+16. Native versus synthetic advanced orders, position modes, strategy disconnect defaults, and which controls preserve queue priority.
+17. Quant live-deployment eligibility, required approvals, compute/network permissions, capital caps, marketplace claims, and strategy retirement policy.
+18. OMS agency/discretion boundaries, care-order price discretion, manual-fill authority, client confirmation, and best-execution benchmarks.
+19. Copy-leader eligibility, follower caps, compensation model, strategy capacity, ranking methodology, and automatic protection triggers.
+20. Convert principal/agency role, FX products, reporting currency, settlement calendars, credit terms, supported rails, and disruption authority.
+21. Agentic-trading modes, confirmation policy, model/provider eligibility, autonomous limits, data-use terms, tool marketplace, and responsibility disclosures.
 
 Each decision belongs in `docs/DIRECTION-*` when it is an owner product decision or in an ADR when it chooses a bounded technical mechanism. Child specs link the decision; they do not restate or silently broaden it.
 
@@ -636,7 +824,7 @@ This matches the existing hierarchy: doctrine says what is law; direction decide
 
 ### 9.2 Start speccing now—but only at the correct resolution
 
-Yes, start now. Do **not** write endpoint-by-endpoint specifications for all 24 mountains in one pass. The correct next resolution is one bounded product contract per mountain, beginning with the mountains that constrain many others.
+Yes, start now. Do **not** write endpoint-by-endpoint specifications for all 29 mountains in one pass. The correct next resolution is one bounded product contract per mountain, beginning with the mountains that constrain many others.
 
 Every child spec uses this shape:
 
@@ -679,11 +867,11 @@ M00 rulebook/decisions, M01 authority graph, M02 instrument lifecycle, M03 micro
 
 ### Professional core ridge
 
-M04 execution toolkit, M05 connectivity, M06 data, M07 terminal, M08 margin/collateral, M09 risk/default, M13 liquidity.
+M04 execution toolkit, M05 connectivity, M06 data, M07 terminal, M08 margin/collateral, M09 risk/default, M13 liquidity, M25 OMS/TCA.
 
 ### Product-depth ridge
 
-M10 linear products, M11 options, M12 RFQ/block/allocations, M14 analytics/reporting, M15 custody/settlement, M22 execution network.
+M10 linear products, M11 options, M12 RFQ/block/allocations, M14 analytics/reporting, M15 custody/settlement, M22 execution network, M24 quant automation, M26 copy/delegation, M27 conversion/FX, M28 agentic trading.
 
 ### Adoption ridge
 
@@ -707,6 +895,9 @@ This document is complete as a capability taxonomy, not eternally frozen. A quar
 8. **Data/evidence pass:** every decision and state can be reconstructed from common IDs and corrected without rewriting history.
 9. **Operator pass:** every intervention has authority, guardrails, dual control where material, visibility, and post-action reconciliation.
 10. **Exit pass:** every market, account, integration, counterparty, and product can be suspended, migrated, unwound, or retired safely.
+11. **Terminal/desk pass:** every live action survives stale data, reconnect, shift handoff, parent/child failure, accidental input, dense state, and long-session operation.
+12. **Quant/OMS pass:** every automated or delegated decision has a version, owner, approval, limit, benchmark, causal audit, kill path, and truthful performance context.
+13. **Agentic pass:** probabilistic intent, external context, tools, credentials, confirmations, provider changes, privacy, injection, multi-agent conflict, and autonomous loss are threat-modeled separately from deterministic algos.
 
 A newly discovered capability is added here first with a stable `PTX-Mxx-Ryy` ID, then routed through the specification factory. A changed competitor UI alone is not sufficient evidence; durable trader need and system consequence are.
 
@@ -730,6 +921,20 @@ Primary sources used in the August 2026 pass:
 - [ESMA MiCA Article 76](https://www.esma.europa.eu/publications-and-data/interactive-single-rulebook/mica/article-76-operation-trading-platform-crypto) — fair/orderly rules, capacity, continuity, market abuse, transparency, fees, settlement, and records.
 - [ESMA MiCA data standards](https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/markets-crypto-assets-regulation-mica) — standardized machine-readable order-book and transaction records.
 - [CFTC DCM rule-enforcement reviews](https://www.cftc.gov/IndustryOversight/TradingOrganizations/DCMs/dcmruleenf.html) — audit trail, surveillance, participant protection, discipline, disputes, and position accountability.
+- [Trading Technologies Pro features](https://library.tradingtechnologies.com/trade/overview/tt-platform/description-tt-platform/tt-pro-advanced-features/) — DOM, spread/hedge/algo tooling, options, RFQ, audit, and professional workspace breadth.
+- [Trading Technologies care-order management](https://library.tradingtechnologies.com/trade/co-working-with-staged-orders.html) and [order passing](https://library.tradingtechnologies.com/trade/ops-order-passing-overview.html) — staged instructions, claiming, child execution, approvals, shift handoff, and audit continuity.
+- [Trading Technologies algo deployment and approval](https://library.tradingtechnologies.com/adl/adl-overview/adl-basic-concepts/description-adl-basic-concepts/algo-deployment-and-approvals/) — test/deploy/approve/undeploy lifecycle.
+- [Trading Technologies session status](https://library.tradingtechnologies.com/trade/ttd-session-status.html) and [workspace locking](https://library.tradingtechnologies.com/trade/overview/workspace-windows/task-workspace-windows/locking-a-workspace/) — component health and protection against accidental live order entry.
+- [Interactive Brokers professional order types and algos](https://portal.interactivebrokers.com/en/trading/ordertypes.php) — basket, benchmark, conditional, pegged, accumulate/distribute, and simulated-order semantics.
+- [Interactive Brokers Risk Navigator](https://www.ibkrguides.com/traderworkstation/risk-navigator.htm) — portfolio drill-down, what-if, scenario analysis, and basket hedging.
+- [Bybit RFQ](https://www.bybit.com/en/help-center/article/FAQ-Bybit-RFQ) — cross-product multi-leg RFQ, quote comparison, portfolio margin, and all-or-none execution.
+- [Bybit dynamic delta hedge](https://www.bybit.com/en/help-center/article/Dynamic-Delta-Hedge) — automated portfolio-delta control and explicit failure/termination risks.
+- [OKX position modes](https://www.okx.com/en-us/help/trading-settings-faq) — one-way versus simultaneous long/short hedge-mode semantics.
+- [CME Globex session controls](https://www.cmegroup.com/globex/files/iLinkSessionIDPolicy.pdf) — cancel-on-disconnect, kill switch, and self-match prevention at exchange-session scope.
+- [Coinbase Prime trade financing](https://docs.cdp.coinbase.com/prime/concepts/trading/trade-financing) — credit-line buying power, withdrawal power, utilization, fees, and delayed settlement.
+- [OKX Agent Trade Kit](https://www.okx.com/docs-v5/agent_en/) — exchange-native MCP/CLI/skills, demo and read-only modes, least-privilege modules, local credential handling, and explicit non-deterministic AI risk.
+- [OKX API agreement for agent trading](https://www.okx.com/en-us/help/okx-api-agreement) — autonomous-order responsibility, independent pre-trade controls, market-integrity prohibitions, and execution-only boundaries.
+- [OKX AI agent marketplace agreement](https://www.okx.com/en-gb/help/okx-ai-agent-marketplace-user-agreement) — hallucination, untrusted-input/prompt-injection, provider, counterparty, and task-performance risks.
 
 Research observations are requirements inputs, not proof of legal applicability or permission to copy protected implementation details. Applicable counsel and entity decisions remain owner-controlled.
 
@@ -741,14 +946,16 @@ The full-scope phase is complete when:
 
 1. Every professional persona and end-to-end lifecycle maps to at least one mountain.
 2. Every exchange money flow, balance-sheet exposure, external counterparty, failure mode, and operator intervention maps to a requirement.
-3. Every current tracker trade capability maps to this document, including sockets and competitive-depth gaps.
+3. Every current tracker exchange, trade, terminal, execution, venue, and quant capability maps to this document, including sockets and competitive-depth gaps.
 4. Every requirement has a maturity state and evidence or an explicit absence.
 5. Every dangerous owner choice appears in the owner-decision register rather than being silently assumed.
 6. Existing specs are linked and contradictions are surfaced; nothing is re-specced merely because it was hard to find.
-7. Research covers CEX, derivatives/options, prime/institutional, on-chain, custody/settlement, and regulatory market infrastructure.
+7. Research covers CEX, derivatives/options, prime/institutional, on-chain, custody/settlement, professional terminal/OMS, quant and agentic automation, and regulatory market infrastructure.
 8. The specification factory can turn any mountain into a bounded contract without creating a second roadmap.
 
-This version satisfies the capability-taxonomy portion of that bar. The next work is an evidence census—assigning every individual requirement a precise repo link and maturity owner—followed by bounded mountain specs. That census should improve this document, not replace it.
+This version satisfies the capability-taxonomy portion of that bar after three progressively adversarial passes: crypto competitors, regulated market infrastructure/custody, and professional terminal/OMS/quant/prime workflows. No finite document can honestly prove that markets, regulation, or technology will never produce a new requirement. The defensible statement is: **as of the research cutoff, no material professional-exchange domain or existing exchange/quant tracker product remains knowingly unmapped.** The recurring audit in §11 is the control that keeps this true.
+
+The next work is an evidence census—assigning every individual requirement a precise repo link and maturity owner—followed by bounded mountain specs. That census should improve this document, not replace it.
 
 ---
 
@@ -764,5 +971,9 @@ These are the first specs to create because they remove ambiguity for the greate
 6. **Liquidity and maker constitution** — M13 + relevant M21 conflicts/incentives.
 7. **Institutional account, broker, allocation, and reporting model** — M01 + M12 + M14 + M20.
 8. **Venue resilience and service proof** — M18, with owner-set capacity and recovery targets.
+9. **Professional terminal, OMS, and TCA** — M07 + M25, including staged orders, shift handoff, operational state, and execution-quality proof.
+10. **Quant strategy lifecycle and delegated execution** — M24 + M26, reusing existing quant/copy foundations while specifying live governance and money authority.
+11. **Position modes, Convert, and FX product law** — M10 + M27, closing explicit tracker-to-scope gaps.
+12. **Agentic trading authority and safety** — M28, separated from deterministic quant automation and ordinary API-key permissions.
 
 Only after these contracts expose their real dependencies should they be converted into implementation phases, tracker mountains, and service-scoped PRs.
