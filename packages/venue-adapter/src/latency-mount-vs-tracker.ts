@@ -2,7 +2,8 @@
  * D26-P1-X1 — connect.latency-grading mount vs tracker honest gaps.
  *
  * Measurement-not-estimate fabric; execution.sor consumes grades via scoreSorCost.
- * Default thresholds and WS stream lag remain Class X / owner residuals.
+ * Default thresholds remain Class X. WS handshake (`ws-round-trip`) is measured;
+ * depth-delta delivery lag is still unmeasured (quiet book ≠ slow stream).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -18,7 +19,7 @@ export type LatencyProductSymbol = (typeof LATENCY_PRODUCT_SYMBOLS)[number];
 
 export const LATENCY_HONEST_GAPS = [
   'gap.default_thresholds_owner_unruled',
-  'gap.ws_stream_lag_not_measured',
+  'gap.depth_delta_delivery_lag_not_measured',
   'gap.unmeasured_latency_ms_sentinel',
 ] as const;
 

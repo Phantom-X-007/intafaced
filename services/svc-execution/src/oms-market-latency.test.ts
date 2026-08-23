@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { MarketDataAdapter, VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { MarketDataAdapter, RestLatencyGrade } from '@intafaced/venue-contracts';
 import { marketDataAdapterLatency } from './oms-market-latency.js';
 
-function ungraded(over: Partial<VenueLatencyGrade> = {}): VenueLatencyGrade {
+function ungraded(over: Partial<RestLatencyGrade> = {}): RestLatencyGrade {
   return {
     venueId: 'street',
     measurement: 'rest-round-trip',

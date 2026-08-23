@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import type { SorCostTerms, VenueKind } from '@intafaced/venue-adapter';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import {
   evaluateMmKillSwitches,
   isExternalVenueKind,
@@ -13,7 +13,7 @@ import {
   type QuoteExternalMmInput,
 } from './market-making.js';
 
-function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
+function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',
@@ -29,7 +29,7 @@ function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
   };
 }
 
-function ungraded(): VenueLatencyGrade {
+function ungraded(): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',

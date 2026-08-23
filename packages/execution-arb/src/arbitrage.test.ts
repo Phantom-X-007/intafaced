@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { type Amount, formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import type { SorCostTerms, VenueKind } from '@intafaced/venue-adapter';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import {
   CROSS_EXCHANGE_DEFAULT_MID,
   CROSS_EXCHANGE_DEFAULT_SPREAD_BPS,
@@ -19,7 +19,7 @@ import {
 const FRESH_NOW_MS = 1_000_000;
 const OWNER_MAX_QUOTE_AGE_MS = 5_000;
 
-function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
+function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',
@@ -35,7 +35,7 @@ function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
   };
 }
 
-function ungraded(): VenueLatencyGrade {
+function ungraded(): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',

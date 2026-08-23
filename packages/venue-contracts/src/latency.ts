@@ -10,22 +10,31 @@
  * WHAT IS MEASURED, EXACTLY — AND WHAT IS NOT
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * `LatencyMeasurement` is a union of ONE on purpose. "Latency" is three
- * different numbers that differ by orders of magnitude, and a grade that does
- * not say which one it holds is a number a consumer will read as whichever one
- * it wanted:
+ * `LatencyMeasurement` is a closed union on purpose. "Latency" is different
+ * numbers that differ by orders of magnitude, and a grade that does not say
+ * which one it holds is a number a consumer will read as whichever one it
+ * wanted. Adding a member makes every consumer's `switch` fail to compile until
+ * it decides what to do — the opposite of silently changing what an existing
+ * number means.
  *
- *   · **`rest-round-trip`** — what we actually measure. Wall-clock on OUR clock,
- *     from immediately before the HTTP request leaves to the moment the response
- *     body has been received. It includes network flight time both ways, the
- *     venue's own service time, and TLS/socket work the client library does per
- *     call.
+ *   · **`rest-round-trip`** — wall-clock on OUR clock, from immediately before
+ *     the HTTP request leaves to the moment the response body has been received.
+ *     It includes network flight time both ways, the venue's own service time,
+ *     and TLS/socket work the client library does per call.
+ *
+ *   · **`ws-round-trip`** — wall-clock on OUR clock, from immediately before
+ *     `StreamPort.open` is called to the moment the handle is returned (the
+ *     WebSocket handshake completed) or the open throws. A venue can serve REST
+ *     quickly and handshake slowly; that is a different failure, so it is a
+ *     different member. Unopened streams stay `grade: null` — silence is not a
+ *     letter.
  *
  * It does **NOT** measure, and must never be read as:
  *
- *   · **Stream delivery lag** — how long a depth delta takes to reach us over
- *     the WebSocket. A venue can serve REST snapshots quickly and deliver its
- *     stream late; that is a different failure with a different cause.
+ *   · **Stream delivery lag** — how long a depth delta takes to reach us after
+ *     the socket is already open. Handshake time is not that number: a quiet
+ *     book would look like a slow stream. Depth-delta lag needs a venue
+ *     timestamp on the frame, which this package does not invent.
  *   · **Book staleness** — how old the book was when we read it. That is
  *     `observedAt` on the snapshot (see `book.ts`), and #1163 settled that
  *     `observedAt` is when a quote was OBSERVED, not when it was read. A fast
@@ -38,10 +47,6 @@
  *     venue for a delay WE imposed would make our own throttling look like the
  *     venue degrading, and the grade would then argue for routing away from a
  *     venue that did nothing wrong.
- *
- * Adding a second measurement means adding a member to this union, which makes
- * every consumer's `switch` fail to compile until it decides what to do — the
- * opposite of silently changing what an existing number means.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * `grade: null` — AN UNGRADED ADAPTER IS NOT A BAD ADAPTER
@@ -81,8 +86,8 @@
  * the letter is unreachable without passing the check.
  */
 
-/** Which latency this grade is about. A union of one — see the header. */
-export type LatencyMeasurement = 'rest-round-trip';
+/** Which latency this grade is about. A closed union — see the header. */
+export type LatencyMeasurement = 'rest-round-trip' | 'ws-round-trip';
 
 /**
  * The letter scale. Only ever produced from real observations — there is no
@@ -157,6 +162,12 @@ export type GradedVenueLatency = VenueLatencyGrade & {
   readonly errorRateBps: number;
 };
 
+/** REST grade — `MarketDataAdapter.latencyGrade` never silently returns WS. */
+export type RestLatencyGrade = VenueLatencyGrade & { readonly measurement: 'rest-round-trip' };
+
+/** WS handshake grade — `MarketDataAdapter.streamLatencyGrade`. Not depth-delta lag. */
+export type WsLatencyGrade = VenueLatencyGrade & { readonly measurement: 'ws-round-trip' };
+
 /**
  * True when this grade rests on at least one observation.
  *
@@ -168,4 +179,14 @@ export type GradedVenueLatency = VenueLatencyGrade & {
  */
 export function isGraded(grade: VenueLatencyGrade): grade is GradedVenueLatency {
   return grade.grade !== null;
+}
+
+/** Type-narrow to REST. A consumer that cares which latency must check. */
+export function isRestGrade(grade: VenueLatencyGrade): grade is RestLatencyGrade {
+  return grade.measurement === 'rest-round-trip';
+}
+
+/** Type-narrow to WS handshake. Not interchangeable with REST. */
+export function isWsGrade(grade: VenueLatencyGrade): grade is WsLatencyGrade {
+  return grade.measurement === 'ws-round-trip';
 }

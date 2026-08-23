@@ -6,6 +6,7 @@ import { isCrossed, midFromSnapshot, topOfBook } from './book.js';
 import { annualisedFundingRate } from './rates.js';
 import { assertTradeOnly, requireCredentials, type VenueCredentials } from './adapter.js';
 import { VenueCredentialScopeError, VenueCredentialsMissingError } from './errors.js';
+import { isRestGrade, isWsGrade, type LatencyMeasurement, type VenueLatencyGrade } from './latency.js';
 
 describe('decimal discipline — the wire refuses what a number cannot carry', () => {
   it('reads a decimal string exactly', () => {
@@ -249,5 +250,44 @@ describe('credentials — the loud failure', () => {
   it('refuses a withdrawal-capable key on the use path too, not only at load', () => {
     const dangerous: VenueCredentials = { ...tradeOnly, scopes: ['trade', 'universal-transfer'] };
     expect(() => requireCredentials('v', 'placeOrder', dangerous)).toThrow(VenueCredentialScopeError);
+  });
+});
+
+describe('LatencyMeasurement — closed union of REST and WS handshake', () => {
+  const empty = (measurement: LatencyMeasurement): VenueLatencyGrade => ({
+    venueId: 'v',
+    measurement,
+    grade: null,
+    samples: 0,
+    p50Ms: null,
+    p95Ms: null,
+    rejectRateBps: null,
+    errorRateBps: null,
+    staleMs: null,
+    provisional: false,
+    reasons: ['ungraded'],
+  });
+
+  it('names rest-round-trip and ws-round-trip as distinct measurements', () => {
+    const rest = empty('rest-round-trip');
+    const ws = empty('ws-round-trip');
+    expect(isRestGrade(rest)).toBe(true);
+    expect(isWsGrade(rest)).toBe(false);
+    expect(isWsGrade(ws)).toBe(true);
+    expect(isRestGrade(ws)).toBe(false);
+    expect(rest.measurement).not.toBe(ws.measurement);
+  });
+
+  it('forces a consumer switch to name both — a third member is a compile break', () => {
+    const nameOf = (m: LatencyMeasurement): 'rest' | 'ws' => {
+      switch (m) {
+        case 'rest-round-trip':
+          return 'rest';
+        case 'ws-round-trip':
+          return 'ws';
+      }
+    };
+    expect(nameOf('rest-round-trip')).toBe('rest');
+    expect(nameOf('ws-round-trip')).toBe('ws');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import { scoreSorCost, type SorCostTerms } from './cost-model.js';
 import { planRoute } from './router.js';
 import type { LiquiditySource, QuoteRequest, VenueHealth } from './source.js';
@@ -11,7 +11,7 @@ import type { LiquiditySource, QuoteRequest, VenueHealth } from './source.js';
  * preference is not raised. Phase A: existing scoreSorCost + planRoute.
  */
 
-function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
+function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',
@@ -27,7 +27,7 @@ function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
   };
 }
 
-function ungraded(): VenueLatencyGrade {
+function ungraded(): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',

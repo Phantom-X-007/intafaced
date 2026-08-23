@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import type { MarketDataAdapter, VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { MarketDataAdapter, RestLatencyGrade } from '@intafaced/venue-contracts';
 import { liveLatencyScoreMs, scoreSorCost, sorCostTermsFromAdapter, type SorCostTerms } from './cost-model.js';
 import { measuredLatencyMs, routingWeightFromGrade, UNMEASURED_LATENCY_MS } from './fabric/latency.js';
 import { createVenueMarketDataAdapter, PUBLIC_MARKET_DATA_VENUE_IDS } from './fabric/venues/factory.js';
@@ -13,7 +13,7 @@ function costs(): { feeBps: number; expectedImpactBps: number; transferCostBps: 
   return { feeBps: 10, expectedImpactBps: 0, transferCostBps: 0 };
 }
 
-function letterWithoutP95(): VenueLatencyGrade {
+function letterWithoutP95(): RestLatencyGrade {
   return {
     venueId: 'never-succeeded',
     measurement: 'rest-round-trip',

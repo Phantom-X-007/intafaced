@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade } from '@intafaced/venue-contracts';
 import { allInEffectivePrice, scoreSorCost, type SorCostTerms } from './cost-model.js';
 import { routingWeightFromGrade } from './fabric/latency.js';
 import { planRoute } from './router.js';
 import type { LiquiditySource, QuoteRequest, VenueHealth } from './source.js';
 
-function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
+function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',
@@ -22,7 +22,7 @@ function graded(letter: 'A' | 'B' | 'C' | 'D' | 'F' = 'A'): VenueLatencyGrade {
   };
 }
 
-function ungraded(): VenueLatencyGrade {
+function ungraded(): RestLatencyGrade {
   return {
     venueId: 'v',
     measurement: 'rest-round-trip',
