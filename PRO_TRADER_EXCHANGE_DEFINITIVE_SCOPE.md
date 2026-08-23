@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.2 — evidence census and dependency-complete specification lock
+**Version:** 1.3 — PX-S03 contract and matching/execution maturity evidence
 **Research cutoff:** 23 August 2026  
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -235,7 +235,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M03-R08` Capacity tests cover peak messages, hot symbols, cancel storms, liquidation bursts, failover, and recovery with owner-set SLOs.
 
 **Current baseline:** matching, sequenced books, journaling, and recovery primitives exist; atomic amend priority, auctions, comprehensive mass controls, and capacity evidence require audit.  
-**Maturity:** `BUILT` / `PARTIAL`.
+**Maturity:** `BUILT` / `PARTIAL` / `SPECIFIED`.
 
 ### M04 — Order, execution, and algo toolkit
 
@@ -255,7 +255,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M04-R12` Multi-leg execution models quote legs, hedge legs, working risk, legging state, hedge-repair choices, account per leg, and the consequence of abandoning a parent while children remain live.
 
 **Current baseline:** core order schema and TWAP/VWAP/POV implementations exist; production enablement and advanced lifecycle depth are uneven. Iceberg remains out under current direction unless separately re-decided.  
-**Maturity:** `BUILT` / `PARTIAL` / `SOCKET`.
+**Maturity:** `BUILT` / `PARTIAL` / `SPECIFIED` / `SOCKET`.
 
 ### M05 — Professional connectivity and execution APIs
 
@@ -981,6 +981,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `E26` | Routing/copy spec, [`services/svc-trade/src/copy`](services/svc-trade/src/copy), and copy-intelligence services; live mirror/capacity/abuse proof remains incomplete                                                                                                                                                           |
 | `E27` | [`services/svc-trade/src/convert/quote.ts`](services/svc-trade/src/convert/quote.ts) and [`services/svc-trade/src/spot/forex-settlement.ts`](services/svc-trade/src/spot/forex-settlement.ts); FX rail/asset law remains socketed/external                                                                                     |
 | `E28` | [`services/svc-agents/src`](services/svc-agents/src), including guardrails/audits/kill switches; no complete exchange-native agent authority and adversarial-evaluation proof found                                                                                                                                            |
+| `C03` | [`docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md); authoritative M03/M04 contract, not implementation proof                                                                                                                 |
 | `N`   | No reliable repository implementation or bounded contract found in the targeted code, spec, tracker/socket, and Graphify audit                                                                                                                                                                                                 |
 
 ### 13.2 Census by requirement
@@ -995,15 +996,15 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M02-R01`     | `BUILT`     | `E02`; typed instruments/listing gates exist, not full lifecycle proof                                                                                               |
 | `PTX-M02-R02–R06` | `PARTIAL`   | `E02`; admission, status, corporate action, derivative fallback, and delisting governance remain incomplete                                                          |
 | `PTX-M03-R01–R02` | `BUILT`     | `E03`; engine/order/ledger primitives and tests exist, but production capacity proof is separate                                                                     |
-| `PTX-M03-R03`     | `ABSENT`    | `N`; no native atomic-amend queue-priority contract found                                                                                                            |
+| `PTX-M03-R03`     | `SPECIFIED` | `C03`; native atomic-amend queue-priority contract now exists; implementation remains absent                                                                         |
 | `PTX-M03-R04`     | `PARTIAL`   | `E03`; cancel/recovery primitives do not prove all scoped mass controls during partition                                                                             |
-| `PTX-M03-R05`     | `ABSENT`    | `N`; no complete auction family found                                                                                                                                |
+| `PTX-M03-R05`     | `SPECIFIED` | `C03`; deterministic auction-family contract now exists; implementation remains absent                                                                               |
 | `PTX-M03-R06–R08` | `PARTIAL`   | `E03`, `E18`; controls/journal exist, owner SLO and stress evidence do not                                                                                           |
 | `PTX-M04-R01`     | `BUILT`     | `E04`; broad core schema exists, with product-specific gaps preventing `PROVEN`                                                                                      |
 | `PTX-M04-R02–R04` | `PARTIAL`   | `E04`; conditional/bulk/algo slices exist without the entire failure and lifecycle contract                                                                          |
-| `PTX-M04-R05`     | `ABSENT`    | `N`; no native atomic spread-order implementation found                                                                                                              |
+| `PTX-M04-R05`     | `SPECIFIED` | `C03`; multi-leg atomicity/legging contract now exists; native atomic implementation remains absent                                                                  |
 | `PTX-M04-R06–R08` | `PARTIAL`   | `E04`, `E22`; preview/report/SOR foundations exist without complete cost and best-execution proof                                                                    |
-| `PTX-M04-R09–R12` | `ABSENT`    | `N`; advanced professional attributes, semantic provenance, baskets, and leg-repair workflows lack bounded proof                                                     |
+| `PTX-M04-R09–R12` | `SPECIFIED` | `C03`; advanced attributes, provenance, baskets, and leg-repair now have a bounded contract; implementation proof remains absent                                     |
 | `PTX-M05-R01`     | `PARTIAL`   | `E05`; REST/WS breadth is real but not complete/versioned across every product                                                                                       |
 | `PTX-M05-R02–R04` | `ABSENT`    | `N`; no FIX, independent drop copy, or binary institutional feed found                                                                                               |
 | `PTX-M05-R05–R07` | `PARTIAL`   | `E01`, `E05`; limits, keys, and client IDs exist without full institutional contracts                                                                                |
@@ -1148,7 +1149,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
 | `PX-S01` | [`SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md)             | M00, M02, M16        | Entity/jurisdiction and venue-role decisions may remain named sockets; no magnitude invention        |
 | `PX-S02` | [`SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md) | M01, M17             | Reuse sub-account spec; legal roles and privileged-action authority must be explicit                 |
-| `PX-S03` | `SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-<DATE>.md`                                                                                | M03, M04             | `PX-S01` market states/rules and `PX-S02` actor/session attribution                                  |
+| `PX-S03` | [`SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md) | M03, M04             | `PX-S01` market states/rules and `PX-S02` actor/session attribution                                  |
 | `PX-S04` | `SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-<DATE>.md`                                                                               | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
 | `PX-S05` | `SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-<DATE>.md`                                                                                              | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
 | `PX-S06` | `SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-<DATE>.md`                                                                               | M08, M09             | Owner risk methodology/magnitudes may remain sockets; isolated mode must remain distinct             |
