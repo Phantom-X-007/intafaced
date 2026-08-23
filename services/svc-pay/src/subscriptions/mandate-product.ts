@@ -59,6 +59,9 @@ export type PreChargeNotifyStatus = 'attempted' | 'skipped_unwired' | 'failed';
  * Same shape as PayService `afterPaymentEvent`: fire-and-forget outbound.
  * Injected so tests can prove a wired attempt; production may omit it.
  */
+/** Proof returned after svc-notify has written the in-app delivery row. */
+export type PreChargeNotifyDelivery = { readonly inAppDeliveryRowExists: true };
+
 export type SubscriptionPreChargeNotify = (event: {
   readonly type: 'subscription.invoice_upcoming';
   readonly subscriptionId: string;
@@ -68,7 +71,7 @@ export type SubscriptionPreChargeNotify = (event: {
   readonly amount: string;
   readonly assetId: string;
   readonly idempotencyKey: string;
-}) => void | Promise<void>;
+}) => void | boolean | PreChargeNotifyDelivery | Promise<void | boolean | PreChargeNotifyDelivery>;
 
 /**
  * Card auto-pull rides the acquiring commercial socket. The rail port can store
@@ -123,7 +126,9 @@ export type PreChargeNotifyGap = {
 export type PreChargeNotifyRecord = {
   notifyStatus: PreChargeNotifyStatus;
   code: typeof SUBSCRIPTION_NOTIFY_UNWIRED | typeof SUBSCRIPTION_NOTIFY_FAILED | null;
-  notified: false;
+  /** True only when the adapter proved the in-app delivery row exists. */
+  notified: boolean;
+  inAppDeliveryRowExists: boolean;
   socket: typeof PRECHARGE_NOTIFY_SOCKET;
   subscriptionId: string;
   occurrence: number;
@@ -150,11 +155,12 @@ export function preChargeNotifyGap(): PreChargeNotifyGap {
  */
 export function assertPrechargeNotifyUnpublished(gap: {
   notified: boolean;
+  inAppDeliveryRowExists?: boolean;
   status?: string;
   code?: string | null;
   notifyStatus?: string;
 }): void {
-  if (gap.notified !== false || gap.status === 'published' || gap.status === 'delivered') {
+  if ((gap.notified && gap.inAppDeliveryRowExists !== true) || gap.status === 'published' || gap.status === 'delivered') {
     throw new PayError('Pre-charge notify is unpublished — refusing to pretend the payer was notified', PRECHARGE_NOTIFY_UNPUBLISHED);
   }
 }
@@ -196,6 +202,7 @@ export async function recordPreChargeNotifyAttempt(input: {
   const path = normaliseSubscriptionPath(input.path);
   const base = {
     notified: false as const,
+    inAppDeliveryRowExists: false as const,
     socket: PRECHARGE_NOTIFY_SOCKET,
     subscriptionId: input.subscriptionId,
     occurrence: input.occurrence,
@@ -205,7 +212,7 @@ export async function recordPreChargeNotifyAttempt(input: {
     return { ...base, notifyStatus: 'skipped_unwired', code: SUBSCRIPTION_NOTIFY_UNWIRED };
   }
   try {
-    await Promise.resolve(
+    const delivery = await Promise.resolve(
       input.notify({
         type: 'subscription.invoice_upcoming',
         subscriptionId: input.subscriptionId,
@@ -217,7 +224,11 @@ export async function recordPreChargeNotifyAttempt(input: {
         idempotencyKey: input.idempotencyKey,
       }),
     );
-    return { ...base, notifyStatus: 'attempted', code: null };
+    // A callback that merely ran is not delivery. Only explicit proof from the
+    // in-app insert may set notified; out-of-app receipts are irrelevant here.
+    const inAppDeliveryRowExists =
+      delivery === true || (typeof delivery === 'object' && delivery !== null && delivery.inAppDeliveryRowExists === true);
+    return { ...base, notified: inAppDeliveryRowExists, inAppDeliveryRowExists, notifyStatus: 'attempted', code: null };
   } catch {
     return { ...base, notifyStatus: 'failed', code: SUBSCRIPTION_NOTIFY_FAILED };
   }
