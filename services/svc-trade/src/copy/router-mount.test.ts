@@ -140,6 +140,7 @@ describe('trade.copy product mount', () => {
     const router = createTradeRouter(stubTrade(), undefined, makeCopy());
     const status = await router.createCaller(signed()).copy.deskStatus();
     expect(status.feeSharePublished).toBe(false);
+    expect(status.leaderShareBps).toBeNull();
     expect(status.jurisdictionPublished).toBe(false);
     expect(status.residual).toContain('DIRECTION §8');
     expect(status.residual).toContain('D26-P0-02');
@@ -153,6 +154,14 @@ describe('trade.copy product mount', () => {
     expect(status.residuals.jurisdiction).toContain('D26-P0-15');
     expect(status.autoMirrorPlace.published).toBe(false);
     expect(status.autoMirrorPlace.socket).toContain('socket.copy-auto-mirror-place');
+  });
+
+  it('deskStatus publishes the owner-configured leader share as a wire string', async () => {
+    const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
+    const status = await router.createCaller(signed()).copy.deskStatus();
+    expect(status.feeSharePublished).toBe(true);
+    expect(status.leaderShareBps).toBe('5000');
+    expect(typeof status.leaderShareBps).toBe('string');
   });
 
   it('follow refuses blank jurisdiction — never invents allowlist', async () => {

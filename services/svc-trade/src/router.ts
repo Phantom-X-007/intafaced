@@ -717,6 +717,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               killUnfollowReal: true,
             },
             feeSharePublished: false,
+            leaderShareBps: null,
             jurisdictionPublished: false,
             statusLine: 'feeShare=0 residual=D26-P0-02_leader_share_bps jurisdiction=0 residual=D26-P0-15_jurisdiction',
             residual: COPY_LAW_RESIDUAL,
