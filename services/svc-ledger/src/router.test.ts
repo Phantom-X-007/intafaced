@@ -235,8 +235,11 @@ describe('balances — authorisation', () => {
     await expect(caller.balances({ ownerType: 'user', ownerId: USER })).resolves.toHaveLength(1);
   });
 
-  it('serves a portfolio view of own balances with indexer named absent', async () => {
-    const caller = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
+  it('serves a portfolio view of own balances with indexer named absent when chain account is missing', async () => {
+    const fetch = async () => {
+      throw new Error('indexer must not be called without a 0x account');
+    };
+    const caller = createLedgerRouter(stubService(), { url: 'http://indexer.test', fetch }).createCaller(await ctx(['ledger:read']));
     await expect(caller.portfolio({ ownerType: 'user', ownerId: USER })).resolves.toMatchObject({
       ownerId: USER,
       custodial: [{ amount: '100', assetId: 'USDT' }],
@@ -256,6 +259,38 @@ describe('balances — authorisation', () => {
       custodial: [],
       indexer: { status: 'absent', reason: 'indexer.portfolio_positions_unwired' },
     });
+  });
+
+  it('composes present indexer positions as decimal strings when URL + 0x account work', async () => {
+    const chainAccount = '0x1111111111111111111111111111111111111111';
+    const fetch = async () =>
+      new Response(
+        JSON.stringify({
+          result: { data: [{ market: 'IFC-USD', size: '1.5', entryPrice: '30.25' }] },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    const caller = createLedgerRouter(stubService(), { url: 'http://indexer.test', fetch }).createCaller(await ctx(['ledger:read']));
+    const view = await caller.portfolio({ ownerType: 'user', ownerId: USER, chainAccount });
+    expect(view.indexer).toEqual({
+      status: 'present',
+      positions: [{ market: 'IFC-USD', size: '1.5', entryPrice: '30.25' }],
+    });
+    if (view.indexer.status !== 'present') throw new Error('expected present');
+    expect(typeof view.indexer.positions[0]!.size).toBe('string');
+    expect(typeof view.indexer.positions[0]!.entryPrice).toBe('string');
+  });
+
+  it('names unwired when the indexer fetch fails, and never returns a zero chain amount', async () => {
+    const chainAccount = '0x1111111111111111111111111111111111111111';
+    const fetch = async () => {
+      throw new Error('ECONNREFUSED');
+    };
+    const caller = createLedgerRouter(stubService(), { url: 'http://indexer.test', fetch }).createCaller(await ctx(['ledger:read']));
+    const view = await caller.portfolio({ ownerType: 'user', ownerId: USER, chainAccount });
+    expect(view.indexer).toEqual({ status: 'absent', reason: 'indexer.portfolio_positions_unwired' });
+    expect(view.indexer).not.toHaveProperty('amount');
+    expect(JSON.stringify(view.indexer)).not.toMatch(/"0"/);
   });
 
   it('rejects an anonymous caller', async () => {

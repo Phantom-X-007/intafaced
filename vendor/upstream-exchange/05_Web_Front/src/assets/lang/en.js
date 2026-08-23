@@ -1729,8 +1729,12 @@ module.exports = {
             asset: "Asset",
             amount: "Amount",
             empty: "Your custodial ledger book is empty.",
-            indexer: "Chain view",
-            indexerAbsent: "Indexer holdings are absent: read models are not built."
+            indexer: "Chain positions",
+            indexerAbsent: "Chain positions are unwired (indexer.portfolio_positions_unwired). This is not a $0 holding.",
+            indexerEmpty: "No chain positions. Empty is empty — not a $0 holding.",
+            market: "Market",
+            size: "Size",
+            entryPrice: "Entry price"
         },
         tax: {
             title: "Tax export",

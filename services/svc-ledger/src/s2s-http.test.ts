@@ -151,6 +151,42 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(out.indexer).toEqual({ status: 'absent', reason: 'indexer.portfolio_positions_unwired' });
     expect(out.indexer).not.toHaveProperty('amount');
   });
+
+  it('composes present indexer positions over S2S when URL + 0x account work', async () => {
+    const chainAccount = '0x1111111111111111111111111111111111111111';
+    const out = await handleS2sPortfolio(
+      stubService({ balances: async () => [] }),
+      { ownerType: 'user', ownerId: USER, chainAccount },
+      {
+        url: 'http://indexer.test',
+        fetch: async () =>
+          new Response(JSON.stringify({ result: { data: [{ market: 'IFC-USD', size: '2', entryPrice: '11' }] } }), {
+            headers: { 'content-type': 'application/json' },
+          }),
+      },
+    );
+    expect(out.indexer).toEqual({
+      status: 'present',
+      positions: [{ market: 'IFC-USD', size: '2', entryPrice: '11' }],
+    });
+    if (out.indexer.status !== 'present') throw new Error('expected present');
+    expect(typeof out.indexer.positions[0]!.size).toBe('string');
+  });
+
+  it('names unwired on indexer fetch failure, never a zero chain amount', async () => {
+    const out = await handleS2sPortfolio(
+      stubService({ balances: async () => [] }),
+      { ownerType: 'user', ownerId: USER, chainAccount: '0x1111111111111111111111111111111111111111' },
+      {
+        url: 'http://indexer.test',
+        fetch: async () => {
+          throw new Error('ECONNREFUSED');
+        },
+      },
+    );
+    expect(out.indexer).toEqual({ status: 'absent', reason: 'indexer.portfolio_positions_unwired' });
+    expect(JSON.stringify(out.indexer)).not.toMatch(/"0"/);
+  });
 });
 
 /**
