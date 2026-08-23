@@ -894,7 +894,7 @@ export const WIRING_SOCKETS = [
   {
     event: 'projectionUpdated',
     missing: 'publisher',
-    class: 'C',
+    class: 'A',
     reason:
       'Publisher waits on a non-zero INDEXER_VENUE_ADDRESS emitting the existing chain/evm/abi.ts surface (socket.clob-contracts). Zero venue / blank RPC is indexer.stream_unwired on the tRPC stream door — Chain.vue names that refuse. This subject is not a licence to invent a venue ABI. Empty deltas stay empty.',
   },
@@ -971,7 +971,7 @@ export const WIRING_SOCKETS = [
   {
     event: 'projectionUpdated',
     missing: 'subscriber',
-    class: 'C',
+    class: 'A',
     reason:
       'NATS fan-out is unbuilt until a venue emits. svc-ws ingestIndexerStream applies market-data deltas or no-ops indexer.stream_unwired — it does not subscribe this subject. Chain.vue reads tRPC stream and names indexer.stream_unwired. Empty stays empty; no invented book.',
   },

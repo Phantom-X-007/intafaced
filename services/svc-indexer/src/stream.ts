@@ -21,18 +21,20 @@ export type StreamBook = {
   readonly asks: readonly StreamLevel[];
 };
 
-export type StreamDelta = {
-  readonly type: 'delta';
-  readonly marketId: string;
-  readonly fromSequence: number;
-  readonly sequence: number;
-  readonly bids: readonly StreamLevel[];
-  readonly asks: readonly StreamLevel[];
+export type StreamDeltaWire = {
+  type: 'delta';
+  marketId: string;
+  fromSequence: number;
+  sequence: number;
+  bids: [string, string][];
+  asks: [string, string][];
 };
 
-export type StreamAssessment =
-  | { readonly status: 'unwired'; readonly code: typeof INDEXER_STREAM_UNWIRED; readonly deltas: readonly [] }
-  | { readonly status: 'ok'; readonly code: null; readonly deltas: readonly StreamDelta[] };
+export type StreamAssessment = {
+  status: 'unwired' | 'ok';
+  code: typeof INDEXER_STREAM_UNWIRED | null;
+  deltas: StreamDeltaWire[];
+};
 
 export function streamIsWired(venue?: string | null, rpcUrl?: string | null): boolean {
   const v = (venue ?? '').trim().toLowerCase();
@@ -40,7 +42,7 @@ export function streamIsWired(venue?: string | null, rpcUrl?: string | null): bo
   return r.length > 0 && /^0x[0-9a-f]{40}$/.test(v) && v !== ZERO_VENUE;
 }
 
-export function toDepthDelta(book: StreamBook): StreamDelta {
+export function toDepthDelta(book: StreamBook): StreamDeltaWire {
   const sequence = book.sequence < 0 ? 0 : book.sequence;
   const fromSequence = sequence === 0 ? 0 : sequence - 1;
   return {
@@ -48,8 +50,8 @@ export function toDepthDelta(book: StreamBook): StreamDelta {
     marketId: book.market,
     fromSequence,
     sequence,
-    bids: book.bids,
-    asks: book.asks,
+    bids: book.bids.map(([p, q]) => [p, q] as [string, string]),
+    asks: book.asks.map(([p, q]) => [p, q] as [string, string]),
   };
 }
 
