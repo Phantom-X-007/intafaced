@@ -17,6 +17,7 @@ import { ALERT_SWEEP_INTERVAL_MS, AlertService, type AlertSweepReport } from './
 import { runAlertSweepPass } from './alerts/sweep-driver.js';
 import { PostgresAlertStore } from './alerts/store.js';
 import { createTradeHttpMarkSource } from './alerts/trade-http-mark.js';
+import { createDarkWhaleMarkSource, createTradeHttpWhaleMarkSource, parseWhaleFlowAllowlist } from './alerts/whale-mark.js';
 import { ALERT_KIND_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -148,7 +149,17 @@ const darkMarks: MarkSource = {
   },
 };
 const alertMarks: MarkSource = env.TRADE_URL ? createTradeHttpMarkSource({ baseUrl: env.TRADE_URL }) : darkMarks;
-const alerts = new AlertService(new PostgresAlertStore(sql), alertMarks, notify);
+/**
+ * Whale flow mark. Dark unless TRADE_URL and a non-empty allow-list both exist.
+ * Live claims live only inside createTradeHttpWhaleMarkSource — never here.
+ * A live price print is not a volume.
+ */
+const whaleAllow = parseWhaleFlowAllowlist(env.NOTIFY_WHALE_FLOW_ALLOWLIST);
+const whaleMarks: MarkSource =
+  env.TRADE_URL && whaleAllow.length > 0
+    ? createTradeHttpWhaleMarkSource({ baseUrl: env.TRADE_URL, allowlist: whaleAllow })
+    : createDarkWhaleMarkSource();
+const alerts = new AlertService(new PostgresAlertStore(sql), alertMarks, notify, whaleMarks);
 /** Last alert sweep — see the interval below. Null until the first pass completes. */
 let lastAlertSweep: AlertSweepReport | null = null;
 let lastAlertSweepAt: string | null = null;

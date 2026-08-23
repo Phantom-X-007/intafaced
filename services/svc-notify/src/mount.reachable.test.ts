@@ -49,6 +49,7 @@ import { NotificationDispatcher } from './dispatch.js';
 import { AlertService } from './alerts/service.js';
 import { MemoryAlertStore } from './alerts/store.js';
 import type { MarkSource } from './alerts/types.js';
+import { createDarkWhaleMarkSource } from './alerts/whale-mark.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -104,7 +105,7 @@ const running: FastifyInstance[] = [];
  * Same plugin, same prefix, same context factory. Real services (memory-backed
  * stores), not stubs — a stub could satisfy a route that serves nothing useful.
  */
-async function mount(options: { marks?: MarkSource; withAlerts?: boolean } = {}): Promise<Mounted> {
+async function mount(options: { marks?: MarkSource; whaleMarks?: MarkSource; withAlerts?: boolean } = {}): Promise<Mounted> {
   const notifyStore = new MemoryNotifyStore();
   const targets = new MemoryTargetStore();
   const deliveries = new MemoryDeliveryStore();
@@ -113,7 +114,10 @@ async function mount(options: { marks?: MarkSource; withAlerts?: boolean } = {})
   const channels = channelsFromEnv({ NOTIFY_GATEWAY_TIMEOUT_MS: 5_000 });
   const dispatcher = new NotificationDispatcher(channels, targets, deliveries, { maxAttempts: 3, outOfAppEnabled: true });
   const notify = new NotifyService(notifyStore, { fanoutEnabled: true }, { targets, deliveries, channels, dispatcher });
-  const alerts = options.withAlerts === false ? null : new AlertService(new MemoryAlertStore(), options.marks ?? darkMarks, notify);
+  const alerts =
+    options.withAlerts === false
+      ? null
+      : new AlertService(new MemoryAlertStore(), options.marks ?? darkMarks, notify, options.whaleMarks ?? createDarkWhaleMarkSource());
   const appRouter = createNotifyRouter(notify, alerts ?? undefined);
   const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-notify' });
 
@@ -309,32 +313,29 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(listed.items[0]!.status).toBe('active');
   });
 
-  it.each(['whale', 'intelligence'] as const)(
-    'createAlert kind=%s refuses alert.kind_unpublished and never stores a live watch',
-    async (kind) => {
-      const { base, notifyStore } = await mount();
-      const res = await call(base, 'notify.createAlert', {
-        method: 'POST',
-        headers: edgeHeaders(),
-        input: { kind, marketId: 'BTC-USD', direction: 'above', targetPrice: '100' },
-      });
-      expect(res.status).not.toBe(200);
-      const text = JSON.stringify(res.body);
-      expect(text).toContain('alert.kind_unpublished');
-      expect(text).not.toMatch(/"status"\s*:\s*"fired"/);
-      expect(await notifyStore.unreadCount(USER)).toBe(0);
+  it('createAlert kind=intelligence refuses alert.kind_unpublished and never stores a live watch', async () => {
+    const { base, notifyStore } = await mount();
+    const res = await call(base, 'notify.createAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { kind: 'intelligence', marketId: 'BTC-USD', direction: 'above', targetPrice: '100' },
+    });
+    expect(res.status).not.toBe(200);
+    const text = JSON.stringify(res.body);
+    expect(text).toContain('alert.kind_unpublished');
+    expect(text).not.toMatch(/"status"\s*:\s*"fired"/);
+    expect(await notifyStore.unreadCount(USER)).toBe(0);
 
-      const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
-      expect(data(listed.body)).toMatchObject({ items: [] });
-    },
-  );
+    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    expect(data(listed.body)).toMatchObject({ items: [] });
+  });
 
-  it.each(['whale', 'intelligence'] as const)('evaluateAlert kind=%s refuses alert.kind_unpublished and never fires', async (kind) => {
+  it('evaluateAlert kind=intelligence refuses alert.kind_unpublished and never fires', async () => {
     const { base, notifyStore } = await mount();
     const evaluated = await call(base, 'notify.evaluateAlert', {
       method: 'POST',
       headers: edgeHeaders(),
-      input: { kind },
+      input: { kind: 'intelligence' },
     });
     expect(evaluated.status).toBe(200);
     const body = data(evaluated.body) as {
@@ -345,6 +346,77 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.kind_unpublished' });
     expect(body.outcome.kind).not.toBe('fire');
     expect(await notifyStore.unreadCount(USER)).toBe(0);
+  });
+
+  it('createAlert kind=whale stores a watch; dark evaluate refuses alerts.whale_mark_dark and never fires', async () => {
+    const { base, notifyStore } = await mount();
+    const res = await call(base, 'notify.createAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { kind: 'whale', marketId: 'BTC-USD', direction: 'above', targetPrice: '1000' },
+    });
+    expect(res.status).toBe(200);
+    const created = data(res.body) as {
+      alert: { id: string; kind: string; status: string; targetPrice: string };
+      evaluation: { markSource: string; canFire: boolean; code: string | null };
+    };
+    expect(created.alert.kind).toBe('whale');
+    expect(created.alert.status).toBe('active');
+    expect(created.alert.targetPrice).toBe('1000');
+    expect(created.evaluation).toEqual({ markSource: 'dark', canFire: false, code: 'alerts.whale_mark_dark' });
+
+    const evaluated = await call(base, 'notify.evaluateAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { id: created.alert.id },
+    });
+    expect(evaluated.status).toBe(200);
+    const body = data(evaluated.body) as {
+      alert: { status: string; kind: string } | null;
+      outcome: { kind: string; code?: string };
+    };
+    expect(body.alert?.kind).toBe('whale');
+    expect(body.alert?.status).toBe('active');
+    expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alerts.whale_mark_dark' });
+    expect(body.outcome.kind).not.toBe('fire');
+    expect(await notifyStore.unreadCount(USER)).toBe(0);
+
+    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    const listedBody = data(listed.body) as { items: readonly { kind: string; status: string }[] };
+    expect(listedBody.items).toHaveLength(1);
+    expect(listedBody.items[0]).toMatchObject({ kind: 'whale', status: 'active' });
+  });
+
+  it('createAlert kind=whale fires when a live whale flow mark is injected', async () => {
+    const liveWhale: MarkSource = {
+      kind: 'live',
+      async quote() {
+        return { kind: 'ok', price: '2500', at: new Date() };
+      },
+    };
+    const { base, notifyStore } = await mount({ whaleMarks: liveWhale });
+    const res = await call(base, 'notify.createAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { kind: 'whale', marketId: 'BTC-USD', direction: 'above', targetPrice: '1000' },
+    });
+    expect(res.status).toBe(200);
+    const created = data(res.body) as { alert: { id: string }; evaluation: { canFire: boolean } };
+    expect(created.evaluation.canFire).toBe(true);
+
+    const evaluated = await call(base, 'notify.evaluateAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { id: created.alert.id },
+    });
+    expect(evaluated.status).toBe(200);
+    const body = data(evaluated.body) as {
+      outcome: { kind: string; markPrice?: string };
+      alert: { status: string } | null;
+    };
+    expect(body.outcome).toEqual({ kind: 'fire', markPrice: '2500' });
+    expect(body.alert?.status).toBe('fired');
+    expect(await notifyStore.unreadCount(USER)).toBe(1);
   });
 
   it.each(['funding', 'liquidation_proximity'] as const)(

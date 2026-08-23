@@ -149,6 +149,14 @@ const schema = serviceEnvSchema
        * empty or trade is down.
        */
       TRADE_URL: blankAsAbsent(z.string().url().optional()),
+
+      /**
+       * Whale-flow allow-list: comma-separated market ids that may quote a
+       * sourced ticker volume. Blank / unset → dark whale mark
+       * (`alerts.whale_mark_dark`). Membership is not a flow number — TRADE_URL
+       * must also be set, and the ticker must publish quoteVolume/baseVolume.
+       */
+      NOTIFY_WHALE_FLOW_ALLOWLIST: blankAsAbsent(z.string().optional()),
     }),
   )
   .superRefine((parsed, ctx) => {

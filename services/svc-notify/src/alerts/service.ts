@@ -11,8 +11,14 @@
 
 import type { CreateResult, NotifyService } from '../notify-service.js';
 import { acceptAlertMark, outOfAppRequiredRefusal } from './accepted-mark.js';
-import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind as unpublishedKindOutcome } from './evaluate.js';
+import {
+  evaluatePortfolioAlert,
+  evaluatePriceAlert,
+  evaluateUnpublishedKind as unpublishedKindOutcome,
+  evaluateWhaleAlert,
+} from './evaluate.js';
 import type { AlertStore } from './store.js';
+import { createDarkWhaleMarkSource } from './whale-mark.js';
 import {
   AlertKindUnpublishedError,
   AlertPortfolioUnpublishedError,
@@ -50,6 +56,12 @@ const FIRE_COPY: Record<
     bodyKey: 'notify.alert.liquidation_proximity.crossed.body',
     sourceSubject: 'intafaced.notify.alert.liquidation_proximity.crossed',
   },
+  whale: {
+    kind: 'alert.whale.crossed',
+    titleKey: 'notify.alert.whale.crossed.title',
+    bodyKey: 'notify.alert.whale.crossed.body',
+    sourceSubject: 'intafaced.notify.alert.whale.crossed',
+  },
 };
 
 /**
@@ -82,7 +94,10 @@ export type AlertEvaluationStatus = {
    */
   readonly canFire: boolean;
   /** The refusal every evaluation would record right now, or null. */
-  readonly code: Extract<AlertRefuseCode, 'alert.price_unavailable' | 'channel.not_configured' | 'channel.disabled'> | null;
+  readonly code: Extract<
+    AlertRefuseCode,
+    'alert.price_unavailable' | 'alerts.whale_mark_dark' | 'channel.not_configured' | 'channel.disabled'
+  > | null;
 };
 
 /** One pass of the sweep, in the shape `/ready` reports and a test asserts. */
@@ -120,6 +135,7 @@ export class AlertService {
     private readonly store: AlertStore,
     private readonly marks: MarkSource,
     private readonly notify: NotifyService,
+    private readonly whaleMarks: MarkSource = createDarkWhaleMarkSource(),
   ) {}
 
   create(input: CreatePriceAlertInput): Promise<PriceAlert> {
@@ -150,8 +166,8 @@ export class AlertService {
   }
 
   /**
-   * Same refuse as create — no invented whale/intelligence series.
-   * Funding and liquidation-proximity evaluate as stored sourced-mark watches.
+   * Same refuse as create — no invented intelligence series.
+   * Whale evaluates as a stored sourced-mark watch against the whale mark.
    */
   evaluateUnpublishedKind(kind: UnpublishedAlertKind): AlertEvalOutcome {
     return unpublishedKindOutcome(kind);
@@ -176,6 +192,32 @@ export class AlertService {
         markSource: 'dark',
         canFire: false,
         code: 'alert.price_unavailable',
+      };
+    }
+    const ooa = this.namedOutOfAppRefusal();
+    if (ooa) {
+      return {
+        markSource: 'live',
+        canFire: false,
+        code: ooa.code,
+      };
+    }
+    return { markSource: 'live', canFire: true, code: null };
+  }
+
+  /**
+   * Whether a whale watch this deployment holds can fire at all.
+   *
+   * Separate from `evaluationStatus()` on purpose: a live price print is not a
+   * flow. Dark whale wiring refuses `alerts.whale_mark_dark` even when the
+   * price mark is live.
+   */
+  whaleEvaluationStatus(): AlertEvaluationStatus {
+    if (this.whaleMarks.kind !== 'live') {
+      return {
+        markSource: 'dark',
+        canFire: false,
+        code: 'alerts.whale_mark_dark',
       };
     }
     const ooa = this.namedOutOfAppRefusal();
@@ -258,11 +300,12 @@ export class AlertService {
    */
   async evaluateMarket(marketId: string, at: Date = new Date()): Promise<EvaluateMarketReport> {
     const quote = await this.sourcedQuote(marketId, at);
+    const whaleQuote = await this.sourcedWhaleQuote(marketId, at);
     const actives = await this.store.listActiveByMarket(marketId);
     const results: EvaluateMarketReport['results'][number][] = [];
 
     for (const alert of actives) {
-      const applied = await this.applyEvaluation(alert, quote, at);
+      const applied = await this.applyEvaluation(alert, alert.kind === 'whale' ? whaleQuote : quote, at);
       results.push({
         alertId: alert.id,
         userId: alert.userId,
@@ -283,17 +326,17 @@ export class AlertService {
    * the watch fired — even when the port quotes a last (invented live).
    */
   async evaluateAlert(userId: string, alertId: string, at: Date = new Date()): Promise<EvaluateAlertReport> {
-    const evaluation = this.evaluationStatus();
     const alert = await this.store.get(userId, alertId);
     if (!alert) {
       return {
         alert: null,
         outcome: { kind: 'refuse', code: 'alert.not_active', detail: 'alert.not_found' },
-        evaluation,
+        evaluation: this.evaluationStatus(),
         notificationId: null,
       };
     }
-    const quote = await this.sourcedQuote(alert.marketId, at);
+    const evaluation = alert.kind === 'whale' ? this.whaleEvaluationStatus() : this.evaluationStatus();
+    const quote = alert.kind === 'whale' ? await this.sourcedWhaleQuote(alert.marketId, at) : await this.sourcedQuote(alert.marketId, at);
     const applied = await this.applyEvaluation(alert, quote, at);
     const refreshed = (await this.store.get(userId, alertId)) ?? alert;
     return {
@@ -309,13 +352,18 @@ export class AlertService {
     return acceptAlertMark(this.marks, raw, at);
   }
 
+  private async sourcedWhaleQuote(marketId: string, at: Date): Promise<MarkQuote> {
+    const raw = await this.whaleMarks.quote(marketId, at);
+    return acceptAlertMark(this.whaleMarks, raw, at);
+  }
+
   private async applyEvaluation(
     alert: PriceAlert,
     quote: MarkQuote,
     at: Date,
   ): Promise<{ outcome: AlertEvalOutcome; notificationId: string | null }> {
     const ooa = this.namedOutOfAppRefusal();
-    let outcome = evaluatePriceAlert(alert, quote);
+    let outcome = alert.kind === 'whale' ? evaluateWhaleAlert(alert, quote) : evaluatePriceAlert(alert, quote);
     if (outcome.kind === 'fire' && ooa) {
       outcome = { kind: 'refuse', code: ooa.code, detail: ooa.detail };
     }

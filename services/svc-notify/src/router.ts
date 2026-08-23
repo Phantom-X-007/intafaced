@@ -192,7 +192,7 @@ const priceAlertOutput = z.object({
 const alertEvaluationOutput = z.object({
   markSource: z.enum(['dark', 'live']),
   canFire: z.boolean(),
-  code: z.enum(['alert.price_unavailable', 'channel.not_configured', 'channel.disabled']).nullable(),
+  code: z.enum(['alert.price_unavailable', 'alerts.whale_mark_dark', 'channel.not_configured', 'channel.disabled']).nullable(),
 });
 
 /** The answer when this deployment has no alert service at all. */
@@ -457,7 +457,8 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         }),
 
       /**
-       * v22.alerts — sourced-mark watchlists (price, funding, liquidation proximity).
+       * v22.alerts — sourced-mark watchlists (price, funding, liquidation
+       * proximity, whale flow).
        *
        * The user surface is create / list / cancel / evaluate. Sweep still
        * runs (`AlertService.evaluateDueAlerts` in `index.ts`). `evaluateAlert`
@@ -467,7 +468,8 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * procedure: a client cannot render somebody's watchlist without also
        * receiving the fact that no watch on it can currently cross.
        *
-       * Whale / intelligence stay unpublished — create throws, evaluate refuses.
+       * Whale create stores; evaluate refuses `alerts.whale_mark_dark` without
+       * a flow mark (a live price is not a volume). Intelligence stays unpublished.
        */
       alerts: scopedProcedure('notify:read', { module: 'notify' })
         .output(z.object({ items: z.array(priceAlertOutput), evaluation: alertEvaluationOutput }))
@@ -559,7 +561,10 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
             direction: input.direction,
             targetPrice: input.targetPrice,
           });
-          return { alert: priceAlertToWire(row), evaluation: alerts.evaluationStatus() };
+          return {
+            alert: priceAlertToWire(row),
+            evaluation: kind === 'whale' ? alerts.whaleEvaluationStatus() : alerts.evaluationStatus(),
+          };
         }),
 
       cancelAlert: scopedProcedure('notify:write', { module: 'notify' })
@@ -598,6 +603,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
                   'alert.invalid_price',
                   'alert.portfolio_view_unpublished',
                   'alert.kind_unpublished',
+                  'alerts.whale_mark_dark',
                   'channel.not_configured',
                   'channel.disabled',
                 ]),

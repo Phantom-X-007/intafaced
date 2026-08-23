@@ -1,33 +1,34 @@
 /**
  * v22.alerts types — sourced-mark watches plus named unpublished kinds.
  *
- * Law §31 / tracker `v22.alerts`: condition evaluation against a price the
+ * Law §31 / tracker `v22.alerts`: condition evaluation against a mark the
  * platform can source. Price, funding, and liquidation-proximity watches all
- * compare a user-named decimal target to that same mark. Notify never invents
- * a funding-rate series or a liquidation-distance book — dark / unpublished
- * marks refuse, never fire.
+ * compare a user-named decimal target to the price mark. Whale watches compare
+ * that target to a separate flow mark — never the price print, never an
+ * invented volume. Dark / unpublished marks refuse, never fire.
  *
- * Whale flow and intelligence tiers stay unpublished (no sourced series).
- * Portfolio stays refuse-closed (`alert.portfolio_view_unpublished`) until
- * ledger-client publishes a view — notify never invents a second book
- * (Doctrine §0.6) and never fires on silence.
+ * Intelligence stays unpublished (no sourced series). Portfolio stays
+ * refuse-closed (`alert.portfolio_view_unpublished`) until ledger-client
+ * publishes a view — notify never invents a second book (Doctrine §0.6) and
+ * never fires on silence.
  *
- * Money discipline: every price is a decimal *string*. Nothing is a `number`.
- * The portfolio refuse arm carries zero money fields.
+ * Money discipline: every price / flow is a decimal *string*. Nothing is a
+ * `number`. The portfolio refuse arm carries zero money fields.
  */
 
-/** Watches evaluated against the injected mark source. */
-export type SourcedAlertKind = 'price' | 'funding' | 'liquidation_proximity';
+/** Watches evaluated against an injected mark source. */
+export type SourcedAlertKind = 'price' | 'funding' | 'liquidation_proximity' | 'whale';
 
-export const SOURCED_ALERT_KINDS = ['price', 'funding', 'liquidation_proximity'] as const satisfies readonly SourcedAlertKind[];
+export const SOURCED_ALERT_KINDS = ['price', 'funding', 'liquidation_proximity', 'whale'] as const satisfies readonly SourcedAlertKind[];
 
 /**
  * Kinds with no sourced series. Create never stores; evaluate never fires.
- * Whale / intelligence stay here. Funding and liquidation-proximity do not.
+ * Intelligence stays here. Whale does not — it evaluates against the whale
+ * mark or refuses `alerts.whale_mark_dark`.
  */
-export type UnpublishedAlertKind = 'whale' | 'intelligence';
+export type UnpublishedAlertKind = 'intelligence';
 
-export const UNPUBLISHED_ALERT_KINDS = ['whale', 'intelligence'] as const satisfies readonly UnpublishedAlertKind[];
+export const UNPUBLISHED_ALERT_KINDS = ['intelligence'] as const satisfies readonly UnpublishedAlertKind[];
 
 export type AlertKind = SourcedAlertKind | 'portfolio' | UnpublishedAlertKind;
 
@@ -40,6 +41,12 @@ export const ALERT_PORTFOLIO_VIEW_UNPUBLISHED = 'alert.portfolio_view_unpublishe
 
 /** Stable refuse for kinds with no sourced series. Never fire, never store. */
 export const ALERT_KIND_UNPUBLISHED = 'alert.kind_unpublished' as const;
+
+/**
+ * Whale flow mark is dark / missing. Never fire, never invent a volume.
+ * Distinct from `alert.price_unavailable` — a live price print is not a flow.
+ */
+export const ALERTS_WHALE_MARK_DARK = 'alerts.whale_mark_dark' as const;
 
 export class AlertKindUnpublishedError extends Error {
   readonly code: typeof ALERT_KIND_UNPUBLISHED = ALERT_KIND_UNPUBLISHED;
@@ -143,6 +150,7 @@ export type AlertRefuseCode =
   | 'alert.invalid_price'
   | 'alert.portfolio_view_unpublished'
   | 'alert.kind_unpublished'
+  | 'alerts.whale_mark_dark'
   | 'channel.not_configured'
   | 'channel.disabled';
 

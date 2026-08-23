@@ -176,6 +176,8 @@ export const en = {
   'notify.alert.liquidation_proximity.crossed.title': 'Liquidation-proximity watch',
   'notify.alert.liquidation_proximity.crossed.body':
     'Liquidation-proximity watch on {marketId} crossed {direction} {targetPrice} (mark {markPrice}).',
+  'notify.alert.whale.crossed.title': 'Whale-flow watch',
+  'notify.alert.whale.crossed.body': 'Whale-flow watch on {marketId} crossed {direction} {targetPrice} (flow {markPrice}).',
 
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',
