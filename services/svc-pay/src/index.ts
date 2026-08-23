@@ -8,7 +8,7 @@ import { BankPayoutAbsentAdapter } from './rails/bank-payout.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
 import { CryptoNativeAdapter } from './rails/crypto-native.js';
 import { RailRegistry } from './rails/registry.js';
-import { CryptoChainWatcher } from './rails/chain-watcher.js';
+import { CryptoChainWatcher, PostgresChainWatcherCursorStore } from './rails/chain-watcher.js';
 import { EvmLiveChain } from './rails/evm-chain.js';
 import { PostgresBroadcastStore } from './rails/broadcast-store.js';
 import { PostgresRestIdempotencyStore } from './rest-idempotency.js';
@@ -104,6 +104,7 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
  * Unconfigured/Memory chain paths ignore the store.
  */
 const broadcasts = new PostgresBroadcastStore(sql);
+const watcherCursors = new PostgresChainWatcherCursorStore(sql);
 const chain = defaultChainFor(process.env, broadcasts);
 
 const cryptoRail = new CryptoNativeAdapter({
@@ -551,6 +552,7 @@ if (chain instanceof EvmLiveChain && env.PAY_CRYPTO_WATCHER_ENABLED === 'true') 
     secret: env.PAY_CRYPTO_WEBHOOK_SECRET,
     webhookUrl: `http://127.0.0.1:${env.HTTP_PORT}/webhooks/crypto-native`,
     pollIntervalMs: env.PAY_CRYPTO_WATCHER_INTERVAL_MS,
+    cursorStore: watcherCursors,
     log: (msg, extra) => app.log.info(extra ?? {}, msg),
   });
   watcher.start();
