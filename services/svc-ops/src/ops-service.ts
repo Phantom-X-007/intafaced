@@ -9,6 +9,8 @@ import {
   OPS_CONTACT_REQUIRED,
   OPS_FUNDRAISING_AMOUNT_INVALID,
   OPS_FUNDRAISING_CHAIN_UNWIRED,
+  OPS_STRUCTURED_OWNER_PRICE_REQUIRED,
+  OPS_STRUCTURED_PRICE_FORBIDDEN,
   OPS_IDENTITY_UNWIRED,
   OPS_PAYROLL_INVENT_FORBIDDEN,
   OPS_PROJECT_REQUIRED,
@@ -57,6 +59,12 @@ export type Milestone = {
   readonly id: string;
   readonly raiseId: string;
   readonly label: string;
+};
+
+export type StructuredRecord = {
+  readonly id: string;
+  readonly name: string;
+  readonly legLabels: readonly string[];
 };
 
 export type SourcedRows<T> = {
@@ -154,6 +162,7 @@ export class OpsService {
   private readonly projects = new Map<string, Project>();
   private readonly raises = new Map<string, Raise>();
   private readonly milestones = new Map<string, Milestone>();
+  private readonly structured = new Map<string, StructuredRecord>();
   private readonly approvals = new Map<string, CustodyApproval>();
 
   constructor(deps: OpsServiceDeps = {}) {
@@ -295,6 +304,32 @@ export class OpsService {
     return { milestones: raiseId.length > 0 ? rows.filter((m) => m.raiseId === raiseId) : rows };
   }
 
+  listStructured(): { records: StructuredRecord[] } {
+    return { records: [...this.structured.values()] };
+  }
+
+  createStructured(input: Record<string, unknown>): StructuredRecord {
+    this.refuseStructuredPricing(input);
+    const ownerPrice = (this.warehouseEnv.STRUCTURED_OWNER_PRICE ?? this.warehouseEnv.OPS_STRUCTURED_OWNER_PRICE ?? '').trim();
+    if (!ownerPrice) {
+      throw new OpsError(
+        OPS_STRUCTURED_OWNER_PRICE_REQUIRED,
+        'Structured launch needs an owner-published price env; no price was invented',
+      );
+    }
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    if (!name) {
+      throw new OpsError(OPS_RAISE_NAME_REQUIRED, 'A structured record needs a name — nothing was invented');
+    }
+    const record: StructuredRecord = {
+      id: this.id(),
+      name,
+      legLabels: this.parseMilestoneLabels(input.legLabels),
+    };
+    this.structured.set(record.id, record);
+    return record;
+  }
+
   createRaise(input: Record<string, unknown>): Raise {
     this.refuseChain(input);
     const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -393,6 +428,17 @@ export class OpsService {
         throw new OpsError(
           OPS_FUNDRAISING_CHAIN_UNWIRED,
           'On-chain escrow and vesting are not wired. Fundraising records do not move value.',
+        );
+      }
+    }
+  }
+
+  private refuseStructuredPricing(input: Record<string, unknown>): void {
+    for (const key of ['mark', 'payoff', 'price', 'tokenPrice', 'valuation']) {
+      if (Object.prototype.hasOwnProperty.call(input, key) && input[key] != null && input[key] !== '') {
+        throw new OpsError(
+          OPS_STRUCTURED_PRICE_FORBIDDEN,
+          'Structured records carry names and leg labels only — no mark, payoff, or price calculation',
         );
       }
     }

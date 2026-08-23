@@ -48,6 +48,12 @@ const milestoneSchema = z.object({
   label: z.string().min(1),
 });
 
+const structuredSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  legLabels: z.array(z.string().min(1)),
+});
+
 const pointSchema = z.object({
   metricId: z.string().min(1),
   value: z.string(),
@@ -242,6 +248,32 @@ export function createOpsRouter(ops: OpsService) {
         .mutation(({ input }) => {
           try {
             ops.fundRaise((input ?? {}) as Record<string, unknown>);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+    }),
+
+    structured: router({
+      list: scopedProcedure('ops:read', guards)
+        .output(z.object({ records: z.array(structuredSchema) }))
+        .query(() => {
+          const out = ops.listStructured();
+          return { records: [...out.records] };
+        }),
+      create: scopedProcedure('ops:write', guards)
+        .input(
+          z
+            .object({
+              name: z.string().optional(),
+              legLabels: z.union([z.array(z.string()), z.string()]).optional(),
+            })
+            .passthrough(),
+        )
+        .output(structuredSchema)
+        .mutation(({ input }) => {
+          try {
+            return ops.createStructured(input as Record<string, unknown>);
           } catch (err) {
             mapError(err);
           }

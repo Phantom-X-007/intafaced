@@ -8,6 +8,7 @@ import {
   OPS_FUNDRAISING_CHAIN_UNWIRED,
   OPS_PAYROLL_INVENT_FORBIDDEN,
   OPS_WAREHOUSE_UNWIRED,
+  OPS_STRUCTURED_OWNER_PRICE_REQUIRED,
 } from './codes.js';
 import { OpsService } from './ops-service.js';
 import { createOpsRouter } from './router.js';
@@ -110,6 +111,22 @@ describe('svc-ops router', () => {
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_FUNDRAISING_CHAIN_UNWIRED),
     });
+  });
+
+  it('structured.create + list exposes only name and leg labels; missing owner price refuses', async () => {
+    const unopened = createOpsRouter(new OpsService()).createCaller(await signed());
+    await expect(unopened.structured.create({ name: 'Wrapped note', legLabels: ['principal'] })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_STRUCTURED_OWNER_PRICE_REQUIRED),
+    });
+
+    const api = createOpsRouter(new OpsService({ warehouseEnv: { STRUCTURED_OWNER_PRICE: 'owner-published' } })).createCaller(
+      await signed(),
+    );
+    const record = await api.structured.create({ name: 'Wrapped note', legLabels: ['principal', 'coupon'] });
+    expect(record).toEqual({ id: expect.any(String), name: 'Wrapped note', legLabels: ['principal', 'coupon'] });
+    expect(record).not.toHaveProperty('price');
+    expect((await api.structured.list()).records).toEqual([record]);
   });
 
   it('custody.list empty keys; wrap unset fail-closes wrap/execute; amounts stay strings', async () => {
