@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from '@intafaced/contracts';
-import { QUANT_SANDBOX_UNWIRED, QuantError } from './errors.js';
+import { QUANT_SANDBOX_UNWIRED, QUANT_STUDIO_RISK_BLOCK_REQUIRED, QuantError } from './errors.js';
 import { runSandbox, type SandboxDeps } from './sandbox/run.js';
+import { saveStudio } from './studio/save.js';
+import { createStudioStore } from './studio/store.js';
 import { withQuantSpan } from './tracing.js';
 
 const decimal = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'amounts are decimal strings with at most 18 decimal places');
@@ -35,19 +37,76 @@ function toTrpc(err: unknown): never {
         ? 'PRECONDITION_FAILED'
         : err.code === 'quant.venue_vault_unset'
           ? 'PRECONDITION_FAILED'
-          : err.code === 'quant.sandbox_timeout'
-            ? 'TIMEOUT'
-            : 'BAD_REQUEST';
+          : err.code === QUANT_STUDIO_RISK_BLOCK_REQUIRED
+            ? 'BAD_REQUEST'
+            : err.code === 'quant.sandbox_timeout'
+              ? 'TIMEOUT'
+              : 'BAD_REQUEST';
     throw new TRPCError({ code, message: err.message, cause: err });
   }
   throw err;
 }
 
+const studioBlock = z.object({
+  side: z.enum(['buy', 'sell']),
+  symbol: z.string().min(1).max(32),
+  qty: decimal,
+});
+
+const studioRisk = z
+  .object({
+    maxDrawdown: z.string().optional(),
+    maxNotional: z.string().optional(),
+    kill: z.string().optional(),
+  })
+  .optional();
+
+const savedStrategy = z.object({
+  id: z.string(),
+  name: z.string(),
+  language: z.literal('javascript'),
+  source: z.string(),
+  cash: z.string(),
+  blocks: z.array(studioBlock),
+  risk: z.object({
+    maxDrawdown: z.string(),
+    maxNotional: z.string(),
+    kill: z.string(),
+  }),
+});
+
 export function createQuantRouter(deps: SandboxDeps) {
+  const studio = createStudioStore();
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.literal(true), service: z.literal('svc-quant'), custodial: z.literal(false) }))
       .query(() => ({ ok: true as const, service: 'svc-quant' as const, custodial: false as const })),
+
+    studio: router({
+      save: publicJurisdictionProcedure('quant', 'fiat')
+        .input(
+          z.object({
+            name: z.string().min(1).max(128),
+            blocks: z.array(studioBlock).min(1),
+            risk: studioRisk,
+            cash: decimal.default('10000'),
+          }),
+        )
+        .output(savedStrategy)
+        .mutation(async ({ input }) =>
+          withQuantSpan('quant.studio.save', { language: 'javascript' }, async () => {
+            try {
+              return saveStudio(input, studio);
+            } catch (err) {
+              toTrpc(err);
+            }
+          }),
+        ),
+
+      list: publicJurisdictionProcedure('quant', 'fiat')
+        .output(z.object({ strategies: z.array(savedStrategy) }))
+        .query(() => ({ strategies: [...studio.list()] })),
+    }),
 
     sandbox: router({
       capabilities: publicJurisdictionProcedure('quant', 'fiat').query(() => ({

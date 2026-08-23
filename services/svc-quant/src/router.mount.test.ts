@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext } from '@intafaced/contracts';
-import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_UNWIRED, QUANT_VENUE_VAULT_UNSET } from './errors.js';
+import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_UNWIRED, QUANT_STUDIO_RISK_BLOCK_REQUIRED, QUANT_VENUE_VAULT_UNSET } from './errors.js';
 import { createQuantRouter } from './router.js';
 
 const SECRET = 'a-quant-mount-test-edge-secret-long-enough';
@@ -75,5 +75,34 @@ describe('svc-quant mount — sandbox.run', () => {
     expect(caps.isolate).toBe('wired');
     expect(caps.venueVault).toBe('unset');
     expect(caps.languages).toContain('python');
+  });
+});
+
+describe('svc-quant mount — studio.save', () => {
+  const risk = { maxDrawdown: '500', maxNotional: '10000', kill: '100' };
+  const blocks = [{ side: 'buy' as const, symbol: 'BTC-USD', qty: '0.01' }];
+
+  it('refuses missing risk block by name and does not persist', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    await expect(caller.studio.save({ name: 'alpha', blocks, cash: '10000' })).rejects.toMatchObject({
+      message: expect.stringContaining(QUANT_STUDIO_RISK_BLOCK_REQUIRED),
+    });
+    const listed = await caller.studio.list();
+    expect(listed.strategies).toEqual([]);
+  });
+
+  it('saves a no-code strategy then runs it through existing sandbox.run', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    const saved = await caller.studio.save({ name: 'alpha', blocks, risk, cash: '10000' });
+    expect(saved.risk.maxDrawdown).toBe('500');
+    expect(typeof saved.risk.maxNotional).toBe('string');
+    expect(typeof saved.cash).toBe('string');
+    expect('pnl' in saved).toBe(false);
+    expect(saved.source).toContain('oms.buy');
+
+    const ran = await caller.sandbox.run({ language: saved.language, source: saved.source, cash: saved.cash });
+    expect(ran.ok).toBe(true);
+    expect(typeof ran.pnl).toBe('string');
+    expect(ran.fills[0]?.qty).toBe('0.01');
   });
 });
