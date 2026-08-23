@@ -846,7 +846,7 @@ if (!available) {
     });
   }
 
-  it('refuses to OPEN above DIRECTION 10× when no tighter cap is named, and locks nothing', async () => {
+  it('refuses to OPEN when no leverage cap is named, and locks nothing', async () => {
     feed('50000');
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(
@@ -858,7 +858,7 @@ if (!available) {
         size: amt('1'),
         leverage: amt('11'),
       }),
-    ).rejects.toMatchObject({ code: 'trade.leverage_too_high', status: 400 });
+    ).rejects.toMatchObject({ code: 'trade.leverage_cap_unset', status: 503 });
 
     expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
     expect(await positions.listOpen(ALICE)).toEqual([]);
