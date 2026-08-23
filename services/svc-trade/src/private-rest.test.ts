@@ -1341,7 +1341,7 @@ describe('private REST — mount boundary + order write path', () => {
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([sample]);
+    expect(res.json()).toEqual([{ ...sample, markSource: null }]);
     await app.close();
   });
 
