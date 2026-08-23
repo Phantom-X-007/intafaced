@@ -126,6 +126,7 @@ export default [
     { path: '/market', component: resolve=>(require(["../pages/intafaced/Market"],resolve)) },
     { path: '/market/mine', component: resolve=>(require(["../pages/intafaced/market/Mine"],resolve)) },
     { path: '/support', component: resolve=>(require(["../pages/intafaced/Support"],resolve)) },
+    { path: '/ops', component: resolve=>(require(["../pages/intafaced/Ops"],resolve)) },
     { path: '/portfolio', component: resolve=>(require(["../pages/intafaced/Portfolio"],resolve)) },
     { path: '/p2p', component: resolve=>(require(["../pages/intafaced/P2P"],resolve)) },
     { path: '/token', component: resolve=>(require(["../pages/intafaced/Token"],resolve)) },

@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**146 of 158 shipped (92%)** · 0 in progress · 7 ready to claim · 5 blocked · 30 deliberate §13 sockets
+**147 of 158 shipped (93%)** · 0 in progress · 6 ready to claim · 5 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -29,7 +29,6 @@ pnpm wt feat/<the-thing>
 | INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
 | Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29) | `quant` | 5 | `quant.sdk` |
-| CRM, HR and team, Finance with live revenue, Project engine (§25:714) | `core-ops` | 5 | `ops.business-systems` |
 | INTAFACED INFRA — embeddable ramp widget and white-label tiers (§37) | `core-ops` | 5 | `ops.infra-b2b` |
 | An audited venue contract emitting the indexed event surface | `indexer` | 3P | `socket.clob-contracts` |
 
@@ -186,7 +185,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (55/59)
+### Phase 5 — Surfaces (56/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -246,7 +245,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Growth Agent — acquisition and campaign proposals (§8.2) <br/>_**D26-P1-G1 Done 2026-08-21:** campaign proposals mounted (`mount-vs-tracker.ts`); never publishes. Dark warehouse + returns-ranked copy + budget invent refused. Class X residual: incentive budgets; live warehouse cubes._ | B |  | `agents.growth` |
 | ✅ | Video library — stored playback, tier-gated (§25:707) <br/>_**Done 2026-08-23:** stored VOD mounted (`videos` + `videoPlayback`); MinIO compose default off. Unconfigured → `academy.video_storage_unconfigured`. Signed expiring GET + tier/stake gate. URL without grant refused. Not LiveKit (`socket.stream-provider`). Class X residual: store listing n/a; transcode path._ | B |  | `academy.video` |
 | ✅ | Portfolio suite — users and house, views over ledger and indexer (§25:723) <br/>_**D26-P1-P2 Done 2026-08-21:** Stage-1 custodial ledger view mounted (`mount-vs-tracker.ts`). Indexer half named absent (`indexer.portfolio_positions_unwired`) — never zero chain balance. Class X residual: wire indexer positions composite; house half exposure._ | B |  | `ops.portfolio` |
-| 🟢 | CRM, HR and team, Finance with live revenue, Project engine (§25:714) <br/>_Law §25:714 ("CRM / HR & team / Finance (live revenue fused) / Project engine | — | svc-core-ops | 5"), gap-closed 2026-08-08. FOUR NAMED SYSTEMS AGAINST ONE ADJACENT ROW — ops.support, which is tickets and a KB (audit §A1.a #7). Blocked on ops.support and ops.analytics, both `ready` and neither `done`: a CRM sits on the contact and case data the support desk already owns, and "Finance with live revenue fused" is the warehouse read rather than a second aggregation of the same numbers. PLANE: the §25 matrix gives "—" for this line. `plane: F` here means only that these are operator-side, identity-bearing internal tools; it is NOT a plane ruling — the same qualification execution.house-tenant carries, for the same reason. FLAGGED FOR SCOPE, NOT FOR DESIGN: CRM and Finance sit next to revenue the platform already records, but "HR & team" and a "Project engine" are internal business software with no customer-facing edge, and nothing anywhere says we build those rather than buy them. That is a build-or-buy call worth taking BEFORE anyone starts, because it is the difference between two surfaces and four. This row does not assume the answer; it records that the law names all four and the board carried none._ | F |  | `ops.business-systems` |
+| ✅ | CRM, HR and team, Finance with live revenue, Project engine (§25:714) <br/>_**Done 2026-08-23:** svc-ops + /ops four cards (contacts, team, revenue, projects). Build-vs-buy: built thin surfaces, no SaaS. CRM is a local list plus named support/identity source lag. Revenue displays warehouse cubes or ops.warehouse_unwired — empty is not fake $. Team directory, no payroll invent (ops.payroll_invent_forbidden). Residual: payroll invent forbidden._ | F |  | `ops.business-systems` |
 | ✅ | Marketing engine — campaigns, attribution, with the Growth Agent (§25:719) <br/>_Done 2026-08-23: /agents campaign draft via existing `mutate(agents, growth.propose)`. Outbound email/push/SMS query notify.channels and paint `channel.not_configured` when unset. No percent, no second send pipeline, no incentive magnitudes. Attribution stays the affiliate tree. Residual: email/push/SMS sockets until owner gateway credentials (`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`); warehouse live cubes; D-S-14 budgets._ | F |  | `ops.marketing` |
 | ✅ | Knowledge base and workflow automation (§25:720) <br/>_**D26-P1-O4 Done 2026-08-21:** versioned i18n-keyed KB catalog (`kb-workflow-mount-vs-tracker.ts`); list/search/get doors. Published-only public wire; never invent SLA timings or vendor names in keys. Class X residual: user-defined workflow automation — agents.gateway owns agent runtime; no second executor._ | F |  | `ops.kb-workflow` |
 | ✅ | Social promotion — share pipeline and tracked attribution, every surface (§25:725) <br/>_Done 2026-08-23: /invite one-tap share via identity affiliates.createShare / revokeShare / shareHits. Token maps to the sharer's referrer id on the existing affiliate tree — not a second attribution book. Signed-out open of /invite?share= increments hits; signed-in shareHits attributes through affiliates.attribute (one tree). Revoke and closed/missing profile are named refuses (`share.revoked`, `share.profile_gone`) so later hits do not attribute. blueprint.card still owns card rendering (untouched). Residual: out-of-app email/push/SMS stay sockets._ | B |  | `ops.social-promotion` |

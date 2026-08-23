@@ -10,17 +10,16 @@
 
 <!-- tracker:start -->
 
-`██████████████████░░` **92%** — 146 of 158 features shipped
+`███████████████████░` **93%** — 147 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** ✅ · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 55/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** ✅ · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 56/59 · **5P** 4/7
 
-**🟢 7 ready to claim** — nothing blocks these:
+**🟢 6 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `chain.mainnet` — INTACHAIN — CometBFT + native CLOB module
 - `mining.pool` — Stratum share protocol, PPLNS payouts
 - `quant.sdk` — Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)
-- `ops.business-systems` — CRM, HR and team, Finance with live revenue, Project engine (§25:714)
 - `ops.infra-b2b` — INTAFACED INFRA — embeddable ramp widget and white-label tiers (§37)
 - `socket.clob-contracts` — An audited venue contract emitting the indexed event surface
 

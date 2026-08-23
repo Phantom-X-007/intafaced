@@ -1657,6 +1657,36 @@ module.exports = {
             unmapped: "No counsel map for this region (tax.jurisdiction_unmapped). Owner TAX_JURISDICTION_MAP_JSON is blank or does not include it.",
             downloaded: "Pack ready"
         },
+        ops: {
+            biz: {
+                title: "Ops",
+                lead: "Contacts, team directory, warehouse revenue and a thin project list. Revenue is a warehouse read — empty is not invented money.",
+                contacts: "Contacts",
+                contactName: "Name",
+                contactEmail: "Email",
+                addContact: "Add contact",
+                contactAdded: "Contact added",
+                contactsEmpty: "No contacts yet. Add one, or wait for support/identity source data.",
+                source: "Source",
+                team: "Team",
+                handle: "Handle",
+                role: "Role",
+                addMember: "Add to directory",
+                teamEmpty: "Directory is empty. This is not a payroll list.",
+                payrollForbidden: "Payroll is refused (ops.payroll_invent_forbidden). This card is a directory only.",
+                revenue: "Revenue",
+                warehouseUnwired: "Warehouse unwired (ops.warehouse_unwired). Cubes display when the replica is wired; empty is not fake revenue.",
+                revenueEmpty: "Warehouse is empty. That is not fake revenue.",
+                metric: "Metric",
+                amount: "Amount",
+                projects: "Projects",
+                projectTitle: "Title",
+                createProject: "Create project",
+                projectCreated: "Project created",
+                projectsEmpty: "No projects yet.",
+                status: "Status"
+            }
+        },
         launch: {
             statusTitle: "Token factory status",
             statusLead: "Whether a creator can launch on this chain right now. Template is marked audited:false until a real audit exists.",

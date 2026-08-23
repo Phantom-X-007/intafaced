@@ -15,6 +15,16 @@ describe('route resolution', () => {
    * Public KB doors (#2078 wire) land on svc-support `/trpc/{list,search,get}Kb`
    * after the edge strips `/api/support`. preservePath would miss the mount.
    */
+  it('strips /api/ops so CRM trpc lands on /trpc/* (module stays core-ops)', () => {
+    const ops = UPSTREAMS.find((u) => u.prefix === '/api/ops');
+    expect(ops?.envVar).toBe('OPS_URL');
+    expect(ops?.module).toBe('core-ops');
+    expect(ops?.preservePath).toBeFalsy();
+    expect(resolve('/api/ops/trpc/contacts')?.path).toBe('/trpc/contacts');
+    expect(resolve('/api/ops/trpc/revenue')?.path).toBe('/trpc/revenue');
+    expect(resolve('/api/ops/trpc/projects.create')?.path).toBe('/trpc/projects.create');
+  });
+
   it('strips /api/support so public KB trpc lands on /trpc/*', () => {
     const support = UPSTREAMS.find((u) => u.prefix === '/api/support');
     expect(support?.envVar).toBe('SUPPORT_URL');

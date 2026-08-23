@@ -88,6 +88,9 @@ export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/market', module: 'market', envVar: 'MARKET_URL', devUrl: 'http://localhost:4018' },
   { prefix: '/api/execution', module: 'execution', envVar: 'EXECUTION_URL', devUrl: 'http://localhost:4019' },
   { prefix: '/api/tax', module: 'tax', envVar: 'TAX_URL', devUrl: 'http://localhost:4020' },
+  // CRM / team / warehouse revenue / projects. Module stays `core-ops` (registry
+  // id); the shell queries `/api/ops` so query('ops', …) matches the surface.
+  { prefix: '/api/ops', module: 'core-ops', envVar: 'OPS_URL', devUrl: 'http://localhost:4022' },
 ] as const;
 
 /**
