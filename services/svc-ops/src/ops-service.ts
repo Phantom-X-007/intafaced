@@ -7,9 +7,12 @@ import {
 } from '@intafaced/contracts';
 import {
   OPS_CONTACT_REQUIRED,
+  OPS_FUNDRAISING_AMOUNT_INVALID,
+  OPS_FUNDRAISING_CHAIN_UNWIRED,
   OPS_IDENTITY_UNWIRED,
   OPS_PAYROLL_INVENT_FORBIDDEN,
   OPS_PROJECT_REQUIRED,
+  OPS_RAISE_NAME_REQUIRED,
   OPS_SUPPORT_UNWIRED,
   OPS_TEAM_HANDLE_REQUIRED,
   OPS_WAREHOUSE_LAG_STALE,
@@ -37,6 +40,18 @@ export type Project = {
   readonly id: string;
   readonly title: string;
   readonly status: 'open';
+};
+
+export type Raise = {
+  readonly id: string;
+  readonly name: string;
+  readonly targetAmount: string | null;
+};
+
+export type Milestone = {
+  readonly id: string;
+  readonly raiseId: string;
+  readonly label: string;
 };
 
 export type SourcedRows<T> = {
@@ -72,6 +87,8 @@ export type TeamResult = {
 };
 
 const PAYROLL_KEYS = ['salary', 'compensation', 'payroll', 'wage', 'pay'] as const;
+const CHAIN_KEYS = ['escrow', 'vesting', 'settlement', 'fund', 'release', 'tokenPrice', 'valuation', 'price', 'mid'] as const;
+const DECIMAL_AMOUNT = /^\d+(\.\d{1,18})?$/;
 
 export interface OpsServiceDeps {
   readonly warehouseEnv?: Record<string, string | undefined>;
@@ -97,6 +114,8 @@ export class OpsService {
   private readonly contacts = new Map<string, Contact>();
   private readonly members = new Map<string, TeamMember>();
   private readonly projects = new Map<string, Project>();
+  private readonly raises = new Map<string, Raise>();
+  private readonly milestones = new Map<string, Milestone>();
 
   constructor(deps: OpsServiceDeps = {}) {
     this.warehouseEnv = deps.warehouseEnv ?? {};
@@ -224,6 +243,77 @@ export class OpsService {
     const project: Project = { id: this.id(), title, status: 'open' };
     this.projects.set(project.id, project);
     return project;
+  }
+
+  listRaises(): { raises: Raise[] } {
+    return { raises: [...this.raises.values()] };
+  }
+
+  listMilestones(input: { raiseId?: string } = {}): { milestones: Milestone[] } {
+    const raiseId = typeof input.raiseId === 'string' ? input.raiseId.trim() : '';
+    const rows = [...this.milestones.values()];
+    return { milestones: raiseId.length > 0 ? rows.filter((m) => m.raiseId === raiseId) : rows };
+  }
+
+  createRaise(input: Record<string, unknown>): Raise {
+    this.refuseChain(input);
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    if (!name) {
+      throw new OpsError(OPS_RAISE_NAME_REQUIRED, 'A raise needs a name — nothing was invented');
+    }
+    const raise: Raise = {
+      id: this.id(),
+      name,
+      targetAmount: this.parseTargetAmount(input.targetAmount),
+    };
+    this.raises.set(raise.id, raise);
+    for (const label of this.parseMilestoneLabels(input.milestoneLabels)) {
+      const milestone: Milestone = { id: this.id(), raiseId: raise.id, label };
+      this.milestones.set(milestone.id, milestone);
+    }
+    return raise;
+  }
+
+  fundRaise(_input: Record<string, unknown>): never {
+    throw new OpsError(OPS_FUNDRAISING_CHAIN_UNWIRED, 'On-chain escrow and vesting are not wired. Fundraising records do not move value.');
+  }
+
+  private parseTargetAmount(raw: unknown): string | null {
+    if (raw == null) return null;
+    if (typeof raw === 'number') {
+      throw new OpsError(OPS_FUNDRAISING_AMOUNT_INVALID, 'targetAmount must be a decimal string — money is never a number');
+    }
+    if (typeof raw !== 'string') {
+      throw new OpsError(OPS_FUNDRAISING_AMOUNT_INVALID, 'targetAmount must be a decimal string — money is never a number');
+    }
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return null;
+    if (!DECIMAL_AMOUNT.test(trimmed)) {
+      throw new OpsError(OPS_FUNDRAISING_AMOUNT_INVALID, 'targetAmount must be a decimal string — no invented price');
+    }
+    return trimmed;
+  }
+
+  private parseMilestoneLabels(raw: unknown): string[] {
+    const parts = Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [];
+    const labels: string[] = [];
+    for (const part of parts) {
+      if (typeof part !== 'string') continue;
+      const label = part.trim();
+      if (label.length > 0) labels.push(label);
+    }
+    return labels;
+  }
+
+  private refuseChain(input: Record<string, unknown>): void {
+    for (const key of CHAIN_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(input, key) && input[key] != null && input[key] !== '') {
+        throw new OpsError(
+          OPS_FUNDRAISING_CHAIN_UNWIRED,
+          'On-chain escrow and vesting are not wired. Fundraising records do not move value.',
+        );
+      }
+    }
   }
 
   private refusePayroll(input: Record<string, unknown>): void {

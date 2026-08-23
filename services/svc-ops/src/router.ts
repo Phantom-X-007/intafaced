@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
-import { OPS_PAYROLL_INVENT_FORBIDDEN, OPS_WAREHOUSE_UNWIRED, OpsError } from './codes.js';
+import { OPS_FUNDRAISING_CHAIN_UNWIRED, OPS_PAYROLL_INVENT_FORBIDDEN, OPS_WAREHOUSE_UNWIRED, OpsError } from './codes.js';
 import type { OpsService } from './ops-service.js';
 
 const contactSchema = z.object({
@@ -26,6 +26,18 @@ const projectSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   status: z.literal('open'),
+});
+
+const raiseSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  targetAmount: z.string().nullable(),
+});
+
+const milestoneSchema = z.object({
+  id: z.string().min(1),
+  raiseId: z.string().min(1),
+  label: z.string().min(1),
 });
 
 const pointSchema = z.object({
@@ -159,6 +171,49 @@ export function createOpsRouter(ops: OpsService) {
           }
         }),
     }),
+
+    fundraising: router({
+      list: scopedProcedure('ops:read', guards)
+        .output(z.object({ raises: z.array(raiseSchema) }))
+        .query(() => {
+          const out = ops.listRaises();
+          return { raises: [...out.raises] };
+        }),
+      create: scopedProcedure('ops:write', guards)
+        .input(
+          z
+            .object({
+              name: z.string().optional(),
+              milestoneLabels: z.union([z.array(z.string()), z.string()]).optional(),
+              targetAmount: z.string().nullable().optional(),
+            })
+            .passthrough(),
+        )
+        .output(raiseSchema)
+        .mutation(({ input }) => {
+          try {
+            return ops.createRaise(input as Record<string, unknown>);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+      milestones: scopedProcedure('ops:read', guards)
+        .input(z.object({ raiseId: z.string().optional() }).optional())
+        .output(z.object({ milestones: z.array(milestoneSchema) }))
+        .query(({ input }) => {
+          const out = ops.listMilestones(input ?? {});
+          return { milestones: [...out.milestones] };
+        }),
+      fund: scopedProcedure('ops:write', guards)
+        .input(z.object({}).passthrough().optional())
+        .mutation(({ input }) => {
+          try {
+            ops.fundRaise((input ?? {}) as Record<string, unknown>);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+    }),
   });
 }
 
@@ -167,3 +222,4 @@ export type OpsRouter = ReturnType<typeof createOpsRouter>;
 /** Grep anchor for the shell golden. */
 export const WAREHOUSE_UNWIRED = OPS_WAREHOUSE_UNWIRED;
 export const PAYROLL_INVENT_FORBIDDEN = OPS_PAYROLL_INVENT_FORBIDDEN;
+export const FUNDRAISING_CHAIN_UNWIRED = OPS_FUNDRAISING_CHAIN_UNWIRED;
