@@ -1849,8 +1849,12 @@ export const FEATURES = [
     module: 'tax',
     phase: '5',
     plane: 'B',
+    status: 'done',
     dependsOn: ['ledger.double-entry', 'connect.data-lake', 'indexer.readmodels'],
-    note: 'Law §31:807, gap-closed 2026-08-08. §31:807 names `svc-tax` as a NEW service, "owned not vendored", phases it 5, and §38:854 records B/svc-tax/5. Scope: per-jurisdiction reporting across trades, P2P, card spend-disposals, on-chain activity via the indexer, mining income and staking rewards; lot accounting (FIFO/LIFO/HIFO per jurisdiction); realised and unrealised views; export packs. THE ADVANTAGE THE LAW CLAIMS IS THE PART THAT IS MISSING: "Reads ledger + data lake; nothing to re-import, which is the entire advantage." The ledger half is real and `done`. The data lake does not exist (connect.data-lake, blocked behind §27) and on-chain history needs indexer.readmodels, also blocked. So this row is blocked on exactly the two reads that make it worth building — a tax engine that has to re-import CSVs is the product the law is differentiating against, not this one. NEEDS COUNSEL, NOT ENGINEERING, and that is the load-bearing half: which lot method applies in which jurisdiction, and what a "spend-disposal" is when a card transaction converts crypto at the till, are legal determinations. Same class as the sanctions list (DIRECTION §8.7) and the licensing gate on launch.rwa. An agent may build the lot-accounting ENGINE and the export format; it must not choose the jurisdiction mapping, because a wrong mapping shipped confidently is worse than no tax product. §31:807 keeps marketplace tax vendors for exotic jurisdictions, so the honest v1 boundary is a small set of mapped jurisdictions that refuses BY NAME outside it — never a silent default to one country\'s rules.',
+    requires: ['services/svc-tax'],
+    note:
+      '**Done 2026-08-23:** svc-tax + /portfolio tax card. Caller selects FIFO|LIFO|HIFO. Blank owner TAX_JURISDICTION_MAP_JSON → tax.jurisdiction_unmapped (never a silent country). Empty books → empty pack, not $0 PnL. ' +
+      'Residuals: counsel jurisdiction map (owner JSON); data-lake and indexer.readmodels blocked reads named absent on the pack (tax.data_lake_unavailable / tax.indexer_unavailable) — not invented, not CSV re-import.',
   }),
   f('quant.studio', 'Strategy Studio — no-code builder, mandatory risk blocks (§29)', {
     module: 'quant',

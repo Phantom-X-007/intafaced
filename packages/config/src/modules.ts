@@ -52,6 +52,7 @@ export const MODULE_IDS = [
   'core-ops',
   'notify',
   'support',
+  'tax',
   'edge',
   // Protocol Plane (v1.1 §17.5)
   'chain',
@@ -106,6 +107,8 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   notify: { id: 'notify', service: 'svc-notify', planes: ['fiat', 'protocol'], phase: '5', custodial: false },
   // Support desk (ops.support). Non-custodial tickets + KB; no ledger.
   support: { id: 'support', service: 'svc-support', planes: ['fiat'], phase: '5', custodial: false },
+  // Lot export. Reads ledger + lake; holds no balance and posts no recipes.
+  tax: { id: 'tax', service: 'svc-tax', planes: ['fiat'], phase: '5', custodial: false },
 
   // Protocol Plane — never custodial. custody-scan asserts this stays true.
   chain: { id: 'chain', service: 'svc-chain', planes: ['protocol'], phase: '4P', custodial: false },

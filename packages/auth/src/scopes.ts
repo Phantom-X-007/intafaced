@@ -74,6 +74,9 @@ export const SCOPES = [
   'support:write',
   'support:ops',
 
+  // Tax export — read-only lot packs over the caller's own ledger books.
+  'tax:read',
+
   // Protocol plane (read-only by definition: keys are the user's, not ours)
   'protocol:read',
 
@@ -245,6 +248,10 @@ const SESSION_SCOPE_LIST = [
   // Support desk (ops.support Stage-1) — non-custodial tickets.
   'support:read',
   'support:write',
+  // Lot export. Non-custodial view over the caller's own books; minTier none.
+  // Issued with the service that mounts it — a scope for a router nobody can
+  // call is the outage this table exists to stop.
+  'tax:read',
   // UNSTUBBED. These read 'svc-market not built' until this commit, and the
   // reason given there was the right one: "a scope for a router that cannot be
   // called is noise in every token in the platform; these get issued by the PR

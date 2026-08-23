@@ -1,0 +1,104 @@
+import { describe, expect, it } from 'vitest';
+import { parseAmount } from '@intafaced/ledger-client';
+import { TAX_DATA_LAKE_UNAVAILABLE, TAX_INDEXER_UNAVAILABLE, TAX_JURISDICTION_UNMAPPED, TAX_LOT_METHOD_REQUIRED } from './codes.js';
+import type { HistoryEntry, TaxBalance, TaxLedgerReads } from './ledger-reads.js';
+import { TaxService } from './tax-service.js';
+
+const USER = '11111111-1111-4111-8111-111111111111';
+
+function emptyReads(): TaxLedgerReads {
+  return {
+    async balances() {
+      return [];
+    },
+    async history() {
+      return [];
+    },
+  };
+}
+
+function books(): TaxLedgerReads {
+  const account = { ownerType: 'user' as const, ownerId: USER, assetId: 'BTC', kind: 'available' as const };
+  const balances: TaxBalance[] = [{ account, accountId: 'acc-btc', amount: parseAmount('1') }];
+  const history: HistoryEntry[] = [
+    {
+      txId: 'tx-1',
+      module: 'ledger',
+      reason: 'deposit.credited',
+      direction: 'debit',
+      amount: parseAmount('1'),
+      postedAt: new Date('2024-01-01T00:00:00.000Z'),
+    },
+  ];
+  return {
+    async balances() {
+      return balances;
+    },
+    async history() {
+      return history;
+    },
+  };
+}
+
+describe('TaxService', () => {
+  it('blank owner map refuses tax.jurisdiction_unmapped', async () => {
+    const tax = new TaxService({
+      mapRaw: '',
+      reads: emptyReads(),
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    });
+    await expect(tax.exportPreview({ userId: USER, region: 'DE', lotMethod: 'FIFO' })).rejects.toMatchObject({
+      code: TAX_JURISDICTION_UNMAPPED,
+    });
+  });
+
+  it('caller must select a lot method — no silent default', async () => {
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads: emptyReads(),
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    });
+    await expect(tax.exportPack({ userId: USER, region: 'DE', lotMethod: '' })).rejects.toMatchObject({
+      code: TAX_LOT_METHOD_REQUIRED,
+    });
+  });
+
+  it('empty books return an empty pack, not $0 PnL, and name the missing lake', async () => {
+    const tax = new TaxService({
+      mapRaw: '{"DE":{}}',
+      reads: emptyReads(),
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+      now: () => new Date('2026-01-02T00:00:00.000Z'),
+    });
+    const pack = await tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
+    expect(pack.empty).toBe(true);
+    expect(pack.realized).toBeNull();
+    expect(pack.unrealized).toBeNull();
+    expect(pack.lotCount).toBe(0);
+    expect(pack.lake).toEqual({ status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE });
+    expect(pack.indexer).toEqual({ status: 'absent', code: TAX_INDEXER_UNAVAILABLE });
+    expect(pack.mime).toBe('application/json');
+    const body = JSON.parse(Buffer.from(pack.bodyBase64, 'base64').toString('utf8')) as { realized: unknown; note: string };
+    expect(body.realized).toBeNull();
+    expect(body.note).toMatch(/empty book/);
+    expect(JSON.stringify(body)).not.toMatch(/"realized": "0"/);
+  });
+
+  it('mapped region + FIFO returns amounts as strings', async () => {
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads: books(),
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    });
+    const preview = await tax.exportPreview({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
+    expect(preview.empty).toBe(false);
+    expect(preview.lotCount).toBe(1);
+    expect(preview.jurisdiction).toBe('DE');
+    expect(typeof preview.lotCount).toBe('number');
+    expect(preview.realized).toBeNull();
+  });
+});

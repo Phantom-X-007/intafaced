@@ -99,6 +99,7 @@ COPY services/svc-trade/package.json         services/svc-trade/
 COPY services/svc-dex/package.json           services/svc-dex/
 COPY services/svc-edge/package.json          services/svc-edge/
 COPY services/svc-execution/package.json     services/svc-execution/
+COPY services/svc-tax/package.json           services/svc-tax/
 COPY services/svc-indexer/package.json       services/svc-indexer/
 COPY services/svc-ws/package.json            services/svc-ws/
 

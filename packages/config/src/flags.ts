@@ -284,6 +284,8 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   // House tenant mechanism. Live control is edge kill of module `execution` plus
   // tRPC `execution.tenant.kill` (in-process). Flag is rollout plan only.
   def('execution.houseTenant', 'execution', 'II', 'Sealed house-desk tenancy mechanism (external venues only)', NOT_ENFORCED),
+  // Lot export. Live control is edge kill of module `tax`. Flag is rollout plan only.
+  def('tax.export', 'tax', 'V', 'Per-jurisdiction lot export packs (FIFO/LIFO/HIFO, caller-selected)', NOT_ENFORCED),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);

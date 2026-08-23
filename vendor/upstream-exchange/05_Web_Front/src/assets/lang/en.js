@@ -1585,6 +1585,19 @@ module.exports = {
             indexer: "Chain view",
             indexerAbsent: "Indexer holdings are absent: read models are not built."
         },
+        tax: {
+            title: "Tax export",
+            lead: "Lot packs from ledger reads. You choose FIFO, LIFO or HIFO. This screen never picks a country for you.",
+            method: "Lot method",
+            methodHint: "Choose a method. The service will not default one.",
+            fifo: "FIFO",
+            lifo: "LIFO",
+            hifo: "HIFO",
+            exportPack: "Export pack",
+            empty: "The book is empty. That is not a $0 profit or loss.",
+            unmapped: "No counsel map for this region (tax.jurisdiction_unmapped). Owner TAX_JURISDICTION_MAP_JSON is blank or does not include it.",
+            downloaded: "Pack ready"
+        },
         launch: {
             statusTitle: "Token factory status",
             statusLead: "Whether a creator can launch on this chain right now. Template is marked audited:false until a real audit exists.",
