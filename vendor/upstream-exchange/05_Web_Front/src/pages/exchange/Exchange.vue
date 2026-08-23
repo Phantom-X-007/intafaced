@@ -413,12 +413,45 @@
 
             <!-- Positions -->
             <div v-else-if="accountTab === 'positions'">
-              <p class="ix-dualbook" role="note">
+              <p class="ix-dualbook" role="note" v-if="!isPerpKind">
                 {{ $t("exchange.residual.spotNoPerps") }}
               </p>
-              <p class="ix-empty">
+              <p class="ix-empty ix-empty-error" v-else-if="!positionsReachable">
+                {{ positionsMessage || $t('exchange.hlplus.positionsUnavailable') }}
+              </p>
+              <p class="ix-empty" v-else-if="positions.length === 0">
                 {{ $t("exchange.terminal.noPositions") }}
               </p>
+              <table class="ix-table" v-else>
+                <thead>
+                  <tr>
+                    <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                    <th>{{ $t('exchange.terminal.colSide') }}</th>
+                    <th>{{ $t('exchange.hlplus.positionStatus') }}</th>
+                    <th>{{ $t('exchange.hlplus.marginMode') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.positionSize') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.entryPrice') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.leverage') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.markPrice') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.unrealizedPnl') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.liquidationPrice') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in positions" :key="row.id">
+                    <td class="ix-strong">{{ row.symbol }}</td>
+                    <td :class="row.side === 'long' ? 'ix-up' : 'ix-down'">{{ positionSideLabel(row.side) }}</td>
+                    <td>{{ row.status }}</td>
+                    <td>{{ row.marginMode }}</td>
+                    <td class="ix-num">{{ positionValue(row.contracts) }}</td>
+                    <td class="ix-num">{{ positionValue(row.entryPrice) }}</td>
+                    <td class="ix-num">{{ positionValue(row.leverage) }}</td>
+                    <td class="ix-num">{{ positionValue(row.markPrice) }}</td>
+                    <td class="ix-num" :class="positionPnlClass(row.unrealizedPnl)">{{ positionValue(row.unrealizedPnl) }}</td>
+                    <td class="ix-num">{{ positionValue(row.liquidationPrice) }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
             <!-- Open orders -->
@@ -717,8 +750,14 @@
             type="button"
             :class="{ 'is-active': deskMode === 'spot' }"
             :aria-pressed="deskMode === 'spot' ? 'true' : 'false'"
-            @click="deskMode = 'spot'"
+            @click="setDeskKind('spot')"
           >{{ $t('exchange.terminal.spot') }}</button>
+          <button
+            type="button"
+            :class="{ 'is-active': deskMode === 'perp' }"
+            :aria-pressed="deskMode === 'perp' ? 'true' : 'false'"
+            @click="setDeskKind('perp')"
+          >{{ $t('exchange.hlplus.perps') }}</button>
           <button
             type="button"
             :class="{ 'is-active': deskMode === 'convert' }"
@@ -1311,6 +1350,10 @@ export default {
       trades: [],
       openOrders: [],
       historyOrders: [],
+      /** Canonical Position[] from GET /api/v1/positions; decimal strings stay strings. */
+      positions: [],
+      positionsReachable: false,
+      positionsMessage: '',
       /** Fills from /account/trades. A separate call — orders carry no nested fills. */
       myFills: [],
       fillsReachable: false,
@@ -1363,6 +1406,9 @@ export default {
   },
 
   computed: {
+    isPerpKind() {
+      return !!(this.$route && this.$route.query && this.$route.query.kind === 'perp');
+    },
     wireOrderType() {
       if (this.orderType === 'MARKET_PRICE') return 'market';
       if (this.orderType === 'LIMIT_PRICE') return 'limit';
@@ -1508,7 +1554,7 @@ export default {
     accountTabs() {
       return [
         { id: 'balances', label: 'Balances' },
-        { id: 'positions', label: 'Positions' },
+        { id: 'positions', label: 'Positions', count: this.isPerpKind ? this.positions.length : 0 },
         { id: 'open', label: 'Open Orders', count: this.openOrders.length },
         { id: 'fills', label: 'Trade History' },
         { id: 'history', label: 'Order History' }
@@ -1518,6 +1564,7 @@ export default {
       /* Only claim empty when the service answered — unknown ≠ empty. */
       if (this.accountTab === 'balances') return this.walletReachable && this.balances.length === 0;
       if (this.accountTab === 'fills') return this.fillsReachable && this.fills.length === 0;
+      if (this.accountTab === 'positions') return this.isPerpKind && this.positionsReachable && this.positions.length === 0;
       if (!this.ordersReachable) return false;
       if (this.accountTab === 'open') return this.openOrders.length === 0;
       if (this.accountTab === 'history') return this.historyOrders.length === 0;
@@ -1675,6 +1722,7 @@ export default {
 
   watch: {
     $route() {
+      this.syncDeskKindFromRoute();
       this.init();
     },
     isLogin(value) {
@@ -1684,7 +1732,10 @@ export default {
       } else {
         this.openOrders = [];
         this.historyOrders = [];
-        this.wallet = { base: 0, coin: 0 };
+        this.positions = [];
+        this.positionsReachable = false;
+        this.positionsMessage = '';
+        this.wallet = { base: null, coin: null };
         this.accountError = '';
         this.accountLoading = false;
         this.walletReachable = false;
@@ -1742,6 +1793,7 @@ export default {
     this.lastTick = 0;
 
     this.loadDeskPrefs();
+    this.syncDeskKindFromRoute();
     this.syncPanelResizeActive();
     this.init();
     /* B7 — capture when focus is not in a field (document-level). */
@@ -1999,10 +2051,23 @@ export default {
       this.panelResizeActive = window.innerWidth >= 1500;
     },
 
+    syncDeskKindFromRoute() {
+      const kind = this.$route && this.$route.query && this.$route.query.kind;
+      if (kind === 'perp') this.deskMode = 'perp';
+      else if (kind === 'spot' && this.deskMode === 'perp') this.deskMode = 'spot';
+    },
+
+    setDeskKind(kind) {
+      if (kind !== 'spot' && kind !== 'perp') return;
+      this.deskMode = kind;
+      const query = Object.assign({}, (this.$route && this.$route.query) || {}, { kind });
+      this.$router.replace({ path: this.$route.path, query });
+    },
+
     init() {
       const pair = this.$route.params.pair;
       if (!pair) {
-        this.$router.replace('/exchange/' + this.defaultPair);
+        this.$router.replace({ path: '/exchange/' + this.defaultPair, query: this.$route.query || {} });
         return;
       }
 
@@ -2485,16 +2550,21 @@ export default {
       }
       this.accountLoading = true;
       this.accountError = '';
+      this.accountRefusal = '';
       this.walletReachable = false;
       this.ordersReachable = false;
+      this.positionsReachable = false;
+      this.positionsMessage = '';
+      this.positions = [];
       Promise.all([
         this.getWallet(),
         this.getOpenOrders(),
         this.getHistoryOrders(),
-        this.getMyFills()
+        this.getMyFills(),
+        this.isPerpKind ? this.getPositions() : Promise.resolve()
       ]).then(() => {
         this.accountLoading = false;
-        if (!this.walletReachable && !this.ordersReachable) {
+        if (!this.walletReachable && !this.ordersReachable && (!this.isPerpKind || !this.positionsReachable)) {
           this.accountError =
             (this.accountRefusal || 'The platform did not answer.') +
             ' Balances and orders are not shown as zero — they are unknown.';
@@ -2581,6 +2651,55 @@ export default {
         this.historyOrders = ixTrade.toDeskOrders(gate.data);
         this.ordersReachable = true;
       });
+    },
+
+    /**
+     * Canonical principal-owned positions. A 200 [] is empty; a refused or
+     * malformed answer remains unavailable and never becomes an empty blotter.
+     */
+    getPositions() {
+      this.positionsReachable = false;
+      this.positionsMessage = '';
+      return rest('/positions', { token: this.ixToken }).then(res => {
+        this.noteRefusal(res);
+        if (!res.ok) {
+          this.positions = [];
+          this.positionsMessage = res.message || '';
+          return;
+        }
+        const rows = Array.isArray(res.data) ? res.data : null;
+        const decimal = value => typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value);
+        const nullableDecimal = value => value === null || decimal(value);
+        const valid = rows && rows.every(row => row && typeof row === 'object' &&
+          typeof row.id === 'string' && typeof row.symbol === 'string' &&
+          (row.side === 'long' || row.side === 'short') &&
+          (row.status === 'open' || row.status === 'closing') &&
+          (row.marginMode === 'isolated' || row.marginMode === 'cross') &&
+          decimal(row.contracts) && decimal(row.entryPrice) && decimal(row.leverage) &&
+          nullableDecimal(row.markPrice) && nullableDecimal(row.unrealizedPnl) &&
+          nullableDecimal(row.liquidationPrice));
+        if (!valid) {
+          this.positions = [];
+          this.positionsMessage = this.$t('exchange.hlplus.positionsUnavailable');
+          return;
+        }
+        this.positions = rows;
+        this.positionsReachable = true;
+      });
+    },
+
+    positionValue(value) {
+      return value === null || value === undefined || value === '' ? '—' : String(value);
+    },
+
+    positionSideLabel(side) {
+      return side === 'long' ? this.$t('exchange.hlplus.sideLong') : this.$t('exchange.hlplus.sideShort');
+    },
+
+    positionPnlClass(value) {
+      if (value === null || value === undefined || value === '') return 'ix-dim';
+      if (String(value).charAt(0) === '-') return 'ix-down';
+      return String(value) === '0' ? '' : 'ix-up';
     },
 
     /**

@@ -2298,7 +2298,19 @@ module.exports = {
             triggerPrice: "Trigger price",
             timeInForce: "Time in force",
             postOnly: "Post only",
-            reduceOnly: "Reduce only"
+            reduceOnly: "Reduce only",
+            perps: "Perps",
+            positionsUnavailable: "Positions unavailable — the venue did not answer.",
+            positionStatus: "Position status",
+            marginMode: "Margin mode",
+            positionSize: "Position size",
+            entryPrice: "Entry price",
+            leverage: "Leverage",
+            markPrice: "Mark price",
+            unrealizedPnl: "Unrealized PnL",
+            liquidationPrice: "Liquidation price",
+            sideLong: "Long",
+            sideShort: "Short"
         },
         convert: {
             title: "Convert",
