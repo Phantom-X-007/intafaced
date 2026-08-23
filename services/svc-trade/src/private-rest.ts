@@ -197,6 +197,16 @@ export interface PrivateRestDeps {
  */
 const PRICE_FIELDS = ['entryPrice', 'exitPrice', 'price', 'markPrice'] as const;
 
+/**
+ * The positions list deliberately does not perform a fresh valuation. Make
+ * that provenance explicit on the wire: a null mark is accompanied by a null
+ * source, never by an implied local last or house quote. Decimal strings pass
+ * through byte-for-byte.
+ */
+export function presentOpenPositions(rows: readonly Position[]): Array<Position & { markSource: null }> {
+  return rows.map((row) => ({ ...row, markSource: null }));
+}
+
 /** Which forbidden price fields a request carries. Empty when it carries none. */
 export function suppliedPriceFields(source: Record<string, unknown> | null | undefined): string[] {
   if (source == null) return [];
@@ -763,7 +773,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     try {
       requireScope(principal, 'trade:read');
       const rows = await deps.listPositions(principal, req.query.symbol);
-      return reply.code(200).send(rows);
+      return reply.code(200).send(presentOpenPositions(rows));
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
