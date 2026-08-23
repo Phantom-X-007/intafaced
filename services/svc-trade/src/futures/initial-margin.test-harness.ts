@@ -1,6 +1,6 @@
 /**
  * Test inject of the DIRECTION §1 cap. Production ships the same 10× in
- * `DEFAULT_MAX_LEVERAGE` — this file exists so mechanism tests can name it
+ * This file exists so mechanism tests can name an explicit fixture cap
  * without reading env.
  */
 import { parseAmount, type Amount } from '@intafaced/ledger-client';

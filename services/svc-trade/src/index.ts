@@ -26,7 +26,7 @@ import {
 } from './futures/adl-disclosure.js';
 import { presentAdlActionDisclosureWire, sqlAdlDisclosureEventStore } from './futures/adl-last-resort.js';
 import { optionalProfitSourceFromConfig } from './futures/profit-source.js';
-import { parseConfiguredMaxLeverage, resolveMaxLeverage } from './futures/initial-margin.js';
+import { parseConfiguredMaxLeverage } from './futures/initial-margin.js';
 import { parseFundingMarketIds, startFuturesJobs } from './futures/futures-jobs.js';
 import { presentMarginCallWire } from './futures/margin-call-transport.js';
 import { createConfiguredVenueMarkSource, createVenueMarketDataAdapter, parseVenueMarkSymbols } from './futures/mark-from-venue.js';
@@ -47,7 +47,7 @@ import { startCandleJobs } from './spot/candle-jobs.js';
 import { startEngineLedgerReconcileJobs } from './spot/engine-ledger-reconcile-jobs.js';
 import { startAlgoJobs } from './algo/algo-jobs.js';
 import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
-import { parseAmount } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { parseOtcDeskLawJson } from './otc/desk-law.js';
 import { createOtcMidSourceFromConfig } from './otc/venue-mid-source.js';
@@ -315,7 +315,7 @@ const futuresJobs = startFuturesJobs({
  * exchange stays up while the owner decides.
  */
 const profitSource = optionalProfitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
-const maxLeverage = resolveMaxLeverage(parseConfiguredMaxLeverage(env.TRADE_FUTURES_MAX_LEVERAGE));
+const maxLeverage = parseConfiguredMaxLeverage(env.TRADE_FUTURES_MAX_LEVERAGE);
 if (profitSource) {
   app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
 } else {
@@ -593,6 +593,7 @@ registerPublicRest(app, {
     fundingMarketCount: fundingMarketIds.length,
     venueMarkConfigured: venueMarkConfigured != null,
     fundingIntervalConfigured: env.TRADE_FUTURES_FUNDING_INTERVAL_MS != null,
+    maxLeverage: maxLeverage == null ? null : formatAmount(maxLeverage),
   },
 });
 

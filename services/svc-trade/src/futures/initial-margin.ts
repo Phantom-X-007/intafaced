@@ -39,46 +39,26 @@
  * price the caller pays.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE NUMBER IS DIRECTION §1. RAISES ARE THE OWNER'S.
+ * THE NUMBER IS THE LISTING OWNER'S.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * `DIRECTION` §1 names max leverage v1 as **10×**. D26-P0-07
- * (`docs/adr/2026-08-13-leverage-defaults-frozen.md`) froze that cell: it is
- * not a placeholder, and agents must not treat unset env as "no cap" or as an
- * excuse to invent 20×. `TRADE_FUTURES_MAX_LEVERAGE` may only TIGHTEN (≤ 10).
- * A value above 10× is a raise and fails boot.
+ * An absent owner/listing cap is not permission to choose one. It disables
+ * position opens and re-leverage while leaving the rest of svc-trade serving.
  */
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 
-/** DIRECTION §1 / D26-P0-07 — live v1 cap. Not a placeholder. */
-export const DEFAULT_MAX_LEVERAGE = '10';
-export const DEFAULT_MAX_LEVERAGE_AMOUNT: Amount = parseAmount(DEFAULT_MAX_LEVERAGE);
-
-/** Positive configured cap ≤ 10×, or the DIRECTION default when omitted. */
-export function resolveMaxLeverage(configured?: Amount | null): Amount {
-  if (configured != null && configured > 0n) {
-    if (configured > DEFAULT_MAX_LEVERAGE_AMOUNT) {
-      throw new Error(
-        'TRADE_FUTURES_MAX_LEVERAGE above 10× is a raise — D26-P0-07 / DIRECTION §1 (docs/adr/2026-08-13-leverage-defaults-frozen.md)',
-      );
-    }
-    return configured;
-  }
-  return DEFAULT_MAX_LEVERAGE_AMOUNT;
+/** Preserve an explicitly named positive cap. Missing stays missing. */
+export function resolveMaxLeverage(configured?: Amount | null): Amount | null {
+  return configured != null && configured > 0n ? configured : null;
 }
 
-/** Parse `TRADE_FUTURES_MAX_LEVERAGE`. Empty → null (code uses 10×). Invalid or >10 → throw at boot. */
+/** Parse the owner cap. Empty → null/refuse-closed; this function never supplies a magnitude. */
 export function parseConfiguredMaxLeverage(raw: string): Amount | null {
   const s = raw.trim();
   if (s === '') return null;
   const n = parseAmount(s);
   if (n <= 0n) {
-    throw new Error('TRADE_FUTURES_MAX_LEVERAGE must be a positive decimal ≤ 10, or empty (DIRECTION §1 10×)');
-  }
-  if (n > DEFAULT_MAX_LEVERAGE_AMOUNT) {
-    throw new Error(
-      'TRADE_FUTURES_MAX_LEVERAGE above 10× is a raise — D26-P0-07 / DIRECTION §1 (docs/adr/2026-08-13-leverage-defaults-frozen.md)',
-    );
+    throw new Error('TRADE_FUTURES_MAX_LEVERAGE must be a positive decimal or empty');
   }
   return n;
 }
@@ -87,6 +67,8 @@ export function parseConfiguredMaxLeverage(raw: string): Amount | null {
 export const LEVERAGE_INVALID = 'trade.leverage_invalid';
 /** Leverage was positive and above the cap. */
 export const LEVERAGE_TOO_HIGH = 'trade.leverage_too_high';
+/** No listing/owner source named the cap, so no money path may guess one. */
+export const LEVERAGE_CAP_UNSET = 'trade.leverage_cap_unset';
 
 export type LeverageRefusalCode = typeof LEVERAGE_INVALID | typeof LEVERAGE_TOO_HIGH;
 

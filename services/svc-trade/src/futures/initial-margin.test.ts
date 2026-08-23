@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
-  DEFAULT_MAX_LEVERAGE,
   LEVERAGE_INVALID,
   LEVERAGE_TOO_HIGH,
   checkLeverage,
@@ -35,26 +34,25 @@ describe('initialMargin', () => {
 describe('resolveMaxLeverage', () => {
   const amt = parseAmount;
 
-  it('unset / non-positive configuration is DIRECTION §1 10×, not refuse-unset', () => {
-    expect(resolveMaxLeverage()).toBe(amt(DEFAULT_MAX_LEVERAGE));
-    expect(resolveMaxLeverage(null)).toBe(amt(DEFAULT_MAX_LEVERAGE));
-    expect(resolveMaxLeverage(0n)).toBe(amt(DEFAULT_MAX_LEVERAGE));
+  it('unset / non-positive configuration remains unset rather than inventing 10x', () => {
+    expect(resolveMaxLeverage()).toBeNull();
+    expect(resolveMaxLeverage(null)).toBeNull();
+    expect(resolveMaxLeverage(0n)).toBeNull();
     expect(parseConfiguredMaxLeverage('')).toBeNull();
     expect(parseConfiguredMaxLeverage('  ')).toBeNull();
-    expect(resolveMaxLeverage(parseConfiguredMaxLeverage(''))).toBe(amt('10'));
+    expect(resolveMaxLeverage(parseConfiguredMaxLeverage(''))).toBeNull();
   });
 
-  it('honours a named positive cap that tightens ≤ 10×', () => {
+  it('honours a named positive owner cap', () => {
     expect(resolveMaxLeverage(amt('5'))).toBe(amt('5'));
     expect(parseConfiguredMaxLeverage('5')).toBe(amt('5'));
     expect(resolveMaxLeverage(amt(TEST_MAX_LEVERAGE))).toBe(amt(TEST_MAX_LEVERAGE));
     expect(parseConfiguredMaxLeverage(TEST_MAX_LEVERAGE)).toBe(amt(TEST_MAX_LEVERAGE));
   });
 
-  it('refuses a raise above 10× at parse and resolve', () => {
-    expect(() => parseConfiguredMaxLeverage('10.01')).toThrow(/raise/);
-    expect(() => parseConfiguredMaxLeverage('20')).toThrow(/raise/);
-    expect(() => resolveMaxLeverage(amt('20'))).toThrow(/raise/);
+  it('does not substitute an agent-owned ceiling for an explicit owner value', () => {
+    expect(parseConfiguredMaxLeverage('20')).toBe(amt('20'));
+    expect(resolveMaxLeverage(amt('20'))).toBe(amt('20'));
   });
 });
 

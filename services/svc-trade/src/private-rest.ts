@@ -138,8 +138,8 @@ export interface PrivateRestDeps {
   /** Close at the current mark. No price parameter, for the same reason. */
   closePosition(principal: Principal, positionId: string): Promise<Position>;
   /**
-   * Isolated live re-leverage within the sealed 10× cap. Extra IM via ledger
-   * recipes; missing position 404; >10× / would-be liquidation / insufficient
+   * Isolated live re-leverage within the explicit owner/listing cap. Extra IM
+   * via ledger recipes; missing position 404; over-cap / would-be liquidation / insufficient
    * margin refuse without writing.
    */
   setLeverage(
@@ -1026,7 +1026,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
-   * POST leverage: isolated live re-leverage within the 10× cap (ledger delta).
+   * POST leverage: isolated live re-leverage within the named cap (ledger delta).
    * POST margin-mode stays 501: isolated-at-open only — never a live mode flip.
    */
   const derivativesNotSupported = (what: string, intafacedCode: string) =>
@@ -1050,7 +1050,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     throw new Error('ccxt matrix setMarginMode must stay 501 NotSupported — isolated-at-open only');
   }
 
-  app.post('/api/v1/positions/leverage', async (req, reply) => {
+  const leverageHandler = (canonicalFuturesDoor: boolean) => async (req: FastifyRequest, reply: FastifyReply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
     if (!requireTradeJurisdiction(req, reply, principal)) return;
@@ -1066,9 +1066,28 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
 
       const symbol = typeof body.symbol === 'string' ? body.symbol : '';
       const leverageRaw = typeof body.leverage === 'string' ? body.leverage.trim() : '';
+      const marginMode = typeof body.marginMode === 'string' ? body.marginMode.trim() : '';
+      if (marginMode && marginMode !== 'isolated' && marginMode !== 'cross') {
+        return reply.code(400).send({
+          ...badRequest('marginMode must be isolated or cross', 'trade.margin_mode_invalid').body,
+        });
+      }
+      if (marginMode === 'cross') {
+        return reply.code(400).send({
+          ...badRequest('cross margin is not available; live re-leverage is isolated-only', 'trade.cross_margin_unsupported').body,
+        });
+      }
       if (!leverageRaw) {
         return reply.code(400).send({
           ...badRequest('leverage is required — isolated re-leverage does not default', 'trade.leverage_required').body,
+        });
+      }
+      try {
+        parseAmount(leverageRaw);
+      } catch (err) {
+        const message = err instanceof MoneyError ? err.message : 'malformed leverage';
+        return reply.code(400).send({
+          ...badRequest(message, 'trade.leverage_invalid').body,
         });
       }
       if (!symbol) {
@@ -1078,17 +1097,18 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       const positionIdRaw = typeof body.id === 'string' ? body.id : typeof body.positionId === 'string' ? body.positionId : '';
       const positionId = positionIdRaw.trim() || undefined;
-      if (!positionId) {
+      if (!positionId && !canonicalFuturesDoor) {
         return reply.code(400).send({
           ...badRequest('positionId is required for a retry-safe margin mutation', 'trade.position_id_required').body,
         });
       }
-      const clientAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
-      if (!clientAdjustmentId) {
+      const suppliedAdjustmentId = typeof body.clientAdjustmentId === 'string' ? body.clientAdjustmentId.trim() : '';
+      if (!suppliedAdjustmentId && !canonicalFuturesDoor) {
         return reply.code(400).send({
           ...badRequest('clientAdjustmentId is required for retry-safe margin mutation', 'trade.idempotency_key_required').body,
         });
       }
+      const clientAdjustmentId = suppliedAdjustmentId || `leverage:${leverageRaw}`;
 
       const pos = await deps.setLeverage(principal, { symbol, leverage: leverageRaw, positionId, clientAdjustmentId });
       return reply.code(200).send(pos);
@@ -1100,7 +1120,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       if (sent) return sent;
       throw err;
     }
-  });
+  };
+
+  app.post('/api/v1/positions/leverage', async (req, reply) => leverageHandler(false)(req, reply));
+  app.post('/api/v1/futures/leverage', leverageHandler(true));
 
   app.post('/api/v1/positions/margin', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
