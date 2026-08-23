@@ -273,10 +273,10 @@ export function sessionStateForMarket(
 export const OPEN_POSITION_GATES_NOTE =
   'caller price 400 · cross margin 400 · leverage required 400 (no silent 1x) · ADL disclosure ack 403 (DIRECTION:34) · unnamed profit pot 403 NotSupported';
 
-/** Listing status vs kill-switch. Options have no engine. */
+/** Listing status vs kill-switch. Paper options are orderable; live options are not. */
 export function orderableForListedMarket(market: Market, futuresOrderable: boolean): boolean {
   if (market.status !== 'active') return false;
-  if (market.kind === 'options') return false;
+  if (market.kind === 'options') return market.paper === true;
   if (market.kind === 'futures') return futuresOrderable === true;
   return true;
 }

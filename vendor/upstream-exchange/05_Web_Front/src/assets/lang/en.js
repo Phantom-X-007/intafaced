@@ -1812,6 +1812,18 @@ module.exports = {
                 empty: "No follows. Empty is honest — this is not a hidden book.",
                 list: "Your follows",
                 loading: "Reading follows…"
+            },
+            options: {
+                title: "Options",
+                lead: "European paper options. Full collateral on the paper book. Live settlement stays refuse-closed until owner law is published — this form never invents a settlement asset.",
+                empty: "Empty book stays empty. No invented depth, mids, or IV.",
+                qty: "Quantity",
+                price: "Limit price",
+                place: "Place paper order",
+                placing: "Placing…",
+                placed: "Paper order on book",
+                signIn: "Sign in on Platform to place a paper options order",
+                invalid: "Quantity and price must be positive decimal strings."
             }
         }
     },

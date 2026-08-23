@@ -365,16 +365,18 @@ export const FEATURES = [
     requires: [
       'services/svc-trade/src/spot/options-policy.ts',
       'services/svc-trade/src/spot/options-listing.test.ts',
+      'services/svc-trade/src/spot/options-listing.ts',
+      'services/svc-trade/src/spot/risk.ts',
       'services/svc-trade/src/spot/options-mount-vs-tracker.ts',
       'services/svc-trade/src/spot/options-mount-vs-tracker.test.ts',
       'services/svc-trade/src/spot/options-compose-wiring.ts',
       'services/svc-trade/src/spot/options-compose-wiring.test.ts',
-
       'services/svc-trade/src/spot/options-tracker-status-pin.test.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/exchange-options.golden.js',
     ],
     note:
-      '**Done 2026-08-22:** SOCKET §13 settlement law + D7 fixing owner env pass-through (blank = refuse); European policy door mounted. ' +
-      'Residual: European options trading engine — orders still refuse until engine ships.',
+      '**Done 2026-08-23:** European paper engine — paper kind=options placeOrder rests on the matching book; live still refuse-closed if settlement law empty (never invent settlement asset). ' +
+      'Residual: live settlement asset law / live engine.',
   }),
   f('trade.otc', 'OTC RFQ desk, staked-tier gate', {
     module: 'trade',

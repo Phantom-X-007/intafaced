@@ -280,12 +280,10 @@ export interface ListMarketInput {
    * non-empty insurance fund for the quote asset (DIRECTION:33) — empty →
    * `trade.insurance_fund_empty`; paper/pending remain allowed.
    *
-   * `options` is refused until D26-P0-05 settlement asset law is stamped
-   * (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW` / SOCKET §13) AND settlement fixing is
-   * configured (`TRADE_OPTIONS_SETTLEMENT_FIXING` / D7) AND complete European
-   * contract terms are supplied — half-listed options cannot exist (service + DB
-   * CHECK). Even when listed, `assertTradable` still refuses options orders by
-   * kind (no engine). Never invent live set / settlement asset / refuse matrix.
+   * Live `options` listing is refused until D26-P0-05 settlement asset law is
+   * stamped AND D7 fixing is configured AND complete European terms are supplied.
+   * Paper options may list without inventing a settlement asset. Paper placeOrder
+   * is the v1 engine; live orders still refuse. Never invent live set / asset.
    */
   kind?: MarketKind;
   /** Required when kind=options: call or put. */
@@ -472,6 +470,7 @@ export class TradeService {
       optionStyle: input.optionStyle,
       strike: input.optionStrike,
       expiryAt: input.optionExpiryAt,
+      paper,
     });
     const rows = await this.sql<MarketRow[]>`
       INSERT INTO trade.markets (
@@ -757,7 +756,10 @@ export class TradeService {
     if (market.kind === 'spot' && !this.spotEnabled) {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
-    assertTradable(market, { futuresEnabled: this.futuresEnabled });
+    assertTradable(market, {
+      futuresEnabled: this.futuresEnabled,
+      optionsSettlementLawStamped: this.optionsSettlementAssetLaw.trim().length > 0,
+    });
     // W4 U1: seed FX/commodity stay active in DB; place must refuse before hold.
     assertSettlementRails(market);
 
@@ -983,7 +985,15 @@ export class TradeService {
       if (raced) return raced;
       throw new TradeError(`order ${orderId} vanished between insert and read`, 'trade.order_not_found');
     }
-    // No ledger.post. No matching.submit. Paper residual for Stage-2 fills.
+    // No ledger.post. Paper options rest on the matching book so the desk is
+    // not an empty invented book — still no live settlement asset.
+    if (market.kind === 'options' && orderType === 'limit' && input.price != null) {
+      try {
+        await this.matching.submit(market.id, this.toEngineRequest(orderId, userId, input, orderType, tif, null));
+      } catch {
+        // Transport miss: the paper row still exists. Recovery is cancel.
+      }
+    }
     const settled = await this.findOrder(orderId);
     if (!settled) throw new TradeError(`order ${orderId} vanished during paper place`, 'trade.order_not_found');
     await this.publishOrderUpdated(settled);

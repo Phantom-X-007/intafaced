@@ -38,14 +38,18 @@ export type OptionsPolicySummary = {
   readonly allowed: {
     readonly nonOptionsListing: true;
     readonly optionsListing: boolean;
-    readonly optionsOrders: false;
+    readonly optionsOrders: boolean;
+    readonly paperOptionsOrders: true;
+    readonly liveOptionsOrders: false;
   };
   readonly europeanOnly: true;
   readonly fullCollateralV1: true;
   readonly inventsLiveSet: false;
   readonly inventsSettlementAsset: false;
   readonly inventsIvSurface: false;
-  readonly ordersStillRefuseUntilEngine: true;
+  readonly ordersStillRefuseUntilEngine: false;
+  readonly liveOrdersStillRefuse: true;
+  readonly paperEngine: true;
 };
 
 /** Public trade.options policy door — mirrors listing gates only, not trading engine. */
@@ -69,13 +73,17 @@ export function describeOptionsPolicy(input?: {
     allowed: {
       nonOptionsListing: true,
       optionsListing: listingAllowed,
-      optionsOrders: false,
+      optionsOrders: true,
+      paperOptionsOrders: true,
+      liveOptionsOrders: false,
     },
     europeanOnly: true,
     fullCollateralV1: true,
     inventsLiveSet: false,
     inventsSettlementAsset: false,
     inventsIvSurface: false,
-    ordersStillRefuseUntilEngine: true,
+    ordersStillRefuseUntilEngine: false,
+    liveOrdersStillRefuse: true,
+    paperEngine: true,
   };
 }

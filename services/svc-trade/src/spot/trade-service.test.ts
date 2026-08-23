@@ -1210,7 +1210,7 @@ if (!available) {
      * Default service has empty TRADE_OPTIONS_SETTLEMENT_ASSET_LAW → refuse any
      * kind=options list (even with complete terms + fixing). Fixing alone must
      * not unlock. With P0-05 + fixing set, incomplete terms still refuse.
-     * Complete terms list; orders remain refused by assertTradable (no engine/IV).
+     * Complete terms list; live orders remain refused. Paper options place.
      */
     it('refuses options listing when P0-05 settlement asset law is unset', async () => {
       await expect(
@@ -1282,7 +1282,7 @@ if (!available) {
       ).rejects.toMatchObject({ code: 'trade.options_terms_incomplete' });
     });
 
-    it('lists a complete options market when P0-05 law + fixing are configured; orders still refuse by kind', async () => {
+    it('lists a complete live options market when P0-05 law + fixing are configured; live orders still refuse by kind', async () => {
       const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
         spotEnabled: true,
         optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
@@ -1327,6 +1327,40 @@ if (!available) {
           clientOrderId: 'opt-must-refuse',
         }),
       ).rejects.toMatchObject({ code: 'trade.market_kind_unsupported' });
+    });
+
+    it('paper options list without settlement law and paper placeOrder is not 501 / not kind-unsupported', async () => {
+      const listed = await trade.listMarket({
+        symbol: 'BTC/USDT:USDT-251226-90000-C-PAPER',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'options',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+        paper: true,
+        optionType: 'call',
+        optionStrike: amt('90000'),
+        optionExpiryAt: new Date('2025-12-26T08:00:00.000Z'),
+      });
+      expect(listed.kind).toBe('options');
+      expect(listed.paper).toBe(true);
+
+      const placed = await trade.placeOrder(principalFor(ALICE), {
+        marketId: listed.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('0.01'),
+        price: amt('1000'),
+        clientOrderId: 'opt-paper-place',
+      });
+      expect(placed.status).toBe('open');
+      expect(placed.qty).toBe(amt('0.01'));
+      expect(matching.submitted.some((s) => s.request.orderId === placed.id)).toBe(true);
     });
 
     it('refuses a weekend forex order and holds nothing', async () => {

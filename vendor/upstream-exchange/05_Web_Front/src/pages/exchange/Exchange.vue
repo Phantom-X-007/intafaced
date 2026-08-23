@@ -720,6 +720,12 @@
             :aria-pressed="deskMode === 'copy' ? 'true' : 'false'"
             @click="deskMode = 'copy'"
           >{{ $t('intafaced.exchange.copy.title') }}</button>
+          <button
+            type="button"
+            :class="{ 'is-active': deskMode === 'options' }"
+            :aria-pressed="deskMode === 'options' ? 'true' : 'false'"
+            @click="deskMode = 'options'"
+          >{{ $t('intafaced.exchange.options.title') }}</button>
         </div>
 
         <div v-if="deskMode === 'convert'" class="ix-order-body">
@@ -750,6 +756,29 @@
           </button>
           <p v-if="convertResult" class="ix-order-note">{{ convertResult.status }} · {{ $t('exchange.convert.orderId') }}: {{ convertResult.orderId }}</p>
           <p v-else-if="!isLogin" class="ix-order-note"><router-link to="/platform">{{ $t('exchange.convert.signIn') }}</router-link></p>
+        </div>
+
+        <div v-else-if="deskMode === 'options'" class="ix-order-body">
+          <p class="ix-order-note">{{ $t('intafaced.exchange.options.lead') }}</p>
+          <p class="ix-order-note">{{ $t('intafaced.exchange.options.empty') }}</p>
+          <div class="ix-field">
+            <label for="ix-options-qty">{{ $t('intafaced.exchange.options.qty') }}</label>
+            <div class="ix-input">
+              <input id="ix-options-qty" type="text" inputmode="decimal" spellcheck="false" v-model="optionsQty" @input="optionsError = ''" />
+            </div>
+          </div>
+          <div class="ix-field">
+            <label for="ix-options-price">{{ $t('intafaced.exchange.options.price') }}</label>
+            <div class="ix-input">
+              <input id="ix-options-price" type="text" inputmode="decimal" spellcheck="false" v-model="optionsPrice" @input="optionsError = ''" />
+            </div>
+          </div>
+          <button type="button" class="ix-submit is-buy" :disabled="!isLogin || optionsSubmitting" @click="placePaperOptionsOrder">
+            {{ optionsSubmitting ? $t('intafaced.exchange.options.placing') : $t('intafaced.exchange.options.place') }}
+          </button>
+          <p v-if="optionsError" class="ix-order-note ix-order-error">{{ optionsError }}</p>
+          <p v-else-if="optionsPlacedId" class="ix-order-note">{{ $t('intafaced.exchange.options.placed') }} · {{ optionsPlacedId }}</p>
+          <p v-else-if="!isLogin" class="ix-order-note"><router-link to="/platform">{{ $t('intafaced.exchange.options.signIn') }}</router-link></p>
         </div>
 
         <div v-else-if="deskMode === 'copy'" class="ix-order-body">
@@ -1136,6 +1165,11 @@ export default {
       copyFollowing: false,
       copyUnfollowingId: '',
       copyError: '',
+      optionsQty: '',
+      optionsPrice: '',
+      optionsError: '',
+      optionsSubmitting: false,
+      optionsPlacedId: '',
       mainTabs: [
         { id: 'chart', label: 'Chart' },
         { id: 'depth', label: 'Depth' },
@@ -2611,6 +2645,38 @@ export default {
           return;
         }
         this.loadCopyFollows();
+      });
+    },
+
+    placePaperOptionsOrder() {
+      if (!this.ixToken) {
+        this.optionsError = this.$t('intafaced.exchange.options.signIn');
+        return;
+      }
+      var qty = String(this.optionsQty == null ? '' : this.optionsQty).trim();
+      var price = String(this.optionsPrice == null ? '' : this.optionsPrice).trim();
+      if (!ixMoney.isPositive(qty) || !ixMoney.isPositive(price)) {
+        this.optionsError = this.$t('intafaced.exchange.options.invalid');
+        return;
+      }
+      this.optionsSubmitting = true;
+      this.optionsError = '';
+      this.optionsPlacedId = '';
+      var body = ixTrade.toCreateOrderBody({
+        symbol: this.currentCoin.symbol,
+        type: 'limit',
+        side: this.side,
+        amount: qty,
+        price: price,
+        kind: 'options'
+      });
+      return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
+        this.optionsSubmitting = false;
+        if (res && res.ok && res.data && res.data.id) {
+          this.optionsPlacedId = String(res.data.id);
+          return;
+        }
+        this.optionsError = ixTrade.orderFailureMessage(res, 'create');
       });
     },
 

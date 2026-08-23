@@ -16,8 +16,8 @@ export const OPTIONS_MOUNTED_DOORS = ['policy'] as const;
 
 export const OPTIONS_DONE_BAR_TEST_FILES = ['options-policy.test.ts', 'options-listing.test.ts', 'options-compose-wiring.test.ts'] as const;
 
-/** P0-05 + D7 compose wired; European engine + order path remain Class X. */
-export const OPTIONS_HONEST_GAPS = ['gap.european_options_engine'] as const;
+/** Paper European engine shipped; live settlement still Class X. */
+export const OPTIONS_HONEST_GAPS = ['gap.live_options_settlement'] as const;
 
 export function optionsDoorsInRouterSource(): readonly (typeof OPTIONS_MOUNTED_DOORS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -35,7 +35,8 @@ export function optionsPolicyHonest(): boolean {
     p.inventsLiveSet === false &&
     p.inventsSettlementAsset === false &&
     p.inventsIvSurface === false &&
-    p.ordersStillRefuseUntilEngine === true &&
+    p.paperEngine === true &&
+    p.liveOrdersStillRefuse === true &&
     p.europeanOnly === true
   );
 }
