@@ -1078,10 +1078,18 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['protocol.smart-accounts'],
-    requires: ['services/svc-indexer/src/router.mount.test.ts', 'services/svc-indexer/src/d26-p1-i3-done-bar.test.ts'],
+    requires: [
+      'services/svc-indexer/src/router.mount.test.ts',
+      'services/svc-indexer/src/d26-p1-i3-done-bar.test.ts',
+      'services/svc-indexer/src/stream.ts',
+      'services/svc-ws/src/indexer-stream.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/indexer-stream.golden.js',
+    ],
     note:
       '**D26-P1-I3 Done 2026-08-21:** chain→Postgres read models mounted (`readmodels-mount-vs-tracker.ts`). ' +
       'Reorg unwind + idempotent projection; permissionless /trpc read API. ' +
+      '**2026-08-23 stream:** tRPC `stream` returns market-data absolute deltas or indexer.stream_unwired when venue/RPC blank. ' +
+      'svc-ws applyDelta; empty stays empty. Venue ABI not invented (socket.clob-contracts). ' +
       'Class X residual: socket.clob-contracts; INDEXER_VENUE_ADDRESS unset default.',
   }),
 
@@ -1888,16 +1896,19 @@ export const FEATURES = [
     // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` (same over-fence as auto-invest).
     requires: [
       'services/svc-bank/src/business/business-service.ts',
+      'services/svc-bank/src/business/business.test.ts',
+      'packages/ledger-client/src/recipes/bank.ts',
       'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/bank/Business.vue',
       'vendor/upstream-exchange/05_Web_Front/src/assets/js/bank-expense-cards.golden.js',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/bank-business.golden.js',
     ],
     dependsOn: ['bank.accounts', 'bank.cards', 'pay.gateway'],
     note:
-      '**Done 2026-08-23:** shell /bank/business — create, proposeTransfer (posted under threshold; pending hold at/above), approve. ' +
-      'Maker self-approve surfaces bank.business_self_approve. Amounts decimal strings. Empty list ≠ 0. Same ledger-half pattern as bank.cards. ' +
+      '**Done 2026-08-23:** atomic payroll — business.runPayroll posts recipes.businessPayroll (all paid or none). ' +
+      'Cross-asset refuses bank.business_payroll_rate_unset (no invented FX/withholding). Amounts decimal strings. ' +
+      'Shell /bank/business payroll click. Maker/checker dual-control + hold still on tip. ' +
       '**2026-08-23 expense cards:** /bank/business issues via cards.issue; simulated is drawn, never hidden. ' +
-      'RESIDUAL (named, not fake-done): KYB Lane B, invoicing, multi-recipient payroll. ' +
-      'Prior: W13 L03 purposed ledger hold; W10 L08 dual-control roles. Law §31:811.',
+      'RESIDUAL (named, not fake-done): KYB Lane B, invoicing. Law §31:811.',
   }),
   f('tax.engine', 'svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)', {
     module: 'tax',

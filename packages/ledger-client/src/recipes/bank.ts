@@ -312,3 +312,66 @@ export function businessApprovalSettle(input: BusinessApprovalSettleInput): Post
     entries: [credit(hold, input.amount), debit(input.to, input.amount)],
   };
 }
+
+// ── Business payroll (bank.business / §31:811) — all paid or none ────────────
+
+export interface BusinessPayrollRecipient {
+  to: AccountRef;
+  amount: Amount;
+}
+
+export interface BusinessPayrollInput {
+  /** Client-supplied run id. Retries reuse it; the ledger key is this id. */
+  payrollId: string;
+  /** Debit pot (primary or named space). */
+  from: AccountRef;
+  /** One line per recipient. Empty is not a transaction. */
+  recipients: ReadonlyArray<BusinessPayrollRecipient>;
+}
+
+/**
+ * Multi-recipient payroll as ONE ledger post.
+ *
+ * All recipients credit or none do: the book either accepts the whole entry
+ * list or refuses it (insufficient funds on the source, a bad line). A loop of
+ * `bankTransfer` would leave earlier workers paid and later ones unpaid — the
+ * failure this recipe exists to make impossible.
+ *
+ * Same-asset only. A stables/fiat mix would need an FX rate this function has
+ * no business inventing; the service refuses that as
+ * `bank.business_payroll_rate_unset` before it reaches here.
+ */
+export function businessPayroll(input: BusinessPayrollInput): PostRequest {
+  if (input.recipients.length === 0) {
+    throw new InvalidEntryError('A payroll with no recipients is not a transaction');
+  }
+  if (input.from.kind !== 'available') {
+    throw new InvalidEntryError('Payroll source must be an available account');
+  }
+
+  const seen = new Set<string>();
+  seen.add(accountKey(input.from));
+  for (const line of input.recipients) {
+    requirePositive(`payroll for ${accountKey(line.to)}`, line.amount);
+    if (line.to.kind !== 'available') {
+      throw new InvalidEntryError('Payroll destinations must be available accounts — locks have their own recipes');
+    }
+    if (line.to.assetId !== input.from.assetId) {
+      throw new InvalidEntryError(`Payroll cannot change asset (${input.from.assetId} → ${line.to.assetId}); rates are not invented here`);
+    }
+    const key = accountKey(line.to);
+    if (seen.has(key)) {
+      throw new InvalidEntryError('Payroll cannot pay the same account twice, or pay the source');
+    }
+    seen.add(key);
+  }
+
+  const total = sum(input.recipients.map((line) => line.amount));
+  return {
+    idempotencyKey: `bank.business.payroll:${input.payrollId}`,
+    module: 'bank',
+    reason: 'bank.business.payroll.settled',
+    meta: { payrollId: input.payrollId, recipients: input.recipients.length },
+    entries: [credit(input.from, total), ...input.recipients.map((line) => debit(line.to, line.amount))],
+  };
+}

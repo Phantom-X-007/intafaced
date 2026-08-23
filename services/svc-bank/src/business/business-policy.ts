@@ -7,7 +7,9 @@ export const BUSINESS_ROLES = ['admin', 'maker', 'checker'] as const;
 
 export type BusinessPolicySummary = ReturnType<typeof describeBusinessPolicy>;
 
-/** Public honesty board for bank.business — dual control + hold-before-approve. */
+export const BUSINESS_PAYROLL_RATE_UNSET = 'bank.business_payroll_rate_unset' as const;
+
+/** Public honesty board for bank.business — dual control + hold-before-approve + atomic payroll. */
 export function describeBusinessPolicy() {
   return {
     roles: BUSINESS_ROLES,
@@ -17,5 +19,9 @@ export function describeBusinessPolicy() {
     thresholdPerAccountOwnerLaw: true as const,
     inventsDefaultThreshold: false as const,
     underThresholdPostsImmediately: true as const,
+    payrollAtomicAllOrNothing: true as const,
+    payrollSameAssetOnly: true as const,
+    inventsPayrollRates: false as const,
+    payrollRateUnsetCode: BUSINESS_PAYROLL_RATE_UNSET,
   };
 }

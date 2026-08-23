@@ -10,6 +10,7 @@ import {
   businessApprovalHold,
   businessApprovalRelease,
   businessApprovalSettle,
+  businessPayroll,
 } from './bank.js';
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
@@ -1146,6 +1147,7 @@ export const recipes = {
   businessApprovalHold,
   businessApprovalRelease,
   businessApprovalSettle,
+  businessPayroll,
   // SPEC-SUBACCOUNTS — only legal cross-partition value path. See ./sub-accounts.ts.
   subAccountTransfer,
   // §8.7 market — purchase (live) + listing/premium fees (§13 unwired; D26-P1-M2).

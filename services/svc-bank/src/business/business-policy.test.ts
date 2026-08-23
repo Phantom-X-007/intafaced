@@ -17,4 +17,12 @@ describe('describeBusinessPolicy — bank.business honesty door', () => {
     expect(p.thresholdPerAccountOwnerLaw).toBe(true);
     expect(p.inventsDefaultThreshold).toBe(false);
   });
+
+  it('payroll is atomic, same-asset, and does not invent rates', () => {
+    const p = describeBusinessPolicy();
+    expect(p.payrollAtomicAllOrNothing).toBe(true);
+    expect(p.payrollSameAssetOnly).toBe(true);
+    expect(p.inventsPayrollRates).toBe(false);
+    expect(p.payrollRateUnsetCode).toBe('bank.business_payroll_rate_unset');
+  });
 });

@@ -104,6 +104,7 @@ export const EVENT_BUS_MATRIX = {
   p2pTradeDisputed: { kind: 'live' },
   p2pDisputeResolved: { kind: 'socket', socketClass: 'A' },
   p2pTradeExpired: { kind: 'socket', socketClass: 'A' },
+  projectionUpdated: { kind: 'socket', socketClass: 'A' },
 } as const satisfies Record<EventName, CatalogDisposition>;
 
 /**

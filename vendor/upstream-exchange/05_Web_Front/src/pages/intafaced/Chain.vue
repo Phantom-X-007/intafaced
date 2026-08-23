@@ -63,6 +63,32 @@
         </div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.chain.streamTitle') }}</h2>
+        <span class="ix-sub">{{ $t('intafaced.chain.streamApi') }}</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.chain.streamLead') }}
+      </p>
+      <IxState :loading="stream.loading" :reason="stream.reason" :message="stream.message" endpoint="/api/indexer/trpc/stream">
+        <div v-if="stream.data && stream.data.deltas && stream.data.deltas.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead><tr><th>{{ $t('intafaced.chain.market') }}</th><th>{{ $t('intafaced.chain.sequence') }}</th><th>{{ $t('intafaced.chain.bids') }}</th><th>{{ $t('intafaced.chain.asks') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="row in stream.data.deltas" :key="row.marketId">
+                <td>{{ row.marketId }}</td>
+                <td>{{ row.sequence }}</td>
+                <td>{{ row.bids.length }}</td>
+                <td>{{ row.asks.length }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.chain.streamEmpty') }}</div>
+      </IxState>
+    </div>
   </div>
 </template>
 
@@ -73,6 +99,7 @@
  * Edge route `/api/indexer` exists on main. Older shell copy claimed the edge
  * had no prefix; that is no longer true. This screen still never invents a
  * height: null stays "—", and halted / lastError surface when present.
+ * Stream is indexer.stream_unwired when venue/RPC are blank — empty stays empty.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';
@@ -83,11 +110,12 @@ export default {
   components: { IxState },
   mixins: [ixModule],
   data() {
-    return { status: this.emptySection() };
+    return { status: this.emptySection(), stream: this.emptySection() };
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.load('status', query('indexer', 'status', undefined, this.ixToken));
+    this.load('stream', query('indexer', 'stream', undefined, this.ixToken));
   }
 };
 </script>

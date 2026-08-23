@@ -137,6 +137,8 @@ export const appRouter = createIndexerRouter({
   ingestEnabled: () => ingestEnabled,
   chainSource,
   chainProbe,
+  venue: evmSource ? env.INDEXER_VENUE_ADDRESS : null,
+  rpcUrl: env.INDEXER_RPC_URL || null,
 });
 export type AppRouter = typeof appRouter;
 

@@ -135,7 +135,8 @@ if (!available) {
 
   beforeEach(async () => {
     await sql`
-      TRUNCATE bank.business_approvals, bank.business_members, bank.business_accounts,
+      TRUNCATE bank.business_payroll_lines, bank.business_payroll_runs,
+               bank.business_approvals, bank.business_members, bank.business_accounts,
                bank.auto_invest_runs, bank.auto_invest_rules,
                bank.interest_accruals, bank.earn_positions, bank.earn_pools,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces,
@@ -2163,6 +2164,7 @@ if (!available) {
         'auto_invest_runs.amount': 'a RECORD of one run (settled or rejected); written once',
         'business_accounts.spend_threshold': 'a POLICY dual-control floor; instruction, not a holding',
         'business_approvals.amount': 'a RECORD of one proposed/approved transfer; written once',
+        'business_payroll_lines.amount': 'a RECORD of one payroll line; written once with the run',
       };
 
       const moneyColumns = columns

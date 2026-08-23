@@ -65,6 +65,75 @@ describe('businessApprovalHold / settle / release', () => {
   });
 });
 
+describe('businessPayroll', () => {
+  it('pays every recipient in one post or none', async () => {
+    await deposit(USER, '100', 'pay-ok');
+    const payrollId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const first = await ledger.post(
+      recipes.businessPayroll({
+        payrollId,
+        from: userAvailable(USER, 'USDT'),
+        recipients: [
+          { to: userAvailable(USER_B, 'USDT'), amount: amt('40') },
+          { to: userAvailable('44444444-4444-4444-8444-444444444444', 'USDT'), amount: amt('25') },
+        ],
+      }),
+    );
+    const again = await ledger.post(
+      recipes.businessPayroll({
+        payrollId,
+        from: userAvailable(USER, 'USDT'),
+        recipients: [
+          { to: userAvailable(USER_B, 'USDT'), amount: amt('40') },
+          { to: userAvailable('44444444-4444-4444-8444-444444444444', 'USDT'), amount: amt('25') },
+        ],
+      }),
+    );
+    expect(again.id).toBe(first.id);
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('35');
+    expect(formatAmount((await ledger.balance(userAvailable(USER_B, 'USDT'))).amount)).toBe('40');
+    expect(formatAmount((await ledger.balance(userAvailable('44444444-4444-4444-8444-444444444444', 'USDT'))).amount)).toBe('25');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('refuses the whole run when the source cannot cover every line', async () => {
+    await deposit(USER, '50', 'pay-short');
+    await expect(
+      ledger.post(
+        recipes.businessPayroll({
+          payrollId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          from: userAvailable(USER, 'USDT'),
+          recipients: [
+            { to: userAvailable(USER_B, 'USDT'), amount: amt('40') },
+            { to: userAvailable('44444444-4444-4444-8444-444444444444', 'USDT'), amount: amt('20') },
+          ],
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
+    expect(formatAmount((await ledger.balance(userAvailable(USER_B, 'USDT'))).amount)).toBe('0');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('refuses empty, cross-asset, and paying the source', () => {
+    expect(() => recipes.businessPayroll({ payrollId: 'x', from: userAvailable(USER, 'USDT'), recipients: [] })).toThrow(InvalidEntryError);
+    expect(() =>
+      recipes.businessPayroll({
+        payrollId: 'x',
+        from: userAvailable(USER, 'USDT'),
+        recipients: [{ to: userAvailable(USER_B, 'EUR'), amount: amt('1') }],
+      }),
+    ).toThrow(/cannot change asset/);
+    expect(() =>
+      recipes.businessPayroll({
+        payrollId: 'x',
+        from: userAvailable(USER, 'USDT'),
+        recipients: [{ to: userAvailable(USER, 'USDT'), amount: amt('1') }],
+      }),
+    ).toThrow(/same account/);
+  });
+});
+
 describe('bankTransfer', () => {
   it('moves available → available and is re-drive safe per occurrence', async () => {
     await deposit(USER, '100', 't1');

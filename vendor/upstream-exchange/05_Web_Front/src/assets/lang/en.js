@@ -951,6 +951,12 @@ module.exports = {
                 needSpace: "Create a space first — a transfer moves value between spaces.",
                 kindPosted: "posted",
                 kindPending: "pending",
+                payroll: "Run payroll",
+                payrollLead: "Pay every recipient in one ledger post, or none. Same asset only — mixed assets refuse bank.business_payroll_rate_unset. Amounts are decimal strings; rates are not invented.",
+                payrollFrom: "From space",
+                payrollRecipient: "Recipient space",
+                payrollRan: "Payroll settled",
+                payrollRateUnset: "A mixed-asset payroll would need an FX rate. svc-bank refuses that as bank.business_payroll_rate_unset.",
                 expenseTitle: "Expense cards",
                 expenseApi: "cards.issue · simulated: true",
                 expenseLead: "Issues through bank.cards. The simulator flag is on the card and on this card — never drawn as a live BIN.",
@@ -1608,7 +1614,15 @@ module.exports = {
         },
         chain: {
             statusTitle: "Indexer status",
-            statusLead: "How far the projection is behind the chain, and whether it has halted itself."
+            statusLead: "How far the projection is behind the chain, and whether it has halted itself.",
+            streamTitle: "Projection stream",
+            streamApi: "stream · indexer.stream_unwired",
+            streamLead: "Absolute book deltas from the indexer. Blank venue or RPC is indexer.stream_unwired — the venue ABI is not invented here. Empty stays empty.",
+            streamEmpty: "No projection deltas. Empty is empty — not a live $0 book.",
+            market: "Market",
+            sequence: "Sequence",
+            bids: "Bid levels",
+            asks: "Ask levels"
         },
         academy: {
             rooms: "Lobbies",
