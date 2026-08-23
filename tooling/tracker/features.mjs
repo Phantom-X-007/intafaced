@@ -249,12 +249,12 @@ export const FEATURES = [
     requires: ['services/svc-token'],
     note: 'PR #94: stake/unstake/listStakes on /trpc; principal-bound.',
   }),
-  f('token.yield', 'Operator-settled staker payout (§4.3 weekly job NOT built)', {
+  f('token.yield', 'Weekly yield job reads houseFees via ledger-client', {
     module: 'token',
     phase: '1',
-    status: 'socket',
+    status: 'done',
     requires: ['services/svc-token'],
-    note: 'CORRECTED 2026-08-03, was `done` "live path". The PAYOUT is real and stays real: distributeRevenue sweeps fee sources and pays stakers pro-rata by stake x snapshotted multiplier through ledger recipes, resumable per (window,user), and it is tested. What §4.3 actually specifies — "weekly job aggregates house fee accounts per asset" — does not exist. distributeRevenue has ZERO callers outside its own tests: no cron, no bus subscriber, and no admin form (apps/admin has jurisdiction/launch/ledger pages and no treasury page). The only live entry is the tRPC mutation at router.ts:300, which a human holding admin:treasury + MFA must invoke by hand. sources[].amount is trusted operator input validated only for decimal shape (router.ts:305-310); nothing reads the real houseFees balance, so the sum distributed is whatever an operator types (audit T-03). Correct money maths behind a manual operator action is not an automated flywheel and must not be described as one. Socket, not done: the missing half is the aggregation job and a service-side window claim.',
+    note: 'PR feat/token-yield-job: runYieldWindow({windowId}) reads ledger.balance(houseFees(module, assetId)) for known modules, builds sources, calls distributeRevenue. Job/tRPC yield.runWindow/S2S POST /internal/yield/run-window have NO sources parameter — caller-typed amounts are refused. YIELD_JOB_ENABLED unset/off → TokenError token.yield_job_unset. Token.vue card: window run → paid or token.yield_job_unset. Operator distributeRevenue remains a treasury mutation.',
   }),
   f('token.buyback', 'Operator-recorded burn (no buyback — nothing is bought)', {
     module: 'token',

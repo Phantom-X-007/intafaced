@@ -10,6 +10,8 @@ import { createLedgerClient } from './ledger-client.js';
 import { createTokenRouter, type TokenRouter } from './router.js';
 import { registerInternalStake } from './internal-stake.js';
 import { registerInternalEmissions } from './internal-emissions.js';
+import { registerInternalYield } from './internal-yield.js';
+import { runYieldWindow } from './yield-job.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -64,7 +66,17 @@ const token = new TokenService(sql, ledger, bus, {
   loadParamsFromDb: true,
 });
 
-export const appRouter = createTokenRouter(token, { emissionsEnabled: env.EMISSIONS_ENABLED });
+const yieldJob = {
+  yieldJobEnabled: env.YIELD_JOB_ENABLED,
+  assetId: env.TOKEN_ASSET_ID,
+  ledger,
+  distributeRevenue: (input: Parameters<typeof token.distributeRevenue>[0]) => token.distributeRevenue(input),
+};
+
+export const appRouter = createTokenRouter(token, {
+  emissionsEnabled: env.EMISSIONS_ENABLED,
+  runYieldWindow: (input) => runYieldWindow(yieldJob, input),
+});
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
@@ -76,6 +88,7 @@ app.get('/ready', async () => ({
   ready: true,
   emissionsEnabled: env.EMISSIONS_ENABLED,
   emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
+  yieldJobEnabled: env.YIELD_JOB_ENABLED,
 }));
 
 // The S2S stake gate. Lives in its own module so it can be tested — see
@@ -91,6 +104,12 @@ registerInternalEmissions(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   emissionsEnabled: env.EMISSIONS_ENABLED,
   mintNextEpoch: () => token.mintNextEpoch(),
+});
+
+registerInternalYield(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  yieldJobEnabled: env.YIELD_JOB_ENABLED,
+  runWindow: (input) => runYieldWindow(yieldJob, input),
 });
 
 // ── Optional emissions auto-tick ─────────────────────────────────────────────

@@ -1357,7 +1357,13 @@ module.exports = {
             unstakeAccepted: "Unstake accepted",
             unlocksAt: "Unlocks",
             status: "Status",
-            noStakes: "No active stakes. This is an empty list, not a zero balance."
+            noStakes: "No active stakes. This is an empty list, not a zero balance.",
+            yieldTitle: "Yield window",
+            yieldLead: "Runs the weekly job for a window. Amounts come from house fee pots — this form does not type them. Unset or off is token.yield_job_unset.",
+            yieldWindow: "Window",
+            yieldWindowHint: "Window id",
+            yieldRun: "Run window",
+            yieldPaid: "Paid"
         },
         agents: {
             routes: "Routing table",

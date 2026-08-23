@@ -126,9 +126,9 @@ export const FEE_REVENUE_PATHS = {
     note: 'RewardsEngine → user (yield / cashback / prizes).',
   },
   'token.yield_house_fee_aggregation': {
-    kind: 'socket',
-    socket: 'token.yield',
-    note: '§4.3 weekly job that reads house fee balances is not built — operator sources[] today.',
+    kind: 'recipe',
+    recipe: 'sweepFeesToRewards',
+    note: 'Weekly yield job reads houseFees(module) via ledger.balance and sweeps through sweepFeesToRewards; never caller-typed sources[].amount. Unset/off is token.yield_job_unset.',
   },
   'bank.loan_interest': {
     kind: 'recipe',

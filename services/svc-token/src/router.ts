@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
-import { TokenError, type TokenService } from './token-service.js';
+import { TokenError, type TokenService, type YieldRunResult } from './token-service.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -17,9 +17,11 @@ import { userCopy } from './user-copy.js';
  * end to end. The three §4.3 economy surfaces are not, and are §13 sockets in
  * tooling/tracker/features.mjs rather than shipped features:
  *
- *   token.yield      `distributeRevenue` is a hand-invoked operator mutation.
- *                    No cron, no bus subscriber, no caller anywhere outside
- *                    tests. `sources` amounts are trusted input.
+ *   token.yield      Weekly job `yield.runWindow` / POST /internal/yield/run-window
+ *                    reads houseFees via ledger-client and calls distributeRevenue.
+ *                    Job input is `{ windowId }` only — never caller-typed amounts.
+ *                    Unset/off is `token.yield_job_unset`. Operator
+ *                    `distributeRevenue` remains a treasury mutation.
  *   token.buyback    `recordBuyback` refuses to settle an operator-typed
  *                    `tokensBought` that did not move on the ledger. No
  *                    market-buy recipe exists; burning fee-funded engine
@@ -76,6 +78,11 @@ export interface TokenRouterOptions {
    * inflation cannot be un-minted (§4.3 / EMISSIONS_ENABLED).
    */
   emissionsEnabled?: boolean;
+  /**
+   * Weekly yield aggregation. When omitted, `yield.runWindow` refuses
+   * `token.yield_job_unset`. Callback MUST NOT accept `sources`.
+   */
+  runYieldWindow?: (input: { windowId: string }) => Promise<YieldRunResult>;
 }
 
 function toTrpcError(err: unknown): TRPCError {
@@ -114,6 +121,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.params_missing':
       case 'token.params_invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
+      case 'token.yield_job_unset':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
     }
@@ -177,6 +186,7 @@ function proposalToWire(p: {
 
 export function createTokenRouter(token: TokenService, options: TokenRouterOptions = {}) {
   const emissionsEnabled = options.emissionsEnabled ?? true;
+  const runYieldWindow = options.runYieldWindow;
 
   return router({
     health: publicProcedure
@@ -302,25 +312,41 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       .output(z.object({ epoch: z.number().int().nonnegative() }))
       .query(async () => guard(async () => ({ epoch: await token.nextEmissionEpoch() }))),
 
-    // ── Operator yield settlement + burn (§4.3 flywheel NOT built) ──────────
-    // Both procedures below are OPERATOR ACTIONS, and calling them "live paths"
-    // (as the tracker did until 2026-08-03) overstated them by a category:
-    //
-    //  - Nothing calls either one. No cron, no bus subscriber, no admin form.
-    //    A human with admin:treasury + MFA invokes them by hand or they never
-    //    run at all.
-    //  - `sources[].amount` is still operator-typed (aggregation job is the
-    //    socket), but first-claim amounts are bound to live houseFees — over-
-    //    claim refuses `token.yield_source_underfunded` (#1353). `tokensBought`
-    //    is asserted, not executed — no market-buy exists, so a new run
-    //    refuses `token.buyback_tokens_unmoved` rather than settling a
-    //    DB-only buy (or burning fee-funded engine balance as if it were
-    //    purchased). `revenueTotal` is validated as assetId → unsigned
-    //    decimals before the buyback claim.
-    //
-    // The maths and the ledger recipes underneath are real and tested; the
-    // missing half is automation / real purchase, not pot bind or burn order.
-    // §13 sockets `token.yield` and `token.buyback`.
+    // ── Yield aggregation job + operator settlement + burn ────────────────
+    // `yield.runWindow` is the §4.3 weekly job: `{ windowId }` only, amounts
+    // from ledger.balance(houseFees). Unset/off → token.yield_job_unset.
+    // `distributeRevenue` stays a treasury mutation that still binds first-
+    // claim amounts to live houseFees (`token.yield_source_underfunded`).
+    // Buyback remains a socket (no market-buy). Do not describe buyback as live.
+
+    yield: router({
+      runWindow: scopedProcedure('admin:treasury')
+        .input(z.object({ windowId: z.string().min(1).max(128) }).strict())
+        .output(
+          z.object({
+            windowId: z.string(),
+            distributed: amountString,
+            recipients: z.number().int().nonnegative(),
+            skipped: z.number().int().nonnegative(),
+            alreadyPaid: z.number().int().nonnegative(),
+          }),
+        )
+        .mutation(async ({ input }) =>
+          guard(async () => {
+            if (!runYieldWindow) {
+              throw new TokenError('Yield aggregation job is unset (YIELD_JOB_ENABLED=false)', 'token.yield_job_unset');
+            }
+            const result = await runYieldWindow({ windowId: input.windowId });
+            return {
+              windowId: result.windowId,
+              distributed: formatAmount(result.distributed),
+              recipients: result.recipients,
+              skipped: result.skipped,
+              alreadyPaid: result.alreadyPaid,
+            };
+          }),
+        ),
+    }),
 
     distributeRevenue: scopedProcedure('admin:treasury')
       .input(
