@@ -113,6 +113,7 @@ export default [
     { path: '/bank/cards', component: resolve=>(require(["../pages/intafaced/bank/Cards"],resolve)) },
     { path: '/bank/ramps', component: resolve=>(require(["../pages/intafaced/bank/Ramps"],resolve)) },
     { path: '/bank/analytics', component: resolve=>(require(["../pages/intafaced/bank/Analytics"],resolve)) },
+    { path: '/bank/business', component: resolve=>(require(["../pages/intafaced/bank/Business"],resolve)) },
     { path: '/pay', component: resolve=>(require(["../pages/intafaced/Pay"],resolve)) },
     { path: '/pay/money', component: resolve=>(require(["../pages/intafaced/pay/Money"],resolve)) },
     { path: '/pay/merchant', component: resolve=>(require(["../pages/intafaced/pay/Merchant"],resolve)) },
