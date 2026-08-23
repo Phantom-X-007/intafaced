@@ -19,7 +19,7 @@ import {
   type QuoteRequest,
   type SorCostTerms,
   type VenueKind,
-  type VenueLatencyGrade,
+  type RestLatencyGrade,
 } from '@intafaced/venue-adapter';
 
 const INTERNAL_KINDS = new Set<VenueKind>(['internal']);
@@ -129,7 +129,7 @@ export async function planOmsRoute(input: OmsPlanInput, registry?: SealedHouseTe
   return { ok: true, report: buildExecutionReport(plan) };
 }
 
-export function latencyGradeWire(venueId: string, over: Partial<VenueLatencyGrade> = {}): VenueLatencyGrade {
+export function latencyGradeWire(venueId: string, over: Partial<RestLatencyGrade> = {}): RestLatencyGrade {
   return {
     venueId,
     measurement: 'rest-round-trip',

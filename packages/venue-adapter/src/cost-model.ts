@@ -1,5 +1,5 @@
 import { type Amount, add, mulBps, sub } from '@intafaced/ledger-client';
-import { isGraded, type MarketDataAdapter, type VenueLatencyGrade } from '@intafaced/venue-contracts';
+import { isGraded, type MarketDataAdapter, type RestLatencyGrade, type VenueLatencyGrade } from '@intafaced/venue-contracts';
 import { routingWeightFromCapture, type CaptureRoutingRecord } from './fabric/capture-routing.js';
 import { measuredLatencyMs, routingWeightFromGrade } from './fabric/latency.js';
 
@@ -48,9 +48,10 @@ export interface SorCostTerms {
    */
   readonly transferCostBps: number | null;
   /**
-   * Connect latency grade. `null` or ungraded → routing weight 0 (D-S-18).
+   * Connect REST latency grade. `null` or ungraded → routing weight 0 (D-S-18).
+   * WS handshake is `streamLatencyGrade` — not a ranking input here.
    */
-  readonly latencyGrade: VenueLatencyGrade | null;
+  readonly latencyGrade: RestLatencyGrade | null;
   /**
    * Optional capture fact (#1739 `CaptureRecord` shape). When set, a hole
    * refuses the venue (weight 0). Omit when capture was not consulted.

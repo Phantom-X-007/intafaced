@@ -17,9 +17,9 @@ import {
 } from '@intafaced/venue-contracts';
 import { AsyncFrameQueue, fetchHttpPort, webSocketStreamPort, type HttpPort, type StreamHandle, type StreamPort } from '../transport.js';
 import { RateLimitGovernor, type RateLimitPolicy } from '../rate-limit.js';
-import { VenueLatencyGrader } from '../latency.js';
+import { observeStreamRoundTrip, REST_MEASUREMENT, VenueLatencyGrader, WS_MEASUREMENT } from '../latency.js';
 import { assertPayoutGradeBook } from '../payout-grade.js';
-import type { VenueLatencyGrade } from '@intafaced/venue-contracts';
+import type { RestLatencyGrade, WsLatencyGrade } from '@intafaced/venue-contracts';
 
 /**
  * BYBIT SPOT — the SECOND venue, and the first thing that makes grading mean
@@ -201,6 +201,7 @@ export interface BybitSpotOptions {
   readonly stream?: StreamPort;
   readonly governor?: RateLimitGovernor;
   readonly grader?: VenueLatencyGrader;
+  readonly wsGrader?: VenueLatencyGrader;
   readonly restBase?: string;
   readonly wsBase?: string;
   readonly clock?: () => number;
@@ -214,6 +215,7 @@ export class BybitSpotMarketData implements MarketDataAdapter {
   readonly venue = VENUE;
   readonly governor: RateLimitGovernor;
   readonly grader: VenueLatencyGrader;
+  readonly wsGrader: VenueLatencyGrader;
 
   readonly #http: HttpPort;
   readonly #stream: StreamPort;
@@ -225,7 +227,6 @@ export class BybitSpotMarketData implements MarketDataAdapter {
 
   constructor(options: BybitSpotOptions = {}) {
     this.#http = options.http ?? fetchHttpPort();
-    this.#stream = options.stream ?? webSocketStreamPort();
     this.#restBase = options.restBase ?? REST_BASE;
     this.#wsBase = options.wsBase ?? WS_BASE;
     this.#clock = options.clock ?? Date.now;
@@ -233,6 +234,14 @@ export class BybitSpotMarketData implements MarketDataAdapter {
     this.#heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
     this.governor = options.governor ?? new RateLimitGovernor(BYBIT_SPOT_RATE_LIMIT, this.#clock());
     this.grader = options.grader ?? new VenueLatencyGrader(VENUE.id);
+    if (this.grader.measurement !== REST_MEASUREMENT) {
+      throw new Error(`${VENUE.id} grader must measure ${REST_MEASUREMENT}, got ${this.grader.measurement}`);
+    }
+    this.wsGrader = options.wsGrader ?? new VenueLatencyGrader(VENUE.id, { measurement: WS_MEASUREMENT });
+    if (this.wsGrader.measurement !== WS_MEASUREMENT) {
+      throw new Error(`${VENUE.id} wsGrader must measure ${WS_MEASUREMENT}, got ${this.wsGrader.measurement}`);
+    }
+    this.#stream = observeStreamRoundTrip(options.stream ?? webSocketStreamPort(), this.wsGrader, this.#clock);
   }
 
   /**
@@ -247,8 +256,16 @@ export class BybitSpotMarketData implements MarketDataAdapter {
    * Declared on `MarketDataAdapter` so a consumer holding the interface can read
    * it; see that contract for why it is optional there.
    */
-  latencyGrade(now: Date = new Date(this.#clock())): VenueLatencyGrade {
-    return this.grader.grade(now);
+  latencyGrade(now: Date = new Date(this.#clock())): RestLatencyGrade {
+    return this.grader.grade(now) as RestLatencyGrade;
+  }
+
+  /**
+   * WebSocket handshake grade. Timed on `StreamPort.open`, not on REST, and not
+   * on first-frame silence. Unopened streams stay `grade: null`.
+   */
+  streamLatencyGrade(now: Date = new Date(this.#clock())): WsLatencyGrade {
+    return this.wsGrader.grade(now) as WsLatencyGrade;
   }
 
   /**

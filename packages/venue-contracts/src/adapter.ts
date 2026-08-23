@@ -2,7 +2,7 @@ import type { VenueMarket } from './market.js';
 import type { VenueBookDelta, VenueBookSnapshot } from './book.js';
 import type { BorrowRate, FundingRate, VenueTrade } from './rates.js';
 import type { TransferRail, VenueBalance, VenueOrder, VenueOrderType, VenuePosition } from './account.js';
-import type { VenueLatencyGrade } from './latency.js';
+import type { RestLatencyGrade, WsLatencyGrade } from './latency.js';
 import { VenueCredentialScopeError, VenueCredentialsMissingError } from './errors.js';
 import type { Amount } from '@intafaced/ledger-client/money';
 
@@ -149,8 +149,23 @@ export interface MarketDataAdapter {
    * `now` is injected for the same reason every clock in this package is: a
    * grade is a statement about a window ending at a specific instant, and a
    * function that reads the wall clock cannot be tested against a stale window.
+   *
+   * This door is **`rest-round-trip`**. Stream handshake is `streamLatencyGrade`.
+   * The two are not interchangeable: a fast REST venue can still handshake late.
    */
-  latencyGrade?(now?: Date): VenueLatencyGrade;
+  latencyGrade?(now?: Date): RestLatencyGrade;
+
+  /**
+   * This adapter's WebSocket handshake grade (`ws-round-trip`).
+   *
+   * Timed from immediately before `StreamPort.open` to the returned handle (or
+   * a thrown open). Unopened streams stay `grade: null` — silence is not a
+   * letter, and a quiet book is not a slow handshake. Depth-delta delivery lag
+   * is a different number and is not this method.
+   *
+   * Optional for the same two-absences reason as `latencyGrade`.
+   */
+  streamLatencyGrade?(now?: Date): WsLatencyGrade;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
