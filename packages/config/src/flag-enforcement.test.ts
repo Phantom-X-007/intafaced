@@ -203,13 +203,12 @@ describe('why the edge does not gate on these flags', () => {
    * 404s unknown prefixes, so gating there would be one place instead of
    * sixteen. It is also the wrong answer, and this is why.
    *
-   * `LAUNCH_DROP` defaults to `'0'`. At drop 0 the registry has exactly five
-   * flags on, none of them a routed capability. So for every prefix in
-   * `UPSTREAMS`, every flag belonging to that module resolves off — and an edge
-   * that refused a request whose module had no live flag would refuse the entire
-   * platform on a default deployment. Identity would not authenticate, trade
-   * would not quote, and `edge.gateway` itself is drop I, so the gateway would
-   * refuse before it got as far as asking about anything else.
+   * `LAUNCH_DROP` defaults to `'0'`. At drop 0 the registry has waitlist and
+   * referral on (`core-ops`), and `/api/ops` now routes that module — those two
+   * stay live. Every other routed module's flags resolve off. An edge that
+   * refused a request whose module had no live flag would still refuse identity
+   * and trade. `edge.gateway` itself is drop I, so the gateway would refuse
+   * before it got as far as asking about anything else.
    *
    * That is the case the brief called out: a flag that silently 404s a live
    * capability at drop 0 is worse than today. The module kill-switch already
@@ -237,11 +236,11 @@ describe('why the edge does not gate on these flags', () => {
     const flags = FLAG_REGISTRY.filter((f) => f.module === module);
     expect(flags.length, `${module} is routed but has no flag at all`).toBeGreaterThan(0);
 
-    const live = flags.filter((f) => isEnabled(f.key, { drop: DEFAULT_DROP }));
-    expect(
-      live.map((f) => f.key),
-      `${module} would still serve if the edge gated on flags`,
-    ).toEqual([]);
+    const live = flags.filter((f) => isEnabled(f.key, { drop: DEFAULT_DROP })).map((f) => f.key);
+    // waitlist/referral are drop-0 and live on module `core-ops`. `/api/ops`
+    // routes that module; they must stay on at the default drop.
+    const allowedOn = module === 'core-ops' ? ['waitlist.enabled', 'referral.queue'] : [];
+    expect(live, `${module} would still serve if the edge gated on flags`).toEqual(allowedOn);
   });
 
   it('would refuse the gateway itself before refusing anything else', () => {
