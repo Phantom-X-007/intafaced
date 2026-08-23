@@ -35,7 +35,13 @@ async function build(licence: string | undefined, extra: { accent?: string; tena
   const app = Fastify({ logger: false });
   await app.register(helmet, {
     contentSecurityPolicy: false,
-    frameguard: { action: 'deny' },
+    frameguard: false,
+  });
+  app.addHook('onSend', async (req, reply, payload) => {
+    const url = req.url.split('?')[0] ?? '';
+    if (url === WIDGET_RAMP_PATH) reply.removeHeader('x-frame-options');
+    else if (!reply.hasHeader('x-frame-options')) reply.header('x-frame-options', 'DENY');
+    return payload;
   });
   registerWidgetRampRoute(app, { licence, accent: extra.accent, tenantCss: extra.tenantCss });
   await app.ready();

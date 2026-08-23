@@ -166,7 +166,9 @@ export async function registerSecurityHeaders(app: FastifyInstance): Promise<voi
     strictTransportSecurity: false,
     // Answers are JSON and are not a document; denying framing costs nothing
     // and removes a clickjacking question nobody should have to re-ask.
-    frameguard: { action: 'deny' },
+    // Widget `/api/widget/ramp` must be iframeable. Frameguard is applied in
+    // a later onSend except that one path (see registerFrameguardExceptWidget).
+    frameguard: false,
     referrerPolicy: { policy: 'no-referrer' },
     // `crossOriginResourcePolicy` would add `same-origin`, which contradicts the
     // deliberate cross-origin grant `cors.ts` issues to the configured
@@ -174,6 +176,15 @@ export async function registerSecurityHeaders(app: FastifyInstance): Promise<voi
     crossOriginResourcePolicy: false,
     crossOriginOpenerPolicy: false,
     crossOriginEmbedderPolicy: false,
+  });
+  app.addHook('onSend', async (req, reply, payload) => {
+    const url = req.url.split('?')[0] ?? '';
+    if (url === '/api/widget/ramp') {
+      reply.removeHeader('x-frame-options');
+    } else if (!reply.hasHeader('x-frame-options')) {
+      reply.header('x-frame-options', 'DENY');
+    }
+    return payload;
   });
 }
 

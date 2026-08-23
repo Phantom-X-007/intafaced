@@ -106,12 +106,21 @@ export function registerWidgetRampRoute(app: FastifyInstance, config: WidgetRamp
     return reply.code(200).send(renderRampWidget(accent, extraCss));
   };
 
+  app.addHook('onSend', async (req, reply, payload) => {
+    const url = req.url.split('?')[0] ?? '';
+    if (url === WIDGET_RAMP_PATH) allowFraming(reply);
+    return payload;
+  });
+
   app.get(
     WIDGET_RAMP_PATH,
     {
-      // Route-level skip (FastifyHelmetRouteOptions.helmet = false). Not
-      // config.helmet.skipRoute — that key is not on FastifyContextConfig.
+      // Route-level skip (FastifyHelmetRouteOptions.helmet = false).
       helmet: false,
+      onRequest: (_req, reply, done) => {
+        allowFraming(reply);
+        done();
+      },
       onSend: framingOnSend,
     },
     send,
