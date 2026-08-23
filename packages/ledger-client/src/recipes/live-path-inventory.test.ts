@@ -79,6 +79,10 @@ const PINNED_SOCKETS: readonly { name: RecipeName; fingerprint: string }[] = [
   { name: 'marketPremiumPlacement', fingerprint: reasonFingerprint(RECIPE_MATRIX.marketPremiumPlacement.reason) },
 ];
 
+const SOCKET_CALLER_ALLOWLIST: ReadonlyMap<RecipeName, readonly string[]> = new Map([
+  ['chargebackOpen', ['services/svc-pay/src/chargeback-ledger.ts']],
+]);
+
 describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
   const inventory = buildRecipeMatrixInventory();
 
@@ -121,13 +125,15 @@ describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
     }
   });
 
-  it('production scan: live recipes have callers; socket recipes have none', () => {
+  it('production scan: live recipes have callers; socket callers stay explicitly allowlisted', () => {
     const callers = scanProductionRecipeCallers();
     for (const name of inventory.live) {
       expect(callers.has(name), `live recipe ${name} has no production caller`).toBe(true);
     }
     for (const name of inventory.sockets) {
-      expect(callers.get(name) ?? [], `socket recipe ${name} must stay unwired in services/`).toEqual([]);
+      expect(callers.get(name) ?? [], `socket recipe ${name} has an unexpected production caller`).toEqual(
+        SOCKET_CALLER_ALLOWLIST.get(name) ?? [],
+      );
     }
     // No production caller outside the matrix (would mean a hand-named recipe).
     for (const name of callers.keys()) {
