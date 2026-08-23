@@ -84,15 +84,15 @@
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('cms.noticePage.alertsTitle') }}</h2>
-        <span class="ix-sub">notify.createAlert · notify.alerts</span>
+        <span class="ix-sub">{{ $t('cms.noticePage.alertsApi') }}</span>
       </div>
       <p class="ix-lead">{{ $t('cms.noticePage.alertsLead') }}</p>
       <div class="ix-form">
         <label>{{ $t('cms.noticePage.alertsKind') }}
           <select v-model="alertKind">
-            <option value="funding">funding</option>
-            <option value="liquidation_proximity">liquidation_proximity</option>
-            <option value="price">price</option>
+            <option value="funding">{{ $t('cms.noticePage.kindFunding') }}</option>
+            <option value="liquidation_proximity">{{ $t('cms.noticePage.kindLiq') }}</option>
+            <option value="price">{{ $t('cms.noticePage.kindPrice') }}</option>
           </select>
         </label>
         <label>{{ $t('cms.noticePage.alertsMarket') }}
@@ -100,8 +100,8 @@
         </label>
         <label>{{ $t('cms.noticePage.alertsDirection') }}
           <select v-model="alertDirection">
-            <option value="above">above</option>
-            <option value="below">below</option>
+            <option value="above">{{ $t('cms.noticePage.dirAbove') }}</option>
+            <option value="below">{{ $t('cms.noticePage.dirBelow') }}</option>
           </select>
         </label>
         <label>{{ $t('cms.noticePage.alertsTarget') }}
