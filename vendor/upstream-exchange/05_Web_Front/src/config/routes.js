@@ -68,6 +68,7 @@ export default [
     { path: '/exchange', component: resolve=>(require(["../pages/exchange/Exchange"],resolve)) },
     { path: '/exchange/:pair', component: resolve=>(require(["../pages/exchange/Exchange"],resolve)), name: "ExchangePair"},
     { path: '/predict', component: resolve=>(require(["../pages/intafaced/Predict"],resolve)) },
+    { path: '/mining', component: resolve=>(require(["../pages/intafaced/Mining"],resolve)) },
     { path: '/help', component: resolve=>(require(["../pages/cms/Help"],resolve)) },
     { path: '/helplist', component: resolve=>(require(["../pages/cms/HelpList"],resolve)) },
     { path: '/helpdetail', component: resolve=>(require(["../pages/cms/HelpDetail"],resolve)) },
