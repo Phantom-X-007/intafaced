@@ -21,6 +21,7 @@ import {
   tryLiveChainFromEnv,
 } from './posture.js';
 import { EvmLiveChain } from './evm-chain.js';
+import { MemoryBroadcastStore } from './broadcast-store.js';
 
 /**
  * RAILS THAT ARE HONEST ABOUT NOT BEING REAL.
@@ -332,10 +333,37 @@ describe('defaultChainFor — what index.ts actually gets', () => {
       PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
       PAY_CRYPTO_ASSETS: 'ETH:native',
     };
-    const chain = defaultChainFor(env);
+    const chain = defaultChainFor(env, new MemoryBroadcastStore());
     expect(chain).toBeInstanceOf(EvmLiveChain);
     expect(chain.posture).toBe('live');
     expect(new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 }).mode).toBe('live');
+  });
+
+  it('REFUSES a live chain in staging/prod without a durable BroadcastStore', () => {
+    const env = {
+      APP_ENV: 'prod',
+      PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+      PAY_CRYPTO_CHAIN_ID: '31337',
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
+      PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      PAY_CRYPTO_ASSETS: 'ETH:native',
+    };
+    expect(() => defaultChainFor(env)).toThrow(/durable BroadcastStore/);
+    expect(() => tryLiveChainFromEnv(env)).toThrow(/durable BroadcastStore/);
+    expect(() => defaultChainFor({ ...env, APP_ENV: 'staging' })).toThrow(/durable BroadcastStore/);
+  });
+
+  it('still builds a live chain in dev without an injected store (Memory fallback)', () => {
+    const chain = defaultChainFor({
+      APP_ENV: 'dev',
+      PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+      PAY_CRYPTO_CHAIN_ID: '31337',
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
+      PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      PAY_CRYPTO_ASSETS: 'ETH:native',
+    });
+    expect(chain).toBeInstanceOf(EvmLiveChain);
+    expect(chain.posture).toBe('live');
   });
 
   it('REFUSES a partial live config rather than quietly falling back to MemoryChain', () => {
@@ -370,7 +398,7 @@ describe('shouldRegisterCardSandbox', () => {
       PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
       PAY_CRYPTO_ASSETS: 'ETH:native',
     };
-    const chain = defaultChainFor(env);
+    const chain = defaultChainFor(env, new MemoryBroadcastStore());
     const rails = new RailRegistry([new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 })]);
     expect(rails.list()[0]!.mode).toBe('live');
     expect(() => assertRailPosture(rails, { APP_ENV: 'prod' })).not.toThrow();
