@@ -136,7 +136,7 @@ describe('executeOmsRoute', () => {
     expect(store.get('oms-cheap')?.execution.venueOrderId).toBe('v-cheap');
   });
 
-  it('refuses internal venues and does not submit', async () => {
+  it('executes the internal book leg through the injected OMS adapter', async () => {
     const book = new FakeSource('book');
     const result = await executeOmsRoute({
       symbol: 'BTC/USDT',
@@ -145,8 +145,8 @@ describe('executeOmsRoute', () => {
       venues: [completeVenue({ id: 'book', price: '90', kind: 'internal' })],
       submitByVenue: { book: book.submit },
     });
-    expect(result).toMatchObject({ ok: false, reason: 'internal_venue' });
-    expect(book.calls).toHaveLength(0);
+    expect(result.ok).toBe(true);
+    expect(book.calls).toHaveLength(1);
   });
 
   it('refuses a killed house tenant and does not submit', async () => {

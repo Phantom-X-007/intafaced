@@ -31,7 +31,8 @@ registerProcessHooks(
  * svc-execution — house tenancy (D26-P0-01) + OMS plan/execute (D26-P1-X3).
  *
  * External spot venues wire from EXECUTION_VENUE_IDS + per-venue EXECUTION_VENUE_{ID}_* credentials.
- * Internal venues refused. No matching-path privilege. In-memory sealed registry.
+ * Internal-book legs use the same OMS route and an explicitly injected submit adapter; no second book is created here.
+ * In-memory sealed registry.
  */
 const registry = new SealedHouseTenantRegistry();
 const executionVenueIds = parseExecutionVenueIds(env.EXECUTION_VENUE_IDS);

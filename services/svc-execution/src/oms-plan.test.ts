@@ -63,14 +63,16 @@ describe('planOmsRoute', () => {
     expect(result.report.shortfall).toMatchObject({ kind: 'none' });
   });
 
-  it('refuses internal venues at the OMS door (P0-01)', async () => {
+  it('plans the existing internal book venue through the same SOR', async () => {
     const result = await planOmsRoute({
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
       venues: [completeVenue({ id: 'book', price: '90', kind: 'internal' })],
     });
-    expect(result).toMatchObject({ ok: false, reason: 'internal_venue' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.report.venues.map((v) => v.venueId)).toEqual(['book']);
   });
 
   it('refuses a killed house tenant before ranking', async () => {
