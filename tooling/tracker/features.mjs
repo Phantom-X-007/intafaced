@@ -1889,12 +1889,14 @@ export const FEATURES = [
     requires: [
       'services/svc-bank/src/business/business-service.ts',
       'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/bank/Business.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/bank-expense-cards.golden.js',
     ],
     dependsOn: ['bank.accounts', 'bank.cards', 'pay.gateway'],
     note:
       '**Done 2026-08-23:** shell /bank/business — create, proposeTransfer (posted under threshold; pending hold at/above), approve. ' +
       'Maker self-approve surfaces bank.business_self_approve. Amounts decimal strings. Empty list ≠ 0. Same ledger-half pattern as bank.cards. ' +
-      'RESIDUAL (named, not fake-done): KYB Lane B, expense cards, invoicing, multi-recipient payroll. ' +
+      '**2026-08-23 expense cards:** /bank/business issues via cards.issue; simulated is drawn, never hidden. ' +
+      'RESIDUAL (named, not fake-done): KYB Lane B, invoicing, multi-recipient payroll. ' +
       'Prior: W13 L03 purposed ledger hold; W10 L08 dual-control roles. Law §31:811.',
   }),
   f('tax.engine', 'svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)', {

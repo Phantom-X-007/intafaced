@@ -950,7 +950,12 @@ module.exports = {
                 needAccount: "Create a business account first.",
                 needSpace: "Create a space first — a transfer moves value between spaces.",
                 kindPosted: "posted",
-                kindPending: "pending"
+                kindPending: "pending",
+                expenseTitle: "Expense cards",
+                expenseApi: "cards.issue · simulated: true",
+                expenseLead: "Issues through bank.cards. The simulator flag is on the card and on this card — never drawn as a live BIN.",
+                expenseSimulated: "true — this programme is the card-sim. Live issuer stays a socket.",
+                expenseIssue: "Issue expense card"
             }
         },
         pay: {
