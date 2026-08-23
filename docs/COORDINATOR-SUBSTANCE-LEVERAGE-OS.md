@@ -3,7 +3,7 @@
 **Audit bank:** [`COORDINATOR-OS-FULL-AUDIT-2026-08-09.md`](COORDINATOR-OS-FULL-AUDIT-2026-08-09.md).
 
 **Binding for every `new` / `topup` / `audit pastes` / mid-wave `status`.**  
-**Companions:** runbook · doctrine · STATE · paste skeleton · depth audit example [`PASTE-W6-DEPTH-AUDIT-2026-08-09.md`](PASTE-W6-DEPTH-AUDIT-2026-08-09.md) · Denon wall [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md).
+**Companions:** runbook · doctrine · STATE · paste skeleton · depth audit example [`PASTE-W6-DEPTH-AUDIT-2026-08-09.md`](PASTE-W6-DEPTH-AUDIT-2026-08-09.md) · Denon wall [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md).
 
 **Acknowledge (once per wave authoring session):**  
 `Substance Audit Active: Evaluating Queue Mass, Leverage Density, Residual Depth. Rejecting busy efficiency.`

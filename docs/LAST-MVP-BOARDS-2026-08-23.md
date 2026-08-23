@@ -6,7 +6,7 @@
 **Does not replace:** ownership law [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · Shehzad sole-lock [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · Shehzad full runway [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) (INTACHAIN stays there, **not this wave**)
 
 **Tip at write:** re-derive `git fetch origin main && git log -1 --oneline origin/main`  
-**Tracker at write:** `140/158` shipped · `13` ready · `5` blocked · `30` sockets. Re-derive with `git show origin/main:docs/TRACKER.md | sed -n '1,45p'`.
+**Tracker at write:** `141/158` shipped · `12` ready · `5` blocked · `30` sockets. Re-derive with `git show origin/main:docs/TRACKER.md | sed -n '1,45p'`.
 
 When **your** list below is empty: **stop**. Do not mill. Do not close a parked socket. Do not wait for Nitro.
 
@@ -87,7 +87,7 @@ Home for GitHub admin clicks: [`ops/OWNER-GITHUB-CONFIG.md`](ops/OWNER-GITHUB-CO
 
 **Ban:** Vue / i18n / academy canvas · new `mount-vs-tracker` as Done · Shehzad `.sol` / L1 · closing §1 sockets · inventing §8 numbers.
 
-**Collision:** path-intersect every open Nitro PR before edit. Nitro in flight at write: **#3069** i18n · **#3072** academy video · **#3073** quant sandbox. Re-derive `gh pr list`.
+**Collision:** path-intersect every open Nitro PR before edit. Nitro in flight at write: **#3069** i18n · **#3073** quant sandbox · **#3074** mobile wrap. Re-derive `gh pr list`.
 
 | #        | Mountain                                                                      | Done bar                                                                                                                                                                                                                                                                                                                |
 | -------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -123,7 +123,7 @@ Then **stop**. Integrity that needs Stripe/BIN stays a socket.
 Drain [`ops/boom/2026-08-22-agent-board-complete.md`](ops/boom/2026-08-22-agent-board-complete.md). After it: **no second boom**.
 
 **Still this wave (skip if already `done` on tip):**  
-`infra.i18n` · `web.mobile-apps` · `api.gateway` · `quant.sdk` · `quant.marketplace` · `academy.video` · `ops.business-systems` · `ops.marketing` · `ops.infra-b2b`  
+`infra.i18n` · `web.mobile-apps` · `api.gateway` · `quant.sdk` · `quant.marketplace` · `ops.business-systems` · `ops.marketing` · `ops.infra-b2b`  
 Plus two wirings (not new tracker mountains): **KYB actually blocks money** · **ops.admin fee/listing WRITE**.
 
 **Not Nitro:** Shehzad chain · Phantom invent/unstamp · Class X content.
@@ -180,7 +180,7 @@ P-07 Kill-switch completeness.
 P-08 connect.data-lake honesty — stamped done 2026-08-22; keep only if ticks/books/fills persist.
 
 NOT YOU: Vue, i18n, academy canvas, Shehzad L1, closing sockets, inventing §8 numbers.
-Path-intersect Nitro open PRs (#3069 i18n, #3072 video, #3073 quant — re-derive).
+Path-intersect Nitro open PRs (#3069 i18n, #3073 quant, #3074 mobile — re-derive).
 
 PARKED (spec’d, not this wave — do not build):
 INTACHAIN + evm/bridge/validators/governance/Predict/mining/rust-core/mpc/contract-audit.
@@ -221,10 +221,10 @@ Do not ping Nitro. Do not touch vendor shell or custodial pay/bank.
 
 ## 9 · Provenance (this turn)
 
-| Fact                                                                                   | How                                       |
-| -------------------------------------------------------------------------------------- | ----------------------------------------- |
-| tip `8aeeb897f` #3067 academy canvas                                                   | `git fetch` + worktree from `origin/main` |
-| tracker 140/158 · 13 ready · 5 blocked · 30 sockets                                    | `docs/TRACKER.md` on that tip             |
-| open PRs #3069 #3072 #3073 ZenYoda3 · #2473 shehzad002                                 | `gh pr list`                              |
-| protection **404** · rulesets `[]` · `allow_auto_merge` false · public · Phantom admin | `gh api` 2026-08-23                       |
-| #2248 / #2575 closed 2026-08-22                                                        | `gh pr view`                              |
+| Fact                                                                                   | How                         |
+| -------------------------------------------------------------------------------------- | --------------------------- |
+| tip `d62014100` #3075 last MVP boards                                                  | `git fetch` + `origin/main` |
+| tracker 141/158 · 12 ready · 5 blocked · 30 sockets                                    | `docs/TRACKER.md` on tip    |
+| open PRs #3069 #3073 #3074 ZenYoda3 · #2473 shehzad002                                 | `gh pr list`                |
+| protection **404** · rulesets `[]` · `allow_auto_merge` false · public · Phantom admin | `gh api` 2026-08-23         |
+| #2248 / #2575 closed 2026-08-22                                                        | `gh pr view`                |

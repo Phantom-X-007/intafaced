@@ -28,25 +28,25 @@ When he says **`new`** (no re-teach needed):
 
 ## Snapshot
 
-| Field               | Value                                                                                                                                 |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| **last_updated**    | 2026-08-09 (v1.4 all-out fixes F1–F12)                                                                                                |
-| **os_version**      | **1.4** — anti-pad law · ROI status · HUMAN frontend fence · durable bank                                                             |
-| **substance_os**    | [`COORDINATOR-SUBSTANCE-LEVERAGE-OS.md`](COORDINATOR-SUBSTANCE-LEVERAGE-OS.md) v1.1                                                   |
-| **objective**       | maximize impact ÷ compute · reject busy efficiency                                                                                    |
-| **os_on_tip**       | **pending PR** — re-set to yes+SHA after merge                                                                                        |
-| **os_docs_pr**      | _(fill after open)_                                                                                                                   |
-| **full_audit**      | [`COORDINATOR-OS-FULL-AUDIT-2026-08-09.md`](COORDINATOR-OS-FULL-AUDIT-2026-08-09.md)                                                  |
-| **active_wave**     | **6**                                                                                                                                 |
-| **denon_parallel**  | **LIVE v2** — [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) · LIVE-LANES `denon-hard-parallel` |
-| **tip_at_last_new** | `8da2c561` paste-time · **always re-fetch** (lead only)                                                                               |
-| **lane_count**      | 16 (pre-v1.4 wave — next `new` re-grades)                                                                                             |
-| **paste_dir**       | `docs/paste-w6/`                                                                                                                      |
-| **master_paste**    | `docs/PASTE-BUILD-WAVE-6-2026-08-09.md`                                                                                               |
-| **depth_audit**     | `docs/PASTE-W6-DEPTH-AUDIT-2026-08-09.md`                                                                                             |
-| **clipboard_index** | L16                                                                                                                                   |
-| **wave_6_status**   | Cooking · L11 HUMAN-fence corrected · Denon fences injected · anti-pad stop law in OS for next wave                                   |
-| **n_policy**        | evidence-driven thick seats only · soft 8–16 · max 20 if THICK · anti-pad · depth+ROI every `new`                                     |
+| Field               | Value                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **last_updated**    | 2026-08-09 (v1.4 all-out fixes F1–F12)                                                                           |
+| **os_version**      | **1.4** — anti-pad law · ROI status · HUMAN frontend fence · durable bank                                        |
+| **substance_os**    | [`COORDINATOR-SUBSTANCE-LEVERAGE-OS.md`](COORDINATOR-SUBSTANCE-LEVERAGE-OS.md) v1.1                              |
+| **objective**       | maximize impact ÷ compute · reject busy efficiency                                                               |
+| **os_on_tip**       | **pending PR** — re-set to yes+SHA after merge                                                                   |
+| **os_docs_pr**      | _(fill after open)_                                                                                              |
+| **full_audit**      | [`COORDINATOR-OS-FULL-AUDIT-2026-08-09.md`](COORDINATOR-OS-FULL-AUDIT-2026-08-09.md)                             |
+| **active_wave**     | **6**                                                                                                            |
+| **denon_parallel**  | **LAST-MVP overlay** — [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) · 120-ID list historical |
+| **tip_at_last_new** | `8da2c561` paste-time · **always re-fetch** (lead only)                                                          |
+| **lane_count**      | 16 (pre-v1.4 wave — next `new` re-grades)                                                                        |
+| **paste_dir**       | `docs/paste-w6/`                                                                                                 |
+| **master_paste**    | `docs/PASTE-BUILD-WAVE-6-2026-08-09.md`                                                                          |
+| **depth_audit**     | `docs/PASTE-W6-DEPTH-AUDIT-2026-08-09.md`                                                                        |
+| **clipboard_index** | L16                                                                                                              |
+| **wave_6_status**   | Cooking · L11 HUMAN-fence corrected · Denon fences injected · anti-pad stop law in OS for next wave              |
+| **n_policy**        | evidence-driven thick seats only · soft 8–16 · max 20 if THICK · anti-pad · depth+ROI every `new`                |
 
 ---
 
