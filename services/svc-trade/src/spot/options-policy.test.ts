@@ -36,8 +36,12 @@ describe('describeOptionsPolicy — trade.options honesty door', () => {
     expect(policy.inventsLiveSet).toBe(false);
     expect(policy.inventsSettlementAsset).toBe(false);
     expect(policy.inventsIvSurface).toBe(false);
-    expect(policy.ordersStillRefuseUntilEngine).toBe(true);
-    expect(policy.allowed.optionsOrders).toBe(false);
+    expect(policy.ordersStillRefuseUntilEngine).toBe(false);
+    expect(policy.paperEngine).toBe(true);
+    expect(policy.liveOrdersStillRefuse).toBe(true);
+    expect(policy.allowed.optionsOrders).toBe(true);
+    expect(policy.allowed.paperOptionsOrders).toBe(true);
+    expect(policy.allowed.liveOptionsOrders).toBe(false);
     expect(policy.allowed.optionsListing).toBe(false);
     expect(policy.allowed.nonOptionsListing).toBe(true);
     expect(policy.statusLine).toContain('lawStamped=0');
@@ -52,7 +56,8 @@ describe('describeOptionsPolicy — trade.options honesty door', () => {
     expect(policy.settlementAssetLawStamped).toBe(true);
     expect(policy.settlementFixingConfigured).toBe(true);
     expect(policy.allowed.optionsListing).toBe(true);
-    expect(policy.allowed.optionsOrders).toBe(false);
+    expect(policy.allowed.optionsOrders).toBe(true);
+    expect(policy.allowed.liveOptionsOrders).toBe(false);
     expect(JSON.stringify(policy)).not.toContain('opaque-owner-stamp');
     expect(JSON.stringify(policy)).not.toContain('opaque-d7-fixing');
   });

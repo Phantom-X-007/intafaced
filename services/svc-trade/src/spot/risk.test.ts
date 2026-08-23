@@ -116,21 +116,31 @@ describe('market status', () => {
   });
 
   /**
-   * Options has no engine, no collateral model and no flag. It is refused by KIND
-   * (`trade.market_kind_unsupported`) even after listing. Listing itself is
-   * refuse-closed until D26-P0-05 (SOCKET §13 `socket.options-settlement-asset-law`)
-   * — see `options-listing.ts`. The futures flag must not be mistaken for a
-   * general non-spot switch.
+   * Live options (paper=false) refuse. Empty settlement law →
+   * trade.unsettled_asset_class_listing (never invent the asset). Law stamped
+   * but live engine unpublished → market_kind_unsupported. Paper options are
+   * the v1 engine.
    */
-  it('refuses an options market on both settings of the futures flag', () => {
-    for (const futuresEnabled of [false, true]) {
-      try {
-        assertTradable(withMarket({ kind: 'options' }), { futuresEnabled });
-        throw new Error('should have thrown');
-      } catch (err) {
-        expect((err as TradeError).code).toBe('trade.market_kind_unsupported');
-      }
+  it('refuses a live options market when settlement law is empty', () => {
+    try {
+      assertTradable(withMarket({ kind: 'options', paper: false }));
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.unsettled_asset_class_listing');
     }
+  });
+
+  it('refuses a live options market even when settlement law is stamped — paper engine only', () => {
+    try {
+      assertTradable(withMarket({ kind: 'options', paper: false }), { optionsSettlementLawStamped: true });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.market_kind_unsupported');
+    }
+  });
+
+  it('accepts a paper options market — European paper engine', () => {
+    expect(() => assertTradable(withMarket({ kind: 'options', paper: true }))).not.toThrow();
   });
 });
 

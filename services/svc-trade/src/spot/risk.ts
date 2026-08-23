@@ -43,6 +43,12 @@ export interface TradableOptions {
    * in scope" was worth 190,000 USDT.
    */
   readonly futuresEnabled?: boolean;
+  /**
+   * Live options settlement-asset law stamped (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`).
+   * Paper options ignore this. Live options with empty law refuse
+   * `trade.unsettled_asset_class_listing` — never invent the asset.
+   */
+  readonly optionsSettlementLawStamped?: boolean;
 }
 
 /**
@@ -87,8 +93,10 @@ export interface TradableOptions {
  * path stays where it is, in `futures/position-service.ts`, behind its own
  * already-named profit source.
  *
- * `options` markets remain refused by kind. There is no options engine, no options
- * collateral model, and nothing to gate.
+ * Paper European options are orderable (full-collateral paper engine). Live
+ * options still refuse: empty settlement law → `trade.unsettled_asset_class_listing`
+ * (never invent the asset); law stamped but live engine not this surface →
+ * `trade.market_kind_unsupported`.
  */
 export function assertTradable(market: Market, options: TradableOptions = {}): void {
   // Enum authority first (D-S-05 / D26-P1-T9) — see instrument-enums.ts.
@@ -98,6 +106,20 @@ export function assertTradable(market: Market, options: TradableOptions = {}): v
       throw new TradeError(
         `${market.symbol} is a futures market and futures trading is not enabled on this deployment (TRADE_FUTURES_ENABLED)`,
         'trade.futures_disabled',
+      );
+    }
+  } else if (market.kind === 'options') {
+    if (market.paper === true) {
+      // paper engine — listed European drills, no ledger, no invented settlement asset
+    } else if (options.optionsSettlementLawStamped !== true) {
+      throw new TradeError(
+        `${market.symbol} is a live options market and settlement asset law is unpublished — refuse rather than invent the settlement asset`,
+        'trade.unsettled_asset_class_listing',
+      );
+    } else {
+      throw new TradeError(
+        `${market.symbol} is a live options market — paper engine only; live settlement is unpublished`,
+        'trade.market_kind_unsupported',
       );
     }
   } else if (market.kind !== 'spot') {

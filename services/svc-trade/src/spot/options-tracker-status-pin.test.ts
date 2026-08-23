@@ -19,9 +19,9 @@ function trackerStatus(featureId: string): string | null {
 }
 
 describe('trade.options tracker status pin', () => {
-  it('P0-05 + D7 compose gaps closed; European engine residual remains', () => {
+  it('P0-05 + D7 compose gaps closed; paper engine shipped; live settlement residual remains', () => {
     expect(optionsOwnerEnvComposeGapsClosed()).toBe(true);
-    expect(OPTIONS_HONEST_GAPS).toEqual(['gap.european_options_engine']);
+    expect(OPTIONS_HONEST_GAPS).toEqual(['gap.live_options_settlement']);
     expect(optionsTrackerBackendDoneBarMet()).toBe(true);
     expect(optionsMountVsTrackerBoardCard().gaps).toBe(1);
   });

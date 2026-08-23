@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import { OPTIONS_SETTLEMENT_LAW_UNSET, assertOptionsSettlementAssetLawStamped, resolveOptionsListing } from './options-listing.js';
+import {
+  OPTIONS_PAPER_FIXING_STAMP,
+  OPTIONS_SETTLEMENT_LAW_UNSET,
+  assertOptionsSettlementAssetLawStamped,
+  resolveOptionsListing,
+} from './options-listing.js';
 import { TradeError } from './types.js';
 
 const expiry = new Date('2026-12-26T08:00:00.000Z');
@@ -258,5 +263,34 @@ describe('resolveOptionsListing — refuse until P0-05 + fixing + complete terms
     expect(terms?.optionType).toBe('put');
     expect(terms?.optionStyle).toBe('european');
     expect(terms?.settlementFixing).toBe('fixing-v1');
+  });
+
+  it('paper options list without inventing settlement-asset law — stamp is paper, not an asset', () => {
+    const terms = resolveOptionsListing({
+      kind: 'options',
+      settlementAssetLawConfigured: '',
+      settlementFixingConfigured: '',
+      optionType: 'call',
+      strike: amt('90000'),
+      expiryAt: expiry,
+      paper: true,
+    });
+    expect(terms?.optionStyle).toBe('european');
+    expect(terms?.settlementFixing).toBe(OPTIONS_PAPER_FIXING_STAMP);
+    expect(terms?.settlementFixing).not.toMatch(/USDT|USDC|USD/);
+  });
+
+  it('paper options still refuse half-listed terms', () => {
+    try {
+      resolveOptionsListing({
+        kind: 'options',
+        settlementAssetLawConfigured: '',
+        settlementFixingConfigured: '',
+        paper: true,
+      });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.options_terms_incomplete');
+    }
   });
 });

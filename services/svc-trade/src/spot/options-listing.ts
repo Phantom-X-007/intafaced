@@ -35,8 +35,8 @@ export {
  * / source / window / payor — inventing those fields here would be the failure
  * this socket exists to prevent.
  *
- * Listing is not trading: `assertTradable` still refuses options orders by kind
- * until an options engine exists.
+ * Listing is not live trading: paper options may list without inventing a
+ * settlement asset. Live listings still require P0-05 + D7.
  */
 
 /**
@@ -66,11 +66,14 @@ export interface OptionsContractTerms {
   readonly settlementFixing: string;
 }
 
+/** Opaque paper-drill fixing stamp — not a settlement asset, not a live oracle. */
+export const OPTIONS_PAPER_FIXING_STAMP = 'paper' as const;
+
 export interface ResolveOptionsListingInput {
   readonly kind: MarketKind;
   /**
    * Opaque stamp that P0-05 ADR is published (`TRADE_OPTIONS_SETTLEMENT_ASSET_LAW`).
-   * Empty / whitespace = unset → refuse. Never parsed for assets or matrix rows.
+   * Empty / whitespace = unset → refuse live listings. Never parsed for assets.
    */
   readonly settlementAssetLawConfigured: string;
   /**
@@ -82,6 +85,11 @@ export interface ResolveOptionsListingInput {
   readonly optionStyle?: OptionStyle | null;
   readonly strike?: Amount | null;
   readonly expiryAt?: Date | null;
+  /**
+   * Paper drills: listing is allowed without inventing settlement-asset law.
+   * Live (`false` / omitted) still refuses when law is empty.
+   */
+  readonly paper?: boolean;
 }
 
 /**
@@ -110,10 +118,14 @@ export function resolveOptionsListing(input: ResolveOptionsListingInput): Option
   }
 
   // ── SOCKET §13 · `socket.options-settlement-asset-law` (D26-P0-05) ────────
-  // PIN: law stamp first. Fixing env / terms must not short-circuit this refuse.
-  assertOptionsSettlementAssetLawStamped(input.settlementAssetLawConfigured);
+  // Paper drills skip the live law stamp — they never settle an asset.
+  // Live: law stamp first. Fixing env / terms must not short-circuit this refuse.
+  const paper = input.paper === true;
+  if (!paper) {
+    assertOptionsSettlementAssetLawStamped(input.settlementAssetLawConfigured);
+  }
 
-  const fixing = input.settlementFixingConfigured.trim();
+  const fixing = paper ? input.settlementFixingConfigured.trim() || OPTIONS_PAPER_FIXING_STAMP : input.settlementFixingConfigured.trim();
   if (fixing.length === 0) {
     throw new TradeError(
       'options cannot be listed until settlement fixing is configured (TRADE_OPTIONS_SETTLEMENT_FIXING empty) — D7 is owner law; empty means refuse',
