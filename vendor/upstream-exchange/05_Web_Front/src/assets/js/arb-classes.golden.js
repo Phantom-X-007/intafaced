@@ -34,6 +34,6 @@ assertContains(routes, "path: '/execution'");
 assertContains(routes, 'pages/intafaced/execution/Arb');
 
 var en = fs.readFileSync(path.join(root, 'assets/lang/en.js'), 'utf8');
-assertContains(en, 'never invent a spread');
+assertContains(en, 'never invents a spread');
 
 console.log('arb-classes.golden: ok');
