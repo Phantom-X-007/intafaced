@@ -64,7 +64,7 @@ export type Milestone = {
 export type StructuredRecord = {
   readonly id: string;
   readonly name: string;
-  readonly legLabels: readonly string[];
+  readonly legLabels: string[];
 };
 
 export type SourcedRows<T> = {
