@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FUTURES_HONEST_GAPS,
   FUTURES_TRACKER_ID,
+  futuresLiveReleverageMounted,
   futuresMountVsTrackerBoardCard,
   futuresOwnerEnvComposeGapsClosed,
   futuresTrackerBackendDoneBarMet,
@@ -19,11 +20,12 @@ function trackerStatus(featureId: string): string | null {
 }
 
 describe('trade.futures tracker status pin', () => {
-  it('owner ladder/funding/leverage compose gaps closed; re-leverage socket residual remains', () => {
+  it('owner ladder/funding/leverage compose gaps closed; live re-leverage is mounted', () => {
     expect(futuresOwnerEnvComposeGapsClosed()).toBe(true);
-    expect(FUTURES_HONEST_GAPS).toEqual(['gap.live_releverage_501']);
+    expect(FUTURES_HONEST_GAPS).toEqual([]);
+    expect(futuresLiveReleverageMounted()).toBe(true);
     expect(futuresTrackerBackendDoneBarMet()).toBe(true);
-    expect(futuresMountVsTrackerBoardCard().gaps).toBe(1);
+    expect(futuresMountVsTrackerBoardCard().gaps).toBe(0);
   });
 
   it('features.mjs marks trade.futures done when owner env wiring ships', () => {

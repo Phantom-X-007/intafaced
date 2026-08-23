@@ -356,10 +356,12 @@ export const FEATURES = [
       'services/svc-trade/src/futures/futures-compose-wiring.ts',
       'services/svc-trade/src/futures/futures-compose-wiring.test.ts',
       'services/svc-trade/src/futures/futures-tracker-status-pin.test.ts',
+      'services/svc-trade/src/futures/futures-leverage-501-notsupported.test.ts',
+      'services/svc-trade/src/futures/futures-live-releverage.test.ts',
     ],
     note:
-      '**Done 2026-08-22:** isolated margin ladder + funding + ADL disclosure; owner D3 ladder/funding/leverage env pass-through (blank = refuse). ' +
-      'Residual socket: live re-leverage (501 or named socket) — not invented here.',
+      '**Done 2026-08-23:** isolated live re-leverage (POST /positions/leverage, ledger IM delta, sealed 10×). ' +
+      'Owner D3 ladder/funding compose pass-through (blank = refuse). TRADE_FUTURES_MAX_LEVERAGE empty = DIRECTION 10× (D26-P0-07), not refuse-unset.',
   }),
   f('trade.options', 'European options, cash-settled, full collateral in v1', {
     module: 'trade',
