@@ -50,6 +50,7 @@ export const MODULE_IDS = [
   'mining-pool',
   'agents',
   'core-ops',
+  'ops',
   'notify',
   'support',
   'tax',
@@ -102,7 +103,9 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   market: { id: 'market', service: 'svc-market', planes: ['fiat'], phase: '5', custodial: true },
   'mining-pool': { id: 'mining-pool', service: 'svc-mining-pool', planes: ['fiat'], phase: '5', custodial: true },
   agents: { id: 'agents', service: 'svc-agents', planes: ['fiat', 'protocol'], phase: '5', custodial: false },
-  'core-ops': { id: 'core-ops', service: 'svc-ops', planes: ['fiat'], phase: '5', custodial: false },
+  'core-ops': { id: 'core-ops', service: 'svc-core-ops', planes: ['fiat'], phase: '5', custodial: false },
+  // CRM / team / revenue / projects. Not `core-ops` (that id owns drop-0 waitlist flags).
+  ops: { id: 'ops', service: 'svc-ops', planes: ['fiat'], phase: '5', custodial: false },
   // In-app inbox only. Non-custodial: holds no balance, posts no ledger txs.
   // Push / email / SMS are §13 sockets — not this service.
   notify: { id: 'notify', service: 'svc-notify', planes: ['fiat', 'protocol'], phase: '5', custodial: false },

@@ -89,9 +89,10 @@ export const UPSTREAMS: readonly Upstream[] = [
   { prefix: '/api/execution', module: 'execution', envVar: 'EXECUTION_URL', devUrl: 'http://localhost:4019' },
   { prefix: '/api/tax', module: 'tax', envVar: 'TAX_URL', devUrl: 'http://localhost:4020' },
   { prefix: '/api/quant', module: 'quant', envVar: 'QUANT_URL', devUrl: 'http://localhost:4021' },
-  // CRM / team / warehouse revenue / projects. Module stays `core-ops` (registry
-  // id); the shell queries `/api/ops` so query('ops', …) matches the surface.
-  { prefix: '/api/ops', module: 'core-ops', envVar: 'OPS_URL', devUrl: 'http://localhost:4022' },
+  // CRM / team / warehouse revenue / projects. Module is `ops` (not `core-ops`):
+  // core-ops owns drop-0 waitlist/referral flags; routing it here made
+  // flag-enforcement think those flags would still serve at LAUNCH_DROP=0.
+  { prefix: '/api/ops', module: 'ops', envVar: 'OPS_URL', devUrl: 'http://localhost:4022' },
 ] as const;
 
 /**

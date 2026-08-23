@@ -45,7 +45,7 @@ function mapError(err: unknown): never {
   throw err;
 }
 
-const guards = { module: 'core-ops' as const, plane: 'fiat' as const };
+const guards = { module: 'ops' as const, plane: 'fiat' as const };
 
 export function createOpsRouter(ops: OpsService) {
   return router({

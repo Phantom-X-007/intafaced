@@ -177,6 +177,7 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   'mining-pool': OPEN_BASIC,
   agents: { status: 'open', minTier: 'none' },
   'core-ops': { status: 'open', minTier: 'none' },
+  ops: { status: 'open', minTier: 'none' },
   support: { status: 'open', minTier: 'none' },
   // Reporting view over the caller's own books. No custody; minTier none.
   // Mapped regions come from owner TAX_JURISDICTION_MAP_JSON, not this matrix.
