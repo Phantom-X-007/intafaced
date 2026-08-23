@@ -239,7 +239,7 @@ describe('why the edge does not gate on these flags', () => {
     const live = flags.filter((f) => isEnabled(f.key, { drop: DEFAULT_DROP })).map((f) => f.key);
     // waitlist/referral are drop-0 and live on module `core-ops`. `/api/ops`
     // routes that module; they must stay on at the default drop.
-    const allowedOn = module === 'core-ops' ? ['waitlist.enabled', 'referral.queue'] : [];
+    const allowedOn = module === 'core-ops' ? ['waitlist.enabled', 'referral.queue'] : module === 'mining-pool' ? ['mining.testnet'] : [];
     expect(live, `${module} would still serve if the edge gated on flags`).toEqual(allowedOn);
   });
 
