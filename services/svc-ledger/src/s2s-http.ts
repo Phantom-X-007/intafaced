@@ -19,7 +19,7 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { z } from 'zod';
-import { portfolioViewFromLedgerBalances } from '@intafaced/portfolio-view';
+import { composePortfolioView } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -83,6 +83,18 @@ const balancesInput = z.object({
   ownerType: z.enum(['user', 'subaccount', 'module', 'house', 'treasury']),
   ownerId: z.string(),
 });
+
+const portfolioS2sInput = balancesInput.extend({
+  chainAccount: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .optional(),
+});
+
+export interface PortfolioIndexerCompose {
+  readonly url?: string;
+  readonly fetch?: typeof globalThis.fetch;
+}
 
 export async function handleS2sPost(ledger: LedgerService, body: unknown) {
   const input = postRequestSchema.parse(body);
@@ -164,16 +176,20 @@ export async function handleS2sBalances(ledger: LedgerService, body: unknown) {
 }
 
 /**
- * Portfolio Stage-1 view. Same owner input as `balances`. Same door as every
- * other S2S route. Does not post. Indexer half is named absent by the view.
+ * Portfolio view. Same owner input as `balances`, plus optional 0x
+ * `chainAccount`. Does not post. Chain half is HTTP/tRPC to indexer `positions`
+ * when URL + address are usable; otherwise named unwired — never a zero.
  */
-export async function handleS2sPortfolio(ledger: LedgerService, body: unknown) {
-  const input = balancesInput.parse(body);
+export async function handleS2sPortfolio(ledger: LedgerService, body: unknown, indexer?: PortfolioIndexerCompose) {
+  const input = portfolioS2sInput.parse(body);
   const balances = await ledger.balances(input.ownerType, input.ownerId);
-  return portfolioViewFromLedgerBalances({
+  return composePortfolioView({
     ownerType: input.ownerType,
     ownerId: input.ownerId,
     balances,
+    url: indexer?.url ?? process.env.INDEXER_URL,
+    chainAccount: input.chainAccount,
+    fetch: indexer?.fetch,
   });
 }
 
@@ -201,6 +217,9 @@ export interface S2sHttpOptions {
    * setting that cannot 401 a caller that has not been redeployed yet.
    */
   bodyBind?: ServiceBodyBindMode;
+  /** Optional indexer compose. Unset URL → named `indexer.portfolio_positions_unwired`. */
+  indexerUrl?: string;
+  indexerFetch?: typeof globalThis.fetch;
 }
 
 export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, internalSecret: string, options: S2sHttpOptions = {}): void {
@@ -270,5 +289,8 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
   // would have been unauthenticated exactly as the money plane once was. There
   // is one door, and every route goes through it.
   app.post('/trpc/history', guarded(handleS2sHistory));
-  app.post('/trpc/portfolio', guarded(handleS2sPortfolio));
+  app.post(
+    '/trpc/portfolio',
+    guarded((svc, body) => handleS2sPortfolio(svc, body, { url: options.indexerUrl, fetch: options.indexerFetch })),
+  );
 }

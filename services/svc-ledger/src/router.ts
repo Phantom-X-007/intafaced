@@ -12,7 +12,7 @@ import {
   InvalidEntryError,
   type EntryInput,
 } from '@intafaced/ledger-client';
-import { portfolioViewFromLedgerBalances, portfolioViewSchema } from '@intafaced/portfolio-view';
+import { composePortfolioView, portfolioViewSchema } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -67,7 +67,12 @@ const balanceOutput = z.object({
   amount: z.string(),
 });
 
-export function createLedgerRouter(ledger: LedgerService) {
+export interface LedgerIndexerCompose {
+  readonly url?: string;
+  readonly fetch?: typeof globalThis.fetch;
+}
+
+export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexerCompose) {
   return router({
     // Reads the freeze row rather than a cached field: a replica that reports
     // itself healthy while the shared book is frozen is worse than no health
@@ -152,11 +157,23 @@ export function createLedgerRouter(ledger: LedgerService) {
       }),
 
     /**
-     * Stage-1 portfolio VIEW (§25:723). Reads `ledger.balances`. Does not post.
-     * Indexer/readmodels are unbuilt — named absent, never a zero chain balance.
+     * Portfolio VIEW (§25:723). Reads `ledger.balances`. Does not post.
+     * Chain half is HTTP/tRPC to svc-indexer `positions` when INDEXER_URL and a
+     * 0x `chainAccount` are both usable. Otherwise named
+     * `indexer.portfolio_positions_unwired` — never a zero chain balance.
+     * Owner UUID is not an EVM address; this door does not invent one.
      */
     portfolio: scopedProcedure('ledger:read')
-      .input(z.object({ ownerType: z.enum(['user', 'subaccount', 'module', 'house', 'treasury']), ownerId: z.string() }))
+      .input(
+        z.object({
+          ownerType: z.enum(['user', 'subaccount', 'module', 'house', 'treasury']),
+          ownerId: z.string(),
+          chainAccount: z
+            .string()
+            .regex(/^0x[0-9a-fA-F]{40}$/)
+            .optional(),
+        }),
+      )
       .output(portfolioViewSchema)
       .query(async ({ ctx, input }) => {
         if (input.ownerType === 'user' && ctx.principal.userId !== input.ownerId) {
@@ -164,10 +181,13 @@ export function createLedgerRouter(ledger: LedgerService) {
         }
 
         const balances = await ledger.balances(input.ownerType, input.ownerId);
-        return portfolioViewFromLedgerBalances({
+        return composePortfolioView({
           ownerType: input.ownerType,
           ownerId: input.ownerId,
           balances,
+          url: indexer?.url ?? process.env.INDEXER_URL,
+          chainAccount: input.chainAccount,
+          fetch: indexer?.fetch,
         });
       }),
 

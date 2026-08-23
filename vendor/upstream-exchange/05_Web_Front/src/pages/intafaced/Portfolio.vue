@@ -20,7 +20,38 @@
           </table>
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.portfolio.empty') }}</div>
-        <div v-if="portfolio.data && portfolio.data.indexer && portfolio.data.indexer.status === 'absent'" class="ix-note ix-note-quiet" style="margin-top:16px;">{{ $t('intafaced.portfolio.indexerAbsent') }}</div>
+      </IxState>
+    </div>
+
+    <div class="ix-card" id="ix-portfolio-indexer">
+      <div class="ix-card-head"><h2>{{ $t('intafaced.portfolio.indexer') }}</h2><span class="ix-sub">indexer.positions</span></div>
+      <IxState :loading="portfolio.loading" :reason="portfolio.reason" :message="portfolio.message" endpoint="/api/ledger/trpc/portfolio">
+        <IxState
+          v-if="indexerAbsent"
+          :loading="false"
+          reason="no_surface"
+          :message="indexerReason"
+          endpoint="/api/ledger/trpc/portfolio"
+        />
+        <div v-else-if="indexerPositions.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('intafaced.portfolio.market') }}</th>
+                <th>{{ $t('intafaced.portfolio.size') }}</th>
+                <th>{{ $t('intafaced.portfolio.entryPrice') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in indexerPositions" :key="row.market">
+                <td>{{ row.market }}</td>
+                <td>{{ row.size }}</td>
+                <td>{{ row.entryPrice }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.portfolio.indexerEmpty') }}</div>
       </IxState>
     </div>
 
@@ -71,6 +102,19 @@ export default {
   computed: {
     unmappedCopy() {
       return this.$t('intafaced.tax.unmapped');
+    },
+    indexerHalf() {
+      return this.portfolio.data && this.portfolio.data.indexer ? this.portfolio.data.indexer : null;
+    },
+    indexerAbsent() {
+      return this.indexerHalf && this.indexerHalf.status === 'absent';
+    },
+    indexerReason() {
+      return this.indexerAbsent ? this.indexerHalf.reason : '';
+    },
+    indexerPositions() {
+      if (!this.indexerHalf || this.indexerHalf.status !== 'present' || !this.indexerHalf.positions) return [];
+      return this.indexerHalf.positions;
     }
   },
   watch: {
