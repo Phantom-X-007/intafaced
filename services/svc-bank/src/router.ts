@@ -201,6 +201,7 @@ function toTrpcError(err: unknown): TRPCError {
       // to — so FORBIDDEN would be both wrong and more disclosing.
       case 'bank.loan_borrower_mismatch':
       case 'bank.position_conflict':
+      case 'bank.business_payroll_conflict':
         return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
       case 'bank.same_space':
@@ -223,6 +224,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.ramp_invalid_asset':
       case 'bank.ramp_invalid_destination':
       case 'bank.ramp_conflict':
+      case 'bank.business_payroll_empty':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
       // Named refusals where the platform, not the caller, is missing something.
@@ -238,6 +240,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.dest_user_missing':
       case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
+      case 'bank.business_payroll_rate_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
       // Kill switches. Same 503 class as the matching HTTP job endpoints —
@@ -2489,6 +2492,54 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             ledgerTxId: a.ledgerTxId,
             createdAt: a.createdAt.toISOString(),
           }));
+        }),
+      ),
+
+    /**
+     * Atomic multi-recipient payroll. One ledger post. Cross-asset lines
+     * refuse `bank.business_payroll_rate_unset` — rates are owner law, never invented.
+     */
+    runPayroll: scopedProcedure('bank:write', { module: 'bank' })
+      .input(
+        z.object({
+          payrollId: z.string().uuid(),
+          accountId: z.string().uuid(),
+          fromSpaceId: z.string().uuid(),
+          recipients: z
+            .array(z.object({ toSpaceId: z.string().uuid(), amount: amountString }))
+            .min(1)
+            .max(64),
+        }),
+      )
+      .output(
+        z.object({
+          payrollId: z.string(),
+          accountId: z.string(),
+          fromSpaceId: z.string(),
+          assetId: z.string(),
+          ledgerTxId: z.string(),
+          recipients: z.array(z.object({ toSpaceId: z.string(), amount: amountString })),
+          createdAt: z.string(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const run = await bank.business.runPayroll({
+            payrollId: input.payrollId,
+            accountId: input.accountId,
+            actorUserId: ctx.principal.userId,
+            fromSpaceId: input.fromSpaceId,
+            recipients: input.recipients.map((r) => ({ toSpaceId: r.toSpaceId, amount: parseAmount(r.amount) })),
+          });
+          return {
+            payrollId: run.payrollId,
+            accountId: run.accountId,
+            fromSpaceId: run.fromSpaceId,
+            assetId: run.assetId,
+            ledgerTxId: run.ledgerTxId,
+            recipients: run.recipients.map((r) => ({ toSpaceId: r.toSpaceId, amount: formatAmount(r.amount) })),
+            createdAt: run.createdAt.toISOString(),
+          };
         }),
       ),
   });

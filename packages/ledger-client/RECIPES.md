@@ -1,6 +1,6 @@
 # Ledger recipe matrix
 
-**55 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
+**56 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
 
 Generated from `src/recipes/index.ts` registry. If this table and the registry disagree, the registry wins and this file is wrong.
 
@@ -57,6 +57,7 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `businessApprovalHold`         | `bank`     | `bank.business.approval.held`                                    |
 | `businessApprovalRelease`      | `bank`     | `bank.business.approval.released`                                |
 | `businessApprovalSettle`       | `bank`     | `bank.business.approval.settled`                                 |
+| `businessPayroll`              | `bank`     | `bank.business.payroll.settled`                                  |
 | `subAccountTransfer`           | `identity` | `identity.sub_account.transfer`                                  |
 | `marketPurchase`               | `market`   | `market.purchase`                                                |
 | `marketListingFee`             | `market`   | `market.listing_fee`                                             |
@@ -67,7 +68,7 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | File                          | Owns                                                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------------------- |
 | `src/recipes/index.ts`        | core trade / pay / token / futures / escrow / stake + registry                              |
-| `src/recipes/bank.ts`         | transfer + earn + business dual-control holds                                               |
+| `src/recipes/bank.ts`         | transfer + earn + business dual-control holds + atomic payroll                              |
 | `src/recipes/loans.ts`        | collateral / draw / repay / liquidate / bad debt / reserve                                  |
 | `src/recipes/chargeback.ts`   | chargeback open / shortfall / won / recovered (owner sign-off banner; not wired to svc-pay) |
 | `src/recipes/sub-accounts.ts` | only legal cross-partition transfer                                                         |

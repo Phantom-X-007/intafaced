@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.business.title') }}</h1>
       <p>{{ $t('intafaced.bank.business.lead') }}</p>
-      <div class="ix-source">svc-bank · business.list · business.create · business.proposeTransfer · business.pending · business.approve · business.addMember</div>
+      <div class="ix-source">svc-bank · business.list · business.create · business.proposeTransfer · business.pending · business.approve · business.addMember · business.runPayroll</div>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -188,6 +188,69 @@
       </div>
     </div>
 
+    <!-- ── payroll ────────────────────────────────────────────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.business.payroll') }}</h2>
+        <span class="ix-sub">business.runPayroll</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.business.payrollLead') }}</p>
+      <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">{{ $t('intafaced.bank.business.payrollRateUnset') }}</div>
+
+      <div v-if="!(accounts.data && accounts.data.length)" class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.needAccount') }}</div>
+      <IxState v-else :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+        <div v-if="spaces.data && spaces.data.length">
+          <div class="ix-field-grid">
+            <div class="ix-field">
+              <label>{{ $t('intafaced.bank.business.accounts') }}</label>
+              <Select v-model="payroll.accountId" :placeholder="$t('intafaced.bank.business.needAccount')">
+                <Option v-for="a in accounts.data" :key="'p-' + a.id" :value="a.id" :label="a.name + ' · ' + a.assetId"></Option>
+              </Select>
+            </div>
+            <div class="ix-field">
+              <label>{{ $t('intafaced.bank.business.payrollFrom') }}</label>
+              <Select v-model="payroll.fromSpaceId" :placeholder="$t('intafaced.bank.chooseSpace')">
+                <Option v-for="s in spaces.data" :key="'pf-' + s.id" :value="s.id" :label="s.name + ' · ' + s.assetId + ' · ' + s.balance"></Option>
+              </Select>
+            </div>
+            <div class="ix-field">
+              <label for="ix-biz-pay-to-1">{{ $t('intafaced.bank.business.payrollRecipient') }} 1</label>
+              <Input element-id="ix-biz-pay-to-1" v-model="payroll.toSpaceId1" :placeholder="$t('intafaced.bank.spaceIdHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-biz-pay-amt-1">{{ $t('intafaced.pay.amount') }} 1</label>
+              <Input element-id="ix-biz-pay-amt-1" v-model="payroll.amount1" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-biz-pay-to-2">{{ $t('intafaced.bank.business.payrollRecipient') }} 2</label>
+              <Input element-id="ix-biz-pay-to-2" v-model="payroll.toSpaceId2" :placeholder="$t('intafaced.bank.spaceIdHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-biz-pay-amt-2">{{ $t('intafaced.pay.amount') }} 2</label>
+              <Input element-id="ix-biz-pay-amt-2" v-model="payroll.amount2" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+            </div>
+          </div>
+          <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">
+            {{ $t('intafaced.bank.transfersPage.idempotency') }} <code>{{ draftId('payroll') }}</code>
+          </div>
+          <div class="ix-actions">
+            <Button type="primary" :loading="payrollRan.busy" :disabled="!canPayroll" @click="submitPayroll">
+              {{ $t('intafaced.bank.business.payroll') }}
+            </Button>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.needSpace') }}</div>
+      </IxState>
+
+      <div v-if="payrollRan.ran" style="margin-top:14px;">
+        <div v-if="payrollRan.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.business.payrollRan') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ payrollRan.data.ledgerTxId }}</div>
+        </div>
+        <IxState v-else :loading="payrollRan.busy" :reason="payrollRan.reason" :message="payrollRan.message" endpoint="/api/bank/trpc/business.runPayroll"></IxState>
+      </div>
+    </div>
+
     <!-- ── add a checker ──────────────────────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -276,10 +339,10 @@
  * BUSINESS — svc-bank's `business` router.
  *
  * Dual control: under the account's spend threshold a propose posts; at or
- * above, funds sit on a purposed hold until a checker approves. Amounts are
- * decimal strings end to end. The maker-cannot-approve-self refusal is the
- * existing `bank.business_self_approve` from the service, quoted by IxState —
- * this screen does not invent a second taxonomy. Empty list is empty copy, not 0.
+ * above, funds sit on a purposed hold until a checker approves. The
+ * maker-cannot-approve-self refusal is `bank.business_self_approve`. Payroll is
+ * one ledger post for every recipient (or none). Mixed assets refuse
+ * `bank.business_payroll_rate_unset`. Amounts are decimal strings end to end.
  * Expense cards reuse `cards.issue`; `simulated: true` is drawn, never hidden.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
@@ -299,6 +362,7 @@ export default {
       actingId: '',
       createForm: { name: '', assetId: '', spendThreshold: '' },
       propose: { accountId: '', fromSpaceId: '', toSpaceId: '', amount: '' },
+      payroll: { accountId: '', fromSpaceId: '', toSpaceId1: '', amount1: '', toSpaceId2: '', amount2: '' },
       member: { accountId: '', userId: '', role: 'checker' },
       accounts: this.emptySection(),
       spaces: this.emptySection(),
@@ -306,6 +370,7 @@ export default {
       created: this.emptyAction(),
       proposed: this.emptyAction(),
       approved: this.emptyAction(),
+      payrollRan: this.emptyAction(),
       memberAdded: this.emptyAction(),
       expenseForm: { assetId: '', perAuthorizationLimit: '' },
       issuedCard: this.emptyAction()
@@ -323,6 +388,17 @@ export default {
     },
     canIssueExpense() {
       return Boolean(this.expenseForm.assetId && this.expenseForm.perAuthorizationLimit && this.draftId('expense-card'));
+    },
+    canPayroll() {
+      return Boolean(
+        this.payroll.accountId &&
+          this.payroll.fromSpaceId &&
+          this.payroll.toSpaceId1 &&
+          this.payroll.amount1 &&
+          this.payroll.toSpaceId2 &&
+          this.payroll.amount2 &&
+          this.draftId('payroll')
+      );
     }
   },
   created() {
@@ -342,6 +418,7 @@ export default {
       if (!account) return;
       this.selectedAccountId = account.id;
       this.propose.accountId = account.id;
+      this.payroll.accountId = account.id;
       this.member.accountId = account.id;
       this.reloadPending();
     },
@@ -406,6 +483,28 @@ export default {
         self.actingId = '';
         if (!res.ok) return;
         self.reloadPending();
+        self.load('spaces', query('bank', 'spaces.list', {}, self.ixToken));
+      });
+    },
+    submitPayroll() {
+      var self = this;
+      if (!this.canPayroll) return;
+      this.act(
+        'payrollRan',
+        mutate('bank', 'business.runPayroll', {
+            payrollId: this.draftId('payroll'),
+            accountId: this.payroll.accountId,
+            fromSpaceId: this.payroll.fromSpaceId,
+            recipients: [
+              { toSpaceId: this.payroll.toSpaceId1, amount: this.payroll.amount1 },
+              { toSpaceId: this.payroll.toSpaceId2, amount: this.payroll.amount2 }
+            ]
+          }, this.ixToken)
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.clearDraftId('payroll');
+        self.payroll.amount1 = '';
+        self.payroll.amount2 = '';
         self.load('spaces', query('bank', 'spaces.list', {}, self.ixToken));
       });
     },

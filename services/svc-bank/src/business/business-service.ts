@@ -16,7 +16,7 @@ import { withMoneySpan } from '../tracing.js';
  * destination; reject/cancel releases hold → debit pot.
  *
  * Residual / §13 (not invent-risk here): KYB Lane B, expense cards, invoicing
- * (pay.gateway), multi-recipient payroll atomicity, dedicated org principal.
+ * (pay.gateway), dedicated org principal. Payroll is atomic via `businessPayroll`.
  */
 
 export type BusinessMemberRole = 'admin' | 'maker' | 'checker';
@@ -53,6 +53,38 @@ export interface BusinessApproval {
   rejectionCode: string | null;
   createdAt: Date;
   decidedAt: Date | null;
+}
+
+export interface BusinessPayrollLine {
+  toSpaceId: string;
+  amount: Amount;
+}
+
+export interface BusinessPayrollRun {
+  payrollId: string;
+  accountId: string;
+  actorUserId: string;
+  fromSpaceId: string;
+  assetId: string;
+  ledgerTxId: string;
+  recipients: BusinessPayrollLine[];
+  createdAt: Date;
+}
+
+interface PayrollRunRow {
+  id: string;
+  account_id: string;
+  actor_user_id: string;
+  from_space_id: string;
+  asset_id: string;
+  ledger_tx_id: string;
+  created_at: Date;
+}
+
+interface PayrollLineRow {
+  payroll_id: string;
+  to_space_id: string;
+  amount: string;
 }
 
 interface AccountRow {
@@ -357,6 +389,152 @@ export class BusinessService {
        ORDER BY created_at ASC
     `;
     return rows.map(toApproval);
+  }
+
+  /**
+   * Multi-recipient payroll: one ledger post, all paid or none.
+   *
+   * Same-asset only. A mix would invent an FX/withholding rate — refused as
+   * `bank.business_payroll_rate_unset`. Amounts are caller-supplied instruction
+   * strings (parsed upstream); this door never computes a salary table.
+   */
+  async runPayroll(input: {
+    payrollId: string;
+    accountId: string;
+    actorUserId: string;
+    fromSpaceId: string;
+    recipients: ReadonlyArray<BusinessPayrollLine>;
+  }): Promise<BusinessPayrollRun> {
+    if (input.recipients.length === 0) {
+      throw new BankError('Payroll needs at least one recipient', 'bank.business_payroll_empty');
+    }
+    const account = await this.account(input.accountId);
+    if (account.status !== 'active') throw new BankError('Business account is closed', 'bank.business_closed');
+    await this.assertRole(input.accountId, input.actorUserId, ['admin', 'maker']);
+
+    const existing = await this.payrollRun(input.payrollId);
+    if (existing) {
+      this.assertPayrollSameTerms(existing, input);
+      return existing;
+    }
+
+    const now = new Date();
+    const from = await this.spaces.resolveForDebit(input.fromSpaceId, now);
+    if (from.userId !== input.actorUserId) {
+      throw new BankError('Payroll debit space must belong to the actor', 'bank.not_owner');
+    }
+    if (from.assetId !== account.assetId) {
+      throw new BankError(`Business account ${account.assetId} cannot payroll ${from.assetId}`, 'bank.asset_mismatch');
+    }
+
+    const seen = new Set<string>([input.fromSpaceId]);
+    const resolved: Array<{ toSpaceId: string; amount: Amount; acct: ReturnType<typeof accountForSpace> }> = [];
+    for (const line of input.recipients) {
+      if (line.amount <= 0n) throw new BankError('Payroll line amount must be positive', 'bank.below_minimum');
+      if (seen.has(line.toSpaceId)) {
+        throw new BankError('Payroll cannot pay the same space twice, or pay the source', 'bank.same_space');
+      }
+      seen.add(line.toSpaceId);
+      const to = await this.spaces.resolveForCredit(line.toSpaceId);
+      if (to.assetId !== from.assetId) {
+        throw new BankError(
+          `Payroll cannot mix ${from.assetId} and ${to.assetId} — rates are not invented here`,
+          'bank.business_payroll_rate_unset',
+        );
+      }
+      resolved.push({ toSpaceId: line.toSpaceId, amount: line.amount, acct: accountForSpace(to) });
+    }
+
+    return withMoneySpan(
+      'bank.business.payroll',
+      { operation: 'business-payroll', userId: input.actorUserId, amount: formatAmount(resolved.reduce((acc, l) => acc + l.amount, 0n)) },
+      async () => {
+        let posted;
+        try {
+          posted = await this.ledger.post(
+            recipes.businessPayroll({
+              payrollId: input.payrollId,
+              from: accountForSpace(from),
+              recipients: resolved.map((line) => ({ to: line.acct, amount: line.amount })),
+            }),
+          );
+        } catch (err) {
+          if (err instanceof InsufficientFundsError) throw err;
+          throw err;
+        }
+
+        const inserted = await this.sql<PayrollRunRow[]>`
+          INSERT INTO bank.business_payroll_runs
+            (id, account_id, actor_user_id, from_space_id, asset_id, ledger_tx_id)
+          VALUES (
+            ${input.payrollId}::uuid, ${input.accountId}::uuid, ${input.actorUserId},
+            ${input.fromSpaceId}::uuid, ${account.assetId}, ${posted.id}
+          )
+          ON CONFLICT (id) DO NOTHING
+          RETURNING id, account_id, actor_user_id, from_space_id, asset_id, ledger_tx_id, created_at
+        `;
+        const row = inserted[0] ?? (await this.payrollRunRow(input.payrollId));
+        if (!row) throw new BankError(`Payroll ${input.payrollId} could not be recorded`, 'bank.business_payroll_conflict');
+        if (inserted[0]) {
+          for (const line of resolved) {
+            await this.sql`
+              INSERT INTO bank.business_payroll_lines (payroll_id, to_space_id, amount)
+              VALUES (${input.payrollId}::uuid, ${line.toSpaceId}::uuid, ${formatAmount(line.amount)}::numeric)
+            `;
+          }
+        }
+        const recorded = await this.payrollRun(input.payrollId);
+        if (!recorded) throw new BankError(`Payroll ${input.payrollId} could not be recorded`, 'bank.business_payroll_conflict');
+        this.assertPayrollSameTerms(recorded, input);
+        return recorded;
+      },
+    );
+  }
+
+  private assertPayrollSameTerms(
+    existing: BusinessPayrollRun,
+    input: { accountId: string; fromSpaceId: string; recipients: ReadonlyArray<BusinessPayrollLine> },
+  ): void {
+    if (existing.accountId !== input.accountId || existing.fromSpaceId !== input.fromSpaceId) {
+      throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_payroll_conflict');
+    }
+    if (existing.recipients.length !== input.recipients.length) {
+      throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_payroll_conflict');
+    }
+    const bySpace = new Map(existing.recipients.map((l) => [l.toSpaceId, l.amount]));
+    for (const line of input.recipients) {
+      if (bySpace.get(line.toSpaceId) !== line.amount) {
+        throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_payroll_conflict');
+      }
+    }
+  }
+
+  private async payrollRunRow(id: string): Promise<PayrollRunRow | null> {
+    const rows = await this.sql<PayrollRunRow[]>`
+      SELECT id, account_id, actor_user_id, from_space_id, asset_id, ledger_tx_id, created_at
+        FROM bank.business_payroll_runs WHERE id = ${id}
+    `;
+    return rows[0] ?? null;
+  }
+
+  private async payrollRun(id: string): Promise<BusinessPayrollRun | null> {
+    const row = await this.payrollRunRow(id);
+    if (!row) return null;
+    const lines = await this.sql<PayrollLineRow[]>`
+      SELECT payroll_id, to_space_id, amount
+        FROM bank.business_payroll_lines WHERE payroll_id = ${id}
+       ORDER BY to_space_id ASC
+    `;
+    return {
+      payrollId: row.id,
+      accountId: row.account_id,
+      actorUserId: row.actor_user_id,
+      fromSpaceId: row.from_space_id,
+      assetId: row.asset_id,
+      ledgerTxId: row.ledger_tx_id,
+      recipients: lines.map((l) => ({ toSpaceId: l.to_space_id, amount: parseAmount(l.amount) })),
+      createdAt: row.created_at,
+    };
   }
 
   /**

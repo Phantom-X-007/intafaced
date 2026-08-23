@@ -61,7 +61,8 @@ if (!available) {
 
   beforeEach(async () => {
     await sql`
-      TRUNCATE bank.business_approvals, bank.business_members, bank.business_accounts,
+      TRUNCATE bank.business_payroll_lines, bank.business_payroll_runs,
+               bank.business_approvals, bank.business_members, bank.business_accounts,
                bank.transfer_executions, bank.scheduled_transfers, bank.spaces
       RESTART IDENTITY CASCADE
     `;
@@ -245,6 +246,109 @@ if (!available) {
       await bank.business.cancel({ approvalId: proposed.approval.id, actorUserId: MAKER });
       expect(await availableOf(MAKER, 'USDT')).toBe('80');
       expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('pays every payroll recipient in one post, or none when short', async () => {
+      const account = await bank.business.createAccount({
+        name: 'Ops Co',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: MAKER,
+      });
+      const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+      const alice = await bank.spaces.ensurePrimary(CHECKER, 'USDT');
+      const bob = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Contractor' });
+      await fund(MAKER, 'USDT', '100');
+      const payrollId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+      const run = await bank.business.runPayroll({
+        payrollId,
+        accountId: account.id,
+        actorUserId: MAKER,
+        fromSpaceId: primary.id,
+        recipients: [
+          { toSpaceId: alice.id, amount: amt('40') },
+          { toSpaceId: bob.id, amount: amt('25') },
+        ],
+      });
+      expect(run.ledgerTxId).toBeTruthy();
+      expect(await availableOf(MAKER, 'USDT')).toBe('35');
+      expect(formatAmount(await bank.spaces.balanceOf(alice))).toBe('40');
+      expect(formatAmount(await bank.spaces.balanceOf(bob))).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+
+      const again = await bank.business.runPayroll({
+        payrollId,
+        accountId: account.id,
+        actorUserId: MAKER,
+        fromSpaceId: primary.id,
+        recipients: [
+          { toSpaceId: alice.id, amount: amt('40') },
+          { toSpaceId: bob.id, amount: amt('25') },
+        ],
+      });
+      expect(again.ledgerTxId).toBe(run.ledgerTxId);
+      expect(await availableOf(MAKER, 'USDT')).toBe('35');
+
+      await expect(
+        bank.business.runPayroll({
+          payrollId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          accountId: account.id,
+          actorUserId: MAKER,
+          fromSpaceId: primary.id,
+          recipients: [
+            { toSpaceId: alice.id, amount: amt('30') },
+            { toSpaceId: bob.id, amount: amt('10') },
+          ],
+        }),
+      ).rejects.toBeTruthy();
+      expect(await availableOf(MAKER, 'USDT')).toBe('35');
+      expect(formatAmount(await bank.spaces.balanceOf(alice))).toBe('40');
+      expect(formatAmount(await bank.spaces.balanceOf(bob))).toBe('25');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('refuses mixed-asset payroll as rate unset — never invents FX', async () => {
+      const account = await bank.business.createAccount({
+        name: 'Ops Co',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: MAKER,
+      });
+      const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+      const eur = await bank.spaces.ensurePrimary(CHECKER, 'EUR');
+      await fund(MAKER, 'USDT', '100');
+
+      await expect(
+        bank.business.runPayroll({
+          payrollId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          accountId: account.id,
+          actorUserId: MAKER,
+          fromSpaceId: primary.id,
+          recipients: [{ toSpaceId: eur.id, amount: amt('10') }],
+        }),
+      ).rejects.toMatchObject({ code: 'bank.business_payroll_rate_unset' });
+      expect(await availableOf(MAKER, 'USDT')).toBe('100');
+      expect(formatAmount(await bank.spaces.balanceOf(eur))).toBe('0');
+    });
+
+    it('refuses an empty payroll', async () => {
+      const account = await bank.business.createAccount({
+        name: 'Ops Co',
+        assetId: 'USDT',
+        spendThreshold: amt('10'),
+        creatorUserId: MAKER,
+      });
+      const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
+      await expect(
+        bank.business.runPayroll({
+          payrollId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          accountId: account.id,
+          actorUserId: MAKER,
+          fromSpaceId: primary.id,
+          recipients: [],
+        }),
+      ).rejects.toMatchObject({ code: 'bank.business_payroll_empty' });
     });
 
     it('refuses a non-member checker', async () => {
