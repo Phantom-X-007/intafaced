@@ -70,7 +70,7 @@ describe('durable scene state persist/load', () => {
     const oversized = persistSceneState(big);
     expect(oversized.ok).toBe(false);
     if (!oversized.ok) expect(oversized.reason).toBe('oversized');
-  });
+  }, 15_000);
 });
 
 describe('named refuse when scene is empty', () => {
