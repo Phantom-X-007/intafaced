@@ -10,16 +10,15 @@
 
 <!-- tracker:start -->
 
-`███████████████████░` **94%** — 148 of 158 features shipped
+`███████████████████░` **94%** — 149 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** ✅ · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 57/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** ✅ · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 58/59 · **5P** 4/7
 
-**🟢 5 ready to claim** — nothing blocks these:
+**🟢 4 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `chain.mainnet` — INTACHAIN — CometBFT + native CLOB module
 - `mining.pool` — Stratum share protocol, PPLNS payouts
-- `quant.sdk` — Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)
 - `socket.clob-contracts` — An audited venue contract emitting the indexed event surface
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
