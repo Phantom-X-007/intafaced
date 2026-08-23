@@ -1,0 +1,33 @@
+export type StratumRequest = { id: string | number | null; method: string; params: unknown[] };
+export type Share = { minerId: string; worker: string; jobId: string; nonce: string; shareHash: string; target: string };
+export type ShareResult =
+  { accepted: true } | { accepted: false; reason: 'malformed' | 'job_not_found' | 'invalid_nonce' | 'low_difficulty' };
+
+export function parseRequest(input: string): StratumRequest {
+  let value: unknown;
+  try {
+    value = JSON.parse(input);
+  } catch {
+    throw new Error('stratum_malformed');
+  }
+  if (!value || typeof value !== 'object') throw new Error('stratum_malformed');
+  const v = value as Record<string, unknown>;
+  if ((typeof v.id !== 'string' && typeof v.id !== 'number' && v.id !== null) || typeof v.method !== 'string' || !Array.isArray(v.params)) {
+    throw new Error('stratum_malformed');
+  }
+  return { id: v.id, method: v.method, params: v.params };
+}
+
+/** A share is valid when its canonical hex hash is at or below the job target. */
+export function acceptShare(share: Share): ShareResult {
+  if (!share.minerId || !share.worker || !share.jobId) return { accepted: false, reason: 'job_not_found' };
+  if (!/^[0-9a-f]+$/i.test(share.nonce) || !/^[0-9a-f]+$/i.test(share.shareHash) || !/^[0-9a-f]+$/i.test(share.target)) {
+    return { accepted: false, reason: 'invalid_nonce' };
+  }
+  try {
+    if (BigInt(`0x${share.shareHash}`) > BigInt(`0x${share.target}`)) return { accepted: false, reason: 'low_difficulty' };
+  } catch {
+    return { accepted: false, reason: 'invalid_nonce' };
+  }
+  return { accepted: true };
+}
