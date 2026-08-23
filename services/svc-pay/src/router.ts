@@ -910,8 +910,8 @@ export function createPayRouter(
 
     /**
      * pay.fraud — scoring + review queue + dispute **case** mechanism (D26-P1-P5).
-     * Moves no ledger value. Chargeback recipes refuse-closed via
-     * `socket.pay-chargeback-ledger-wire` (named §13). List content Class X.
+     * Opening a dispute posts the existing ledger recipe through the
+     * ledger client. Shortfall/recovery policy remains outside this path.
      */
     fraud: router({
       policy: publicProcedure.query(() => describeFraudPolicy()),
@@ -1107,9 +1107,7 @@ export function createPayRouter(
           }
         }),
 
-      /**
-       * Dispute case surface — status machine only. Does not call chargeback recipes.
-       */
+    /** Dispute case surface — opening posts the existing ledger recipe. */
       openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
         .input(
           z.object({
@@ -1132,6 +1130,18 @@ export function createPayRouter(
               });
               marked = true;
             }
+            // Lightweight router fixtures may omit the money port; production
+            // PayService always provides it. Keeping that fixture mode honest
+            // preserves refuse-closed behavior when no ledger is available.
+            const ledgerPost = typeof pay.openChargeback === 'function'
+              ? await pay.openChargeback({
+                  disputeId: input.disputeId,
+                  paymentId: input.paymentId,
+                  merchantId: input.merchantId,
+                  amount: input.amount,
+                  assetId: input.assetId,
+                })
+              : undefined;
             const c = defaultDisputeCaseStore.open({
               disputeId: input.disputeId,
               paymentId: input.paymentId,
@@ -1140,13 +1150,15 @@ export function createPayRouter(
               assetId: input.assetId,
               reasonCode: input.reasonCode,
               paymentMarkedDisputed: marked,
+              ledgerPost,
             });
             return {
               disputeId: c.disputeId,
               status: c.status,
               ledgerWire: c.ledgerWire,
-              ledgerRefuseCode: c.ledgerRefuse.code,
-              ledgerSocket: c.ledgerRefuse.socket,
+              ledgerTxId: c.ledgerTxId,
+              ledgerRefuseCode: c.ledgerRefuse?.code ?? null,
+              ledgerSocket: c.ledgerRefuse?.socket ?? null,
               paymentMarkedDisputed: c.paymentMarkedDisputed,
             };
           } catch (e) {
@@ -1170,8 +1182,9 @@ export function createPayRouter(
               disputeId: c.disputeId,
               status: c.status,
               ledgerWire: c.ledgerWire,
-              ledgerRefuseCode: c.ledgerRefuse.code,
-              ledgerSocket: c.ledgerRefuse.socket,
+              ledgerTxId: c.ledgerTxId,
+              ledgerRefuseCode: c.ledgerRefuse?.code ?? null,
+              ledgerSocket: c.ledgerRefuse?.socket ?? null,
             };
           } catch (e) {
             if (e instanceof DisputeCaseError) {
@@ -1197,8 +1210,9 @@ export function createPayRouter(
             reasonCode: c.reasonCode,
             status: c.status,
             ledgerWire: c.ledgerWire,
-            ledgerRefuseCode: c.ledgerRefuse.code,
-            ledgerSocket: c.ledgerRefuse.socket,
+            ledgerTxId: c.ledgerTxId,
+            ledgerRefuseCode: c.ledgerRefuse?.code ?? null,
+            ledgerSocket: c.ledgerRefuse?.socket ?? null,
             openedAt: c.openedAt,
             closedAt: c.closedAt,
           };
