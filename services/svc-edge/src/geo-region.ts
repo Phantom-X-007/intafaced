@@ -23,6 +23,9 @@ export const EDGE_GEO_COUNTRY_HEADER_ENV = 'EDGE_GEO_COUNTRY_HEADER';
 
 export type RegionSource = 'default' | 'trusted_header' | 'unresolved' | 'header_ignored_no_trust';
 
+/** Missing or untrusted geo header — caller must not set region. */
+export const EDGE_REGION_UNTRUSTED = 'edge.region_untrusted' as const;
+
 export type RequestRegionResolution = {
   /** Two-letter code stamped onto the principal. */
   readonly region: string;
@@ -33,6 +36,8 @@ export type RequestRegionResolution = {
   readonly headerName: string | null;
   /** One sentence an operator can act on. */
   readonly note: string;
+  /** Set when a named header is missing, invalid, or untrusted (forge path). */
+  readonly refuseCode: typeof EDGE_REGION_UNTRUSTED | null;
 };
 
 function normalizeRegionCode(raw: string | undefined | null): string | null {
@@ -79,6 +84,7 @@ export function resolveRequestRegion(input: {
       regionResolved: isRegionResolved(defaultRegion),
       source: 'default',
       headerName: null,
+      refuseCode: null,
       note:
         'region: DEFAULT_REGION only — no EDGE_GEO_COUNTRY_HEADER. ' +
         'Per-request geo is residual until a trusted upstream header is named (socket.geo-region-resolution).',
@@ -87,15 +93,16 @@ export function resolveRequestRegion(input: {
 
   if (!input.trustProxy) {
     // Header name configured but trustProxy off — reading it would accept
-    // client-forged country. Ignore the header; keep default; say so out loud.
+    // client-forged country. Refuse; never stamp a caller-chosen regulator.
     return {
-      region: defaultRegion,
-      regionResolved: isRegionResolved(defaultRegion),
+      region: UNRESOLVED_REGION,
+      regionResolved: false,
       source: 'header_ignored_no_trust',
       headerName,
+      refuseCode: EDGE_REGION_UNTRUSTED,
       note:
         `region: EDGE_GEO_COUNTRY_HEADER=${headerName} is set but EDGE_TRUST_PROXY is unset — ` +
-        'header ignored (would be forgeable). Set EDGE_TRUST_PROXY to the reverse-proxy hop first.',
+        `${EDGE_REGION_UNTRUSTED}. Set EDGE_TRUST_PROXY to the reverse-proxy hop first.`,
     };
   }
 
@@ -107,9 +114,8 @@ export function resolveRequestRegion(input: {
       regionResolved: false,
       source: 'unresolved',
       headerName,
-      note:
-        `region: trusted header "${headerName}" missing or invalid — unresolved (${UNRESOLVED_REGION}). ` +
-        'Not a restrictive jurisdiction; regionResolved=false. Arm INTAFACED_REGION_FAIL_CLOSED to refuse.',
+      refuseCode: EDGE_REGION_UNTRUSTED,
+      note: `region: trusted header "${headerName}" missing or invalid — ${EDGE_REGION_UNTRUSTED}. Caller cannot set region.`,
     };
   }
 
@@ -118,6 +124,7 @@ export function resolveRequestRegion(input: {
     regionResolved: true,
     source: 'trusted_header',
     headerName,
+    refuseCode: null,
     note: `region: ${fromHeader} from trusted header ${headerName}.`,
   };
 }
