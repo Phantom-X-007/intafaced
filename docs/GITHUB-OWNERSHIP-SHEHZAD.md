@@ -4,6 +4,7 @@
 **Supersedes:** M1–M7 hard spine lock (2026-08-01) for **who may code**  
 **Historical detail (superseded for scope):** [`SHEHZAD-HARD-OWNERSHIP-2026-08-01.md`](SHEHZAD-HARD-OWNERSHIP-2026-08-01.md)  
 **Task board (sole runway):** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md)  
+**Last MVP overlay (2026-08-23):** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) — this wave is P0 venue + #2473; INTACHAIN is parked  
 **Three-way split:** [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md)  
 **Live claims:** [`LIVE-LANES.md`](LIVE-LANES.md)
 

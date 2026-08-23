@@ -8,6 +8,8 @@
 
 **What changed since these were filed:** the repo went **public**. Every "needs GitHub Pro" blocker below was priced for a private repo and is now **free**. G1–G3 are still three admin clicks (G1 is no longer a 404 — the remaining clicks **strengthen** the thin rule).
 
+**Live 2026-08-23** (`gh api`, identity with `write`; **no settings written**): `visibility=public` · `allow_auto_merge=false` · squash-only + delete-on-merge on · **`GET …/branches/main/protection` → 404** · `rulesets` → `[]` · collaborators Phantom **admin** / shehzad002 **write** / ZenYoda3 **write**. The 2026-08-15 “protection 200” snapshot **did not hold**. G1 is again “no rule on `main`”. Re-derive before clicking.
+
 Re-derive before acting — do not trust this table's live column:
 
 ```

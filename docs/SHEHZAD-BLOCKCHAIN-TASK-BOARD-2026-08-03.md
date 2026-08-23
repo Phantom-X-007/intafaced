@@ -1,10 +1,14 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-20  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-23  
 **Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
+> ### 2026-08-23 delta — last MVP wave (then stop)
+>
+> Live overlay: [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md). **This wave:** land or kill #2473 · real venue contract (`socket.clob-contracts`) · remaining P0 that §1.5 does not already list as shipped. **Not this wave:** INTACHAIN (`chain.mainnet`) and everything blocked on it, mining-as-L1, Predict, rust-core, MPC, external audit. Do not ping Nitro. `audited:true` stays false. When that short list is empty: **STOP**.
+>
 > ### 2026-08-20 delta — sitting items are not coding gates
 >
 > §0.5 does not pause the board. Do not ping Nitro to flip `audited:true`. Keep shipping with an honest `audited: false`.
