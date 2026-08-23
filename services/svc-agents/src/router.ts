@@ -3589,7 +3589,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
           ]),
         )
-        .query(({ input }) => {
+        .mutation(({ input }) => {
           const result = proposeGrowthCampaign({
             warehouse: envGrowthWarehouse(),
             ...(input.headline === undefined ? {} : { headline: input.headline }),

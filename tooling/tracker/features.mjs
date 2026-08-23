@@ -2058,8 +2058,17 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'F',
+    status: 'done',
     dependsOn: ['ops.analytics', 'ops.affiliates', 'agents.growth'],
-    note: 'Law §25:719 ("Marketing engine (+ Growth Agent) | — | svc-core-ops | 5"), gap-closed 2026-08-08 — no row for the engine, and Growth was one of the five missing agents (audit §A1.a #8). Blocked on ops.analytics and ops.affiliates (both `ready`, neither `done`) and on agents.growth: a marketing engine with no attribution is a send button, and attribution already has a home in the affiliate and referral trees rather than needing a second one. PLANE: §25 gives "—"; `F` states operator-side and identity-bearing, and is not a plane ruling. THE CONSTRAINT THAT MATTERS MORE THAN THE FEATURE SET: this is the surface most likely to make a claim the rest of the platform has spent real effort refusing to make. Returns-ranked leaderboards are banned (§8, D-S-18); curve-fit marketing is banned on-platform (§29:785); brand-scan already enforces §0.7. A campaign template with a performance figure in it breaches all three quietly, so the engine should make that shape HARD rather than possible. UNRESOLVED UPSTREAM, and it decides what this engine can actually do: outbound email, push and SMS all refuse with channel.not_configured until the owner supplies gateway credentials (`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`), so the delivery rail a campaign would use does not currently deliver out-of-app. NOT DECIDED: budgets and incentive magnitudes, owner-only under D-S-14.',
+    requires: [
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/Agents.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/campaign-draft.golden.js',
+    ],
+    note:
+      'Done 2026-08-23: /agents campaign draft via existing `mutate(agents, growth.propose)`. ' +
+      'Outbound email/push/SMS query notify.channels and paint `channel.not_configured` when unset. ' +
+      'No percent, no second send pipeline, no incentive magnitudes. Attribution stays the affiliate tree. ' +
+      'Residual: email/push/SMS sockets until owner gateway credentials (`docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md`); warehouse live cubes; D-S-14 budgets.',
   }),
   f('ops.kb-workflow', 'Knowledge base and workflow automation (§25:720)', {
     module: 'core-ops',

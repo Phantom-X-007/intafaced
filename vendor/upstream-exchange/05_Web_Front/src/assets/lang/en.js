@@ -1333,7 +1333,11 @@ module.exports = {
                 copyHint: "Draft copy",
                 run: "Propose",
                 refused: "Growth refused",
-                proposal: "Proposal"
+                proposal: "Proposal",
+                outbound: "Outbound",
+                outboundLead: "Email, push and SMS leave the app only after the owner sets gateway credentials. Unset rails refuse by name.",
+                outboundRun: "Check outbound",
+                outboundRefused: "Outbound refused"
             },
             risk: {
                 title: "Screening draft",
@@ -1365,6 +1369,22 @@ module.exports = {
                 winRate: "Win rate",
                 billed: "Billed"
             }
+        },
+        marketing: {
+            title: "Campaign draft",
+            lead: "A campaign proposal only. This screen never publishes and never sends a budget.",
+            headline: "Headline",
+            headlineHint: "Campaign headline",
+            copy: "Copy",
+            copyHint: "Draft copy",
+            run: "Create draft",
+            refused: "Draft refused",
+            proposal: "Draft",
+            outbound: "Outbound",
+            outboundLead: "Email, push and SMS leave the app only after the owner sets gateway credentials. Unset rails refuse by name.",
+            outboundRun: "Publish out-of-app",
+            outboundRefused: "Outbound refused",
+            attribution: "Attribution uses the affiliate tree. This screen does not keep a second book."
         },
         blueprint: {
             lead: "Your profile, as svc-blueprint holds it.",
