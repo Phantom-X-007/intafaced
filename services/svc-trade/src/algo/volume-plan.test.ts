@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import { TradeError } from '../spot/types.js';
 import type { Candle } from '../spot/types.js';
-import { alignLookbackVolumes, planPovSliceQty, planVwapSlices, sliceCount, timeframeForSliceInterval } from './volume-plan.js';
+import {
+  alignLookbackVolumes,
+  planPovSliceQty,
+  planVwapSlices,
+  planVwapSlicesFromFills,
+  sliceCount,
+  timeframeForSliceInterval,
+} from './volume-plan.js';
 
 const LOT = parseAmount('0.001');
 
@@ -32,6 +39,17 @@ describe('alignLookbackVolumes', () => {
 });
 
 describe('planVwapSlices', () => {
+  it('weights slices from real fills and refuses an empty tape', () => {
+    expect(
+      planVwapSlicesFromFills({
+        totalQty: parseAmount('10'),
+        lotSize: parseAmount('1'),
+        fills: [{ qty: parseAmount('2') }, { qty: parseAmount('8') }],
+      }).slices,
+    ).toEqual([parseAmount('2'), parseAmount('8')]);
+    expect(() => planVwapSlicesFromFills({ totalQty: parseAmount('10'), lotSize: parseAmount('1'), fills: [] })).toThrow(/immature/);
+  });
+
   it('weights slices by observed volume; last absorbs remainder; lots snap', () => {
     const plan = planVwapSlices({
       totalQty: parseAmount('0.010'),

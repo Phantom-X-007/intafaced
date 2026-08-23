@@ -1957,18 +1957,26 @@ if (!available) {
     it('serializes a concurrent KYB rejection ahead of payment creation', async () => {
       const m = await merchant();
       const cutoff = await beginMerchantCutoff(m.id, 'rejected');
-      const creating = pay.createPayment({
-        merchantId: m.id,
-        amount: amt('10'),
-        assetId: 'USDT',
-        method: 'card',
-        railAdapter: 'card-sandbox',
-        instrument: { kind: 'card', token: 'tok_ok' },
-      });
+      const creating = pay
+        .createPayment({
+          merchantId: m.id,
+          amount: amt('10'),
+          assetId: 'USDT',
+          method: 'card',
+          railAdapter: 'card-sandbox',
+          instrument: { kind: 'card', token: 'tok_ok' },
+        })
+        .then(
+          () => ({ status: 'fulfilled' as const }),
+          (error: unknown) => ({ status: 'rejected' as const, error }),
+        );
 
       await expectEligibilityReadWaiting();
       await cutoff.commit();
-      await expect(creating).rejects.toMatchObject({ code: 'pay.kyb_required' });
+      const outcome = await creating;
+      expect(outcome.status).toBe('rejected');
+      if (outcome.status === 'fulfilled') throw new Error('payment creation unexpectedly succeeded');
+      expect(outcome.error).toMatchObject({ code: 'pay.kyb_required' });
       expect(await sql`SELECT id FROM pay.payments WHERE merchant_id = ${m.id}`).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });

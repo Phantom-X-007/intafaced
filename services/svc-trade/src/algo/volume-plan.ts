@@ -96,6 +96,22 @@ export function planVwapSlices(input: { totalQty: Amount; volumes: readonly Amou
   return { slices, plannedQty: planned, droppedQty: input.totalQty - planned };
 }
 
+/** Plan VWAP directly from observed fill quantities; an empty tape refuses. */
+export function planVwapSlicesFromFills(input: {
+  totalQty: Amount;
+  fills: readonly { qty: Amount; liquidity?: 'maker' | 'taker' }[];
+  lotSize: Amount;
+}): TwapSlicePlan {
+  const fills = input.fills.filter((fill) => fill.liquidity === undefined || fill.liquidity === 'taker');
+  if (fills.length === 0) {
+    throw new TradeError(
+      'VWAP has no observed fills — market is immature; refuse rather than invent a curve',
+      'trade.algo_volume_immature',
+    );
+  }
+  return planVwapSlices({ totalQty: input.totalQty, volumes: fills.map((fill) => fill.qty), lotSize: input.lotSize });
+}
+
 /** POV child qty = participation of observed interval volume, capped by remaining schedule, lot-aligned. */
 export function planPovSliceQty(input: {
   intervalVolume: Amount;
