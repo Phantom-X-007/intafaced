@@ -35,11 +35,7 @@ export function assertVideoGatePublished(gate: VideoGateConfig): void {
   }
 }
 
-export function assertVideoEntitled(input: {
-  readonly gate: VideoGateConfig;
-  readonly caller: VideoCaller;
-  readonly stake: Amount;
-}): void {
+export function assertVideoEntitled(input: { readonly gate: VideoGateConfig; readonly caller: VideoCaller; readonly stake: Amount }): void {
   assertVideoGatePublished(input.gate);
   const wantTier = input.gate.minTier.trim();
   if (!TIER_NAMES.has(wantTier)) {

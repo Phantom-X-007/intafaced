@@ -168,14 +168,7 @@ export function assertPlaybackUrlGranted(config: VideoStorageConfig, playbackUrl
   if (!stamp) {
     throw new AcademyError('Video URL grant date is not a grant', 'academy.video_grant_required');
   }
-  const signedAt = Date.UTC(
-    Number(stamp[1]),
-    Number(stamp[2]) - 1,
-    Number(stamp[3]),
-    Number(stamp[4]),
-    Number(stamp[5]),
-    Number(stamp[6]),
-  );
+  const signedAt = Date.UTC(Number(stamp[1]), Number(stamp[2]) - 1, Number(stamp[3]), Number(stamp[4]), Number(stamp[5]), Number(stamp[6]));
   if (!Number.isFinite(signedAt) || signedAt + expires * 1000 <= now.getTime()) {
     throw new AcademyError('Video URL grant has expired', 'academy.video_grant_required');
   }

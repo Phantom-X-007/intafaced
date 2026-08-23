@@ -1045,12 +1045,10 @@ describe('svc-academy mount — stored video (not LiveKit)', () => {
       stakeOf: async () => parseAmount('1'),
     };
     await expect(
-      createAcademyRouter(stubAcademy(), {}, video)
-        .createCaller(signed())
-        .videoPlayback({
-          slug: 'foundations-risk-first',
-          url: 'http://academy-minio:9000/academy-video/foundations/risk-first.mp4',
-        }),
+      createAcademyRouter(stubAcademy(), {}, video).createCaller(signed()).videoPlayback({
+        slug: 'foundations-risk-first',
+        url: 'http://academy-minio:9000/academy-video/foundations/risk-first.mp4',
+      }),
     ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       message: userCopy('academy.video_grant_required'),
