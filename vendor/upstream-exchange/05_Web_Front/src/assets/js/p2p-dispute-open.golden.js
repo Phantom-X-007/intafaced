@@ -19,6 +19,8 @@ assertContains(page, 'if (evidence.length) input.evidence = evidence;');
 assertContains(page, '{ tradeId: trade.id, evidence: evidence }');
 assertContains(page, 'ifNobodyRules');
 assertContains(page, 'moderationReachable');
+assertContains(page, 'disputeOpen.data.chatThreadId');
+assertContains(page, "intafaced.p2p.disputeChatThread");
 assertContains(page, "status === 'escrowed'");
 assertContains(page, "status === 'fiat_sent'");
 assertContains(page, "status === 'disputed'");
@@ -38,6 +40,12 @@ if (page.indexOf("query('p2p', 'disputes.list'") !== -1) {
 if (/watching console|moderator is watching|a console is watching/i.test(page)) {
   throw new Error('must not fake a watching console');
 }
+if (page.indexOf('LiveKit') !== -1) {
+  throw new Error('must not invent a LiveKit room');
+}
+if (/fake transcript|lorem ipsum/i.test(page)) {
+  throw new Error('must not invent a fake chat');
+}
 if (/evidenceRemove|removeEvidence|editEvidence|evidenceEdit/.test(page)) {
   throw new Error('evidence is append-only — no edit/remove UI');
 }
@@ -47,6 +55,7 @@ assertContains(en, 'disputeEvidence:', 'en.js');
 assertContains(en, 'disputeDeadline:', 'en.js');
 assertContains(en, 'disputeIfNobodyRules:', 'en.js');
 assertContains(en, 'disputeModerationReachable:', 'en.js');
+assertContains(en, 'disputeChatThread:', 'en.js');
 assertContains(en, 'open: "Open dispute"', 'en.js');
 assertContains(en, 'openDone:', 'en.js');
 assertContains(en, 'append: "Append evidence"', 'en.js');

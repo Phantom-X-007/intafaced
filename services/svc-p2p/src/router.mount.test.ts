@@ -289,6 +289,7 @@ describe('svc-p2p mount — the moderator queue', () => {
     openedBy: BUYER,
     openedVia: 'party' as const,
     reason: 'nothing arrived',
+    chatThreadId: '77777777-7777-4777-8777-777777777777',
     evidence: [
       { seq: 1, submittedBy: BUYER, submittedAt: new Date('2026-08-04T00:00:00.000Z'), item: { ref: 'BUYER-RECEIPT' } },
       { seq: 2, submittedBy: SELLER, submittedAt: new Date('2026-08-04T01:00:00.000Z'), item: { ref: 'SELLER-STATEMENT' } },
@@ -409,6 +410,7 @@ describe('svc-p2p mount — the moderator queue', () => {
 
     expect(opened.ifNobodyRules).toBe('escalated_and_held');
     expect(opened.moderationReachable).toBe(false);
+    expect(opened.chatThreadId).toBe(dispute.chatThreadId);
   });
 
   it('discloses when moderation IS reachable at open time', async () => {
@@ -479,6 +481,7 @@ describe('svc-p2p mount — the moderator queue', () => {
       status: 'released' as const,
       resolution: 'released' as const,
       resolutionReason: 'moderator:release',
+      chatThreadId: '77777777-7777-4777-8777-777777777777',
       deadlines: {},
       deadlineAt: null,
       createdAt: new Date('2026-07-20T00:00:00.000Z'),
@@ -538,6 +541,7 @@ describe('svc-p2p mount — the moderator queue', () => {
       status: 'cancelled' as const,
       resolution: 'refunded' as const,
       resolutionReason: 'moderator:refund',
+      chatThreadId: '77777777-7777-4777-8777-777777777777',
       deadlines: {},
       deadlineAt: null,
       createdAt: new Date('2026-07-20T00:00:00.000Z'),
@@ -654,6 +658,7 @@ describe('svc-p2p mount — trade/dispute read IDOR', () => {
     status: 'escrowed' as const,
     resolution: null,
     resolutionReason: null,
+    chatThreadId: null,
     deadlines: {},
     deadlineAt: new Date(),
     createdAt: new Date(),
@@ -692,6 +697,7 @@ describe('svc-p2p mount — trade/dispute read IDOR', () => {
       openedBy: BUYER,
       openedVia: 'party' as const,
       reason: 'nothing arrived',
+      chatThreadId: '77777777-7777-4777-8777-777777777777',
       evidence: [],
       moderatorId: null,
       resolution: null,
