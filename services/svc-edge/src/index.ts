@@ -14,6 +14,7 @@ import { upstreamBody } from './proxy-body.js';
 import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
 import { userCopy } from './user-copy.js';
+import { registerWidgetRampRoute } from './widget-ramp.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -253,6 +254,12 @@ registerGeoBlockGuard(app);
 // Must not invent a partner; refuses only when env arms fail-closed / flagged.
 registerNetworkAccessGuard(app);
 registerAdminRoutes(app, admin);
+
+registerWidgetRampRoute(app, {
+  licence: env.INFRA_LICENCE,
+  accent: env.INFRA_WIDGET_ACCENT,
+  tenantCss: env.INFRA_WIDGET_CSS,
+});
 
 /**
  * The proxy.
