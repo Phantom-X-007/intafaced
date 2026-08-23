@@ -11,6 +11,7 @@ import { CommerceService } from './commerce/commerce-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './affiliate-payout.js';
+import { PerpProposalService } from './perp-proposal-service.js';
 
 // §9 — register the TracerProvider before the first span is created.
 registerProcessHooks(
@@ -55,6 +56,12 @@ await sql`SELECT 1 FROM market.purchases LIMIT 1`.catch(() => {
 await sql`SELECT 1 FROM market.subscription_state LIMIT 1`.catch(() => {
   throw new Error('market.subscription_state is missing — run migrations before starting svc-market');
 });
+await sql`SELECT 1 FROM market.perp_proposals LIMIT 1`.catch(() => {
+  throw new Error('market.perp_proposals is missing — run migrations before starting svc-market');
+});
+await sql`SELECT 1 FROM market.perp_proposal_status_events LIMIT 1`.catch(() => {
+  throw new Error('market.perp_proposal_status_events is missing — run migrations before starting svc-market');
+});
 
 const vendors = new VendorService(sql, createStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET));
 const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
@@ -63,7 +70,8 @@ const commerce = new CommerceService(sql, vendors, ledger, {
   affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
 });
-const appRouter = createMarketRouter(vendors, commerce);
+const perpProposals = new PerpProposalService(sql, vendors);
+const appRouter = createMarketRouter(vendors, commerce, perpProposals);
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 

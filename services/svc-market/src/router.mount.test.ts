@@ -4,6 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createMarketRouter } from './router.js';
 import { userCopy } from './user-copy.js';
 import { MarketError, type VendorService } from './vendor-service.js';
+import type { PerpProposalService } from './perp-proposal-service.js';
 
 /**
  * REACHABILITY, NOT SHAPE.
@@ -106,6 +107,65 @@ function stubVendors(overrides: Partial<VendorService> = {}): VendorService {
     ...overrides,
   } as unknown as VendorService;
 }
+
+describe('svc-market mount — perpetual proposal authority', () => {
+  it('derives the perpetual proposal proposer from a market:write principal', async () => {
+    const proposals = {
+      propose: vi.fn(async (input) => ({
+        ...input,
+        id: input.clientProposalId,
+        status: 'proposed',
+        orderable: false,
+        createdAt: '2026-08-23T12:00:00.000Z',
+        updatedAt: '2026-08-23T12:00:00.000Z',
+      })),
+    } as unknown as PerpProposalService;
+    const input = {
+      clientProposalId: '22222222-2222-4222-8222-222222222222',
+      symbol: 'fixture-perp',
+      settle: 'fixture-settle',
+      oracleSource: 'fixture-oracle',
+      leverageCap: '2.5',
+    };
+    await createMarketRouter(stubVendors(), undefined, proposals).createCaller(signed()).proposePerpMarket(input);
+    expect(proposals.propose).toHaveBeenCalledWith({ ...input, proposerId: USER });
+  });
+
+  it('does not reach perpetual proposals without market:write', async () => {
+    const proposals = { propose: vi.fn() } as unknown as PerpProposalService;
+    const input = {
+      clientProposalId: '22222222-2222-4222-8222-222222222222',
+      symbol: 'fixture-perp',
+      settle: 'fixture-settle',
+      oracleSource: 'fixture-oracle',
+      leverageCap: '2.5',
+    };
+    await expect(
+      createMarketRouter(stubVendors(), undefined, proposals)
+        .createCaller(signed(principal({ scopes: ['market:read'] })))
+        .proposePerpMarket(input),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(proposals.propose).not.toHaveBeenCalled();
+  });
+
+  it('passes a blank oracle to the domain gate and preserves its typed refusal', async () => {
+    const proposals = {
+      propose: vi.fn(async () => {
+        throw new MarketError('market.oracle_source_unset', 'market.oracle_source_unset');
+      }),
+    } as unknown as PerpProposalService;
+    await expect(
+      createMarketRouter(stubVendors(), undefined, proposals).createCaller(signed()).proposePerpMarket({
+        clientProposalId: '22222222-2222-4222-8222-222222222222',
+        symbol: 'fixture-perp',
+        settle: 'fixture-settle',
+        oracleSource: '',
+        leverageCap: '2.5',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'market.oracle_source_unset' });
+    expect(proposals.propose).toHaveBeenCalledOnce();
+  });
+});
 
 describe('svc-market mount — who may apply', () => {
   it('refuses an anonymous application', async () => {

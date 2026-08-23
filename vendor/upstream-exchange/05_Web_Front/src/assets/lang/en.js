@@ -1791,7 +1791,16 @@ module.exports = {
             createListing: "Create listing",
             createOfferTypeOneTime: "One-time",
             createPriceHint: "Decimal string",
-            createCreated: "Listing created"
+            createCreated: "Listing created",
+            perpProposal: "Propose a perpetual market",
+            perpProposalLead: "A proposal records metadata only. It does not create an orderable market or a second money book.",
+            perpSymbol: "Symbol",
+            perpSettle: "Settlement asset id",
+            perpOracleSource: "Oracle source",
+            perpLeverageCap: "Maximum leverage",
+            perpLeverageHint: "Positive decimal string; no default",
+            perpPropose: "Submit proposal",
+            perpProposed: "Proposal recorded — not orderable"
         },
         support: {
             title: "Support",
