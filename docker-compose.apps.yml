@@ -1436,6 +1436,11 @@ services:
   # the de-facto product. Nobody decided that." A running port outranks a stated
   # direction every time, so the port goes with the direction.
   #
+  # no-deploy: mobile — Capacitor wrap of the vendored Vue shell (`apps/mobile`,
+  # bundle id app.intafaced.mobile). Sideload / WebView from this repo; not a
+  # fleet HTTP service. Store listing is a Class X residual. `/app` on the
+  # shell tells that truth. A compose port here would mint a second surface.
+  #
   # no-deploy: web — `apps/web`, the retired Next scaffold. Deliberate, and this
   # line is the deliberateness: the gate below is right that an app nobody serves
   # can be worked on for weeks unseen, and that is precisely the history here —
