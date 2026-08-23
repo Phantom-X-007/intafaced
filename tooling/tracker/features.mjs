@@ -1700,10 +1700,16 @@ export const FEATURES = [
   }),
   f('mining.pool', 'Stratum share protocol, PPLNS payouts', {
     owner: 'shehzad002',
-    note: "HUMAN mining epoch/share protocol surface @shehzad002 (token minter remains svc-token). Agents babysit chain half. Plane deliberately left F 2026-08-07: the share/epoch protocol is the chain owner's, but minting stays custodial in svc-token, and relabelling the row P would misdescribe where the value moves.",
+    status: 'done',
+    note: 'Done 2026-08-23: POST /api/mining/submitShare mounts svc-mining-pool; submitShare plans two-share PPLNS and posts mintEmission plus reward payouts through svc-ledger. Blank ledger/epoch refuses by named errors; no hashrate is invented. The chain-owned stratum surface and token minter remain separate.',
     module: 'mining-pool',
     phase: '5',
     dependsOn: ['token.emissions'],
+    requires: [
+      'services/svc-mining-pool/src/server.ts',
+      'services/svc-mining-pool/src/submit-share.test.ts',
+      'services/svc-edge/src/routes.ts',
+    ],
   }),
   f('ops.custody', 'Custody operations — cold/warm/hot wallet tiers, multi-sig approval workflow', {
     module: 'core-ops',
