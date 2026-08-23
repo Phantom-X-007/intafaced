@@ -2525,9 +2525,14 @@ export const FEATURES = [
   f('socket.stream-provider', 'A real WebRTC SFU behind StreamProvider (§8.3 LiveKit self-hosted)', {
     module: 'academy',
     phase: '5',
-    status: 'socket',
+    status: 'done',
     dependsOn: ['academy.lobbies'],
-    note: '§13 — the interface exists (services/svc-academy/src/stream/provider.ts) and lobbies run without it: seats, presence, capacity, invites and the 2D scene need no provider. NullStreamProvider REFUSES a join credential by name rather than returning a plausible one, because a lobby that opens against no SFU fails silently in the browser and reads as a broken platform. Needs a self-hosted LiveKit deployment and its API key — neither exists in this environment.',
+    requires: [
+      'docker-compose.apps.yml',
+      'services/svc-academy/src/stream/provider.ts',
+      'services/svc-academy/src/stream/livekit-compose-pin.test.ts',
+    ],
+    note: 'Done 2026-08-23: docker-compose.apps.yml provides livekit/livekit-server:v1.9.0 on the internal compose network, while StreamProvider remains refuse-closed when LIVEKIT_URL or provider configuration is blank. The compose pin and NullStreamProvider tests preserve the unavailable state honestly until operator credentials are supplied.',
   }),
   // Found 2026-08-03 while separating the screening authority from the
   // jurisdiction matrix. Declared rather than fixed: an undeclared gap is a
