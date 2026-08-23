@@ -331,6 +331,46 @@
         <IxState v-else :loading="issuedCard.busy" :reason="issuedCard.reason" :message="issuedCard.message" endpoint="/api/bank/trpc/cards.issue"></IxState>
       </div>
     </div>
+
+    <!-- ── invoice (reuse pay.gateway createLink; no second book) ─────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.business.invoiceTitle') }}</h2>
+        <span class="ix-sub">{{ $t('intafaced.bank.business.invoiceApi') }}</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.business.invoiceLead') }}</p>
+      <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">{{ $t('intafaced.bank.business.invoiceSocket') }}</div>
+      <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+        <div v-if="!invoiceMerchantId" class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.invoiceNeedMerchant') }}</div>
+        <div v-else>
+          <div class="ix-field-grid">
+            <div class="ix-field">
+              <label for="ix-biz-inv-label">{{ $t('intafaced.pay.linkLabel') }}</label>
+              <Input element-id="ix-biz-inv-label" v-model="invoiceForm.label" :placeholder="$t('intafaced.bank.business.invoiceLabelHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-biz-inv-amount">{{ $t('intafaced.pay.amount') }}</label>
+              <Input element-id="ix-biz-inv-amount" v-model="invoiceForm.amount" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+            </div>
+            <div class="ix-field">
+              <label for="ix-biz-inv-currency">{{ $t('intafaced.pay.currency') }}</label>
+              <Input element-id="ix-biz-inv-currency" v-model="invoiceForm.currency" :placeholder="$t('intafaced.bank.assetHint')"></Input>
+            </div>
+          </div>
+          <div class="ix-actions">
+            <Button type="primary" :loading="issuedInvoice.busy" :disabled="!canIssueInvoice" @click="submitInvoice">{{ $t('intafaced.bank.business.invoiceIssue') }}</Button>
+          </div>
+        </div>
+      </IxState>
+      <div v-if="issuedInvoice.ran" style="margin-top:14px;">
+        <div v-if="issuedInvoice.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.business.invoiceIssued') }}</strong>
+          <div style="margin-top:10px;">{{ $t('intafaced.pay.tokenOnce') }}</div>
+          <div style="margin-top:8px;"><code>{{ issuedInvoice.data.token }}</code></div>
+        </div>
+        <IxState v-else :loading="issuedInvoice.busy" :reason="issuedInvoice.reason" :message="issuedInvoice.message" endpoint="/api/pay/trpc/merchant.createLink"></IxState>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -344,6 +384,8 @@
  * one ledger post for every recipient (or none). Mixed assets refuse
  * `bank.business_payroll_rate_unset`. Amounts are decimal strings end to end.
  * Expense cards reuse `cards.issue`; `simulated: true` is drawn, never hidden.
+ * Invoices reuse `merchant.createLink` (pay.gateway). Token is shown once; no
+ * checkout origin is assembled here. Card acquiring stays socket.psp-partners.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -373,7 +415,10 @@ export default {
       payrollRan: this.emptyAction(),
       memberAdded: this.emptyAction(),
       expenseForm: { assetId: '', perAuthorizationLimit: '' },
-      issuedCard: this.emptyAction()
+      issuedCard: this.emptyAction(),
+      invoiceForm: { label: '', amount: '', currency: '' },
+      merchant: this.emptySection(),
+      issuedInvoice: this.emptyAction()
     };
   },
   computed: {
@@ -399,12 +444,19 @@ export default {
           this.payroll.amount2 &&
           this.draftId('payroll')
       );
+    },
+    invoiceMerchantId() {
+      return (this.merchant.data && this.merchant.data.id) || '';
+    },
+    canIssueInvoice() {
+      return Boolean(this.invoiceMerchantId && this.invoiceForm.label);
     }
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.reloadAccounts();
     this.load('spaces', query('bank', 'spaces.list', {}, this.ixToken));
+    this.load('merchant', query('pay', 'merchant.me', undefined, this.ixToken));
   },
   methods: {
     reloadAccounts() {
@@ -547,6 +599,17 @@ export default {
         if (!res.ok) return;
         self.clearDraftId('expense-card');
         self.expenseForm = { assetId: '', perAuthorizationLimit: '' };
+      });
+    },
+    submitInvoice() {
+      var self = this;
+      if (!this.canIssueInvoice) return;
+      var input = { merchantId: this.invoiceMerchantId, label: this.invoiceForm.label };
+      if (this.invoiceForm.amount) input.amount = this.invoiceForm.amount;
+      if (this.invoiceForm.currency) input.currency = this.invoiceForm.currency;
+      this.act('issuedInvoice', mutate('pay', 'merchant.createLink', input, this.ixToken)).then(function(res) {
+        if (!res.ok) return;
+        self.invoiceForm = { label: '', amount: '', currency: '' };
       });
     }
   }

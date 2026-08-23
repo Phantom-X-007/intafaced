@@ -961,7 +961,15 @@ module.exports = {
                 expenseApi: "cards.issue · simulated: true",
                 expenseLead: "Issues through bank.cards. The simulator flag is on the card and on this card — never drawn as a live BIN.",
                 expenseSimulated: "true — this programme is the card-sim. Live issuer stays a socket.",
-                expenseIssue: "Issue expense card"
+                expenseIssue: "Issue expense card",
+                invoiceTitle: "Invoice",
+                invoiceApi: "merchant.createLink · pay.gateway",
+                invoiceLead: "Issues a hosted-checkout token through pay.gateway. Amount is a decimal string you type. No second money book.",
+                invoiceSocket: "Card acquiring is not this card (socket.psp-partners).",
+                invoiceNeedMerchant: "No merchant on this session. Open /pay/merchant first — this card does not invent one.",
+                invoiceLabelHint: "e.g. August invoice",
+                invoiceIssue: "Issue invoice",
+                invoiceIssued: "Hosted link token (shown once)"
             }
         },
         pay: {
