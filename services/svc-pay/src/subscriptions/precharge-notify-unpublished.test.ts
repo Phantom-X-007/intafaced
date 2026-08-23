@@ -82,6 +82,23 @@ describe('pre-charge notify — attempt recorded, never pretend delivered', () =
     expect(failed.notified).toBe(false);
   });
 
+  it('only an explicit in-app delivery-row proof makes the fire result notified', async () => {
+    const delivered = await recordPreChargeNotifyAttempt({
+      notify: () => ({ inAppDeliveryRowExists: true }),
+      subscriptionId: 's',
+      occurrence: 0,
+      path: 'crypto_invoice',
+      merchantId: 'm',
+      customerId: 'c',
+      amount: '1',
+      assetId: 'USDT',
+      idempotencyKey: 'k',
+    });
+    expect(delivered.inAppDeliveryRowExists).toBe(true);
+    expect(delivered.notified).toBe(true);
+    expect(() => assertPrechargeNotifyUnpublished(delivered)).not.toThrow();
+  });
+
   it('card pull stays closed — invent charge-against-mandate cannot open money', () => {
     expect(pathOpensMoney('card')).toBe(false);
     const card = mandateChargeDisposition('card');
