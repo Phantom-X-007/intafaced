@@ -56,6 +56,8 @@ export interface PresentCopyFollow {
   readonly sessionKeyRevoked: boolean;
   readonly sessionKeyPrefix?: string;
   readonly sessionKeyId?: string;
+  /** Raw token — grantSessionKey only, never list/store. */
+  readonly sessionKey?: string;
 }
 
 export function parseCopyEnvelope(input: {
