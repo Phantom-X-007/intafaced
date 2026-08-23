@@ -1995,8 +1995,20 @@ export const FEATURES = [
     module: 'academy',
     phase: '5',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['academy.curriculum'],
-    note: 'Law §25:707 ("Video library | B | media service | 5"), gap-closed 2026-08-08 — a named surface in the matrix with no row and no service on disk (audit §A1.a #10). Phase and plane are the matrix\'s own. Blocked on academy.curriculum (`ready`, not `done`): §25:705 puts the 20 playbooks and 3 workbooks in the curriculum spine, and a video library is the media half of that same shelf rather than a separate product — standing a second catalogue up beside it is how one surface becomes two. WHAT IS ACTUALLY MISSING IS NOT CODE: §25:707 names a "media service", and there is no object storage and no transcode path anywhere in this repo. That is the same unprovisioned dependency blueprint.card records for its rasterizer, and it is an owner and infrastructure item rather than a PR. NOTE WHAT THIS ROW IS NOT, so one blocker cannot hide behind the other: socket.stream-provider is LIVE streaming (LiveKit, blocked on a self-hosted deployment and an API key the owner must supply); this is stored playback. DONE-BAR CONDITION: entitlement. §25:710 gates Academy access by tier and stake, so a video library that serves a file to anyone holding the URL has not shipped the product — signed, expiring, tier-checked access, or it is not `done`.',
+    requires: [
+      'services/svc-academy/src/video/mount-vs-tracker.ts',
+      'services/svc-academy/src/video/mount-vs-tracker.test.ts',
+      'services/svc-academy/src/video/library.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/academy-videos.golden.js',
+    ],
+    note:
+      '**Done 2026-08-23:** stored VOD mounted (`videos` + `videoPlayback`); MinIO compose default off. ' +
+      'Unconfigured → `academy.video_storage_unconfigured`. Signed expiring GET + tier/stake gate. ' +
+      'URL without grant refused. Not LiveKit (`socket.stream-provider`). ' +
+      'Class X residual: store listing n/a; transcode path.',
   }),
   f('ops.portfolio', 'Portfolio suite — users and house, views over ledger and indexer (§25:723)', {
     module: 'core-ops',

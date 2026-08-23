@@ -11,6 +11,7 @@ import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
 import { isUsable, NullStreamProvider, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
+import { videoGateFromEnv, videoStorageFromEnv } from './video/library.js';
 import { createTradePublicPaperFlagPort } from './paper/market-flag-verify.js';
 import { parseAmbassadorIfcPayLawJson, parseAmbassadorRevenueShareLawJson } from './ambassadors/ifc-pay-rate-law.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -121,10 +122,18 @@ const academy = new AcademyService(
   certXp,
 );
 
-export const appRouter = createAcademyRouter(academy, {
-  ifcPayLaw: parseAmbassadorIfcPayLawJson(env.ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON),
-  revenueShareLaw: parseAmbassadorRevenueShareLawJson(env.ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON),
-});
+export const appRouter = createAcademyRouter(
+  academy,
+  {
+    ifcPayLaw: parseAmbassadorIfcPayLawJson(env.ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON),
+    revenueShareLaw: parseAmbassadorRevenueShareLawJson(env.ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON),
+  },
+  {
+    storage: videoStorageFromEnv(env),
+    gate: videoGateFromEnv(env),
+    stakeOf: (userId) => stakes.stakeOf(userId),
+  },
+);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

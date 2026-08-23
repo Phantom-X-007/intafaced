@@ -162,6 +162,68 @@
       <IxState v-else :loading="withdrawAction.busy" :reason="withdrawAction.reason" :message="withdrawAction.message" endpoint="/api/academy/trpc/withdrawResidency"></IxState>
     </div>
   </div>
+
+  <div class="ix-card">
+    <div class="ix-card-head">
+      <h2>{{ $t('intafaced.academy.video') }}</h2>
+      <span class="ix-sub">videos · videoPlayback · academy.video_storage_unconfigured</span>
+    </div>
+    <p class="ix-lead">{{ $t('intafaced.academy.videoLead') }}</p>
+
+    <IxState :loading="videos.loading" :reason="videos.reason" :message="videos.message" endpoint="/api/academy/trpc/videos">
+      <div v-if="videos.data && videos.data.length" class="ix-scroll">
+        <table class="ix-table">
+          <thead>
+            <tr>
+              <th>{{ $t('intafaced.academy.playbook') }}</th>
+              <th>{{ $t('intafaced.academy.path') }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in videos.data" :key="row.slug">
+              <td>{{ row.title }}</td>
+              <td>{{ row.path }}</td>
+              <td>
+                <div class="ix-actions">
+                  <Button
+                    v-if="canWrite"
+                    type="primary"
+                    size="small"
+                    :loading="playback.loading && playSlug === row.slug"
+                    @click="playVideo(row.slug)"
+                  >{{ $t('intafaced.academy.videoPlay') }}</Button>
+                  <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.academy.videoSignIn') }}</router-link>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.academy.videoEmpty') }}</div>
+    </IxState>
+
+    <div v-if="playSlug" style="margin-top:14px;">
+      <IxState :loading="playback.loading" :reason="playback.reason" :message="playback.message" endpoint="/api/academy/trpc/videoPlayback">
+        <div v-if="playback.data" class="ix-kv">
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('intafaced.academy.videoGranted') }}</span>
+            <span class="v">{{ playback.data.slug }}</span>
+          </div>
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('intafaced.academy.videoExpires') }}</span>
+            <span class="v">{{ playback.data.expiresAt }}</span>
+          </div>
+          <video
+            v-if="playback.data.playbackUrl"
+            :src="playback.data.playbackUrl"
+            controls
+            style="width:100%;margin-top:10px;background:#0b0b0b;"
+          ></video>
+        </div>
+      </IxState>
+    </div>
+  </div>
   </div>
 </template>
 
@@ -196,7 +258,10 @@ export default {
       withdrawId: '',
       mine: this.emptySection(),
       applyAction: this.emptyAction(),
-      withdrawAction: this.emptyAction()
+      withdrawAction: this.emptyAction(),
+      playSlug: '',
+      videos: this.emptySection(),
+      playback: this.emptySection()
     };
   },
   computed: {
@@ -213,6 +278,7 @@ export default {
   created() {
     this.loadPath();
     this.loadMine();
+    this.loadVideos();
   },
   methods: {
     loadPath() {
@@ -246,6 +312,13 @@ export default {
       this.act('withdrawAction', mutate('academy', 'withdrawResidency', { id: id }, this.ixToken)).then(function (res) {
         if (res && res.ok) self.loadMine();
       });
+    },
+    loadVideos() {
+      this.load('videos', query('academy', 'videos', undefined, this.ixToken));
+    },
+    playVideo(slug) {
+      this.playSlug = slug;
+      this.load('playback', query('academy', 'videoPlayback', { slug: slug }, this.ixToken));
     }
   }
 };

@@ -10,11 +10,11 @@
 
 <!-- tracker:start -->
 
-`██████████████████░░` **89%** — 140 of 158 features shipped
+`██████████████████░░` **89%** — 141 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 51/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 52/59 · **5P** 4/7
 
-**🟢 13 ready to claim** — nothing blocks these:
+**🟢 12 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `web.mobile-apps` — Native mobile apps — iOS and Android, own name, zero attribution (§25:727)
@@ -23,7 +23,7 @@ Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 �
 - `mining.pool` — Stratum share protocol, PPLNS payouts
 - `quant.sdk` — Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)
 - `quant.marketplace` — Strategy marketplace and compute tiers — subscriptions, token-gated tiers (§29)
-- …and 5 more
+- …and 4 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 
