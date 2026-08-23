@@ -377,6 +377,14 @@ export const MONEY_PUBLIC_DOORS: readonly MoneyPublicDoor[] = [
     control: { kind: 'edge-module', module: 'token' },
   },
   {
+    id: 'mining.submitShare',
+    module: 'mining-pool',
+    method: 'POST',
+    path: '/api/mining/submitShare',
+    what: 'submit an observed share for ledger-backed PPLNS payout',
+    control: { kind: 'edge-module', module: 'mining-pool' },
+  },
+  {
     id: 'market.purchase',
     module: 'market',
     method: 'POST',
@@ -442,7 +450,7 @@ export function moneyKillControlFor(module: ModuleId): MoneyKillControl {
       note: 'svc-matching has no browser door; halt trade to stop new risk at the edge',
     };
   }
-  if (module === 'launch' || module === 'mining-pool' || module === 'bridge') {
+  if (module === 'launch' || module === 'bridge') {
     return {
       kind: 'not-deployed',
       module,

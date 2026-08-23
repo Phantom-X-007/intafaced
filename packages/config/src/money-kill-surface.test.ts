@@ -22,6 +22,7 @@ const LIVE_MONEY_UPSTREAMS = [
   { prefix: '/api/p2p', module: 'p2p' },
   { prefix: '/api/pay', module: 'pay' },
   { prefix: '/api/market', module: 'market' },
+  { prefix: '/api/mining', module: 'mining-pool' },
 ] as const;
 
 describe('money kill surface (D26-P2-10)', () => {
