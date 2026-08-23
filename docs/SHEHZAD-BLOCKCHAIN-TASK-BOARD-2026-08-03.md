@@ -5,9 +5,13 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-08-23 delta — last MVP wave (then stop)
+> ### 2026-08-23 delta — INTACHAIN GO (Nitro)
 >
-> Live overlay: [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md). **This wave:** land or kill #2473 · real venue contract (`socket.clob-contracts`) · remaining P0 that §1.5 does not already list as shipped. **Not this wave:** INTACHAIN (`chain.mainnet`) and everything blocked on it, mining-as-L1, Predict, rust-core, MPC, external audit. Do not ping Nitro. `audited:true` stays false. When that short list is empty: **STOP**.
+> Live overlay: [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) §4. **Start INTACHAIN P1 now.** Land or kill #2473 · venue contract (`socket.clob-contracts`) · then S-D2…S-D7 (`chain.mainnet`, INTAEVM, `svc-chain`, bridge). `audited:true` stays false. Do not ping Nitro. `chain.mainnet` Done = running chain + native CLOB, not a stamp. P2 rust / MPC / paid audit stay later.
+>
+> ### 2026-08-23 earlier — last MVP wave (superseded for INTACHAIN)
+>
+> The same-day overlay first parked INTACHAIN. **Nitro overruled: GO.** Keep #2473 + venue contract; do not treat INTACHAIN as parked.
 >
 > ### 2026-08-20 delta — sitting items are not coding gates
 >

@@ -258,7 +258,7 @@
 
 ## Last board update
 
-- **2026-08-23 last MVP overlay:** live queue is [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md). `denon-hard-parallel` 120-ID board is **HISTORICAL**. Shehzad this wave = #2473 + venue contract; INTACHAIN parked.
+- **2026-08-23 last MVP overlay:** live queue is [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md). `denon-hard-parallel` 120-ID board is **HISTORICAL**. Shehzad = #2473 + venue contract + **INTACHAIN P1 GO**.
 - **2026-08-15 Denon D26-P4-07:** claim `denon-d26-p4-07-java-ts` LIVE — Java vs TS money SoT seal ADR; this row only; P2-02 keeps the door map.
 - **2026-08-15 Denon D26-P2-02:** claim `denon-d26-p2-02-java-map` LIVE — tip Java money-plane inventory (wallet_rpc + exchange Java); map-only; does not claim dual-book fixed. Historical generator land remains **#1751**.
 - **2026-08-15 Denon D26-P3-05:** claim `denon-d26-p3-05-rotation` LIVE — secret rotation readiness runbook + parity gates; no live rotation (Class X).
