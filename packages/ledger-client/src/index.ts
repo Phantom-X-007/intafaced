@@ -13,5 +13,6 @@ export * from './types.js';
 export * from './client.js';
 export * from './accounts.js';
 export * from './memory-ledger.js';
+export * from './sharding.js';
 export * from './http-errors.js';
 export * from './recipes/index.js';
