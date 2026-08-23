@@ -69,8 +69,8 @@ export interface MmSeedTarget {
 export interface MmSeedJobsConfig {
   /** Master kill — false = host created, no intervals. */
   enabled: boolean;
-  /** Tick interval when enabled. */
-  intervalMs: number;
+  /** Tick interval when enabled. Unset/invalid = refuse to schedule. */
+  intervalMs?: number | null;
   halfSpreadBps: number;
   stepBps: number;
   levels: number;
@@ -130,8 +130,20 @@ export interface MmSeedJobsHandle {
 export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
   const host = createJobHost({ onError: deps.onError });
 
-  // SD-4: kill-switch — disabled or empty targets → stopped host (never invent markets).
-  if (!mmSeedJobsArmed(deps.config.enabled, deps.config.targets.length)) {
+  // SD-4/H2: disabled, unnamed targets, or an unset/invalid interval →
+  // stopped host. A job host must never turn an absent ops choice into a timer.
+  const namedTargets =
+    deps.config.targets.length > 0 &&
+    deps.config.targets.every(
+      (target) => target.marketId.trim() !== '' && target.baseAsset.trim() !== '' && target.quoteAsset.trim() !== '',
+    );
+  if (
+    !mmSeedJobsArmed(deps.config.enabled, deps.config.targets.length) ||
+    !namedTargets ||
+    deps.config.intervalMs == null ||
+    !Number.isFinite(deps.config.intervalMs) ||
+    deps.config.intervalMs <= 0
+  ) {
     return { host, stop: () => host.stopAll() };
   }
 
