@@ -159,6 +159,7 @@ export class CopyService {
         killUnfollowReal: true,
       },
       feeSharePublished,
+      leaderShareBps: feeSharePublished ? String(this.feeShareLaw.leaderShareBps) : null,
       jurisdictionPublished,
       statusLine: copyLawStatusLine(this.feeShareLaw, this.jurisdictionLaw),
       residual: copyLawResidual(this.feeShareLaw, this.jurisdictionLaw),

@@ -90,7 +90,11 @@ module.exports = {
             policyLedgerOnly: "Money only through ledger-client",
             policyDepthCap: "Max referral depth",
             policyPayoutResidual: "Payout residual",
-            policyAccrualResidual: "Accrual residual"
+            policyAccrualResidual: "Accrual residual",
+            feeShareTitle: "Copy fee share",
+            feeShareLead: "Owner-configured share of settled protocol fees; it stays unset until published.",
+            feeShareBps: "Leader share (bps)",
+            feeShareUnset: "Not configured"
         },
         referrer: {
             title: "Your referrer",

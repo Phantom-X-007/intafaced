@@ -184,6 +184,28 @@
       </IxState>
     </div>
 
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('invite.attribute.feeShareTitle') }}</h2>
+        <span class="ix-sub">trade.copy.deskStatus</span>
+      </div>
+      <p class="ix-lead">{{ $t('invite.attribute.feeShareLead') }}</p>
+      <IxState
+        :loading="feeShare.loading"
+        :reason="feeShare.reason"
+        :message="feeShare.message"
+        endpoint="/api/trade/trpc/copy.deskStatus"
+      >
+        <div v-if="feeShareBps !== null" class="ix-kv">
+          <div class="ix-kv-item">
+            <span class="k">{{ $t('invite.attribute.feeShareBps') }}</span>
+            <span class="v">{{ feeShareBps }}</span>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('invite.attribute.feeShareUnset') }}</div>
+      </IxState>
+    </div>
+
     <!-- ── durable accruals + ancestor ids; empty when unpublished ──────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -278,6 +300,7 @@ export default {
       referrerId: '',
       referrer: this.emptySection(),
       policy: this.emptySection(),
+      feeShare: this.emptySection(),
       accruals: this.emptySection(),
       ancestors: this.emptySection(),
       attributed: this.emptyAction(),
@@ -301,12 +324,20 @@ export default {
     },
     ancestorIds() {
       return Array.isArray(this.ancestors.data) ? this.ancestors.data : [];
+    },
+    feeShareBps() {
+      var status = this.feeShare.data;
+      if (!status || status.feeSharePublished !== true) return null;
+      return typeof status.leaderShareBps === 'string' && /^\d+$/.test(status.leaderShareBps)
+        ? status.leaderShareBps
+        : null;
     }
   },
   created() {
     this.$store.commit('navigate', 'nav-invite');
     this.reloadReferrer();
     this.load('policy', query('identity', 'affiliates.policy', undefined, this.ixToken));
+    this.load('feeShare', query('trade', 'copy.deskStatus', undefined, this.ixToken));
     this.load('accruals', query('identity', 'affiliates.myAccruals', { limit: 50 }, this.ixToken));
     this.load('ancestors', query('identity', 'affiliates.myAncestors', undefined, this.ixToken));
     this.consumeShareQuery();
