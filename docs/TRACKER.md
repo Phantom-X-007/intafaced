@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**139 of 158 shipped (88%)** · 0 in progress · 14 ready to claim · 5 blocked · 30 deliberate §13 sockets
+**140 of 158 shipped (89%)** · 0 in progress · 13 ready to claim · 5 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -29,7 +29,6 @@ pnpm wt feat/<the-thing>
 | Native mobile apps — iOS and Android, own name, zero attribution (§25:727) | `core-ops` | 2 | `web.mobile-apps` |
 | Public API — ONE gateway in front of trade, pay and data (§9) | `core-ops` | 3 | `api.gateway` |
 | INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
-| 2D navigable room canvas, VR-ready scene state | `academy` | 5 | `academy.spatial` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
 | svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31) | `tax` | 5 | `tax.engine` |
 | Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29) | `quant` | 5 | `quant.sdk` |
@@ -47,7 +46,6 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
 | **6** | INTACHAIN — CometBFT + native CLOB module | 🟢 ready | `chain.mainnet` |
-| **1** | 2D navigable room canvas, VR-ready scene state | 🟢 ready | `academy.spatial` |
 | **1** | Validator set opening, published schedule | ⛔ blocked | `chain.validators` |
 
 ---
@@ -194,7 +192,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (50/59)
+### Phase 5 — Surfaces (51/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -212,7 +210,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Merchant agent — approval-rate watch <br/>_**D26-P1-A4 Done 2026-08-21:** missing/dark/stale pay metrics named refuse; never invent numeric rate (`mount-vs-tracker.ts`). PayMetricsPort + PAY_URL HTTP door; svc-pay merchant_watch_metrics store/project/refresh (#2607/#2614). Class X residual: owner PAY_URL + metrics allowlist in prod. pay.routing product law remains Shehzad M1 — agents babysit only._ | F |  | `agents.merchant` |
 | ✅ | Copy-Intel — writes audited leader stats <br/>_**D26-P1-A5 Done 2026-08-21:** audited leader stats + directory presentation; returns-ranked boards refused (`mount-vs-tracker.ts`, #1708). CopyLeaderFixturesPort + TRADE_URL HTTP door; live session refuses `no_live_leaders` when plane sealed. Class X residual: owner `LIVE_TRADE_COPY_LEADER_PLANE_OPEN` + allowlist + live audited store. Shell consumer residual._ | F |  | `agents.copy-intel` |
 | ✅ | Live lobbies, LiveKit SFU, capacity tiers <br/>_DONE: decideSeat capacity tiers (free/staked/invite); host bypass; NullStreamProvider refuses SFU creds. D26-P1-LB1 mount-vs-tracker seals lobby doors. Class X residual: LiveKit SFU socket; navigable spatial shell._ | F |  | `academy.lobbies` |
-| 🟢 | 2D navigable room canvas, VR-ready scene state <br/>_Stage-1 D26-P1-SP1M: Scene v1 schema + size gate + host write policy mount-vs-tracker. NOT done — navigable shell product residual (sceneIsNavigableProductShell stays false). Class X: canvas UI craft._ | F |  | `academy.spatial` |
+| ✅ | 2D navigable room canvas, VR-ready scene state <br/>_Done 2026-08-23: navigable shell is Canvas.vue on /academy (hub sessionIdFromHub, host click updateScene, empty session empty). sceneIsNavigableProductShell true. VR client residual (`socket.vr-client`) — do not invent VR._ | F |  | `academy.spatial` |
 | ✅ | DERIV//DESK library import — 20 playbooks + 3 workbooks <br/>_**D26-P1-C5 Done-bar sealed 2026-08-12 (#1738):** import substance bar (not char-count theater); D26-P1-C5M mount-vs-tracker seals `substanceBarMet` on spine (20 playbooks + 3 workbooks platform-native). Licensed DERIV//DESK dump assets Class X residual._ | F |  | `academy.curriculum` |
 | ✅ | Certifications → XP → real perks <br/>_**D26-P1-C1 Done 2026-08-21:** cert→XP→identity perks or refuse invent (`mount-vs-tracker.ts`). grantCert + certPerkPlane + certPerkIntent refuse-closed. Class X residual: multi-svc perk product law; full title real perks._ | F |  | `academy.certs` |
 | ✅ | Residencies, IFC pay, revenue share <br/>_**D26-P1-C2 Done-bar sealed 2026-08-12 (#1725):** IFC pay under owner rate law — refuse invent rates. D26-P1-C2M mount-vs-tracker seals public quote + residency gate paths. Class X: ledger settlement recipe._ | F |  | `academy.ambassadors` |

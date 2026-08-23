@@ -114,8 +114,8 @@ describe('L3 wave49 scene status/export', () => {
   });
 });
 
-describe('spatial scene is not a navigable product shell', () => {
-  it('pins Scene v1 as schema+size gate, not Vue/VR/canvas product', () => {
+describe('spatial scene honesty: navigable shell is real, VR is residual', () => {
+  it('pins Scene v1 + Canvas.vue shell; VR product stays residual', () => {
     const empty = emptyScene();
     expect(parseScene(empty).ok).toBe(true);
     expect(SCENE_VERSION).toBe(1);
@@ -124,12 +124,12 @@ describe('spatial scene is not a navigable product shell', () => {
     const honesty = sceneProductHonesty();
     expect(honesty.version).toBe(1);
     expect(honesty.maxBytes).toBe(SCENE_MAX_BYTES);
-    expect(honesty.isNavigableProductShell).toBe(false);
+    expect(honesty.isNavigableProductShell).toBe(true);
     expect(honesty.isFinishedVrProduct).toBe(false);
     expect(honesty.isFinishedCanvasProduct).toBe(false);
     expect(honesty.residual).toBe(SCENE_NAVIGABLE_SHELL_RESIDUAL);
 
-    expect(sceneIsNavigableProductShell(empty)).toBe(false);
+    expect(sceneIsNavigableProductShell(empty)).toBe(true);
     expect(sceneNavigableShellIsResidual()).toBe(true);
     expect(sceneNavigableShellIsResidual('canvas product done')).toBe(false);
 

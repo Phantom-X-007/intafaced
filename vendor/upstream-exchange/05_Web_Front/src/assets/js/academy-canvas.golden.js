@@ -14,5 +14,14 @@ if (page.indexOf('version: 1') === -1) throw new Error('scene v1 missing');
 if (page.indexOf('version: 2') !== -1) throw new Error('must not send scene schema v2');
 if (page.indexOf('localStorage') !== -1) throw new Error('must not persist scene in localStorage');
 if (hub.indexOf("academy/Canvas.vue") === -1) throw new Error('Canvas not imported as a card');
+if (hub.indexOf('session-id-from-hub') === -1) throw new Error('hub must pass session-id-from-hub');
+if (hub.indexOf('activeSessionId ||') === -1) throw new Error('hub must pass active session id, not a typed UUID');
+if (page.indexOf('sessionIdFromHub') === -1) throw new Error('sessionIdFromHub prop missing');
+if (page.indexOf('this.sessionIdFromHub') === -1) throw new Error('must load from hub when set');
+if (page.indexOf('this.reload()') === -1) throw new Error('hub load must reload session');
+if (page.indexOf('academy.not_host') === -1) throw new Error('attendee write must name academy.not_host');
+if (page.indexOf("id: 'demo'") !== -1 || page.indexOf("id: 'fake'") !== -1) {
+  throw new Error('must not invent demo/fake avatars');
+}
 
 console.log('academy-canvas.golden: ok');
