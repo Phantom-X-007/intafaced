@@ -1,15 +1,16 @@
 /**
- * Pure price-alert evaluation + refuse-closed portfolio arm.
+ * Pure sourced-mark evaluation + refuse-closed unpublished / portfolio arms.
  *
- * Done bar (v22.alerts MVP):
+ * Done bar (v22.alerts):
  *   · dark / stale / refused mark → refuse `alert.price_unavailable`, never fire
  *   · mark crosses target in the watched direction → fire
  *   · mark on the unarmed side → hold
  *   · inactive / cancelled / already-fired → refuse `alert.not_active`
+ *   · price / funding / liquidation_proximity all use the injected mark source
+ *     — never an invented funding rate or liquidation book
  *   · portfolio kind → refuse `alert.portfolio_view_unpublished`, never fire,
  *     never read or invent a ledger balance (silence is not a cross)
- *   · funding / whale / liquidation_proximity / intelligence → refuse
- *     `alert.kind_unpublished`, never fire on an invented series
+ *   · whale / intelligence → refuse `alert.kind_unpublished`, never fire
  *
  * No network, no store, no invent of prices or balances.
  */
@@ -37,8 +38,9 @@ export function evaluatePortfolioAlert(): AlertEvalOutcome {
 }
 
 /**
- * Funding / whale / liquidation-proximity / intelligence have no sourced series
- * on this mountain. Evaluate never quotes a mark and never fires.
+ * Whale / intelligence have no sourced series. Evaluate never quotes a mark
+ * and never fires. Funding and liquidation-proximity are sourced-mark watches
+ * — they go through `evaluatePriceAlert`, not this arm.
  */
 export function evaluateUnpublishedKind(kind: UnpublishedAlertKind): AlertEvalOutcome {
   return {

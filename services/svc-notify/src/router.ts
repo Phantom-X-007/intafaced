@@ -9,7 +9,9 @@ import type { AlertService } from './alerts/service.js';
 import {
   AlertKindUnpublishedError,
   AlertPortfolioUnpublishedError,
+  isSourcedAlertKind,
   isUnpublishedAlertKind,
+  SOURCED_ALERT_KINDS,
   UNPUBLISHED_ALERT_KINDS,
   type PriceAlert,
 } from './alerts/types.js';
@@ -167,6 +169,7 @@ const priceAlertOutput = z.object({
   id: z.string().uuid(),
   userId: z.string(),
   marketId: z.string(),
+  kind: z.enum(SOURCED_ALERT_KINDS),
   direction: z.enum(['above', 'below']),
   targetPrice: z.string(),
   status: z.enum(['active', 'fired', 'cancelled']),
@@ -200,6 +203,7 @@ function priceAlertToWire(row: PriceAlert) {
     id: row.id,
     userId: row.userId,
     marketId: row.marketId,
+    kind: row.kind,
     direction: row.direction,
     targetPrice: row.targetPrice,
     status: row.status,
@@ -453,7 +457,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         }),
 
       /**
-       * v22.alerts MVP — price watchlists.
+       * v22.alerts — sourced-mark watchlists (price, funding, liquidation proximity).
        *
        * The user surface is create / list / cancel / evaluate. Sweep still
        * runs (`AlertService.evaluateDueAlerts` in `index.ts`). `evaluateAlert`
@@ -462,6 +466,8 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
        * `evaluation` rides with the list rather than sitting behind its own
        * procedure: a client cannot render somebody's watchlist without also
        * receiving the fact that no watch on it can currently cross.
+       *
+       * Whale / intelligence stay unpublished — create throws, evaluate refuses.
        */
       alerts: scopedProcedure('notify:read', { module: 'notify' })
         .output(z.object({ items: z.array(priceAlertOutput), evaluation: alertEvaluationOutput }))
@@ -477,7 +483,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
         .input(
           z.union([
             z.object({
-              kind: z.literal('price').optional(),
+              kind: z.enum(SOURCED_ALERT_KINDS).optional(),
               marketId: z.string().min(1).max(64),
               direction: z.enum(['above', 'below']),
               /** Decimal string — never a JSON number. */
@@ -539,9 +545,17 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService)
               message: 'alert.portfolio_view_unpublished: ledger portfolio view unpublished — notify holds no balance',
             });
           }
+          const kind = input.kind ?? 'price';
+          if (!isSourcedAlertKind(kind)) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: `alert.kind_unpublished: ${String(kind)} has no sourced series`,
+            });
+          }
           const row = await alerts.create({
             userId: ctx.principal.userId,
             marketId: input.marketId,
+            kind,
             direction: input.direction,
             targetPrice: input.targetPrice,
           });

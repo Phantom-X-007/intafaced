@@ -12,28 +12,41 @@
 import { describe, expect, it } from 'vitest';
 import { MESSAGE_KEYS, createTranslator } from '@intafaced/i18n';
 
-const TITLE = 'notify.alert.price.crossed.title';
-const BODY = 'notify.alert.price.crossed.body';
+const KEYS = [
+  ['notify.alert.price.crossed.title', 'notify.alert.price.crossed.body'],
+  ['notify.alert.funding.crossed.title', 'notify.alert.funding.crossed.body'],
+  ['notify.alert.liquidation_proximity.crossed.title', 'notify.alert.liquidation_proximity.crossed.body'],
+] as const;
 
 describe('v22.alerts catalog keys pin', () => {
   it('title and body keys are in the English catalog', () => {
-    expect(MESSAGE_KEYS).toContain(TITLE);
-    expect(MESSAGE_KEYS).toContain(BODY);
+    for (const [title, body] of KEYS) {
+      expect(MESSAGE_KEYS).toContain(title);
+      expect(MESSAGE_KEYS).toContain(body);
+    }
   });
 
   it('renders human copy, not the key string', () => {
     const t = createTranslator('en');
-    // Typed keys (not `as never`) so TS tracks required placeholders.
-    const title = t.t('notify.alert.price.crossed.title');
-    const body = t.t('notify.alert.price.crossed.body', {
+    const params = {
       marketId: 'BTC-PERP',
       direction: 'above',
       targetPrice: '100000',
       markPrice: '100500',
-    });
-    expect(title).not.toBe(TITLE);
-    expect(body).not.toBe(BODY);
-    expect(body).toMatch(/BTC-PERP/);
-    expect(body).toMatch(/100000/);
+    };
+    const priceTitle = t.t('notify.alert.price.crossed.title');
+    const priceBody = t.t('notify.alert.price.crossed.body', params);
+    expect(priceTitle).not.toBe('notify.alert.price.crossed.title');
+    expect(priceBody).not.toBe('notify.alert.price.crossed.body');
+    expect(priceBody).toMatch(/BTC-PERP/);
+    expect(priceBody).toMatch(/100000/);
+
+    const funding = t.t('notify.alert.funding.crossed.body', params);
+    expect(funding).toMatch(/Funding watch/);
+    expect(funding).toMatch(/BTC-PERP/);
+
+    const liq = t.t('notify.alert.liquidation_proximity.crossed.body', params);
+    expect(liq).toMatch(/Liquidation-proximity/);
+    expect(liq).toMatch(/100500/);
   });
 });

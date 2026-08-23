@@ -18,6 +18,7 @@ const base: PriceAlert = {
   id: '00000000-0000-4000-8000-000000000001',
   userId: 'user-1',
   marketId: 'BTC-USD',
+  kind: 'price',
   direction: 'above',
   targetPrice: '100.5',
   status: 'active',
@@ -146,5 +147,22 @@ describe('evaluateUnpublishedKind — never fire on an invented series', () => {
     expect(out.kind).not.toBe('fire');
     expect(out.kind).not.toBe('hold');
     expect('markPrice' in out).toBe(false);
+  });
+
+  it('whale and intelligence stay unpublished — funding and liq do not', () => {
+    expect(UNPUBLISHED_ALERT_KINDS).toEqual(['whale', 'intelligence']);
+    expect(UNPUBLISHED_ALERT_KINDS).not.toContain('funding');
+    expect(UNPUBLISHED_ALERT_KINDS).not.toContain('liquidation_proximity');
+  });
+});
+
+describe('evaluatePriceAlert — funding and liquidation_proximity use the sourced mark', () => {
+  it.each(['funding', 'liquidation_proximity'] as const)('%s fires on a live cross and refuses a dark mark', (kind) => {
+    const watch: PriceAlert = { ...base, kind };
+    const fire = evaluatePriceAlert(watch, { kind: 'ok', price: '100.5', at: new Date() });
+    expect(fire).toEqual({ kind: 'fire', markPrice: '100.5' });
+    const dark = evaluatePriceAlert(watch, { kind: 'unavailable', reason: 'dark' });
+    expect(dark).toEqual({ kind: 'refuse', code: 'alert.price_unavailable', detail: 'dark' });
+    expect(dark.kind).not.toBe('fire');
   });
 });

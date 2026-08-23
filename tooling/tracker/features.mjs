@@ -1800,10 +1800,11 @@ export const FEATURES = [
       'services/svc-notify/src/alerts-tracker-status-pin.test.ts',
       'services/svc-notify/src/alerts/sweep-mounted-pin.test.ts',
       'services/svc-notify/src/alerts/evaluate.test.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/notice-alerts.golden.js',
     ],
     note:
-      '**Done 2026-08-22:** price watch core + sweep driver mounted; dark mark refuses; unpublished kinds refuse by name; rides ops.notifications fan-out. ' +
-      'Residuals: funding/liquidation/whale kinds; mobile sync; out-of-app gateway credentials.',
+      '**Done 2026-08-23:** price + funding + liquidation_proximity watches on the sourced mark; dark/unpublished mark refuses never fire; Vue /notice create mutate. Whale/intelligence stay unpublished. ' +
+      'Residuals: whale/intelligence kinds; mobile sync; out-of-app gateway credentials.',
   }),
   f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
     module: 'notify',
