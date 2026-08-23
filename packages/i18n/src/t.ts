@@ -37,7 +37,7 @@ import {
   type PluralCategory,
   type PluralMessage,
 } from './catalog.js';
-import { catalogFor, catalogOrEmpty } from './catalogs.js';
+import { catalogFor, catalogHasWords, catalogOrEmpty } from './catalogs.js';
 import { formatNumber } from './format.js';
 import { DEFAULT_LOCALE, dir, intlTagFor, type Direction } from './locales.js';
 
@@ -207,7 +207,9 @@ export function createTranslator(
   // difference is that the empty catalog makes every key report `untranslated`,
   // so coverage is measured instead of assumed.
   const own = catalog ?? catalogOrEmpty(localeCode);
-  const catalogExists = catalog !== undefined || catalogFor(localeCode) !== undefined;
+  // Empty registry rows (generated fallback catalogs) are not "translated".
+  // Treating them as present would flip RTL around English text.
+  const catalogExists = catalogHasWords(catalog !== undefined ? catalog : catalogFor(localeCode));
 
   // Direction follows the language we are actually rendering. An RTL locale with
   // no catalog is English text, and mirroring the layout around it is a defect a

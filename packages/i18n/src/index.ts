@@ -10,9 +10,9 @@
  *     and stays one. No float touches a balance on the way to a screen.
  *   - A locale registry with RTL flags, so adding a language is a data change.
  *   - `localeCoverage()` — the measured answer to "which languages do we have",
- *     derived from the catalogs that exist rather than from the locales we
- *     declared. TODAY THAT IS ENGLISH AND NOTHING ELSE: 28 locales are declared,
- *     one is written. Nothing in this package rounds that up.
+ *     derived from the catalogs that have words rather than from the locales we
+ *     declared. 100+ codes are declared; en/es/fr have distinct copy; the rest
+ *     are empty fallbacks so a keyed surface never shows a raw key.
  *
  * Nothing here does I/O. Catalogs are data; loading them is the app's job.
  */

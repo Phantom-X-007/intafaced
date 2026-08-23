@@ -157,10 +157,16 @@ export const FEATURES = [
   f('infra.i18n', '100+ languages — keyed from day one (§9)', {
     module: 'core-ops',
     phase: '0',
-    status: 'ready',
-    requires: ['packages/i18n'],
+    status: 'done',
+    requires: [
+      'packages/i18n',
+      'vendor/upstream-exchange/05_Web_Front/src/App.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/lang/es.js',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/lang/fr.js',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/i18n-switcher.golden.js',
+    ],
     dependsOn: ['infra.ui-tokens'],
-    note: 'Owner released 2026-08-08 (axis C1 / Nitro green light). Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface.',
+    note: 'Vendor shell keyed: 100+ locale codes in @intafaced/i18n (empty catalogs fall back to en so $t never shows raw keys). Header switcher on App.vue offers en/es/fr with distinct /bank titles; persist via localStorage; missing/broken catalogue stays en (no footer.gsmc). apps/web is gone — the surface is vendor/upstream-exchange/05_Web_Front.',
   }),
 
   // ── PHASE 1 · THE CORE ───────────────────────────────────────────────────

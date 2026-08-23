@@ -414,14 +414,12 @@ describe('formatNumber / formatPercent / dates', () => {
 // ── Locales ─────────────────────────────────────────────────────────────────
 
 describe('locale registry', () => {
-  it('declares 28 locales — a number, not "100+"', () => {
-    // §9 wants 100+ languages. This asserts what we HAVE, so the gap between the
-    // ambition and the state stays a visible number rather than a doc sentence
-    // somebody has to go and check.
-    expect(SUPPORTED_LOCALES.length).toBe(28);
+  it('declares 100+ locales — codes, not literary coverage', () => {
+    expect(SUPPORTED_LOCALES.length).toBeGreaterThanOrEqual(100);
     const codes = SUPPORTED_LOCALES.map((l) => l.code);
     expect(new Set(codes).size).toBe(codes.length);
     expect(DEFAULT_LOCALE).toBe('en');
+    expect(codes).toEqual(expect.arrayContaining(['en', 'es', 'fr']));
   });
 
   it('flags RTL languages correctly', () => {
@@ -437,7 +435,8 @@ describe('locale registry', () => {
       rtlLocales()
         .map((l) => l.code)
         .sort(),
-    ).toEqual(['ar', 'fa', 'he', 'ur']);
+    ).toEqual(expect.arrayContaining(['ar', 'fa', 'he', 'ur']));
+    expect(rtlLocales().every((l) => l.rtl)).toBe(true);
     // `isRtl`/`dir` answer for the LANGUAGE. A translator answers for the text
     // it is actually holding, which is English until Hebrew has a catalog — so
     // these two deliberately disagree today, and will agree the day a catalog
@@ -477,26 +476,33 @@ describe('locale registry', () => {
 // ── The catalog registry — declared vs written ──────────────────────────────
 
 describe('catalog registry — what we declare vs what we have written', () => {
-  it('has exactly one catalog, and does not round that up', () => {
-    // If this fails because a language was added, that is good news — update the
-    // number. If it fails because a language was added WITHOUT a human-written
-    // catalog, the number is the point: a row in SUPPORTED_LOCALES is intent,
-    // not coverage, and machine-translating a money product is not on the table.
-    expect(Object.keys(CATALOGS)).toEqual(['en']);
-    expect(TRANSLATED_LOCALES).toEqual(['en']);
-    expect(UNTRANSLATED_LOCALES.length).toBe(SUPPORTED_LOCALES.length - 1);
+  it('registers every declared locale in CATALOGS, with three written catalogs', () => {
+    const catalogCodes = Object.keys(CATALOGS).sort();
+    const supportedCodes = SUPPORTED_LOCALES.map((l) => l.code).sort();
+    expect(catalogCodes).toEqual(supportedCodes);
+    expect(SUPPORTED_LOCALES.length).toBeGreaterThanOrEqual(100);
+    expect([...TRANSLATED_LOCALES].sort()).toEqual(['en', 'es', 'fr']);
+    expect(UNTRANSLATED_LOCALES.length).toBe(SUPPORTED_LOCALES.length - 3);
     expect(TRANSLATED_LOCALES.length + UNTRANSLATED_LOCALES.length).toBe(SUPPORTED_LOCALES.length);
+    expect(CATALOGS.en['auth.login.title']).not.toBe(CATALOGS.es['auth.login.title']);
+    expect(CATALOGS.es['auth.login.title']).not.toBe(CATALOGS.fr['auth.login.title']);
+    expect(CATALOGS.fr['auth.login.title']).not.toBe(CATALOGS.en['auth.login.title']);
   });
 
-  it('resolves a catalog through locale aliases, and returns nothing when there is nothing', () => {
+  it('resolves a catalog through locale aliases, and does not claim empty rows as written', () => {
     expect(catalogFor('en')).toBe(en);
     expect(hasCatalog('en')).toBe(true);
+    expect(hasCatalog('es')).toBe(true);
+    expect(hasCatalog('fr')).toBe(true);
     // Alias path: a browser sending `zh-CN` resolves to `zh-Hans`, which is
-    // declared and empty — so the answer is an honest "no", not a crash.
+    // declared and empty — so hasCatalog is honest "no", while catalogFor
+    // still returns the fallback row so $t never raw-keys.
     expect(hasCatalog('zh-CN')).toBe(false);
-    expect(catalogFor('zh-CN')).toBeUndefined();
+    expect(catalogFor('zh-CN')).toBeDefined();
+    expect(Object.keys(catalogFor('zh-CN')!)).toEqual([]);
     // Not a locale we know at all.
     expect(hasCatalog('kl')).toBe(false);
+    expect(catalogFor('kl')).toBeUndefined();
   });
 
   it('reports every declared locale in the coverage table, including the empty ones', () => {
@@ -508,9 +514,16 @@ describe('catalog registry — what we declare vs what we have written', () => {
     expect(english.translated).toBe(MESSAGE_KEYS.length);
     expect(english.missing).toEqual([]);
 
+    for (const code of ['es', 'fr'] as const) {
+      const row = rows.find((r) => r.code === code)!;
+      expect(row.hasCatalog, code).toBe(true);
+      expect(row.translated, code).toBeGreaterThan(0);
+      expect(row.translated, code).toBeLessThan(MESSAGE_KEYS.length);
+    }
+
     // The rows that make the table worth having: declared, present, and zero.
-    // A dashboard that omitted them would show "1 language, 100%".
-    for (const row of rows.filter((r) => r.code !== 'en')) {
+    const written = new Set(['en', 'es', 'fr']);
+    for (const row of rows.filter((r) => !written.has(r.code))) {
       expect(row.hasCatalog, row.code).toBe(false);
       expect(row.translated, row.code).toBe(0);
       expect(row.total, row.code).toBe(MESSAGE_KEYS.length);

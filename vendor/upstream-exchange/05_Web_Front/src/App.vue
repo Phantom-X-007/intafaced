@@ -86,15 +86,27 @@
                 </DropdownMenu>
               </Dropdown>
             </div>
+            <div class="header_nav ix-nav ix-lang">
+              <Dropdown @on-click="changeLanguage">
+                <a href="javascript:void(0)" class="ix-nav-title" :aria-label="$t('intafaced.i18n.label')">
+                  {{ $t('intafaced.i18n.label') }}
+                  <Icon type="md-arrow-dropdown" size="16" />
+                </a>
+                <DropdownMenu slot="list">
+                  <DropdownItem
+                    v-for="loc in languageOptions"
+                    :key="loc.code"
+                    :name="loc.code"
+                    :selected="currentLocale === loc.code"
+                  >
+                    {{ $t('intafaced.i18n.' + loc.code) }}
+                  </DropdownItem>
+                </DropdownMenu>
+              </Dropdown>
+            </div>
             <div class="header_nav_mobile_triggle" @click="toggleMemu()">
               <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/>
             </div>
-            <!-- Language switcher removed. The shell ships one catalogue
-                 (src/assets/lang/en.js); there is no zh.js. Selecting "Chinese"
-                 set $i18n.locale='zh' against a locale that does not exist and
-                 every $t() in the app fell through to its raw key, so the whole
-                 UI read "footer.gsmc". A control that can only break the page is
-                 not a feature. English-only is the standing instruction. -->
             <!-- App-download entry removed. The QR it showed was the upstream
                  vendor's, and the button behind it fetched an APK that has never
                  existed in this repo. /app still routes, and now says so. -->
@@ -221,8 +233,18 @@
                   <MenuItem name="nav_innnovationmanage" class="lang-item" style="padding-left:20px!important;">{{$t("header.innovationmanage")}}</MenuItem>
                 </router-link>
             </Submenu>
-            <!-- No language submenu and no app-download entry on mobile either,
-                 for the same two reasons as the desktop bar above. -->
+            <Submenu name="nav-lang">
+              <template slot="title" class="lang-title">
+                <span style="color:#bdc2ca;">{{$t("intafaced.i18n.label")}}</span>
+              </template>
+              <MenuItem
+                v-for="loc in languageOptions"
+                :key="loc.code"
+                :name="'lang-' + loc.code"
+                class="lang-item"
+                style="padding-left:20px!important;"
+              >{{ $t('intafaced.i18n.' + loc.code) }}</MenuItem>
+            </Submenu>
         </Menu>
     </Drawer>
     <!-- B2 density: marketing footer stays on marketing pages only — on the
@@ -335,6 +357,21 @@ import { mapGetters, mapActions } from "vuex";
 // others.
 import { MODULES as IX_MODULES, mutate } from "./config/intafaced.js";
 import CommandPalette from "./components/intafaced/CommandPalette.vue";
+
+var I18N_STORAGE_KEY = "intafaced.i18n.locale";
+var I18N_FALLBACK = "en";
+/** Locales that have vendor lang files. Never offer a code without a file. */
+var I18N_SHIPPED = [
+  { code: "en" },
+  { code: "es" },
+  { code: "fr" }
+];
+function unwrapCatalog(mod) {
+  if (!mod) return null;
+  if (mod.intafaced) return mod;
+  if (mod.default && mod.default.intafaced) return mod.default;
+  return mod.default || mod;
+}
 export default {
   name: "app",
   components: { CommandPalette },
@@ -351,7 +388,9 @@ export default {
       time: null,
       content: " ",
       navDrawerModal: false,
-      ixModules: IX_MODULES
+      ixModules: IX_MODULES,
+      currentLocale: I18N_FALLBACK,
+      shippedLocales: I18N_SHIPPED
     };
   },
   watch: {
@@ -430,12 +469,11 @@ export default {
     member: function() {
       return this.$store.getters.member;
     },
-    /* Kept as the one place the locale is pinned. The switcher is gone, but the
-       store still initialises `lang`, and pinning here means a stale
-       localStorage value cannot leave $i18n on a locale we do not ship. */
-    languageValue: function() {
-      this.$i18n.locale = "en";
-      return this.$store.getters.lang;
+    languageOptions: function() {
+      var self = this;
+      return this.shippedLocales.filter(function(loc) {
+        return self.hasHealthyCatalog(loc.code);
+      });
     },
     exchangeSkin() {
       return this.$store.state.exchangeSkin;
@@ -468,6 +506,14 @@ export default {
     }
   },
   created: function() {
+    this.registerShippedCatalogs();
+    var stored = null;
+    try {
+      stored = localStorage.getItem(I18N_STORAGE_KEY);
+    } catch (e) {
+      stored = null;
+    }
+    this.applyLocale(stored);
     this.initialize();
     var d = new Date(),
       gmtHours = d.getTimezoneOffset() / 60;
@@ -499,7 +545,7 @@ export default {
     goModule(route) {
       if (route && this.$route.path !== route) this.$router.push(route);
     },
-    /** Mobile drawer: every item is a route now that the lang items are gone. */
+    /** Mobile drawer: routes plus `lang-*` locale codes from the switcher. */
     onMobileSelect(name) {
       var map = {
         "nav-index": "/",
@@ -526,10 +572,52 @@ export default {
           return;
         }
       }
+      if (name && name.indexOf("lang-") === 0) {
+        this.changeLanguage(name.slice(5));
+        this.navDrawerModal = false;
+        return;
+      }
       if (map[name]) {
         this.$router.push(map[name]);
         this.navDrawerModal = false;
       }
+    },
+    registerShippedCatalogs() {
+      if (typeof this.$i18n.setLocaleMessage !== "function") return;
+      try {
+        var es = unwrapCatalog(require("./assets/lang/es.js"));
+        if (es) this.$i18n.setLocaleMessage("es", es);
+      } catch (e) {
+        /* missing or broken file: do not register; applyLocale stays en */
+      }
+      try {
+        var fr = unwrapCatalog(require("./assets/lang/fr.js"));
+        if (fr) this.$i18n.setLocaleMessage("fr", fr);
+      } catch (e) {
+        /* missing or broken file: do not register; applyLocale stays en */
+      }
+    },
+    hasHealthyCatalog(code) {
+      if (!code || code === "zh") return false;
+      var messages = this.$i18n.messages && this.$i18n.messages[code];
+      if (!messages) return false;
+      var bank = messages.intafaced && messages.intafaced.modules && messages.intafaced.modules.bank;
+      var title = bank && bank.title;
+      return typeof title === "string" && title.length > 0 && title !== "intafaced.modules.bank.title" && title !== "footer.gsmc";
+    },
+    applyLocale(code) {
+      var next = I18N_FALLBACK;
+      if (code && this.hasHealthyCatalog(code)) next = code;
+      this.$i18n.locale = next;
+      this.currentLocale = next;
+      try {
+        localStorage.setItem(I18N_STORAGE_KEY, next);
+      } catch (e) {
+        /* private-mode storage refusal is not a reason to fail boot */
+      }
+    },
+    changeLanguage(code) {
+      this.applyLocale(code);
     },
     strpo(str) {
       if (str.length > 4) {
@@ -583,8 +671,6 @@ export default {
         }
       });
     }
-    /* changelanguage() removed with the switcher. Its "zh" branch set
-       $i18n.locale to a catalogue that does not exist in this repo. */
   }
 };
 </script>
@@ -643,6 +729,15 @@ export default {
     }
   }
 .router-link-active.ix-nav-title {
+    color: #ff6b00;
+  }
+}
+.ix-lang {
+  float: right;
+}
+.ix-lang .ix-nav-title {
+  color: #8a8a8a;
+  &:hover {
     color: #ff6b00;
   }
 }
