@@ -11,6 +11,7 @@ import {
   type PostRequest,
   type PostedEntry,
 } from './types.js';
+import { assetIds, crossShardAnchor, hashAssetTx } from './sharding.js';
 
 /**
  * Reference ledger implementation, in memory.
@@ -34,6 +35,7 @@ export class MemoryLedger implements LedgerClient {
   private readonly txByKey = new Map<string, string>();
   private readonly txOrder: string[] = [];
   private tip: string | null = null;
+  private readonly assetTips = new Map<string, string>();
 
   /**
    * Owner types permitted to hold a negative `available` balance.
@@ -93,6 +95,18 @@ export class MemoryLedger implements LedgerClient {
 
     const postedAt = new Date();
     const previousHash = this.tip;
+    const previousAssetHashes: Record<string, string | null> = {};
+    const assetHashes: Record<string, string> = {};
+    for (const assetId of assetIds({ entries: postedEntries })) {
+      const prior = this.assetTips.get(assetId) ?? null;
+      previousAssetHashes[assetId] = prior;
+      assetHashes[assetId] = hashAssetTx(
+        { id: txId, module: request.module, reason: request.reason, postedAt, entries: postedEntries },
+        assetId,
+        prior,
+      );
+    }
+    for (const [assetId, hash] of Object.entries(assetHashes)) this.assetTips.set(assetId, hash);
     const tx: LedgerTx = {
       id: txId,
       idempotencyKey: request.idempotencyKey,
@@ -103,6 +117,9 @@ export class MemoryLedger implements LedgerClient {
       previousHash,
       hash: hashTx({ id: txId, module: request.module, reason: request.reason, postedAt, entries: postedEntries }, previousHash),
       entries: postedEntries,
+      assetHashes,
+      previousAssetHashes,
+      crossShardAnchor: crossShardAnchor(assetHashes),
     };
 
     // Commit.
@@ -191,6 +208,13 @@ export class MemoryLedger implements LedgerClient {
     for (const tx of this.journal()) {
       const expected = hashTx({ id: tx.id, module: tx.module, reason: tx.reason, postedAt: tx.postedAt, entries: tx.entries }, previous);
       if (tx.previousHash !== previous || tx.hash !== expected) return { ok: false, brokenAt: tx.id };
+      if (tx.assetHashes && tx.previousAssetHashes) {
+        for (const assetId of Object.keys(tx.assetHashes)) {
+          const expectedAsset = hashAssetTx(tx, assetId, tx.previousAssetHashes[assetId] ?? null);
+          if (tx.assetHashes[assetId] !== expectedAsset) return { ok: false, brokenAt: tx.id };
+        }
+        if (tx.crossShardAnchor !== crossShardAnchor(tx.assetHashes)) return { ok: false, brokenAt: tx.id };
+      }
       previous = tx.hash;
     }
     return { ok: true };

@@ -246,6 +246,11 @@ export interface LedgerTx {
   readonly hash: string;
   readonly previousHash: string | null;
   readonly entries: readonly PostedEntry[];
+  /** Per-asset links used by the ledger-sharding socket when enabled. */
+  readonly assetHashes?: Readonly<Record<string, string>>;
+  readonly previousAssetHashes?: Readonly<Record<string, string | null>>;
+  /** Deterministic digest of the complete per-asset tip set after this tx. */
+  readonly crossShardAnchor?: string;
 }
 
 export interface Balance {
