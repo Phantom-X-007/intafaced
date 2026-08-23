@@ -23,6 +23,7 @@ import {
   seedVolumeCountsTowardUserStats,
 } from './seed-honesty.js';
 import { startMmSeedJobs } from './seed-jobs.js';
+import { AcceptedMmMid } from './accepted-mid.js';
 import { MM_MATCHING_ACCOUNT_ID, seedMarket, type SeededOrderRecord, type SeedTradableMarket } from './seed-market.js';
 
 const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT', assetClass: 'crypto', kind: 'spot', status: 'active' };
@@ -126,7 +127,7 @@ describe('D26-P1-T10 seed/mm honesty contract', () => {
     const dead = startMmSeedJobs({
       ledger: new MemoryLedger(),
       matching: new HonestyStubMatching(),
-      midSource: () => '100',
+      midSource: () => AcceptedMmMid.configured('100'),
       marketFor: () => ACTIVE_SPOT,
       config: {
         enabled: parseMmSeedEnabled(undefined),

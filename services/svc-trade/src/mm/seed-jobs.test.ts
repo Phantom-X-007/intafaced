@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadMmSeedLastRun, parseMmSeedMids, parseMmSeedTargets, saveMmSeedLastRun, startMmSeedJobs } from './seed-jobs.js';
+import { AcceptedMmMid } from './accepted-mid.js';
 import { MM_MATCHING_ACCOUNT_ID, type SeedTradableMarket } from './seed-market.js';
 
 /** Active spot catalog row — same gate inputs placeOrder uses. */
@@ -118,7 +119,7 @@ describe('startMmSeedJobs', () => {
     const host1 = startMmSeedJobs({
       ledger: new MemoryLedger(),
       matching: new JobStubMatching(),
-      midSource: () => '100',
+      midSource: () => AcceptedMmMid.configured('100'),
       marketFor: marketForActive,
       config: {
         enabled: false,
@@ -136,7 +137,7 @@ describe('startMmSeedJobs', () => {
     const host2 = startMmSeedJobs({
       ledger: new MemoryLedger(),
       matching: new JobStubMatching(),
-      midSource: () => '100',
+      midSource: () => AcceptedMmMid.configured('100'),
       marketFor: marketForActive,
       config: {
         enabled: true,
@@ -162,7 +163,7 @@ describe('startMmSeedJobs', () => {
       const h = startMmSeedJobs({
         ledger,
         matching,
-        midSource: () => '100',
+        midSource: () => AcceptedMmMid.configured('100'),
         marketFor: marketForActive,
         config: {
           enabled: true,
@@ -205,7 +206,7 @@ describe('startMmSeedJobs', () => {
       const h = startMmSeedJobs({
         ledger,
         matching,
-        midSource: () => '100',
+        midSource: () => AcceptedMmMid.configured('100'),
         marketFor: marketForActive,
         config: {
           enabled: true,
@@ -273,6 +274,44 @@ describe('startMmSeedJobs', () => {
     });
   });
 
+  it('refuses an unaccepted bare price — no submit', async () => {
+    const matching = new JobStubMatching();
+
+    await new Promise<void>((resolve, reject) => {
+      const h = startMmSeedJobs({
+        ledger: new MemoryLedger(),
+        matching,
+        // Fail-first boundary: a decimal alone says nothing about provenance.
+        midSource: (() => '100') as never,
+        marketFor: marketForActive,
+        config: {
+          enabled: true,
+          intervalMs: 20,
+          halfSpreadBps: 100,
+          stepBps: 0,
+          levels: 1,
+          qtyPerLevel: '1',
+          targets: [{ marketId: 'btc-usdt', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+        },
+        onResult: (_id, result) => {
+          try {
+            expect('skipped' in result && result.skipped).toBe('missing_mid');
+            expect(matching.submitted).toHaveLength(0);
+            h.stop();
+            resolve();
+          } catch (error) {
+            h.stop();
+            reject(error);
+          }
+        },
+      });
+      setTimeout(() => {
+        h.stop();
+        reject(new Error('tick timeout'));
+      }, 2000);
+    });
+  });
+
   it('skips when marketFor returns null — no invent-active, no submit', async () => {
     const matching = new JobStubMatching();
     const ledger = new MemoryLedger();
@@ -281,7 +320,7 @@ describe('startMmSeedJobs', () => {
       const h = startMmSeedJobs({
         ledger,
         matching,
-        midSource: () => '100',
+        midSource: () => AcceptedMmMid.configured('100'),
         marketFor: () => null,
         config: {
           enabled: true,
@@ -321,7 +360,7 @@ describe('startMmSeedJobs', () => {
       const h = startMmSeedJobs({
         ledger,
         matching,
-        midSource: () => '100',
+        midSource: () => AcceptedMmMid.configured('100'),
         marketFor: () => ({ symbol: 'BTC/USDT', kind: 'spot', assetClass: 'crypto', status: 'halted' }),
         config: {
           enabled: true,
@@ -369,7 +408,7 @@ describe('startMmSeedJobs', () => {
       const h = startMmSeedJobs({
         ledger,
         matching,
-        midSource: () => '100',
+        midSource: () => AcceptedMmMid.configured('100'),
         marketFor: marketForActive,
         config: {
           enabled: true,
