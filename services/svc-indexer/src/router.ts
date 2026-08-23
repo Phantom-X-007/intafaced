@@ -13,6 +13,7 @@ import {
 } from './serving.js';
 import { userCopy } from './user-copy.js';
 import { withReadSpan } from './tracing.js';
+import { assessProjectionStream, INDEXER_STREAM_UNWIRED, type StreamBook, type StreamLevel } from './stream.js';
 
 /**
  * svc-indexer's API — the read path for `apps/web` (§17.5).
@@ -152,6 +153,12 @@ export interface IndexerRouterDeps {
    * "nobody asked" and never as "the chain is fine".
    */
   readonly chainProbe?: () => Promise<ChainProbe>;
+  /**
+   * Venue + RPC that would feed the projection stream. Blank / zero venue →
+   * `indexer.stream_unwired`. Optional so existing mounts stay honest.
+   */
+  readonly venue?: string | null;
+  readonly rpcUrl?: string | null;
 }
 
 /**
@@ -367,6 +374,59 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           assertServing(indexer, deps.chainSource);
           const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account));
           return rows.map(toWirePosition);
+        } catch (err) {
+          throw toTrpcError(err);
+        }
+      }),
+
+    /**
+     * Projection stream as market-data absolute deltas.
+     *
+     * Unwired venue/RPC → `indexer.stream_unwired` (do not invent ABI).
+     * Empty projection → empty deltas, never a live $0 book.
+     */
+    stream: publicJurisdictionProcedure('indexer', 'protocol')
+      .input(z.object({ market: marketSchema.optional(), depth: z.number().int().min(1).max(200).default(50) }).optional())
+      .output(
+        z.object({
+          status: z.enum(['ok', 'unwired']),
+          code: z.string().nullable(),
+          deltas: z.array(
+            z.object({
+              type: z.literal('delta'),
+              marketId: z.string(),
+              fromSequence: z.number().int(),
+              sequence: z.number().int(),
+              bids: z.array(wireLevelSchema),
+              asks: z.array(wireLevelSchema),
+            }),
+          ),
+        }),
+      )
+      .query(async ({ input }) => {
+        const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
+        if (assessed.status === 'unwired') {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: userCopy(INDEXER_STREAM_UNWIRED),
+            cause: new Error(INDEXER_STREAM_UNWIRED),
+          });
+        }
+        try {
+          const markets = input?.market ? [input.market] : [...(await store.markets())];
+          const depth = input?.depth ?? 50;
+          const books: StreamBook[] = [];
+          for (const market of markets) {
+            const view = await store.book(market, depth);
+            const seq = view.asOfHeight ?? 0;
+            books.push({
+              market: view.market,
+              sequence: seq,
+              bids: view.bids.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as StreamLevel),
+              asks: view.asks.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as StreamLevel),
+            });
+          }
+          return assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl, books });
         } catch (err) {
           throw toTrpcError(err);
         }
