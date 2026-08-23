@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**149 of 158 shipped (94%)** · 0 in progress · 4 ready to claim · 5 blocked · 30 deliberate §13 sockets
+**150 of 158 shipped (95%)** · 0 in progress · 3 ready to claim · 5 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -25,7 +25,6 @@ pnpm wt feat/<the-thing>
 
 | Feature | Module | Phase | id |
 |---|---|---|---|
-| 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
 | An audited venue contract emitting the indexed event surface | `indexer` | 3P | `socket.clob-contracts` |
@@ -43,7 +42,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 ## Everything, by phase
 
-### Phase 0 — Foundations (11/12)
+### Phase 0 — Foundations ✅
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -58,7 +57,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | brand-scan, custody-scan, migration-check, DoD gate | F |  | `infra.gates` |
 | ✅ | Worktree tooling + GitHub Flow | F |  | `infra.worktrees` |
 | ✅ | §14.5 metrics — /metrics on the edge, scraped, one live SLO dashboard <br/>_LANDED 2026-08-08. The METRICS half of §14.5; traces landed separately in packages/telemetry/src/start.ts and are not restated here. Verified absent first: prom-client / "text/plain; version=0.0.4" / http_request_duration matched NOTHING under services/ or packages/, prometheus.yaml was 16 lines scraping only itself and nats:8222, and grafana/ held a datasource file with no dashboard and NO PROVIDER that could have loaded one. DONE-BAR EVIDENCE. (1) REACHABLE — proved three ways, not asserted. metrics.boot.e2e.test.ts SPAWNS THE REAL index.ts, binds a real socket and scrapes it, so deleting the registerMetrics call from index.ts turns 5 tests red (it turned none red before that file existed, which is why it exists). Out of band, the committed prometheus.yaml was loaded by real prom/prometheus:v3.0.1 and reported job=svc-edge health=up url=http://svc-edge:4000/metrics; real grafana/grafana:11.4.0 loaded the committed JSON with provisioned=true provisionedFile=edge-slo.json, all 5 panels, and every panel query returned live series through Grafana own datasource proxy (availability 0.9596, p99 pay 2.39s). (2) TESTED — 45 assertions across 4 suites, all parsing the ENDPOINT OUTPUT rather than calling render(); mutation-checked, see the PR for the 9-mutation table. promtool check metrics accepts 934 lines of real output; promtool check config accepts the scrape file. (3) NOT PROPPED UP — no stub, no mock, and NO NEW DEPENDENCY (prom-client rejected; the 0.0.4 format is frozen and a library would not have answered either hard question, which were "does anything scrape it" and "does the panel name what we emit"). WHAT IS NOT COVERED, PLAINLY. ONE of 19 services emits metrics — svc-edge. The panel is an EDGE-MEASURED SLO: 15 modules appear as `module` label values when traffic crosses the edge (academy agents bank blueprint dex identity indexer market notify p2p pay protocol support token trade), and svc-ws, svc-ledger and svc-matching are NOT covered at all because they do not sit behind the edge (routes.ts OUTSIDE_THE_DOOR). No service instruments its own internals; a module with no traffic has no series. So §14.5 read as "at least one SLO dashboard panel" is met and proven; read as per-service instrumentation it is 1/19 and the remaining 18 are residual. The series names, label set and buckets live in packages/telemetry so the next adopter needs no dashboard edit — it appears as another `service` value._ | F |  | `infra.slo-dashboards` |
-| 🟢 | 100+ languages — keyed from day one (§9) <br/>_Owner released 2026-08-08 (axis C1 / Nitro green light). Downgraded 2026-07-28: `@intafaced/i18n` is imported by zero files outside its own package. apps/web hardcodes English in a `copy` object whose comment calls i18n "being built in a separate worktree". "Keyed from day one" is not true of any surface._ | F |  | `infra.i18n` |
+| ✅ | 100+ languages — keyed from day one (§9) <br/>_Vendor shell keyed: 100+ locale codes in @intafaced/i18n (empty catalogs fall back to en so $t never shows raw keys). Header switcher on App.vue offers en/es/fr with distinct /bank titles; persist via localStorage; missing/broken catalogue stays en (no footer.gsmc). apps/web is gone — the surface is vendor/upstream-exchange/05_Web_Front._ | F |  | `infra.i18n` |
 
 ### Phase 1 — THE CORE ✅
 

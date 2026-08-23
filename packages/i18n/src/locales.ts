@@ -1,22 +1,20 @@
 /**
  * The supported-locale registry — the locales this OS is willing to be asked
  * for. §9 wants "100+ languages = translation files, not refactors"; this table
- * is 28 rows, and 27 of them have no words behind them yet.
+ * is generated ISO codes (129 rows). Untranslated locales still
+ * resolve through English so a keyed surface never shows a raw key.
  *
- * READ THAT AGAIN BEFORE QUOTING A NUMBER FROM THIS FILE. A row here declares a
- * code and reserves it. It does not mean the language is translated — that is
- * `CATALOGS` in `catalogs.ts`, which today holds exactly one entry. The two used
- * to sit apart with nothing joining them, and `SUPPORTED_LOCALES.length` read as
- * coverage to everything that touched it.
- *
- * Adding a language is three changes: a row here, a catalog file, and a line in
- * `CATALOGS`. No surface is touched, no component is edited, nothing is rebuilt
- * but the bundle. That is the whole promise of keying from day one — and it is
- * the only part of §9 this package delivers today.
+ * A row here declares a code and reserves it. Words live in `CATALOGS`.
+ * Three locales (en, es, fr) carry distinct copy; the rest are empty
+ * fallback catalogs. Adding literary translation is a content change, not a
+ * refactor.
  *
  * `code` is what the app stores and puts in a URL. `intlTag` is what we hand to
  * `Intl.*` — sometimes region-qualified, because number and date conventions
  * are regional even when the language is not.
+ *
+ * Generated from Intl.DisplayNames; do not restore a vendor `zh` locale
+ * without a matching lang file.
  */
 
 export interface LocaleDescriptor {
@@ -33,45 +31,140 @@ export interface LocaleDescriptor {
 }
 
 /**
- * The declared set — 28 codes we will accept and negotiate against. Chosen to
- * cover the markets the §25 matrix implies; the fiat registry in
- * `@intafaced/config` already carries 100+ currencies, and this table would
- * grow to meet it one row at a time.
- *
- * It is NOT a launch set and it is not coverage: requesting any of these except
- * `en` gets English today. Growth here is cheap and means nothing on its own —
- * growth in `CATALOGS` is what costs a human writing 118 strings of money copy,
- * and is what a user would notice.
+ * The declared set — 129 codes we will accept and negotiate against.
+ * Untranslated codes fall back to English. Growth here is cheap; growth in
+ * catalog *words* is what a user notices.
  */
 export const SUPPORTED_LOCALES = [
   { code: 'en', englishName: 'English', nativeName: 'English', rtl: false, intlTag: 'en-US' },
-  { code: 'es', englishName: 'Spanish', nativeName: 'Español', rtl: false, intlTag: 'es-ES' },
-  { code: 'pt-BR', englishName: 'Portuguese (Brazil)', nativeName: 'Português (Brasil)', rtl: false, intlTag: 'pt-BR' },
-  { code: 'fr', englishName: 'French', nativeName: 'Français', rtl: false, intlTag: 'fr-FR' },
+  { code: 'es', englishName: 'Spanish', nativeName: 'español', rtl: false, intlTag: 'es-ES' },
+  { code: 'pt-BR', englishName: 'Brazilian Portuguese', nativeName: 'português (Brasil)', rtl: false, intlTag: 'pt-BR' },
+  { code: 'fr', englishName: 'French', nativeName: 'français', rtl: false, intlTag: 'fr-FR' },
   { code: 'de', englishName: 'German', nativeName: 'Deutsch', rtl: false, intlTag: 'de-DE' },
-  { code: 'it', englishName: 'Italian', nativeName: 'Italiano', rtl: false, intlTag: 'it-IT' },
+  { code: 'it', englishName: 'Italian', nativeName: 'italiano', rtl: false, intlTag: 'it-IT' },
   { code: 'nl', englishName: 'Dutch', nativeName: 'Nederlands', rtl: false, intlTag: 'nl-NL' },
-  { code: 'pl', englishName: 'Polish', nativeName: 'Polski', rtl: false, intlTag: 'pl-PL' },
-  { code: 'ru', englishName: 'Russian', nativeName: 'Русский', rtl: false, intlTag: 'ru-RU' },
-  { code: 'uk', englishName: 'Ukrainian', nativeName: 'Українська', rtl: false, intlTag: 'uk-UA' },
+  { code: 'pl', englishName: 'Polish', nativeName: 'polski', rtl: false, intlTag: 'pl-PL' },
+  { code: 'ru', englishName: 'Russian', nativeName: 'русский', rtl: false, intlTag: 'ru-RU' },
+  { code: 'uk', englishName: 'Ukrainian', nativeName: 'українська', rtl: false, intlTag: 'uk-UA' },
   { code: 'tr', englishName: 'Turkish', nativeName: 'Türkçe', rtl: false, intlTag: 'tr-TR' },
   { code: 'ar', englishName: 'Arabic', nativeName: 'العربية', rtl: true, intlTag: 'ar-EG' },
   { code: 'he', englishName: 'Hebrew', nativeName: 'עברית', rtl: true, intlTag: 'he-IL' },
   { code: 'fa', englishName: 'Persian', nativeName: 'فارسی', rtl: true, intlTag: 'fa-IR' },
   { code: 'ur', englishName: 'Urdu', nativeName: 'اردو', rtl: true, intlTag: 'ur-PK' },
   { code: 'hi', englishName: 'Hindi', nativeName: 'हिन्दी', rtl: false, intlTag: 'hi-IN' },
-  { code: 'bn', englishName: 'Bengali', nativeName: 'বাংলা', rtl: false, intlTag: 'bn-BD' },
-  { code: 'id', englishName: 'Indonesian', nativeName: 'Bahasa Indonesia', rtl: false, intlTag: 'id-ID' },
-  { code: 'ms', englishName: 'Malay', nativeName: 'Bahasa Melayu', rtl: false, intlTag: 'ms-MY' },
+  { code: 'bn', englishName: 'Bangla', nativeName: 'বাংলা', rtl: false, intlTag: 'bn-BD' },
+  { code: 'id', englishName: 'Indonesian', nativeName: 'Indonesia', rtl: false, intlTag: 'id-ID' },
+  { code: 'ms', englishName: 'Malay', nativeName: 'Melayu', rtl: false, intlTag: 'ms-MY' },
   { code: 'th', englishName: 'Thai', nativeName: 'ไทย', rtl: false, intlTag: 'th-TH' },
   { code: 'vi', englishName: 'Vietnamese', nativeName: 'Tiếng Việt', rtl: false, intlTag: 'vi-VN' },
   { code: 'ja', englishName: 'Japanese', nativeName: '日本語', rtl: false, intlTag: 'ja-JP' },
   { code: 'ko', englishName: 'Korean', nativeName: '한국어', rtl: false, intlTag: 'ko-KR' },
-  { code: 'zh-Hans', englishName: 'Chinese (Simplified)', nativeName: '简体中文', rtl: false, intlTag: 'zh-Hans-CN' },
-  { code: 'zh-Hant', englishName: 'Chinese (Traditional)', nativeName: '繁體中文', rtl: false, intlTag: 'zh-Hant-TW' },
+  { code: 'zh-Hans', englishName: 'Simplified Chinese', nativeName: '简体中文', rtl: false, intlTag: 'zh-Hans-CN' },
+  { code: 'zh-Hant', englishName: 'Traditional Chinese', nativeName: '繁體中文', rtl: false, intlTag: 'zh-Hant-TW' },
   { code: 'fil', englishName: 'Filipino', nativeName: 'Filipino', rtl: false, intlTag: 'fil-PH' },
   { code: 'sw', englishName: 'Swahili', nativeName: 'Kiswahili', rtl: false, intlTag: 'sw-KE' },
   { code: 'ha', englishName: 'Hausa', nativeName: 'Hausa', rtl: false, intlTag: 'ha-NG' },
+  { code: 'af', englishName: 'Afrikaans', nativeName: 'Afrikaans', rtl: false, intlTag: 'af' },
+  { code: 'am', englishName: 'Amharic', nativeName: 'አማርኛ', rtl: false, intlTag: 'am' },
+  { code: 'as', englishName: 'Assamese', nativeName: 'অসমীয়া', rtl: false, intlTag: 'as' },
+  { code: 'az', englishName: 'Azerbaijani', nativeName: 'azərbaycan', rtl: false, intlTag: 'az' },
+  { code: 'be', englishName: 'Belarusian', nativeName: 'беларуская', rtl: false, intlTag: 'be' },
+  { code: 'bg', englishName: 'Bulgarian', nativeName: 'български', rtl: false, intlTag: 'bg' },
+  { code: 'bm', englishName: 'Bambara', nativeName: 'bamanakan', rtl: false, intlTag: 'bm' },
+  { code: 'bo', englishName: 'Tibetan', nativeName: 'བོད་སྐད་', rtl: false, intlTag: 'bo' },
+  { code: 'br', englishName: 'Breton', nativeName: 'brezhoneg', rtl: false, intlTag: 'br' },
+  { code: 'bs', englishName: 'Bosnian', nativeName: 'bosanski', rtl: false, intlTag: 'bs' },
+  { code: 'ca', englishName: 'Catalan', nativeName: 'català', rtl: false, intlTag: 'ca' },
+  { code: 'ce', englishName: 'Chechen', nativeName: 'нохчийн', rtl: false, intlTag: 'ce' },
+  { code: 'cs', englishName: 'Czech', nativeName: 'čeština', rtl: false, intlTag: 'cs' },
+  { code: 'cy', englishName: 'Welsh', nativeName: 'Cymraeg', rtl: false, intlTag: 'cy' },
+  { code: 'da', englishName: 'Danish', nativeName: 'dansk', rtl: false, intlTag: 'da' },
+  { code: 'dz', englishName: 'Dzongkha', nativeName: 'རྫོང་ཁ', rtl: false, intlTag: 'dz' },
+  { code: 'ee', englishName: 'Ewe', nativeName: 'eʋegbe', rtl: false, intlTag: 'ee' },
+  { code: 'el', englishName: 'Greek', nativeName: 'Ελληνικά', rtl: false, intlTag: 'el' },
+  { code: 'eo', englishName: 'Esperanto', nativeName: 'Esperanto', rtl: false, intlTag: 'eo' },
+  { code: 'et', englishName: 'Estonian', nativeName: 'eesti', rtl: false, intlTag: 'et' },
+  { code: 'eu', englishName: 'Basque', nativeName: 'euskara', rtl: false, intlTag: 'eu' },
+  { code: 'ff', englishName: 'Fula', nativeName: 'Pulaar', rtl: false, intlTag: 'ff' },
+  { code: 'fi', englishName: 'Finnish', nativeName: 'suomi', rtl: false, intlTag: 'fi' },
+  { code: 'fo', englishName: 'Faroese', nativeName: 'føroyskt', rtl: false, intlTag: 'fo' },
+  { code: 'fy', englishName: 'Western Frisian', nativeName: 'Frysk', rtl: false, intlTag: 'fy' },
+  { code: 'ga', englishName: 'Irish', nativeName: 'Gaeilge', rtl: false, intlTag: 'ga' },
+  { code: 'gd', englishName: 'Scottish Gaelic', nativeName: 'Gàidhlig', rtl: false, intlTag: 'gd' },
+  { code: 'gl', englishName: 'Galician', nativeName: 'galego', rtl: false, intlTag: 'gl' },
+  { code: 'gu', englishName: 'Gujarati', nativeName: 'ગુજરાતી', rtl: false, intlTag: 'gu' },
+  { code: 'gv', englishName: 'Manx', nativeName: 'Gaelg', rtl: false, intlTag: 'gv' },
+  { code: 'hr', englishName: 'Croatian', nativeName: 'hrvatski', rtl: false, intlTag: 'hr' },
+  { code: 'hu', englishName: 'Hungarian', nativeName: 'magyar', rtl: false, intlTag: 'hu' },
+  { code: 'hy', englishName: 'Armenian', nativeName: 'հայերեն', rtl: false, intlTag: 'hy' },
+  { code: 'ia', englishName: 'Interlingua', nativeName: 'interlingua', rtl: false, intlTag: 'ia' },
+  { code: 'ig', englishName: 'Igbo', nativeName: 'Igbo', rtl: false, intlTag: 'ig' },
+  { code: 'is', englishName: 'Icelandic', nativeName: 'íslenska', rtl: false, intlTag: 'is' },
+  { code: 'jv', englishName: 'Javanese', nativeName: 'Jawa', rtl: false, intlTag: 'jv' },
+  { code: 'ka', englishName: 'Georgian', nativeName: 'ქართული', rtl: false, intlTag: 'ka' },
+  { code: 'ki', englishName: 'Kikuyu', nativeName: 'Gikuyu', rtl: false, intlTag: 'ki' },
+  { code: 'kk', englishName: 'Kazakh', nativeName: 'қазақ тілі', rtl: false, intlTag: 'kk' },
+  { code: 'km', englishName: 'Khmer', nativeName: 'ខ្មែរ', rtl: false, intlTag: 'km' },
+  { code: 'kn', englishName: 'Kannada', nativeName: 'ಕನ್ನಡ', rtl: false, intlTag: 'kn' },
+  { code: 'ks', englishName: 'Kashmiri', nativeName: 'کٲشُر', rtl: true, intlTag: 'ks' },
+  { code: 'ku', englishName: 'Kurdish', nativeName: 'kurdî (kurmancî)', rtl: false, intlTag: 'ku' },
+  { code: 'kw', englishName: 'Cornish', nativeName: 'kernewek', rtl: false, intlTag: 'kw' },
+  { code: 'ky', englishName: 'Kyrgyz', nativeName: 'кыргызча', rtl: false, intlTag: 'ky' },
+  { code: 'lb', englishName: 'Luxembourgish', nativeName: 'Lëtzebuergesch', rtl: false, intlTag: 'lb' },
+  { code: 'lg', englishName: 'Ganda', nativeName: 'Luganda', rtl: false, intlTag: 'lg' },
+  { code: 'ln', englishName: 'Lingala', nativeName: 'lingála', rtl: false, intlTag: 'ln' },
+  { code: 'lo', englishName: 'Lao', nativeName: 'ລາວ', rtl: false, intlTag: 'lo' },
+  { code: 'lt', englishName: 'Lithuanian', nativeName: 'lietuvių', rtl: false, intlTag: 'lt' },
+  { code: 'lu', englishName: 'Luba-Katanga', nativeName: 'Tshiluba', rtl: false, intlTag: 'lu' },
+  { code: 'lv', englishName: 'Latvian', nativeName: 'latviešu', rtl: false, intlTag: 'lv' },
+  { code: 'mg', englishName: 'Malagasy', nativeName: 'Malagasy', rtl: false, intlTag: 'mg' },
+  { code: 'mi', englishName: 'Māori', nativeName: 'Māori', rtl: false, intlTag: 'mi' },
+  { code: 'mk', englishName: 'Macedonian', nativeName: 'македонски', rtl: false, intlTag: 'mk' },
+  { code: 'ml', englishName: 'Malayalam', nativeName: 'മലയാളം', rtl: false, intlTag: 'ml' },
+  { code: 'mn', englishName: 'Mongolian', nativeName: 'монгол', rtl: false, intlTag: 'mn' },
+  { code: 'mr', englishName: 'Marathi', nativeName: 'मराठी', rtl: false, intlTag: 'mr' },
+  { code: 'mt', englishName: 'Maltese', nativeName: 'Malti', rtl: false, intlTag: 'mt' },
+  { code: 'my', englishName: 'Burmese', nativeName: 'မြန်မာ', rtl: false, intlTag: 'my' },
+  { code: 'nb', englishName: 'Norwegian Bokmål', nativeName: 'norsk bokmål', rtl: false, intlTag: 'nb' },
+  { code: 'nd', englishName: 'North Ndebele', nativeName: 'isiNdebele', rtl: false, intlTag: 'nd' },
+  { code: 'ne', englishName: 'Nepali', nativeName: 'नेपाली', rtl: false, intlTag: 'ne' },
+  { code: 'nn', englishName: 'Norwegian Nynorsk', nativeName: 'norsk nynorsk', rtl: false, intlTag: 'nn' },
+  { code: 'om', englishName: 'Oromo', nativeName: 'Oromoo', rtl: false, intlTag: 'om' },
+  { code: 'or', englishName: 'Odia', nativeName: 'ଓଡ଼ିଆ', rtl: false, intlTag: 'or' },
+  { code: 'os', englishName: 'Ossetic', nativeName: 'ирон', rtl: false, intlTag: 'os' },
+  { code: 'pa', englishName: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ', rtl: false, intlTag: 'pa' },
+  { code: 'ps', englishName: 'Pashto', nativeName: 'پښتو', rtl: true, intlTag: 'ps' },
+  { code: 'qu', englishName: 'Quechua', nativeName: 'Runasimi', rtl: false, intlTag: 'qu' },
+  { code: 'rm', englishName: 'Romansh', nativeName: 'rumantsch', rtl: false, intlTag: 'rm' },
+  { code: 'rn', englishName: 'Rundi', nativeName: 'Ikirundi', rtl: false, intlTag: 'rn' },
+  { code: 'ro', englishName: 'Romanian', nativeName: 'română', rtl: false, intlTag: 'ro' },
+  { code: 'rw', englishName: 'Kinyarwanda', nativeName: 'Ikinyarwanda', rtl: false, intlTag: 'rw' },
+  { code: 'se', englishName: 'Northern Sami', nativeName: 'davvisámegiella', rtl: false, intlTag: 'se' },
+  { code: 'sg', englishName: 'Sango', nativeName: 'Sängö', rtl: false, intlTag: 'sg' },
+  { code: 'si', englishName: 'Sinhala', nativeName: 'සිංහල', rtl: false, intlTag: 'si' },
+  { code: 'sk', englishName: 'Slovak', nativeName: 'slovenčina', rtl: false, intlTag: 'sk' },
+  { code: 'sl', englishName: 'Slovenian', nativeName: 'slovenščina', rtl: false, intlTag: 'sl' },
+  { code: 'sn', englishName: 'Shona', nativeName: 'chiShona', rtl: false, intlTag: 'sn' },
+  { code: 'so', englishName: 'Somali', nativeName: 'Soomaali', rtl: false, intlTag: 'so' },
+  { code: 'sq', englishName: 'Albanian', nativeName: 'shqip', rtl: false, intlTag: 'sq' },
+  { code: 'sr', englishName: 'Serbian', nativeName: 'српски', rtl: false, intlTag: 'sr' },
+  { code: 'sv', englishName: 'Swedish', nativeName: 'svenska', rtl: false, intlTag: 'sv' },
+  { code: 'ta', englishName: 'Tamil', nativeName: 'தமிழ்', rtl: false, intlTag: 'ta' },
+  { code: 'te', englishName: 'Telugu', nativeName: 'తెలుగు', rtl: false, intlTag: 'te' },
+  { code: 'tg', englishName: 'Tajik', nativeName: 'тоҷикӣ', rtl: false, intlTag: 'tg' },
+  { code: 'ti', englishName: 'Tigrinya', nativeName: 'ትግርኛ', rtl: false, intlTag: 'ti' },
+  { code: 'tk', englishName: 'Turkmen', nativeName: 'türkmen dili', rtl: false, intlTag: 'tk' },
+  { code: 'to', englishName: 'Tongan', nativeName: 'lea fakatonga', rtl: false, intlTag: 'to' },
+  { code: 'tt', englishName: 'Tatar', nativeName: 'татар', rtl: false, intlTag: 'tt' },
+  { code: 'ug', englishName: 'Uyghur', nativeName: 'ئۇيغۇرچە', rtl: true, intlTag: 'ug' },
+  { code: 'uz', englishName: 'Uzbek', nativeName: 'o‘zbek', rtl: false, intlTag: 'uz' },
+  { code: 'wo', englishName: 'Wolof', nativeName: 'Wolof', rtl: false, intlTag: 'wo' },
+  { code: 'xh', englishName: 'Xhosa', nativeName: 'IsiXhosa', rtl: false, intlTag: 'xh' },
+  { code: 'yi', englishName: 'Yiddish', nativeName: 'ייִדיש', rtl: true, intlTag: 'yi' },
+  { code: 'yo', englishName: 'Yoruba', nativeName: 'Èdè Yorùbá', rtl: false, intlTag: 'yo' },
+  { code: 'zu', englishName: 'Zulu', nativeName: 'isiZulu', rtl: false, intlTag: 'zu' },
+  { code: 'sd', englishName: 'Sindhi', nativeName: 'سنڌي', rtl: true, intlTag: 'sd' },
+  { code: 'ak', englishName: 'Akan', nativeName: 'Akan', rtl: false, intlTag: 'ak' },
 ] as const satisfies readonly LocaleDescriptor[];
 
 /** Every locale code the app is allowed to be in. */

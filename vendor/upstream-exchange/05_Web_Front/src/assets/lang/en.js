@@ -136,6 +136,12 @@ module.exports = {
      * unfinished module reads as a finished empty one.
      */
     intafaced: {
+        i18n: {
+            label: "Language",
+            en: "English",
+            es: "Español",
+            fr: "Français"
+        },
         hub: {
             title: "Platform",
             lead: "Every INTAFACED module, inside this app. One account, one balance owner — the ledger. This page reports what each module can actually do today, not what is planned.",
