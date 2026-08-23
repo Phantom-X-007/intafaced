@@ -8,6 +8,7 @@ import { env } from './env.js';
 import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
 import { markAuthOutcome, registerMetrics } from './metrics.js';
+import { createQuotaStore, decideGateway, sandboxOf } from './gateway-plane.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { upstreamBody } from './proxy-body.js';
 import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
@@ -140,6 +141,9 @@ const rateLimitState = rateLimitSummary(rateLimit);
 app.log[rateLimitState.level]({ appEnv: env.APP_ENV, ...rateLimit }, rateLimitState.summary);
 
 const envLookup = (name: string): string | undefined => process.env[name];
+
+/** Per-key quota for the API-key plane (`gateway-plane.ts`). IP throttle stays in hardening.ts. */
+const keyQuota = createQuotaStore();
 
 const tokenConfig = {
   secret: env.JWT_ACCESS_SECRET,
@@ -332,6 +336,24 @@ await app.register(async (api) => {
     // signing-key mismatch, and a spike in `anonymous` is a front-end that stopped
     // attaching the header. An availability panel that merges them shows neither.
     markAuthOutcome(req, exchanged.rejected ? 'refused' : exchanged.principal ? 'authenticated' : 'anonymous');
+
+    // One key/scope/quota/sandbox plane. Dialects stay two — refuse bodies are
+    // CCXT on /api/v1 and tRPC on /api/pay. Interactive sessions skip this.
+    const gate = decideGateway({
+      pathname: url.pathname,
+      method: req.method,
+      principal: exchanged.principal,
+      quota: keyQuota,
+      now: Date.now(),
+      max: env.EDGE_RATE_LIMIT_MAX,
+      windowMs: env.EDGE_RATE_LIMIT_WINDOW_MS,
+    });
+    if (exchanged.principal?.kid) {
+      reply.header('x-intafaced-key-env', sandboxOf(exchanged.principal) ? 'sandbox' : 'live');
+    }
+    if (!gate.allow) {
+      return reply.code(gate.status).send(gate.body);
+    }
 
     const body = upstreamBody(req.method, req.body);
 
