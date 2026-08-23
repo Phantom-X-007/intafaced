@@ -96,15 +96,26 @@ export class LiveKitStreamProvider implements StreamProvider {
     return typeof result.name === 'string' && result.name.length > 0 ? result.name : sessionId;
   }
 
-  async credential(input: { sessionId: string; streamRoom: string; userId: string; role: 'host' | 'speaker' | 'attendee' }): Promise<StreamCredential> {
+  async credential(input: {
+    sessionId: string;
+    streamRoom: string;
+    userId: string;
+    role: 'host' | 'speaker' | 'attendee';
+  }): Promise<StreamCredential> {
     const canPublish = input.role !== 'attendee';
-    const token = jwt(this.options.apiKey, this.options.apiSecret, input.userId, {
-      roomJoin: true,
-      room: input.streamRoom || input.sessionId,
-      canPublish,
-      canSubscribe: true,
-      canPublishData: true,
-    }, this.ttl);
+    const token = jwt(
+      this.options.apiKey,
+      this.options.apiSecret,
+      input.userId,
+      {
+        roomJoin: true,
+        room: input.streamRoom || input.sessionId,
+        canPublish,
+        canSubscribe: true,
+        canPublishData: true,
+      },
+      this.ttl,
+    );
     return { url: this.options.url, token, expiresAt: new Date(Date.now() + this.ttl * 1000) };
   }
 
@@ -122,7 +133,13 @@ export function streamProviderFromEnv(input: {
   fetch?: typeof globalThis.fetch;
 }): StreamProvider {
   if (input.provider !== 'livekit' || !input.url || !input.apiKey || !input.apiSecret) return new NullStreamProvider();
-  return new LiveKitStreamProvider({ url: input.url, apiKey: input.apiKey, apiSecret: input.apiSecret, tokenTtlSeconds: input.tokenTtlSeconds, fetch: input.fetch });
+  return new LiveKitStreamProvider({
+    url: input.url,
+    apiKey: input.apiKey,
+    apiSecret: input.apiSecret,
+    tokenTtlSeconds: input.tokenTtlSeconds,
+    fetch: input.fetch,
+  });
 }
 
 /** True when a provider can actually carry a session. */
