@@ -16,6 +16,7 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerFuturesTickerRest } from './futures/futures-ticker-rest.js';
 import { registerPrivateRest } from './private-rest.js';
+import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
 import {
   ADL_DISCLOSURE_VERSION,
@@ -615,6 +616,15 @@ const copyLeaderFixturesStore = createCopyLeaderFixturesStore(sql);
 registerCopyLeaderFixturesRoutes(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   store: copyLeaderFixturesStore,
+});
+
+// Custodial outcome doors start with no invented listings. Order and settlement
+// ports remain absent until their ledger-backed implementations are configured.
+registerOutcomesRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  catalogue: memoryOutcomeCatalogue([]),
 });
 
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
