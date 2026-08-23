@@ -1950,6 +1950,22 @@ export class TradeService {
   }
 
   /**
+   * Operator read of the canonical order rows. Matching remains execution
+   * state; this does not reconstruct or maintain a second order book.
+   */
+  async adminOpenOrders(principal: Principal, limit = 100): Promise<OrderRecord[]> {
+    requireScope(principal, 'admin:read');
+    const capped = Math.min(Math.max(limit, 1), 500);
+    const rows = await this.sql<OrderRow[]>`
+      SELECT * FROM trade.orders
+       WHERE status IN ('pending', 'open')
+       ORDER BY created_at DESC
+       LIMIT ${capped}
+    `;
+    return rows.map(toOrder);
+  }
+
+  /**
    * Terminal orders for the principal (filled / cancelled / rejected / expired).
    * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
    * (CCXT convention). `created_at` is timestamptz — convert ms via `Date`.

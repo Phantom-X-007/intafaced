@@ -327,6 +327,7 @@ describe('private REST — mount boundary + order write path', () => {
       edgeSecret: SECRET,
       serviceName: 'svc-trade',
       openOrders: async () => [open],
+      adminOpenOrders: async () => [open],
       orderHistory: async () => [closed],
       getOrder: async () => open,
       placeOrder: async () => open,
@@ -477,6 +478,36 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  it('admin open orders requires admin:read and exposes canonical rows as decimal strings', async () => {
+    const app = await build();
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/orders/open',
+      headers: signedHeaders(),
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/orders/open',
+      headers: signedHeaders(principal({ scopes: ['admin:read'] })),
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json()).toMatchObject([
+      {
+        id: ORDER_ID,
+        userId: USER,
+        symbol: 'BTC/USDT',
+        amount: '2',
+        filled: '0',
+        price: '100',
+        status: 'open',
+        seeded: false,
+      },
+    ]);
     await app.close();
   });
 

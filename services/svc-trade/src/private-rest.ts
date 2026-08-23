@@ -40,6 +40,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
  *   GET    /api/v1/orders/open     scope: trade:read
+ *   GET    /api/v1/admin/orders/open scope: admin:read (canonical order rows)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
@@ -83,6 +84,8 @@ export interface PrivateRestDeps {
   edgeSecret: string;
   serviceName: string;
   openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
+  /** Operator projection. Unset mounts a typed refuse, never a fallback book. */
+  adminOpenOrders?(principal: Principal, limit?: number): Promise<OrderRecord[]>;
   orderHistory(principal: Principal, input: { marketId?: string; limit?: number; sinceMs?: number }): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
@@ -599,6 +602,30 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   }
 
   // ── Static paths first (before :id) ───────────────────────────────────────
+
+  app.get<{ Querystring: { limit?: string } }>('/api/v1/admin/orders/open', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+    try {
+      requireScope(principal, 'admin:read');
+      if (!deps.adminOpenOrders) {
+        return reply.code(503).send({ error: 'admin order projection is not configured', code: 'trade.admin_orders_unconfigured' });
+      }
+      const orders = await deps.adminOpenOrders(principal, limit);
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const order of orders) {
+        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+        wire.push({ ...presentCcxtOrder(order, symbol), userId: order.userId, seeded: order.seeded });
+      }
+      return reply.code(200).send(wire);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
 
   app.get<{ Querystring: { symbol?: string } }>('/api/v1/orders/open', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
