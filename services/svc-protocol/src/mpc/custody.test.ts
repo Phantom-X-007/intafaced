@@ -7,23 +7,23 @@ describe('MPC custody stage 1 (2-of-3)', () => {
 
   it('reconstructs with any two named shares and preserves leading zeroes', () => {
     const shares = splitSecret(secret, holders);
-    expect(reconstructSecret([shares[0], shares[2]])).toEqual(secret);
-    expect(reconstructSecret([shares[1], shares[2]])).toEqual(secret);
+    expect(reconstructSecret([shares[0]!, shares[2]!])).toEqual(secret);
+    expect(reconstructSecret([shares[1]!, shares[2]!])).toEqual(secret);
   });
 
   it('refuses a single named share', () => {
     const shares = splitSecret(secret, holders);
-    expect(() => reconstructSecret([shares[0]])).toThrow(MpcCustodyRefuseError);
-    expect(() => reconstructSecret([shares[0]])).toThrow(/two named shares/);
+    expect(() => reconstructSecret([shares[0]!])).toThrow(MpcCustodyRefuseError);
+    expect(() => reconstructSecret([shares[0]!])).toThrow(/two named shares/);
   });
 
   it('holds only named participants and refuses unknown holders', () => {
     const custody = new MpcCustodyStage1(holders);
     const shares = splitSecret(secret, holders);
-    custody.hold(shares[0]);
+    custody.hold(shares[0]!);
     expect(() => custody.reconstruct()).toThrow(/two named shares/);
-    expect(() => custody.hold({ ...shares[1], holder: 'mallory' })).toThrow(/unknown holder/);
-    custody.hold(shares[1]);
+    expect(() => custody.hold({ ...shares[1]!, holder: 'mallory' })).toThrow(/unknown holder/);
+    custody.hold(shares[1]!);
     expect(custody.reconstruct()).toEqual(secret);
   });
 
