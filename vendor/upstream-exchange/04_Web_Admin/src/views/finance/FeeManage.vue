@@ -131,21 +131,24 @@ import { perTradeAll  } from '@/service/getData';
         }).then((response) => {
           return response.json().catch(() => null).then((payload) => {
             if (!response.ok) throw new Error('fee schedule refused');
-          const rows = [];
-          if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+              throw new Error('fee schedule shape refused');
+            }
+            const rows = [];
+            const decimal = /^-?\d+(?:\.\d+)?$/;
             Object.keys(payload).forEach((symbol) => {
               const fee = payload[symbol];
-              if (fee && typeof fee.maker === 'string' && fee.maker.length > 0 &&
-                  typeof fee.taker === 'string' && fee.taker.length > 0 && fee.percentage === true) {
-                rows.push({ symbol, maker: fee.maker, taker: fee.taker });
+              if (!fee || fee.symbol !== symbol || typeof fee.maker !== 'string' || !decimal.test(fee.maker) ||
+                  typeof fee.taker !== 'string' || !decimal.test(fee.taker) || fee.percentage !== true) {
+                throw new Error('fee schedule row refused');
               }
+              rows.push({ symbol: fee.symbol, maker: fee.maker, taker: fee.taker });
             });
-          }
-          this.feeScheduleRows = rows;
-          if (rows.length === 0) {
-            this.feeScheduleUnavailable = '费率未配置或 svc-trade 未返回可用的 maker/taker 十进制字符串。';
-          }
-          this.feeScheduleLoading = false;
+            this.feeScheduleRows = rows;
+            if (rows.length === 0) {
+              this.feeScheduleUnavailable = '费率未配置或 svc-trade 未返回可用的 maker/taker 十进制字符串。';
+            }
+            this.feeScheduleLoading = false;
           });
         }).catch(() => {
           this.feeScheduleRows = [];
