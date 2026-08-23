@@ -174,6 +174,22 @@ module.exports = {
             probeRun: "Re-check",
             probeRoutes: "Routes the edge will forward"
         },
+        api: {
+            title: "API keys",
+            lead: "One key for trade and pay. Scopes, quota and sandbox live on that key. Trade still speaks CCXT; pay still speaks pay — missing scope is a named refuse, not a silent pass.",
+            name: "Key name",
+            mint: "Mint key",
+            sandbox: "Sandbox",
+            live: "Live",
+            sandboxHint: "Sandbox — this key stays on the sandbox rail",
+            shownOnce: "This secret is shown once. Copy it now.",
+            mode: "Mode",
+            probe: "Call both doors",
+            tradeDoor: "Trade",
+            payDoor: "Pay",
+            tradePath: "GET /api/v1/markets",
+            payPath: "GET /api/pay/trpc/health"
+        },
         waitlist: {
             title: "Join the waitlist",
             lead: "Register interest for the next release. This does not create a balance or promise a reward.",

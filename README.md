@@ -10,21 +10,21 @@
 
 <!-- tracker:start -->
 
-`██████████████████░░` **91%** — 143 of 158 features shipped
+`██████████████████░░` **91%** — 144 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 54/59 · **5P** 4/7
+Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 54/59 · **5P** 4/7
 
-**🟢 10 ready to claim** — nothing blocks these:
+**🟢 9 ready to claim** — nothing blocks these:
 
 - `infra.i18n` — 100+ languages — keyed from day one (§9)
 - `web.mobile-apps` — Native mobile apps — iOS and Android, own name, zero attribution (§25:727)
-- `api.gateway` — Public API — ONE gateway in front of trade, pay and data (§9)
 - `chain.mainnet` — INTACHAIN — CometBFT + native CLOB module
 - `mining.pool` — Stratum share protocol, PPLNS payouts
 - `quant.sdk` — Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)
 - `ops.business-systems` — CRM, HR and team, Finance with live revenue, Project engine (§25:714)
 - `ops.marketing` — Marketing engine — campaigns, attribution, with the Growth Agent (§25:719)
-- …and 2 more
+- `ops.infra-b2b` — INTAFACED INFRA — embeddable ramp widget and white-label tiers (§37)
+- …and 1 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
 

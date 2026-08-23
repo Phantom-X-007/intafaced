@@ -951,8 +951,15 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '3',
     plane: 'B',
+    status: 'done',
+    owner: 'Phantom-X-007',
     dependsOn: ['pay.public-api', 'trade.ccxt-api'],
-    note: 'Law §9:430, gap-closed 2026-08-08: "REST + webhooks, named keys, scopes, domain whitelist, sandbox env — ONE gateway in front of trade/pay/data." The board has two domain-scoped surfaces and nobody owning the single one the law describes (audit §A1.a #20): pay.public-api (blocked, pay-scoped) and trade.ccxt-api (`ready`, trade-scoped, and the board\'s one recorded ORPHAN — no law basis, no ADR, no spec). There is no "data" surface of any kind. Blocked on both, honestly: two gateways cannot be unified while one of them has not shipped. FLAGGED — §9:430 AND AN ACCEPTED ADR PULL IN OPPOSITE DIRECTIONS, and that needs an owner ruling rather than a PR. `docs/adr/2026-08-07-pay-public-api-law.md` (Accepted) deliberately REJECTS a shared error taxonomy: svc-trade speaks CCXT "because bots already speak CCXT and that is a real interop win", and the ADR records that payments have no equivalent lingua franca, so adopting one vendor\'s would name a vendor (§0.7) and buy nothing. That reasoning is sound, and one gateway with two error taxonomies is not one gateway. So either §9:430 means one KEY, SCOPE, QUOTA and SANDBOX plane in front of several domain dialects, or it means one dialect and the ADR gives. THE FIRST READING IS THE CHEAPER ONE AND THIS ROW DELIBERATELY DOES NOT PICK IT. What is genuinely shared and uncontested either way is the key and scope plane — identity.apikeys is `done` and already issues named, scoped keys — so that is where a claimant should start, and asserting the taxonomy answer is where they should stop.',
+    requires: [
+      'services/svc-edge/src/gateway-plane.ts',
+      'services/svc-edge/src/gateway-plane.test.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/platform-api-keys.golden.js',
+    ],
+    note: '**DONE 2026-08-23:** One key/scope/quota/sandbox plane at svc-edge (`gateway-plane.ts`). Keys stay identity.apikeys — no second table. API-key callers on /api/v1 and /api/trade need trade:*; /api/pay needs pay:*. Quota is per-key using the existing edge.rate_limited code. Sandbox is principal.key_env, visible on /platform. Residual: dialects stay two (ADR 2026-08-07-pay-public-api-law) — trade CCXT, pay tRPC; no third error taxonomy. No data door. Pin: gateway-plane.test.ts. Click: /platform mint key → probe both doors.',
   }),
 
   // ── PHASE 3P · PROTOCOL PLANE P0 ─────────────────────────────────────────
