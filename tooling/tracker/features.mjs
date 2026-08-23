@@ -2064,8 +2064,13 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'F',
+    status: 'done',
     dependsOn: ['ops.support', 'ops.analytics'],
-    note: 'Law §25:714 ("CRM / HR & team / Finance (live revenue fused) / Project engine | — | svc-core-ops | 5"), gap-closed 2026-08-08. FOUR NAMED SYSTEMS AGAINST ONE ADJACENT ROW — ops.support, which is tickets and a KB (audit §A1.a #7). Blocked on ops.support and ops.analytics, both `ready` and neither `done`: a CRM sits on the contact and case data the support desk already owns, and "Finance with live revenue fused" is the warehouse read rather than a second aggregation of the same numbers. PLANE: the §25 matrix gives "—" for this line. `plane: F` here means only that these are operator-side, identity-bearing internal tools; it is NOT a plane ruling — the same qualification execution.house-tenant carries, for the same reason. FLAGGED FOR SCOPE, NOT FOR DESIGN: CRM and Finance sit next to revenue the platform already records, but "HR & team" and a "Project engine" are internal business software with no customer-facing edge, and nothing anywhere says we build those rather than buy them. That is a build-or-buy call worth taking BEFORE anyone starts, because it is the difference between two surfaces and four. This row does not assume the answer; it records that the law names all four and the board carried none.',
+    requires: ['services/svc-ops'],
+    note:
+      '**Done 2026-08-23:** svc-ops + /ops four cards (contacts, team, revenue, projects). Build-vs-buy: built thin surfaces, no SaaS. ' +
+      'CRM is a local list plus named support/identity source lag. Revenue displays warehouse cubes or ops.warehouse_unwired — empty is not fake $. ' +
+      'Team directory, no payroll invent (ops.payroll_invent_forbidden). Residual: payroll invent forbidden.',
   }),
   f('ops.marketing', 'Marketing engine — campaigns, attribution, with the Growth Agent (§25:719)', {
     module: 'core-ops',

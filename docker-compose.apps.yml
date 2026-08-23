@@ -253,6 +253,7 @@ services:
       MARKET_URL: http://svc-market:4018
       EXECUTION_URL: http://svc-execution:4019
       TAX_URL: http://svc-tax:4020
+      OPS_URL: http://svc-ops:4022
       # connect.data-lake TSDB + retention owner env — blank retention refuses persist.
       CONNECT_DATA_LAKE_TSDB_URL: postgres://svc_connect_lake:svc_connect_lake@postgres:5432/intafaced
       CONNECT_DATA_LAKE_RETENTION_DAYS:
@@ -1198,6 +1199,28 @@ services:
     healthcheck: *healthcheck
     depends_on:
       svc-ledger: { condition: service_healthy }
+
+  # CRM / team / warehouse revenue / projects (ops.business-systems).
+  # Non-custodial. Blank analytics replica → ops.warehouse_unwired.
+  # Payroll is never invented (ops.payroll_invent_forbidden).
+  svc-ops:
+    <<: *app
+    container_name: intafaced-svc-ops
+    command: ['node', 'services/svc-ops/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret, *internal-secret]
+      SERVICE_NAME: svc-ops
+      HTTP_PORT: '4022'
+      # IDENTITY_URL / SUPPORT_URL blank → contacts name ops.identity_unwired /
+      # ops.support_unwired. Local CRM rows still write. No second contact book.
+      ANALYTICS_REPLICA_CONFIGURED: ${ANALYTICS_REPLICA_CONFIGURED:-}
+      ANALYTICS_REPLICA_LAG_SECONDS: ${ANALYTICS_REPLICA_LAG_SECONDS:-}
+      ANALYTICS_REPLICA_LEDGER_URL: ${ANALYTICS_REPLICA_LEDGER_URL:-}
+      ANALYTICS_REPLICA_TRADE_URL: ${ANALYTICS_REPLICA_TRADE_URL:-}
+      ANALYTICS_REPLICA_IDENTITY_URL: ${ANALYTICS_REPLICA_IDENTITY_URL:-}
+      ANALYTICS_ETL_WATERMARK_AT: ${ANALYTICS_ETL_WATERMARK_AT:-}
+    expose: ['4022']
+    healthcheck: *healthcheck
 
   # Live lobbies with capacity tiers (§8.3, §XIII). Non-custodial: no
   # LEDGER_URL, and nothing in this process could reach anything that moves

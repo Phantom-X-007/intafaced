@@ -1,0 +1,28 @@
+import { z } from 'zod';
+import { baseEnvSchema, edgeEnvSchema, httpEnvSchema, internalServiceEnvSchema, loadEnv, otelEnvSchema } from '@intafaced/config';
+
+/**
+ * svc-ops — thin CRM / team / revenue / projects. No Postgres, no payroll, no
+ * second money book. HTTP_PORT 4022: 4020 is tax; 4021 is reserved.
+ */
+const blankAsAbsent = <T extends z.ZodTypeAny>(inner: T) =>
+  z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), inner);
+
+const schema = baseEnvSchema
+  .merge(otelEnvSchema)
+  .merge(httpEnvSchema)
+  .merge(edgeEnvSchema)
+  .merge(internalServiceEnvSchema)
+  .merge(
+    z.object({
+      SERVICE_NAME: z.string().default('svc-ops'),
+      HTTP_PORT: z.coerce.number().int().positive().default(4022),
+      /** Blank → contacts.identity source names ops.identity_unwired. */
+      IDENTITY_URL: blankAsAbsent(z.string().url().optional()),
+      /** Blank → contacts.support source names ops.support_unwired. */
+      SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
+    }),
+  );
+
+export type OpsEnv = z.infer<typeof schema>;
+export const env: OpsEnv = loadEnv(schema);

@@ -77,6 +77,10 @@ export const SCOPES = [
   // Tax export — read-only lot packs over the caller's own ledger books.
   'tax:read',
 
+  // Ops business systems (CRM / team / revenue / projects). Non-custodial.
+  'ops:read',
+  'ops:write',
+
   // Protocol plane (read-only by definition: keys are the user's, not ours)
   'protocol:read',
 
@@ -123,6 +127,7 @@ const IMPLIED: Partial<Record<Scope, readonly Scope[]>> = {
   'notify:write': ['notify:read'],
   'support:write': ['support:read'],
   'support:ops': ['support:read', 'support:write'],
+  'ops:write': ['ops:read'],
 };
 
 /** Expand a scope list to everything it actually grants. */
@@ -252,6 +257,12 @@ const SESSION_SCOPE_LIST = [
   // Issued with the service that mounts it — a scope for a router nobody can
   // call is the outage this table exists to stop.
   'tax:read',
+  // CRM / team directory / warehouse revenue / projects (ops.business-systems).
+  // Non-custodial, minTier none. Issued with svc-ops — a scope for a router
+  // nobody can call is the outage this table exists to stop. Payroll is not a
+  // scope; inventPayroll refuses by name.
+  'ops:read',
+  'ops:write',
   // UNSTUBBED. These read 'svc-market not built' until this commit, and the
   // reason given there was the right one: "a scope for a router that cannot be
   // called is noise in every token in the platform; these get issued by the PR
