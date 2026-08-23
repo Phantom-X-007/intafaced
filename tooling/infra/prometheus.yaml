@@ -90,3 +90,34 @@ scrape_configs:
     scrape_interval: 10s
     static_configs:
       - targets: ['svc-matching:4005']
+
+  # ── THE BOOK (§4.2) ────────────────────────────────────────────────────────
+  #
+  # A process scrape, not the user SLO. The SLO still lives on svc-edge: the
+  # user's request is measured at the front door, with this hop inside it. This
+  # job exists so an operator can see THIS process's HTTP latency when the
+  # book is the thing that's slow.
+  #
+  # Ledger is not a proxy. The exposition's `module` label is always `_local`.
+  #
+  # Why this address resolves: `svc-ledger` is started by
+  # `docker-compose.apps.yml`, which `include:`s the compose file this config
+  # belongs to. `HTTP_PORT: '4001'` is the CONTAINER port — not a published
+  # host port. `/metrics` is `METRICS_PATH` in
+  # `services/svc-ledger/src/metrics.ts`.
+  #
+  # All three are asserted by `services/svc-ledger/src/observability-wiring.test.ts`
+  # against THIS FILE and the real compose block. A scrape config pointing at
+  # localhost would miss the container entirely.
+  #
+  # ── No `labels:` block, on purpose ─────────────────────────────────────────
+  #
+  # The exposition already carries `service="svc-ledger"`. A `labels:`
+  # `{service: …}` here would NOT overwrite it — Prometheus renames the scraped
+  # one to `exported_service` and keeps both, so every dashboard query matching
+  # on `service` would silently match nothing.
+  - job_name: svc-ledger
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['svc-ledger:4001']
