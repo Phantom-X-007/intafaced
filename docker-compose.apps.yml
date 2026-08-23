@@ -1245,6 +1245,8 @@ services:
       ANALYTICS_REPLICA_TRADE_URL: ${ANALYTICS_REPLICA_TRADE_URL:-}
       ANALYTICS_REPLICA_IDENTITY_URL: ${ANALYTICS_REPLICA_IDENTITY_URL:-}
       ANALYTICS_ETL_WATERMARK_AT: ${ANALYTICS_ETL_WATERMARK_AT:-}
+      # OPS_CUSTODY_WRAP blank → wrap/execute refuse ops.custody_wrap_unset. Never invent keys.
+      OPS_CUSTODY_WRAP: ${OPS_CUSTODY_WRAP:-}
     expose: ['4022']
     healthcheck: *healthcheck
 

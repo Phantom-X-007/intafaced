@@ -11,6 +11,11 @@ export const OPS_TEAM_HANDLE_REQUIRED = 'ops.team_handle_required' as const;
 export const OPS_RAISE_NAME_REQUIRED = 'ops.raise_name_required' as const;
 export const OPS_FUNDRAISING_AMOUNT_INVALID = 'ops.fundraising_amount_invalid' as const;
 export const OPS_FUNDRAISING_CHAIN_UNWIRED = 'ops.fundraising_chain_unwired' as const;
+export const OPS_CUSTODY_WRAP_UNSET = 'ops.custody_wrap_unset' as const;
+export const OPS_CUSTODY_CHAIN_UNWIRED = 'ops.custody_chain_unwired' as const;
+export const OPS_CUSTODY_KEYS_FORBIDDEN = 'ops.custody_keys_forbidden' as const;
+export const OPS_CUSTODY_TIER_REQUIRED = 'ops.custody_tier_required' as const;
+export const OPS_CUSTODY_AMOUNT_INVALID = 'ops.custody_amount_invalid' as const;
 
 export type OpsRefuseCode =
   | typeof OPS_WAREHOUSE_UNWIRED
@@ -24,7 +29,12 @@ export type OpsRefuseCode =
   | typeof OPS_TEAM_HANDLE_REQUIRED
   | typeof OPS_RAISE_NAME_REQUIRED
   | typeof OPS_FUNDRAISING_AMOUNT_INVALID
-  | typeof OPS_FUNDRAISING_CHAIN_UNWIRED;
+  | typeof OPS_FUNDRAISING_CHAIN_UNWIRED
+  | typeof OPS_CUSTODY_WRAP_UNSET
+  | typeof OPS_CUSTODY_CHAIN_UNWIRED
+  | typeof OPS_CUSTODY_KEYS_FORBIDDEN
+  | typeof OPS_CUSTODY_TIER_REQUIRED
+  | typeof OPS_CUSTODY_AMOUNT_INVALID;
 
 export class OpsError extends Error {
   readonly code: OpsRefuseCode;

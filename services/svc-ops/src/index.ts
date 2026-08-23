@@ -20,9 +20,11 @@ registerProcessHooks(
  * svc-ops — CRM / team / warehouse revenue / projects / fundraising records.
  * No balances of its own. Unwired warehouse refuses ops.warehouse_unwired.
  * Payroll is never invented. Fundraising fund/escrow refuses ops.fundraising_chain_unwired.
+ * Custody wrap blank refuses ops.custody_wrap_unset. Keys stay empty — never invented.
  */
 const ops = new OpsService({
   warehouseEnv: process.env,
+  custodyWrap: env.OPS_CUSTODY_WRAP,
   identitySource: async () => ({ status: 'absent', code: OPS_IDENTITY_UNWIRED, rows: [] }),
   supportSource: async () => ({ status: 'absent', code: OPS_SUPPORT_UNWIRED, rows: [] }),
   identityTeamSource: async () => ({ status: 'absent', code: OPS_IDENTITY_UNWIRED, rows: [] }),

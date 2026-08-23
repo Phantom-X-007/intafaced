@@ -1,6 +1,6 @@
 # svc-ops
 
-Thin operator surfaces for CRM, team directory, warehouse revenue, and projects. **Not** a second money book, **not** payroll, **not** SaaS.
+Thin operator surfaces for CRM, team directory, warehouse revenue, projects, and custody tiers. **Not** a second money book, **not** payroll, **not** SaaS, **not** a key store.
 
 Blank analytics replica refuses `ops.warehouse_unwired`. Empty warehouse is empty — never a fabricated `$0`. Team has no compensation field; `inventPayroll` refuses `ops.payroll_invent_forbidden`. Contacts are a local list plus named identity/support source lag.
 
@@ -18,6 +18,10 @@ Module id: `core-ops`. Edge prefix: `/api/ops`. Port: `4022`.
 | `inventPayroll`                     | `ops:write`              | always refuses                                                                          |
 | `revenue`                           | `ops:read`               | warehouse cubes or named lag/unwired refuse; amounts as strings                         |
 | `projects.list` / `projects.create` | `ops:read` / `ops:write` | thin list                                                                               |
+| `custody.list`                      | `ops:read`               | cold/warm/hot tiers; keys empty; wrap unset names `ops.custody_wrap_unset`              |
+| `custody.createApproval`            | `ops:write`              | pending movement record; amount decimal string or null; never a live send               |
+| `custody.wrap`                      | `ops:write`              | blank wrap → `ops.custody_wrap_unset`; never invents keys                               |
+| `custody.execute`                   | `ops:write`              | wrap unset → `ops.custody_wrap_unset`; else `ops.custody_chain_unwired` (Shehzad)       |
 
 ## Ledger
 

@@ -21,6 +21,8 @@ const schema = baseEnvSchema
       IDENTITY_URL: blankAsAbsent(z.string().url().optional()),
       /** Blank → contacts.support source names ops.support_unwired. */
       SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
+      /** Blank → custody wrap/execute refuse ops.custody_wrap_unset. Never invent a wrap key. */
+      OPS_CUSTODY_WRAP: blankAsAbsent(z.string().optional()),
     }),
   );
 
