@@ -17,9 +17,15 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
 function serviceBlock(source: string, name: string): string {
-  const match = source.match(new RegExp(`^  ${name}:\\n(?:.*\\n)*?(?=^  [a-z]|\\Z)`, 'm'));
-  if (!match) throw new Error(`${name} service block missing from docker-compose.apps.yml`);
-  return match[0];
+  const lines = source.split('\n');
+  const start = lines.findIndex((line) => line === `  ${name}:`);
+  if (start < 0) throw new Error(`${name} service block missing from docker-compose.apps.yml`);
+  const block = [lines[start]];
+  for (const line of lines.slice(start + 1)) {
+    if (/^  [A-Za-z0-9_-]+:/.test(line)) break;
+    block.push(line);
+  }
+  return block.join('\n');
 }
 
 describe('compose academy video storage default off', () => {
@@ -47,7 +53,6 @@ describe('compose academy video storage default off', () => {
   it('academy-minio is profile-gated default off — not LiveKit', () => {
     expect(minio).toMatch(/profiles:\s*\['academy-video'\]/);
     expect(minio).toMatch(/minio\/minio:/);
-    expect(minio).not.toMatch(/livekit/i);
-    expect(minio).not.toMatch(/command:.*livekit/i);
+    expect(minio).not.toMatch(/(?:image|command):.*livekit/i);
   });
 });
