@@ -363,6 +363,8 @@ jobs:
         env:
           CI: 'true'
 
+      - name: Build full-test dependencies
+        run: pnpm build
       - run: pnpm test
 
       # The backstop. REQUIRE_POSTGRES / REQUIRE_EVM_CHAIN make the shared probes
@@ -493,6 +495,8 @@ jobs:
         run: pnpm --filter @intafaced/svc-protocol test:forge
         env:
           CI: 'true'
+      - name: Build protocol test dependencies
+        run: pnpm --filter @intafaced/svc-protocol --filter @intafaced/svc-dex --filter @intafaced/svc-indexer... build
       - name: Protocol package tests
         run: pnpm --filter @intafaced/svc-protocol --filter @intafaced/svc-dex --filter @intafaced/svc-indexer test
       - name: Annotate shard failure
