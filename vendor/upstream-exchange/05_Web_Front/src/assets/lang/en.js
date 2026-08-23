@@ -756,7 +756,14 @@ module.exports = {
                 dcaCreated: "DCA schedule created",
                 dcaId: "Rule id",
                 dcaEmpty: "No DCA schedule on this account.",
-                dcaRateUnset: "If this deployment has no convert counterparty, svc-bank refuses bank.auto_invest_rate_unset. This screen does not invent a rate."
+                dcaRateUnset: "If this deployment has no convert counterparty, svc-bank refuses bank.auto_invest_rate_unset. This screen does not invent a rate.",
+                dcaRun: "Run auto-invest",
+                dcaRunLead: "Fire due DCA and threshold rules now. Convert uses trade.convert. If this deployment has no convert counterparty, svc-bank refuses bank.auto_invest_rate_unset — this screen does not invent a rate.",
+                dcaRunDone: "Auto-invest run finished",
+                dcaRunConsidered: "Considered",
+                dcaRunSettled: "Settled",
+                dcaRunSkipped: "Skipped",
+                dcaRunRejected: "Rejected"
             },
 
             loansPage: {

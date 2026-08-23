@@ -9,6 +9,7 @@ import { createBankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { BankError } from '../errors.js';
 import type { ConvertPort } from './auto-invest-service.js';
+import { tradeConvertPort } from './trade-convert-port.js';
 
 /**
  * CAN INDEX WIRE CONVERT? (bank.auto-invest — same missing-wiring shape as cards)
@@ -28,6 +29,11 @@ const migrations = readdirSync(drizzle)
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const USER_A = '11111111-1111-4111-8111-111111111111';
+const EDGE = 'a-bank-auto-invest-convert-edge-secret-32ch';
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
 
 describe('index.ts boot-wires autoInvest.convert (cards/ramps shape)', () => {
   const indexSrc = readFileSync(join(ROOT, 'services/svc-bank/src/index.ts'), 'utf8');
@@ -44,6 +50,19 @@ describe('index.ts boot-wires autoInvest.convert (cards/ramps shape)', () => {
     const slice = autoBlock.slice(0, 900);
     expect(slice).toMatch(/convert:\s*tradeConvertPort/);
     expect(indexSrc).not.toMatch(/autoInvest:\s*\{\s*enabled:\s*env\.AUTO_INVEST_ENABLED\s*\}/);
+  });
+
+  it('live job path is tradeConvertPort convert.quote — not a bank mid', () => {
+    const serviceSrc = readFileSync(join(here, 'auto-invest-service.ts'), 'utf8');
+    const portSrc = readFileSync(join(here, 'trade-convert-port.ts'), 'utf8');
+    const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
+    expect(indexSrc).toMatch(/\/internal\/jobs\/run-auto-invest/);
+    expect(indexSrc).toMatch(/bank\.autoInvest\.runDue/);
+    expect(routerSrc).toMatch(/runAutoInvest:/);
+    expect(routerSrc).toMatch(/autoInvest\.runDue/);
+    expect(serviceSrc).toMatch(/this\.convert\.convert\(/);
+    expect(portSrc).toMatch(/\/trpc\/convert\.quote/);
+    expect(portSrc).toMatch(/\/trpc\/convert\.execute/);
   });
 });
 
@@ -155,6 +174,114 @@ if (!available) {
           startsAt: new Date('2026-08-09T00:00:00Z'),
         }),
       ).rejects.toMatchObject({ code: 'bank.auto_invest_rate_unset' });
+    });
+
+    it('runDue through tradeConvertPort hits convert.quote — no bank mid', async () => {
+      const seen: string[] = [];
+      const convert = tradeConvertPort({
+        baseUrl: 'http://svc-trade:4004',
+        edgeSecret: EDGE,
+        fetchImpl: async (input) => {
+          const url = String(input);
+          seen.push(url);
+          if (url.includes('/api/v1/markets')) {
+            return jsonResponse(200, [
+              {
+                symbol: 'BTC/USDT',
+                base: 'BTC',
+                quote: 'USDT',
+                spot: true,
+                active: true,
+                limits: { amount: { min: '0.001' } },
+              },
+            ]);
+          }
+          if (url.includes('/trpc/convert.quote')) {
+            return jsonResponse(200, {
+              result: {
+                data: {
+                  symbol: 'BTC/USDT',
+                  side: 'buy',
+                  requestedQty: '0.002',
+                  filledQty: '0.002',
+                  userNotional: '100',
+                  avgPrice: '50000',
+                  fullyFilled: true,
+                },
+              },
+            });
+          }
+          if (url.includes('/trpc/convert.execute')) {
+            return jsonResponse(200, {
+              result: {
+                data: {
+                  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                  filled: '0.002',
+                  remaining: '0',
+                  status: 'filled',
+                },
+              },
+            });
+          }
+          return jsonResponse(404, { error: { message: 'unexpected' } });
+        },
+      });
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        nativeAssetId: 'IFC',
+        autoInvest: { enabled: true, convert },
+      });
+      await fund(USER_A, 'USDT', '500');
+      const rule = await bank.autoInvest.createDca({
+        userId: USER_A,
+        spendAssetId: 'USDT',
+        buyAssetId: 'BTC',
+        amount: amt('100'),
+        cadence: 'daily',
+        startsAt: new Date('2026-08-01T00:00:00Z'),
+      });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+      expect(seen.some((u) => u.includes('/trpc/convert.quote'))).toBe(true);
+      expect(seen.some((u) => u.includes('/trpc/convert.execute'))).toBe(true);
+      expect(report.settled).toBe(1);
+      const runs = await bank.autoInvest.runsOf(rule.id);
+      expect(runs[0]?.ledgerTxId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+      // HTTP mock is trade's fill — bank does not post a mid or move USDT itself.
+      expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'USDT'))).amount)).toBe('500');
+    });
+
+    it('runDue through tradeConvertPort names rate_unset when convert.quote fails', async () => {
+      const convert = tradeConvertPort({
+        baseUrl: 'http://svc-trade:4004',
+        edgeSecret: EDGE,
+        fetchImpl: async (input) => {
+          const url = String(input);
+          if (url.includes('/api/v1/markets')) {
+            return jsonResponse(200, [
+              { symbol: 'BTC/USDT', base: 'BTC', quote: 'USDT', spot: true, active: true, limits: { amount: { min: '0.001' } } },
+            ]);
+          }
+          return jsonResponse(400, {
+            error: { message: 'insufficient book depth', data: { intafacedCode: 'trade.convert_insufficient_depth' } },
+          });
+        },
+      });
+      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+        nativeAssetId: 'IFC',
+        autoInvest: { enabled: true, convert },
+      });
+      await fund(USER_A, 'USDT', '500');
+      await bank.autoInvest.createDca({
+        userId: USER_A,
+        spendAssetId: 'USDT',
+        buyAssetId: 'BTC',
+        amount: amt('100'),
+        cadence: 'daily',
+        startsAt: new Date('2026-08-01T00:00:00Z'),
+      });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+      expect(report.settled).toBe(0);
+      expect(report.rejected).toBe(1);
+      expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'USDT'))).amount)).toBe('500');
     });
 
     it('convert failure does not invent a price', async () => {

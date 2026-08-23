@@ -244,9 +244,10 @@ export class AutoInvestService {
   /**
    * DCA schedule — refuse-closed without a convert port.
    *
-   * The Done bar for rates: if this deployment has no convert counterparty, we
-   * do not create a dormant schedule that looks live and invents a price later.
-   * Named refusal today; wire `ConvertPort` when trade.convert is injectable.
+   * Production injects `tradeConvertPort` (trade.convert quote+execute) when
+   * TRADE_URL is a usable http(s) URL. Absent that counterparty, we do not
+   * create a dormant schedule that looks live and invents a price later.
+   * Named refusal: `bank.auto_invest_rate_unset`.
    */
   async createDca(input: {
     userId: string;
@@ -640,8 +641,7 @@ export class AutoInvestService {
         'bank.auto_invest_rate_unset',
       );
     }
-    // Convert-backed DCA body lands with the port. Until then create refuses,
-    // so this path is only reachable in tests that inject a ConvertPort.
+    // Production convert is `tradeConvertPort`. Tests inject a double.
     const clientRunId = `dca:${rule.id}:${rule.nextRunAt?.toISOString() ?? now.toISOString()}`;
     const amount = rule.amount!;
     const buyAssetId = rule.buyAssetId!;
