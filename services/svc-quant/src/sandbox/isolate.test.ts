@@ -1,0 +1,71 @@
+import { describe, expect, it } from 'vitest';
+import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_UNWIRED } from '../errors.js';
+import { createPaperBook } from './book.js';
+import { runIsolate } from './isolate.js';
+
+const limits = { maxOps: 5_000, maxSource: 8_000 };
+
+function book() {
+  return createPaperBook({ startingCash: '10000', venueVaultSet: false });
+}
+
+describe('strategy isolate', () => {
+  it('runs five lines of javascript against the internal book', () => {
+    const b = book();
+    const ran = runIsolate(
+      'javascript',
+      `const px = market.last("BTC-USD");
+oms.buy("BTC-USD", "0.01");
+console.log(px);
+console.log(book.cash());
+console.log(book.pnl());`,
+      b,
+      limits,
+      true,
+    );
+    expect(ran.logs[0]).toBe('50000');
+    expect(ran.cash).toBe('9500');
+    expect(ran.pnl).toBe('0');
+    expect(typeof ran.pnl).toBe('string');
+  });
+
+  it('runs five lines of python against the same book', () => {
+    const b = book();
+    const ran = runIsolate(
+      'python',
+      `px = market.last("BTC-USD")
+oms.buy("BTC-USD", "0.01")
+print(px)
+print(book.cash())
+print(book.pnl())`,
+      b,
+      limits,
+      true,
+    );
+    expect(ran.logs[0]).toBe('50000');
+    expect(ran.cash).toBe('9500');
+    expect(ran.pnl).toBe('0');
+  });
+
+  it('refuses when the isolate is unwired rather than inventing pnl', () => {
+    expect(() => runIsolate('javascript', 'console.log("x")', book(), limits, false)).toThrow(QUANT_SANDBOX_UNWIRED);
+  });
+});
+
+describe('sandbox escape', () => {
+  it('refuses fetch', () => {
+    expect(() => runIsolate('javascript', 'fetch("https://evil.example")', book(), limits, true)).toThrow(QUANT_SANDBOX_ESCAPE);
+  });
+
+  it('refuses require', () => {
+    expect(() => runIsolate('javascript', 'require("fs")', book(), limits, true)).toThrow(QUANT_SANDBOX_ESCAPE);
+  });
+
+  it('refuses python import', () => {
+    expect(() => runIsolate('python', 'import os', book(), limits, true)).toThrow(QUANT_SANDBOX_ESCAPE);
+  });
+
+  it('refuses constructor walks', () => {
+    expect(() => runIsolate('javascript', 'console.constructor', book(), limits, true)).toThrow(QUANT_SANDBOX_ESCAPE);
+  });
+});

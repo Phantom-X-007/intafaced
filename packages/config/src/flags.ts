@@ -286,6 +286,8 @@ export const FLAG_REGISTRY: readonly FlagDef[] = [
   def('execution.houseTenant', 'execution', 'II', 'Sealed house-desk tenancy mechanism (external venues only)', NOT_ENFORCED),
   // Lot export. Live control is edge kill of module `tax`. Flag is rollout plan only.
   def('tax.export', 'tax', 'V', 'Per-jurisdiction lot export packs (FIFO/LIFO/HIFO, caller-selected)', NOT_ENFORCED),
+  // Sandbox isolate. Live halt is the edge kill of module `quant`; flag is rollout plan.
+  def('quant.sandbox', 'quant', 'V', 'Sandboxed strategy runtime (TypeScript and Python)', NOT_ENFORCED),
 ];
 
 export const FLAG_KEYS = FLAG_REGISTRY.map((f) => f.key);

@@ -181,6 +181,8 @@ export const DEFAULT_MODULE_RULES: Readonly<Record<ModuleId, JurisdictionRule>> 
   // Reporting view over the caller's own books. No custody; minTier none.
   // Mapped regions come from owner TAX_JURISDICTION_MAP_JSON, not this matrix.
   tax: { status: 'open', minTier: 'none' },
+  // Paper sandbox, no custody. Sanctioned regions still refuse via screening.
+  quant: { status: 'open', minTier: 'none' },
   // Inbox only — no custody, no money movement. minTier none so a user can
   // always read their own notifications regardless of verification tier.
   notify: { status: 'open', minTier: 'none' },

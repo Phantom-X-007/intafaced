@@ -439,6 +439,28 @@ module.exports = {
                 note: "Status is public under svc-protocol launch.status. Template is not audited until a real audit. This screen never signs a deploy."
             }
         },
+        quant: {
+            title: "Quant sandbox",
+            lead: "Paste a few lines of JavaScript or Python. They run in a sandbox against the internal paper book — no raw network, no fabricated PnL.",
+            capabilities: "Runtime",
+            isolate: "Isolate",
+            venue: "Venue Vault",
+            venueUnset: "Unset — internal book only. Venue trades refuse until QUANT_VENUE_VAULT is set (trade-only).",
+            venueTradeOnly: "Pin is set. Venue OMS is trade-only; withdrawals stay refused.",
+            run: "Run",
+            runLead: "Starting cash and fills are decimal strings. The result is this run's paper book, or a named refuse.",
+            language: "Language",
+            javascript: "JavaScript",
+            python: "Python",
+            typescript: "TypeScript",
+            cash: "Starting cash",
+            cashHint: "Decimal string",
+            source: "Strategy",
+            sourceHint: "market.last, oms.buy, book.pnl — runtime API only",
+            result: "Run result",
+            pnl: "PnL",
+            sandboxUnwired: "quant.sandbox_unwired — the strategy isolate is not wired. Nothing here is a PnL."
+        },
         bank: {
             // ── The tab strip of the /bank vertical ─────────────────────────
             // One row per svc-bank router. `<row>Blurb` is read by the tile grid
