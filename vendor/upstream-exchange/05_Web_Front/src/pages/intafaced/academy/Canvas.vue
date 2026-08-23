@@ -52,6 +52,8 @@
       </div>
       <IxState v-else :loading="sceneAction.busy" :reason="sceneAction.reason" :message="sceneAction.message" endpoint="/api/academy/trpc/updateScene"></IxState>
     </div>
+
+    <IxAcademyVr :session-id="sessionId" :scene="sessionScene" />
   </div>
 </template>
 
@@ -63,12 +65,13 @@
  * Attendee writes refuse by name (`academy.not_host`).
  */
 import IxState from '../../../components/intafaced/IxState.vue';
+import IxAcademyVr from './Vr.vue';
 import { query, mutate } from '../../../config/intafaced.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxAcademyCanvas',
-  components: { IxState },
+  components: { IxState, IxAcademyVr },
   mixins: [ixModule],
   props: {
     sessionIdFromHub: { type: String, default: '' }
@@ -89,6 +92,10 @@ export default {
       var s = this.session.data && this.session.data.session;
       var scene = s && s.scene;
       return (scene && scene.avatars) || [];
+    },
+    sessionScene() {
+      var s = this.session.data && this.session.data.session;
+      return (s && s.scene) || null;
     }
   },
   watch: {
